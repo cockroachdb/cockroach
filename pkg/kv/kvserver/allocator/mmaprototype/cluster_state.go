@@ -1360,7 +1360,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
-	ctx context.Context, msg *StoreLeaseholderMsg, metrics *counterMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, metrics *rangeOperationMetrics,
 ) {
 	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
@@ -1370,7 +1370,7 @@ func (cs *clusterState) processStoreLeaseholderMsg(
 func (cs *clusterState) processRangeMsg(
 	ctx context.Context,
 	rangeMsg *RangeMsg,
-	metrics *counterMetrics,
+	metrics *rangeOperationMetrics,
 	localStoreID roachpb.StoreID,
 	now time.Time,
 ) (hasError bool, hasSoftError bool) {
@@ -1577,7 +1577,7 @@ func (cs *clusterState) processRangeMsg(
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *counterMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *rangeOperationMetrics,
 ) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
