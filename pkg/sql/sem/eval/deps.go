@@ -286,6 +286,13 @@ type Planner interface {
 		force bool,
 	) error
 
+	// ResetLeaseTimestamp is used to release the locked lease timestamp.
+	// Note: This should only be used if we have a deadlock between the current txn
+	// and another txn conducting a schema change on our behalf. The correct way
+	// to achieve this is to execute the schema change on the same transaction,
+	// which also reduces the risk of waiting for leases to expire.
+	ResetLeaseTimestamp(ctx context.Context)
+
 	// UnsafeDeleteComment is used to delete comments for a non-existent object.
 	UnsafeDeleteComment(ctx context.Context, objectID int64) error
 
