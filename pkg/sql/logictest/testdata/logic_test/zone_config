@@ -1,4 +1,4 @@
-# LogicTest:  default-configs !local-prepared local-leased-descriptors 3node-tenant
+# LogicTest:  default-configs !local-prepared 3node-tenant
 # Check that we can alter the default zone config.
 statement ok
 ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1

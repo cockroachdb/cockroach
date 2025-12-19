@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -97,6 +98,21 @@ var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
 	time.Minute*25,
 )
 
+// diableLeasedDescriptorsByDefaultThreshold any value above this is considered
+// disabled, making it 10% odds of disabled.
+const diableLeasedDescriptorsByDefaultThreshold = 90
+
+// disableLeasedDescriptorThresholdDefault, by default, leased descriptors
+// are enabled.
+const disableLeasedDescriptorThresholdDefault = 0
+
+// UseLeasedDescriptorsForCatalogDefault determines if leased descrptor are used for catalog
+// views.
+var UseLeasedDescriptorsForCatalogDefault = metamorphic.ConstantWithTestRange("disable-catalog-leased-descriptors-threshold",
+	disableLeasedDescriptorThresholdDefault,
+	0,
+	100) < diableLeasedDescriptorsByDefaultThreshold
+
 var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_wait_for_initial_version.enabled",
 	"enables waiting for the initial version of a descriptor",
@@ -106,7 +122,7 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
 	"guarantees transactional version consistency for descriptors used by the lease manager,"+
 		"descriptors used can be intentionally older to support this",
-	true)
+	UseLeasedDescriptorsForCatalogDefault)
 
 var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
