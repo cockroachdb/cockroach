@@ -118,7 +118,7 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 }
 
 type metricsEtc struct {
-	counters             *counterMetrics
+	counters             *rangeOperationMetrics
 	passMetricsAndLogger *rebalancingPassMetricsAndLogger
 	metricsRegistered    bool
 }
@@ -140,7 +140,7 @@ func (a *allocatorState) InitMetricsForLocalStore(
 
 func (a *allocatorState) getCounterMetricsForLocalStoreLocked(
 	ctx context.Context, localStoreID roachpb.StoreID,
-) *counterMetrics {
+) *rangeOperationMetrics {
 	return a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).counters
 }
 
@@ -161,7 +161,7 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	m, ok := a.metricsMap[localStoreID]
 	if !ok {
 		m = &metricsEtc{
-			counters:             makeCounterMetrics(),
+			counters:             makeRangeOperationMetrics(),
 			passMetricsAndLogger: makeRebalancingPassMetricsAndLogger(localStoreID),
 		}
 		a.metricsMap[localStoreID] = m
@@ -289,14 +289,14 @@ func (a *allocatorState) RegisterExternalChange(
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
-		counterMetrics.ExternalRegisterFailure.Inc(1)
+		rangeOperationMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
-		counterMetrics.ExternalRegisterSuccess.Inc(1)
+		rangeOperationMetrics.ExternalRegisterSuccess.Inc(1)
 	}
 	a.cs.addPendingRangeChange(change)
 	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
@@ -314,8 +314,8 @@ func (a *allocatorState) ComputeChanges(
 	if opts.DryRun {
 		panic(errors.AssertionFailedf("unsupported dry-run mode"))
 	}
-	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
-	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
+	a.cs.processStoreLeaseholderMsg(ctx, msg, rangeOperationMetrics)
 	var passObs *rebalancingPassMetricsAndLogger
 	if opts.PeriodicCall {
 		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
