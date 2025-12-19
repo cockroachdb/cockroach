@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -51,6 +52,57 @@ type regressionInfo struct {
 	formattedDelta string
 }
 
+// parseBenchmarkName extracts the package path and function name from a benchmark name.
+// Benchmark names are formatted as: pkg/path→FunctionName/subtest-GOMAXPROCS
+// Returns the package path and the benchmark function name (with "Benchmark" prefix).
+func parseBenchmarkName(benchmarkName string) (packagePath, functionName string) {
+	// Split by → to separate package path from function name
+	parts := strings.Split(benchmarkName, util.PackageSeparator)
+	if len(parts) != 2 {
+		// Fallback
+		return "", benchmarkName
+	}
+
+	packagePath = parts[0]
+
+	// Extract function name (everything before the first /)
+	funcPart := parts[1]
+	if idx := strings.Index(funcPart, "/"); idx != -1 {
+		funcPart = funcPart[:idx]
+	}
+
+	// Remove GOMAXPROCS suffix (e.g., -32)
+	if idx := strings.LastIndex(funcPart, "-"); idx != -1 {
+		funcPart = funcPart[:idx]
+	}
+
+	// Add "Benchmark" prefix if not present
+	if !strings.HasPrefix(funcPart, "Benchmark") {
+		functionName = "Benchmark" + funcPart
+	} else {
+		functionName = funcPart
+	}
+
+	return packagePath, functionName
+}
+
+// regressionFormatter is a custom formatter for microbenchmark performance regressions.
+// It generates shorter, more informative titles compared to the default unit test formatter.
+type regressionFormatter struct {
+	versionContext string
+}
+
+// Title generates a short title that includes the version context for easier identification
+// across different branch comparisons.
+func (rf regressionFormatter) Title(data issues.TemplateData) string {
+	return fmt.Sprintf("%s: regression (%s)", data.PackageNameShort, rf.versionContext)
+}
+
+// Body reuses the standard unit test body formatter.
+func (rf regressionFormatter) Body(r *issues.Renderer, data issues.TemplateData) error {
+	return issues.UnitTestFormatter.Body(r, data)
+}
+
 // createRegressionPostRequest creates a post request for benchmark performance regressions.
 func createRegressionPostRequest(
 	pkgName string, regressions []regressionInfo, description string,
@@ -66,14 +118,25 @@ func createRegressionPostRequest(
 			reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange))
 	}
 
+	// Parse the first benchmark name to extract package and function for team lookup
 	benchmarkName := regressions[0].benchmarkName
+	packagePath, functionName := parseBenchmarkName(benchmarkName)
+
+	// Use the parsed package path if available, otherwise fall back to pkgName
+	if packagePath == "" {
+		packagePath = pkgName
+	}
+
 	f := githubpost.MicrobenchmarkFailure(
-		pkgName,
-		benchmarkName,
+		packagePath,
+		functionName,
 		sb.String(),
 	)
 
-	formatter, req := githubpost.DefaultFormatter(context.Background(), f)
+	// Use custom regression formatter instead of default to get shorter,
+	// more informative titles with version context.
+	formatter := regressionFormatter{versionContext: description}
+	_, req := githubpost.DefaultFormatter(context.Background(), f)
 	req.Labels = append(req.Labels, "O-microbench", "C-performance")
 	return formatter, req
 }

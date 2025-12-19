@@ -82,7 +82,7 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	require.Contains(t, req.Labels, "O-microbench")
 	require.Contains(t, req.Labels, "C-performance")
 
-	// Verify title contains package name
+	// Verify title contains package name and version context
 	data := issues.TemplateData{
 		PostRequest:      req,
 		Parameters:       req.ExtraParams,
@@ -91,7 +91,8 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	}
 	title := formatter.Title(data)
 	require.Contains(t, title, "pkg/sql")
-	require.Contains(t, title, "BenchmarkScan")
+	require.Contains(t, title, "regression")
+	require.Contains(t, title, "master -> release-24.1")
 
 	// Verify message contains key information
 	require.Contains(t, req.Message, "pkg/sql")
@@ -164,9 +165,9 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 	}
 	title := formatter.Title(data)
 
-	// Verify title structure - title now contains the benchmark name for team resolution
 	require.Contains(t, title, "pkg/sql/exec")
-	require.Contains(t, title, "BenchmarkScan/rows=1000")
+	require.Contains(t, title, "regression")
+	require.Contains(t, title, "v24.1.0 -> v24.2.0")
 
 	// Verify formatted output contains all key elements
 	expectedElements := []string{
@@ -223,4 +224,52 @@ func formatPostRequest(formatter issues.IssueFormatter, req issues.PostRequest) 
 	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
 
 	return post.String(), nil
+}
+
+func TestParseBenchmarkName(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantPkg     string
+		wantFunc    string
+		description string
+	}{
+		{
+			input:       "pkg/ccl/changefeedccl/schemafeed→PauseOrResumePolling/not_schema_locked-32",
+			wantPkg:     "pkg/ccl/changefeedccl/schemafeed",
+			wantFunc:    "BenchmarkPauseOrResumePolling",
+			description: "benchmark with subtest and GOMAXPROCS",
+		},
+		{
+			input:       "pkg/storage→MVCCGet/batch=false/versions=1/valueSize=8/numRangeKeys=0-32",
+			wantPkg:     "pkg/storage",
+			wantFunc:    "BenchmarkMVCCGet",
+			description: "benchmark with multiple subtest params",
+		},
+		{
+			input:       "pkg/util/num32→Scale-32",
+			wantPkg:     "pkg/util/num32",
+			wantFunc:    "BenchmarkScale",
+			description: "benchmark without subtest",
+		},
+		{
+			input:       "pkg/raft→Status/members=1/WithProgress-32",
+			wantPkg:     "pkg/raft",
+			wantFunc:    "BenchmarkStatus",
+			description: "benchmark with nested subtests",
+		},
+		{
+			input:       "invalid-format",
+			wantPkg:     "",
+			wantFunc:    "invalid-format",
+			description: "invalid format fallback",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			gotPkg, gotFunc := parseBenchmarkName(tt.input)
+			require.Equal(t, tt.wantPkg, gotPkg, "package path mismatch")
+			require.Equal(t, tt.wantFunc, gotFunc, "function name mismatch")
+		})
+	}
 }
