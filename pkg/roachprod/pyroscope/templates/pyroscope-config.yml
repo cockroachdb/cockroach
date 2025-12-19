@@ -1,10 +1,8 @@
 server:
   http_listen_port: 4040
 
-storage:
-  backend: filesystem
-  filesystem:
-    dir: /var/lib/pyroscope/data
+pyroscopedb:
+  data_path: /var/lib/pyroscope/data
 
 limits:
   ingestion_relabeling_rules:
