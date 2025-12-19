@@ -1,18 +1,19 @@
 # This test verifies that the multi-metric allocator skips stores that aren't
-# ready to receive leases when considering lease transfers.
+# ready to receive replicas when considering replica transfers.
 #
 # Setup: s1 holds the lease for r1, with replicas on s1, s2, s3.
-# - s1: overloaded (wants to shed leases)
-# - s2: low load (would be ideal target) but marked as refusing leases
-# - s3: also overloaded (not a good target)
+# - s1: overloaded (wants to shed load)
+# - s2, s3: also overloaded (not good targets)
+# - s4: low load (would be ideal target) but marked as refusing replicas
 #
-# Expected: s2 is filtered out. With only overloaded stores remaining,
-# no lease transfer occurs.
+# Expected: s4 is filtered out due to replica disposition.
+# With no valid targets remaining, no replica transfer occurs.
 
 set-store
   store-id=1 node-id=1
   store-id=2 node-id=2
   store-id=3 node-id=3
+  store-id=4 node-id=4
 ----
 node-id=1 locality-tiers=node=1
   store-id=1 attrs=
@@ -20,71 +21,86 @@ node-id=2 locality-tiers=node=2
   store-id=2 attrs=
 node-id=3 locality-tiers=node=3
   store-id=3 attrs=
+node-id=4 locality-tiers=node=4
+  store-id=4 attrs=
 
 store-load-msg
   store-id=1 node-id=1 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
-  store-id=2 node-id=2 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=2 node-id=2 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
   store-id=3 node-id=3 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=4 node-id=4 load=[100,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
 ----
 
 store-leaseholder-msg
 store-id=1
-  range-id=1 load=[100,0,0] raft-cpu=10
+  range-id=1 load=[100,0,0] raft-cpu=100
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
     store-id=2 replica-id=2 type=VOTER_FULL
     store-id=3 replica-id=3 type=VOTER_FULL
     config=num_replicas=3 constraints={} voter_constraints={}
 ----
 
-# Mark s2 as refusing leases.
-set-store-status store-id=2 leases=refusing
+# Mark s4 as refusing replicas.
+set-store-status store-id=4 replicas=refusing
 ----
-ok refusing=leases
+ok refusing=replicas
 
-# s1 tries to shed leases but s2 is filtered out, leaving only [1 3].
-# Since s1 and s3 are equally loaded, no lease transfer occurs.
+# s1 tries to shed load. Lease transfers fail (all other replica-holding stores
+# are also overloaded). Replica transfer attempted but s4 is filtered out.
 rebalance-stores store-id=1
 ----
 [mmaid=1] rebalanceStores begins
-[mmaid=1] cluster means: (stores-load [cpu:700ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 700) (nodes-cpu-capacity 1000)
-[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] cluster means: (stores-load [cpu:775ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 775) (nodes-cpu-capacity 1000)
+[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
-[mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=700 fractionUsed=10.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (s2): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n2): loadLow, reason: load is >10% below mean [load=100 meanLoad=700 fractionUsed=10.00% meanUtil=70.00% capacity=1000]
-[mmaid=1] evaluating s2: node load loadLow, store load loadNormal, worst dim WriteBandwidth
-[mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n2): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
+[mmaid=1] evaluating s2: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s2 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] store s2 was added to shedding store list
+[mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=775 fractionUsed=100.00% meanUtil=77.50% capacity=1000]
 [mmaid=1] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-continued s3 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s3 was added to shedding store list
+[mmaid=1] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=100 meanLoad=775 fractionUsed=10.00% meanUtil=77.50% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=775 fractionUsed=10.00% meanUtil=77.50% capacity=1000]
+[mmaid=1] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [2 3]
-[mmaid=1] skipping s2 for lease transfer: lease disposition refusing (health ok)
 [mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] result(failed): skipping r1 since store not overloaded relative to candidates
 [mmaid=1] attempting to shed replicas next
-[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] skipping s4 for replica transfer: replica disposition refusing (health ok)
+[mmaid=1] pre-means filtered 1 stores → remaining [1 2 3], means: store={[1000 0 0] [1000 1000 1000] [1 0 0] [0 0]} node={1000 1000 1}
+[mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] considering replica-transfer r1 from s1: store load [cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] candidates are:
 [mmaid=1] result(failed): no candidates found for r1 after exclusions
+[mmaid=1] start processing shedding store s2: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] top-K[CPURate] ranges for s2 with lease on local s1: r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] skipping remote store s2: in lease shedding grace period
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
-[mmaid=1] no top-K[CPURate] ranges found for s3 with lease on local s1
+[mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=1] skipping remote store s3: in lease shedding grace period
 [mmaid=1] rebalancing pass failures (store,reason:count): (s1,not-overloaded:1)
 pending(0)
