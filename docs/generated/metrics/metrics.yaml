@@ -13402,12 +13402,22 @@ layers:
       derivative: NONE
     - name: mma.span_config.normalization.error
       exported_name: mma_span_config_normalization_error
-      description: Number of ranges where span config normalization had errors. This includes cases where best-effort normalization may have succeeded (producing a usable config despite the error).
+      labeled_name: 'mma.span_config.normalization{result: error}'
+      description: Number of ranges where the local store is leaseholder and span config normalization encountered errors. Includes both hard errors (nil conf, excluded from rebalancing) and soft errors (usable config, still rebalanced). Operators should review zone config if this metric is non-zero.
       y_axis_label: Range
-      type: COUNTER
+      type: GAUGE
       unit: COUNT
       aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
+      derivative: NONE
+    - name: mma.span_config.normalization.soft_error
+      exported_name: mma_span_config_normalization_soft_error
+      labeled_name: 'mma.span_config.normalization{result: soft_error}'
+      description: Number of ranges where the local store is leaseholder and structural span config normalization failed, but produced a best-effort usable config. Operators should fix the zone config if this metric is non-zero.
+      y_axis_label: Range
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: node-id
       exported_name: node_id
       description: node ID with labels for advertised RPC and HTTP addresses

@@ -1088,6 +1088,12 @@ type rangeState struct {
 	// be non-nil.
 	conf *normalizedSpanConfig
 
+	// hasNormalizationError indicates whether span config normalization
+	// encountered any error (hard or soft). This is tracked separately from conf
+	// since conf may still be non-nil when only soft errors occur. Used solely
+	// for recording metrics on ranges with normalization errors.
+	hasNormalizationError bool
+
 	load RangeLoad
 
 	// The pending changes to this range, that are already reflected in
@@ -1370,9 +1376,19 @@ func (cs *clusterState) processRangeMsg(
 	metrics *counterMetrics,
 	localStoreID roachpb.StoreID,
 	now time.Time,
-) {
+) (hasError bool, hasSoftError bool) {
 	cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
 	rs, ok := cs.ranges[rangeMsg.RangeID]
+
+	defer func() {
+		if rs.hasNormalizationError {
+			hasError = true
+			if rs.conf != nil {
+				hasSoftError = true
+			}
+		}
+	}()
+
 	if !ok {
 		// This is the first time we've seen this range.
 		if !rangeMsg.MaybeSpanConfIsPopulated {
@@ -1551,15 +1567,16 @@ func (cs *clusterState) processRangeMsg(
 		if err != nil {
 			log.KvDistribution.Warningf(
 				ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
-			metrics.incSpanConfigNormalizationErrorIfNonNil()
 		}
 		rs.conf = normSpanConfig
+		rs.hasNormalizationError = err != nil
 	}
 	// Ensure (later) recomputation of the analyzed range constraints for the
 	// range, by clearing the existing analyzed constraints. This is done
 	// since in this slow path the span config or the replicas may have
 	// changed.
 	rs.clearAnalyzedConstraints()
+	return
 }
 
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
@@ -1569,10 +1586,21 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	cs.gcPendingChanges(now)
 
 	clear(cs.scratchRangeMap)
+	totalErrorCount := 0
+	totalSoftErrorCount := 0
 	for _, rangeMsg := range msg.Ranges {
-		cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
+		hasError, hasSoftError := cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
+		if hasError {
+			totalErrorCount++
+		}
+		if hasSoftError {
+			totalSoftErrorCount++
+		}
 	}
-
+	if metrics != nil {
+		metrics.SpanConfigNormalizationError.Update(int64(totalErrorCount))
+		metrics.SpanConfigNormalizationSoftError.Update(int64(totalSoftErrorCount))
+	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
 	// no longer the leaseholder.
 	for r, rs := range cs.ranges {

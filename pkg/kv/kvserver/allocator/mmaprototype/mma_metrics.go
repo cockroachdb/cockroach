@@ -42,38 +42,54 @@ type counterMetrics struct {
 	RebalanceLeaseChangeSuccess   *metric.Counter
 	RebalanceLeaseChangeFailure   *metric.Counter
 
-	// SpanConfigNormalizationError counts ranges where span config normalization
-	// encountered an error. This includes cases where best-effort normalization
-	// may have succeeded (producing a usable config despite the error). This
-	// metric does not include cases constraint analysis fails.
-	// TODO(wenyihu6): add ConstraintAnalysisSkipped for those.
-	SpanConfigNormalizationError *metric.Counter
-}
+	// Both metrics below counts ranges where the local store is leaseholder and
+	// span config normalization encountered errors. Both metrics persist until a
+	// new config arrives. This does not include cases where constraint analysis
+	// fails. Both are unexpected, and operators should fix the zone config if
+	// these metrics are non-zero.
+	//
+	// SpanConfigNormalizationError counts all normalization errors including
+	// SpanConfigNormalizationSoftError.
+	//  These ranges have nil
+	// conf and are excluded from rebalancing.
+	// SpanConfigNormalizationError counts ALL normalization errors.
+	// This is a superset that includes both:
+	//   - Hard errors: basic normalization failed (e.g.invalid user-provided
+	//   config or a bug in the code). Results in nil conf; range is excluded from
+	//   rebalancing. Note that range still remains in clusterState.ranges and may
+	//   appear in topKReplicas, but will be skipped if selected as a rebalancing
+	//   candidate.
+	//   - Soft errors: doStructuralNormalization failed but produced a
+	//   best-effort usable config. Range remains a valid rebalancing candidate.
+	//   Same as SpanConfigNormalizationSoftError.
+	SpanConfigNormalizationError *metric.Gauge
 
-// incSpanConfigNormalizationErrorIfNonNil increments the
-// SpanConfigNormalizationError counter if it is non-nil. This is used to avoid
-// panics when the metrics registry is nil.
-func (c *counterMetrics) incSpanConfigNormalizationErrorIfNonNil() {
-	if c == nil {
-		return
-	}
-	c.SpanConfigNormalizationError.Inc(1)
+	// SpanConfigNormalizationSoftError counts ranges where structural
+	// normalization failed but produced a best-effort usable config. These ranges
+	// remain as valid rebalancing candidates. Counts only soft errors where
+	// normalization produced a usable config despite errors (e.g., voter
+	// constraints not fully satisfiable by replica constraints). These ranges
+	// remain valid rebalancing candidates.
+	// INVARIANT: SpanConfigNormalizationSoftError <=
+	// SpanConfigNormalizationError.
+	SpanConfigNormalizationSoftError *metric.Gauge
 }
 
 func makeCounterMetrics() *counterMetrics {
 	return &counterMetrics{
-		DroppedDueToStateInconsistency: metric.NewCounter(metaDroppedDueToStateInconsistency),
-		ExternalRegisterSuccess:        metric.NewCounter(metaExternalRegisterSuccess),
-		ExternalRegisterFailure:        metric.NewCounter(metaExternalRegisterFailure),
-		ExternalReplicaChangeSuccess:   metric.NewCounter(metaExternalReplicaChangeSuccess),
-		ExternalReplicaChangeFailure:   metric.NewCounter(metaExternalReplicaChangeFailure),
-		ExternalLeaseChangeSuccess:     metric.NewCounter(metaExternalLeaseChangeSuccess),
-		ExternalLeaseChangeFailure:     metric.NewCounter(metaExternalLeaseChangeFailure),
-		RebalanceReplicaChangeSuccess:  metric.NewCounter(metaRebalanceReplicaChangeSuccess),
-		RebalanceReplicaChangeFailure:  metric.NewCounter(metaRebalanceReplicaChangeFailure),
-		RebalanceLeaseChangeSuccess:    metric.NewCounter(metaRebalanceLeaseChangeSuccess),
-		RebalanceLeaseChangeFailure:    metric.NewCounter(metaRebalanceLeaseChangeFailure),
-		SpanConfigNormalizationError:   metric.NewCounter(metaSpanConfigNormalizationError),
+		DroppedDueToStateInconsistency:   metric.NewCounter(metaDroppedDueToStateInconsistency),
+		ExternalRegisterSuccess:          metric.NewCounter(metaExternalRegisterSuccess),
+		ExternalRegisterFailure:          metric.NewCounter(metaExternalRegisterFailure),
+		ExternalReplicaChangeSuccess:     metric.NewCounter(metaExternalReplicaChangeSuccess),
+		ExternalReplicaChangeFailure:     metric.NewCounter(metaExternalReplicaChangeFailure),
+		ExternalLeaseChangeSuccess:       metric.NewCounter(metaExternalLeaseChangeSuccess),
+		ExternalLeaseChangeFailure:       metric.NewCounter(metaExternalLeaseChangeFailure),
+		RebalanceReplicaChangeSuccess:    metric.NewCounter(metaRebalanceReplicaChangeSuccess),
+		RebalanceReplicaChangeFailure:    metric.NewCounter(metaRebalanceReplicaChangeFailure),
+		RebalanceLeaseChangeSuccess:      metric.NewCounter(metaRebalanceLeaseChangeSuccess),
+		RebalanceLeaseChangeFailure:      metric.NewCounter(metaRebalanceLeaseChangeFailure),
+		SpanConfigNormalizationError:     metric.NewGauge(metaSpanConfigNormalizationError),
+		SpanConfigNormalizationSoftError: metric.NewGauge(metaSpanConfigNormalizationSoftError),
 	}
 }
 
@@ -170,11 +186,26 @@ var (
 	}
 	metaSpanConfigNormalizationError = metric.Metadata{
 		Name: "mma.span_config.normalization.error",
-		Help: "Number of ranges where span config normalization had errors. " +
-			"This includes cases where best-effort normalization may have succeeded " +
-			"(producing a usable config despite the error).",
+		Help: "Number of ranges where the local store is leaseholder and span config " +
+			"normalization encountered errors. Includes both hard errors (nil conf, " +
+			"excluded from rebalancing) and soft errors (usable config, still rebalanced). " +
+			"Operators should review zone config if this metric is non-zero.",
 		Measurement: "Range",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.span_config.normalization",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelResult, "error"),
+	}
+	metaSpanConfigNormalizationSoftError = metric.Metadata{
+		Name: "mma.span_config.normalization.soft_error",
+		Help: "Number of ranges where the local store is leaseholder and structural " +
+			"span config normalization failed, but produced a best-effort usable config. " +
+			"Operators should fix the zone config if this metric is non-zero.",
+		Measurement: "Range",
+		Unit:        metric.Unit_COUNT,
+		LabeledName: "mma.span_config.normalization",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelResult, "soft_error"),
 	}
 
 	// Future: we will add additional origins for MMA-initiated operations that
