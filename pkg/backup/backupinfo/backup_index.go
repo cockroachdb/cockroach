@@ -321,34 +321,6 @@ func parseIndexFilename(basename string) (start time.Time, end time.Time, err er
 	return start, end, nil
 }
 
-// ListSubdirsFromIndex lists the paths of all full backup subdirectories that
-// have an entry in the index. The store should be rooted at the default
-// collection URI. The subdirs are returned in chronological order.
-func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	var subdirs []string
-	if err := store.List(
-		ctx,
-		backupbase.BackupIndexDirectoryPath,
-		"/",
-		func(indexSubdir string) error {
-			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
-			subdir, err := convertIndexSubdirToSubdir(indexSubdir)
-			if err != nil {
-				return err
-			}
-			subdirs = append(subdirs, subdir)
-			return nil
-		},
-	); err != nil {
-		return nil, errors.Wrapf(err, "listing index subdirs")
-	}
-	// Index subdirs are in descending order and we want chronological order.
-	// TODO (kev-cao): In the new faster `SHOW BACKUP` effort, we will want
-	// the subdirs in descending order.
-	slices.Reverse(subdirs)
-	return subdirs, nil
-}
-
 // shouldWriteIndex determines if a backup index file should be written for a
 // given backup. The rule is:
 //  1. An index should only be written on a v25.4+ cluster.

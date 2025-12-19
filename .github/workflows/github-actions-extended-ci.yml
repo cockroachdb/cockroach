@@ -1,0 +1,56 @@
+name: GitHub Actions Extended CI
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - "master"
+      - "release-*"
+      - "staging-*"
+      - "!release-1.0*"
+      - "!release-1.1*"
+      - "!release-2.0*"
+      - "!release-2.1*"
+      - "!release-19.1*"
+      - "!release-19.2*"
+      - "!release-20.1*"
+      - "!release-20.2*"
+      - "!release-21.1*"
+      - "!release-21.2*"
+      - "!release-22.1*"
+      - "!release-22.2*"
+      - "!release-23.1*"
+      - "!release-23.2*"
+      - "!staging-v22.2*"
+      - "!staging-v23.1*"
+      - "!staging-v23.2*"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  maybe_stress:
+    if: github.event.pull_request.draft == false
+    runs-on: [self-hosted, ubuntu_2004]
+    timeout-minutes: 180
+    steps:
+      - name: calculate commit depth
+        run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: ${{ env.COMMIT_DEPTH }}
+      - name: Fetch the base commit
+        run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run tests
+        run: ./build/github/maybe-stress.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
