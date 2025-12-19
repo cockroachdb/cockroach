@@ -3,14 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Pacer's internals rely on our fork of Go. See pacer_nofork.go.
-//go:build bazel
-
 package admission
 
 import (
 	"context"
-	"runtime"
 	"time"
 )
 
@@ -26,12 +22,9 @@ type Pacer struct {
 
 	cur *ElasticCPUWorkHandle
 
-	// Yield, if true, indicates that the Pacer should runtime.Yield() in each
-	// Pace() call, even if the call is otherwise a no-op due to wq being nil i.e.
-	// when time-based pacing is not enabled. Eventually this might just become
-	// the default behavior for nil *Pacer, but the bool allows it to be opt-in
-	// initially.
-	Yield bool
+	// yield, if true, indicates that the ElasticCPUWorkHandle should
+	// runtime.Yield() in each Overlimit() call.
+	yield bool
 }
 
 // Pace will block as needed to pace work that calls it. It is
@@ -50,21 +43,13 @@ func (p *Pacer) Pace(ctx context.Context) (readmitted bool, err error) {
 		return false, nil
 	}
 
-	if p.Yield {
-		runtime.Yield()
-	}
-
-	if p.wq == nil {
-		return false, nil
-	}
-
-	if overLimit, _ := p.cur.OverLimit(); overLimit {
+	if overLimit, _ := p.cur.IsOverLimitAndPossiblyYield(); overLimit {
 		p.wq.AdmittedWorkDone(p.cur)
 		p.cur = nil
 	}
 
 	if p.cur == nil {
-		handle, err := p.wq.Admit(ctx, p.unit, p.wi)
+		handle, err := p.wq.Admit(ctx, p.unit, p.wi, p.yield)
 		if err != nil {
 			return false, err
 		}

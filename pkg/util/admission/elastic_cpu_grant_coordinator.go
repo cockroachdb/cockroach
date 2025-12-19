@@ -84,10 +84,10 @@ func (e *ElasticCPUGrantCoordinator) tryGrant() {
 	e.elasticCPUGranter.tryGrant()
 }
 
-// YieldInPacer is exported so it can be overridden in tests.
-var YieldInPacer = settings.RegisterBoolSetting(
+// YieldForElasticCPU is exported so it can be overridden in tests.
+var YieldForElasticCPU = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"admission.elastic_cpu.yield_in_pacer.enabled",
+	"admission.elastic_cpu.yield.enabled",
 	"when true, time-based elastic CPU pacing additionally yields CPU as-needed according to the scheduler",
 	true,
 )
@@ -101,6 +101,6 @@ func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *
 		unit:  unit,
 		wi:    wi,
 		wq:    e.ElasticCPUWorkQueue,
-		Yield: YieldInPacer.Get(&e.ElasticCPUWorkQueue.settings.SV),
+		yield: YieldForElasticCPU.Get(&e.ElasticCPUWorkQueue.settings.SV),
 	}
 }
