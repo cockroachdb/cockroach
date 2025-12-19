@@ -211,6 +211,12 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 		},
 	}
 
+	// Use PinnedLeases to control lease acquisition deterministically. We'll pin
+	// the lease to n2 before withdrawing support from n1, ensuring that when n1
+	// loses its lease, only n2 can acquire it (eliminating the race between n2
+	// and n3).
+	pinnedLeases := kvserver.NewPinnedLeases()
+
 	// Create server args with localities for each node.
 	serverArgs := make(map[int]base.TestServerArgs, numNodes)
 	for i := 0; i < numNodes; i++ {
@@ -225,6 +231,9 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 				},
 				Server: &server.TestingKnobs{
 					DefaultZoneConfigOverride: &zcfg,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					PinnedLeases: pinnedLeases,
 				},
 			},
 			RaftConfig: base.RaftConfig{
@@ -266,6 +275,12 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Pin the lease to n2 before we start withdrawing support from n1. This
+	// ensures that when n1 loses its lease, only n2 can acquire it -
+	// eliminating any race between n2 and n3. The pin doesn't affect n1's
+	// existing lease, only future acquisitions.
+	pinnedLeases.PinLease(desc.RangeID, tc.Target(1).StoreID)
 
 	// Set up store liveness heartbeat dropping from n1 to n2 and n3, which then
 	// causes n2 and n3 to withdraw support from n1.
@@ -314,11 +329,12 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 	})
 	t.Logf("n1 stepped down; new raft leader is n%d", newLeaderIdx+1)
 
-	// Send a Get request to the new leader's store to trigger lease acquisition.
-	newLeaderStore := tc.GetFirstStoreFromServer(t, newLeaderIdx)
-	_, err := newLeaderStore.DB().Get(ctx, scratchKey)
+	// Send a Get request to n2's store to trigger lease acquisition. Because we
+	// pinned the lease to n2, only n2 can acquire it regardless of who the raft
+	// leader is.
+	_, err := store2.DB().Get(ctx, scratchKey)
 	require.NoError(t, err)
-	t.Logf("sent Get request to n%d to trigger lease acquisition", newLeaderIdx+1)
+	t.Logf("sent Get request to n2 to trigger lease acquisition")
 
 	// Re-enable store liveness heartbeats from n1 so it regains support.
 	dropMessages.Store(false)
@@ -335,15 +351,15 @@ func TestLeaseTransferAfterStoreLivenessSupportWithdrawn(t *testing.T) {
 	})
 	t.Logf("n1 has regained support from n2 and n3")
 
-	// Now enqueue the range in the lease queue on the current leaseholder.
+	// Now enqueue the range in the lease queue on n2 (the current leaseholder).
 	// The lease queue should attempt to transfer the lease back to n1, since
 	// n1 is the preferred leaseholder, but it should only do so if it doesn't
 	// treat n1 as suspect. Currently, n1 is not treated as suspect if support
 	// has been recently withdrawn from it, which demonstrates the issue.
-	repl := newLeaderStore.LookupReplica(roachpb.RKey(scratchKey))
+	repl := store2.LookupReplica(roachpb.RKey(scratchKey))
 	require.NotNil(t, repl)
 
-	_, err = newLeaderStore.Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, false /* async */)
+	_, err = store2.Enqueue(ctx, "lease", repl, true /* skipShouldQueue */, false /* async */)
 	require.NoError(t, err)
 
 	// TODO(arul): This should be a require.Never followed by a require.Eventually
