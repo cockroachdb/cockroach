@@ -969,6 +969,16 @@ func (m *Manager) insertDescriptorVersions(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	newVersionsToInsert := make([]*descriptorVersionState, 0, len(versions))
+	defer func() {
+		// Release memory for anything not inserted, entries are
+		// cleared after each insert.
+		for _, state := range newVersionsToInsert {
+			if state == nil {
+				continue
+			}
+			t.m.boundAccount.Shrink(ctx, state.getByteSize())
+		}
+	}()
 	for i := range versions {
 		// Since we gave up the lock while reading the versions from
 		// the store we have to ensure that no one else inserted the
@@ -983,8 +993,9 @@ func (m *Manager) insertDescriptorVersions(
 		}
 	}
 	// Only insert if all versions were allocated.
-	for _, descState := range newVersionsToInsert {
+	for idx, descState := range newVersionsToInsert {
 		t.mu.active.insert(descState)
+		newVersionsToInsert[idx] = nil
 	}
 
 	return nil
