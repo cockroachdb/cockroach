@@ -2473,8 +2473,6 @@ func shouldWaitForPendingMerge(
 // Despite the safety due to the change replicas protocol explained above it'd
 // be good to know for sure that a replica ID for a range on a store is always
 // monotonically increasing, even across restarts.
-//
-// See TestProcessSplitAfterRightHandSideHasBeenRemoved.
 func (r *Replica) isNewerThanSplit(split *roachpb.SplitTrigger) bool {
 	rightDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	// If the first raft message we received for the RHS range was for a replica
