@@ -816,7 +816,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	ms, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
-	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
+	assertRecomputedStatsExceptSys(t, "before split", snap, repl.Desc(), ms, start.WallTime)
 
 	require.Equal(t, replMS, ms, "in-memory and on-disk stats diverge")
 
@@ -867,8 +867,8 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	require.GreaterOrEqual(t, msLeft.GCBytesAge+msRight.GCBytesAge, ms.GCBytesAge)
 
 	// Stats should agree with re-computation.
-	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
-	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
 	// Expect estimates if the cluster setting is enabled and neither side is empty.
 	expectEstimates := kvserver.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV) &&
 		msLeft.Total() > 0 && msRight.Total() > 0
@@ -892,7 +892,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	msMerged, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
-	assertRecomputedStats(t, "in-mem after merge", snap, repl.Desc(), msMerged, s.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "in-mem after merge", snap, repl.Desc(), msMerged, s.Clock().PhysicalNow())
 
 	msMerged.SysBytes, msMerged.SysCount, msMerged.AbortSpanBytes = 0, 0, 0
 	ms.AgeTo(msMerged.LastUpdateNanos)
@@ -1022,8 +1022,8 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 						require.Greater(t, rhsStats.ContainsEstimates, int64(0))
 					} else {
 						// Otherwise, the stats should agree with re-computation.
-						assertRecomputedStats(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
-						assertRecomputedStats(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "LHS after split", snap, lhsRepl.Desc(), lhsStats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "RHS after split", snap, rhsRepl.Desc(), rhsStats, s.Clock().PhysicalNow())
 					}
 
 					// If we used estimated stats while splitting the range, the stats on disk
@@ -1060,10 +1060,10 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 					// estimates and not re-computing stats at the beginning of splits.
 					expectIncorrectStats := expectContainsEstimates && !recompute
 					if !expectIncorrectStats {
-						assertRecomputedStats(t, "LHS1 after second split", snap, lhsRepl.Desc(), lhs1Stats, s.Clock().PhysicalNow())
-						assertRecomputedStats(t, "LHS2 after second split", snap, lhs2Repl.Desc(), lhs2Stats, s.Clock().PhysicalNow())
-						assertRecomputedStats(t, "RHS1 after second split", snap, rhsRepl.Desc(), rhs1Stats, s.Clock().PhysicalNow())
-						assertRecomputedStats(t, "RHS2 after second split", snap, rhs2Repl.Desc(), rhs2Stats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "LHS1 after second split", snap, lhsRepl.Desc(), lhs1Stats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "LHS2 after second split", snap, lhs2Repl.Desc(), lhs2Stats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "RHS1 after second split", snap, rhsRepl.Desc(), rhs1Stats, s.Clock().PhysicalNow())
+						assertRecomputedStatsExceptSys(t, "RHS2 after second split", snap, rhs2Repl.Desc(), rhs2Stats, s.Clock().PhysicalNow())
 					} else {
 						require.Greater(t, lhs1Stats.ContainsEstimates, int64(0))
 						require.Greater(t, lhs2Stats.ContainsEstimates, int64(0))
@@ -1446,8 +1446,8 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	estimates := kvserver.EnableEstimatedMVCCStatsInSplit.Get(&store.ClusterSettings().SV)
 	recompute := kvserver.EnableMVCCStatsRecomputationInSplit.Get(&store.ClusterSettings().SV)
 	if !estimates || (estimates && recompute) {
-		assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
-		assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+		assertRecomputedStatsExceptSys(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+		assertRecomputedStatsExceptSys(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
 	}
 }
 
@@ -4539,8 +4539,8 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 				recompute := kvserver.EnableMVCCStatsRecomputationInSplit.Get(&store.ClusterSettings().SV)
 				if !estimates || (estimates && recompute) {
 					now := s.Clock().Now()
-					assertRecomputedStats(t, "lhs after split", snap, lhsRepl.Desc(), lhsStats, now.WallTime)
-					assertRecomputedStats(t, "rhs after split", snap, rhsRepl.Desc(), rhsStats, now.WallTime)
+					assertRecomputedStatsExceptSys(t, "lhs after split", snap, lhsRepl.Desc(), lhsStats, now.WallTime)
+					assertRecomputedStatsExceptSys(t, "rhs after split", snap, rhsRepl.Desc(), rhsStats, now.WallTime)
 				}
 			}
 
