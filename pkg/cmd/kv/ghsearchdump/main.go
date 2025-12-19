@@ -401,9 +401,7 @@ func getLastPushDate(commits []Commit) time.Time {
 // getLastIssueContribution finds the most recent contribution (issue creation or comment)
 // from one of the tracked authors within the date range. Returns zero time if none found.
 func getLastIssueContribution(
-	issue *IssueDetail,
-	authorSet map[string]bool,
-	after, before time.Time,
+	issue *IssueDetail, authorSet map[string]bool, after, before time.Time,
 ) time.Time {
 	var latest time.Time
 

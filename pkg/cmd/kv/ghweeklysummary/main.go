@@ -24,6 +24,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var (
@@ -69,7 +71,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		endDate = time.Now()
+		endDate = timeutil.Now()
 	}
 
 	if *after != "" {
