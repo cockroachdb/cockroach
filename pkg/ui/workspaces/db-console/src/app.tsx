@@ -10,6 +10,7 @@ import {
   DatabasesPageV2,
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
+  StatementStatisticsPage,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -217,6 +218,14 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           path={`/table/:${tableIdAttr}`}
                           component={TableDetailsPageV2}
                         />
+
+                        {/* statement statistics */}
+                        <Route
+                          exact
+                          path="/statistics"
+                          component={StatementStatisticsPage}
+                        />
+
                         <Redirect
                           from={`/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}`}
                           to={`/database/:${databaseNameAttr}/table/:${tableNameAttr}`}

@@ -303,6 +303,11 @@ export default function Debug() {
           disabled={disable_kv_level_advanced_debug}
         />
         <StatementDiagnosticsConnected />
+        <DebugPanelLink
+          name="Statement Statistics (New)"
+          url="#/statistics"
+          note="View top statement statistics using the new SQL activity API."
+        />
         <PanelTitle>Configuration</PanelTitle>
         <DebugPanelLink
           name="Cluster Settings"
