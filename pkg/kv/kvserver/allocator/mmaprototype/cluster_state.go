@@ -1088,6 +1088,12 @@ type rangeState struct {
 	// be non-nil.
 	conf *normalizedSpanConfig
 
+	// hasNormalizationError indicates whether span config normalization
+	// encountered any error (hard or soft). This is tracked separately from conf
+	// since conf may still be non-nil when only soft errors occur. Used solely
+	// for recording metrics on ranges with normalization errors.
+	hasNormalizationError bool
+
 	load RangeLoad
 
 	// The pending changes to this range, that are already reflected in
@@ -1357,208 +1363,246 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
-	ctx context.Context, msg *StoreLeaseholderMsg, metrics *counterMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, metrics *rangeOperationMetrics,
 ) {
 	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
 
+// processRangeMsg processes a RangeMsg from a leaseholder store. It updates the
+// clusterState with the new range state.
+func (cs *clusterState) processRangeMsg(
+	ctx context.Context,
+	rangeMsg *RangeMsg,
+	metrics *rangeOperationMetrics,
+	localStoreID roachpb.StoreID,
+	now time.Time,
+) (hasError bool, hasSoftError bool) {
+	cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
+	rs, ok := cs.ranges[rangeMsg.RangeID]
+
+	defer func() {
+		if rs.hasNormalizationError {
+			hasError = true
+			if rs.conf != nil {
+				hasSoftError = true
+			}
+		}
+	}()
+
+	if !ok {
+		// This is the first time we've seen this range.
+		if !rangeMsg.MaybeSpanConfIsPopulated {
+			panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
+		}
+		rs = newRangeState(localStoreID)
+		cs.ranges[rangeMsg.RangeID] = rs
+	} else if rs.localRangeOwner != localStoreID {
+		rs.localRangeOwner = localStoreID
+	}
+	rs.load = rangeMsg.RangeLoad
+	if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
+		// Common case: no pending changes, and span config not provided.
+		//
+		// Confirm that the membership state is consistent. If not, fall through
+		// and make it consistent. We have seen an example where
+		// AdjustPendingChangesDisposition lied about being successful, and have
+		// not been able to find the root cause. So we'd rather force eventual
+		// consistency here.
+		mayHaveDiverged := false
+		if len(rs.replicas) == len(rangeMsg.Replicas) {
+			for i := range rs.replicas {
+				// Since we stuff rangeMsg.Replicas directly into the
+				// rangeState.replicas slice, in the common case we expect both of
+				// them to have the same replica at the same position. If they
+				// don't, they have either diverged, or there have been adjustments
+				// made n rangeState.replicas that have changed the ordering. The
+				// latter may be a false positive, but we don't mind the small
+				// amount of additional work below.
+				if rs.replicas[i] != rangeMsg.Replicas[i] {
+					mayHaveDiverged = true
+					break
+				}
+			}
+		} else {
+			mayHaveDiverged = true
+		}
+		if !mayHaveDiverged {
+			// This is the common case where there were no pending changes, and no
+			// span config provided and no replicas changes. We don't need to do
+			// any more processing of this RangeMsg.
+			return
+		}
+		// Else fall through and do the expensive work.
+	}
+	// Slow path, which reconstructs everything about the range.
+
+	// Set the range state and store state to match the range message state
+	// initially. The pending changes which are not enacted in the range
+	// message are handled and added back below.
+	for _, replica := range rs.replicas {
+		ss := cs.stores[replica.StoreID]
+		if ss == nil {
+			panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
+		}
+		delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
+	}
+	rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
+	for _, replica := range rangeMsg.Replicas {
+		cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
+	}
+
+	// Find any pending changes which are now enacted, according to the
+	// leaseholder. Note that this is the only code path where a subset of
+	// pending changes for a replica can be considered enacted.
+	var remainingChanges, enactedChanges []*pendingReplicaChange
+	for _, change := range rs.pendingChanges {
+		ss := cs.stores[change.target.StoreID]
+		adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
+		if !ok {
+			adjustedReplica.ReplicaID = noReplicaID
+		}
+		if adjustedReplica.subsumesChange(change.next) {
+			// The change has been enacted according to the leaseholder.
+			enactedChanges = append(enactedChanges, change)
+		} else {
+			// Not subsumed. Replace the prev with the latest source of truth from
+			// the leaseholder. Note, this can be the noReplicaID case from above.
+			change.prev = adjustedReplica
+			remainingChanges = append(remainingChanges, change)
+		}
+	}
+	if len(enactedChanges) > 0 && len(remainingChanges) > 0 {
+		// There are remaining changes, so potentially update their gcTime.
+		//
+		// All remaining changes have the same gcTime.
+		curGCTime := remainingChanges[0].gcTime
+		revisedGCTime := now.Add(partiallyEnactedGCDuration)
+		if revisedGCTime.Before(curGCTime) {
+			// Shorten when the GC happens.
+			for _, change := range remainingChanges {
+				change.gcTime = revisedGCTime
+			}
+		}
+	}
+	// rs.pendingChanges is the union of remainingChanges and enactedChanges.
+	// These changes are also in cs.pendingChanges.
+	if len(enactedChanges) > 0 {
+		log.KvDistribution.Infof(ctx, "enactedChanges %v", enactedChanges)
+	}
+	for _, change := range enactedChanges {
+		// Mark the change as enacted. Enacting a change does not remove the
+		// corresponding load adjustments. The store load message will do that,
+		// indicating that the change has been reflected in the store load.
+		//
+		// There was a previous bug where these changes were not being
+		// removed now, and were being removed later when the load adjustment
+		// incorporated them. Fixing this has introduced improved
+		// example_skewed_cpu_even_ranges_mma in that it converges faster, but
+		// introduced more thrashing in
+		// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
+		// is because MMA is acting faster to undo the effects of the changes
+		// made by the replicate and lease queues.
+		cs.pendingChangeEnacted(change.changeID, now)
+	}
+	// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
+	// of changes, though possibly in different order.
+
+	// rs.pendingChanges only contains remainingChanges, and these are also in
+	// cs.pendingChanges and storeState's loadPendingChanges. Their load
+	// effect is also incorporated into the storeStates, but not in the range
+	// membership (since we undid that above).
+	if len(remainingChanges) > 0 {
+		log.KvDistribution.Infof(ctx, "remainingChanges %v", remainingChanges)
+		// Temporarily set the rs.pendingChanges to nil, since
+		// preCheckOnApplyReplicaChanges returns false if there are any pending
+		// changes, and these are the changes that are pending. This is hacky
+		// and should be cleaned up.
+		//
+		// NB: rs.pendingChanges contains the same changes as
+		// remainingChanges, but they are not the same slice.
+		rc := rs.pendingChanges
+		rs.pendingChanges = nil
+		err := cs.preCheckOnApplyReplicaChanges(PendingRangeChange{
+			RangeID:               rangeMsg.RangeID,
+			pendingReplicaChanges: remainingChanges,
+		})
+		// Restore it.
+		rs.pendingChanges = rc
+
+		if err == nil {
+			// Re-apply the remaining changes. Note that the load change was not
+			// undone above, so we pass !applyLoadChange, to avoid applying it
+			// again. Also note that applyReplicaChange does not add to the various
+			// pendingChanges data-structures, which is what we want here since
+			// these changes are already in those data-structures.
+			for _, change := range remainingChanges {
+				cs.applyReplicaChange(change.ReplicaChange, false)
+			}
+		} else {
+			reason := redact.Sprint(err)
+			// The current state provided by the leaseholder does not permit these
+			// changes, so we need to drop them. This should be rare, but can happen
+			// if the leaseholder executed a change that MMA was completely unaware
+			// of.
+			log.KvDistribution.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
+				remainingChanges, reason)
+			if metrics != nil {
+				metrics.DroppedDueToStateInconsistency.Inc(1)
+			}
+			// We did not undo the load change above, or remove it from the various
+			// pendingChanges data-structures. We do those things now.
+			for _, change := range remainingChanges {
+				rs.removePendingChangeTracking(change.changeID)
+				delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
+				delete(cs.pendingChanges, change.changeID)
+				cs.undoChangeLoadDelta(change.ReplicaChange)
+			}
+			if n := len(rs.pendingChanges); n > 0 {
+				panic(errors.AssertionFailedf("expected no pending changes but found %d", n))
+			}
+		}
+	}
+	if rangeMsg.MaybeSpanConfIsPopulated {
+		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
+		if err != nil {
+			log.KvDistribution.Warningf(
+				ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
+		}
+		rs.conf = normSpanConfig
+		rs.hasNormalizationError = err != nil
+	}
+	// Ensure (later) recomputation of the analyzed range constraints for the
+	// range, by clearing the existing analyzed constraints. This is done
+	// since in this slow path the span config or the replicas may have
+	// changed.
+	rs.clearAnalyzedConstraints()
+	return
+}
+
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *counterMetrics,
+	ctx context.Context,
+	msg *StoreLeaseholderMsg,
+	numTopKReplicas int,
+	metrics *rangeOperationMetrics,
 ) {
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
 	clear(cs.scratchRangeMap)
+	totalErrorCount := 0
+	totalSoftErrorCount := 0
 	for _, rangeMsg := range msg.Ranges {
-		cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
-		rs, ok := cs.ranges[rangeMsg.RangeID]
-		if !ok {
-			// This is the first time we've seen this range.
-			if !rangeMsg.MaybeSpanConfIsPopulated {
-				panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
-			}
-			rs = newRangeState(msg.StoreID)
-			cs.ranges[rangeMsg.RangeID] = rs
-		} else if rs.localRangeOwner != msg.StoreID {
-			rs.localRangeOwner = msg.StoreID
+		hasError, hasSoftError := cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
+		if hasError {
+			totalErrorCount++
 		}
-		rs.load = rangeMsg.RangeLoad
-		if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
-			// Common case: no pending changes, and span config not provided.
-			//
-			// Confirm that the membership state is consistent. If not, fall through
-			// and make it consistent. We have seen an example where
-			// AdjustPendingChangesDisposition lied about being successful, and have
-			// not been able to find the root cause. So we'd rather force eventual
-			// consistency here.
-			mayHaveDiverged := false
-			if len(rs.replicas) == len(rangeMsg.Replicas) {
-				for i := range rs.replicas {
-					// Since we stuff rangeMsg.Replicas directly into the
-					// rangeState.replicas slice, in the common case we expect both of
-					// them to have the same replica at the same position. If they
-					// don't, they have either diverged, or there have been adjustments
-					// made n rangeState.replicas that have changed the ordering. The
-					// latter may be a false positive, but we don't mind the small
-					// amount of additional work below.
-					if rs.replicas[i] != rangeMsg.Replicas[i] {
-						mayHaveDiverged = true
-						break
-					}
-				}
-			} else {
-				mayHaveDiverged = true
-			}
-			if !mayHaveDiverged {
-				// This is the common case where there were no pending changes, and no
-				// span config provided and no replicas changes. We don't need to do
-				// any more processing of this RangeMsg.
-				continue
-			}
-			// Else fall through and do the expensive work.
+		if hasSoftError {
+			totalSoftErrorCount++
 		}
-		// Slow path, which reconstructs everything about the range.
-
-		// Set the range state and store state to match the range message state
-		// initially. The pending changes which are not enacted in the range
-		// message are handled and added back below.
-		for _, replica := range rs.replicas {
-			ss := cs.stores[replica.StoreID]
-			if ss == nil {
-				panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
-			}
-			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
-		}
-		rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
-		for _, replica := range rangeMsg.Replicas {
-			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
-		}
-
-		// Find any pending changes which are now enacted, according to the
-		// leaseholder. Note that this is the only code path where a subset of
-		// pending changes for a replica can be considered enacted.
-		var remainingChanges, enactedChanges []*pendingReplicaChange
-		for _, change := range rs.pendingChanges {
-			ss := cs.stores[change.target.StoreID]
-			adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
-			if !ok {
-				adjustedReplica.ReplicaID = noReplicaID
-			}
-			if adjustedReplica.subsumesChange(change.next) {
-				// The change has been enacted according to the leaseholder.
-				enactedChanges = append(enactedChanges, change)
-			} else {
-				// Not subsumed. Replace the prev with the latest source of truth from
-				// the leaseholder. Note, this can be the noReplicaID case from above.
-				change.prev = adjustedReplica
-				remainingChanges = append(remainingChanges, change)
-			}
-		}
-		if len(enactedChanges) > 0 && len(remainingChanges) > 0 {
-			// There are remaining changes, so potentially update their gcTime.
-			//
-			// All remaining changes have the same gcTime.
-			curGCTime := remainingChanges[0].gcTime
-			revisedGCTime := now.Add(partiallyEnactedGCDuration)
-			if revisedGCTime.Before(curGCTime) {
-				// Shorten when the GC happens.
-				for _, change := range remainingChanges {
-					change.gcTime = revisedGCTime
-				}
-			}
-		}
-		// rs.pendingChanges is the union of remainingChanges and enactedChanges.
-		// These changes are also in cs.pendingChanges.
-		if len(enactedChanges) > 0 {
-			log.KvDistribution.Infof(ctx, "enactedChanges %v", enactedChanges)
-		}
-		for _, change := range enactedChanges {
-			// Mark the change as enacted. Enacting a change does not remove the
-			// corresponding load adjustments. The store load message will do that,
-			// indicating that the change has been reflected in the store load.
-			//
-			// There was a previous bug where these changes were not being
-			// removed now, and were being removed later when the load adjustment
-			// incorporated them. Fixing this has introduced improved
-			// example_skewed_cpu_even_ranges_mma in that it converges faster, but
-			// introduced more thrashing in
-			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
-			// is because MMA is acting faster to undo the effects of the changes
-			// made by the replicate and lease queues.
-			cs.pendingChangeEnacted(change.changeID, now)
-		}
-		// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
-		// of changes, though possibly in different order.
-
-		// rs.pendingChanges only contains remainingChanges, and these are also in
-		// cs.pendingChanges and storeState's loadPendingChanges. Their load
-		// effect is also incorporated into the storeStates, but not in the range
-		// membership (since we undid that above).
-		if len(remainingChanges) > 0 {
-			log.KvDistribution.Infof(ctx, "remainingChanges %v", remainingChanges)
-			// Temporarily set the rs.pendingChanges to nil, since
-			// preCheckOnApplyReplicaChanges returns false if there are any pending
-			// changes, and these are the changes that are pending. This is hacky
-			// and should be cleaned up.
-			//
-			// NB: rs.pendingChanges contains the same changes as
-			// remainingChanges, but they are not the same slice.
-			rc := rs.pendingChanges
-			rs.pendingChanges = nil
-			err := cs.preCheckOnApplyReplicaChanges(PendingRangeChange{
-				RangeID:               rangeMsg.RangeID,
-				pendingReplicaChanges: remainingChanges,
-			})
-			// Restore it.
-			rs.pendingChanges = rc
-
-			if err == nil {
-				// Re-apply the remaining changes. Note that the load change was not
-				// undone above, so we pass !applyLoadChange, to avoid applying it
-				// again. Also note that applyReplicaChange does not add to the various
-				// pendingChanges data-structures, which is what we want here since
-				// these changes are already in those data-structures.
-				for _, change := range remainingChanges {
-					cs.applyReplicaChange(change.ReplicaChange, false)
-				}
-			} else {
-				reason := redact.Sprint(err)
-				// The current state provided by the leaseholder does not permit these
-				// changes, so we need to drop them. This should be rare, but can happen
-				// if the leaseholder executed a change that MMA was completely unaware
-				// of.
-				log.KvDistribution.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
-					remainingChanges, reason)
-				if metrics != nil {
-					metrics.DroppedDueToStateInconsistency.Inc(1)
-				}
-				// We did not undo the load change above, or remove it from the various
-				// pendingChanges data-structures. We do those things now.
-				for _, change := range remainingChanges {
-					rs.removePendingChangeTracking(change.changeID)
-					delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
-					delete(cs.pendingChanges, change.changeID)
-					cs.undoChangeLoadDelta(change.ReplicaChange)
-				}
-				if n := len(rs.pendingChanges); n > 0 {
-					panic(errors.AssertionFailedf("expected no pending changes but found %d", n))
-				}
-			}
-		}
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
-			if err != nil {
-				log.KvDistribution.Warningf(
-					ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
-				metrics.incSpanConfigNormalizationErrorIfNonNil()
-			}
-			rs.conf = normSpanConfig
-		}
-		// Ensure (later) recomputation of the analyzed range constraints for the
-		// range, by clearing the existing analyzed constraints. This is done
-		// since in this slow path the span config or the replicas may have
-		// changed.
-		rs.clearAnalyzedConstraints()
+	}
+	if metrics != nil {
+		metrics.SpanConfigNormalizationError.Update(int64(totalErrorCount))
+		metrics.SpanConfigNormalizationSoftError.Update(int64(totalSoftErrorCount))
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
 	// no longer the leaseholder.
