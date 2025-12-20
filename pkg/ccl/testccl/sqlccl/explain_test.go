@@ -152,6 +152,9 @@ func TestExplainGist(t *testing.T) {
 		// Set up some initial state.
 		setup := sqlsmith.Setups["seed"](rng)
 		setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
+		// Avoid retry errors when decoding gists due to locked lease timestamps
+		// around schema changes.
+		setup = append(setup, "SET CLUSTER SETTING sql.catalog.descriptor_lease.lock_old_versions.enabled = true;")
 		if rng.Float64() < 0.5 {
 			// In some cases have stats on the seed table.
 			setup = append(setup, "ANALYZE seed;")
