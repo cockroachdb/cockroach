@@ -4456,15 +4456,25 @@ func (ex *connExecutor) execWithProfiling(
 		}
 		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
 		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
-		pprofutil.Do(ctx, func(ctx context.Context) {
-			err = op(ctx)
-		},
+			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+		)
+		labels := make([]string, 0, 12)
+		labels = append(labels, []string{
 			workloadid.ProfileTag, sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID),
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
+		}...)
+		if opName, ok := GetInternalOpName(ctx); ok {
+			labels = append(labels, "opname", opName)
+		}
+		pprofutil.Do(
+			ctx,
+			func(ctx context.Context) {
+				err = op(ctx)
+			},
+			labels...,
 		)
 	} else {
 		err = op(ctx)
