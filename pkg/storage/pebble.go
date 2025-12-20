@@ -580,6 +580,26 @@ var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
 	settings.IntInRange(0, 100),
 )
 
+var tableFilterModeSetting = settings.RegisterEnumSetting(
+	settings.ApplicationLevel, // used by temp storage as well
+	"storage.table_filters",
+	"table filter configuration: uniform = 10bpk bloom filters on all levels; progressive = bloom filters with level-dependent size",
+	"uniform",
+	map[tableFilterMode]string{
+		tableFilterModeUniform:     "uniform",
+		tableFilterModeProgressive: "progressive",
+	},
+)
+
+type tableFilterMode int8
+
+const (
+	// tableFilterModeUniform applies pebble.DBTableFilterPolicyUniform.
+	tableFilterModeUniform tableFilterMode = iota
+	// tableFilterModeProgressive applies pebble.DBTableFilterPolicyProgressive.
+	tableFilterModeProgressive
+)
+
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = func() pebble.Comparer {
@@ -673,14 +693,14 @@ func initPebbleOptions() *pebble.Options {
 	opts.Levels[0] = pebble.LevelOptions{
 		BlockSize:         32 << 10,  // 32 KB
 		IndexBlockSize:    256 << 10, // 256 KB
-		TableFilterPolicy: bloom.FilterPolicy(10),
+		TableFilterPolicy: func() pebble.TableFilterPolicy { return bloom.FilterPolicy(10) },
 	}
 	opts.Levels[0].EnsureL0Defaults()
 	for i := 1; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
 		l.BlockSize = 32 << 10       // 32 KB
 		l.IndexBlockSize = 256 << 10 // 256 KB
-		l.TableFilterPolicy = bloom.FilterPolicy(10)
+		l.TableFilterPolicy = func() pebble.TableFilterPolicy { return bloom.FilterPolicy(10) }
 		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
 	}
 
@@ -1015,6 +1035,16 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
 	cfg.opts.ApplyCompressionSettings(func() pebble.DBCompressionSettings {
 		return CompressionAlgorithmStorage.Get(sv).DBCompressionSettings()
+	})
+	cfg.opts.ApplyTableFilterPolicy(func() pebble.DBTableFilterPolicy {
+		switch tableFilterModeSetting.Get(&cfg.settings.SV) {
+		case tableFilterModeUniform:
+			return pebble.DBTableFilterPolicyUniform
+		case tableFilterModeProgressive:
+			return pebble.DBTableFilterPolicyProgressive
+		default:
+			return pebble.DBTableFilterPolicyUniform
+		}
 	})
 	// Note: the CompactionConcurrencyRange function will be wrapped below to
 	// allow overriding the lower and upper values at runtime through
