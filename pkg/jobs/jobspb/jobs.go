@@ -172,3 +172,7 @@ var _ redact.SafeFormatter = (*RowLevelTTLProcessorProgress)(nil)
 func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.SafeString(redact.SafeString(r.String()))
 }
+
+func (c CreateStatsDetails) IsAuto() bool {
+	return c.Name == AutoStatsName || c.Name == AutoPartialStatsName
+}
