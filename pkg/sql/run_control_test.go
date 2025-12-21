@@ -130,7 +130,10 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		errChan <- err
 	}()
 	_, err := conn2.Exec(cancelQuery)
-	if err != nil && !testutils.IsError(err, "query ID") {
+	// We might have blocked the cancellation query longer than it took the
+	// target query to execute, in which case the cancel query itself errors out
+	// (and it's ok).
+	if err != nil && !testutils.IsError(err, "could not cancel query") {
 		t.Fatal(err)
 	}
 
