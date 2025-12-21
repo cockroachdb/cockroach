@@ -618,16 +618,32 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			columnsUsed[i] = columnIDs
 		}
 		keepTime := stats.TableStatisticsRetentionPeriod.Get(&s.FlowCtx.Cfg.Settings.SV)
-		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+		columnIDsPlaceholders, placeHolderVals, err := stats.GetPlaceholderValsFromColumnIDs(s.tableID, columnsUsed, keepTime)
+		if err != nil {
+			return err
+		}
+
+		if err := s.FlowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, s.tableID)
+			if err != nil {
+				return err
+			}
+			canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0
+			if canaryEnabled && s.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+				if err := stats.DeleteExpiredStatsForOtherColumns(ctx, txn, columnIDsPlaceholders, placeHolderVals); err != nil {
+					return errors.Wrapf(err, "fail to delete expired stats for other columns for table id: %d", s.tableID)
+				}
+				return stats.MarkDelayDeleteForOtherColumns(ctx, txn, columnIDsPlaceholders, placeHolderVals)
+			}
 			// Delete old stats from columns that were not collected. This is
 			// important to prevent single-column stats from deleted columns or
 			// multi-column stats from deleted indexes from persisting indefinitely.
 			return stats.DeleteOldStatsForOtherColumns(
 				ctx,
 				txn,
-				s.tableID,
-				columnsUsed,
-				keepTime,
+				columnIDsPlaceholders,
+				placeHolderVals,
 			)
 		}); err != nil {
 			return err
