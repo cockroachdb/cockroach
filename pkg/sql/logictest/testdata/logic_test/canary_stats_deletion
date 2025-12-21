@@ -20,18 +20,19 @@ statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction = 1;
 
 statement ok
-CREATE TABLE t (a INT PRIMARY KEY) WITH (sql_stats_canary_window = '15s')
+CREATE TABLE t (a INT PRIMARY KEY, b INT) WITH (sql_stats_canary_window = '15s')
 
 statement ok
-INSERT INTO t (a) SELECT * FROM generate_series(1, 1000);
+INSERT INTO t (a, b) SELECT i, i FROM generate_series(1, 1000) as g(i);
 ANALYZE t;
 
 query TTIB colnames,retry
 SELECT statistics_name, column_names, row_count, delay_delete
-FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
 ----
 statistics_name  column_names  row_count  delay_delete
 NULL             {a}           1000       false
+NULL             {b}           1000       false
 
 # For a table with canary_window set, we don't immediately evict the
 # existing most-recent stats (row_count=1000) right away, but mark it
@@ -42,11 +43,13 @@ ANALYZE t;
 
 query TTIB colnames,retry
 SELECT statistics_name, column_names, row_count, delay_delete
-FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
 ----
 statistics_name  column_names  row_count  delay_delete
 NULL             {a}           2000       false
+NULL             {b}           2000       false
 NULL             {a}           1000       true
+NULL             {b}           1000       true
 
 statement ok
 INSERT INTO t (a) SELECT * FROM generate_series(2001, 3000);
@@ -57,26 +60,46 @@ CREATE STATISTICS s FROM t;
 # delay_delete=true.
 query TTIB colnames,retry
 SELECT statistics_name, column_names, row_count, delay_delete
-FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
 ----
 statistics_name  column_names  row_count  delay_delete
 s                {a}           3000       false
+s                {b}           3000       false
 NULL             {a}           2000       true
+NULL             {b}           2000       true
+
+# Test with new stats collected only on column a, which means
+# deleteOtherStats = false.
+# The other column (b) should not be affected.
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(3001, 4000);
+CREATE STATISTICS s_a2 ON a FROM t
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+s_a2             {a}           4000       false
+s                {a}           3000       true
+s                {b}           3000       false
+NULL             {b}           2000       true
 
 # But such 2-phases deletion is disabled for table with canary_window unset.
 statement ok
 ALTER TABLE t SET (sql_stats_canary_window = '0s');
 
 statement ok
-INSERT INTO t (a) SELECT * FROM generate_series(3001, 4000);
+INSERT INTO t (a) SELECT * FROM generate_series(4001, 5000);
 ANALYZE t;
 
 query TTIB colnames,retry
 SELECT statistics_name, column_names, row_count, delay_delete
-FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
 ----
 statistics_name  column_names  row_count  delay_delete
-NULL             {a}           4000       false
+NULL             {a}           5000       false
+NULL             {b}           5000       false
 
 subtest end
 
