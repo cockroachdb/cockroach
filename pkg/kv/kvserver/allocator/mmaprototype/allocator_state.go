@@ -118,7 +118,7 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 }
 
 type metricsEtc struct {
-	counters             *counterMetrics
+	counters             *rangeOperationMetrics
 	passMetricsAndLogger *rebalancingPassMetricsAndLogger
 	metricsRegistered    bool
 }
@@ -140,7 +140,7 @@ func (a *allocatorState) InitMetricsForLocalStore(
 
 func (a *allocatorState) getCounterMetricsForLocalStoreLocked(
 	ctx context.Context, localStoreID roachpb.StoreID,
-) *counterMetrics {
+) *rangeOperationMetrics {
 	return a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).counters
 }
 
@@ -161,7 +161,7 @@ func (a *allocatorState) ensureMetricsForLocalStoreLocked(
 	m, ok := a.metricsMap[localStoreID]
 	if !ok {
 		m = &metricsEtc{
-			counters:             makeCounterMetrics(),
+			counters:             makeRangeOperationMetrics(),
 			passMetricsAndLogger: makeRebalancingPassMetricsAndLogger(localStoreID),
 		}
 		a.metricsMap[localStoreID] = m
@@ -289,14 +289,14 @@ func (a *allocatorState) RegisterExternalChange(
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
-		counterMetrics.ExternalRegisterFailure.Inc(1)
+		rangeOperationMetrics.ExternalRegisterFailure.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
-		counterMetrics.ExternalRegisterSuccess.Inc(1)
+		rangeOperationMetrics.ExternalRegisterSuccess.Inc(1)
 	}
 	a.cs.addPendingRangeChange(change)
 	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
@@ -314,8 +314,8 @@ func (a *allocatorState) ComputeChanges(
 	if opts.DryRun {
 		panic(errors.AssertionFailedf("unsupported dry-run mode"))
 	}
-	counterMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
-	a.cs.processStoreLeaseholderMsg(ctx, msg, counterMetrics)
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
+	a.cs.processStoreLeaseholderMsg(ctx, msg, rangeOperationMetrics)
 	var passObs *rebalancingPassMetricsAndLogger
 	if opts.PeriodicCall {
 		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
@@ -753,10 +753,22 @@ func sortTargetCandidateSetAndPick(
 // ensureAnalyzedConstraints ensures that the constraints field of rangeState is
 // populated. It uses rangeState.{replicas,conf} as inputs to the computation.
 //
+// rstate.conf may be nil if basic span config normalization failed (e.g.,
+// invalid config). In this case, constraint analysis is skipped and
+// rstate.constraints remains nil. In addition, rstate.constraints may also
+// remain nil after the call if there is no leaseholder found. In such cases,
+// the range should be skipped from rebalancing.
+//
 // NB: Caller is responsible for calling clearAnalyzedConstraints when rstate or
 // the rstate.constraints is no longer needed.
 func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 	if rstate.constraints != nil {
+		return
+	}
+	// Skip the range if the configuration is invalid for constraint analysis.
+	if rstate.conf == nil {
+		log.KvDistribution.Warning(context.Background(),
+			"no span config due to normalization error, skipping constraint analysis")
 		return
 	}
 	// Populate the constraints.
@@ -779,9 +791,16 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 		// that there is a new leaseholder (and thus should drop this range).
 		// However, even in this case, replica.IsLeaseholder should still be there
 		// based on to the stale state, so this should still be impossible to hit.
-		panic(errors.AssertionFailedf("no leaseholders found in %v", rstate.replicas))
+		log.KvDistribution.Warningf(context.Background(),
+			"mma: no leaseholders found in %v, skipping constraint analysis", rstate.replicas)
+		return
 	}
-	rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder)
+	if err := rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder); err != nil {
+		releaseRangeAnalyzedConstraints(rac)
+		log.KvDistribution.Warningf(context.Background(),
+			"mma: error finishing constraint analysis: %v, skipping range", err)
+		return
+	}
 	rstate.constraints = rac
 }
 

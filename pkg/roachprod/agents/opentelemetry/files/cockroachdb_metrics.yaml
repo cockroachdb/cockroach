@@ -1380,6 +1380,8 @@ mma_overloaded_store_medium_dur_failure: mma.overloaded_store.medium_dur.failure
 mma_overloaded_store_medium_dur_success: mma.overloaded_store.medium_dur.success
 mma_overloaded_store_short_dur_failure: mma.overloaded_store.short_dur.failure
 mma_overloaded_store_short_dur_success: mma.overloaded_store.short_dur.success
+mma_span_config_normalization_error: mma.span_config.normalization.error
+mma_span_config_normalization_soft_error: mma.span_config.normalization.soft_error
 node_id: node_id
 obs_tablemetadata_update_job_duration: obs.tablemetadata.update_job.duration
 obs_tablemetadata_update_job_duration_bucket: obs.tablemetadata.update_job.duration.bucket
