@@ -961,7 +961,7 @@ func (p *planner) objectIsUnsafe(ctx context.Context, privilegeObject privilege.
 		return false
 	}
 
-	// All system descriptors are considered unsafe.
+	// All system descriptors are considered unsafe
 	if catalog.IsSystemDescriptor(d) {
 		return true
 	}
