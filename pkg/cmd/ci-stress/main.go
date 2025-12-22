@@ -152,6 +152,10 @@ func mainImpl(baseRef string, bazelArgs []string) error {
 		return err
 	}
 	pkgToTests := getPkgToTests(diff)
+	if len(pkgToTests) == 0 {
+		fmt.Println("could not find any eligible tests to stress, exiting")
+		return nil
+	}
 	return runTests(ctx, pkgToTests, bazelArgs)
 }
 
