@@ -51,7 +51,24 @@ const (
 	// non-terminal jobs.
 	NonTerminalStateTupleString = `(` + nonTerminalStateList + `)`
 
-	claimQuery = `
+	// GetClaimableJobsQuery is the first part of the new two-query claim approach
+	// that uses SELECT FOR UPDATE to prevent deadlock.
+	GetClaimableJobsQuery = `
+ SELECT id FROM system.jobs
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStateTupleString + `))
+ ORDER BY created DESC
+    LIMIT $1 FOR UPDATE`
+
+	// claimJobsQuery is the second part of the new two-query claim approach.
+	claimJobsQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE id = ANY($3)`
+
+	// legacyClaimQuery is the old single-query approach that can deadlock
+	// when multiple nodes acquire locks across ranges in parallel.
+	legacyClaimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
     WHERE ((claim_session_id IS NULL)
@@ -100,6 +117,60 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	ctx, cancel := context.WithDeadlineCause(ctx, timeutil.Now().Add(timeout), errors.New("claim jobs transaction took too long"))
 	defer cancel()
 
+	useSelectForUpdate := UseSelectForUpdate.Get(&r.settings.SV)
+	if !useSelectForUpdate {
+		return r.claimJobsLegacy(ctx, s)
+	}
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (retErr error) {
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "get-claimable-jobs", txn.KV(), sessiondata.NodeUserSessionDataOverride, GetClaimableJobsQuery, maxAdoptionsPerLoop.Get(&r.settings.SV))
+
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+
+		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+		var jobIDs []int
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			row := it.Cur()
+			id := int(*row[0].(*tree.DInt))
+			jobIDs = append(jobIDs, id)
+		}
+
+		if len(jobIDs) == 0 {
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.Dev.Infof(ctx, "claimed no jobs")
+			}
+			return nil
+		}
+		totalClaimed, err := txn.Exec(
+			ctx, "claim-jobs", txn.KV(), claimJobsQuery,
+			s.ID().UnsafeBytes(), r.ID(), jobIDs,
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not claim jobs")
+		}
+		r.metrics.ClaimedJobs.Inc(int64(totalClaimed))
+		log.Dev.Infof(ctx, "claimed %d jobs", totalClaimed)
+		return nil
+	})
+}
+
+func (r *Registry) claimJobsLegacy(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
@@ -107,7 +178,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 			return errors.WithAssertionFailure(err)
 		}
 		numRows, err := txn.Exec(
-			ctx, "claim-jobs", txn.KV(), claimQuery,
+			ctx, "claim-jobs", txn.KV(), legacyClaimQuery,
 			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop.Get(&r.settings.SV),
 		)
 		if err != nil {
