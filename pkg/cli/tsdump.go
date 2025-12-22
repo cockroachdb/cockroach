@@ -191,11 +191,6 @@ will then convert it to the --format requested in the current invocation.
 
 			tsClient := conn.NewTimeSeriesClient()
 			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
-				stream, err := tsClient.DumpRaw(context.Background(), req)
-				if err != nil {
-					return errors.Wrapf(err, "connecting to %s", target)
-				}
-
 				// get the node details so that we can get the SQL port
 				statusClient := conn.NewStatusClient()
 				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
@@ -221,6 +216,11 @@ will then convert it to the --format requested in the current invocation.
 					Version:        build.BinaryVersion(),
 					StoreToNodeMap: storeToNodeMap,
 					CreatedAt:      timeutil.Now(),
+				}
+
+				stream, err := tsClient.DumpRaw(context.Background(), req)
+				if err != nil {
+					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
 				// Buffer the writes to os.Stdout since we're going to
