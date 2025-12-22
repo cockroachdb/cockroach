@@ -1217,7 +1217,16 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
-func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []testStep) []testStep {
+// walkSteps recursively walks through all steps in the given slice,
+// calling the function `f` for every `singleStep` encountered. The
+// function returns the transformed list of steps.
+//
+// The `generateDelays` parameter controls whether new random delays
+// should be generated for steps that are newly inserted into a
+// concurrentRunStep.
+func (plan *TestPlan) walkSteps(
+	steps []testStep, f func(*singleStep, bool) []testStep, generateDelays bool,
+) []testStep {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
 		switch s := step.(type) {
@@ -1237,10 +1246,15 @@ func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []te
 					// generate a new delay for it.
 					if ss == ds.step {
 						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
-					} else {
+					} else if generateDelays {
+						// New step inserted during mutation - generate a new delay.
 						newSteps = append(newSteps, delayedStep{
 							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
 						)
+					} else {
+						// Read-only iteration - preserve the original delay to
+						// avoid mutating RNG state.
+						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
 					}
 				}
 			}
@@ -1274,27 +1288,27 @@ func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []te
 // that actually performs an action). The function should return a
 // list of testSteps that replace the given step in the plan.
 func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f)
-	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f)
-	plan.initSteps = plan.walkSteps(plan.initSteps, f)
-	plan.upgrades = plan.mapUpgrades(plan.upgrades, f)
+	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f, true)
+	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f, true)
+	plan.initSteps = plan.walkSteps(plan.initSteps, f, true)
+	plan.upgrades = plan.mapUpgrades(plan.upgrades, f, true)
 }
 
 func (plan *TestPlan) mapServiceSetup(
-	s *serviceSetup, f func(*singleStep, bool) []testStep,
+	s *serviceSetup, f func(*singleStep, bool) []testStep, generateDelays bool,
 ) *serviceSetup {
 	if s == nil {
 		return nil
 	}
 
 	return &serviceSetup{
-		steps:    plan.walkSteps(s.steps, f),
-		upgrades: plan.mapUpgrades(s.upgrades, f),
+		steps:    plan.walkSteps(s.steps, f, generateDelays),
+		upgrades: plan.mapUpgrades(s.upgrades, f, generateDelays),
 	}
 }
 
 func (plan *TestPlan) mapUpgrades(
-	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep,
+	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep, generateDelays bool,
 ) []*upgradePlan {
 	var newUpgrades []*upgradePlan
 	for _, upgrade := range upgrades {
@@ -1303,7 +1317,7 @@ func (plan *TestPlan) mapUpgrades(
 			to:   upgrade.to,
 			sequentialStep: sequentialRunStep{
 				label: upgrade.sequentialStep.label,
-				steps: plan.walkSteps(upgrade.sequentialStep.steps, f),
+				steps: plan.walkSteps(upgrade.sequentialStep.steps, f, generateDelays),
 			},
 		})
 	}
@@ -1312,10 +1326,10 @@ func (plan *TestPlan) mapUpgrades(
 }
 
 func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.mapServiceSetup(plan.setup.systemSetup, f)
-	plan.mapServiceSetup(plan.setup.tenantSetup, f)
-	plan.walkSteps(plan.initSteps, f)
-	plan.mapUpgrades(plan.upgrades, f)
+	plan.mapServiceSetup(plan.setup.systemSetup, f, false)
+	plan.mapServiceSetup(plan.setup.tenantSetup, f, false)
+	plan.walkSteps(plan.initSteps, f, false)
+	plan.mapUpgrades(plan.upgrades, f, false)
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
