@@ -28,7 +28,7 @@ import { nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
-import "./decommissionedNodeHistory.styl";
+import "./decommissionedNodeHistory.scss";
 
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;

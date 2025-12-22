@@ -14,7 +14,7 @@ import Print from "src/views/reports/containers/range/print";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
-import "./index.styl";
+import "./index.scss";
 
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;

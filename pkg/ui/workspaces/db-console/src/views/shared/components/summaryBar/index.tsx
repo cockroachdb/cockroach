@@ -14,7 +14,7 @@ import * as protos from "src/js/protos";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
-import "./summarybar.styl";
+import "./summarybar.scss";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 

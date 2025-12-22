@@ -5,7 +5,7 @@
 
 import * as React from "react";
 
-import "./globalNavigation.styl";
+import "./globalNavigation.scss";
 
 export interface GlobalNavigationProps {
   children: React.ReactNode;
