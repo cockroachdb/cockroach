@@ -3300,6 +3300,11 @@ func (ex *connExecutor) makeExecPlan(
 		}
 		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
 		if err != nil {
+			// Serialization failures can occur from the lease manager if a
+			// consistent view of descriptors was not observed.
+			if pgerror.GetPGCode(err) == pgcode.SerializationFailure {
+				return ctx, err
+			}
 			return ctx, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode plan gist: %q", ih.planGist.String())
 		}
 	}
