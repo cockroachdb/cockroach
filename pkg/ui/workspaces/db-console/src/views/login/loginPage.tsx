@@ -25,7 +25,7 @@ import {
   OIDCLoginConnected,
 } from "src/views/login/oidc";
 
-import "./loginPage.styl";
+import "./loginPage.scss";
 
 export interface LoginPageProps {
   loginState: LoginAPIState;

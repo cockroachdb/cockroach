@@ -33,7 +33,7 @@ import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
 import ReplicaMatrix, { SchemaObject } from "./replicaMatrix";
 import { TreeNode, TreePath } from "./tree";
-import "./index.styl";
+import "./index.scss";
 
 type DataDistributionResponse =
   cockroach.server.serverpb.DataDistributionResponse;
