@@ -1,0 +1,47 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cockroachdb",
+    srcs = [
+        "cockroachdb.go",
+        "migrations_definition.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks/cockroachdb",
+    visibility = ["//pkg/cmd/roachprod-centralized:__subpackages__"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/tasks",
+        "//pkg/cmd/roachprod-centralized/repositories/tasks",
+        "//pkg/cmd/roachprod-centralized/utils/database",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cockroachdb_test",
+    srcs = [
+        "cockroachdb_mock_test.go",
+        "cockroachdb_test.go",
+        "migrations_test.go",
+    ],
+    embed = [":cockroachdb"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/tasks",
+        "//pkg/cmd/roachprod-centralized/repositories/tasks",
+        "//pkg/cmd/roachprod-centralized/utils/database",
+        "//pkg/cmd/roachprod-centralized/utils/database/cockroachdb",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/testutils/skip",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//require",
+    ],
+)

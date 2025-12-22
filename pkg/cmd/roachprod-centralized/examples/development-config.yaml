@@ -1,0 +1,87 @@
+# roachprod-centralized Configuration
+# This is a development configuration with commented production examples
+
+# Logging configuration
+Log:
+  Level: debug  # Verbose logging for development (use "info" or "warn" in production)
+
+# API server configuration
+API:
+  Port: 8080
+  BasePath: ""  # No base path for development (use "/api" in production if needed)
+
+  Metrics:
+    Enabled: true
+    Port: 8081
+    Path: "/metrics"
+
+  Authentication:
+    Disabled: true  # Disable authentication for easier development
+    # For production, enable authentication:
+    # Disabled: false
+    JWT:
+      Header: "X-Goog-IAP-JWT-Assertion"
+      Audience: ""  # Not needed when disabled
+      # For production, set your JWT audience:
+      # Audience: "your-production-audience-id"
+
+# Database configuration
+Database:
+  Type: memory  # Use in-memory storage for development (fast, no persistence)
+  URL: ""  # Not needed for memory type
+  # For production, use CockroachDB:
+  # Type: cockroachdb
+  # URL: "postgresql://roachprod_user:password@crdb-cluster:26257/roachprod?sslmode=require"
+  # MaxConns: 10  # Increase to 20-50 in production for higher load
+  # MaxIdleTime: 300  # 5 minutes - adjust based on load patterns
+
+# Task processing configuration
+Tasks:
+  Workers: 1  # Single worker for development
+  # For production, use multiple workers based on load:
+  # Workers: 5
+
+# Cloud provider configuration
+# Add your cloud providers here. Multiple providers of the same type are supported.
+CloudProviders:
+  # Example GCE provider - uncomment and configure for your environment
+  # - type: gce
+  #   gce:
+  #     project: "your-gcp-project-id"
+  #     metadataProject: "shared-metadata-project"  # Optional
+  #   DNSPublicZone: "clusters.example.com"  # Override zone at provider level
+
+  # Example AWS provider
+  # - type: aws
+  #   aws:
+  #     accountID: "123456789012"
+  #     assumeStsRole: true  # Set to false or omit if not using STS
+  #   DNSPublicZone: "clusters.example.com"
+
+  # Example Azure provider
+  # - type: azure
+  #   azure:
+  #     subscriptionName: "your-azure-subscription"
+  #   DNSPublicZone: "clusters.example.com"
+
+  # Example IBM provider
+  # - type: ibm
+  #   DNSPublicZone: "clusters.example.com"
+
+# DNS providers (can be different from cloud providers)
+# These manage DNS records for your clusters
+DNSProviders: []  # Empty for development
+  # Example GCE DNS provider:
+  # - type: gce
+  #   gce:
+  #     dnsProject: "shared-dns-project"
+  #     dnsPublicZone: "public-zone-name"
+  #     dnsPublicDomain: "clusters.example.com"
+
+# Production deployment notes:
+# 1. Enable authentication and configure JWT audience
+# 2. Use CockroachDB with proper connection string and SSL
+# 3. Increase worker count and database connections
+# 4. Configure cloud providers for your environment
+# 5. Set log level to "info" or "warn"
+# 6. Use environment variables for secrets (DATABASE_URL, credentials, etc.)
