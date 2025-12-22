@@ -3,6 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+@import "src/core/index.module";
+
 :global {
   @import "uplot/dist/uPlot.min";
 }
@@ -19,6 +21,14 @@
       z-index: 1;
       width: fit-content;
       padding: 10px;
+      :global(.u-series) {
+        :global(.u-marker) {
+          display: inline-block;
+        }
+        :global(.u-label) {
+          color: $headings-color;
+        }
+      }
     }
   }
 }
