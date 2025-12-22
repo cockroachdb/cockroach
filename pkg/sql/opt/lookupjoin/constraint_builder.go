@@ -91,6 +91,149 @@ func (c *Constraint) IsUnconstrained() bool {
 	return len(c.KeyCols) == 0 && len(c.LookupExpr) == 0
 }
 
+// constraintDraft wraps a Constraint that is being built, producing the
+// Constraint with the Finalize method. It provides other methods that track
+// additional state needed during construction but not needed in the final
+// constraint.
+type constraintDraft struct {
+	Constraint
+	onFilters  memo.FiltersExpr
+	allFilters memo.FiltersExpr
+	// filtersOrdsToExclude is the set of ordinals in onFilters that should be
+	// excluded from RemainingFilters.
+	filterOrdsToExclude intsets.Fast
+	// equalityIndexCols is the set of columns in the index that are constrained
+	// via equality conditions.
+	equalityIndexCols opt.ColSet
+	// optionalMultiValFilterSuffixLen is the length of the suffix of index
+	// columns that are constrained to multiple constant values by optional
+	// filters. We do not want a suffix of the index columns to be constrained
+	// to multiple values by optional filters. This would only increase the
+	// number of lookup spans without making the constraint more selective. This
+	// field is used for trimming the constraint suffix in Finalize.
+	optionalMultiValFilterSuffixLen int32
+	// constrainedByInputCol is true when at least one input column is used to
+	// constrain index columns. A constraint that only constrains index columns
+	// by equalities or inequalities with constant values is not useful, so, for
+	// these types of drafts, Finalize will return an unconstrained constraint.
+	constrainedByInputCol bool
+}
+
+// Init initializes the constraint draft. It pre-allocates KeyCols and
+// RightSideCols to hold up to numIndexKeyCols each.
+func (c *constraintDraft) Init(onFilters, allFilters memo.FiltersExpr, numIndexKeyCols int) {
+	colsAlloc := make(opt.ColList, numIndexKeyCols*2)
+	c.KeyCols = colsAlloc[0:0:numIndexKeyCols]
+	c.RightSideCols = colsAlloc[numIndexKeyCols : numIndexKeyCols : numIndexKeyCols*2]
+	c.onFilters = onFilters
+	c.allFilters = allFilters
+}
+
+// AddDerivedEquivCol adds col to the set of derived equivalent columns. See
+// Constraint.DerivedEquivCols.
+func (c *constraintDraft) AddDerivedEquivCol(col opt.ColumnID) {
+	c.DerivedEquivCols.Add(col)
+}
+
+// AddProjection adds a projection to the draft.
+func (c *constraintDraft) AddProjection(projection memo.ProjectionsItem) {
+	c.InputProjections = append(c.InputProjections, projection)
+}
+
+// AddRemainingFilter adds a filter to the RemainingFilters of the draft. This
+// should be a filter that does not exist in onFilters.
+func (c *constraintDraft) AddRemainingFilter(filter memo.FiltersItem) {
+	if c.RemainingFilters == nil {
+		c.RemainingFilters = make(memo.FiltersExpr, 0, len(c.onFilters))
+	}
+	c.RemainingFilters = append(c.RemainingFilters, filter)
+}
+
+// ConstrainByEquality adds an equality constraint between leftCol and rightCol
+// to the draft. filterOrd is the ordinal within b.onFilters of the equality
+// filter or -1 if the filter was not within the onFilters.
+// constrainedByInputCol should be true if leftCol is produced the input (LHS)
+// or a projection of a non-constant value.
+//
+// NOTE: ConstrainEquality assumes that the equality between leftCol and
+// rightCol are not from optional filters.
+func (c *constraintDraft) ConstrainByEquality(
+	leftCol, rightCol opt.ColumnID, filterOrd int, constrainedByInputCol bool,
+) {
+	c.KeyCols = append(c.KeyCols, leftCol)
+	c.RightSideCols = append(c.RightSideCols, rightCol)
+	if filterOrd >= 0 {
+		c.AllLookupFilters = append(c.AllLookupFilters, c.allFilters[filterOrd])
+		c.filterOrdsToExclude.Add(filterOrd)
+	}
+	if constrainedByInputCol {
+		c.equalityIndexCols.Add(rightCol)
+		c.constrainedByInputCol = true
+	}
+	c.optionalMultiValFilterSuffixLen = 0
+}
+
+// ConstrainByExpr adds a lookup expression to the draft. filterOrd is the
+// ordinal within b.allFilters of the expression; it must be within bounds.
+// constrainedByInputCol should be true if leftCol is produced the input (LHS)
+// or a projection of a non-constant value.
+func (c *constraintDraft) ConstrainByExpr(
+	expr memo.FiltersItem, filterOrd int, constrainedByInputCol bool,
+) {
+	c.LookupExpr = append(c.LookupExpr, expr)
+	c.AllLookupFilters = append(c.AllLookupFilters, c.allFilters[filterOrd])
+	c.filterOrdsToExclude.Add(filterOrd)
+	if constrainedByInputCol {
+		c.constrainedByInputCol = true
+	}
+	if fromOptionalFilter := filterOrd >= len(c.onFilters); fromOptionalFilter {
+		c.optionalMultiValFilterSuffixLen++
+	} else {
+		c.optionalMultiValFilterSuffixLen = 0
+	}
+}
+
+// Finalize turns the draft into a constraint. It returns the constraint and the
+// set of columns in the index that are constrained via equality conditions. If
+// the draft does not constrain a lookup join in a useful way then the returned
+// constraint is unconstrained.
+func (c *constraintDraft) Finalize(f *norm.Factory) (_ Constraint, equalityIndexCols opt.ColSet) {
+	// Lookup join constraints that contain no lookup columns (e.g., a lookup
+	// expression x=1) are not useful.
+	if !c.constrainedByInputCol {
+		return Constraint{}, opt.ColSet{}
+	}
+
+	// Remove the suffix of index columns constrained to multiple values by
+	// optional filters.
+	if c.LookupExpr != nil && c.optionalMultiValFilterSuffixLen > 0 {
+		c.LookupExpr = c.LookupExpr[:len(c.LookupExpr)-int(c.optionalMultiValFilterSuffixLen)]
+		c.AllLookupFilters = c.AllLookupFilters[:len(c.AllLookupFilters)-int(c.optionalMultiValFilterSuffixLen)]
+	}
+
+	// If a lookup expression is required, convert the equality columns to
+	// equalities in the lookup expression.
+	if len(c.LookupExpr) > 0 {
+		for i := range c.KeyCols {
+			eqExpr := constructColEquality(f, c.KeyCols[i], c.RightSideCols[i])
+			c.LookupExpr = append(c.LookupExpr, eqExpr)
+		}
+		c.KeyCols = nil
+	}
+
+	// Reduce the remaining filters.
+	for i := range c.onFilters {
+		if !c.filterOrdsToExclude.Contains(i) {
+			if c.RemainingFilters == nil {
+				c.RemainingFilters = make(memo.FiltersExpr, 0, len(c.onFilters))
+			}
+			c.RemainingFilters = append(c.RemainingFilters, c.onFilters[i])
+		}
+	}
+
+	return c.Constraint, c.equalityIndexCols
+}
+
 // ConstraintBuilder determines how to constrain index key columns for a lookup
 // join. See Build for more details.
 type ConstraintBuilder struct {
@@ -201,13 +344,15 @@ func (b *ConstraintBuilder) Build(
 	// an equality with another column or a constant.
 	numIndexKeyCols := index.LaxKeyColumnCount()
 
-	var derivedEquivCols opt.ColSet
+	var draft constraintDraft
+	draft.Init(onFilters, b.allFilters, numIndexKeyCols)
+
 	// Don't change the selectivity estimate of this join vs. other joins which
-	// don't use derivedFkOnFilters. Add column IDs from these filters to the set
-	// of columns to ignore for join selectivity estimation. The alternative would
-	// be to derive these filters for all joins, but it's not clear that this
-	// would always be better given that some joins like hash join would have more
-	// terms to evaluate. Also, that approach may cause selectivity
+	// don't use derivedFkOnFilters. Add column IDs from these filters to the
+	// set of columns to ignore for join selectivity estimation. The alternative
+	// would be to derive these filters for all joins, but it's not clear that
+	// this would always be better given that some joins like hash join would
+	// have more terms to evaluate. Also, that approach may cause selectivity
 	// underestimation, so would require more effort to make sure correlations
 	// between columns are accurately captured.
 	for _, filtersItem := range derivedFkOnFilters {
@@ -215,35 +360,10 @@ func (b *ConstraintBuilder) Build(
 			leftVariable, leftOk := eqExpr.Left.(*memo.VariableExpr)
 			rightVariable, rightOk := eqExpr.Right.(*memo.VariableExpr)
 			if leftOk && rightOk {
-				derivedEquivCols.Add(leftVariable.Col)
-				derivedEquivCols.Add(rightVariable.Col)
+				draft.AddDerivedEquivCol(leftVariable.Col)
+				draft.AddDerivedEquivCol(rightVariable.Col)
 			}
 		}
-	}
-
-	colsAlloc := make(opt.ColList, numIndexKeyCols*2)
-	keyCols := colsAlloc[0:0:numIndexKeyCols]
-	rightSideCols := colsAlloc[numIndexKeyCols : numIndexKeyCols : numIndexKeyCols*2]
-	foundLookupCols := false
-	var (
-		inputProjections    memo.ProjectionsExpr
-		lookupExpr          memo.FiltersExpr
-		allLookupFilters    memo.FiltersExpr
-		remainingFilters    memo.FiltersExpr
-		filterOrdsToExclude intsets.Fast
-	)
-	// We do not want a suffix of the index columns to be constrained to
-	// multiple values by optional filters. This would only increase the number
-	// of lookup spans without making the constraint more selective. We keep
-	// track of the suffix length of indexed columns constrained in this way so
-	// that we can remove them after the loop.
-	optionalMultiValFilterSuffixLen := 0
-
-	// addEqualityColumns adds the given columns as an equality in keyCols and
-	// rightSideCols.
-	addEqualityColumns := func(leftCol, rightCol opt.ColumnID) {
-		keyCols = append(keyCols, leftCol)
-		rightSideCols = append(rightSideCols, rightCol)
 	}
 
 	// All the lookup conditions must apply to the prefix of the index and so
@@ -252,12 +372,9 @@ func (b *ConstraintBuilder) Build(
 		idxCol := b.table.IndexColumnID(index, j)
 		idxColIsDesc := index.Column(j).Descending
 		if eqIdx, ok := rightEq.Find(idxCol); ok {
-			allLookupFilters = append(allLookupFilters, b.allFilters[eqFilterOrds[eqIdx]])
-			addEqualityColumns(leftEq[eqIdx], idxCol)
-			filterOrdsToExclude.Add(eqFilterOrds[eqIdx])
-			equalityLookupCols.Add(idxCol)
-			foundLookupCols = true
-			optionalMultiValFilterSuffixLen = 0
+			draft.ConstrainByEquality(
+				leftEq[eqIdx], idxCol, eqFilterOrds[eqIdx], true, /* constrainedByInputCol */
+			)
 			continue
 		}
 
@@ -299,13 +416,10 @@ func (b *ConstraintBuilder) Build(
 				return b.f.Replace(e, replace)
 			}
 			projection := b.f.ConstructProjectionsItem(b.f.Replace(expr, replace).(opt.ScalarExpr), compEqCol)
-			inputProjections = append(inputProjections, projection)
-			addEqualityColumns(compEqCol, idxCol)
-			derivedEquivCols.Add(compEqCol)
-			derivedEquivCols.Add(idxCol)
-			equalityLookupCols.Add(idxCol)
-			foundLookupCols = true
-			optionalMultiValFilterSuffixLen = 0
+			draft.AddProjection(projection)
+			draft.ConstrainByEquality(compEqCol, idxCol, -1, true /* constrainedByInputCol */)
+			draft.AddDerivedEquivCol(compEqCol)
+			draft.AddDerivedEquivCol(idxCol)
 			continue
 		}
 
@@ -320,14 +434,12 @@ func (b *ConstraintBuilder) Build(
 		if ok && len(foundVals) == 1 {
 			typ := foundVals[0].ResolvedType()
 			constColID := b.md.AddColumn(fmt.Sprintf("lookup_join_const_col_@%d", idxCol), typ)
-			inputProjections = append(inputProjections, b.f.ConstructProjectionsItem(
+			projection := b.f.ConstructProjectionsItem(
 				b.f.ConstructConstVal(foundVals[0], typ),
 				constColID,
-			))
-			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
-			addEqualityColumns(constColID, idxCol)
-			filterOrdsToExclude.Add(allIdx)
-			optionalMultiValFilterSuffixLen = 0
+			)
+			draft.AddProjection(projection)
+			draft.ConstrainByEquality(constColID, idxCol, allIdx, false /* constrainedByInputCol */)
 			continue
 		}
 
@@ -343,18 +455,7 @@ func (b *ConstraintBuilder) Build(
 					valsFilter = b.f.ConstructConstFilter(idxCol, foundVals)
 				})
 			}
-			lookupExpr = append(lookupExpr, valsFilter)
-			allLookupFilters = append(allLookupFilters, b.allFilters[allIdx])
-			if isOptional := allIdx >= len(onFilters); isOptional {
-				optionalMultiValFilterSuffixLen++
-			} else {
-				optionalMultiValFilterSuffixLen = 0
-				// There's no need to track optional filters for reducing the
-				// remaining filters because they are not present in the ON
-				// filters to begin with.
-				filterOrdsToExclude.Add(allIdx)
-			}
-
+			draft.ConstrainByExpr(valsFilter, allIdx, false /* constrainedByInputCol */)
 			continue
 		}
 
@@ -364,18 +465,10 @@ func (b *ConstraintBuilder) Build(
 			rightCmp, inequalityFilterOrds, b.allFilters, idxCol, idxColIsDesc,
 		)
 		if foundStart {
-			lookupExpr = append(lookupExpr, b.allFilters[startIdx])
-			allLookupFilters = append(allLookupFilters, b.allFilters[startIdx])
-			filterOrdsToExclude.Add(startIdx)
-			foundLookupCols = true
-			optionalMultiValFilterSuffixLen = 0
+			draft.ConstrainByExpr(b.allFilters[startIdx], startIdx, true /* constrainedByInputCol */)
 		}
 		if foundEnd {
-			lookupExpr = append(lookupExpr, b.allFilters[endIdx])
-			allLookupFilters = append(allLookupFilters, b.allFilters[endIdx])
-			filterOrdsToExclude.Add(endIdx)
-			foundLookupCols = true
-			optionalMultiValFilterSuffixLen = 0
+			draft.ConstrainByExpr(b.allFilters[endIdx], endIdx, true /* constrainedByInputCol */)
 		}
 		if foundStart && foundEnd {
 			// The column is constrained above and below by an inequality; no further
@@ -396,12 +489,9 @@ func (b *ConstraintBuilder) Build(
 		)
 		if rangeFilter != nil {
 			// A constant range filter could be found.
-			lookupExpr = append(lookupExpr, *rangeFilter)
-			allLookupFilters = append(allLookupFilters, b.allFilters[filterIdx])
-			filterOrdsToExclude.Add(filterIdx)
+			draft.ConstrainByExpr(*rangeFilter, filterIdx, false /* constrainedByInputCol */)
 			if remaining != nil {
-				remainingFilters = make(memo.FiltersExpr, 0, len(onFilters))
-				remainingFilters = append(remainingFilters, *remaining)
+				draft.AddRemainingFilter(*remaining)
 			}
 		}
 
@@ -411,49 +501,7 @@ func (b *ConstraintBuilder) Build(
 		break
 	}
 
-	// Lookup join constraints that contain no lookup columns (e.g., a lookup
-	// expression x=1) are not useful.
-	if !foundLookupCols {
-		return Constraint{}, opt.ColSet{}
-	}
-
-	// Remove the suffix of index columns constrained to multiple values by
-	// optional filters.
-	if lookupExpr != nil && optionalMultiValFilterSuffixLen > 0 {
-		lookupExpr = lookupExpr[:len(lookupExpr)-optionalMultiValFilterSuffixLen]
-		allLookupFilters = allLookupFilters[:len(allLookupFilters)-optionalMultiValFilterSuffixLen]
-	}
-
-	// If a lookup expression is required, convert the equality columns to
-	// equalities in the lookup expression.
-	if len(lookupExpr) > 0 {
-		for i := range keyCols {
-			lookupExpr = append(lookupExpr, b.constructColEquality(keyCols[i], rightSideCols[i]))
-		}
-		keyCols = nil
-	}
-
-	c := Constraint{
-		KeyCols:          keyCols,
-		DerivedEquivCols: derivedEquivCols,
-		RightSideCols:    rightSideCols,
-		LookupExpr:       lookupExpr,
-		InputProjections: inputProjections,
-		AllLookupFilters: allLookupFilters,
-	}
-
-	// Reduce the remaining filters.
-	for i := range onFilters {
-		if !filterOrdsToExclude.Contains(i) {
-			if remainingFilters == nil {
-				remainingFilters = make(memo.FiltersExpr, 0, len(onFilters))
-			}
-			remainingFilters = append(remainingFilters, onFilters[i])
-		}
-	}
-	c.RemainingFilters = remainingFilters
-
-	return c, equalityLookupCols
+	return draft.Finalize(b.f)
 }
 
 // findComputedColJoinEquality returns the computed column expression of col and
@@ -696,15 +744,15 @@ func (b *ConstraintBuilder) findJoinConstantRangeFilter(
 
 // constructColEquality returns a FiltersItem representing equality between the
 // given columns.
-func (b *ConstraintBuilder) constructColEquality(leftCol, rightCol opt.ColumnID) memo.FiltersItem {
+func constructColEquality(f *norm.Factory, leftCol, rightCol opt.ColumnID) memo.FiltersItem {
 	var filters memo.FiltersItem
 	// Disable normalization rules when constructing the lookup expression so
 	// that it does not get normalized into a non-canonical expression.
-	b.f.DisableOptimizationsTemporarily(func() {
-		filters = b.f.ConstructFiltersItem(
-			b.f.ConstructEq(
-				b.f.ConstructVariable(leftCol),
-				b.f.ConstructVariable(rightCol),
+	f.DisableOptimizationsTemporarily(func() {
+		filters = f.ConstructFiltersItem(
+			f.ConstructEq(
+				f.ConstructVariable(leftCol),
+				f.ConstructVariable(rightCol),
 			),
 		)
 	})
