@@ -4463,13 +4463,14 @@ func (ex *connExecutor) execWithProfiling(
 		fingerprintID := appstatspb.ConstructStatementFingerprintID(
 			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
 		)
-		labels := []string{
+		labels := make([]string, 0, 12)
+		labels = append(labels,
 			workloadid.ProfileTag, sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID),
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
-		}
+		)
 		if opName, ok := GetInternalOpName(ctx); ok {
 			labels = append(labels, "opname", opName)
 		}
