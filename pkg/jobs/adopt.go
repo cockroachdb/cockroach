@@ -51,14 +51,17 @@ const (
 	// non-terminal jobs.
 	NonTerminalStateTupleString = `(` + nonTerminalStateList + `)`
 
-	claimQuery = `
-   UPDATE system.jobs
-      SET claim_session_id = $1, claim_instance_id = $2
+	GetClaimableJobsQuery = `
+ SELECT id FROM system.jobs
     WHERE ((claim_session_id IS NULL)
       AND (status IN ` + claimableStateTupleString + `))
  ORDER BY created DESC
-    LIMIT $3
-RETURNING id;`
+    LIMIT $1 FOR UPDATE`
+
+	claimJobsQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE id = ANY($3)`
 )
 
 // maybeDumpTrace will conditionally persist the trace recording of the job's
@@ -100,23 +103,50 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 	ctx, cancel := context.WithDeadlineCause(ctx, timeutil.Now().Add(timeout), errors.New("claim jobs transaction took too long"))
 	defer cancel()
 
-	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (retErr error) {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
 		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
-		numRows, err := txn.Exec(
-			ctx, "claim-jobs", txn.KV(), claimQuery,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop.Get(&r.settings.SV),
-		)
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "get-claimable-jobs", txn.KV(), sessiondata.NodeUserSessionDataOverride, GetClaimableJobsQuery, maxAdoptionsPerLoop.Get(&r.settings.SV))
+
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
-		r.metrics.ClaimedJobs.Inc(int64(numRows))
-		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
-			log.Dev.Infof(ctx, "claimed %d jobs", numRows)
+
+		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+		var jobIDs []int
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			row := it.Cur()
+			id := int(*row[0].(*tree.DInt))
+			jobIDs = append(jobIDs, id)
 		}
+
+		if len(jobIDs) == 0 {
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.Dev.Infof(ctx, "claimed no jobs")
+			}
+			return nil
+		}
+		totalClaimed, err := txn.Exec(
+			ctx, "claim-jobs", txn.KV(), claimJobsQuery,
+			s.ID().UnsafeBytes(), r.ID(), jobIDs,
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not claim jobs")
+		}
+		r.metrics.ClaimedJobs.Inc(int64(totalClaimed))
+		log.Dev.Infof(ctx, "claimed %d jobs", totalClaimed)
 		return nil
 	})
 }

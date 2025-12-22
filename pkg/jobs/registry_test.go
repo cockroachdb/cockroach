@@ -648,7 +648,7 @@ func TestRegistryUsePartialIndex(t *testing.T) {
 		queryArgs []interface{}
 	}{
 		{"remove claims", RemoveClaimsQuery, []interface{}{sid, lim}},
-		{"claim jobs", AdoptQuery, []interface{}{sid, iid, lim}},
+		{"get claimable jobs", GetClaimableJobsQuery, []interface{}{lim}},
 		{"process claimed jobs", ProcessJobsQuery, []interface{}{sid, iid}},
 		{"serve cancel and pause", CancelQuery, []interface{}{sid, iid}},
 	} {
