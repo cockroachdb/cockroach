@@ -19,6 +19,14 @@
       z-index: 1;
       width: fit-content;
       padding: 10px;
+      :global(.u-series) {
+        :global(.u-marker) {
+          display: inline-block;
+        }
+        :global(.u-label) {
+          color: #00294d;
+        }
+      }
     }
   }
 }
