@@ -58,6 +58,7 @@ import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
+import ClusterExplorerPage from "src/views/explorer/explorer";
 import HotRangesPage from "src/views/hotRanges/index";
 import JobDetails from "src/views/jobs/jobDetails";
 import JobsPage from "src/views/jobs/jobsPage";
@@ -355,6 +356,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         <Route
                           path={`/insights/statement/:${idAttr}`}
                           component={StatementInsightDetailsPage}
+                        />
+
+                        {/* cluster explorer */}
+                        <Route
+                          exact
+                          path="/cluster-explorer"
+                          component={ClusterExplorerPage}
                         />
 
                         {/* debug pages */}
