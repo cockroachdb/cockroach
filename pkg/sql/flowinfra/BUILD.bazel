@@ -24,6 +24,7 @@ go_library(
         "//pkg/rpc/rpcbase",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/ash",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",

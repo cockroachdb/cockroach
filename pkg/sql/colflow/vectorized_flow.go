@@ -529,6 +529,7 @@ type remoteComponentCreator interface {
 		streamID execinfrapb.StreamID,
 		flowCtxDone <-chan struct{},
 		admissionOpts admissionOptions,
+		workloadID uint64,
 	) (*colrpc.Inbox, error)
 }
 
@@ -552,10 +553,12 @@ func (vectorizedRemoteComponentCreator) newInbox(
 	streamID execinfrapb.StreamID,
 	flowCtxDone <-chan struct{},
 	admissionOpts admissionOptions,
+	workloadID uint64,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInboxWithAdmissionControl(
 		allocator, typs, streamID, flowCtxDone,
 		admissionOpts.admissionQ, admissionOpts.admissionInfo,
+		workloadID,
 	)
 }
 
@@ -928,7 +931,8 @@ func (s *vectorizedFlowCreator) setupInput(
 				admissionOptions{
 					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
 					admissionInfo: s.f.GetAdmissionInfo(),
-				})
+				},
+				flowCtx.WorkloadID)
 
 			if err != nil {
 				return colexecargs.OpWithMetaInfo{}, err

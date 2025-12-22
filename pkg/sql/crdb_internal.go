@@ -232,6 +232,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
 		catconstants.CrdbInternalClusterInspectErrorsViewID:         crdbInternalClusterInspectErrorsView,
+		catconstants.CrdbInternalNodeActiveSessionHistoryTableID:    crdbInternalNodeActiveSessionHistoryTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -9730,4 +9731,42 @@ CREATE VIEW crdb_internal.cluster_inspect_errors AS
 		{Name: "crdb_internal_expiration", Typ: types.TimestampTZ},
 	},
 	comment: `wrapper over system.inspect_errors`,
+}
+
+// crdbInternalNodeActiveSessionHistoryTable exposes Active Session History
+// samples from the local node's in-memory buffer.
+var crdbInternalNodeActiveSessionHistoryTable = virtualSchemaTable{
+	comment: `sampled active session history from this node (RAM)`,
+	schema: `
+CREATE TABLE crdb_internal.node_active_session_history (
+  sample_time      TIMESTAMPTZ NOT NULL,
+  node_id          INT NOT NULL,
+  workload_id      STRING,
+  work_event_type  STRING NOT NULL,
+  work_event       STRING NOT NULL,
+  goroutine_id     INT NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Get ASH samples from the sampler's buffer.
+		sampler := p.extendedEvalCtx.ASHSampler
+		if sampler == nil {
+			// ASH not enabled or not initialized.
+			return nil
+		}
+
+		samples := sampler.GetSamples()
+		for _, sample := range samples {
+			if err := addRow(
+				tree.MustMakeDTimestampTZ(sample.SampleTime, time.Microsecond),
+				tree.NewDInt(tree.DInt(sample.NodeID)),
+				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.WorkEventType.String()),
+				tree.NewDString(sample.WorkEvent),
+				tree.NewDInt(tree.DInt(sample.GoroutineID)),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
 }

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -311,6 +312,9 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+			// Register work state for ASH sampling.
+			clearWorkState := ash.SetWorkState(rb.flowCtx.WorkloadID, ash.WORK_SQL, "Router")
+			defer clearWorkState()
 			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {

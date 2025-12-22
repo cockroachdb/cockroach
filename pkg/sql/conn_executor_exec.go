@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -692,6 +694,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
+	// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+	stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, os.ImplicitTxn.Get(), p.SessionData().Database))
 	p.stmt = stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -1636,6 +1640,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 	}
 
+	// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+	vars.stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(), p.SessionData().Database))
 	p.stmt = vars.stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(vars.stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -3516,6 +3522,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 			nil, /* statementHintsCache */
 		)
+		// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+		stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, ex.implicitTxn(), ex.sessionData().Database))
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
@@ -4439,28 +4447,32 @@ func logTraceAboveThreshold(
 func (ex *connExecutor) execWithProfiling(
 	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
+	// Always compute fingerprint ID for ASH sampling, regardless of CPU profiling settings.
+	fmtFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
+	var stmtNoConstants string
+	if prepared != nil {
+		stmtNoConstants = prepared.StatementNoConstants
+	} else {
+		stmtNoConstants = tree.FormatStatementHideConstants(ast, fmtFlags)
+	}
+	fingerprintID := appstatspb.ConstructStatementFingerprintID(
+		stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
+	workloadID := sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID)
+
+	// Always register work state for ASH sampling.
+	clearWorkState := ash.SetWorkState(uint64(fingerprintID), ash.WORK_SQL, "ConnExecutor")
+	defer clearWorkState()
+
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels || log.HasSpan(ctx) {
 		remoteAddr := "internal"
 		if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
 			remoteAddr = rAddr.String()
 		}
-		// Compute stmtNoConstants with proper FmtFlags for consistency with
-		// makeStatement and ih.Setup.
-		fmtFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
-		var stmtNoConstants string
-		if prepared != nil {
-			stmtNoConstants = prepared.StatementNoConstants
-		} else {
-			stmtNoConstants = tree.FormatStatementHideConstants(ast, fmtFlags)
-		}
-		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
-		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
 		pprofutil.Do(ctx, func(ctx context.Context) {
 			err = op(ctx)
 		},
-			workloadid.ProfileTag, sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID),
+			workloadid.ProfileTag, workloadID,
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),

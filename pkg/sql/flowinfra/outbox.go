@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -413,6 +414,9 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	m.flowCtxCancel = flowCtxCancel
 	wg.Add(1)
 	go func() {
+		// Register work state for ASH sampling.
+		clearWorkState := ash.SetWorkState(m.flowCtx.WorkloadID, ash.WORK_SQL, "Outbox")
+		defer clearWorkState()
 		growstack.Grow()
 		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))

@@ -375,6 +375,7 @@ go_library(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigbounds",
         "//pkg/sql/appstatspb",
+        "//pkg/sql/ash",
         "//pkg/sql/auditlogging",
         "//pkg/sql/auditlogging/auditevents",
         "//pkg/sql/backfill",

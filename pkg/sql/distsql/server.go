@@ -385,7 +385,7 @@ func (ds *ServerImpl) setupFlow(
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
 		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
-		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(), req.WorkloadID,
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -488,6 +488,7 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
+	workloadID uint64,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -504,6 +505,7 @@ func (ds *ServerImpl) newFlowContext(
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
 		DiskMonitor:    diskMonitor,
+		WorkloadID:     workloadID,
 	}
 
 	if localState.IsLocal && localState.Collection != nil {
@@ -729,6 +731,7 @@ func (ds *ServerImpl) SetupFlow(
 			}
 			return err
 		}
+		// TODO(alyshan): workloadID is available in SetupFlowRequest, add the workloadid.ProfileTag to the pprof labels.
 		var undo func()
 		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		defer undo()

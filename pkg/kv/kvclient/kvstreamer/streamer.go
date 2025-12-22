@@ -402,6 +402,7 @@ func NewStreamer(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
+	workloadID uint64,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -446,6 +447,7 @@ func NewStreamer(
 		lockWaitPolicy:         lockWaitPolicy,
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
+		workloadID:             workloadID,
 	}
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
@@ -914,6 +916,11 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -1409,6 +1416,7 @@ func (w *workerCoordinator) performRequestAsync(
 		ba.Header.AllowEmpty = !headOfLine
 		ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
 		ba.Header.IsReverse = w.s.reverse
+		ba.Header.WorkloadId = w.workloadID
 		// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 		// applicable (#67885).
 		ba.AdmissionHeader = w.requestAdmissionHeader

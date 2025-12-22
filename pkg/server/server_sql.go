@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -956,6 +957,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
+
+	// Create the Active Session History (ASH) sampler.
+	ashSampler := ash.NewSampler(
+		roachpb.NodeID(nodeInfo.NodeID.SQLInstanceID()),
+		cfg.Settings,
+		cfg.stopper,
+	)
+
 	*execCfg = sql.ExecutorConfig{
 		Settings: cfg.Settings,
 		// TODO(yuzefovich): I think cfg.stopper doesn't use the Tracer option.
@@ -985,6 +994,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ContentionRegistry:      contentionRegistry,
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
+		ASHSampler:              ashSampler,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
@@ -1419,6 +1429,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	})
 
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
+
+	// Start the ASH sampler.
+	if err := ashSampler.Start(ctx); err != nil {
+		return nil, err
+	}
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -471,6 +472,7 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	}
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
+	ba.Header.WorkloadId = ash.TxnHeartbeatWorkloadID
 	ba.Add(&kvpb.HeartbeatTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
@@ -553,7 +555,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
 	ba := &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: txn}
+	ba.Header = kvpb.Header{Txn: txn, WorkloadId: ash.TxnHeartbeatWorkloadID}
 	ba.Add(&kvpb.EndTxnRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent

@@ -92,6 +92,10 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -103,7 +107,7 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 
 // init initializes the tableWriterBase with a Txn.
 func (tb *tableWriterBase) init(
-	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context,
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, workloadID uint64,
 ) error {
 	if txn.Type() != kv.RootTxn {
 		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
@@ -114,6 +118,7 @@ func (tb *tableWriterBase) init(
 	tb.deadlockTimeout = 0
 	tb.originID = 0
 	tb.originTimestamp = hlc.Timestamp{}
+	tb.workloadID = workloadID
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
@@ -228,6 +233,7 @@ func (tb *tableWriterBase) initNewBatch() {
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
 	tb.b.Header.DeadlockTimeout = tb.deadlockTimeout
+	tb.b.Header.WorkloadId = tb.workloadID
 	if tb.originID != 0 {
 		tb.b.Header.WriteOptions = &kvpb.WriteOptions{
 			OriginID:        tb.originID,

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -116,6 +117,9 @@ type extendedEvalContext struct {
 
 	// validateDbZoneConfig should the DB zone config on commit.
 	validateDbZoneConfig *bool
+
+	// ASHSampler is the Active Session History sampler for this node.
+	ASHSampler *ash.Sampler
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -144,6 +148,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas
 	evalCtx.KVStoresIterator = execCfg.KVStoresIterator
 	evalCtx.InspectzServer = execCfg.InspectzServer
+	evalCtx.ASHSampler = execCfg.ASHSampler
 }
 
 // copy returns a deep copy of ctx.

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -187,6 +188,10 @@ type WorkInfo struct {
 	// ReplicatedWorkInfo groups everything needed to admit replicated writes, done
 	// so asynchronously below-raft as part of replication admission control.
 	ReplicatedWorkInfo ReplicatedWorkInfo
+	// WorkloadID is an identifier that links this work back to the workload
+	// entity that triggered it (e.g., statement fingerprint). This is used for
+	// observability (e.g., ASH sampling). If zero, no workload ID is set.
+	WorkloadID uint64
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -769,6 +774,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	ctx, span = tracing.ChildSpan(ctx, "admissionWorkQueueWait")
 	defer span.Finish()
 	defer releaseWaitingWork(work)
+	// Register admission wait state for ASH sampling.
+	clearWorkState := ash.SetWorkState(info.WorkloadID, ash.WORK_ADMISSION, string(q.queueKind))
+	defer clearWorkState()
 	select {
 	case <-ctx.Done():
 		waitDur := q.timeNow().Sub(startTime)

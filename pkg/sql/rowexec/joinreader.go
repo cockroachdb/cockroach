@@ -595,6 +595,7 @@ func newJoinReader(
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
 			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
+			flowCtx.WorkloadID,
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint

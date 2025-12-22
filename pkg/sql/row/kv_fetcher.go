@@ -61,6 +61,7 @@ func newTxnKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) *txnKVFetcher {
 	alloc := new(struct {
 		batchRequestsIssued int64
@@ -117,6 +118,7 @@ func newTxnKVFetcher(
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
+		workloadID:                 workloadID,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
@@ -148,10 +150,11 @@ func NewDirectKVBatchFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -177,10 +180,11 @@ func NewKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
 	))
 }
 
@@ -208,6 +212,7 @@ func NewStreamingKVFetcher(
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	rawMVCCValues bool,
+	workloadID uint64,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -229,6 +234,7 @@ func NewStreamingKVFetcher(
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
+		workloadID,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {

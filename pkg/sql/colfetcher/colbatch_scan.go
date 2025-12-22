@@ -349,6 +349,7 @@ func NewColBatchScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
+		flowCtx.WorkloadID,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)

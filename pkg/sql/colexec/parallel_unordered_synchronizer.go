@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -285,6 +286,9 @@ func (s *ParallelUnorderedSynchronizer) init() {
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
 		go func(input colexecargs.OpWithMetaInfo, inputIdx int) {
+			// Register work state for ASH sampling.
+			clearWorkState := ash.SetWorkState(s.flowCtx.WorkloadID, ash.WORK_SQL, "ColExecSync")
+			defer clearWorkState()
 			span := s.tracingSpans[inputIdx]
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {

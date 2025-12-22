@@ -215,6 +215,11 @@ type txnKVFetcher struct {
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 	admissionPacer         *admission.Pacer
+
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -367,6 +372,7 @@ type newTxnKVFetcherArgs struct {
 	batchRequestsIssued        *int64
 	kvCPUTime                  *int64
 	rawMVCCValues              bool
+	workloadID                 uint64
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -397,6 +403,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
+		workloadID:                 args.workloadID,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -619,6 +626,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.Header.IsReverse = f.reverse
+	ba.Header.WorkloadId = f.workloadID
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")

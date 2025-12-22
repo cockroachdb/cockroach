@@ -44,7 +44,7 @@ func (u *updateSwapNode) startExec(params runParams) error {
 
 	u.run.init(params, u.columns)
 
-	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext(), params.p.stmt.WorkloadID); err != nil {
 		return err
 	}
 

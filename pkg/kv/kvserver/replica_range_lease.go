@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
@@ -654,6 +655,7 @@ func (p *pendingLeaseRequest) requestLease(
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = p.repl.store.Clock().Now()
 	ba.RangeID = p.repl.RangeID
+	ba.Header.WorkloadId = ash.LeaseRequestWorkloadID
 	// NB:
 	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
 	// get stuck on an unavailable range rather than failing fast; see

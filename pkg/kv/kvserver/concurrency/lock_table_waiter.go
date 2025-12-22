@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -113,6 +114,14 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) *Error {
+	// Register lock wait state for ASH sampling.
+	var workloadID uint64
+	if req.Batch != nil {
+		workloadID = req.Batch.Header.WorkloadId
+	}
+	clearWorkState := ash.SetWorkState(workloadID, ash.WORK_LOCK, "LockWait")
+	defer clearWorkState()
+
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -140,6 +141,10 @@ func (r *Replica) SendWithWriteBytes(
 		}
 		defer reset()
 	}
+
+	// Always register work state for ASH sampling.
+	clearWorkState := ash.SetWorkState(ba.Header.WorkloadId, ash.WORK_KV, "ReplicaSend")
+	defer clearWorkState()
 
 	if trace.IsEnabled() {
 		foundLabel := ""

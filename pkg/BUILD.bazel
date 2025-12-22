@@ -1883,6 +1883,7 @@ GO_TARGETS = [
     "//pkg/spanconfig:spanconfig_test",
     "//pkg/sql/appstatspb:appstatspb",
     "//pkg/sql/appstatspb:appstatspb_test",
+    "//pkg/sql/ash:ash",
     "//pkg/sql/auditlogging/auditevents:auditevents",
     "//pkg/sql/auditlogging:auditlogging",
     "//pkg/sql/auditlogging:auditlogging_test",

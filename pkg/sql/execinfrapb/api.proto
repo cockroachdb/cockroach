@@ -65,6 +65,11 @@ message SetupFlowRequest {
   // is populated on a best effort basis.
   optional string statement_sql = 10 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StatementSQL"];
+
+  // WorkloadID is the identifier for this workload that we can use
+  // for profiling and tracing.
+  optional uint64 workload_id = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadID"];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

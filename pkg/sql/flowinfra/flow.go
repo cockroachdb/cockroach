@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
@@ -505,6 +506,9 @@ func (f *FlowBase) StartInternal(
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
+			// Register work state for ASH sampling.
+			clearWorkState := ash.SetWorkState(f.FlowCtx.WorkloadID, ash.WORK_SQL, "DistSQLFlow")
+			defer clearWorkState()
 			processors[i].Run(ctx, outputs[i])
 			f.waitGroup.Done()
 		}(i)
