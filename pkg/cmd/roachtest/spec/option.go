@@ -209,6 +209,21 @@ func DisableLocalSSD() Option {
 	}
 }
 
+// RandomizeVolumeType is an Option which randomly picks the volume type
+// to be used. Unless SSD is forced, the volume type is picked randomly
+// between the available types for a provider:
+// - GCE: pd-ssd, local-ssd
+// - AWS: gp3, io2, local-ssd
+// - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
+// - IBM: 10iops-tier
+// Note: this option has no effect if VolumeType is explicitly set
+// or PreferLocalSSD/DisableLocalSSD is used.
+func RandomizeVolumeType() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomizeVolumeType = true
+	}
+}
+
 // TerminateOnMigration ensures VM is terminated in case GCE triggers a live migration.
 func TerminateOnMigration() Option {
 	return func(spec *ClusterSpec) {
@@ -240,10 +255,18 @@ func SetFileSystem(fs fileSystemType) Option {
 // RandomlyUseZfs is an Option which randomly picks
 // the file system to be used, and sets it to zfs,
 // about 20% of the time.
-// Zfs is only picked if the cloud is gce.
 func RandomlyUseZfs() Option {
 	return func(spec *ClusterSpec) {
 		spec.RandomlyUseZfs = true
+	}
+}
+
+// RandomlyUseXfs is an Option which randomly picks
+// the file system to be used, and sets it to xfs,
+// about 20% of the time.
+func RandomlyUseXfs() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomlyUseXfs = true
 	}
 }
 

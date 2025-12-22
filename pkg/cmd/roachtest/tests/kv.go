@@ -343,7 +343,16 @@ func registerKV(r registry.Registry) {
 		if opts.nodes > 3 {
 			workloadNodeCPUs = opts.cpus
 		}
-		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
+		cSpec := r.MakeClusterSpec(
+			opts.nodes+1,
+			spec.CPU(opts.cpus),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(workloadNodeCPUs),
+			spec.SSD(opts.ssds),
+			spec.RAID0(opts.raid0),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		)
 
 		var clouds registry.CloudSet
 		tags := make(map[string]struct{})
@@ -389,10 +398,15 @@ func registerKV(r registry.Registry) {
 func registerKVContention(r registry.Registry) {
 	const nodes = 4
 	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("kv/contention/nodes=%d", nodes),
-		Owner:            registry.OwnerKV,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(nodes+1, spec.WorkloadNode()),
+		Name:      fmt.Sprintf("kv/contention/nodes=%d", nodes),
+		Owner:     registry.OwnerKV,
+		Benchmark: true,
+		Cluster: r.MakeClusterSpec(
+			nodes+1,
+			spec.WorkloadNode(),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
@@ -524,9 +538,14 @@ func registerKVLongRunningTxn(r registry.Registry) {
 
 func registerKVGracefulDraining(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "kv/gracefuldraining",
-		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(7, spec.WorkloadNode()),
+		Name:  "kv/gracefuldraining",
+		Owner: registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(
+			7,
+			spec.WorkloadNode(),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
@@ -773,7 +792,12 @@ func registerKVSplits(r registry.Registry) {
 			Name:    name,
 			Owner:   registry.OwnerKV,
 			Timeout: item.timeout,
-			Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
+			Cluster: r.MakeClusterSpec(
+				4,
+				spec.WorkloadNode(),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+			),
 			// These tests are carefully tuned to succeed up to certain number of
 			// splits; they are flaky in slower environments.
 			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
@@ -841,9 +865,16 @@ func registerKVScalability(r registry.Registry) {
 		for _, p := range []int{0, 95} {
 			p := p
 			r.Add(registry.TestSpec{
-				Name:             fmt.Sprintf("kv%d/scale/nodes=6", p),
-				Owner:            registry.OwnerKV,
-				Cluster:          r.MakeClusterSpec(7, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8)),
+				Name:  fmt.Sprintf("kv%d/scale/nodes=6", p),
+				Owner: registry.OwnerKV,
+				Cluster: r.MakeClusterSpec(
+					7,
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.RandomizeVolumeType(),
+					spec.RandomlyUseXfs(),
+				),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
@@ -976,9 +1007,16 @@ func registerKVRangeLookups(r registry.Registry) {
 			panic("unexpected")
 		}
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
+			Name:  fmt.Sprintf("kv50/rangelookups/%s/nodes=%d", workloadName, nodes),
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(
+				nodes+1,
+				spec.CPU(cpus),
+				spec.WorkloadNode(),
+				spec.WorkloadNodeCPU(cpus),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+			),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
@@ -1003,8 +1041,16 @@ func registerKVRestartImpact(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Owner:            registry.OwnerAdmissionControl,
 		Timeout:          4 * time.Hour,
-		Cluster:          r.MakeClusterSpec(13, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8), spec.DisableLocalSSD()),
-		Leases:           registry.MetamorphicLeases,
+		Cluster: r.MakeClusterSpec(
+			13,
+			spec.CPU(8),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(8),
+			spec.DisableLocalSSD(),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
+		Leases: registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			nodes := len(c.CRDBNodes())
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -44,6 +45,7 @@ const (
 	codeKey                  = "code"
 	stateKey                 = "state"
 	secretCookieName         = "oidc_secret"
+	oidcProvisioningKey      = "oidc"
 	oidcLoginPath            = "/oidc/v1/login"
 	oidcCallbackPath         = "/oidc/v1/callback"
 	oidcJWTPath              = "/oidc/v1/jwt"
@@ -158,6 +160,7 @@ type oidcAuthenticationConf struct {
 	authZEnabled                 bool
 	groupClaim                   string
 	userinfoGroupKey             string
+	provisioningEnabled          bool
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -420,9 +423,10 @@ func reloadConfigLocked(
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
 		),
-		authZEnabled:     OIDCAuthZEnabled.Get(&st.SV),
-		groupClaim:       OIDCAuthGroupClaim.Get(&st.SV),
-		userinfoGroupKey: OIDCAuthUserinfoGroupKey.Get(&st.SV),
+		authZEnabled:        OIDCAuthZEnabled.Get(&st.SV),
+		groupClaim:          OIDCAuthGroupClaim.Get(&st.SV),
+		userinfoGroupKey:    OIDCAuthUserinfoGroupKey.Get(&st.SV),
+		provisioningEnabled: provisioning.ClusterProvisioningConfig(st).Enabled("oidc"),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -488,6 +492,69 @@ func getRegionSpecificRedirectURL(locality roachpb.Locality, conf redirectURLCon
 		return "", errors.New("OIDC: redirect URL config expects region setting, which is unset")
 	}
 	return s, nil
+}
+
+// maybeProvisionUserLocked checks the cached OIDC configuration to see whether
+// automatic user provisioning is enabled. If so, it attempts to create a SQL
+// user linked to the OIDC identity provider.
+//
+// This function is called after a successful OIDC token exchange and
+// verification. Its execution relies on the success of the underlying OIDC
+// library, which operates on the following assumptions:
+//
+//  1. OIDC Discovery: The library uses the OIDC discovery protocol to fetch the
+//     provider's configuration from "/.well-known/openid-configuration". This
+//     assumes the provider has discovery enabled and accessible.
+//
+//  2. Issuer Validation: The go-oidc library's verifier ensures the 'iss' claim
+//     in the ID Token matches the issuer URL from the discovery document. There
+//     is also an exception made to this in go-oidc for accounts.google.com
+//
+// Errors during username validation, provisioning source parsing, or user creation
+// are logged with detailed context and result in an HTTP 500 response with a
+// generic error message to the client.
+func maybeProvisionUserLocked(
+	ctx context.Context,
+	authConf oidcAuthenticationConf,
+	execCfg *sql.ExecutorConfig,
+	username string,
+	w http.ResponseWriter,
+) (err error) {
+	if !authConf.provisioningEnabled {
+		return
+	}
+
+	log.Dev.Infof(ctx, "OIDC: attempting user provisioning for %s", username)
+	telemetry.Inc(provisioning.BeginOIDCProvisionUseCounter)
+
+	// Convert the extracted username string to a username.SQLUsername type.
+	sqlUsername, err := secuser.MakeSQLUsernameFromUserInput(username, secuser.PurposeCreation)
+	if err != nil {
+		log.Dev.Errorf(ctx, "OIDC provisioning: invalid username format for %s: %v", username, err)
+		http.Error(w, "OIDC: invalid username format", http.StatusInternalServerError)
+		return err
+	}
+
+	// Create the provisioning source identifier string, e.g., "oidc:https://accounts.example.com".
+	idpString := oidcProvisioningKey + ":" + authConf.providerURL
+	provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+	if err != nil {
+		// This error occurs if the provisioning package doesn't recognize the "oidc:" prefix.
+		log.Dev.Errorf(ctx, "OIDC provisioning: error parsing provisioning source IDP %s: %v", idpString, err)
+		http.Error(w, "OIDC: provisioning error", http.StatusInternalServerError)
+		return err
+	}
+
+	// Call the core provisioning function using the execCfg.
+	if err = sql.CreateRoleForProvisioning(ctx, execCfg, sqlUsername, provisioningSource.String()); err != nil {
+		log.Dev.Errorf(ctx, "OIDC provisioning: error provisioning user %s: %v", sqlUsername, err)
+		http.Error(w, "OIDC: provisioning error", http.StatusInternalServerError)
+		return err
+	}
+
+	log.Dev.Infof(ctx, "OIDC: successfully provisioned user %s", sqlUsername)
+	telemetry.Inc(provisioning.ProvisionOIDCSuccessCounter)
+	return
 }
 
 // ConfigureOIDC attaches handlers to the server `mux` that
@@ -605,6 +672,12 @@ var ConfigureOIDC = func(
 		)
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+			return
+		}
+
+		// OIDC user provisioning
+		if err := maybeProvisionUserLocked(ctx, oidcAuthentication.conf, oidcAuthentication.execCfg, username, w); err != nil {
+			log.Dev.Errorf(ctx, "OIDC provisioning failed with error: %v", err)
 			return
 		}
 
@@ -936,6 +1009,9 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAuthUserinfoGroupKey.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	provisioning.OIDCProvisioningEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 
