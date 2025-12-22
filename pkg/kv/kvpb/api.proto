@@ -3022,9 +3022,25 @@ message Header {
   // evaluated in descending range order.
   bool is_reverse = 38;
 
+  // WorkloadID allows the caller to tag the request with an
+  // identifier that links is back to the workload entity that triggered
+  // the Batch. This can be a statement fingerprint ID, transaction
+  // fingerprint ID, job ID, etc. This ID will be added to profiler
+  // and trace labels.
+  uint64 workload_id = 39;
+  
+  // app_name_id is the uint64 identifier for the app_name of the SQL session
+  // that created this request. This is a hash of the app_name string that can
+  // be mapped back to the app_name using the node-local app name mapping.
+  // Zero means no app_name is associated with this request.
+  uint64 app_name_id = 40 [(gogoproto.customname) = "AppNameID"];
+  
+  int32 sql_gateway_node_id = 41 [(gogoproto.customname) = "SQLGatewayNodeID",
+                              (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 39
+  // Next ID: 41
 }
 
 message WriteOptions {

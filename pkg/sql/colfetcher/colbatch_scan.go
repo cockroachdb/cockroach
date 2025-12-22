@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -349,6 +350,9 @@ func NewColBatchScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
+		flowCtx.WorkloadID,
+		flowCtx.AppNameID,
+		roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)

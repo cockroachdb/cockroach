@@ -91,7 +91,11 @@ type Context struct {
 	// circumstances.
 	// TODO(knz,radu): Split this into separate fields.
 	NodeID *base.SQLIDContainer
-	Codec  keys.SQLCodec
+	// Gateway is the SQL instance ID of the gateway node that planned the flow
+	// or served the query. This is always set to the gateway node ID, even when
+	// the flow is executing on a remote node.
+	Gateway base.SQLInstanceID
+	Codec   keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there

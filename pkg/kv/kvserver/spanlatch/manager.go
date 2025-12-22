@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -503,6 +504,18 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
+	// Register latch wait state for ASH sampling.
+	var workloadID uint64
+	var appNameID uint64
+	var gatewayNodeID roachpb.NodeID
+	if lg.ba != nil {
+		workloadID = lg.ba.Header.WorkloadId
+		appNameID = lg.ba.Header.AppNameID
+		gatewayNodeID = lg.ba.Header.SQLGatewayNodeID
+	}
+	clearWorkState := ash.SetWorkStateWithAppName(workloadID, ash.WORK_LOCK, "LatchWait", appNameID, gatewayNodeID)
+	defer clearWorkState()
+
 	var timer timeutil.Timer
 	defer timer.Stop()
 

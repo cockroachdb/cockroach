@@ -476,6 +476,9 @@ func (z *zigzagJoiner) setupInfo(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.WorkloadID,
+			AppNameID:                  flowCtx.AppNameID,
+			Gateway:                    flowCtx.EvalCtx.Gateway,
 		},
 	); err != nil {
 		return err

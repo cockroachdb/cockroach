@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -460,12 +461,23 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
+
+	var workloadID uint64
+	if planCtx.planner != nil {
+		workloadID = planCtx.planner.stmt.WorkloadID
+	}
+	var appNameID uint64
+	if evalCtx.SessionData().ApplicationName != "" {
+		appNameID = ash.GetOrStoreAppNameID(evalCtx.SessionData().ApplicationName)
+	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execversion.V25_4,
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
+		WorkloadID:        workloadID,
+		AppNameID:         appNameID,
 	}
 	if localState.IsLocal {
 		// VectorizeMode is the only field that the setup code expects to be set

@@ -626,6 +626,9 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
 			tableArgs.RequiresRawMVCCValues(),
+			flowCtx.WorkloadID,
+			flowCtx.AppNameID,
+			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
@@ -641,6 +644,9 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			spec.FetchSpec.External,
+			flowCtx.WorkloadID,
+			flowCtx.AppNameID,
+			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	}
 

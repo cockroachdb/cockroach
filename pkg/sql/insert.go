@@ -276,7 +276,7 @@ func (n *insertNode) startExec(params runParams) error {
 
 	n.run.init(params, n.columns)
 
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), params.p.stmt.WorkloadID); err != nil {
 		return err
 	}
 

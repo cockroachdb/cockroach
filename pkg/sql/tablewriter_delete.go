@@ -26,8 +26,10 @@ type tableDeleter struct {
 }
 
 // init initializes the tableDeleter with a Txn.
-func (td *tableDeleter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
-	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx)
+func (td *tableDeleter) init(
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, workloadID uint64,
+) error {
+	return td.tableWriterBase.init(txn, td.tableDesc(), evalCtx, workloadID)
 }
 
 // row performs a delete.

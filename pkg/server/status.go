@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -483,6 +484,18 @@ func (b *baseStatusServer) localTxnIDResolution(
 	txnIDCache.DrainWriteBuffer()
 
 	return resp
+}
+
+func (b *baseStatusServer) localAppNameMappings(
+	ctx context.Context,
+	req *serverpb.AppNameMappingsRequest,
+) *serverpb.AppNameMappingsResponse {
+	mappings := ash.GetAllAppNameMappings()
+
+	log.Ops.Infof(ctx, "ASH sampler: returning app name mappings: %v", mappings)
+	return &serverpb.AppNameMappingsResponse{
+		Mappings: mappings,
+	}
 }
 
 func (b *baseStatusServer) localTransactionContentionEvents(
@@ -3291,6 +3304,92 @@ func (s *statusServer) ListLocalSessions(
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
 }
 
+// ListLocalActiveSessionHistory returns Active Session History samples from this node.
+func (s *statusServer) ListLocalActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	sampler := s.sqlServer.execCfg.ASHSampler
+	if sampler == nil {
+		// ASH not enabled or not initialized.
+		return &serverpb.ListActiveSessionHistoryResponse{Samples: []serverpb.ASHSample{}}, nil
+	}
+
+	samples := sampler.GetSamples()
+	protoSamples := make([]serverpb.ASHSample, len(samples))
+	for i, sample := range samples {
+		protoSamples[i] = serverpb.ASHSample{
+			SampleTime:    sample.SampleTime,
+			NodeID:        sample.NodeID,
+			WorkloadId:    sample.WorkloadID,
+			WorkEventType: sample.WorkEventType.String(),
+			WorkEvent:     sample.WorkEvent,
+			GoroutineID:   sample.GoroutineID,
+			AppName:       sample.AppName,
+			GatewayNodeID: sample.GatewayNodeID,
+		}
+	}
+
+	return &serverpb.ListActiveSessionHistoryResponse{Samples: protoSamples}, nil
+}
+
+// ListActiveSessionHistory retrieves Active Session History samples across the entire cluster.
+func (s *statusServer) ListActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if s.serverIterator.getID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
+	}
+
+	response := &serverpb.ListActiveSessionHistoryResponse{
+		Samples: []serverpb.ASHSample{},
+		Errors:  []serverpb.ListActiveSessionHistoryError{},
+	}
+
+	nodeFn := func(ctx context.Context, statusClient serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]serverpb.ASHSample, error) {
+		resp, err := statusClient.ListLocalActiveSessionHistory(ctx, req)
+		if resp != nil && err == nil {
+			return resp.Samples, nil
+		}
+		return nil, err
+	}
+	responseFn := func(nodeID roachpb.NodeID, samples []serverpb.ASHSample) {
+		response.Samples = append(response.Samples, samples...)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		errResponse := serverpb.ListActiveSessionHistoryError{
+			NodeID:  nodeID,
+			Message: err.Error(),
+		}
+		response.Errors = append(response.Errors, errResponse)
+	}
+
+	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "active session history",
+		noTimeout,
+		s.dialNode,
+		nodeFn,
+		responseFn,
+		errorFn,
+	); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 // iterateNodes calls iterateNodesExt with max concurrency
 func iterateNodes[Client, Result any](
 	ctx context.Context,
@@ -4246,6 +4345,32 @@ func (s *statusServer) TxnIDResolution(
 	}
 
 	return statusClient.TxnIDResolution(ctx, req)
+}
+
+func (s *statusServer) AppNameMappings(
+	ctx context.Context, req *serverpb.AppNameMappingsRequest,
+) (*serverpb.AppNameMappingsResponse, error) {
+	ctx = s.AnnotateCtx(authserver.ForwardSQLIdentityThroughRPCCalls(ctx))
+	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if local {
+		log.Ops.Info(ctx, "ASH sampler: resolving app name mappings")
+		return s.localAppNameMappings(ctx, req), nil
+	}
+
+	log.Ops.Infof(ctx, "ASH sampler: resolving app name mappings dialing node %d", requestedNodeID)
+	statusClient, err := s.dialNode(ctx, requestedNodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.AppNameMappings(ctx, req)
 }
 
 func (s *statusServer) TransactionContentionEvents(

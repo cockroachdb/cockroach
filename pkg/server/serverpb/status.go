@@ -18,6 +18,8 @@ import (
 type SQLStatusServer interface {
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	ListActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
+	ListLocalActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
 	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
 	CancelQueryByKey(context.Context, *CancelQueryByKeyRequest) (*CancelQueryByKeyResponse, error)
 	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
@@ -35,6 +37,7 @@ type SQLStatusServer interface {
 	TableIndexStats(context.Context, *TableIndexStatsRequest) (*TableIndexStatsResponse, error)
 	UserSQLRoles(context.Context, *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
 	TxnIDResolution(context.Context, *TxnIDResolutionRequest) (*TxnIDResolutionResponse, error)
+	AppNameMappings(context.Context, *AppNameMappingsRequest) (*AppNameMappingsResponse, error)
 	TransactionContentionEvents(context.Context, *TransactionContentionEventsRequest) (*TransactionContentionEventsResponse, error)
 	NodesList(context.Context, *NodesListRequest) (*NodesListResponse, error)
 	ListExecutionInsights(context.Context, *ListExecutionInsightsRequest) (*ListExecutionInsightsResponse, error)

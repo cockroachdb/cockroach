@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -282,8 +283,10 @@ func (p *planner) prepareUsingOptimizerInternal(
 // makeOptimizerPlan generates a plan using the cost-based optimizer.
 // On success, it populates p.curPlan.
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
-	ctx, sp := tracing.ChildSpan(ctx, "optimizer")
+	ctx, sp := tracing.ChildSpan(ctx, "OptimizerPlanning")
 	defer sp.Finish()
+	clearWorkState := ash.SetWorkState(p.stmt.WorkloadID, ash.WORK_CPU, "optimizer")
+	defer clearWorkState()
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 
 	opc := &p.optPlanningCtx

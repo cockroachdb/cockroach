@@ -568,7 +568,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext(), params.p.stmt.WorkloadID); err != nil {
 				return err
 			}
 

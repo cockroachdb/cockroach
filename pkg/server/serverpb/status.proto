@@ -1154,6 +1154,60 @@ message ListSessionsResponse {
   string internal_app_name_prefix = 3;
 }
 
+// ListActiveSessionHistoryRequest is used to request Active Session History samples.
+message ListActiveSessionHistoryRequest {
+  // Empty for now, but reserved for future filtering options.
+}
+
+// ASHSample represents a single Active Session History sample.
+message ASHSample {
+  // SampleTime is when this sample was taken.
+  google.protobuf.Timestamp sample_time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  // NodeID is the node where this sample was captured.
+  int32 node_id = 2 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // WorkloadID identifies the workload (e.g., statement fingerprint).
+  string workload_id = 3;
+  // WorkEventType categorizes the work by resource type (e.g., "CPU", "NETWORK", "LOCK").
+  string work_event_type = 4;
+  // WorkEvent is a more specific identifier for the work (e.g., "dist_sender_batch").
+  string work_event = 5;
+  // GoroutineID is the ID of the goroutine that was sampled.
+  int64 goroutine_id = 6 [(gogoproto.customname) = "GoroutineID"];
+
+  string app_name = 7;
+
+  int32 gateway_node_id = 8 [
+    (gogoproto.customname) = "GatewayNodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
+// An error wrapper object for ListActiveSessionHistoryResponse.
+message ListActiveSessionHistoryError {
+  // ID of node that was being contacted when this error occurred
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // Error message.
+  string message = 2;
+}
+
+// Response object for ListActiveSessionHistory and ListLocalActiveSessionHistory.
+message ListActiveSessionHistoryResponse {
+  // A list of ASH samples from this node or cluster.
+  repeated ASHSample samples = 1 [ (gogoproto.nullable) = false ];
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActiveSessionHistoryError errors = 2 [ (gogoproto.nullable) = false ];
+}
+
 // Request object for issuing a query cancel request.
 message CancelQueryRequest {
   // ID of gateway node for the query to be canceled.
@@ -2200,6 +2254,17 @@ message GetJobProfilerExecutionDetailResponse {
   bytes data = 1;
 }
 
+// AppNameMappingsRequest requests all app name ID to string mappings from a node.
+message AppNameMappingsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// AppNameMappingsResponse returns all app name ID to string mappings.
+message AppNameMappingsResponse {
+  // mappings is a map from app name ID (uint64) to app name string.
+  map<uint64, string> mappings = 1 [(gogoproto.nullable) = false];
+}
+
 message ListJobProfilerExecutionDetailsRequest {
   int64 job_id = 1;
 }
@@ -2348,6 +2413,9 @@ service Status {
     };
   }
 
+  // AppNameMappings returns all app name ID to string mappings from this node.
+  rpc AppNameMappings(AppNameMappingsRequest) returns (AppNameMappingsResponse) {}
+
   // Gossip retrieves gossip-level details about a given node.
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
@@ -2388,6 +2456,20 @@ service Status {
   rpc ListLocalSessions(ListSessionsRequest) returns (ListSessionsResponse) {
     option (google.api.http) = {
       get : "/_status/local_sessions"
+    };
+  }
+
+  // ListActiveSessionHistory retrieves Active Session History samples across the entire cluster.
+  rpc ListActiveSessionHistory(ListActiveSessionHistoryRequest) returns (ListActiveSessionHistoryResponse) {
+    option (google.api.http) = {
+      get : "/_status/active_session_history"
+    };
+  }
+
+  // ListLocalActiveSessionHistory retrieves Active Session History samples on this node.
+  rpc ListLocalActiveSessionHistory(ListActiveSessionHistoryRequest) returns (ListActiveSessionHistoryResponse) {
+    option (google.api.http) = {
+      get : "/_status/local_active_session_history"
     };
   }
 

@@ -458,7 +458,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		n.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 	}
 
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext(), params.p.stmt.WorkloadID); err != nil {
 		return err
 	}
 

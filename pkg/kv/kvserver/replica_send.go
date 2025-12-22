@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -140,6 +141,15 @@ func (r *Replica) SendWithWriteBytes(
 		}
 		defer reset()
 	}
+
+	clearWorkState := ash.SetWorkStateWithAppName(
+		ba.Header.WorkloadId,
+		ash.WORK_CPU,
+		"ReplicaSend",
+		ba.Header.AppNameID,
+		ba.Header.SQLGatewayNodeID,
+	)
+	defer clearWorkState()
 
 	if trace.IsEnabled() {
 		foundLabel := ""
@@ -310,6 +320,15 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 		// need to wait.
 		return nil
 	}
+
+	clearWorkState := ash.SetWorkStateWithAppName(
+		ba.Header.WorkloadId,
+		ash.WORK_OTHER,
+		"CommitWaitSleep",
+		ba.Header.AppNameID,
+		ba.Header.SQLGatewayNodeID,
+	)
+	defer clearWorkState()
 
 	waitUntil := txn.WriteTimestamp
 	before := r.Clock().PhysicalTime()

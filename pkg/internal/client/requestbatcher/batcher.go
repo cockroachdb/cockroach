@@ -132,6 +132,11 @@ type Config struct {
 	// enforced. It is inadvisable to disable both MaxIdle and MaxWait.
 	MaxIdle time.Duration
 
+	// WorkloadID is an identifier that links the batch request back to the
+	// workload entity that triggered it. This is used for observability
+	// (e.g., ASH sampling). If zero, no workload ID is set.
+	WorkloadID uint64
+
 	// MaxTimeout limits the amount of time that a BatchRequest can run for
 	// before timing out. When the work for a batch is paginated into multiple
 	// BatchRequests, due to MaxKeysPerBatchReq or TargetBytesPerBatchReq, this
@@ -678,6 +683,9 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 	}
 	if cfg.TargetBytesPerBatchReq > 0 {
 		req.TargetBytes = cfg.TargetBytesPerBatchReq
+	}
+	if cfg.WorkloadID != 0 {
+		req.Header.WorkloadId = cfg.WorkloadID
 	}
 	req.AdmissionHeader = b.admissionHeader()
 	return req
