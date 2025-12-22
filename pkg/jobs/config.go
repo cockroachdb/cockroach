@@ -24,6 +24,7 @@ const (
 	cancelUpdateLimitKey       = "jobs.cancel_update_limit"
 	debugPausePointsSettingKey = "jobs.debug.pausepoints"
 	metricsPollingIntervalKey  = "jobs.metrics.interval.poll"
+	claimQueryTimeoutKey       = "jobs.registry.claim_query.timeout"
 )
 
 const (
@@ -133,6 +134,14 @@ var (
 		debugPausePointsSettingKey,
 		"the list, comma separated, of named pausepoints currently enabled for debugging",
 		"",
+	)
+
+	claimQueryTimeout = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		claimQueryTimeoutKey,
+		"the timeout for the claim query used when adopting jobs",
+		time.Minute,
+		settings.PositiveDuration,
 	)
 )
 
