@@ -2443,12 +2443,15 @@ func (cs *clusterState) canShedAndAddLoad(
 		// In other words, whenever a node level summary was "bumped up" beyond
 		// the target's by some other local store, we reject the change.
 		//
-		// TODO(tbg): While the example illustrates that "something had to be
-		// done", I don't understand why it makes sense to solve this exactly
-		// as it was done. The node level summary is based on node-wide CPU
-		// utilization as well as its distance from the mean (across the
-		// candidate set). Store summaries a) reflect the worst dimension, and
-		// b) on the CPU dimension are based on the store-apportioned capacity.
+		// TODO(tbg,wenyihu6): There's a conceptual mismatch in this comparison: nls
+		// is CPU-specific while sls is max over all dimensions. A more consistent
+		// approach would compare nls with dimSummary[CPURate]. However, using sls
+		// is more permissive (since dimSummary[CPURate] <= sls). If sls is elevated
+		// due to a non-CPU dimension (e.g., write bandwidth), the check passes more
+		// easily, allowing more transfers. This helps avoid situations where the
+		// source is overloaded and needs to shed load, but all potential targets
+		// are rejected by overly strict checks despite having capacity. For now,
+		// we lean toward permissiveness, but it's unclear if this is optimal.
 		targetSLS.nls <= targetSLS.sls
 	if canAddLoad {
 		return true
