@@ -36,9 +36,11 @@ module.exports = (env, argv) => {
   }
 
   let plugins = [
-    new CopyWebpackPlugin([
-      { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
-    ]),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
+      ],
+    }),
     // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
     new WebpackBar({
       name: "db-console",
@@ -54,6 +56,13 @@ module.exports = (env, argv) => {
       // We have to tell the plugin where to store the pruned file
       // otherwise webpack can't find it.
       cacheDir: path.resolve(__dirname, "timezones"),
+    }),
+
+    // Webpack 5 no longer provides Node.js polyfills automatically.
+    // Provide Buffer and process globals for libraries that expect them.
+    new webpack.ProvidePlugin({
+      Buffer: ["buffer", "Buffer"],
+      process: "process/browser",
     }),
   ];
 
@@ -83,6 +92,27 @@ module.exports = (env, argv) => {
         ccl: path.resolve(__dirname, "ccl"),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
         "ccl/src/js/protos": "@cockroachlabs/crdb-protobuf-client-ccl",
+        // Webpack 5 doesn't polyfill Node.js built-ins automatically.
+        // Some packages import these subpaths explicitly.
+        "process/browser": require.resolve("process/browser"),
+      },
+      // Webpack 5 no longer auto-polyfills Node.js built-ins
+      fallback: {
+        "path": require.resolve("path-browserify"),
+        "fs": false,
+        "buffer": require.resolve("buffer/"),
+        "stream": require.resolve("stream-browserify"),
+        "assert": require.resolve("assert/"),
+        "crypto": require.resolve("crypto-browserify"),
+        "util": require.resolve("util/"),
+        "events": require.resolve("events/"),
+        "process": require.resolve("process/browser"),
+        "string_decoder": require.resolve("string_decoder/"),
+        "http": false,
+        "https": false,
+        "os": false,
+        "url": false,
+        "vm": false,
       },
     },
 
@@ -122,7 +152,6 @@ module.exports = (env, argv) => {
         {
           test: /\.module\.styl$/,
           use: [
-            "cache-loader",
             "style-loader",
             {
               loader: "css-loader",
@@ -135,7 +164,9 @@ module.exports = (env, argv) => {
             {
               loader: "stylus-loader",
               options: {
-                use: [require("nib")()],
+                stylusOptions: {
+                  use: [require("nib")()],
+                },
               },
             },
           ],
@@ -143,28 +174,36 @@ module.exports = (env, argv) => {
         {
           test: /(?<!\.module)\.styl$/,
           use: [
-            "cache-loader",
             "style-loader",
             "css-loader",
             {
               loader: "stylus-loader",
               options: {
-                use: [require("nib")()],
+                stylusOptions: {
+                  use: [require("nib")()],
+                },
               },
             },
           ],
         },
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          loader: "url-loader",
-          options: {
-            limit: 10000,
+          type: "asset",
+          parser: {
+            dataUrlCondition: {
+              maxSize: 10 * 1024, // 10kb
+            },
+          },
+          generator: {
             // Preserve the original filename instead of using hash
             // in order to play nice with bazel.
-            name: "[name].[ext]",
+            filename: "[name][ext]",
           },
         },
-        { test: /\.html$/, loader: "file-loader" },
+        {
+          test: /\.html$/,
+          type: "asset/resource",
+        },
         {
           test: /\.js$/,
           include: localRoots,
@@ -233,17 +272,22 @@ module.exports = (env, argv) => {
     stats: "errors-only",
 
     devServer: {
-      contentBase: path.join(__dirname, `dist${env.dist}`),
-      index: "",
-      proxy: {
-        "/": {
+      static: {
+        directory: path.join(__dirname, `dist${env.dist}`),
+      },
+      devMiddleware: {
+        index: false,
+      },
+      proxy: [
+        {
+          context: ["/"],
           secure: false,
           target: env.target || process.env.TARGET,
           headers: {
             "CRDB-Development": "true",
           },
         },
-      },
+      ],
     },
 
     watchOptions: {
