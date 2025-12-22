@@ -701,6 +701,9 @@ func workInfoForBatch(
 		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
 		CreateTime:      createTime,
 		BypassAdmission: bypassAdmission,
+		WorkloadID:      ba.Header.WorkloadId,
+		AppNameID:       ba.Header.AppNameID,
+		GatewayNodeID:   ba.Header.SQLGatewayNodeID,
 	}
 	return admissionInfo
 }

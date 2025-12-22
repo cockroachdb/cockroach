@@ -68,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -958,6 +959,28 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
+
+	// Create a callback that converts between ash types and serverpb types.
+	// This breaks the dependency cycle: ash -> serverpb -> ... -> admission -> ash
+	appNameResolver := func(ctx context.Context, req *ash.AppNameMappingsRequest) (*ash.AppNameMappingsResponse, error) {
+		serverpbReq := &serverpb.AppNameMappingsRequest{
+			NodeID: req.NodeID.String(),
+		}
+		serverpbResp, err := cfg.sqlStatusServer.AppNameMappings(ctx, serverpbReq)
+		if err != nil {
+			return nil, err
+		}
+		return &ash.AppNameMappingsResponse{
+			Mappings: serverpbResp.Mappings,
+		}, nil
+	}
+	ashSampler := ash.NewSamplerWithAppNameFetcher(
+		roachpb.NodeID(nodeInfo.NodeID.SQLInstanceID()),
+		cfg.Settings,
+		cfg.stopper,
+		appNameResolver,
+	)
+
 	*execCfg = sql.ExecutorConfig{
 		Settings: cfg.Settings,
 		// TODO(yuzefovich): I think cfg.stopper doesn't use the Tracer option.
@@ -987,6 +1010,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ContentionRegistry:      contentionRegistry,
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
+		ASHSampler:              ashSampler,
 		VirtualSchemas:          virtualSchemas,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		RangeDescriptorCache:    cfg.distSender.RangeDescriptorCache(),
@@ -1422,6 +1446,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	})
 
 	auditlogging.ConfigureRoleBasedAuditClusterSettings(ctx, execCfg.AuditConfig, execCfg.Settings, &execCfg.Settings.SV)
+
+	// Start the ASH sampler.
+	if err := ashSampler.Start(ctx); err != nil {
+		return nil, err
+	}
 
 	return &SQLServer{
 		ambientCtx:                     cfg.BaseConfig.AmbientCtx,

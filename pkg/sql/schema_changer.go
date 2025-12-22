@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -452,11 +453,14 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		localPlanner.MaybeReallocateAnnotations(stmt.NumAnnotations)
 		// Construct an optimized logical plan of the AS source stmt.
-		localPlanner.stmt = makeStatement(
+		stmtObj := makeStatement(
 			ctx, stmt, clusterunique.ID{}, /* queryID */
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)),
 			nil, /* statementHintsCache */
 		)
+		// Set WorkloadID so it can be plumbed through DistSQL flows for profiling and tracing.
+		stmtObj.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmtObj.StmtNoConstants, false /* implicitTxn */, localPlanner.SessionData().Database))
+		localPlanner.stmt = stmtObj
 		localPlanner.optPlanningCtx.init(localPlanner)
 
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -2954,6 +2958,10 @@ func createSchemaChangeEvalCtx(
 			Locality:             execCfg.Locality,
 			Tracer:               execCfg.AmbientCtx.Tracer,
 		},
+	}
+	// Set Gateway to the gateway SQL instance ID if DistSQLPlanner is available.
+	if execCfg.DistSQLPlanner != nil {
+		evalCtx.Gateway = execCfg.DistSQLPlanner.GatewayID()
 	}
 	// The backfill is going to use the current timestamp for the various
 	// functions, like now(), that need it.  It's possible that the backfill has

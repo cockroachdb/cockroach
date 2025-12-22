@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -158,6 +159,10 @@ func (o *Outbox) Run(
 	flowCtxCancel context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	// Register work state for ASH sampling.
+	clearWorkState := ash.SetWorkStateWithAppName(o.flowCtx.WorkloadID, ash.WORK_NETWORK, "ColOutbox", o.flowCtx.AppNameID, 0)
+	defer clearWorkState()
+
 	flowCtx := ctx
 	// Derive a child context so that we can cancel all components rooted in
 	// this outbox.

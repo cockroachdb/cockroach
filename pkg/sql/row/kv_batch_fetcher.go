@@ -216,6 +216,15 @@ type txnKVFetcher struct {
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 	admissionPacer         *admission.Pacer
+
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
+	appNameID  uint64
+	// gatewayNodeID is the SQL instance ID of the gateway node that planned the flow
+	// or served the query.
+	gatewayNodeID roachpb.NodeID
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -368,6 +377,9 @@ type newTxnKVFetcherArgs struct {
 	batchRequestsIssued        *int64
 	kvCPUTime                  *int64
 	rawMVCCValues              bool
+	workloadID                 uint64
+	appNameID                  uint64
+	gatewayNodeID              roachpb.NodeID
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -398,6 +410,9 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
+		workloadID:                 args.workloadID,
+		appNameID:                  args.appNameID,
+		gatewayNodeID:              args.gatewayNodeID,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -443,9 +458,12 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 				// nodes running colocated SQL+KV code where all SQL code is run
 				// on behalf of the one tenant. So from an AC perspective, the
 				// tenant ID we pass through here is irrelevant.
-				TenantID:   roachpb.SystemTenantID,
-				Priority:   admissionPri,
-				CreateTime: admissionHeader.CreateTime,
+				TenantID:      roachpb.SystemTenantID,
+				Priority:      admissionPri,
+				CreateTime:    admissionHeader.CreateTime,
+				WorkloadID:    f.workloadID,
+				AppNameID:     f.appNameID,
+				GatewayNodeID: f.gatewayNodeID,
 			})
 	}
 }
@@ -620,6 +638,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.Header.IsReverse = f.reverse
+	ba.Header.WorkloadId = f.workloadID
+	ba.Header.AppNameID = f.appNameID
+	if f.gatewayNodeID != 0 {
+		ba.Header.SQLGatewayNodeID = f.gatewayNodeID
+	}
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
@@ -773,9 +796,12 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 		}
 	} else if f.responseAdmissionQ != nil {
 		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
-			CreateTime: f.requestAdmissionHeader.CreateTime,
+			TenantID:      roachpb.SystemTenantID,
+			Priority:      admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime:    f.requestAdmissionHeader.CreateTime,
+			WorkloadID:    f.workloadID,
+			AppNameID:     f.appNameID,
+			GatewayNodeID: f.gatewayNodeID,
 		}
 		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err

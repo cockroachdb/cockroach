@@ -133,10 +133,13 @@ func TestStreamerLimitations(t *testing.T) {
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
 				nil,           /* kvCpuTime */
-				lock.None,
-				lock.Unreplicated,
-				false, /* reverse */
-			)
+		lock.None,
+		lock.Unreplicated,
+		false, /* reverse */
+		0,     /* workloadID */
+		0,     /* appNameID */
+		0,     /* gatewayNodeID */
+	)
 		})
 	})
 }

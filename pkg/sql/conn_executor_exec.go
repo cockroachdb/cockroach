@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -61,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -703,11 +705,20 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
+	// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+	stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, os.ImplicitTxn.Get(), p.SessionData().Database))
 	p.stmt = stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	// Set workload info on the transaction so it propagates to all BatchRequests.
+	if p.txn != nil {
+		appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+		sqlGatewayNodeID := roachpb.NodeID(p.extendedEvalCtx.Gateway)
+		p.txn.SetWorkloadInfo(stmt.WorkloadID, appNameID, sqlGatewayNodeID)
+	}
 
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging
@@ -1658,11 +1669,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 	}
 
+	// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+	vars.stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(vars.stmt.StmtNoConstants, os.ImplicitTxn.Get(), p.SessionData().Database))
 	p.stmt = vars.stmt
 	p.semaCtx.Annotations = tree.MakeAnnotations(vars.stmt.NumAnnotations)
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+
+	// Set workload info on the transaction so it propagates to all BatchRequests.
+	if p.txn != nil {
+		appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+		sqlGatewayNodeID := roachpb.NodeID(p.extendedEvalCtx.Gateway)
+		p.txn.SetWorkloadInfo(vars.stmt.WorkloadID, appNameID, sqlGatewayNodeID)
+	}
 
 	if buildutil.CrdbTestBuild {
 		// Ensure that each statement is formatted regardless of logging
@@ -3557,11 +3577,15 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 			nil, /* statementHintsCache */
 		)
+		// TODO(alyshan): Are there other components that create a planner so that they can run DistSQL flows?
+		stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, ex.implicitTxn(), ex.sessionData().Database))
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 		p.extendedEvalCtx.Placeholders = &tree.PlaceholderInfo{}
 		p.curPlan.init(&p.stmt, &p.instrumentation)
+		// Note: In NoTxn state, there's no transaction yet, so we can't set workload info here.
+		// The transaction will be created later if needed, and we'll set the workload info then.
 		var execErr error
 		if p, ok := payload.(payloadWithError); ok {
 			execErr = p.errorCause()

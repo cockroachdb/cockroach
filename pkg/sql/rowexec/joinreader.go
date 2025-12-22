@@ -595,6 +595,9 @@ func newJoinReader(
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
 			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
+			flowCtx.WorkloadID,
+			flowCtx.AppNameID,
+			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint
@@ -624,6 +627,9 @@ func newJoinReader(
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			SpansCanOverlap:            jr.spansCanOverlap,
+			WorkloadID:                 flowCtx.WorkloadID,
+			AppNameID:                  flowCtx.AppNameID,
+			Gateway:                    flowCtx.EvalCtx.Gateway,
 		},
 	); err != nil {
 		return nil, err

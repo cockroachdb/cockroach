@@ -31,6 +31,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/ash",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/buildutil",

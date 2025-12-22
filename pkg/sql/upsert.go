@@ -53,7 +53,7 @@ func (r *upsertRun) init(params runParams) error {
 	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
-	return r.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	return r.tw.init(params.ctx, params.p.txn, params.EvalContext(), params.p.stmt.WorkloadID)
 }
 
 func (n *upsertNode) startExec(params runParams) error {

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
@@ -285,7 +286,11 @@ func (ds *ServerImpl) setupFlow(
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
-		return kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader), nil
+		sqlGatewayNodeID := roachpb.NodeID(req.Flow.Gateway)
+		return kv.NewLeafTxnWithWorkloadInfo(
+			ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader,
+			req.WorkloadID, req.AppNameID, sqlGatewayNodeID,
+		), nil
 	}
 
 	var evalCtx *eval.Context
@@ -296,6 +301,11 @@ func (ds *ServerImpl) setupFlow(
 		// this allows us to avoid an unnecessary deserialization of the eval
 		// context proto.
 		evalCtx = localState.EvalContext
+		// Ensure Gateway is set to the gateway node ID. It should already be set
+		// from copyFromExecCfg, but set it from req.Flow.Gateway as a fallback.
+		if evalCtx.Gateway == 0 {
+			evalCtx.Gateway = req.Flow.Gateway
+		}
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf(ctx)
@@ -357,6 +367,7 @@ func (ds *ServerImpl) setupFlow(
 			ClusterID:                 ds.ServerConfig.LogicalClusterID.Get(),
 			ClusterName:               ds.ServerConfig.ClusterName,
 			NodeID:                    ds.ServerConfig.NodeID,
+			Gateway:                   req.Flow.Gateway,
 			Codec:                     ds.ServerConfig.Codec,
 			ReCache:                   ds.regexpCache,
 			ToCharFormatCache:         ds.toCharFormatCache,
@@ -386,7 +397,8 @@ func (ds *ServerImpl) setupFlow(
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
 		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
-		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(), req.WorkloadID,
+		req.AppNameID,
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -465,6 +477,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		txn = leafTxn
 	}
+	txn.SetWorkloadInfo(flowCtx.WorkloadID, flowCtx.AppNameID, roachpb.NodeID(req.Flow.Gateway))
 	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
 	// field has already been captured by various processors and operators that
 	// have already made a copy of the EvalCtx. In case this is not the gateway,
@@ -489,6 +502,8 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
+	workloadID uint64,
+	appNameID uint64,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -505,6 +520,8 @@ func (ds *ServerImpl) newFlowContext(
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
 		DiskMonitor:    diskMonitor,
+		WorkloadID:     workloadID,
+		AppNameID:      appNameID,
 	}
 
 	// Don't reuse the collection when we're running a parallel check off the
@@ -701,6 +718,10 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
+	// Hash and store the app_name from SessionData if present.
+	if req.EvalContext.SessionData.ApplicationName != "" {
+		_ = ash.GetOrStoreAppNameID(req.EvalContext.SessionData.ApplicationName)
+	}
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 
@@ -743,6 +764,7 @@ func (ds *ServerImpl) SetupFlow(
 			}
 			return err
 		}
+		// TODO(alyshan): workloadID is available in SetupFlowRequest, add the workloadid.ProfileTag to the pprof labels.
 		var undo func()
 		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		defer undo()

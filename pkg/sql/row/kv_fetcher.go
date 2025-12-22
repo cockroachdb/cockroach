@@ -61,6 +61,9 @@ func newTxnKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) *txnKVFetcher {
 	alloc := new(struct {
 		batchRequestsIssued int64
@@ -103,20 +106,23 @@ func newTxnKVFetcher(
 		}
 	}
 
-	fetcherArgs := newTxnKVFetcherArgs{
-		sendFn:                     sendFn,
-		reverse:                    reverse,
-		rawMVCCValues:              rawMVCCValues,
-		lockStrength:               lockStrength,
-		lockWaitPolicy:             lockWaitPolicy,
-		lockDurability:             lockDurability,
-		lockTimeout:                lockTimeout,
-		deadlockTimeout:            deadlockTimeout,
-		acc:                        acc,
-		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		fetcherArgs := newTxnKVFetcherArgs{
+			sendFn:                     sendFn,
+			reverse:                    reverse,
+			rawMVCCValues:              rawMVCCValues,
+			lockStrength:               lockStrength,
+			lockWaitPolicy:             lockWaitPolicy,
+			lockDurability:             lockDurability,
+			lockTimeout:                lockTimeout,
+			deadlockTimeout:            deadlockTimeout,
+			acc:                        acc,
+			forceProductionKVBatchSize: forceProductionKVBatchSize,
+			gatewayNodeID:              gatewayNodeID,
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
+		workloadID:                 workloadID,
+		appNameID:                  appNameID,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
@@ -148,10 +154,13 @@ func NewDirectKVBatchFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID, appNameID, gatewayNodeID,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -177,10 +186,13 @@ func NewKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID, appNameID, gatewayNodeID,
 	))
 }
 
@@ -208,6 +220,9 @@ func NewStreamingKVFetcher(
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	rawMVCCValues bool,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -229,6 +244,9 @@ func NewStreamingKVFetcher(
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
+		workloadID,
+		appNameID,
+		gatewayNodeID,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -92,6 +93,16 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
+	// appNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this request. This is a hash of the app_name string.
+	appNameID uint64
+	// gatewayNodeID is the SQL instance ID of the gateway node that planned the flow
+	// or served the query.
+	gatewayNodeID roachpb.NodeID
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -103,7 +114,7 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 
 // init initializes the tableWriterBase with a Txn.
 func (tb *tableWriterBase) init(
-	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context,
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, workloadID uint64,
 ) error {
 	if txn.Type() != kv.RootTxn {
 		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
@@ -114,11 +125,16 @@ func (tb *tableWriterBase) init(
 	tb.deadlockTimeout = 0
 	tb.originID = 0
 	tb.originTimestamp = hlc.Timestamp{}
+	tb.workloadID = workloadID
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+		if evalCtx.SessionData().ApplicationName != "" {
+			tb.appNameID = ash.GetOrStoreAppNameID(evalCtx.SessionData().ApplicationName)
+		}
+		tb.gatewayNodeID = roachpb.NodeID(evalCtx.Gateway)
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -211,6 +227,8 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
 			CreateTime: requestAdmissionHeader.CreateTime,
+			WorkloadID: tb.workloadID,
+			AppNameID:  tb.appNameID,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
@@ -228,6 +246,11 @@ func (tb *tableWriterBase) initNewBatch() {
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
 	tb.b.Header.DeadlockTimeout = tb.deadlockTimeout
+	tb.b.Header.WorkloadId = tb.workloadID
+	tb.b.Header.AppNameID = tb.appNameID
+	if tb.gatewayNodeID != 0 {
+		tb.b.Header.SQLGatewayNodeID = tb.gatewayNodeID
+	}
 	if tb.originID != 0 {
 		tb.b.Header.WriteOptions = &kvpb.WriteOptions{
 			OriginID:        tb.originID,

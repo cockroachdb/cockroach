@@ -403,6 +403,9 @@ func NewStreamer(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -447,6 +450,9 @@ func NewStreamer(
 		lockWaitPolicy:         lockWaitPolicy,
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
+		workloadID:             workloadID,
+		appNameID:              appNameID,
+		gatewayNodeID:          gatewayNodeID,
 	}
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
@@ -918,6 +924,17 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
+	// appNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this request. This is a hash of the app_name string.
+	appNameID uint64
+	// gatewayNodeID is the SQL instance ID of the gateway node that planned the flow
+	// or served the query.
+	gatewayNodeID roachpb.NodeID
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -1413,6 +1430,11 @@ func (w *workerCoordinator) performRequestAsync(
 		ba.Header.AllowEmpty = !headOfLine
 		ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
 		ba.Header.IsReverse = w.s.reverse
+		ba.Header.WorkloadId = w.workloadID
+		ba.Header.AppNameID = w.appNameID
+		if w.gatewayNodeID != 0 {
+			ba.Header.SQLGatewayNodeID = w.gatewayNodeID
+		}
 		// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 		// applicable (#67885).
 		ba.AdmissionHeader = w.requestAdmissionHeader
@@ -1554,9 +1576,12 @@ func (w *workerCoordinator) performRequestAsync(
 		// Do admission control after we've finalized the memory accounting.
 		if br != nil && w.responseAdmissionQ != nil {
 			responseAdmission := admission.WorkInfo{
-				TenantID:   roachpb.SystemTenantID,
-				Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
-				CreateTime: w.requestAdmissionHeader.CreateTime,
+				TenantID:      roachpb.SystemTenantID,
+				Priority:      admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
+				CreateTime:    w.requestAdmissionHeader.CreateTime,
+				WorkloadID:    w.workloadID,
+				AppNameID:     w.appNameID,
+				GatewayNodeID: w.gatewayNodeID,
 			}
 			if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 				log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
