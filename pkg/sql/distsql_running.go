@@ -568,10 +568,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var runnerSpan *tracing.Span
 	// This span is necessary because it can outlive its parent.
 	runnerCtx, runnerSpan = tracing.ChildSpan(runnerCtx, "setup-flow-async" /* opName */)
+	// runnerDone will be closed whenever all concurrent SetupFlowRequest RPCs
+	// are complete.
+	runnerDone := make(chan struct{})
 	// runnerCleanup can only be executed _after_ all issued RPCs are complete.
 	runnerCleanup := func() {
 		cancelRunnerCtx()
 		runnerSpan.Finish()
+		close(runnerDone)
 	}
 	// Make sure that we call runnerCleanup unless a new goroutine takes that
 	// responsibility.
@@ -642,24 +646,25 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// setup of a remote flow fails, we want to eagerly cancel all the flows,
 	// and we do so in a separate goroutine.
 	//
-	// We need to synchronize the new goroutine with flow.Cleanup() being called
-	// since flow.Cleanup() is the last thing before DistSQLPlanner.Run returns
-	// at which point the rowResultWriter is no longer protected by the mutex of
-	// the DistSQLReceiver.
-	// TODO(yuzefovich): think through this comment - we no longer have mutex
-	// protection in place, so perhaps this can be simplified.
+	// We need to ensure that the local flow Cleanup() is blocked until all RPCs
+	// are performed. This is needed since we release the PhysicalInfrastructure
+	// back into the sync.Pool, and FlowSpecs for concurrent RPCs might
+	// reference that infra.
 	cleanupCalledMu := struct {
 		syncutil.Mutex
 		called bool
 	}{}
 	flow.AddOnCleanupStart(func() {
 		cleanupCalledMu.Lock()
-		defer cleanupCalledMu.Unlock()
 		cleanupCalledMu.called = true
 		// Cancel any outstanding RPCs while holding the lock to protect from
-		// the context canceled error (the result of the RPC) being set on the
-		// DistSQLReceiver by the listener goroutine below.
+		// the context canceled error (the result of the RPC) being communicated
+		// to the DistSQLReceiver by the listener goroutine below.
 		cancelRunnerCtx()
+		cleanupCalledMu.Unlock()
+		// Now block the cleanup of the local flow until all concurrent RPCs are
+		// complete.
+		<-runnerDone
 	})
 	err = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
 		// Note that in the loop below we always receive from the result channel
