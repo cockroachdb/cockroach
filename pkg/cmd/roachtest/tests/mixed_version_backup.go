@@ -2368,50 +2368,57 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
-// deleteUserTableSST deletes an SST that covers a user table from the full
-// backup in a collection. This is used to test online restore recovery. We
-// delete from the full backup specifically to avoid deleting an SST from an
-// incremental that is skipped due to a compacted backup. This ensures that
-// deleting an SST will cause the download job to fail (assuming it hasn't
-// already been downloaded).
-// Note: We delete specifically a user-table SST as opposed to choosing a random
-// SST because the temporary system table SSTs may be GC'd before the download
-// phase attempts to download the SST. This would cause the download job to
-// succeed instead of failing as expected. See
-// https://github.com/cockroachdb/cockroach/issues/148408 for more details.
-// TODO (kev-cao): Investigate if blocking storage level compaction would
-// prevent GC of temporary system tables and allow us to delete a random SST
-// instead. Technically, it is still possible, but unlikely, for storage to
-// compact away a user-table SST before the download job attempts to download
-// it, which would result in false positives in the test.
-func (d *BackupRestoreTestDriver) deleteUserTableSST(
+// deleteSSTFromBackupLayers deletes one SST from each layer of a backup
+// collection. This is used to test online restore recovery. Deleting an SST
+// from each layer ensures that at least one SST required for a restore will be
+// missing.
+func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
-	var sstPath string
-	var startPretty, endPretty string
-	var sizeBytes, numRows int
-	if err := db.QueryRowContext(
+	type sstInfo struct {
+		path, start, end string
+		bytes, rows      int
+	}
+	rows, err := db.QueryContext(
 		ctx,
-		`SELECT path, start_pretty, end_pretty, size_bytes, rows FROM
-		(
-			SELECT row_number() OVER (), * FROM
-			[SHOW BACKUP FILES FROM LATEST IN $1]
+		// We delete the last SST in each directory just to ensure that we always
+		// delete user data. If a system table data is deleted, it is possible for
+		// the temporary system table to be GC'd before the download phase detects
+		// the missing file.
+		`WITH with_dir AS (
+			SELECT *, regexp_replace(path, '/[^/]+\.sst$', '') AS dir
+			FROM [SHOW BACKUP FILES FROM LATEST IN $1]
 		)
-		WHERE backup_type = 'full'
-		ORDER BY row_number DESC
-		LIMIT 1`,
+		SELECT path, start_pretty, end_pretty, size_bytes, rows
+		FROM (
+			SELECT *, row_number() OVER (PARTITION BY dir ORDER BY path DESC) AS rn
+			FROM with_dir
+		)
+		WHERE rn = 1`,
 		collection.uri(),
-	).Scan(&sstPath, &startPretty, &endPretty, &sizeBytes, &numRows); err != nil {
-		return errors.Wrapf(err, "failed to get SST path from %s", collection.uri())
+	)
+	if err != nil {
+		return errors.Wrapf(err, "failed to query for backup files in %q", collection.uri())
+	}
+	defer rows.Close()
+	var ssts []sstInfo
+	for rows.Next() {
+		var sst sstInfo
+		if err := rows.Scan(&sst.path, &sst.start, &sst.end, &sst.bytes, &sst.rows); err != nil {
+			return errors.Wrap(err, "error scanning SHOW BACKUP FILES row")
+		}
+		ssts = append(ssts, sst)
+	}
+	if rows.Err() != nil {
+		return errors.Wrap(rows.Err(), "error iterating over SHOW BACKUP FILES")
+	}
+	if len(ssts) == 0 {
+		return errors.Newf("unexpectedly found no SST files to delete in %q", collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse backup collection URI %q", collection.uri())
 	}
-	l.Printf(
-		"deleting sst %s at %s: covering %d bytes and %d rows in [%s, %s)",
-		sstPath, uri, sizeBytes, numRows, startPretty, endPretty,
-	)
 	storage, err := cloud.ExternalStorageFromURI(
 		ctx,
 		collection.uri(),
@@ -2427,13 +2434,22 @@ func (d *BackupRestoreTestDriver) deleteUserTableSST(
 		return errors.Wrapf(err, "failed to create external storage for %q", collection.uri())
 	}
 	defer storage.Close()
-	return errors.Wrapf(
-		storage.Delete(ctx, sstPath),
-		"failed to delete sst %s from backup %s at %s",
-		sstPath,
-		collection.name,
-		uri,
-	)
+	for _, sst := range ssts {
+		l.Printf(
+			"deleting sst %s at %s: covering %d bytes and %d rows in [%s, %s)",
+			sst.path, uri, sst.bytes, sst.rows, sst.start, sst.end,
+		)
+		if err := storage.Delete(ctx, sst.path); err != nil {
+			return errors.Wrapf(
+				err,
+				"failed to delete sst %s from backup %s at %s",
+				sst.path,
+				collection.name,
+				uri,
+			)
+		}
+	}
+	return nil
 }
 
 // sentinelFilePath returns the path to the file that prevents job
