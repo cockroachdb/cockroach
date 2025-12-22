@@ -20,7 +20,7 @@ import OverviewListAlerts from "src/views/shared/containers/alerts/overviewListA
 import createChartComponent from "src/views/shared/util/d3-react";
 
 import capacityChart from "./capacity";
-import "./cluster.styl";
+import "./cluster.scss";
 import {
   CapacityUsageTooltip,
   UsedTooltip,

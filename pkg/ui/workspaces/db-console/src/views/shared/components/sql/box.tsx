@@ -7,7 +7,7 @@ import classNames from "classnames/bind";
 import React from "react";
 
 import { Highlight } from "./highlight";
-import styles from "./sqlhighlight.module.styl";
+import styles from "./sqlhighlight.module.scss";
 
 export interface SqlBoxProps {
   value: string;

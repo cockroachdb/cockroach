@@ -13,7 +13,7 @@ import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { NetworkFilter, NetworkSort } from "..";
 import { Filter } from "../filter";
-import "./sort.styl";
+import "./sort.scss";
 
 interface ISortProps {
   onChangeFilter: (key: string, value: string) => void;

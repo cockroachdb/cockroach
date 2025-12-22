@@ -8,7 +8,7 @@ import React from "react";
 
 import { Text, TextTypes } from "src/components";
 import { Chip } from "src/views/app/components/chip";
-import "./legend.styl";
+import "./legend.scss";
 
 interface ILegendProps {
   stddevMinus2: number;

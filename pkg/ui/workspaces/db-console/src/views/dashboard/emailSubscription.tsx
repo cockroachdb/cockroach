@@ -18,7 +18,7 @@ import {
 import { dismissReleaseNotesSignupForm } from "src/redux/uiDataSelectors";
 import { EmailSubscriptionForm } from "src/views/shared/components/emailSubscriptionForm";
 
-import "./emailSubscription.styl";
+import "./emailSubscription.scss";
 
 type EmailSubscriptionProps = MapDispatchToProps & MapStateToProps;
 

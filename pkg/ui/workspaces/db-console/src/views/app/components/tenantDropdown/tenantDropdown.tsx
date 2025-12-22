@@ -11,7 +11,7 @@ import { getDataFromServer } from "src/util/dataFromServer";
 
 import ErrorBoundary from "../errorMessage/errorBoundary";
 
-import "./tenantDropdown.styl";
+import "./tenantDropdown.scss";
 
 const tenantIDKey = "tenant";
 

@@ -6,7 +6,7 @@
 import classNames from "classnames/bind";
 import React, { ButtonHTMLAttributes } from "react";
 
-import styles from "./button.module.styl";
+import styles from "./button.module.scss";
 
 export interface ButtonProps {
   type?: "primary" | "secondary" | "flat" | "unstyled-link";

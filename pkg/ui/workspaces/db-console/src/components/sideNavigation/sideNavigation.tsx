@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { Text, TextTypes } from "src/components";
 
-import "./sideNavigation.styl";
+import "./sideNavigation.scss";
 
 export interface SideNavigationProps {
   children: React.ReactNode;
