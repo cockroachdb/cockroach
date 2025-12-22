@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -97,6 +98,11 @@ type Inbox struct {
 	admissionQ    *admission.WorkQueue
 	admissionInfo admission.WorkInfo
 
+	// workloadID is the ID of the workload that this inbox is receiving data
+	// for. This is used for ASH sampling to correlate network waits with
+	// specific queries.
+	workloadID uint64
+
 	// statsAtomics are the execution statistics that need to be atomically
 	// accessed. This is necessary since Get*() methods can be called from
 	// different goroutine than Next().
@@ -160,6 +166,7 @@ func NewInboxWithAdmissionControl(
 	flowCtxDone <-chan struct{},
 	admissionQ *admission.WorkQueue,
 	admissionInfo admission.WorkInfo,
+	workloadID uint64,
 ) (*Inbox, error) {
 	i, err := NewInboxWithFlowCtxDone(allocator, typs, streamID, flowCtxDone)
 	if err != nil {
@@ -167,6 +174,7 @@ func NewInboxWithAdmissionControl(
 	}
 	i.admissionQ = admissionQ
 	i.admissionInfo = admissionInfo
+	i.workloadID = workloadID
 	return i, err
 }
 
@@ -329,7 +337,10 @@ func (i *Inbox) Next() coldata.Batch {
 	defer i.deserializationStopWatch.Stop()
 	for {
 		i.deserializationStopWatch.Stop()
+		// Register network wait state for ASH sampling while waiting to receive.
+		clearWorkState := ash.SetWorkState(i.workloadID, ash.WORK_NETWORK, "InboxRecv")
 		m, err := i.stream.Recv()
+		clearWorkState()
 		i.deserializationStopWatch.Start()
 		atomic.AddInt64(&i.statsAtomics.numMessages, 1)
 		if err != nil {
@@ -468,7 +479,10 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	}
 
 	for {
+		// Register network wait state for ASH sampling while waiting to receive.
+		clearWorkState := ash.SetWorkState(i.workloadID, ash.WORK_NETWORK, "InboxDrainRecv")
 		msg, err := i.stream.Recv()
+		clearWorkState()
 		if err != nil {
 			if err == io.EOF {
 				break

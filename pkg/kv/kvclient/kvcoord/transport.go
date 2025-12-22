@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -204,11 +205,22 @@ func (gt *grpcTransport) sendBatch(
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
-	if rpc.IsLocal(iface) {
+	isLocal := rpc.IsLocal(iface)
+	if isLocal {
 		gt.opts.metrics.LocalSentCount.Inc(1)
 	}
 	log.VEvent(ctx, 2, "sending batch request")
+	var eventType ash.WorkEventType
+	eventName := "DistSenderRemote"
+	if isLocal {
+		eventType = ash.WORK_CPU
+		eventName = "DistSenderLocal"
+	} else {
+		eventType = ash.WORK_NETWORK
+	}
+	clearWorkState := ash.SetWorkState(ba.Header.WorkloadId, eventType, eventName)
 	reply, err := iface.Batch(ctx, ba)
+	clearWorkState()
 	log.VEvent(ctx, 2, "received batch response")
 
 	// We don't have any strong reason to keep verifying the checksum of the

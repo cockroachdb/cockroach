@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/rowflow",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/ash",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfra/execopnode",

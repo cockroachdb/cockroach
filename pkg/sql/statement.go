@@ -43,6 +43,10 @@ type Statement struct {
 
 	QueryTags []sqlcommenter.QueryTag
 
+	// WorkloadID is the identifier for this workload that we can use
+	// for profiling and tracing.
+	WorkloadID uint64
+
 	// Hints are any external statement hints from the system.statement_hints
 	// table that could apply to this statement, based on the statement
 	// fingerprint. Hints are ordered with the most recent first.

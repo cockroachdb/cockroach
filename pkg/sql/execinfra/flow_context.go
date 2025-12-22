@@ -97,6 +97,8 @@ type FlowCtx struct {
 	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
+
+	WorkloadID uint64
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.

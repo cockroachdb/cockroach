@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 )
@@ -27,6 +28,9 @@ func (r *Replica) maybeRateLimitBatch(
 	if !tenantIDOrZero.IsSet() || tenantIDOrZero.IsSystem() {
 		return nil
 	}
+
+	clearWorkState := ash.SetWorkState(ba.Header.WorkloadId, ash.WORK_OTHER, "TenantRateLimit")
+	defer clearWorkState()
 
 	var info tenantcostmodel.BatchInfo
 	for i := range ba.Requests {

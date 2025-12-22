@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1723,6 +1724,8 @@ type ExecutorConfig struct {
 	ClosedSessionCache  *ClosedSessionCache
 	SQLLiveness         sqlliveness.Provider
 	JobRegistry         *jobs.Registry
+	// ASHSampler is the Active Session History sampler for this node.
+	ASHSampler *ash.Sampler
 	VirtualSchemas      *VirtualSchemaHolder
 	DistSQLPlanner      *DistSQLPlanner
 	TableStatsCache     *stats.TableStatisticsCache

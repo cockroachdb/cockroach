@@ -47,6 +47,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/telemetry",  # keep
         "//pkg/settings",
+        "//pkg/sql/ash",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/colinfo",  # keep

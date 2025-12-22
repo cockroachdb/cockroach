@@ -690,6 +690,7 @@ func workInfoForBatch(
 		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
 		CreateTime:      createTime,
 		BypassAdmission: bypassAdmission,
+		WorkloadID:      ba.Header.WorkloadId,
 	}
 	return admissionInfo
 }

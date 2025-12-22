@@ -3022,6 +3022,13 @@ message Header {
   // evaluated in descending range order.
   bool is_reverse = 38;
 
+  // WorkloadID allows the caller to tag the request with an
+  // identifier that links is back to the workload entity that triggered
+  // the Batch. This can be a statement fingerprint ID, transaction
+  // fingerprint ID, job ID, etc. This ID will be added to profiler
+  // and trace labels.
+  uint64 workload_id = 39;
+
   reserved 7, 10, 12, 14, 20, 24;
 
   // Next ID: 39

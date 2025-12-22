@@ -18,6 +18,8 @@ import (
 type SQLStatusServer interface {
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	ListActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
+	ListLocalActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
 	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
 	CancelQueryByKey(context.Context, *CancelQueryByKeyRequest) (*CancelQueryByKeyResponse, error)
 	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
