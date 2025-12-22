@@ -869,6 +869,8 @@ ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 statement ok
 ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey_v2" PRIMARY KEY (y)
 
+# The legacy schema changer does not leave behind an index on the old primary key column.
+onlyif config local-legacy-schema-changer
 query TT
 SHOW CREATE t
 ----
@@ -876,6 +878,20 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      CONSTRAINT t_pkey_v2 PRIMARY KEY (y ASC),
+     FAMILY fam_0_x (x),
+     FAMILY fam_1_y (y)
+   );
+
+# The declarative schema changer leaves behind an index on the old primary key column.
+skipif config local-legacy-schema-changer
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     y INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC),
+     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x (x),
      FAMILY fam_1_y (y)
    );
@@ -1067,12 +1083,30 @@ SELECT * FROM t2
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL) WITH (schema_locked = false)
 
+onlyif config local-legacy-schema-changer
 statement error pq: table "t" does not have a primary key, cannot perform ADD COLUMN z INT8 AS \(x \+ 1\) STORED
 ALTER TABLE t DROP CONSTRAINT t_pkey, ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
 
+# The declarative schema changer supports this, since it defers the primary key
+# swap until it sees the new PK being added.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t DROP CONSTRAINT t_pkey, ADD COLUMN z INT AS (x + 1) STORED, ADD PRIMARY KEY (y)
+
+skipif config local-legacy-schema-changer
+query TT
+SHOW CREATE t
+----
+t  CREATE TABLE public.t (
+     x INT8 NOT NULL,
+     y INT8 NOT NULL,
+     z INT8 NULL AS (x + 1:::INT8) STORED,
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC),
+     UNIQUE INDEX t_x_key (x ASC)
+   );
 
 subtest create_table_change_pk
 
@@ -2083,7 +2117,7 @@ statement ok
 CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctcheck CHECK (a > 0))
 
 skipif config local-legacy-schema-changer
-statement error pgcode 42710 constraint with name "ctcheck" already exists
+statement error pgcode 42P07 constraint with name "ctcheck" already exists
 ALTER TABLE t_name_check ADD CONSTRAINT ctcheck PRIMARY KEY (a)
 
 statement ok
@@ -2096,7 +2130,7 @@ statement ok
 CREATE TABLE t_name_check (a INT NOT NULL, CONSTRAINT ctuniq UNIQUE (a))
 
 skipif config local-legacy-schema-changer
-statement error pgcode 42710 constraint with name "ctuniq" already exists
+statement error pgcode 42P07 constraint with name "ctuniq" already exists
 ALTER TABLE t_name_check ADD CONSTRAINT ctuniq PRIMARY KEY (a)
 
 statement ok
@@ -2106,7 +2140,7 @@ statement ok
 CREATE TABLE t_name_check (a INT NOT NULL, INDEX idx (a))
 
 skipif config local-legacy-schema-changer
-statement error pgcode 42710 constraint with name "idx" already exists
+statement error pgcode 42P07 constraint with name "idx" already exists
 ALTER TABLE t_name_check ADD CONSTRAINT idx PRIMARY KEY (a)
 
 # The following subtest tests the case when the new primary key
