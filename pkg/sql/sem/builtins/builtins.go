@@ -9677,6 +9677,13 @@ WHERE object_id = table_descriptor_id
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+
 				stmtFingerprint := string(tree.MustBeDString(args[0]))
 				donorSQL := string(tree.MustBeDString(args[1]))
 

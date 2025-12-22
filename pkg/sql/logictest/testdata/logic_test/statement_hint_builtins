@@ -953,3 +953,22 @@ SELECT information_schema.crdb_rewrite_inline_hints('', '')
 
 statement error pq: could not parse hint donor statement as a single SQL statement
 SELECT information_schema.crdb_rewrite_inline_hints('SELECT 1', 'SELECT 2; SELECT 3')
+
+# Test privilege checks for information_schema.crdb_rewrite_inline_hints.
+
+user testuser
+
+statement error user testuser does not have REPAIRCLUSTER system privilege
+SELECT information_schema.crdb_rewrite_inline_hints('SELECT _', 'SELECT _')
+
+user root
+
+statement ok
+GRANT SYSTEM REPAIRCLUSTER TO testuser
+
+user testuser
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints('SELECT _', 'SELECT _')
+
+user root
