@@ -112,7 +112,11 @@ write *eventpb.CreateFunction to event log:
   functionName: defaultdb.public.t
   sql:
     descriptorId: 107
-    statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
+    statement: |-
+      CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+      	RETURNS INT8
+      	LANGUAGE SQL
+      	AS $$SELECT ‹1›;$$
     tag: CREATE FUNCTION
     user: root
 ## StatementPhase stage 1 of 1 with 11 MutationType ops

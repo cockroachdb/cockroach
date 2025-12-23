@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestConfig(t *testing.T) {
@@ -24,7 +23,7 @@ func TestConfig(t *testing.T) {
 		}
 		t.Logf("%# v", pretty.Formatter(c))
 		var buf bytes.Buffer
-		b, err := yaml.Marshal(&c)
+		b, err := yamlutil.Marshal(&c)
 		if err != nil {
 			fmt.Fprintf(&buf, "ERROR: %v\n", err)
 		} else {

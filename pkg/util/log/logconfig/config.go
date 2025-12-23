@@ -949,7 +949,7 @@ func (c *ChannelFilters) UnmarshalYAML(value *yaml.Node) error {
 	// We recognize two formats here: either a map of
 	// severity to channel lists, or a single channel list.
 	var a ChannelList
-	err := value.Decode(&a)
+	err := a.UnmarshalYAML(value)
 	if err == nil /* no error: it's a simple channel list */ {
 		c.Filters = map[logpb.Severity]ChannelList{
 			logpb.Severity_UNKNOWN: a,

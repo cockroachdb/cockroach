@@ -30,7 +30,7 @@ var _ yaml.Unmarshaler = &Allowlist{}
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (al *Allowlist) UnmarshalYAML(value *yaml.Node) error {
 	var f AllowlistFile
-	if err := value.Load(&f, yaml.WithUniqueKeys(false), yaml.WithKnownFields(true)); err != nil {
+	if err := value.Load(&f, yaml.WithUniqueKeys(false)); err != nil {
 		return err
 	}
 	al.entries = f.Allowlist

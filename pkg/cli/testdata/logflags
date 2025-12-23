@@ -479,7 +479,7 @@ run
 start
 --log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO}}
 ----
-error: yaml: did not find expected key
+error: yaml: while parsing a block mapping at <unknown position>: <unknown position>: did not find expected key
 
 
 # This configuration becomes possible if redactability is explicitly retracted.
@@ -487,7 +487,7 @@ run
 start
 --log=capture-stray-errors: {enable: false}, sinks: {stderr: {filter: INFO, redactable: false}}
 ----
-error: yaml: did not find expected key
+error: yaml: while parsing a block mapping at <unknown position>: <unknown position>: did not find expected key
 
 subtest end
 

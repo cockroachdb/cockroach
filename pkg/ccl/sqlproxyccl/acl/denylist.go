@@ -35,7 +35,7 @@ var _ yaml.Unmarshaler = &Denylist{}
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (dl *Denylist) UnmarshalYAML(value *yaml.Node) error {
 	var f DenylistFile
-	if err := value.Load(&f, yaml.WithUniqueKeys(false), yaml.WithKnownFields(true)); err != nil {
+	if err := value.Load(&f, yaml.WithUniqueKeys(false)); err != nil {
 		return err
 	}
 	dl.entries = make(map[DenyEntity]*DenyEntry)
