@@ -4215,6 +4215,10 @@ func (m *sessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
 	m.data.OptimizerUseMaxFrequencySelectivity = val
 }
 
+func (m *sessionDataMutator) SetPreventPartitioningSoftLimitTableReaders(val bool) {
+	m.data.PreventPartitioningSoftLimitTableReaders = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

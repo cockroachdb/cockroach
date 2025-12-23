@@ -4145,6 +4145,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`prevent_partitioning_soft_limit_table_readers`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`prevent_partitioning_soft_limit_table_readers`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("prevent_partitioning_soft_limit_table_readers", s)
+			if err != nil {
+				return err
+			}
+			m.SetPreventPartitioningSoftLimitTableReaders(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PreventPartitioningSoftLimitTableReaders), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
