@@ -566,7 +566,7 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 func drpcGatewayRequestRecoveryInterceptor(
 	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
 ) (resp interface{}, err error) {
-	md, ok := metadata.FromOutgoingContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		val := md.Get(gwRequestKey)
 		if len(val) > 0 {
@@ -595,7 +595,7 @@ func drpcGatewayRequestCounterInterceptor(
 	cc *drpcclient.ClientConn,
 	invoker drpcclient.UnaryInvoker,
 ) error {
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := metadata.FromOutgoingContext(ctx)
 	if ok {
 		val := md.Get(gwRequestKey)
 		if len(val) == 1 && val[0] != "" {

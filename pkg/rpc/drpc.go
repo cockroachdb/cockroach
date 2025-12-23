@@ -352,7 +352,7 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		Manager: drpcmanager.Options{Reader: drpcwire.
 			ReaderOptions{MaximumBufferSize: math.MaxInt},
 			// enable grpc compabitility for metadata
-			GrpcMetadataCompatMode: true
+			GrpcMetadataCompatMode: true,
 		},
 	})
 	d.Mux = mux
