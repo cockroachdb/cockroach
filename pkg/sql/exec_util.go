@@ -4309,6 +4309,10 @@ func (m *sessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(va
 	m.data.UseImprovedRoutineDepsTriggersAndComputedCols = val
 }
 
+func (m *sessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val bool) {
+	m.data.DistSQLPreventPartitioningSoftLimitedScans = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
