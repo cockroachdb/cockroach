@@ -285,9 +285,8 @@ func TestIterateSingleStepsIsPure(t *testing.T) {
 
 	// First call to iterateSingleSteps.
 	var stepCount1 int
-	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) {
 		stepCount1++
-		return nil
 	})
 	require.Greater(t, stepCount1, 0, "should have iterated over at least one step")
 
@@ -296,9 +295,8 @@ func TestIterateSingleStepsIsPure(t *testing.T) {
 
 	// Second call to iterateSingleSteps.
 	var stepCount2 int
-	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) {
 		stepCount2++
-		return nil
 	})
 
 	// Capture plan representation after second iteration.
