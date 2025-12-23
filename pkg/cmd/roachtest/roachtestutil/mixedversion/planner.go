@@ -1217,15 +1217,14 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
-// walkSteps recursively walks through all steps in the given slice,
+// transformSteps recursively walks through all steps in the given slice,
 // calling the function `f` for every `singleStep` encountered. The
 // function returns the transformed list of steps.
 //
-// The `generateDelays` parameter controls whether new random delays
-// should be generated for steps that are newly inserted into a
-// concurrentRunStep.
-func (plan *TestPlan) walkSteps(
-	steps []testStep, f func(*singleStep, bool) []testStep, generateDelays bool,
+// This function may mutate RNG state when generating delays for newly
+// inserted concurrent steps. For read-only iteration, use forEachStep.
+func (plan *TestPlan) transformSteps(
+	steps []testStep, f func(*singleStep, bool) []testStep,
 ) []testStep {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
@@ -1246,15 +1245,11 @@ func (plan *TestPlan) walkSteps(
 					// generate a new delay for it.
 					if ss == ds.step {
 						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
-					} else if generateDelays {
+					} else {
 						// New step inserted during mutation - generate a new delay.
 						newSteps = append(newSteps, delayedStep{
 							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
 						)
-					} else {
-						// Read-only iteration - preserve the original delay to
-						// avoid mutating RNG state.
-						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
 					}
 				}
 			}
@@ -1283,32 +1278,61 @@ func (plan *TestPlan) walkSteps(
 	return newSteps
 }
 
+// forEachStep is a pure function that iterates over
+// all steps in the given slice, calling the function `f` for every
+// `singleStep` encountered. Unlike transformSteps, this function does
+// not mutate the plan or RNG state.
+func forEachStep(steps []testStep, f func(*singleStep, bool)) {
+	var visit func(testStep, bool)
+	visit = func(step testStep, isConcurrent bool) {
+		switch s := step.(type) {
+		case sequentialRunStep:
+			for _, seqStep := range s.steps {
+				visit(seqStep, false)
+			}
+		case concurrentRunStep:
+			for _, concurrentStep := range s.delayedSteps {
+				ds := concurrentStep.(delayedStep)
+				visit(ds.step, true)
+			}
+		default:
+			ss := s.(*singleStep)
+			f(ss, isConcurrent)
+		}
+	}
+	for _, s := range steps {
+		visit(s, false)
+	}
+}
+
 // mapSingleSteps iterates over every step in the test plan and calls
 // the given function `f` for every `singleStep` (i.e., every step
 // that actually performs an action). The function should return a
 // list of testSteps that replace the given step in the plan.
+// This function may mutate RNG state when generating delays for newly
+// inserted concurrent steps.
 func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f, true)
-	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f, true)
-	plan.initSteps = plan.walkSteps(plan.initSteps, f, true)
-	plan.upgrades = plan.mapUpgrades(plan.upgrades, f, true)
+	plan.setup.systemSetup = plan.transformServiceSetup(plan.setup.systemSetup, f)
+	plan.setup.tenantSetup = plan.transformServiceSetup(plan.setup.tenantSetup, f)
+	plan.initSteps = plan.transformSteps(plan.initSteps, f)
+	plan.upgrades = plan.transformUpgrades(plan.upgrades, f)
 }
 
-func (plan *TestPlan) mapServiceSetup(
-	s *serviceSetup, f func(*singleStep, bool) []testStep, generateDelays bool,
+func (plan *TestPlan) transformServiceSetup(
+	s *serviceSetup, f func(*singleStep, bool) []testStep,
 ) *serviceSetup {
 	if s == nil {
 		return nil
 	}
 
 	return &serviceSetup{
-		steps:    plan.walkSteps(s.steps, f, generateDelays),
-		upgrades: plan.mapUpgrades(s.upgrades, f, generateDelays),
+		steps:    plan.transformSteps(s.steps, f),
+		upgrades: plan.transformUpgrades(s.upgrades, f),
 	}
 }
 
-func (plan *TestPlan) mapUpgrades(
-	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep, generateDelays bool,
+func (plan *TestPlan) transformUpgrades(
+	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep,
 ) []*upgradePlan {
 	var newUpgrades []*upgradePlan
 	for _, upgrade := range upgrades {
@@ -1317,7 +1341,7 @@ func (plan *TestPlan) mapUpgrades(
 			to:   upgrade.to,
 			sequentialStep: sequentialRunStep{
 				label: upgrade.sequentialStep.label,
-				steps: plan.walkSteps(upgrade.sequentialStep.steps, f, generateDelays),
+				steps: plan.transformSteps(upgrade.sequentialStep.steps, f),
 			},
 		})
 	}
@@ -1325,11 +1349,11 @@ func (plan *TestPlan) mapUpgrades(
 	return newUpgrades
 }
 
-func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.mapServiceSetup(plan.setup.systemSetup, f, false)
-	plan.mapServiceSetup(plan.setup.tenantSetup, f, false)
-	plan.walkSteps(plan.initSteps, f, false)
-	plan.mapUpgrades(plan.upgrades, f, false)
+// iterateSingleSteps is a pure (side-effect free) function that calls
+// `f` for every `singleStep` in the test plan. Unlike mapSingleSteps,
+// this function does not mutate the plan or RNG state.
+func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool)) {
+	forEachStep(plan.Steps(), f)
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
@@ -1787,11 +1811,10 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	}
 	// Extract user hooks from the plan.
 	userHooks := make(map[string]string)
-	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, _ bool) {
 		if hook, ok := ss.impl.(runHookStep); ok {
 			userHooks[hook.hook.id] = hook.hook.name
 		}
-		return nil
 	})
 	if len(userHooks) > 0 {
 		names := slices.Collect(maps.Values(userHooks))
