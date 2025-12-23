@@ -584,7 +584,7 @@ var tableFilterModeSetting = settings.RegisterEnumSetting(
 	settings.ApplicationLevel, // used by temp storage as well
 	"storage.table_filters",
 	"table filter configuration: uniform = 10bpk bloom filters on all levels; progressive = bloom filters with level-dependent size",
-	"uniform",
+	"progressive",
 	map[tableFilterMode]string{
 		tableFilterModeUniform:     "uniform",
 		tableFilterModeProgressive: "progressive",
