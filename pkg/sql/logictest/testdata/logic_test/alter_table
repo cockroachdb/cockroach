@@ -3020,6 +3020,146 @@ CREATE TABLE public.t5 (
   CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15, schema_locked = true);
 
+# -----------------------------------------------------------------------------
+# sql_stats_forecasts_enabled - boolean storage parameter for statistics forecasting
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = true)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+true
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = false)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+false
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_forecasts_enabled)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+NULL
+
+statement error parameter "sql_stats_forecasts_enabled" requires a Boolean value
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = 'invalid')
+
+# -----------------------------------------------------------------------------
+# sql_stats_automatic_partial_collection_min_stale_rows - integer storage parameter
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_min_stale_rows = 1000)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'->>'partialMinStaleRows'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+1000
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_automatic_partial_collection_min_stale_rows)
+
+statement error pq: invalid integer value for sql_stats_automatic_partial_collection_min_stale_rows: cannot be set to a negative value: -1
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_min_stale_rows = -1)
+
+# -----------------------------------------------------------------------------
+# sql_stats_automatic_partial_collection_fraction_stale_rows - float storage parameter
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = 0.25)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'->>'partialFractionStaleRows'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+0.25
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_automatic_partial_collection_fraction_stale_rows)
+
+statement error pq: invalid float value for sql_stats_automatic_partial_collection_fraction_stale_rows: cannot set to a negative value: -0.500000
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = -0.5)
+
+statement ok
+DROP TABLE t5
+
+subtest end
+
+# -----------------------------------------------------------------------------
+# Unimplemented index storage parameters
+# These should all return an unimplemented error with issue 43299.
+# -----------------------------------------------------------------------------
+
+subtest unimplemented_index_storage_params
+
+statement ok
+CREATE TABLE t_index_params (a INT PRIMARY KEY, b INT)
+
+statement error unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+CREATE INDEX idx ON t_index_params (b) WITH (vacuum_cleanup_index_scale_factor = 0.1)
+
+statement error unimplemented: storage parameter "buffering"
+CREATE INDEX idx ON t_index_params (b) WITH (buffering = 'on')
+
+statement error unimplemented: storage parameter "fastupdate"
+CREATE INDEX idx ON t_index_params (b) WITH (fastupdate = true)
+
+statement error unimplemented: storage parameter "gin_pending_list_limit"
+CREATE INDEX idx ON t_index_params (b) WITH (gin_pending_list_limit = 1000)
+
+statement error unimplemented: storage parameter "pages_per_range"
+CREATE INDEX idx ON t_index_params (b) WITH (pages_per_range = 128)
+
+statement error unimplemented: storage parameter "autosummarize"
+CREATE INDEX idx ON t_index_params (b) WITH (autosummarize = true)
+
+statement ok
+DROP TABLE t_index_params
+
+subtest end
+
 subtest add_volatile_unique_column_81448
 
 statement ok
