@@ -975,6 +975,19 @@ func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 	}
 }
 
+// DisableWriterAssertions unwraps any storage.Writer implementations that may
+// assert access against a given SpanSet.
+func DisableWriterAssertions(writer storage.Writer) storage.Writer {
+	switch v := writer.(type) {
+	case spanSetWriter:
+		return DisableWriterAssertions(v.w)
+	case *spanSetBatch:
+		return DisableWriterAssertions(v.spanSetWriter.w)
+	default:
+		return writer
+	}
+}
+
 // DisableReadWriterAssertions unwraps any storage.ReadWriter implementations
 // that may assert access against a given SpanSet.
 func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
@@ -994,10 +1007,24 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 // wrapper with the latch assertion disabled.
 func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	case *storage.OpLoggerBatch:
+		// OpLoggerBatch embeds a storage.Batch.
+		result := DisableUndeclaredSpanAssertions(v.Batch)
+		return result
+
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spans.DisableUndeclaredAccessAssertions()
+
+		// Recursively disable on the underlying batch in case there are
+		// nested spanSetBatches.
+		newSnapSetBatch.b = DisableUndeclaredSpanAssertions(v.b).(storage.Batch)
+		// Update the reader and writer to point to the recursively processed batch.
+		newSnapSetBatch.spanSetReader.r = newSnapSetBatch.b
+		newSnapSetBatch.spanSetWriteBatch.spanSetWriter.w = newSnapSetBatch.b
+		newSnapSetBatch.spanSetWriteBatch.wb = newSnapSetBatch.b
 		return newSnapSetBatch
+
 	default:
 		return rw
 	}
@@ -1011,10 +1038,24 @@ func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 // function.
 func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	case *storage.OpLoggerBatch:
+		// OpLoggerBatch embeds a storage.Batch.
+		result := DisableForbiddenSpanAssertions(v.Batch)
+		return result
+
 	case *spanSetBatch:
 		newSnapSetBatch := v.shallowCopy()
 		newSnapSetBatch.spans.DisableForbiddenSpansAssertions()
+
+		// Recursively disable on the underlying batch in case there are
+		// nested spanSetBatches.
+		newSnapSetBatch.b = DisableForbiddenSpanAssertions(v.b).(storage.Batch)
+		// Update the reader and writer to point to the recursively processed batch.
+		newSnapSetBatch.spanSetReader.r = newSnapSetBatch.b
+		newSnapSetBatch.spanSetWriteBatch.spanSetWriter.w = newSnapSetBatch.b
+		newSnapSetBatch.spanSetWriteBatch.wb = newSnapSetBatch.b
 		return newSnapSetBatch
+
 	default:
 		return rw
 	}
