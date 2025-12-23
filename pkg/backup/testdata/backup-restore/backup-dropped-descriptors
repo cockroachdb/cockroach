@@ -41,7 +41,7 @@ SELECT orig->'database'->'name', orig->'database'->'state' FROM tbls WHERE id = 
 exec-sql
 BACKUP DATABASE d INTO 'nodelocal://1/dropped-database';
 ----
-pq: failed to resolve targets specified in the BACKUP stmt: database "d" does not exist, or invalid RESTORE timestamp: supplied backups do not cover requested time
+pq: failed to resolve targets specified in the BACKUP stmt: database "d" does not exist
 
 # A cluster backup should succeed but should ignore the dropped database
 # and table descriptors.

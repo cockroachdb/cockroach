@@ -193,8 +193,9 @@ func NewPhysicalInfrastructure(
 
 // Release resets the object and puts it back into the pool for reuse.
 func (p *PhysicalInfrastructure) Release() {
-	// We only need to nil out the local processors since these are the only
-	// pointer types.
+	for i := range p.Processors {
+		p.Processors[i] = Processor{}
+	}
 	for i := range p.LocalProcessors {
 		p.LocalProcessors[i] = nil
 	}

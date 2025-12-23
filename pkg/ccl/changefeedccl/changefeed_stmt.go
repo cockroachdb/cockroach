@@ -1171,7 +1171,7 @@ func getTargetDescriptors(
 		}
 	}
 	// targetTableDescs is empty if the targets are not tables, targetDatabaseDescs is empty if the targets are not databases
-	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargets(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
