@@ -84,20 +84,29 @@ jobs:
       - name: Download and Setup Railroad Diagram Generator
         run: |
           echo "::group::Setting up Railroad Diagram Generator"
-          # Download the Railroad JAR
-          mkdir -p ~/.cache/bazel/_bazel_runner/railroad
+          # Download the Railroad JAR to a temp directory
+          TEMP_DIR=$(mktemp -d)
+          cd $TEMP_DIR
+
           curl -L https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip -o railroad.zip
           unzip -q railroad.zip
-          mv rr.war ~/.cache/bazel/_bazel_runner/railroad/
+
+          # Create directories and copy the JAR
+          mkdir -p ~/.cache/bazel/_bazel_runner/railroad
+          cp rr.war ~/.cache/bazel/_bazel_runner/railroad/
 
           # Verify the JAR is valid
-          java -jar ~/.cache/bazel/_bazel_runner/railroad/rr.war -version 2>/dev/null || echo "Railroad JAR downloaded successfully"
+          java -jar rr.war -version 2>/dev/null || echo "Railroad JAR downloaded successfully"
 
           # Also place it where Bazel might look for it
-          mkdir -p external/railroadjar
-          cp ~/.cache/bazel/_bazel_runner/railroad/rr.war external/railroadjar/
+          mkdir -p $GITHUB_WORKSPACE/external/railroadjar
+          cp rr.war $GITHUB_WORKSPACE/external/railroadjar/
+
+          cd $GITHUB_WORKSPACE
+          rm -rf $TEMP_DIR
 
           echo "Railroad JAR setup complete"
+          ls -la external/railroadjar/
           echo "::endgroup::"
 
       # Skip EngFlow keys for fork (not needed for GitHub-hosted runners)
