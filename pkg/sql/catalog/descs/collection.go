@@ -238,19 +238,21 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 // locked lease timestamp gets bumped.
 func (tc *Collection) MaybeWaitForLeaseTimestampBump(
 	ctx context.Context, commitTime hlc.Timestamp,
-) {
+) error {
 	// This transaction does not require any leased timestamp bump.
 	if !tc.waitForLockedLeaseBump {
-		return
+		return nil
 	}
 	// Confirm the lease manager is leasing out any new descriptor versions
 	// at the commit time.
 	r := retry.StartWithCtx(ctx, retry.Options{})
 	for r.Next() {
 		if !tc.leased.lm.GetSafeReplicationTS().Less(commitTime) {
-			break
+			return nil
 		}
 	}
+	// Otherwise, the context has timed out or has been cancelled.
+	return ctx.Err()
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
