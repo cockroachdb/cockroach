@@ -435,7 +435,10 @@ func (b *baseStatusServer) localExecutionInsights(
 
 // validContentionInsights iterates through the contention event registry and checks the
 // events that are related to the passed in (contention) insights. The insights that have
-// valid (resolved BlockingTxnFingerprintID) contention events are returned.
+// valid contention events are returned. A contention event is considered valid if either:
+//  1. The BlockingTxnFingerprintID has been resolved, OR
+//  2. The event is a latch contention event (latch contention may involve non-transactional
+//     requests where fingerprint resolution is not possible or meaningful)
 func validContentionInsights(
 	registry *contention.Registry, contentionInsights map[uuid.UUID]insightspb.Insight,
 ) (map[uuid.UUID]bool, error) {
@@ -447,10 +450,13 @@ func validContentionInsights(
 		}
 		// We are interested in the contention events that are related to our insights.
 		if _, ok := contentionInsights[event.WaitingTxnID]; ok {
-			// If the event has the blocking transaction fingerprint ID resolved, we consider it
-			// valid for the insights response (since the insight response already has the waiting
-			// transaction fingerprint ID).
-			if event.BlockingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
+			// Consider valid if:
+			// 1. The blocking txn fingerprint was resolved, OR
+			// 2. It's a latch contention event (latch contention may involve
+			//    non-transactional requests where fingerprint resolution is not
+			//    possible or meaningful)
+			if event.BlockingTxnFingerprintID != appstatspb.InvalidTransactionFingerprintID ||
+				event.BlockingEvent.IsLatch {
 				valid[event.WaitingTxnID] = true
 			}
 		}
