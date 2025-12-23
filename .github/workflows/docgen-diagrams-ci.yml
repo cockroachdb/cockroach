@@ -75,6 +75,40 @@ jobs:
           sudo mv bazelisk /usr/local/bin/bazel
           bazel version
 
+      - name: Setup Java for Railroad Diagram Generator
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Download and Setup Railroad Diagram Generator
+        run: |
+          echo "::group::Setting up Railroad Diagram Generator"
+          # Download the Railroad JAR to a temp directory
+          TEMP_DIR=$(mktemp -d)
+          cd $TEMP_DIR
+
+          curl -L https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip -o railroad.zip
+          unzip -q railroad.zip
+
+          # Create directories and copy the JAR
+          mkdir -p ~/.cache/bazel/_bazel_runner/railroad
+          cp rr.war ~/.cache/bazel/_bazel_runner/railroad/
+
+          # Verify the JAR is valid
+          java -jar rr.war -version 2>/dev/null || echo "Railroad JAR downloaded successfully"
+
+          # Also place it where Bazel might look for it
+          mkdir -p $GITHUB_WORKSPACE/external/railroadjar
+          cp rr.war $GITHUB_WORKSPACE/external/railroadjar/
+
+          cd $GITHUB_WORKSPACE
+          rm -rf $TEMP_DIR
+
+          echo "Railroad JAR setup complete"
+          ls -la external/railroadjar/
+          echo "::endgroup::"
+
       # Skip EngFlow keys for fork (not needed for GitHub-hosted runners)
       # - name: Get EngFlow keys
       #   run: ./build/github/get-engflow-keys.sh
@@ -90,7 +124,29 @@ jobs:
         id: build-svg
         run: |
           echo "::group::Building SVG diagrams"
+
+          # Set environment variable to require railroad diagrams
+          export COCKROACH_REQUIRE_RAILROAD=1
+
+          # Debug: Check if Railroad JAR exists
+          echo "Checking for Railroad JAR..."
+          ls -la external/railroadjar/ || echo "external/railroadjar not found"
+
+          # Try to build SVG diagrams
+          echo "Building SVG diagrams with ./dev build..."
           ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+
+          # Check if HTML files were generated
+          echo "Checking for generated HTML files..."
+          if ls bazel-bin/docs/generated/sql/bnf/*.html 2>/dev/null; then
+            echo "✅ HTML files generated successfully!"
+            ls -la bazel-bin/docs/generated/sql/bnf/*.html | head -10
+          else
+            echo "⚠️ No HTML files found in bazel-bin/docs/generated/sql/bnf/"
+            echo "Checking other possible locations..."
+            find . -name "*.html" -path "*/bnf/*" 2>/dev/null | head -20
+          fi
+
           echo "::endgroup::"
 
       - name: Run validation tests
