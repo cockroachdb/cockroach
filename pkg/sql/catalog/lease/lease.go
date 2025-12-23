@@ -164,25 +164,26 @@ func (m *Manager) WaitForNoVersion(
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
 	defer wsTracker.end()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
 		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
 		if detail.count == 0 {
-			break
+			return nil
 		}
 		if detail.count != lastCount {
 			lastCount = detail.count
 			wsTracker.updateProgress(detail)
 			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%d", detail.count, id)
 		}
-		if lastCount == 0 {
-			break
-		}
 	}
-	return nil
+	// Return context cancellation back if detected.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("exited lease wait loop before success")
 }
 
 // maybeGetDescriptorsWithoutValidation gets descriptors without validating from
@@ -374,7 +375,8 @@ func (m *Manager) WaitForInitialVersion(
 	for _, id := range descriptorsIds {
 		ids.Add(id)
 	}
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	success := false
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		descs, err := m.maybeGetDescriptorsWithoutValidation(ctx, ids.Ordered(), false /* existenceExpected */)
 		if err != nil {
 			return err
@@ -536,6 +538,7 @@ func (m *Manager) WaitForInitialVersion(
 		}
 		// All the expected sessions are there now.
 		if totalCount == totalExpectedCount {
+			success = true
 			break
 		}
 		if totalCount != lastCount {
@@ -546,6 +549,12 @@ func (m *Manager) WaitForInitialVersion(
 			})
 		}
 		lastCount = totalCount
+	}
+	if !success {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return errors.New("exited lease wait loop before success")
 	}
 	return nil
 }
@@ -574,7 +583,8 @@ func (m *Manager) WaitForOneVersion(
 	defer wsTracker.end()
 
 	var desc catalog.Descriptor
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	success := false
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -590,6 +600,7 @@ func (m *Manager) WaitForOneVersion(
 			return nil, err
 		}
 		if detail.count == 0 {
+			success = true
 			log.Dev.Infof(ctx, "all leases have expired at %v: desc=%v", now, descs)
 			break
 		}
@@ -599,7 +610,9 @@ func (m *Manager) WaitForOneVersion(
 			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
-
+	if !success && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	return desc, nil
 }
 
@@ -627,7 +640,7 @@ func (m *Manager) WaitForNewVersion(
 	// also holds a lease on the current version of the descriptor (`for all
 	// session: (session in Prev => session in Curr)` for the set theory
 	// enjoyers).
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -697,6 +710,10 @@ func (m *Manager) WaitForNewVersion(
 		}
 	}
 	if !success {
+		// Return context cancellation back if detected.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("Exited lease acquisition loop before success")
 	}
 
