@@ -366,7 +366,7 @@ var specs = []stmtSpec{
 			"alter_backup_cmds":                                        "'ADD' 'NEW_KMS' kmsURI 'WITH' 'OLD_KMS' kmsURI",
 			"'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds": "",
 		},
-		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
+		unlink: []string{"subdirectory", "collectionURI", "kmsURI", "string_or_placeholder"},
 	},
 	{
 		name:    "alter_backup_schedule",

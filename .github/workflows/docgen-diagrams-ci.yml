@@ -113,11 +113,19 @@ jobs:
       # - name: Get EngFlow keys
       #   run: ./build/github/get-engflow-keys.sh
 
+      - name: Initialize dev environment
+        run: |
+          echo "::group::Initializing dev environment"
+          # Initialize dev tool
+          ./dev doctor || true
+          echo "::endgroup::"
+
       - name: Generate BNF files
         id: generate-bnf
         run: |
           echo "::group::Generating BNF files from sql.y"
-          ./dev generate bnf 2>&1 | tee bnf_generation.log
+          # Use bazel directly to avoid dev wrapper issues
+          bazel run //pkg/cmd/docgen -- grammar bnf docs/generated/sql/bnf/ --addr pkg/sql/parser/sql.y 2>&1 | tee bnf_generation.log
           echo "::endgroup::"
 
       - name: Build SVG diagrams
@@ -132,9 +140,9 @@ jobs:
           echo "Checking for Railroad JAR..."
           ls -la external/railroadjar/ || echo "external/railroadjar not found"
 
-          # Try to build SVG diagrams
-          echo "Building SVG diagrams with ./dev build..."
-          ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+          # Build SVG diagrams using bazel directly
+          echo "Building SVG diagrams with bazel..."
+          bazel build //docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
 
           # Check if HTML files were generated
           echo "Checking for generated HTML files..."
@@ -160,7 +168,7 @@ jobs:
 
           # Check 1: Verify all BNF files exist for diagrams.go entries
           echo "Checking for missing BNF files..."
-          missing_bnf=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingBNFFiles 2>&1) || true
+          missing_bnf=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestMissingBNFFiles 2>&1) || true
           if echo "$missing_bnf" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing BNF Files\n${missing_bnf}"
@@ -168,7 +176,7 @@ jobs:
 
           # Check 2: Verify all HTML diagrams were generated
           echo "Checking for missing HTML diagrams..."
-          missing_html=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingHTMLDiagrams 2>&1) || true
+          missing_html=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestMissingHTMLDiagrams 2>&1) || true
           if echo "$missing_html" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing HTML Diagrams\n${missing_html}"
@@ -176,7 +184,7 @@ jobs:
 
           # Check 3: Look for _stmt naming conflicts
           echo "Checking for _stmt naming conflicts..."
-          stmt_conflicts=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestStmtNamingConflicts 2>&1) || true
+          stmt_conflicts=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestStmtNamingConflicts 2>&1) || true
           if echo "$stmt_conflicts" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## _stmt Naming Conflicts\n${stmt_conflicts}"
@@ -184,7 +192,7 @@ jobs:
 
           # Check 4: Detect replace/unlink mismatches
           echo "Checking for replace/unlink mismatches..."
-          replace_mismatch=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestReplaceUnlinkMismatch 2>&1) || true
+          replace_mismatch=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestReplaceUnlinkMismatch 2>&1) || true
           if echo "$replace_mismatch" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Replace/Unlink Mismatches\n${replace_mismatch}"
@@ -192,7 +200,7 @@ jobs:
 
           # Check 5: Verify grammar links are valid
           echo "Checking for broken grammar links..."
-          broken_links=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestBrokenGrammarLinks 2>&1) || true
+          broken_links=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestBrokenGrammarLinks 2>&1) || true
           if echo "$broken_links" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Broken Grammar Links\n${broken_links}"
