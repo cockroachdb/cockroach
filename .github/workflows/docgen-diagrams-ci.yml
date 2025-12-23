@@ -75,6 +75,31 @@ jobs:
           sudo mv bazelisk /usr/local/bin/bazel
           bazel version
 
+      - name: Setup Java for Railroad Diagram Generator
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Download and Setup Railroad Diagram Generator
+        run: |
+          echo "::group::Setting up Railroad Diagram Generator"
+          # Download the Railroad JAR
+          mkdir -p ~/.cache/bazel/_bazel_runner/railroad
+          curl -L https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip -o railroad.zip
+          unzip -q railroad.zip
+          mv rr.war ~/.cache/bazel/_bazel_runner/railroad/
+
+          # Verify the JAR is valid
+          java -jar ~/.cache/bazel/_bazel_runner/railroad/rr.war -version 2>/dev/null || echo "Railroad JAR downloaded successfully"
+
+          # Also place it where Bazel might look for it
+          mkdir -p external/railroadjar
+          cp ~/.cache/bazel/_bazel_runner/railroad/rr.war external/railroadjar/
+
+          echo "Railroad JAR setup complete"
+          echo "::endgroup::"
+
       # Skip EngFlow keys for fork (not needed for GitHub-hosted runners)
       # - name: Get EngFlow keys
       #   run: ./build/github/get-engflow-keys.sh
@@ -90,7 +115,20 @@ jobs:
         id: build-svg
         run: |
           echo "::group::Building SVG diagrams"
-          ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+
+          # Set environment variable to require railroad diagrams
+          export COCKROACH_REQUIRE_RAILROAD=1
+
+          # Ensure Bazel can find the Railroad JAR
+          # Try to build with verbose output to debug if needed
+          ./dev build docs/generated/sql/bnf:svg --verbose 2>&1 | tee svg_build.log || {
+            echo "Initial build failed, trying with explicit JAR location..."
+            # If the build fails, try to help Bazel find the JAR
+            bazel build docs/generated/sql/bnf:svg \
+              --override_repository=railroadjar=external/railroadjar \
+              2>&1 | tee svg_build_retry.log
+          }
+
           echo "::endgroup::"
 
       - name: Run validation tests
