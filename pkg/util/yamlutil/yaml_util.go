@@ -5,13 +5,9 @@
 
 package yamlutil
 
-import (
-	"bytes"
+import "go.yaml.in/yaml/v4"
 
-	"go.yaml.in/yaml/v4"
-)
-
-// Marshal is like yaml.v3.Marshal but indents to 2 spaces.
+// Marshal is like yaml.v4.Marshal but indents to 2 spaces.
 func Marshal(in interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	e := yaml.NewEncoder(&buf)
@@ -25,10 +21,8 @@ func Marshal(in interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UnmarshalStrict is like yaml.v3.Unmarshal but fails if unknown fields are
+// UnmarshalStrict is like yaml.v4.Unmarshal but fails if unknown fields are
 // encountered.
 func UnmarshalStrict(in []byte, out interface{}) error {
-	d := yaml.NewDecoder(bytes.NewReader(in))
-	d.KnownFields(true)
-	return d.Decode(out)
+	return yaml.Load(in, out, unmarshalStrictOpts...)
 }

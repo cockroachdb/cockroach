@@ -17,6 +17,7 @@ go_library(
         "//pkg/util/jsonbytes",  # keep
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",  # keep
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

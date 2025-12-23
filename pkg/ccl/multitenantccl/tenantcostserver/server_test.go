@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 func TestDataDriven(t *testing.T) {
@@ -166,7 +166,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 	args.ConsumptionPeriod = "10s"
 	args.RequestPeriod = "10s"
 	args.InstanceLease = "foo"
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
 	// If sequence number not specified, use an auto-incrementing number.
@@ -252,7 +252,7 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 		RefillRate      float64 `yaml:"refill_rate"`
 		MaxBurstTokens  float64 `yaml:"max_burst_tokens"`
 	}
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &args); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &args); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
 	db := ts.s.InternalDB().(isql.DB)

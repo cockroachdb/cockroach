@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 var _ yaml.Marshaler = LeasePreference{}
@@ -29,9 +29,9 @@ func (l LeasePreference) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (l *LeasePreference) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (l *LeasePreference) UnmarshalYAML(value *yaml.Node) error {
 	var shortConstraints []string
-	if err := unmarshal(&shortConstraints); err != nil {
+	if err := value.Load(&shortConstraints, yaml.WithKnownFields(true)); err != nil {
 		return err
 	}
 	constraints := make([]Constraint, len(shortConstraints))
@@ -54,7 +54,7 @@ func (c ConstraintsConjunction) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements yaml.Marshaler.
-func (c *ConstraintsConjunction) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *ConstraintsConjunction) UnmarshalYAML(value *yaml.Node) error {
 	return fmt.Errorf(
 		"UnmarshalYAML should never be called directly on Constraints: %v", debugutil.Stack())
 }
@@ -105,13 +105,13 @@ func (c ConstraintsList) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *ConstraintsList) UnmarshalYAML(value *yaml.Node) error {
 	// Note that we're intentionally checking for err == nil here. This handles
 	// unmarshaling the legacy Constraints format, which is just a list of
 	// strings.
 	var strs []string
 	c.Inherited = true
-	if err := unmarshal(&strs); err == nil {
+	if err := value.Load(&strs, yaml.WithKnownFields()); err == nil {
 		constraints := make([]Constraint, len(strs))
 		for i, short := range strs {
 			if err := constraints[i].FromString(short); err != nil {
@@ -136,7 +136,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 	// Otherwise, the input must be a map that can be converted to per-replica
 	// constraints.
 	constraintsMap := make(map[string]int32)
-	if err := unmarshal(&constraintsMap); err != nil {
+	if err := value.Decode(&constraintsMap); err != nil {
 		return errors.New(
 			"invalid constraints format. expected an array of strings or a map of strings to ints")
 	}
@@ -302,12 +302,12 @@ func (c ZoneConfig) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (c *ZoneConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *ZoneConfig) UnmarshalYAML(value *yaml.Node) error {
 	// Pre-initialize aux with the contents of c. This is important for
 	// maintaining the behavior of not overwriting existing fields unless the
 	// user provided new values for them.
 	aux := zoneConfigToMarshalable(*c)
-	if err := unmarshal(&aux); err != nil {
+	if err := value.Load(&aux, yaml.WithKnownFields()); err != nil {
 		return err
 	}
 	*c = zoneConfigFromMarshalable(aux, *c)

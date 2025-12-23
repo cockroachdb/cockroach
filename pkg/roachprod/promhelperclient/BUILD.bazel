@@ -15,7 +15,7 @@ go_library(
         "//pkg/roachprod/vm/ibm",
         "//pkg/util/httputil",
         "@com_github_cockroachdb_errors//:errors",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 
@@ -25,8 +25,8 @@ go_test(
     embed = [":promhelperclient"],
     deps = [
         "//pkg/roachprod/logger",
+        "//pkg/util/yamlutil",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
         "@org_golang_x_oauth2//:oauth2",
     ],
 )

@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // WithBuilderDependenciesFromTestServer sets up and tears down an

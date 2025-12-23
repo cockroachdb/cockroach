@@ -25,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 type targetStatus int
@@ -212,7 +212,7 @@ func processYaml(
 ) error {
 	// Unmarshal the YAML content into the yamlConfig struct
 	var clusterConfig yamlConfig
-	if err := yaml.UnmarshalStrict(yamlContent, &clusterConfig); err != nil {
+	if err := yamlutil.UnmarshalStrict(yamlContent, &clusterConfig); err != nil {
 		return err
 	}
 	if !options.displayOnly {
@@ -223,7 +223,7 @@ func processYaml(
 	if len(remoteDeployYamlContent) > 0 {
 		// Unmarshal the YAML content for the remote deployment and the cluster config will be executed in that remote VM.
 		var remoteDeploymentConfig yamlConfig
-		if err := yaml.UnmarshalStrict(remoteDeployYamlContent, &remoteDeploymentConfig); err != nil {
+		if err := yamlutil.UnmarshalStrict(remoteDeployYamlContent, &remoteDeploymentConfig); err != nil {
 			return err
 		}
 		return processYamlRemote(ctx, options, clusterConfig, remoteDeploymentConfig, notifier)

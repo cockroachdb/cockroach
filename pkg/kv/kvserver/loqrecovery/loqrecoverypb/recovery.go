@@ -14,6 +14,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // needed for recovery.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"go.yaml.in/yaml/v4"
 )
 
 // RecoveryKey is an alias for RKey that is used to make it
@@ -21,15 +22,18 @@ import (
 // representation outside of tests.
 type RecoveryKey roachpb.RKey
 
-// MarshalYAML implements Marshaler interface.
+var _ yaml.Marshaler = RecoveryKey{}
+var _ yaml.Unmarshaler = &RecoveryKey{}
+
+// MarshalYAML implements yaml.Marshaler interface.
 func (r RecoveryKey) MarshalYAML() (interface{}, error) {
 	return roachpb.RKey(r).String(), nil
 }
 
-// UnmarshalYAML implements Unmarshaler interface.
-func (r *RecoveryKey) UnmarshalYAML(fn func(interface{}) error) error {
+// UnmarshalYAML implements yaml.Unmarshaler interface.
+func (r *RecoveryKey) UnmarshalYAML(value *yaml.Node) error {
 	var pretty string
-	if err := fn(&pretty); err != nil {
+	if err := value.Load(&pretty, yaml.WithKnownFields()); err != nil {
 		return err
 	}
 	scanner := keysutil.MakePrettyScanner(nil /* tableParser */, nil /* tenantParser */)

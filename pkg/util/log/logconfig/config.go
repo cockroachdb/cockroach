@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
-	yaml "gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // DefaultFileFormat is the entry format for file sinks when not
@@ -95,7 +96,7 @@ sinks:
 capture-stray-errors:
   enable: true
 `
-	if err := yaml.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
 		panic(err)
 	}
 	return c
@@ -115,7 +116,7 @@ sinks:
 capture-stray-errors:
   enable: false
 `
-	if err := yaml.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(defaultConfig), &c); err != nil {
 		panic(err)
 	}
 	return c
@@ -746,11 +747,11 @@ func (c ChannelList) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (c *ChannelList) UnmarshalYAML(fn func(interface{}) error) error {
+func (c *ChannelList) UnmarshalYAML(value *yaml.Node) error {
 	// We recognize two formats here: YAML arrays,
 	// and a simple string-based format.
 	var a []string
-	err := fn(&a)
+	err := value.Load(&a)
 	if err == nil /* no error: it's an array */ {
 		ch, err := selectChannels(false /* invert */, a)
 		if err != nil {
@@ -766,7 +767,7 @@ func (c *ChannelList) UnmarshalYAML(fn func(interface{}) error) error {
 
 	// It was not an array. Is it a string?
 	var s string
-	if err := fn(&s); err != nil {
+	if err := value.Decode(&s); err != nil {
 		return err
 	}
 	// It was a string: use the string configuration format.
@@ -944,11 +945,11 @@ func (c ChannelFilters) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (c *ChannelFilters) UnmarshalYAML(fn func(interface{}) error) error {
+func (c *ChannelFilters) UnmarshalYAML(value *yaml.Node) error {
 	// We recognize two formats here: either a map of
 	// severity to channel lists, or a single channel list.
 	var a ChannelList
-	err := fn(&a)
+	err := value.Decode(&a)
 	if err == nil /* no error: it's a simple channel list */ {
 		c.Filters = map[logpb.Severity]ChannelList{
 			logpb.Severity_UNKNOWN: a,
@@ -961,7 +962,7 @@ func (c *ChannelFilters) UnmarshalYAML(fn func(interface{}) error) error {
 	}
 
 	// It was not a simple channel list. Assume a map.
-	return fn(&c.Filters)
+	return value.Decode(&c.Filters)
 }
 
 // fillDefaultSeverityAndPrune replaces instances of severity UNKNOWN
@@ -1082,9 +1083,9 @@ func (x ByteSize) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (x *ByteSize) UnmarshalYAML(fn func(interface{}) error) error {
+func (x *ByteSize) UnmarshalYAML(value *yaml.Node) error {
 	var s string
-	if err := fn(&s); err != nil {
+	if err := value.Load(&s); err != nil {
 		return err
 	}
 	i, err := humanize.ParseBytes(s)
@@ -1109,7 +1110,7 @@ func (x FilePermissions) MarshalYAML() (r interface{}, err error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) {
+func (x *FilePermissions) UnmarshalYAML(value *yaml.Node) (err error) {
 	defer func() {
 		if err != nil {
 			err = errors.WithHint(err, "This value should consist of three even digits.")
@@ -1117,7 +1118,7 @@ func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) 
 	}()
 
 	var in string
-	if err = fn(&in); err != nil {
+	if err = value.Load(&in); err != nil {
 		return err
 	}
 
@@ -1135,15 +1136,6 @@ func (x *FilePermissions) UnmarshalYAML(fn func(interface{}) error) (err error) 
 
 	*x = FilePermissions(val)
 	return nil
-}
-
-func init() {
-	// Use FutureLineWrap to avoid wrapping long lines. This is required for cases
-	// where one of the logging or zone config fields is longer than 80
-	// characters. In that case, without FutureLineWrap, the output will have `\n`
-	// characters interspersed every 80 characters. FutureLineWrap ensures that
-	// the whole field shows up as a single line.
-	yaml.FutureLineWrap()
 }
 
 // String implements the fmt.Stringer interface.
@@ -1176,7 +1168,7 @@ func (*Holder) Type() string { return "yaml" }
 
 // Set implements the pflag.Value interface.
 func (h *Holder) Set(value string) error {
-	return yaml.UnmarshalStrict([]byte(value), &h.Config)
+	return yamlutil.UnmarshalStrict([]byte(value), &h.Config)
 }
 
 // MarshalYAML implements yaml.Marshaler interface.
@@ -1188,9 +1180,9 @@ func (w CommonBufferSinkConfigWrapper) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error) error {
+func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(value *yaml.Node) error {
 	var v string
-	if err := fn(&v); err == nil {
+	if err := value.Load(&v, yaml.WithKnownFields()); err == nil {
 		if strings.ToUpper(v) == "NONE" {
 			d := time.Duration(0)
 			s := ByteSize(0)
@@ -1204,7 +1196,7 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(fn func(interface{}) error
 			return nil
 		}
 	}
-	return fn(&w.CommonBufferSinkConfig)
+	return value.Decode(&w.CommonBufferSinkConfig)
 }
 
 // IsNone before default propagation indicates that the config explicitly disables
@@ -1245,8 +1237,8 @@ func (hsm HTTPSinkMethod) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (hsm *HTTPSinkMethod) UnmarshalYAML(fn func(interface{}) error) error {
-	return unmarshalYAMLConstrainedString(hsm, fn)
+func (hsm *HTTPSinkMethod) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalYAMLConstrainedString(hsm, value)
 }
 
 // constrainedString is an interface to make it easy to unmarshal
@@ -1289,15 +1281,15 @@ func (hsm BufferFormat) MarshalYAML() (interface{}, error) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (hsm *BufferFormat) UnmarshalYAML(fn func(interface{}) error) error {
-	return unmarshalYAMLConstrainedString(hsm, fn)
+func (hsm *BufferFormat) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalYAMLConstrainedString(hsm, value)
 }
 
 // unmarshalYAMLConstrainedString is a utility function to unmarshal
 // a type satisfying the constrainedString interface.
-func unmarshalYAMLConstrainedString(cs constrainedString, fn func(interface{}) error) error {
+func unmarshalYAMLConstrainedString(cs constrainedString, value *yaml.Node) error {
 	var s string
-	if err := fn(&s); err != nil {
+	if err := value.Load(&s); err != nil {
 		return err
 	}
 	s = cs.Canonicalize(s)

@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -2967,12 +2968,11 @@ func (r *RowCount) Add(other RowCount) {
 	r.IndexEntries += other.IndexEntries
 }
 
-func (tid *TenantID) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (tid *TenantID) UnmarshalYAML(value *yaml.Node) error {
 	var id uint64
-	if err := unmarshal(&id); err == nil {
-		tid.InternalValue = id
-		return nil
-	} else {
-		return unmarshal(tid)
+	if err := value.Load(&id, yaml.WithKnownFields()); err != nil {
+		return err
 	}
+	tid.InternalValue = id
+	return nil
 }

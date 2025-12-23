@@ -10,7 +10,7 @@ import (
 	"net"
 
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 type AllowlistFile struct {
@@ -28,9 +28,9 @@ var _ AccessController = &Allowlist{}
 var _ yaml.Unmarshaler = &Allowlist{}
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (al *Allowlist) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (al *Allowlist) UnmarshalYAML(value *yaml.Node) error {
 	var f AllowlistFile
-	if err := unmarshal(&f); err != nil {
+	if err := value.Load(&f, yaml.WithUniqueKeys(false), yaml.WithKnownFields(true)); err != nil {
 		return err
 	}
 	al.entries = f.Allowlist
@@ -74,12 +74,12 @@ var _ yaml.Unmarshaler = &AllowEntry{}
 // If it cannot be parsed, it is currently ignored and not added to the AllowEntry.
 //
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (e *AllowEntry) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (e *AllowEntry) UnmarshalYAML(value *yaml.Node) error {
 	var raw struct {
 		IPs []string `yaml:"ips"`
 	}
 
-	if err := unmarshal(&raw); err != nil {
+	if err := value.Load(&raw, yaml.WithUniqueKeys(false), yaml.WithKnownFields(true)); err != nil {
 		return err
 	}
 	e.ips = make([]*net.IPNet, 0)

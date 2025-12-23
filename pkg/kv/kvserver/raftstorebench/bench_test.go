@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // BenchmarkRaftStore runs the experiments in the testdata directory. It sets up
@@ -85,7 +85,7 @@ func benchmarkRaftStoreInner(t testing.TB, smokeCheckOnly bool) {
 			}
 
 			dec := yaml.NewDecoder(strings.NewReader(d.Input))
-			dec.SetStrict(true)
+			dec.KnownFields(true)
 			cfg := MakeDefaultConfig()
 			require.NoError(t, dec.Decode(&cfg))
 

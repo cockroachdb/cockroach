@@ -8,6 +8,8 @@ package logpb
 import (
 	"strconv"
 	"strings"
+
+	"go.yaml.in/yaml/v4"
 )
 
 // Set is part of the pflag.Value interface.
@@ -55,9 +57,9 @@ func SeverityByName(s string) (Severity, bool) {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (s *Severity) UnmarshalYAML(fn func(interface{}) error) error {
+func (s *Severity) UnmarshalYAML(value *yaml.Node) error {
 	var sv string
-	if err := fn(&sv); err != nil {
+	if err := value.Load(&sv); err != nil {
 		return err
 	}
 	return s.Set(sv)

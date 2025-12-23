@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v4"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v2"
 )
 
 /*

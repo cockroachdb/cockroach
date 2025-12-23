@@ -318,7 +318,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 			"cannot remove default zone",
 		},
 		{
-			"ALTER RANGE default CONFIGURE ZONE = '&!@*@&'",
+			"ALTER RANGE default CONFIGURE ZONE = '!@*@&'",
 			"could not parse zone config",
 		},
 		{
