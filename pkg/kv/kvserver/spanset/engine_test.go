@@ -37,8 +37,7 @@ func TestSpanSetEngine(t *testing.T) {
 	}
 
 	// Wrap the engine with spanSetEngine.
-	wrappedEngine := NewEngine(engine)
-	wrappedEngine.(*spanSetEngine).AddForbiddenMatcher(fm)
+	wrappedEngine := NewEngine(engine, fm)
 
 	// Create a batch from the wrapped engine.
 	batch := wrappedEngine.NewBatch()

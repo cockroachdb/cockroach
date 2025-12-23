@@ -44,11 +44,6 @@ func NewEngine(engine storage.Engine, forbiddenMatchers ...func(TrickySpan) erro
 	}
 }
 
-// AddForbiddenMatcher adds a forbidden matcher to the underlying SpanSet.
-func (s *spanSetEngine) AddForbiddenMatcher(matcher func(TrickySpan) error) {
-	s.spans.AddForbiddenMatcher(matcher)
-}
-
 // NewBatch implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) NewBatch() storage.Batch {
 	return NewBatch(s.e.NewBatch(), s.spans)
