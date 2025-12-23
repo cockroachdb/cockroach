@@ -551,15 +551,17 @@ CREATE TABLE foo (
 				} else {
 					expect, tc.expectOnlyCFamily = tc.expectOnlyCFamily[0], tc.expectOnlyCFamily[1:]
 				}
-				updatedRow, err := decoder.DecodeKV(
+				updatedRow, status, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), tc.keyOnly)
 
 				if expect.expectUnwatchedErr {
-					require.ErrorIs(t, err, ErrUnwatchedFamily)
+					require.NoError(t, err)
+					require.Equal(t, DecodeSkipUnwatchedFamily, status)
 					continue
 				}
 
 				require.NoError(t, err)
+				require.Equal(t, DecodeOK, status)
 				require.True(t, updatedRow.IsInitialized())
 				if expect.deleted {
 					require.True(t, updatedRow.IsDeleted())
@@ -568,9 +570,10 @@ CREATE TABLE foo (
 					require.Equal(t, expect.allValues, slurpDatums(t, updatedRow.ForEachColumn()))
 				}
 
-				prevRow, err := decoder.DecodeKV(
+				prevRow, prevStatus, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, PrevRow, v.Timestamp(), tc.keyOnly)
 				require.NoError(t, err)
+				require.Equal(t, DecodeOK, prevStatus)
 
 				// prevRow always has key columns initialized.
 				require.Equal(t, expect.keyValues, slurpDatums(t, prevRow.ForEachKeyColumn()))
@@ -816,15 +819,17 @@ func TestEventColumnOrderingWithSchemaChanges(t *testing.T) {
 				} else {
 					expect, tc.expectECFamily = tc.expectECFamily[0], tc.expectECFamily[1:]
 				}
-				updatedRow, err := decoder.DecodeKV(
+				updatedRow, status, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), false)
 
 				if expect.expectUnwatchedErr {
-					require.ErrorIs(t, err, ErrUnwatchedFamily)
+					require.NoError(t, err)
+					require.Equal(t, DecodeSkipUnwatchedFamily, status)
 					continue
 				}
 
 				require.NoError(t, err)
+				require.Equal(t, DecodeOK, status)
 				require.True(t, updatedRow.IsInitialized())
 
 				require.Equal(t, expect.keyValues, slurpDatums(t, updatedRow.ForEachKeyColumn()), "row %d", i)
@@ -1106,10 +1111,13 @@ CREATE TABLE foo (
 	b.StartTimer()
 
 	for i := 0; i < b.N; i++ {
-		_, err := decoder.DecodeKV(
+		_, status, err := decoder.DecodeKV(
 			ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, CurrentRow, v.Timestamp(), false)
 		if err != nil {
 			b.Fatal(err)
+		}
+		if status != DecodeOK {
+			b.Fatalf("unexpected decode status: %v", status)
 		}
 	}
 }

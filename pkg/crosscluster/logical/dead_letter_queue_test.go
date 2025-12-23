@@ -464,10 +464,11 @@ func TestDLQJSONQuery(t *testing.T) {
 	row := popRow(t)
 
 	kv := roachpb.KeyValue{Key: row.Key, Value: row.Value}
-	updatedRow, err := decoder.DecodeKV(
+	updatedRow, status, err := decoder.DecodeKV(
 		ctx, kv, cdcevent.CurrentRow, row.Timestamp(), false)
 
 	require.NoError(t, err)
+	require.Equal(t, cdcevent.DecodeOK, status)
 	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, errInjected, noSpace))
 
 	dlqtableName := tableName.toDLQTableName()
