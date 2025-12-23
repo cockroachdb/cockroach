@@ -1774,6 +1774,162 @@ roachprod grafana-annotation grafana.testeng.crdb.io example-annotation-event --
 	return grafanaAnnotationCmd
 }
 
+func (cr *commandRegistry) buildPyroscopeCmd() *cobra.Command {
+	pyroscopeCmd := &cobra.Command{
+		Use:   "pyroscope [command]",
+		Short: "manage pyroscope profiling stack",
+		Long:  `Manage the Pyroscope continuous profiling stack for a cluster.`,
+	}
+	pyroscopeCmd.AddCommand(
+		cr.buildPyroscopeStartCmd(),
+		cr.buildPyroscopeStopCmd(),
+		cr.buildPyroscopeAddNodesCmd(),
+		cr.buildPyroscopeRemoveNodesCmd(),
+		cr.buildPyroscopeListNodesCmd(),
+		cr.buildPyroscopeInitTargetCmd(),
+	)
+	return pyroscopeCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeStartCmd() *cobra.Command {
+	pyroscopeStartCmd := &cobra.Command{
+		Use:   "start <cluster>",
+		Short: "start the pyroscope stack using docker compose on the target node",
+		Long: `Start the Pyroscope continuous profiling stack on a single node using docker compose.
+
+This command deploys the Pyroscope server and Grafana Alloy agent to collect continuous
+profiling data from the cluster nodes.
+
+Example:
+
+  roachprod pyroscope start my-cluster:1
+
+The cluster specification must be a single node (e.g., my-cluster:1).`,
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StartPyroscope(context.Background(), config.Logger, args[0])
+		}),
+	}
+	return pyroscopeStartCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeStopCmd() *cobra.Command {
+	pyroscopeStopCmd := &cobra.Command{
+		Use:   "stop <cluster>",
+		Short: "stop the pyroscope stack and remove containers",
+		Long: `Stop the Pyroscope continuous profiling stack and remove all containers.
+
+This command stops the Pyroscope server and Grafana Alloy agent using docker compose down.
+
+Example:
+
+  roachprod pyroscope stop my-cluster:1
+
+The cluster specification must be a single node (e.g., my-cluster:1).`,
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StopPyroscope(context.Background(), config.Logger, args[0])
+		}),
+	}
+	return pyroscopeStopCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeAddNodesCmd() *cobra.Command {
+	pyroscopeAddNodesCmd := &cobra.Command{
+		Use:   "add-nodes <pyroscope-cluster> <target-cluster>",
+		Short: "add target nodes to the pyroscope profiling configuration",
+		Long: `Add target cluster nodes to be profiled by the Pyroscope stack.
+
+This command updates the Grafana Alloy configuration on the Pyroscope node to start
+collecting profiles from the specified target cluster nodes.
+
+Examples:
+
+  roachprod pyroscope add-nodes my-pyroscope:1 my-cluster:1-3
+
+The first argument must be a single Pyroscope node (e.g., my-pyroscope:1).
+The second argument can specify multiple target nodes (e.g., my-cluster:1-3 or my-cluster:1,2,4).`,
+		Args: cobra.ExactArgs(2),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.AddPyroscopeNodes(context.Background(), config.Logger, args[0], args[1])
+		}),
+	}
+	return pyroscopeAddNodesCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeRemoveNodesCmd() *cobra.Command {
+	pyroscopeRemoveNodesCmd := &cobra.Command{
+		Use:   "remove-nodes <pyroscope-cluster> <target-cluster>",
+		Short: "remove target nodes from the pyroscope profiling configuration",
+		Long: `Remove target cluster nodes from being profiled by the Pyroscope stack.
+
+This command updates the Grafana Alloy configuration on the Pyroscope node to stop
+collecting profiles from the specified target cluster nodes.
+
+Examples:
+
+  roachprod pyroscope remove-nodes my-pyroscope:1 my-cluster:1-3
+
+The first argument must be a single Pyroscope node (e.g., my-pyroscope:1).
+The second argument can specify multiple target nodes to remove (e.g., my-cluster:1-3 or my-cluster:1,2,4).`,
+		Args: cobra.ExactArgs(2),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.RemovePyroscopeNodes(context.Background(), config.Logger, args[0], args[1])
+		}),
+	}
+	return pyroscopeRemoveNodesCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeListNodesCmd() *cobra.Command {
+	pyroscopeListNodesCmd := &cobra.Command{
+		Use:   "list-nodes <pyroscope-cluster> <target-cluster>",
+		Short: "list nodes currently being scraped by the pyroscope profiling configuration",
+		Long: `List nodes currently being scraped by the Pyroscope stack.
+
+This command displays which nodes from the target cluster are currently being profiled
+by the Pyroscope stack.
+
+Examples:
+
+  roachprod pyroscope list-nodes my-pyroscope:1 my-cluster
+
+The first argument must be a single Pyroscope node (e.g., my-pyroscope:1).
+The second argument is the target cluster to query.`,
+		Args: cobra.ExactArgs(2),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.ListPyroscopeNodes(context.Background(), config.Logger, args[0], args[1])
+		}),
+	}
+	return pyroscopeListNodesCmd
+}
+
+func (cr *commandRegistry) buildPyroscopeInitTargetCmd() *cobra.Command {
+	pyroscopeInitTargetCmd := &cobra.Command{
+		Use:   "init-target <pyroscope-cluster> <target-cluster>",
+		Short: "initialize or re-initialize a target cluster config for Pyroscope profiling",
+		Long: `Initialize or re-initialize a target cluster config for Pyroscope profiling.
+
+This command sets up the Alloy configuration on the Pyroscope cluster to scrape profiles
+from the target cluster. If the target cluster is secure, it will create an authentication
+session for accessing the profiling endpoints. This command can be called multiple times
+to update the configuration (e.g., if security settings change).
+
+Examples:
+
+  roachprod pyroscope init-target my-pyroscope:1 my-target-cluster
+  roachprod pyroscope init-target my-pyroscope:1 my-secure-cluster --secure
+
+The first argument must be a single Pyroscope node (e.g., my-pyroscope:1).
+The second argument is the target cluster to profile.`,
+		Args: cobra.ExactArgs(2),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.InitPyroscopeTarget(context.Background(), config.Logger, args[0], args[1], isSecure)
+		}),
+	}
+	initFlagInsecureForCmd(pyroscopeInitTargetCmd)
+	return pyroscopeInitTargetCmd
+}
+
 func (cr *commandRegistry) buildRootStorageCmd() *cobra.Command {
 	rootStorageCmd := &cobra.Command{
 		Use:   `storage`,

@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -1427,6 +1428,49 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", jobID))
 	sqlDB.Exec(t, fmt.Sprintf("SHOW JOB WHEN COMPLETE %d", jobID))
 	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM t", [][]string{{"0"}})
+
+	// Verify TablePublished is set after cleanup.
+	job, err := tc.ApplicationLayer(0).JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(jobID))
+	require.NoError(t, err)
+	payload := job.Payload()
+	importDetails := payload.GetImport()
+	require.True(t, importDetails.TablePublished, "expected TablePublished to be true after cleanup")
+}
+
+func TestImportCancelAfterSuccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is a regression test for #159603. If the cancel logic ran after the
+	// descriptor was marked as offline, we could end up deleting live data.
+
+	ctx := context.Background()
+	baseDir := datapathutils.TestDataPath(t, "csv")
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		ExternalIODir: baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	testFiles := makeCSVData(t, 1, 100, 1, 100)
+
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, fmt.Sprintf("WITH j AS (IMPORT INTO t (a, b) CSV DATA (%s)) SELECT job_id FROM j", testFiles.files[0])).Scan(&jobID)
+
+	var countBefore int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&countBefore)
+
+	sqlDB.Exec(t, "UPDATE system.jobs SET status = 'cancel-requested' WHERE id = $1", jobID)
+	jobutils.WaitForJobToCancel(t, sqlDB, jobID)
+
+	var countAfter int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&countAfter)
+	require.Equal(t, countBefore, countAfter, "data should not be rolled back")
 }
 
 func TestImportCSVStmt(t *testing.T) {
@@ -5272,6 +5316,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
+	defer besteffort.TestForbidSkip("import-event")()
 
 	skip.UnderRace(t)
 
@@ -5323,7 +5368,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
 	}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -5350,7 +5395,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	// we record the count of inserted rows prior to executing testingKnobs.afterImport
 	// (see `importResumer.Resume()`) so that we can test on resuming the interrupted
 	// import process (such as TestCSVImportCanBeResumed).
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 }
 
 func TestUDTChangeDuringImport(t *testing.T) {

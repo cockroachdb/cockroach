@@ -93,6 +93,10 @@ func TestBackupCompaction(t *testing.T) {
 		backupStmt := fullBackupQuery(fullCluster, collectionURI, start, noOpts)
 		db.Exec(t, backupStmt)
 
+		var fullJobId jobspb.JobID
+		db.QueryRow(t, "SELECT system.jobs.id from system.jobs WHERE system.jobs.job_type = 'BACKUP'").Scan(&fullJobId)
+		fullRedactedUri := getDescUri(t, db, fullJobId)
+
 		// Run twice to test compaction on top of compaction.
 		for i := range 2 {
 			db.Exec(t, "INSERT INTO foo VALUES (2, 2), (3, 3)")
@@ -102,7 +106,13 @@ func TestBackupCompaction(t *testing.T) {
 			db.Exec(t, "DELETE FROM foo WHERE a = 3")
 			end := getTime()
 			db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
-			jobutils.WaitForJobToSucceed(t, db, startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end))
+
+			compactionJobId := startCompaction(db, backupStmt, getLatestFullDir(collectionURI), start, end)
+			compactionRedactedUri := getDescUri(t, db, compactionJobId)
+			require.Equal(t, fullRedactedUri, compactionRedactedUri)
+
+			jobutils.WaitForJobToSucceed(t, db, compactionJobId)
+
 			validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2+i)
 			start = end
 		}
@@ -1125,4 +1135,13 @@ func aostExpr(aost hlc.Timestamp) string {
 		return ""
 	}
 	return fmt.Sprintf("AS OF SYSTEM TIME '%s'", aost.AsOfSystemTime())
+}
+
+func getDescUri(t *testing.T, db *sqlutils.SQLRunner, jobId jobspb.JobID) string {
+	var desc string
+	db.QueryRow(t, fmt.Sprintf("SELECT system.jobs.description from system.jobs WHERE system.jobs.id = %d", jobId)).Scan(&desc)
+	inStart := strings.Index(desc, "IN ")
+	uriStart := inStart + strings.Index(desc[inStart:], "'") + 1
+	uriEnd := uriStart + strings.Index(desc[uriStart:], "'")
+	return desc[uriStart:uriEnd]
 }

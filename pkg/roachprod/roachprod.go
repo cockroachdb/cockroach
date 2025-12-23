@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -2035,6 +2036,114 @@ func InitProviders() map[string]string {
 	}
 
 	return providersState
+}
+
+// StartPyroscope deploys and starts the Pyroscope profiling stack on a node.
+func StartPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be started on a single node")
+	}
+
+	return pyroscope.Start(ctx, l, c)
+}
+
+// StopPyroscope tears down the Pyroscope profiling stack on a node.
+func StopPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be stopped on a single node")
+	}
+
+	return pyroscope.Stop(ctx, l, c)
+}
+
+// AddPyroscopeNodes adds nodes from the target cluster to the Pyroscope scrape configuration.
+func AddPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.AddNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// RemovePyroscopeNodes removes nodes from the target cluster from the Pyroscope scrape
+// configuration.
+func RemovePyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.RemoveNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// ListPyroscopeNodes displays the nodes from the target cluster currently being scraped by
+// Pyroscope.
+func ListPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.ListNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// InitPyroscopeTarget initializes the target cluster in the Pyroscope scrape configuration,
+// setting up authentication if the target cluster is secure.
+func InitPyroscopeTarget(
+	ctx context.Context,
+	l *logger.Logger,
+	pyroscopeClusterName, targetClusterName string,
+	secure install.ComplexSecureOption,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	targetCluster, err := GetClusterFromCache(l, targetClusterName, secure)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.InitTarget(ctx, l, pyroscopeCluster, targetCluster)
 }
 
 // StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes

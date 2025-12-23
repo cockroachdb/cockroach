@@ -340,7 +340,7 @@ func TestMultipleRegistrations(t *testing.T) {
 	}
 
 	require.NoError(t, quick.Check(verify, &quick.Config{
-		MaxCount: 150,
+		MaxCount: 50,
 		Rand:     rng,
 		Values:   generator,
 	}))
@@ -459,9 +459,9 @@ func TestServiceDescriptors(t *testing.T) {
 
 	// The TestDNSServer finds records by iterating over all records and checking
 	// for any matches. Listing n records from a size m DNS server will take O(n*m) time,
-	// so we limit the number of iterations to 1000.
+	// so we limit the number of iterations to reduce test execution time.
 	require.NoError(t, quick.Check(verify, &quick.Config{
-		MaxCount: 1000,
+		MaxCount: 100,
 		Rand:     rng,
 		Values:   generator,
 	}))

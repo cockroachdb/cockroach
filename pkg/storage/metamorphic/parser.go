@@ -63,12 +63,9 @@ func parseOutputPreamble(f io.Reader) (cfg engineConfig, seed int64, err error) 
 }
 
 var parseHooks = &pebble.ParseHooks{
-	NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
-		switch name {
-		case "none":
-			return nil, nil
-		case "rocksdb.BuiltinBloomFilter":
-			return bloom.FilterPolicy(10), nil
+	NewFilterPolicy: func(name string) (pebble.TableFilterPolicy, error) {
+		if p, ok := bloom.PolicyFromName(name); ok {
+			return p, nil
 		}
 		return nil, nil
 	},

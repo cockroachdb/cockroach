@@ -1,0 +1,23 @@
+server:
+  http_listen_port: 4040
+
+pyroscopedb:
+  data_path: /var/lib/pyroscope/data
+
+limits:
+  max_query_length: 2h
+  max_query_parallelism: 4
+  max_profile_stacktrace_samples: 500000
+  max_profile_size_bytes: 50000000
+  max_global_series_per_tenant: 50000000
+  ingestion_rate_mb: 4000
+  ingestion_burst_size_mb: 2000
+  ingestion_relabeling_rules:
+    - action: labelmap
+      regex: "(.*)-(.*)"
+      replacement: "${1}_${2}"
+    - action: labeldrop
+      regex: ".*-.*"
+
+self_profiling:
+  disable_push: true

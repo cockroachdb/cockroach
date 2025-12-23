@@ -468,6 +468,9 @@ type ProviderOpts struct {
 	// BootDiskOnly ensures that no additional disks will be attached, other than
 	// the boot disk.
 	BootDiskOnly bool
+	// UseBulkInsert uses the GCP Compute SDK's BulkInsert API for creating VMs
+	// instead of the CLI-based approach. This is more efficient for large clusters.
+	UseBulkInsert bool
 
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
@@ -1298,6 +1301,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"the number of visible threads per physical core (valid values: 1 or 2), default is 0 (auto)")
 	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
 		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
+	flags.BoolVar(&o.UseBulkInsert, ProviderName+"-use-bulk-insert", true,
+		"use GCP Compute SDK's BulkInsert API for creating VMs (more efficient for large clusters)")
 }
 
 // ConfigureProviderFlags implements Provider
@@ -1726,7 +1731,9 @@ func (p *Provider) computeInstanceArgs(
 			// Add `discard` for Local SSDs on NVMe, as is advised in:
 			// https://cloud.google.com/compute/docs/disks/add-local-ssd
 			extraMountOpts = "discard"
-			if opts.SSDOpts.NoExt4Barrier {
+
+			// Disable ext4 barriers if specified and using ext4.
+			if opts.SSDOpts.NoExt4Barrier && opts.SSDOpts.FileSystem == vm.Ext4 {
 				extraMountOpts = fmt.Sprintf("%s,nobarrier", extraMountOpts)
 			}
 		} else {
@@ -1966,7 +1973,6 @@ func (p *Provider) Create(
 	usedZones := maps.Keys(zoneToHostNames)
 
 	var vmList vm.List
-	var vmListMutex syncutil.Mutex
 	switch {
 	case providerOpts.Managed:
 		zoneToInstanceArgs := make(map[string][]string)
@@ -2044,7 +2050,16 @@ func (p *Provider) Create(
 			return nil, err
 		}
 
+	case providerOpts.UseBulkInsert:
+		l.Printf("Using SDK-based BulkInsert API")
+		vmList, err = p.createInstancesSDK(l, opts, providerOpts, labels, zoneToHostNames, usedZones)
+		if err != nil {
+			return nil, err
+		}
+
 	default:
+		// Default: CLI-based approach using batched gcloud commands.
+		var vmListMutex syncutil.Mutex
 		g := newLimitedErrorGroup()
 		createArgs := []string{"compute", "instances", "create", "--subnet", "default", "--format", "json"}
 		createArgs = append(createArgs, "--labels", labels)
@@ -2086,6 +2101,7 @@ func (p *Provider) Create(
 			return nil, err
 		}
 	}
+
 	return vmList, propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD,
 		providerOpts.PDVolumeCount, providerOpts.BootDiskOnly)
 }

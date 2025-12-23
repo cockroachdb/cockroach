@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared default-configs 3node-tenant local-leased-descriptors
+# LogicTest: !local-prepared default-configs 3node-tenant
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 

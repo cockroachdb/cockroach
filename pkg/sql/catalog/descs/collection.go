@@ -459,7 +459,7 @@ var allowLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.allow_leased_descriptors.enabled",
 	"if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance",
-	true,
+	lease.UseLeasedDescriptorsForCatalogDefault,
 	settings.WithPublic,
 )
 

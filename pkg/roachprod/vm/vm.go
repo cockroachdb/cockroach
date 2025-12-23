@@ -392,7 +392,7 @@ type CreateOpts struct {
 	SSDOpts        struct {
 		UseLocalSSD bool
 		// NoExt4Barrier, if set, makes the "-o nobarrier" flag be used when
-		// mounting the SSD. Ignored if UseLocalSSD is not set.
+		// mounting the SSD. Ignored if UseLocalSSD is not set or filesystem is not ext4.
 		NoExt4Barrier bool
 		// The file system to be used. This is set to "ext4" by default.
 		FileSystem Filesystem

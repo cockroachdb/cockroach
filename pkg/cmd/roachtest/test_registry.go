@@ -180,3 +180,14 @@ func (r testRegistryImpl) AllOperations() []registry.OperationSpec {
 	})
 	return ops
 }
+
+// FilteredOperations returns operations filtered by the given regex.
+func (r testRegistryImpl) FilteredOperations(regex *regexp.Regexp) []registry.OperationSpec {
+	var filteredOps []registry.OperationSpec
+	for _, opSpec := range r.AllOperations() {
+		if regex.MatchString(opSpec.Name) {
+			filteredOps = append(filteredOps, opSpec)
+		}
+	}
+	return filteredOps
+}

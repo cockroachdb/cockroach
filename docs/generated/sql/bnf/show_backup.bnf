@@ -1,5 +1,5 @@
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' collectionURI opt_with_show_backups_options
+	'SHOW' 'BACKUPS' 'IN' collectionURI
 	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' show_backup_options ( ( ',' show_backup_options ) )*
 	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 'WITH' 'OPTIONS' '(' show_backup_options ( ( ',' show_backup_options ) )* ')'
 	| 'SHOW' 'BACKUP' 'SCHEMAS' 'FROM' subdirectory 'IN' collectionURI 

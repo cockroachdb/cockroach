@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -162,7 +164,11 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 func ListIndexes(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]string, error) {
-	var indexBasenames []string
+	type indexTimes struct {
+		file       string
+		start, end time.Time
+	}
+	var indexes []indexTimes
 	indexDir, err := indexSubdir(subdir)
 	if err != nil {
 		return nil, err
@@ -172,52 +178,46 @@ func ListIndexes(
 		indexDir+"/",
 		"",
 		func(file string) error {
-			indexBasenames = append(indexBasenames, path.Base(file))
+			// We assert that if a file ends with .pb in the index, it should be a
+			// parsable index file. Otherwise, we ignore it. This circumvents any temp
+			// files that may be created by the external storage implementation.
+			if !strings.HasSuffix(file, ".pb") {
+				log.Dev.Warningf(ctx, "unexpected file %s in index directory", file)
+				return nil
+			}
+
+			base := path.Base(file)
+			i := indexTimes{
+				file: base,
+			}
+			i.start, i.end, err = parseIndexFilename(base)
+			if err != nil {
+				return err
+			}
+			indexes = append(indexes, i)
 			return nil
 		},
 	); err != nil {
 		return nil, errors.Wrapf(err, "listing indexes in %s", subdir)
 	}
 
-	timeMemo := make(map[string][2]time.Time)
-	indexTimesFromFile := func(basename string) (time.Time, time.Time, error) {
-		if times, ok := timeMemo[basename]; ok {
-			return times[0], times[1], nil
-		}
-		start, end, err := parseIndexFilename(basename)
-		if err != nil {
-			return time.Time{}, time.Time{}, err
-		}
-		timeMemo[basename] = [2]time.Time{start, end}
-		return start, end, nil
-	}
-	var sortErr error
-	slices.SortFunc(indexBasenames, func(a, b string) int {
-		aStart, aEnd, err := indexTimesFromFile(a)
-		if err != nil {
-			sortErr = err
-		}
-		bStart, bEnd, err := indexTimesFromFile(b)
-		if err != nil {
-			sortErr = err
-		}
-		if aEnd.Before(bEnd) {
+	slices.SortFunc(indexes, func(a, b indexTimes) int {
+		if a.end.Before(b.end) {
 			return -1
-		} else if aEnd.After(bEnd) {
+		} else if a.end.After(b.end) {
 			return 1
 		}
 		// End times are equal, so break tie with start time.
-		if aStart.Before(bStart) {
+		if a.start.Before(b.start) {
 			return -1
 		} else {
 			return 1
 		}
 	})
-	if sortErr != nil {
-		return nil, errors.Wrapf(sortErr, "sorting index filenames")
-	}
 
-	return indexBasenames, nil
+	return util.Map(indexes, func(i indexTimes) string {
+		return i.file
+	}), nil
 }
 
 // GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
@@ -319,34 +319,6 @@ func parseIndexFilename(basename string) (start time.Time, end time.Time, err er
 	}
 
 	return start, end, nil
-}
-
-// ListSubdirsFromIndex lists the paths of all full backup subdirectories that
-// have an entry in the index. The store should be rooted at the default
-// collection URI. The subdirs are returned in chronological order.
-func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	var subdirs []string
-	if err := store.List(
-		ctx,
-		backupbase.BackupIndexDirectoryPath,
-		"/",
-		func(indexSubdir string) error {
-			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
-			subdir, err := convertIndexSubdirToSubdir(indexSubdir)
-			if err != nil {
-				return err
-			}
-			subdirs = append(subdirs, subdir)
-			return nil
-		},
-	); err != nil {
-		return nil, errors.Wrapf(err, "listing index subdirs")
-	}
-	// Index subdirs are in descending order and we want chronological order.
-	// TODO (kev-cao): In the new faster `SHOW BACKUP` effort, we will want
-	// the subdirs in descending order.
-	slices.Reverse(subdirs)
-	return subdirs, nil
 }
 
 // shouldWriteIndex determines if a backup index file should be written for a

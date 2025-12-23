@@ -46,30 +46,64 @@ func (c *ExternalStorageMux) Close() error {
 	return err
 }
 
-// StoreFile splits a URI into its storage prefix and file path, caching the
-// storage instance for reuse. For example, "nodelocal://1/import/123/file.sst"
-// is split into storage "nodelocal://1" and path "/import/123/file.sst".
-func (c *ExternalStorageMux) StoreFile(
+// getStore resolves (and caches) the cloud storage instance for the provided
+// URI and returns it along with the file path relative to that storage.
+func (c *ExternalStorageMux) getStore(
 	ctx context.Context, uri string,
-) (storageccl.StoreFile, error) {
+) (cloud.ExternalStorage, string, error) {
 	prefix, filepath, err := c.splitURI(uri)
 	if err != nil {
-		return storageccl.StoreFile{}, err
+		return nil, "", err
 	}
 	prefixKey := prefix.String()
 	store, ok := c.storeInstances[prefixKey]
 	if !ok {
 		storage, err := c.factory(ctx, prefix.String(), c.user)
 		if err != nil {
-			return storageccl.StoreFile{}, err
+			return nil, "", err
 		}
 		c.storeInstances[prefixKey] = storage
 		store = storage
+	}
+	return store, filepath, nil
+}
+
+// StoreFile splits a URI into its storage prefix and file path, caching the
+// storage instance for reuse. For example, "nodelocal://1/import/123/file.sst"
+// is split into storage "nodelocal://1" and path "/import/123/file.sst".
+func (c *ExternalStorageMux) StoreFile(
+	ctx context.Context, uri string,
+) (storageccl.StoreFile, error) {
+	store, filepath, err := c.getStore(ctx, uri)
+	if err != nil {
+		return storageccl.StoreFile{}, err
 	}
 	return storageccl.StoreFile{
 		Store:    store,
 		FilePath: filepath,
 	}, nil
+}
+
+// DeleteFile removes the file at the provided URI using a cached storage
+// handle when possible.
+func (c *ExternalStorageMux) DeleteFile(ctx context.Context, uri string) error {
+	store, filepath, err := c.getStore(ctx, uri)
+	if err != nil {
+		return err
+	}
+	return store.Delete(ctx, filepath)
+}
+
+// ListFiles lists all files under the provided URI prefix. The callback receives
+// paths relative to the prefix.
+func (c *ExternalStorageMux) ListFiles(
+	ctx context.Context, uriPrefix string, fn cloud.ListingFn,
+) error {
+	store, prefix, err := c.getStore(ctx, uriPrefix)
+	if err != nil {
+		return err
+	}
+	return store.List(ctx, prefix, "" /* delimiter */, fn)
 }
 
 // splitURI splits a URI into its prefix (scheme + host) and path components.

@@ -236,7 +236,7 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 	rootCmd.AddCommand(runOperationCmd)
 
 	var listOperationCmd = &cobra.Command{
-		Use:   "list-operations",
+		Use:   "list-operations [regex...]",
 		Short: "list all operation names",
 		Long: `List all available operations that can be run with the run-operation command.
 
@@ -245,12 +245,13 @@ This command lists the names of all registered operations.
 Example:
 
    roachtest list-operations
+   roachtest list-operations node-kill/.*m$
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := makeTestRegistry()
 			operations.RegisterOperations(&r)
 
-			ops := r.AllOperations()
+			ops := r.FilteredOperations(registry.MergeRegEx(args))
 			for _, op := range ops {
 				fmt.Printf("%s\n", op.Name)
 			}
@@ -459,12 +460,7 @@ func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, erro
 	if err != nil {
 		return nil, err
 	}
-	var filteredOps []registry.OperationSpec
-	for _, opSpec := range r.AllOperations() {
-		if regex.MatchString(opSpec.Name) {
-			filteredOps = append(filteredOps, opSpec)
-		}
-	}
+	filteredOps := r.FilteredOperations(regex)
 	if len(filteredOps) == 0 {
 		return nil, errors.New("no matching operations to run")
 	}

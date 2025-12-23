@@ -3300,6 +3300,11 @@ func (ex *connExecutor) makeExecPlan(
 		}
 		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
 		if err != nil {
+			// Serialization failures can occur from the lease manager if a
+			// consistent view of descriptors was not observed.
+			if pgerror.GetPGCode(err) == pgcode.SerializationFailure {
+				return ctx, err
+			}
 			return ctx, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode plan gist: %q", ih.planGist.String())
 		}
 	}
@@ -4456,15 +4461,24 @@ func (ex *connExecutor) execWithProfiling(
 		}
 		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
 		fingerprintID := appstatspb.ConstructStatementFingerprintID(
-			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
-		pprofutil.Do(ctx, func(ctx context.Context) {
-			err = op(ctx)
-		},
+			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+		)
+		labels := []string{
 			workloadid.ProfileTag, sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID),
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
+		}
+		if opName, ok := GetInternalOpName(ctx); ok {
+			labels = append(labels, "opname", opName)
+		}
+		pprofutil.Do(
+			ctx,
+			func(ctx context.Context) {
+				err = op(ctx)
+			},
+			labels...,
 		)
 	} else {
 		err = op(ctx)
