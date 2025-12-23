@@ -1565,6 +1565,59 @@ SET CLUSTER SETTING sql.schema.force_declarative_statements='+CREATE SCHEMA'
 statement ok
 EXPLAIN (DDL) CREATE SCHEMA sc1
 
+# Test ALTER TABLE subcommand-level control.
+# Disable just ADD COLUMN subcommand.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE ADD COLUMN'
+
+statement ok
+CREATE TABLE stmt_ctrl_sub(n int primary key) WITH (schema_locked = false)
+
+# ADD COLUMN should be disabled (fall back to legacy).
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN disabled_col BOOL
+
+# DROP COLUMN should still use declarative (not disabled).
+statement ok
+ALTER TABLE stmt_ctrl_sub ADD COLUMN to_drop BOOL
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub DROP COLUMN to_drop
+
+# Test that statement-level disable can be overridden by subcommand-level enable.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE, +ALTER TABLE DROP COLUMN'
+
+# ADD COLUMN should be disabled (inherits from !ALTER TABLE).
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN still_disabled BOOL
+
+# DROP COLUMN should use declarative (overridden by +ALTER TABLE DROP COLUMN).
+statement ok
+ALTER TABLE stmt_ctrl_sub ADD COLUMN another_to_drop BOOL
+
+statement ok
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub DROP COLUMN another_to_drop
+
+# Test mixed subcommand statement - any disabled subcommand disables the whole statement.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE ADD COLUMN'
+
+# This statement has ADD COLUMN which is disabled, so the whole thing should fall back.
+statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
+EXPLAIN (DDL) ALTER TABLE stmt_ctrl_sub ADD COLUMN mixed_col BOOL, DROP COLUMN another_to_drop
+
+# Test invalid subcommand tag validation.
+statement error ALTER TABLE subcommand tag "ALTER TABLE NONEXISTENT CMD" is not controlled
+SET CLUSTER SETTING sql.schema.force_declarative_statements='!ALTER TABLE NONEXISTENT CMD'
+
+# Clean up.
+statement ok
+SET CLUSTER SETTING sql.schema.force_declarative_statements=''
+
+statement ok
+DROP TABLE stmt_ctrl_sub
+
 subtest end
 
 
