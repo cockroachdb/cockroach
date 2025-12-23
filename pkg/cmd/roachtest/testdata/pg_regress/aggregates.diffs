@@ -1446,7 +1446,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  --
  -- Test combinations of DISTINCT and/or ORDER BY
  --
-@@ -1595,246 +1418,186 @@
+@@ -1595,246 +1418,182 @@
  
  select array_agg(distinct a order by a)
    from (values (1),(2),(1),(3),(null),(2)) v(a);
@@ -1786,7 +1786,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- string_agg tests
  select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
     string_agg   
-@@ -1862,25 +1625,29 @@
+@@ -1862,25 +1621,29 @@
  
  -- check some implicit casting cases, as per bug #5564
  select string_agg(distinct f1, ',' order by f1) from varchar_tbl;  -- ok
@@ -1832,7 +1832,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- string_agg bytea tests
  create table bytea_test_table(v bytea);
  select string_agg(v, '') from bytea_test_table;
-@@ -1922,11 +1689,60 @@
+@@ -1922,11 +1685,60 @@
  select (case x % 4 when 1 then null else x end), x % 10
  from generate_series(1,5000) x;
  set parallel_setup_cost TO 0;
@@ -1893,7 +1893,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- create a view as we otherwise have to repeat this query a few times.
  create view v_pagg_test AS
  select
-@@ -1954,66 +1770,92 @@
+@@ -1954,66 +1766,92 @@
  	) a1
  ) a2
  group by y;
@@ -2031,7 +2031,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  drop table pagg_test;
  -- FILTER tests
  select min(unique1) filter (where unique1 > 100) from tenk1;
-@@ -2023,13 +1865,9 @@
+@@ -2023,13 +1861,9 @@
  (1 row)
  
  select sum(1/ten) filter (where ten > 0) from tenk1;
@@ -2047,7 +2047,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
   ten | sum 
  -----+-----
     0 |    
-@@ -2045,17 +1883,14 @@
+@@ -2045,17 +1879,14 @@
  (10 rows)
  
  select ten, sum(distinct four) filter (where four > 10) from onek a
@@ -2072,7 +2072,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')
  from (values ('a', 'b')) AS v(foo,bar);
   max 
-@@ -2064,11 +1899,7 @@
+@@ -2064,11 +1895,7 @@
  (1 row)
  
  select any_value(v) filter (where v > 2) from (values (1), (2), (3)) as v (v);
@@ -2085,7 +2085,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- outer reference in FILTER (PostgreSQL extension)
  select (select count(*)
          from (values (1)) t0(inner_c))
-@@ -2117,11 +1948,10 @@
+@@ -2117,11 +1944,10 @@
  select aggfns(distinct a,b,c order by a,c using ~<~,b) filter (where a > 1)
      from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
      generate_series(1,2) i;
@@ -2101,7 +2101,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- check handling of bare boolean Var in FILTER
  select max(0) filter (where b1) from bool_test;
   max 
-@@ -2137,78 +1967,49 @@
+@@ -2137,78 +1963,49 @@
  
  -- check for correct detection of nested-aggregate errors in FILTER
  select max(unique1) filter (where sum(ten) > 0) from tenk1;
@@ -2196,7 +2196,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  select percentile_disc(0.5) within group (order by thousand) from tenk1;
   percentile_disc 
  -----------------
-@@ -2217,161 +2018,97 @@
+@@ -2217,161 +2014,97 @@
  
  select rank(3) within group (order by x)
  from (values (1),(1),(2),(2),(3),(3),(4)) v(x);
@@ -2402,7 +2402,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- deparse and multiple features:
  create view aggordview1 as
  select ten,
-@@ -2380,73 +2117,83 @@
+@@ -2380,73 +2113,83 @@
         rank(5,'AZZZZ',50) within group (order by hundred, string4 desc, hundred)
    from tenk1
   group by ten order by ten;
@@ -2538,7 +2538,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create type avg_state as (total bigint, count bigint);
  create or replace function avg_transfn(state avg_state, n int) returns avg_state as
  $$
-@@ -2469,6 +2216,10 @@
+@@ -2469,6 +2212,10 @@
  	return null;
  end
  $$ language plpgsql;
@@ -2549,7 +2549,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create function avg_finalfn(state avg_state) returns int4 as
  $$
  begin
-@@ -2479,6 +2230,10 @@
+@@ -2479,6 +2226,10 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2560,7 +2560,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create function sum_finalfn(state avg_state) returns int4 as
  $$
  begin
-@@ -2489,106 +2244,70 @@
+@@ -2489,106 +2240,70 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2693,7 +2693,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- test that aggs with the same sfunc and initcond share the same agg state
  create aggregate my_sum_init(int4)
  (
-@@ -2597,6 +2316,12 @@
+@@ -2597,6 +2312,12 @@
     finalfunc = sum_finalfn,
     initcond = '(10,0)'
  );
@@ -2706,7 +2706,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create aggregate my_avg_init(int4)
  (
     stype = avg_state,
-@@ -2604,6 +2329,12 @@
+@@ -2604,6 +2325,12 @@
     finalfunc = avg_finalfn,
     initcond = '(10,0)'
  );
@@ -2719,7 +2719,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create aggregate my_avg_init2(int4)
  (
     stype = avg_state,
-@@ -2611,30 +2342,28 @@
+@@ -2611,30 +2338,28 @@
     finalfunc = avg_finalfn,
     initcond = '(4,0)'
  );
@@ -2764,7 +2764,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create or replace function sum_transfn(state int4, n int4) returns int4 as
  $$
  declare new_state int4;
-@@ -2664,29 +2393,35 @@
+@@ -2664,29 +2389,35 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2809,7 +2809,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- test that the aggregate transition logic correctly handles
  -- transition / combine functions returning NULL
  -- First test the case of a normal transition function returning NULL
-@@ -2701,6 +2436,8 @@
+@@ -2701,6 +2432,8 @@
      END IF;
      RETURN NULL;
  END$$;
@@ -2818,7 +2818,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE AGGREGATE balk(int4)
  (
      SFUNC = balkifnull(int8, int4),
-@@ -2708,13 +2445,16 @@
+@@ -2708,13 +2441,16 @@
      PARALLEL = SAFE,
      INITCOND = '0'
  );
@@ -2840,7 +2840,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- Secondly test the case of a parallel aggregate combiner function
  -- returning NULL. For that use normal transition function, but a
  -- combiner function returning NULL.
-@@ -2730,6 +2470,23 @@
+@@ -2730,6 +2466,23 @@
      END IF;
      RETURN NULL;
  END$$;
@@ -2864,7 +2864,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE AGGREGATE balk(int4)
  (
      SFUNC = int4_sum(int8, int4),
-@@ -2738,26 +2495,27 @@
+@@ -2738,26 +2491,27 @@
      PARALLEL = SAFE,
      INITCOND = '0'
  );
@@ -2906,7 +2906,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  ROLLBACK;
  -- test multiple usage of an aggregate whose finalfn returns a R/W datum
  BEGIN;
-@@ -2767,6 +2525,8 @@
+@@ -2767,6 +2521,8 @@
      RETURN array_fill(y[1], ARRAY[4]);
  END;
  $$;
@@ -2915,7 +2915,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE FUNCTION rwagg_finalfunc(x anyarray) RETURNS anyarray
  LANGUAGE plpgsql STRICT IMMUTABLE AS $$
  DECLARE
-@@ -2777,11 +2537,25 @@
+@@ -2777,11 +2533,25 @@
      RETURN res;
  END;
  $$;
@@ -2941,7 +2941,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE FUNCTION eatarray(x real[]) RETURNS real[]
  LANGUAGE plpgsql STRICT IMMUTABLE AS $$
  BEGIN
-@@ -2789,21 +2563,44 @@
+@@ -2789,21 +2559,44 @@
      RETURN x;
  END;
  $$;
@@ -2991,7 +2991,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- variance(int4) covers numeric_poly_combine
  -- sum(int8) covers int8_avg_combine
  -- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
-@@ -2813,36 +2610,17 @@
+@@ -2813,36 +2606,17 @@
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1) u;
@@ -3034,7 +3034,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- variance(int8) covers numeric_combine
  -- avg(numeric) covers numeric_avg_combine
  EXPLAIN (COSTS OFF, VERBOSE)
-@@ -2851,46 +2629,22 @@
+@@ -2851,46 +2625,22 @@
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1) u;
@@ -3089,7 +3089,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- Ensure that the STRICT checks for aggregates does not take NULLness
  -- of ORDER BY columns into account. See bug report around
  -- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
-@@ -2929,27 +2683,46 @@
+@@ -2929,27 +2679,46 @@
  -- does not lead to array overflow due to unexpected duplicate hash keys
  -- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
  set enable_memoize to off;
@@ -3148,7 +3148,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  select unique1, count(*), sum(twothousand) from tenk1
  group by unique1
  having sum(fivethous) > 4975
-@@ -3007,36 +2780,84 @@
+@@ -3007,36 +2776,84 @@
  (48 rows)
  
  set work_mem to default;
@@ -3242,7 +3242,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create table agg_group_2 as
  select * from
    (values (100), (300), (500)) as r(a),
-@@ -3047,30 +2868,58 @@
+@@ -3047,30 +2864,58 @@
      from agg_data_2k
      where g < r.a
      group by g/2) as s;
@@ -3308,7 +3308,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create table agg_hash_2 as
  select * from
    (values (100), (300), (500)) as r(a),
-@@ -3081,15 +2930,43 @@
+@@ -3081,15 +2926,43 @@
      from agg_data_2k
      where g < r.a
      group by g/2) as s;

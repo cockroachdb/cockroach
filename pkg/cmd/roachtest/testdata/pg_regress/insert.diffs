@@ -62,18 +62,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert.out --labe
  -- add small record to the second page
  INSERT INTO large_tuple_test (select 3, NULL);
  -- now this tuple won't fit on the second page, but the insert should
-@@ -108,395 +101,630 @@
- -- these tests are aware that transformInsertStmt has 3 separate code paths
- --
- create type insert_test_type as (if1 int, if2 text[]);
-+ERROR:  at or near "[": syntax error
-+DETAIL:  source SQL:
-+create type insert_test_type as (if1 int, if2 text[])
-+                                                  ^
-+HINT:  try \h CREATE TYPE
+@@ -111,73 +104,167 @@
  create table inserttest (f1 int, f2 int[],
                           f3 insert_test_type, f4 insert_test_type[]);
-+ERROR:  type "insert_test_type" does not exist
  insert into inserttest (f2[1], f2[2]) values (1,2);
 +ERROR:  at or near "[": syntax error
 +DETAIL:  source SQL:
@@ -191,8 +182,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert.out --labe
 -    |       |                  | {"(,\"{baz,quux}\")"}
 -    |       |                  | {"(,\"{bear,beer}\")"}
 -(16 rows)
--
-+ERROR:  relation "inserttest" does not exist
++ f1 | f2 | f3 | f4 
++----+----+----+----
++(0 rows)
+ 
  -- also check reverse-listing
  create table inserttest2 (f1 bigint, f2 text);
  create rule irule1 as on insert to inserttest2 do also
@@ -276,11 +269,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert.out --labe
 +                                                                           ^
  drop table inserttest2;
  drop table inserttest;
-+ERROR:  relation "inserttest" does not exist
  drop type insert_test_type;
-+ERROR:  type "insert_test_type" does not exist
- -- direct partition inserts should check partition bound constraint
- create table range_parted (
+@@ -186,317 +273,453 @@
  	a text,
  	b int
  ) partition by range (a, (b+0));
@@ -883,7 +873,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert.out --labe
  -- attnum for key attribute 'a' is different in mlparted, mlparted1, and mlparted11
  select attrelid::regclass, attname, attnum
  from pg_attribute
-@@ -505,29 +733,31 @@
+@@ -505,29 +728,31 @@
     or attrelid = 'mlparted1'::regclass
     or attrelid = 'mlparted11'::regclass)
  order by attrelid::regclass::text;
@@ -929,7 +919,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/insert.out --labe
  -- have a BR trigger modify the row such that the check_b is violated
  create function mlparted11_trig_fn()
  returns trigger AS
-@@ -540,443 +770,678 @@
+@@ -540,443 +765,678 @@
  language plpgsql;
  create trigger mlparted11_trig before insert ON mlparted11
    for each row execute procedure mlparted11_trig_fn();
