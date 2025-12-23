@@ -341,7 +341,7 @@ var specs = []stmtSpec{
 	{
 		name:   "add_column",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "col_qual_list"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "col_qual_list", "opt_collate"},
 		regreplace: map[string]string{
 			` \( \( col_qualification \) \)\* .*`: `( ( col_qualification ) )*`,
 		},
