@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -139,7 +140,7 @@ func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, w st
 	// TODO(pav-kv): figure out whether LastReplicaGCTimestamp should be in the
 	// log or state engine.
 	require.NoError(t, storage.MVCCBlindPutProto(
-		ctx, w,
+		ctx, spanset.DisableWriterAssertions(w),
 		keys.RangeLastReplicaGCTimestampKey(r.id.RangeID),
 		hlc.Timestamp{}, /* timestamp */
 		&hlc.Timestamp{WallTime: 12345678},
