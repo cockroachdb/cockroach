@@ -919,6 +919,11 @@ const (
 type Engine interface {
 	Reader
 	Writer
+	EngineWithoutRW
+}
+
+// EngineWithoutRW is the interface that wraps the engine functions.
+type EngineWithoutRW interface {
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
