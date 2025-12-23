@@ -79,6 +79,7 @@ distribute_scan_row_count_threshold                        10000
 distribute_sort_row_count_threshold                        1000
 distsql                                                    off
 distsql_plan_gateway_bias                                  2
+distsql_prevent_partitioning_soft_limited_scans            off
 enable_auto_rehoming                                       off
 enable_create_stats_using_extremes                         on
 enable_create_stats_using_extremes_bool_enum               off
