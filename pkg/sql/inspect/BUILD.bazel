@@ -13,6 +13,7 @@ go_library(
         "issue.go",
         "log_sink.go",
         "progress.go",
+        "row_count_check.go",
         "runner.go",
         "span_source.go",
         "table_sink.go",
