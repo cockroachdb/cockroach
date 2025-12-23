@@ -79,3 +79,59 @@ func TestEncodingOptionsValidations(t *testing.T) {
 	}
 
 }
+
+func TestAvroSchemaPrefixValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	invalidPrefixErr := "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"
+
+	validPrefixes := []string{
+		"",
+		"a",
+		"A",
+		"_",
+		"abc",
+		"ABC",
+		"_abc",
+		"a1",
+		"A1_b2_C3",
+		"crdb_cdc_",
+		"super",
+		"____",
+	}
+
+	invalidPrefixes := []string{
+		// Invalid first characters.
+		"1abc",
+		"123",
+		"-abc",
+
+		// Invalid subsequent characters.
+		"abc-def",
+		"abc.def",
+		"abc def",
+		"abc!",
+	}
+
+	for _, prefix := range validPrefixes {
+		t.Run(fmt.Sprintf("valid/prefix=%q", prefix), func(t *testing.T) {
+			opts := MakeStatementOptions(map[string]string{
+				OptAvroSchemaPrefix: prefix,
+			})
+			err := opts.ValidateForCreateChangefeed(false)
+			require.NoError(t, err)
+		})
+	}
+
+	for _, prefix := range invalidPrefixes {
+		t.Run(fmt.Sprintf("invalid/prefix=%q", prefix), func(t *testing.T) {
+			opts := MakeStatementOptions(map[string]string{
+				OptAvroSchemaPrefix: prefix,
+			})
+			err := opts.ValidateForCreateChangefeed(false)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), invalidPrefixErr)
+		})
+	}
+}
