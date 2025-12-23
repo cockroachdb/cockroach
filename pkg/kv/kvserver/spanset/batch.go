@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -771,6 +772,108 @@ func NewReader(r storage.Reader, spans *SpanSet, ts hlc.Timestamp) storage.Reade
 // NewReadWriterAt clones and does not retain the provided span set.
 func NewReadWriterAt(rw storage.ReadWriter, spans *SpanSet, ts hlc.Timestamp) storage.ReadWriter {
 	return makeSpanSetReadWriterAt(rw, spans, ts)
+}
+
+// spanSetWriteBatch wraps a storage.WriteBatch and adds span checking.
+type spanSetWriteBatch struct {
+	spanSetWriter
+	wb storage.WriteBatch
+}
+
+var _ storage.WriteBatch = (*spanSetWriteBatch)(nil)
+
+// ClearRawEncodedRange implements storage.InternalWriter.
+func (s spanSetWriteBatch) ClearRawEncodedRange(start, end []byte) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.ClearRawEncodedRange(start, end)
+}
+
+// PutInternalRangeKey implements storage.InternalWriter.
+func (s spanSetWriteBatch) PutInternalRangeKey(start, end []byte, key rangekey.Key) error {
+	// Decode the engine keys to check spans.
+	startKey, ok := storage.DecodeEngineKey(start)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	endKey, ok := storage.DecodeEngineKey(end)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+	if err := s.spanSetWriter.checkAllowedRange(startKey.Key, endKey.Key); err != nil {
+		return err
+	}
+	return s.wb.PutInternalRangeKey(start, end, key)
+}
+
+// PutInternalPointKey implements storage.InternalWriter.
+func (s spanSetWriteBatch) PutInternalPointKey(key *pebble.InternalKey, value []byte) error {
+	// Decode the internal key to check spans.
+	mvccKey, ok := storage.DecodeEngineKey(key.UserKey)
+	if !ok {
+		return errors.Errorf("cannot decode start engine key")
+	}
+
+	if err := s.spanSetWriter.checkAllowed(mvccKey.Key); err != nil {
+		return err
+	}
+
+	return s.wb.PutInternalPointKey(key, value)
+}
+
+// Close implements storage.WriteBatch.
+func (s spanSetWriteBatch) Close() {
+	s.wb.Close()
+}
+
+// Commit implements storage.WriteBatch.
+func (s spanSetWriteBatch) Commit(sync bool) error {
+	return s.wb.Commit(sync)
+}
+
+// CommitNoSyncWait implements storage.WriteBatch.
+func (s spanSetWriteBatch) CommitNoSyncWait() error {
+	return s.wb.CommitNoSyncWait()
+}
+
+// SyncWait implements storage.WriteBatch.
+func (s spanSetWriteBatch) SyncWait() error {
+	return s.wb.SyncWait()
+}
+
+// Empty implements storage.WriteBatch.
+func (s spanSetWriteBatch) Empty() bool {
+	return s.wb.Empty()
+}
+
+// Count implements storage.WriteBatch.
+func (s spanSetWriteBatch) Count() uint32 {
+	return s.wb.Count()
+}
+
+// Len implements storage.WriteBatch.
+func (s spanSetWriteBatch) Len() int {
+	return s.wb.Len()
+}
+
+// Repr implements storage.WriteBatch.
+func (s spanSetWriteBatch) Repr() []byte {
+	return s.wb.Repr()
+}
+
+// CommitStats implements storage.WriteBatch.
+func (s spanSetWriteBatch) CommitStats() storage.BatchCommitStats {
+	return s.wb.CommitStats()
 }
 
 type spanSetBatch struct {
