@@ -770,6 +770,10 @@ message LocalOnlySessionData {
   // triggers or computed columns. The fix applies at routine creation time and
   // prevents unnecessary column dependencies from being recorded.
   bool use_improved_routine_deps_triggers_and_computed_cols = 196;
+  // DistSQLPreventPartitioningSoftLimitedScans, when true, prevents the distsql
+  // physical planner from partitioning scans with soft limits into multiple
+  // TableReaders. When true, this matches the behavior for hard limits.
+  bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
