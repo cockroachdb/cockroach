@@ -1,0 +1,12 @@
+name: "Overview"
+description: "High-level cluster overview metrics"
+
+# Charts are defined by their title, which must match the chart title in metrics.yaml
+# All chart metadata (axis, tooltip, options, metrics) comes from metrics.yaml
+charts:
+  - "SQL Queries Per Second"
+  - "Service Latency: SQL Statements, 99th percentile"
+  - "SQL Statement Contention"
+  - "Replicas per Node"
+  - "Capacity"
+
