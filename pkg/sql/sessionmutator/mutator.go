@@ -1118,3 +1118,7 @@ func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
 func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
 	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
 }
+
+func (m *SessionDataMutator) SetPreventPartitioningSoftLimitTableReaders(val bool) {
+	m.Data.PreventPartitioningSoftLimitTableReaders = val
+}
