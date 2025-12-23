@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/spf13/pflag"
-	"go.yaml.in/yaml/v4"
 )
 
 // FKRef is a struct that holds the foreign key reference information for the Placeholder struct.
@@ -234,7 +233,7 @@ func (w *workloadGenerator) initializeGenerator() error {
 
 // writeSchemaToFile writes the workload schema to a YAML file in the output directory.
 func (w *workloadGenerator) writeSchemaToFile() error {
-	data, err := yaml.Marshal(w.workloadSchema)
+	data, err := yamlutil.Marshal(w.workloadSchema)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal workload schema to YAML")
 	}

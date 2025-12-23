@@ -37,10 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v4"
 )
 
 func init() {
@@ -269,7 +269,7 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 			}
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
-			data, err := yaml.Marshal(opMap)
+			data, err := yamlutil.Marshal(opMap)
 			require.NoError(t, err)
 			stageOps += fmt.Sprintf("%T\n%s", op, indentText(string(data), "  "))
 		}

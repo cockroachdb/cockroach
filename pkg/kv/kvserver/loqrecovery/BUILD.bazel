@@ -125,6 +125,5 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
-        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )

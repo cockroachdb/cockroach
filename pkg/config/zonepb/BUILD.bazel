@@ -46,7 +46,6 @@ go_test(
         "//pkg/util/yamlutil",
         "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
-        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

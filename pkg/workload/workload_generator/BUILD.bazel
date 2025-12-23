@@ -33,7 +33,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
         "@com_github_spf13_pflag//:pflag",
-        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	yaml "go.yaml.in/yaml/v4"
 )
 
 func TestZoneConfigValidate(t *testing.T) {
@@ -833,12 +832,12 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 			original.Constraints = tc.constraints
 			original.VoterConstraints = tc.voterConstraints
 			original.LeasePreferences = tc.leasePreferences
-			body, err := yaml.Marshal(original)
+			body, err := yamlutil.Marshal(original)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if string(body) != tc.expected {
-				t.Fatalf("yaml.Marshal(%+v)\ngot:\n%s\nwant:\n%s", original, body, tc.expected)
+				t.Fatalf("yamlutil.Marshal(%+v)\ngot:\n%s\nwant:\n%s", original, body, tc.expected)
 			}
 
 			var unmarshaled ZoneConfig

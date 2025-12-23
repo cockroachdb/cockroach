@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"go.yaml.in/yaml/v4"
 )
 
 // DecorateErrorWithPlanDetails adds plan graphviz URLs as error details.
@@ -280,7 +280,7 @@ func explainOpBodyVerbose(op scop.Op) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	yml, err := yaml.Marshal(opMap)
+	yml, err := yamlutil.Marshal(opMap)
 	if err != nil {
 		return "", err
 	}

@@ -38,11 +38,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v4"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -619,7 +619,7 @@ func TestLockTableBasic(t *testing.T) {
 
 			case "metrics":
 				metrics := lt.Metrics()
-				b, err := yaml.Marshal(&metrics)
+				b, err := yamlutil.Marshal(&metrics)
 				if err != nil {
 					d.Fatalf(t, "marshaling metrics: %v", err)
 				}

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"go.yaml.in/yaml/v4"
 )
 
 func TestDenyListFileParsing(t *testing.T) {
@@ -156,7 +155,7 @@ denylist:
 			},
 		}
 
-		raw, err := yaml.Marshal(file)
+		raw, err := yamlutil.Marshal(file)
 		require.NoError(t, err)
 		deserialized, err := Deserialize[DenylistFile](bytes.NewBuffer(raw))
 		require.NoError(t, err)

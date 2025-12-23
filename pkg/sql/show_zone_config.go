@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	yaml "go.yaml.in/yaml/v4"
 )
@@ -290,7 +291,7 @@ func generateZoneConfigIntrospectionValues(
 	}
 
 	// Populate the YAML column.
-	yamlConfig, err := yaml.Marshal(zone)
+	yamlConfig, err := yamlutil.Marshal(zone)
 	if err != nil {
 		return err
 	}
@@ -321,7 +322,7 @@ func generateZoneConfigIntrospectionValues(
 		inheritedConfig = zone
 	}
 
-	yamlConfig, err = yaml.Marshal(inheritedConfig)
+	yamlConfig, err = yamlutil.Marshal(inheritedConfig)
 	if err != nil {
 		return err
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
-	"go.yaml.in/yaml/v4"
 )
 
 // extractGroups parses a yaml file located at the given path,
@@ -81,7 +80,7 @@ func main() {
 				},
 			}
 
-			outBytes, err := yaml.Marshal(output)
+			outBytes, err := yamlutil.Marshal(output)
 			if err != nil {
 				return err
 			}
