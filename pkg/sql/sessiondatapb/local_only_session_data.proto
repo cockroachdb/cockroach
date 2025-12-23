@@ -690,6 +690,10 @@ message LocalOnlySessionData {
   // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
   // optimizer should use max frequency for selectivity estimation.
   bool optimizer_use_max_frequency_selectivity = 191;
+  // DistSQLPreventPartitioningSoftLimitedScans, when true, prevents the distsql
+  // physical planner from partitioning scans with soft limits into multiple
+  // TableReaders. When true, this matches the behavior for hard limits.
+  bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
