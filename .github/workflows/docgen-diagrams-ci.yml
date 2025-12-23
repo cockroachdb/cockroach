@@ -50,7 +50,7 @@ jobs:
   generate-diagrams:
     needs: check-label
     if: needs.check-label.outputs.should_run == 'true'
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       diagrams_changed: ${{ steps.check-changes.outputs.changed }}
@@ -67,8 +67,17 @@ jobs:
       - name: Compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
 
-      - name: Get EngFlow keys
-        run: ./build/github/get-engflow-keys.sh
+      - name: Setup Bazel
+        run: |
+          echo "Installing Bazelisk..."
+          curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o bazelisk
+          chmod +x bazelisk
+          sudo mv bazelisk /usr/local/bin/bazel
+          bazel version
+
+      # Skip EngFlow keys for fork (not needed for GitHub-hosted runners)
+      # - name: Get EngFlow keys
+      #   run: ./build/github/get-engflow-keys.sh
 
       - name: Generate BNF files
         id: generate-bnf
@@ -231,9 +240,10 @@ jobs:
           path: artifacts/diagrams/
           retention-days: 30
 
-      - name: Clean up EngFlow keys
-        if: always()
-        run: ./build/github/cleanup-engflow-keys.sh
+      # Skip EngFlow cleanup for fork
+      # - name: Clean up EngFlow keys
+      #   if: always()
+      #   run: ./build/github/cleanup-engflow-keys.sh
 
   sync-to-generated-diagrams:
     needs: generate-diagrams
