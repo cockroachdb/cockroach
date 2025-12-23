@@ -3467,7 +3467,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_location: specify a different path to store the incremental backup
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
@@ -3577,10 +3576,6 @@ backup_options:
 | KMS '=' string_or_placeholder_opt_list
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
-  }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-  {
-    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
 | EXECUTION LOCALITY '=' string_or_placeholder
   {

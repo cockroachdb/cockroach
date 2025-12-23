@@ -428,7 +428,6 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
-	const incrementalBackupLocation = "nodelocal://1/inc-full-backup"
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
@@ -437,8 +436,8 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, "CREATE USER maxroach1")
 
-	sqlDB.Exec(t, `BACKUP INTO $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
-	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	checkQuery := "SELECT * FROM system.users"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))

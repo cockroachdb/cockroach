@@ -54,7 +54,7 @@ CREATE TABLE data.sc.t2 (a data.welcome);
 `,
 		`;`)...)
 
-	const full, inc = localFoo + "/full", localFoo + "/inc"
+	const full = localFoo + "/full"
 
 	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
@@ -88,10 +88,10 @@ ORDER BY object_type, object_name`, full)
 	// Backup the changes by appending to the base and by making a separate
 	// inc backup.
 	incTS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s' WITH incremental_location = $2`, incTS), full, inc)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, incTS), full)
 
 	// Check the appended base backup.
-	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP FROM LATEST IN $1 WITH incremental_location = $2]`, full, inc)
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP FROM LATEST IN $1]`, full)
 	require.Equal(t, [][]string{
 		// Full.
 		{"data", "full", "NULL", beforeTS, "NULL", "false"},
@@ -120,10 +120,10 @@ ORDER BY object_type, object_name`, full)
 
 	// Backup the changes again, by making a new inc backup.
 	inc2TS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s' WITH incremental_location = $2`, inc2TS), full, inc)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, inc2TS), full)
 
 	// Check the backup.
-	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP FROM LATEST IN $1 WITH incremental_location = $2] WHERE object_type='table'`, full, inc)
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP FROM LATEST IN $1] WHERE object_type='table'`, full)
 	require.Equal(t, [][]string{
 		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts)},
 		{"t1", "full", "NULL", beforeTS, "0"},
@@ -312,8 +312,7 @@ ORDER BY object_type, object_name`, full)
 			t.Fatal("expected show backup to indicate that backup was full cluster")
 		}
 
-		fullClusterInc := localFoo + "/full_cluster_inc"
-		sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH incremental_location = $2;`, fullCluster, fullClusterInc)
+		sqlDB.Exec(t, `BACKUP INTO LATEST IN $1;`, fullCluster)
 
 		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP FROM LATEST IN '%s']`, fullCluster))
 		isFullCluster = showBackupRows[0][0]
@@ -435,7 +434,6 @@ func TestShowBackups(t *testing.T) {
 	defer cleanupEmptyCluster()
 
 	const full = localFoo + "/full"
-	const remoteInc = localFoo + "/inc"
 
 	// Make an initial backup.
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
@@ -447,17 +445,11 @@ func TestShowBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
-	// Make a third full backup, add changes to it.
-	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
-	// Make 2 remote incremental backups, chaining to the third full backup
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
 	// assert that we see the three, and only the three, full backups.
-	require.Equal(t, 3, len(rows))
+	require.Equal(t, 2, len(rows))
 
 	// check that we can show the inc layers in the individual full backups.
 	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
@@ -465,17 +457,6 @@ func TestShowBackups(t *testing.T) {
 	b2 := sqlDBRestore.QueryStr(t,
 		`SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
 	require.Equal(t, 3, len(b2))
-
-	require.Equal(t,
-		sqlDBRestore.QueryStr(t, `SHOW BACKUP FROM $1 IN $2`, rows[2][0], full),
-		sqlDBRestore.QueryStr(t, `SHOW BACKUP FROM LATEST IN $1`, full),
-	)
-
-	// check that full and remote incremental backups appear
-	b3 := sqlDBRestore.QueryStr(t,
-		`SELECT * FROM [SHOW BACKUP FROM LATEST IN $1 WITH incremental_location = $2 ] WHERE object_type ='table'`, full, remoteInc)
-	require.Equal(t, 3, len(b3))
-
 }
 
 func TestShowNonDefaultBackups(t *testing.T) {
@@ -487,11 +468,9 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	defer cleanupFn()
 
 	const full = localFoo + "/full"
-	const remoteInc = localFoo + "/inc"
 
 	// Make an initial backup.
 	fullNonDefault := full + "NonDefault"
-	incNonDefault := remoteInc + "NonDefault"
 	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, fullNonDefault)
 
 	// Get base number of files, schemas, and ranges in the backup
@@ -507,7 +486,6 @@ func TestShowNonDefaultBackups(t *testing.T) {
 	// Increase the number of files,schemas, and ranges that will be in the backup chain
 	sqlDB.Exec(t, `CREATE TABLE data.blob (a INT PRIMARY KEY); INSERT INTO data.blob VALUES (0)`)
 	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, fullNonDefault)
-	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH incremental_location=$2`, fullNonDefault, incNonDefault)
 
 	// Show backup should contain more rows as new files/schemas/ranges were
 	// added in the incremental backup
@@ -517,12 +495,6 @@ func TestShowNonDefaultBackups(t *testing.T) {
 		newCount, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
 		require.NoError(t, err, "error converting new count to integer")
 		require.Greater(t, newCount, oldCount[i])
-
-		queryInc := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s' WITH incremental_location='%s']`, typ,
-			fullNonDefault, incNonDefault)
-		newCountInc, err := strconv.Atoi(sqlDB.QueryStr(t, queryInc)[0][0])
-		require.NoError(t, err, "error converting new count to integer")
-		require.Greater(t, newCountInc, oldCount[i])
 	}
 }
 
@@ -716,12 +688,10 @@ func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 }
 
 // TestShowBackupCheckFiles verifies the check_files option catches a corrupt
-// backup file in 3 scenarios: 1. SST from a full backup; 2. SST from a default
-// incremental backup; 3. SST from an incremental backup created with the
-// incremental_location parameter. The first two scenarios also get checked with
-// locality aware backups. The test also sanity checks the new file_bytes column
-// in SHOW BACKUP with check_files, which displays the physical size of each
-// table in the backup.
+// backup file in 2 scenarios: 1. SST from a full backup; 2. SST from a default
+// incremental backup. The two scenarios also get checked with locality aware
+// backups. The test also sanity checks the new file_bytes column in SHOW BACKUP
+// with check_files, which displays the physical size of each table in the backup.
 func TestShowBackupCheckFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -733,9 +703,7 @@ func TestShowBackupCheckFiles(t *testing.T) {
 	defer cleanupFn()
 
 	collectionRoot := "full"
-	incLocRoot := "inc"
 	const c1, c2, c3 = `nodelocal://1/full`, `nodelocal://2/full`, `nodelocal://3/full`
-	const i1, i2, i3 = `nodelocal://1/inc`, `nodelocal://2/inc`, `nodelocal://3/inc`
 	localities := []string{"default", "dc=dc1", "dc=dc2"}
 
 	collections := []string{
@@ -744,18 +712,12 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c3, url.QueryEscape(localities[2])),
 	}
 
-	incrementals := []string{
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i1, url.QueryEscape(localities[0])),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i2, url.QueryEscape(localities[1])),
-		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", i3, url.QueryEscape(localities[2])),
-	}
 	tests := []struct {
 		dest       []string
-		inc        []string
 		localities []string
 	}{
-		{dest: []string{collections[0]}, inc: []string{incrementals[0]}},
-		{dest: collections, inc: incrementals, localities: localities},
+		{dest: []string{collections[0]}},
+		{dest: collections, localities: localities},
 	}
 
 	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
@@ -763,11 +725,9 @@ func TestShowBackupCheckFiles(t *testing.T) {
 
 	for _, test := range tests {
 		dest := strings.Join(test.dest, ", ")
-		inc := strings.Join(test.inc, ", ")
 
 		if len(test.dest) > 1 {
 			dest = "(" + dest + ")"
-			inc = "(" + inc + ")"
 		}
 
 		for i := 0; i < 10; i++ {
@@ -777,9 +737,6 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		sqlDB.Exec(t, fb)
 
 		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
-
-		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_location = %s", dest, inc)
-		sqlDB.Exec(t, sib)
 
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest))
 
@@ -868,15 +825,5 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		sqlDB.CheckQueryResults(t,
 			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FROM LATEST IN %s with check_files]`, dest),
 			fileSum)
-
-		if len(test.dest) == 1 {
-			// Break on an incremental backup stored at incremental_location.
-			fileInfo := sqlDB.QueryStr(t,
-				fmt.Sprintf(`SELECT path, locality FROM [SHOW BACKUP FILES FROM LATEST IN %s WITH incremental_location = %s]`,
-					dest, inc))
-
-			incCheckQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files, incremental_location = %s`, dest, inc)
-			breakCheckFiles(incLocRoot, test.inc, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], incCheckQuery)
-		}
 	}
 }

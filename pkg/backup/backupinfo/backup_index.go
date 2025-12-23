@@ -342,12 +342,13 @@ func shouldWriteIndex(
 		return false, nil
 	}
 
-	// As we are going to be deprecating the `incremental_location` option, we
-	// will avoid writing an index for any backups that specify an `incremental`
-	// location. Note that if `incremental_location` is explicitly set to the
-	// default location, then we will have some backups containing an index and
-	// others not. We are treating this as an unsupported state and the user
-	// should not use `incremental_location` in this manner.
+	// While `incremental_location` has been removed in 26.2, we still need to
+	// keep this check for one major version. A backup with custom incremental
+	// locations could be started on a 25.4 node, then the cluster could be
+	// upgraded and the job dropped. It could then be picked up by a 26.2 node. If
+	// this check were removed, we'd end up writing an index for a backup with a
+	// custom incremental location.
+	// TODO (kev-cao): Remove this check in v26.4.
 	if len(details.Destination.IncrementalStorage) != 0 {
 		return false, nil
 	}
