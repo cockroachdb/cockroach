@@ -964,6 +964,9 @@ func NewBatchAt(b storage.Batch, spans *SpanSet, ts hlc.Timestamp) storage.Batch
 
 // DisableReaderAssertions unwraps any storage.Reader implementations that may
 // assert access against a given SpanSet.
+// TODO(ibrahim): Eventually we want to eliminate all the users of these generic
+// disable functions, and use the specific disable functions
+// (DisableUndeclaredSpanAssertions or DisableForbiddenSpanAssertions).
 func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 	switch v := reader.(type) {
 	case ReadWriter:
@@ -975,10 +978,32 @@ func DisableReaderAssertions(reader storage.Reader) storage.Reader {
 	}
 }
 
+// DisableWriterAssertions unwraps any storage.Writer implementations that may
+// assert access against a given SpanSet.
+// TODO(ibrahim): Eventually we want to eliminate all the users of these generic
+// disable functions, and use the specific disable functions
+// (DisableUndeclaredSpanAssertions or DisableForbiddenSpanAssertions).
+func DisableWriterAssertions(writer storage.Writer) storage.Writer {
+	switch v := writer.(type) {
+	case spanSetWriter:
+		return DisableWriterAssertions(v.w)
+	case *spanSetWriteBatch:
+		return DisableWriterAssertions(v.spanSetWriter.w)
+	case *spanSetBatch:
+		return DisableWriterAssertions(v.spanSetWriter.w)
+	default:
+		return writer
+	}
+}
+
 // DisableReadWriterAssertions unwraps any storage.ReadWriter implementations
 // that may assert access against a given SpanSet.
+// TODO(ibrahim): Eventually we want to eliminate all the users of these generic
+// disable functions, and use the specific disable functions
+// (DisableUndeclaredSpanAssertions or DisableForbiddenSpanAssertions).
 func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	// TODO(ibrahim): fix the case where one case is a pointer and the other is not.
 	case ReadWriter:
 		return DisableReadWriterAssertions(v.spanSetWriter.w.(storage.ReadWriter))
 	case *spanSetBatch:
@@ -995,9 +1020,18 @@ func DisableReadWriterAssertions(rw storage.ReadWriter) storage.ReadWriter {
 func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
 	case *spanSetBatch:
-		newSnapSetBatch := v.shallowCopy()
-		newSnapSetBatch.spans.DisableUndeclaredAccessAssertions()
-		return newSnapSetBatch
+		newSpanSetBatch := v.shallowCopy()
+		newSpanSetBatch.spans.DisableUndeclaredAccessAssertions()
+
+		// Recursively disable on the underlying batch in case there are
+		// nested spanSetBatches.
+		newSpanSetBatch.b = DisableUndeclaredSpanAssertions(v.b).(storage.Batch)
+		// Update the reader and writer to point to the recursively processed batch.
+		newSpanSetBatch.spanSetReader.r = newSpanSetBatch.b
+		newSpanSetBatch.spanSetWriteBatch.spanSetWriter.w = newSpanSetBatch.b
+		newSpanSetBatch.spanSetWriteBatch.wb = newSpanSetBatch.b
+		return newSpanSetBatch
+
 	default:
 		return rw
 	}
@@ -1011,10 +1045,27 @@ func DisableUndeclaredSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 // function.
 func DisableForbiddenSpanAssertions(rw storage.ReadWriter) storage.ReadWriter {
 	switch v := rw.(type) {
+	// TODO(ibrahim): We eventually want to remove OpLoggerBatch from this switch
+	// case.
+	case *storage.OpLoggerBatch:
+		// OpLoggerBatch embeds a storage.Batch. Recursively process the inner
+		// batch and wrap it back in an OpLoggerBatch to preserve the chain.
+		innerBatch := DisableForbiddenSpanAssertions(v.Batch).(storage.Batch)
+		return v.ShallowCopyWithBatch(innerBatch)
+
 	case *spanSetBatch:
-		newSnapSetBatch := v.shallowCopy()
-		newSnapSetBatch.spans.DisableForbiddenSpansAssertions()
-		return newSnapSetBatch
+		newSpanSetBatch := v.shallowCopy()
+		newSpanSetBatch.spans.DisableForbiddenSpansAssertions()
+
+		// Recursively disable on the underlying batch in case there are
+		// nested spanSetBatches.
+		newSpanSetBatch.b = DisableForbiddenSpanAssertions(v.b).(storage.Batch)
+		// Update the reader and writer to point to the recursively processed batch.
+		newSpanSetBatch.spanSetReader.r = newSpanSetBatch.b
+		newSpanSetBatch.spanSetWriteBatch.spanSetWriter.w = newSpanSetBatch.b
+		newSpanSetBatch.spanSetWriteBatch.wb = newSpanSetBatch.b
+		return newSpanSetBatch
+
 	default:
 		return rw
 	}
