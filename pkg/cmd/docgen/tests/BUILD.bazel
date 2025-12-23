@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "tests_test",
+    srcs = ["validation_test.go"],
+    deps = [
+        "//pkg/testutils/skip",
+        "@com_github_stretchr_testify//require",
+    ],
+)
