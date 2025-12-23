@@ -754,6 +754,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) showAfterBefore() *tree.ShowAfterBefore {
+  return u.val.(*tree.ShowAfterBefore)
+}
 func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
   return u.val.(*tree.CheckExternalConnectionOptions)
 }
@@ -1481,6 +1484,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowAfterBefore> opt_show_after_before_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -9008,10 +9012,12 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_after_before_clause
  {
+
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
+      TimeRange: *$5.showAfterBefore(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -9163,6 +9169,28 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
  }
+
+opt_show_after_before_clause:
+  AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr()}
+  }
+  | BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{Before: $2.expr()}
+  }
+  | AFTER a_expr BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr(), Before: $4.expr()}
+  }
+  | BEFORE a_expr AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $4.expr(), Before: $2.expr()}
+  }
+  | /* EMPTY */
+  {
+    $$.val = &tree.ShowAfterBefore{}
+  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
