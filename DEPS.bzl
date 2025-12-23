@@ -10537,10 +10537,10 @@ def go_deps():
         name = "in_yaml_go_yaml_v4",
         build_file_proto_mode = "disable_global",
         importpath = "go.yaml.in/yaml/v4",
-        sha256 = "d5ca6a029979bc52760f17ed1a9393637a46095b9e0e8f504f1dc5d70ece46ac",
-        strip_prefix = "go.yaml.in/yaml/v4@v4.0.0-rc.3",
+        sha256 = "c92d4caf7e9f95eabad6d85777ace67dcf9cbe5b53ece5deb7da3a638728c848",
+        strip_prefix = "go.yaml.in/yaml/v4@v4.0.0-rc.3.0.20251222200925-3467d58aa2a0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/go.yaml.in/yaml/v4/in_yaml_go_yaml_v4-v4.0.0-rc.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/go.yaml.in/yaml/v4/in_yaml_go_yaml_v4-v4.0.0-rc.3.0.20251222200925-3467d58aa2a0.zip",
         ],
     )
     go_repository(

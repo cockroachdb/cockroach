@@ -251,7 +251,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.17.0
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
-	go.yaml.in/yaml/v4 v4.0.0-rc.3
+	go.yaml.in/yaml/v4 v4.0.0-rc.3.0.20251222200925-3467d58aa2a0
 	golang.org/x/perf v0.0.0-20251112180420-cfbd823f7301
 	golang.org/x/term v0.37.0
 	gonum.org/v1/gonum v0.15.1
