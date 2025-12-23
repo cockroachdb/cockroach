@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -152,10 +153,22 @@ func createCompactionPlan(
 		return nil, nil, errors.Wrap(err, "counting number of restore span entries")
 	}
 
-	// TODO (kev-cao): Add support for execution locality.
+	evalCtx := execCtx.ExtendedEvalContext()
+	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
+	oracle := physicalplan.DefaultReplicaChooser
+	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
+			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			locFilter,
+		)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+		}
+	}
+
 	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
-		physicalplan.DefaultReplicaChooser, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
+		ctx, evalCtx, execCtx.ExecCfg(),
+		oracle, locFilter, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
 		return nil, nil, err
