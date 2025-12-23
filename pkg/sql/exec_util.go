@@ -2228,6 +2228,9 @@ type InspectTestingKnobs struct {
 	OnInspectAfterProtectedTimestamp func() error
 	// InspectIssueLogger is an override to the default issue logger.
 	InspectIssueLogger interface{}
+	// OnCheckComplete is called after a check completes. The check interface
+	// is passed to allow the callback to extract metadata (e.g., row counts).
+	OnCheckComplete func(check interface{}) error
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.

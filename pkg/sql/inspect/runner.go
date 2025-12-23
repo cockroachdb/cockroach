@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
@@ -126,6 +127,17 @@ func (c *inspectRunner) Step(
 		if err := check.Close(ctx); err != nil {
 			return false, err
 		}
+
+		if cfg != nil && cfg.ExecutorConfig != nil {
+			inspectTestingKnobs := cfg.ExecutorConfig.(*sql.ExecutorConfig).InspectTestingKnobs
+			if inspectTestingKnobs != nil && inspectTestingKnobs.OnCheckComplete != nil {
+				err := inspectTestingKnobs.OnCheckComplete(check)
+				if err != nil {
+					return false, err
+				}
+			}
+		}
+
 		c.checks = c.checks[1:]
 	}
 	return false, nil
