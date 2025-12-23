@@ -128,15 +128,24 @@ jobs:
           # Set environment variable to require railroad diagrams
           export COCKROACH_REQUIRE_RAILROAD=1
 
-          # Ensure Bazel can find the Railroad JAR
-          # Try to build with verbose output to debug if needed
-          ./dev build docs/generated/sql/bnf:svg --verbose 2>&1 | tee svg_build.log || {
-            echo "Initial build failed, trying with explicit JAR location..."
-            # If the build fails, try to help Bazel find the JAR
-            bazel build docs/generated/sql/bnf:svg \
-              --override_repository=railroadjar=external/railroadjar \
-              2>&1 | tee svg_build_retry.log
-          }
+          # Debug: Check if Railroad JAR exists
+          echo "Checking for Railroad JAR..."
+          ls -la external/railroadjar/ || echo "external/railroadjar not found"
+
+          # Try to build SVG diagrams
+          echo "Building SVG diagrams with ./dev build..."
+          ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+
+          # Check if HTML files were generated
+          echo "Checking for generated HTML files..."
+          if ls bazel-bin/docs/generated/sql/bnf/*.html 2>/dev/null; then
+            echo "✅ HTML files generated successfully!"
+            ls -la bazel-bin/docs/generated/sql/bnf/*.html | head -10
+          else
+            echo "⚠️ No HTML files found in bazel-bin/docs/generated/sql/bnf/"
+            echo "Checking other possible locations..."
+            find . -name "*.html" -path "*/bnf/*" 2>/dev/null | head -20
+          fi
 
           echo "::endgroup::"
 
