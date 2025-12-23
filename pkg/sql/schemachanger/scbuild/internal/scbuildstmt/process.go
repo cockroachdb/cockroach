@@ -200,16 +200,50 @@ func Process(b BuildCtx, n tree.Statement) {
 // `use_declarative_schema_changer`, unless `n` is forcefully enabled (or
 // disabled) via cluster setting `sql.schema.force_declarative_statements`, in
 // which case it returns `unsafe` (or `off`).
+//
+// For ALTER TABLE statements, subcommand-level force control takes precedence
+// over statement-level control. If any subcommand is force-disabled, the mode
+// is set to Off. If any subcommand is force-enabled and no subcommand is
+// force-disabled, the mode is set to Unsafe.
 func getDeclarativeSchemaChangerModeForStmt(
 	b BuildCtx, n tree.Statement,
 ) sessiondatapb.NewSchemaChangerMode {
 	ret := b.EvalCtx().SessionData().NewSchemaChangerMode
-	// Check if the feature is either forcefully enabled or disabled, via a
-	// cluster setting.
 	stmtsForceControl := getStatementsForceControl(&b.ClusterSettings().SV)
-	if forcedEnabled := stmtsForceControl.CheckControl(n); forcedEnabled {
-		ret = sessiondatapb.UseNewSchemaChangerUnsafe
+
+	// Check statement-level force control.
+	if stmtsForceControl.statements != nil {
+		stmtEnabled, stmtFound := stmtsForceControl.statements[n.StatementTag()]
+		if stmtFound && !stmtEnabled {
+			// Statement is force-disabled at statement level.
+			// For ALTER TABLE, check if any subcommand overrides this.
+			ret = sessiondatapb.UseNewSchemaChangerOff
+		} else if stmtFound && stmtEnabled {
+			ret = sessiondatapb.UseNewSchemaChangerUnsafe
+		}
 	}
+
+	// For ALTER TABLE, check subcommand-level force control.
+	// Subcommand-level controls take precedence over statement-level controls.
+	if alterTable, ok := n.(*tree.AlterTable); ok {
+		hasForceEnabled := false
+		for _, cmd := range alterTable.Cmds {
+			enabled, found := stmtsForceControl.CheckAlterTableCmdControl(cmd)
+			if found {
+				if !enabled {
+					// Any force-disabled subcommand means fall back to legacy.
+					return sessiondatapb.UseNewSchemaChangerOff
+				}
+				hasForceEnabled = true
+			}
+		}
+		// If any subcommand is force-enabled (and none are force-disabled),
+		// use declarative even if statement-level says otherwise.
+		if hasForceEnabled {
+			ret = sessiondatapb.UseNewSchemaChangerUnsafe
+		}
+	}
+
 	return ret
 }
 
