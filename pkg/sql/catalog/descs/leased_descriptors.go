@@ -98,6 +98,7 @@ type retryOnModifiedDescriptor struct {
 	descID        descpb.ID
 	expiration    hlc.Timestamp
 	readTimestamp hlc.Timestamp
+	isRenamed     bool
 	forcedErr     error
 }
 
@@ -112,8 +113,13 @@ func (r *retryOnModifiedDescriptor) Error() string {
 
 // SafeFormatError implements SafeFormatter.
 func (r *retryOnModifiedDescriptor) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("the descriptor %s(%d) has been modified at timestamp %s, which is no longer usable by the transaction's timestamp: %s",
-		r.descName, r.descID, r.expiration, r.readTimestamp)
+	changeType := "modified at"
+	if r.isRenamed {
+		changeType = "renamed before"
+	}
+	const baseMessage = "the descriptor %s(%d) has been %s timestamp %s, which is no longer usable by the transaction's timestamp: %s"
+	p.Printf(baseMessage,
+		r.descName, r.descID, changeType, r.expiration, r.readTimestamp)
 	return r.forcedErr
 }
 
