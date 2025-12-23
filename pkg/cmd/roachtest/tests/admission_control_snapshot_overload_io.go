@@ -47,6 +47,8 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				spec.VolumeSize(cfg.volumeSize),
 				spec.ReuseNone(),
 				spec.DisableLocalSSD(),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
 			),
 			Leases:  registry.MetamorphicLeases,
 			Timeout: 12 * time.Hour,

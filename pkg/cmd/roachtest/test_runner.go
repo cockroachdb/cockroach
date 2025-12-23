@@ -321,15 +321,15 @@ func (r *testRunner) Run(
 		// We should also check against the spec of the cluster, but we don't
 		// currently have a way of doing that; we're relying on the fact that attaching to the cluster
 		// will fail if the cluster is incompatible.
-		spec := tests[0].Cluster
-		spec.Lifetime = 0
+		spec1 := tests[0].Cluster
+		spec1.Lifetime = 0
 		for i := 1; i < len(tests); i++ {
 			spec2 := tests[i].Cluster
 			spec2.Lifetime = 0
-			if spec != spec2 {
+			if !spec.ClustersCompatible(spec1, spec2, roachtestflags.Cloud) {
 				return errors.Errorf("cluster specified but found tests "+
 					"with incompatible specs: %s (%s) - %s (%s)",
-					tests[0].Name, spec, tests[i].Name, spec2,
+					tests[0].Name, spec1, tests[i].Name, spec2,
 				)
 			}
 		}
@@ -2197,6 +2197,12 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 	if spec.Cluster.Arch != "" {
 		clusterParams["arch"] = string(spec.Cluster.Arch)
 	}
+
+	// Include cluster spec metamorphic test parameters.
+	for k, v := range spec.Cluster.GetMetamorphicInfo() {
+		clusterParams[k] = v
+	}
+
 	// These params can be probabilistically set, so we pass them here to
 	// show what their actual values are in the posted issue.
 	if createOpts != nil {
