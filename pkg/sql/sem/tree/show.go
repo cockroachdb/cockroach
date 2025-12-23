@@ -100,6 +100,7 @@ type ShowBackup struct {
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
+	TimeRange    ShowBeforeAfter
 }
 
 // Format implements the NodeFormatter interface.
@@ -107,6 +108,10 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
+		if !node.TimeRange.IsDefault() {
+			ctx.WriteString(" ")
+			ctx.FormatNode(&node.TimeRange)
+		}
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
@@ -133,6 +138,34 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Options)
 		ctx.WriteString(")")
 	}
+}
+
+// ShowBeforeAfter represents the BEFORE <expr> AFTER <expr> option for
+// SHOW BACKUPS.
+type ShowBeforeAfter struct {
+	Before Expr
+	After  Expr
+}
+
+var _ NodeFormatter = &ShowBeforeAfter{}
+
+func (s *ShowBeforeAfter) Format(ctx *FmtCtx) {
+	if s.Before != nil {
+		ctx.WriteString("BEFORE ")
+		ctx.FormatNode(s.Before)
+	}
+
+	if s.After != nil {
+		if s.Before != nil {
+			ctx.WriteString(" ")
+		}
+		ctx.WriteString("AFTER ")
+		ctx.FormatNode(s.After)
+	}
+}
+
+func (s *ShowBeforeAfter) IsDefault() bool {
+	return s.Before == nil && s.After == nil
 }
 
 type ShowBackupOptions struct {

@@ -150,6 +150,58 @@ SHOW BACKUPS IN $1 -- literals removed
 SHOW BACKUPS IN $1 -- identifiers removed
 
 parse
+SHOW BACKUPS IN 'bar' BEFORE '1'
+----
+SHOW BACKUPS IN '*****' BEFORE '1' -- normalized!
+SHOW BACKUPS IN ('*****') BEFORE ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' BEFORE '_' -- literals removed
+SHOW BACKUPS IN '*****' BEFORE '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' BEFORE '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' AFTER '1'
+----
+SHOW BACKUPS IN '*****' AFTER '1' -- normalized!
+SHOW BACKUPS IN ('*****') AFTER ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' AFTER '_' -- literals removed
+SHOW BACKUPS IN '*****' AFTER '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' AFTER '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' BEFORE '1' AFTER '2'
+----
+SHOW BACKUPS IN '*****' BEFORE '1' AFTER '2' -- normalized!
+SHOW BACKUPS IN ('*****') BEFORE ('1') AFTER ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' BEFORE '_' AFTER '_' -- literals removed
+SHOW BACKUPS IN '*****' BEFORE '1' AFTER '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' BEFORE '1' AFTER '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' AFTER '2' BEFORE '1'
+----
+SHOW BACKUPS IN '*****' BEFORE '1' AFTER '2' -- normalized!
+SHOW BACKUPS IN ('*****') BEFORE ('1') AFTER ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' BEFORE '_' AFTER '_' -- literals removed
+SHOW BACKUPS IN '*****' BEFORE '1' AFTER '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' BEFORE '1' AFTER '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 BEFORE $2 AFTER $3
+----
+SHOW BACKUPS IN $1 BEFORE $2 AFTER $3
+SHOW BACKUPS IN ($1) BEFORE ($2) AFTER ($3) -- fully parenthesized
+SHOW BACKUPS IN $1 BEFORE $1 AFTER $1 -- literals removed
+SHOW BACKUPS IN $1 BEFORE $2 AFTER $3 -- identifiers removed
+
+parse
+SHOW BACKUPS IN $1 AFTER $2 BEFORE $3
+----
+SHOW BACKUPS IN $1 BEFORE $3 AFTER $2 -- normalized!
+SHOW BACKUPS IN ($1) BEFORE ($3) AFTER ($2) -- fully parenthesized
+SHOW BACKUPS IN $1 BEFORE $1 AFTER $1 -- literals removed
+SHOW BACKUPS IN $1 BEFORE $3 AFTER $2 -- identifiers removed
+
+parse
 SHOW BACKUP 'foo' IN 'bar'
 ----
 SHOW BACKUP 'foo' IN '*****' -- normalized!
