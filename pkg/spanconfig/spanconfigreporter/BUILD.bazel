@@ -30,6 +30,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":spanconfigreporter",
+        "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/liveness/livenesspb",
