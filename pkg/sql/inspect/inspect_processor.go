@@ -236,16 +236,15 @@ func getProcessorConcurrency(flowCtx *execinfra.FlowCtx) int {
 }
 
 // getInspectLogger returns a logger bundle for the inspect processor.
-func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) *inspectLoggerBundle {
-	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+func getInspectLogger(execCfg *sql.ExecutorConfig, jobID jobspb.JobID) *inspectLoggerBundle {
 	metrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
 
 	loggers := []inspectLogger{
 		&logSink{},
 		&tableSink{
-			db:    flowCtx.Cfg.DB,
+			db:    execCfg.DistSQLSrv.DB,
 			jobID: jobID,
-			sv:    &flowCtx.Cfg.Settings.SV,
+			sv:    &execCfg.Settings.SV,
 		},
 		&metricsLogger{
 			issuesFoundCtr: metrics.IssuesFound,
@@ -461,17 +460,15 @@ func (p *inspectProcessor) pushProgressMeta(
 func newInspectProcessor(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, processorID int32, spec execinfrapb.InspectSpec,
 ) (execinfra.Processor, error) {
-	checkFactories, err := buildInspectCheckFactories(flowCtx, spec)
+	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+
+	checkFactories, err := buildInspectCheckFactories(execCfg, spec)
 	if err != nil {
 		return nil, err
 	}
-	var spansProcessedCtr *metric.Counter
-	var numActiveSpansGauge *metric.Gauge
-	if execCfg, ok := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig); ok {
-		inspectMetrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
-		spansProcessedCtr = inspectMetrics.SpansProcessed
-		numActiveSpansGauge = inspectMetrics.NumActiveSpans
-	}
+	inspectMetrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
+	spansProcessedCtr := inspectMetrics.SpansProcessed
+	numActiveSpansGauge := inspectMetrics.NumActiveSpans
 
 	return &inspectProcessor{
 		spec:                spec,
@@ -480,7 +477,7 @@ func newInspectProcessor(
 		checkFactories:      checkFactories,
 		cfg:                 flowCtx.Cfg,
 		spanSrc:             newSliceSpanSource(spec.Spans),
-		loggerBundle:        getInspectLogger(flowCtx, spec.JobID),
+		loggerBundle:        getInspectLogger(execCfg, spec.JobID),
 		concurrency:         getProcessorConcurrency(flowCtx),
 		clock:               flowCtx.Cfg.DB.KV().Clock(),
 		spansProcessedCtr:   spansProcessedCtr,
@@ -495,7 +492,7 @@ func newInspectProcessor(
 // This indirection ensures that each check instance is freshly created per span,
 // avoiding shared state across concurrent workers.
 func buildInspectCheckFactories(
-	flowCtx *execinfra.FlowCtx, spec execinfrapb.InspectSpec,
+	execCfg *sql.ExecutorConfig, spec execinfrapb.InspectSpec,
 ) ([]inspectCheckFactory, error) {
 	checkFactories := make([]inspectCheckFactory, 0, len(spec.InspectDetails.Checks))
 	for _, specCheck := range spec.InspectDetails.Checks {
@@ -509,7 +506,7 @@ func buildInspectCheckFactories(
 					indexConsistencyCheckApplicability: indexConsistencyCheckApplicability{
 						tableID: tableID,
 					},
-					flowCtx:      flowCtx,
+					execCfg:      execCfg,
 					indexID:      indexID,
 					tableVersion: tableVersion,
 					asOf:         asOf,
