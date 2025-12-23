@@ -94,8 +94,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	if util.RaceEnabled {
 		spans := g.LatchSpans()
-		spans.AddForbiddenMatcher(overlapsUnreplicatedRangeIDLocalKeys)
-		spans.AddForbiddenMatcher(overlapsStoreLocalKeys)
+		spans.AddForbiddenMatcher(validateIsStateEngineSpan)
 		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}
 	defer rw.Close()
