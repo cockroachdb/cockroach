@@ -112,12 +112,9 @@ func (a kvAuth) unaryDRPCInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
-		// Clear any leftover incoming DRPC metadata, if this call is
+		// Clear any leftover incoming RPC metadata, if this call is
 		// originating from a RPC handler function called as a result of a
 		// tenant call. See unaryInterceptor for more details.
-		// The incoming context could also have grpc metadata
-		// since the drpc framework duplicates metadata to both grpc and
-		// drpc (Ref: https://github.com/cockroachdb/drpc/pull/22).
 		ctx = grpcutil.ClearIncomingContext(ctx)
 
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, req); err != nil {

@@ -275,8 +275,6 @@ func makeStopperInterceptors(
 func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DRPCServer, error) {
 	d := &drpcServer{}
 
-	// enable grpc compabitility for metadata
-
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -353,7 +351,9 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		// as happens with AddSSTable) the RPCs fail.
 		Manager: drpcmanager.Options{Reader: drpcwire.
 			ReaderOptions{MaximumBufferSize: math.MaxInt},
-			GrpcMetadataCompatMode: true},
+			// enable grpc compabitility for metadata
+			GrpcMetadataCompatMode: true
+		},
 	})
 	d.Mux = mux
 
