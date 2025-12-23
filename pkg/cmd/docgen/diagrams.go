@@ -355,7 +355,7 @@ var specs = []stmtSpec{
 		name:    "add_constraint",
 		stmt:    "alter_onetable_stmt",
 		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ADD' 'CONSTRAINT' constraint_name constraint_elem opt_validate_behavior"},
-		unlink:  []string{"table_name"},
+		unlink:  []string{"table_name", "constraint_name"},
 	},
 	{
 		name: "alter_backup",
