@@ -622,12 +622,14 @@ func RenameColumnInTable(
 			return err
 		}
 		if !canBeRenamed {
-			return nil
+			continue
 		}
 		// Recursively rename the shard column.
 		// We don't need to worry about deeper than one recursive call because
 		// shard columns cannot refer to each other.
-		return RenameColumnInTable(tableDesc, shardCol, newShardColName, nil /* isShardColumnRenameable */)
+		if err := RenameColumnInTable(tableDesc, shardCol, newShardColName, nil /* isShardColumnRenameable */); err != nil {
+			return err
+		}
 	}
 
 	return nil
