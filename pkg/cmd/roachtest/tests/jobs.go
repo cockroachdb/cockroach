@@ -76,7 +76,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Because this roachtest spins up and pauses/cancels 5k changefeed jobs
 	// really quickly, run the adopt interval which by default only runs every 30s
 	// and adopts 10 jobs at a time.
-	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='15s'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='5s'")
 
 	rng, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("Rand seed: %d", seed)
