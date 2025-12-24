@@ -282,6 +282,7 @@ func makeProcessor(
 		concurrency:    concurrency,
 		clock:          clock,
 	}
+
 	return proc, logger
 }
 
