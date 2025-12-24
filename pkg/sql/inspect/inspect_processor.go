@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -94,7 +97,12 @@ type inspectProcessor struct {
 	concurrency       int
 	clock             *hlc.Clock
 	spansProcessedCtr *metric.Counter
-	mu                struct {
+
+	// testingPTSProtector is an optional override for testing. If set, it is
+	// called instead of the real PTS protection logic in tryProtectTimestampForSpan.
+	testingPTSProtector func(ctx context.Context, ts hlc.Timestamp) (jobsprotectedts.Cleaner, error)
+
+	mu struct {
 		// Guards calls to output.Push because DistSQLReceiver.Push is not
 		// concurrency safe and progress metadata can be emitted from multiple
 		// worker goroutines.
@@ -267,6 +275,20 @@ func (p *inspectProcessor) processSpan(
 ) (err error) {
 	asOfToUse := p.getTimestampForSpan()
 
+	// If using "now" AOST, set up protected timestamp to prevent GC during
+	// long-running span processing.
+	if p.spec.InspectDetails.AsOf.IsEmpty() {
+		cleaner, cleanerErr := p.tryProtectTimestampForSpan(ctx, asOfToUse)
+		if cleanerErr != nil {
+			return cleanerErr
+		}
+		defer func() {
+			if cleanupErr := cleaner(ctx); cleanupErr != nil {
+				err = errors.CombineErrors(err, cleanupErr)
+			}
+		}()
+	}
+
 	// Only create checks that apply to this span.
 	var checks []inspectCheck
 	for _, factory := range p.checkFactories {
@@ -360,6 +382,69 @@ func (p *inspectProcessor) getTimestampForSpan() hlc.Timestamp {
 		return p.clock.Now()
 	}
 	return p.spec.InspectDetails.AsOf
+}
+
+// tryProtectTimestampForSpan sets up protected timestamp protection for the
+// tables involved in this span's checks. Uses TryToProtectBeforeGC which waits
+// until 80% of the GC TTL has elapsed before creating a PTS, avoiding
+// unnecessary PTS creation for quick operations. Returns a cleaner function
+// that must be called when span processing is complete.
+func (p *inspectProcessor) tryProtectTimestampForSpan(
+	ctx context.Context, tsToProtect hlc.Timestamp,
+) (jobsprotectedts.Cleaner, error) {
+	// Allow tests to override the PTS protection logic.
+	if p.testingPTSProtector != nil {
+		return p.testingPTSProtector(ctx, tsToProtect)
+	}
+
+	execCfg, ok := p.flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	if !ok || execCfg == nil {
+		// If ExecutorConfig is not available (e.g., in unit tests that don't set
+		// testingPTSProtector), skip PTS protection.
+		log.Dev.Warningf(ctx, "cannot apply protected timestamp in INSPECT processor job=%d", p.spec.JobID)
+		return func(ctx context.Context) error { return nil }, nil
+	}
+
+	// Load the job object - TryToProtectBeforeGC requires it.
+	job, err := execCfg.JobRegistry.LoadJob(ctx, p.spec.JobID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load job for INSPECT span protection")
+	}
+
+	// Collect table IDs and load descriptors - we need at least one for
+	// TryToProtectBeforeGC. TryToProtectBeforeGC only takes a single table
+	// descriptor, so we call it for each table and combine the cleaners.
+	var tableIDSet catalog.DescriptorIDSet
+	for _, check := range p.spec.InspectDetails.Checks {
+		tableIDSet.Add(check.TableID)
+	}
+
+	var cleaners []jobsprotectedts.Cleaner
+	err = execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		for _, tableID := range tableIDSet.Ordered() {
+			tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+			if err != nil {
+				return err
+			}
+			cleaner := execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, job, tableDesc, tsToProtect)
+			cleaners = append(cleaners, cleaner)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to set up PTS protection for INSPECT span")
+	}
+
+	// Return a combined cleaner that cleans up all protections.
+	return func(ctx context.Context) error {
+		var combinedErr error
+		for _, cleaner := range cleaners {
+			if cleanerErr := cleaner(ctx); cleanerErr != nil {
+				combinedErr = errors.CombineErrors(combinedErr, cleanerErr)
+			}
+		}
+		return combinedErr
+	}, nil
 }
 
 // sendSpanCompletionProgress sends progress indicating a span has been completed.
