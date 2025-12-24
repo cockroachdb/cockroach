@@ -560,7 +560,7 @@ func Open(
 	var cfg engineConfig
 	cfg.env = env
 	cfg.settings = settings
-	cfg.opts = DefaultPebbleOptionsForOpen(&cfg.settings.SV)
+	cfg.opts = initPebbleOptions()
 	cfg.opts.FS = env
 	cfg.opts.ReadOnly = env.IsReadOnly()
 	for _, opt := range opts {

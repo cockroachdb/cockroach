@@ -282,9 +282,8 @@ func TestAlterBackupScheduleWithSQLSpecialCharacters(t *testing.T) {
 	uri := "nodelocal://1/backup/alter ,s{hedu}e"
 
 	createCmd := fmt.Sprintf(
-		"CREATE SCHEDULE FOR BACKUP INTO '%s' WITH"+
-			" incremental_location = '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
-		uri, uri,
+		"CREATE SCHEDULE FOR BACKUP INTO '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
+		uri,
 	)
 	rows := th.sqlDB.QueryStr(t, createCmd)
 	require.Len(t, rows, 2)

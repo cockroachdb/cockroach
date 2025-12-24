@@ -241,7 +241,9 @@ func (f *RangeFeed) start(
 		// pprof.Do function does exactly what we do here, but it also results in
 		// pprof.Do function showing up in the stack traces -- so, just set and reset
 		// labels manually.
-		ctx, reset := pprofutil.SetProfilerLabels(ctx, append(f.extraPProfLabels, "rangefeed", f.name)...)
+		ctx, reset := pprofutil.SetProfilerLabels(
+			ctx, append(f.extraPProfLabels, "rangefeed", f.name)...,
+		)
 		defer reset()
 
 		if f.invoker != nil {

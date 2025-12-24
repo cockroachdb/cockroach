@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,6 +38,16 @@ func TestCrdbInternalDatumsToBytes(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+
+	if srv.DeploymentMode().IsExternal() {
+		// If we're in the external-process mode, then disable rate limiting for
+		// it (we're going to be slamming the server with many queries, and we
+		// don't want for them to be artificially delayed).
+		require.NoError(t, srv.GrantTenantCapabilities(
+			ctx, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.ExemptFromRateLimiting: "true"}))
+	}
+
 	types := []string{
 		"INT2", "INT4", "INT8",
 		"FLOAT4", "FLOAT8",

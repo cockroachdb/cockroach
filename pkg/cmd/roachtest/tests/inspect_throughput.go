@@ -213,8 +213,7 @@ func makeInspectThroughputTest(
 				t.Fatal(err)
 			}
 
-			// Enable INSPECT feature flag.
-			if _, err := db.Exec("USE bulkingest; SET enable_inspect_command = true"); err != nil {
+			if _, err := db.Exec("USE bulkingest;"); err != nil {
 				t.Fatal(err)
 			}
 

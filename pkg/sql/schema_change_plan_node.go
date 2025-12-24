@@ -296,6 +296,9 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		&execCfg.Settings.SV,
 		sessionData,
+		execCfg.Settings,
+		execCfg.JobsKnobs(),
+		execCfg.NodeInfo.LogicalClusterID(),
 	)
 	return scdeps.NewExecutorDependencies(
 		execCfg.Settings,

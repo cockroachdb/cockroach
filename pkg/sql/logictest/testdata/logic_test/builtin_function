@@ -533,8 +533,10 @@ select ascii('禅')
 ----
 31109
 
-query error the input string must not be empty
+query I
 select ascii('')
+----
+0
 
 query T
 select chr(122)

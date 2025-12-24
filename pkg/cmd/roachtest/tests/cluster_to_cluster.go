@@ -430,7 +430,7 @@ func (bo replicateBulkOps) runDriver(
 			}
 		}
 	}
-	runBackupMVCCRangeTombstones(workloadCtx, t, c, mvccRangeTombstoneConfig{
+	runBackupImportRollback(workloadCtx, t, c, importRollbackConfig{
 		skipBackupRestore: true,
 		skipClusterSetup:  true,
 		short:             bo.short,

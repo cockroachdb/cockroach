@@ -4430,6 +4430,105 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.currently_idle
+      exported_name: jobs_fingerprint_currently_idle
+      labeled_name: 'jobs{type: fingerprint, status: currently_idle}'
+      description: Number of fingerprint jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.currently_paused
+      exported_name: jobs_fingerprint_currently_paused
+      labeled_name: 'jobs{name: fingerprint, status: currently_paused}'
+      description: Number of fingerprint jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.currently_running
+      exported_name: jobs_fingerprint_currently_running
+      labeled_name: 'jobs{type: fingerprint, status: currently_running}'
+      description: Number of fingerprint jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.expired_pts_records
+      exported_name: jobs_fingerprint_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: fingerprint}'
+      description: Number of expired protected timestamp records owned by fingerprint jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.fail_or_cancel_completed
+      exported_name: jobs_fingerprint_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: fingerprint, status: completed}'
+      description: Number of fingerprint jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.fail_or_cancel_retry_error
+      exported_name: jobs_fingerprint_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: fingerprint, status: retry_error}'
+      description: Number of fingerprint jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.protected_age_sec
+      exported_name: jobs_fingerprint_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: fingerprint}'
+      description: The age of the oldest PTS record protected by fingerprint jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.protected_record_count
+      exported_name: jobs_fingerprint_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: fingerprint}'
+      description: Number of protected timestamp records held by fingerprint jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.fingerprint.resume_completed
+      exported_name: jobs_fingerprint_resume_completed
+      labeled_name: 'jobs.resume{name: fingerprint, status: completed}'
+      description: Number of fingerprint jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.resume_failed
+      exported_name: jobs_fingerprint_resume_failed
+      labeled_name: 'jobs.resume{name: fingerprint, status: failed}'
+      description: Number of fingerprint jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.fingerprint.resume_retry_error
+      exported_name: jobs_fingerprint_resume_retry_error
+      labeled_name: 'jobs.resume{name: fingerprint, status: retry_error}'
+      description: Number of fingerprint jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.currently_idle
       exported_name: jobs_history_retention_currently_idle
       labeled_name: 'jobs{type: history_retention, status: currently_idle}'
@@ -10672,12 +10771,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.nanos_exhausted_duration
       exported_name: admission_elastic_cpu_nanos_exhausted_duration
-      description: Total duration when elastic CPU nanoseconds were exhausted, in micros
+      description: Total duration (in micros) when elastic CPU tokens (tokens measured in nanoseconds) were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu.over_limit_durations
       exported_name: admission_elastic_cpu_over_limit_durations
       description: Measurement of how much over the prescribed limit elastic requests ran (not recorded if requests don't run over)
@@ -10912,7 +11011,7 @@ layers:
       derivative: NONE
     - name: admission.granter.elastic_io_tokens_exhausted_duration.kv
       exported_name: admission_granter_elastic_io_tokens_exhausted_duration_kv
-      description: Total duration when Elastic IO tokens were exhausted, in micros
+      description: Total duration (in micros) when Elastic IO tokens were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
@@ -10936,7 +11035,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.io_tokens_exhausted_duration.kv
       exported_name: admission_granter_io_tokens_exhausted_duration_kv
-      description: Total duration when IO tokens were exhausted, in micros
+      description: Total duration (in micros) when IO tokens were exhausted, as observed by the token granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
@@ -10976,7 +11075,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.slots_exhausted_duration.kv
       exported_name: admission_granter_slots_exhausted_duration_kv
-      description: Total duration when KV slots were exhausted, in micros
+      description: Total duration (in micros) when KV slots were exhausted, as observed by the slot granter (not waiters)
       y_axis_label: Microseconds
       type: COUNTER
       unit: COUNT
@@ -13129,6 +13228,192 @@ layers:
       exported_name: lockcount
       description: Count of replicated locks (shared, exclusive, and intent strength)
       y_axis_label: Locks
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.change.external.lease.failure
+      exported_name: mma_change_external_lease_failure
+      labeled_name: 'mma.change{origin: external, type: lease, result: failure}'
+      description: Number of failed external lease change operations
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.lease.success
+      exported_name: mma_change_external_lease_success
+      labeled_name: 'mma.change{origin: external, type: lease, result: success}'
+      description: Number of successful external lease change operations
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.replica.failure
+      exported_name: mma_change_external_replica_failure
+      labeled_name: 'mma.change{origin: external, type: replica, result: failure}'
+      description: Number of failed external replica change operations
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.external.replica.success
+      exported_name: mma_change_external_replica_success
+      labeled_name: 'mma.change{origin: external, type: replica, result: success}'
+      description: Number of successful external replica change operations
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.lease.failure
+      exported_name: mma_change_rebalance_lease_failure
+      labeled_name: 'mma.change{origin: rebalance, type: lease, result: failure}'
+      description: Number of failed MMA-initiated rebalance operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.lease.success
+      exported_name: mma_change_rebalance_lease_success
+      labeled_name: 'mma.change{origin: rebalance, type: lease, result: success}'
+      description: Number of successful MMA-initiated rebalance operations that transfer the lease
+      y_axis_label: Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.replica.failure
+      exported_name: mma_change_rebalance_replica_failure
+      labeled_name: 'mma.change{origin: rebalance, type: replica, result: failure}'
+      description: Number of failed MMA-initiated rebalance operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.change.rebalance.replica.success
+      exported_name: mma_change_rebalance_replica_success
+      labeled_name: 'mma.change{origin: rebalance, type: replica, result: success}'
+      description: Number of successful MMA-initiated rebalance operations that change replicas
+      y_axis_label: Range Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.dropped
+      exported_name: mma_dropped
+      description: Number of operations dropped due to MMA state inconsistency
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.external.registration.failure
+      exported_name: mma_external_registration_failure
+      description: Number of external operations that failed to register with MMA
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.external.registration.success
+      exported_name: mma_external_registration_success
+      description: Number of external operations successfully registered with MMA
+      y_axis_label: Replica/Lease Change
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.overloaded_store.lease_grace.failure
+      exported_name: mma_overloaded_store_lease_grace_failure
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: failure}'
+      description: Number of overloaded stores within lease shedding grace period for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.lease_grace.success
+      exported_name: mma_overloaded_store_lease_grace_success
+      labeled_name: 'mma.overloaded_store{type: lease_grace, result: success}'
+      description: Number of overloaded stores within lease shedding grace period for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.long_dur.failure
+      exported_name: mma_overloaded_store_long_dur_failure
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: failure}'
+      description: Number of stores overloaded for a long duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.long_dur.success
+      exported_name: mma_overloaded_store_long_dur_success
+      labeled_name: 'mma.overloaded_store{type: long_dur, result: success}'
+      description: Number of stores overloaded for a long duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.medium_dur.failure
+      exported_name: mma_overloaded_store_medium_dur_failure
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: failure}'
+      description: Number of stores overloaded for a medium duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.medium_dur.success
+      exported_name: mma_overloaded_store_medium_dur_success
+      labeled_name: 'mma.overloaded_store{type: medium_dur, result: success}'
+      description: Number of stores overloaded for a medium duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.short_dur.failure
+      exported_name: mma_overloaded_store_short_dur_failure
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: failure}'
+      description: Number of stores overloaded for a short duration for which shedding failed
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.overloaded_store.short_dur.success
+      exported_name: mma_overloaded_store_short_dur_success
+      labeled_name: 'mma.overloaded_store{type: short_dur, result: success}'
+      description: Number of stores overloaded for a short duration for which shedding succeeded
+      y_axis_label: Stores
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.span_config.normalization.error
+      exported_name: mma_span_config_normalization_error
+      labeled_name: 'mma.span_config.normalization{result: error}'
+      description: Number of ranges where the local store is leaseholder and span config normalization encountered errors. Includes both hard errors (nil conf, excluded from rebalancing) and soft errors (usable config, still rebalanced). Operators should review zone config if this metric is non-zero.
+      y_axis_label: Range
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.span_config.normalization.soft_error
+      exported_name: mma_span_config_normalization_soft_error
+      labeled_name: 'mma.span_config.normalization{result: soft_error}'
+      description: Number of ranges where the local store is leaseholder and structural span config normalization failed, but produced a best-effort usable config. Operators should fix the zone config if this metric is non-zero.
+      y_axis_label: Range
       type: GAUGE
       unit: COUNT
       aggregation: AVG
@@ -17244,6 +17529,14 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+    - name: storeliveness.heartbeat.persist_duration
+      exported_name: storeliveness_heartbeat_persist_duration
+      description: Latency of persisting Store Liveness requester meta before sending heartbeats
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.heartbeat.successes
       exported_name: storeliveness_heartbeat_successes
       description: Number of Store Liveness heartbeats sent out by the Store Liveness Support Manager
@@ -17260,6 +17553,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.message_handle.persist_duration
+      exported_name: storeliveness_message_handle_persist_duration
+      description: Latency of persisting Store Liveness state when handling incoming messages
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.message_handle.successes
       exported_name: storeliveness_message_handle_successes
       description: Number of incoming Store Liveness messages handled by the Store Liveness Support Manager
@@ -17292,6 +17593,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.support_withdraw.persist_duration
+      exported_name: storeliveness_support_withdraw_persist_duration
+      description: Latency of persisting Store Liveness state when withdrawing support
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: storeliveness.support_withdraw.successes
       exported_name: storeliveness_support_withdraw_successes
       description: Number of times the Store Liveness Support Manager has successfully withdrawn support for another store

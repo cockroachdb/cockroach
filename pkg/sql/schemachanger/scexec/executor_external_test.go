@@ -530,6 +530,18 @@ func (noopMetadataUpdater) UpdateTTLScheduleLabel(
 	return nil
 }
 
+func (u noopMetadataUpdater) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	return nil
+}
+
+func (u noopMetadataUpdater) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	return nil
+}
+
 type noopTemporarySchemaCreator struct{}
 
 var _ scexec.TemporarySchemaCreator = noopTemporarySchemaCreator{}

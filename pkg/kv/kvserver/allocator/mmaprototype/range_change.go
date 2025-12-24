@@ -20,6 +20,9 @@ import (
 // It is a partial external representation of a set of changes that are
 // internally modeled using a slice of *pendingReplicaChanges.
 type ExternalRangeChange struct {
+	origin       ChangeOrigin
+	localStoreID roachpb.StoreID
+
 	roachpb.RangeID
 	Changes []ExternalReplicaChange
 }
@@ -48,7 +51,9 @@ type ExternalReplicaChange struct {
 	ChangeType ReplicaChangeType
 }
 
-func MakeExternalRangeChange(change PendingRangeChange) ExternalRangeChange {
+func MakeExternalRangeChange(
+	origin ChangeOrigin, localStoreID roachpb.StoreID, change PendingRangeChange,
+) ExternalRangeChange {
 	changes := make([]ExternalReplicaChange, len(change.pendingReplicaChanges))
 	for i, rc := range change.pendingReplicaChanges {
 		changeType := rc.replicaChangeType()
@@ -64,8 +69,10 @@ func MakeExternalRangeChange(change PendingRangeChange) ExternalRangeChange {
 		}
 	}
 	return ExternalRangeChange{
-		RangeID: change.RangeID,
-		Changes: changes,
+		origin:       origin,
+		localStoreID: localStoreID,
+		RangeID:      change.RangeID,
+		Changes:      changes,
 	}
 }
 

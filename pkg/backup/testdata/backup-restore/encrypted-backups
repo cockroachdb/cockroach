@@ -14,9 +14,8 @@ BACKUP INTO 'nodelocal://1/full' WITH encryption_passphrase='123';
 ----
 
 exec-sql
-BACKUP INTO 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+BACKUP INTO 'nodelocal://1/full2' WITH encryption_passphrase='456';
 ----
-NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 exec-sql
 BACKUP INTO 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
@@ -41,14 +40,14 @@ public schema full
 public schema full
 
 exec-sql expect-error-regex=(file appears encrypted)
-SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
-WITH incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name);
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2']
+WHERE database_name <> 'system' ORDER BY (backup_type, object_name);
 ----
 regex matches error
 
 query-sql
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
-WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system'
+WITH encryption_passphrase='456'] WHERE database_name <> 'system'
 ORDER BY (backup_type, object_name);
 ----
 bank table full
@@ -91,9 +90,8 @@ BACKUP INTO LATEST IN 'nodelocal://1/full' WITH encryption_passphrase='123';
 ----
 
 exec-sql
-BACKUP INTO LATEST IN 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+BACKUP INTO LATEST IN 'nodelocal://1/full2' WITH encryption_passphrase='456';
 ----
-NOTICE: the incremental_location option is deprecated and will be removed in a future release
 
 exec-sql
 BACKUP INTO LATEST IN 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
@@ -120,7 +118,7 @@ public schema incremental
 
 query-sql
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
-WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system'
+WITH encryption_passphrase='456'] WHERE database_name <> 'system'
 ORDER BY (backup_type, object_name)
 ----
 bank table full
@@ -163,7 +161,7 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full' WITH new_db_name='d2', en
 ----
 
 exec-sql
-RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full2' WITH new_db_name='d3', encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full2' WITH new_db_name='d3', encryption_passphrase='456';
 ----
 
 exec-sql

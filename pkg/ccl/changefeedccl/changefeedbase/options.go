@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -109,6 +110,7 @@ const (
 	OptEnvelope                           = `envelope`
 	OptFormat                             = `format`
 	OptFullTableName                      = `full_table_name`
+	OptHibernationPollingFrequency        = `hibernation_polling_frequency`
 	OptKeyInValue                         = `key_in_value`
 	OptTopicInValue                       = `topic_in_value`
 	OptResolvedTimestamps                 = `resolved`
@@ -400,6 +402,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
 	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet", "protobuf"),
 	OptFullTableName:                      flagOption,
+	OptHibernationPollingFrequency:        durationOption,
 	OptKeyInValue:                         flagOption,
 	OptTopicInValue:                       flagOption,
 	OptResolvedTimestamps:                 durationOption.thatCanBeZero().orEmptyMeans("0"),
@@ -448,7 +451,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
-	OptRangeDistributionStrategy,
+	OptRangeDistributionStrategy, OptHibernationPollingFrequency,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -486,6 +489,22 @@ type redactionFunc func(string) (string, error)
 
 var redactSimple = func(string) (string, error) {
 	return "redacted", nil
+}
+
+// Regex from https://avro.apache.org/docs/1.8.1/spec.html.
+var avroNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateAvroSchemaPrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	if !avroNameRegexp.MatchString(prefix) {
+		return errors.Errorf(
+			`%s must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]`,
+			OptAvroSchemaPrefix,
+		)
+	}
+	return nil
 }
 
 // RedactUserFromURI takes a URI string and removes the user from it.
@@ -1218,6 +1237,20 @@ func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
 	return s.getDurationValue(OptMinCheckpointFrequency)
 }
 
+// GetHibernationPollingFrequency returns the frequency with which polling
+// should be performed while the changefeed is waiting for the tableset to be
+// non-empty.
+func (s StatementOptions) GetHibernationPollingFrequency() (*time.Duration, error) {
+	freq, err := s.getDurationValue(OptHibernationPollingFrequency)
+	if err != nil {
+		return nil, err
+	}
+	if freq != nil {
+		return freq, nil
+	}
+	return &DefaultHibernationPollingFrequency, nil
+}
+
 func (s StatementOptions) GetConfluentSchemaRegistry() string {
 	return s.m[OptConfluentSchemaRegistry]
 }
@@ -1377,6 +1410,11 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 			}
 		}
 	}
+
+	if err := validateAvroSchemaPrefix(s.m[OptAvroSchemaPrefix]); err != nil {
+		return err
+	}
+
 	return nil
 }
 

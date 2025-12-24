@@ -37,7 +37,12 @@ const (
 	POST httpMethod = http.MethodPost
 )
 
-var decoder = schema.NewDecoder()
+var decoder = func() *schema.Decoder {
+	d := schema.NewDecoder()
+	d.SetAliasTag("json")
+	d.IgnoreUnknownKeys(true)
+	return d
+}()
 
 // route defines a REST endpoint with its handler and HTTP method.
 type route struct {
@@ -93,9 +98,6 @@ func NewAPIInternalServer(
 	r.registerStatusRoutes()
 	r.registerAdminRoutes()
 	r.registerTimeSeriesRoutes()
-
-	decoder.SetAliasTag("json")
-	decoder.IgnoreUnknownKeys(true)
 
 	return r, nil
 }

@@ -329,6 +329,18 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+
+	// TTLExpirationExpression returns a validated TTL expiration expression for
+	// a table's row-level TTL configuration. It verifies that the expression:
+	// - type-checks as a TIMESTAMPTZ.
+	// - is not volatile.
+	// - references valid columns in the table.
+	TTLExpirationExpression(
+		tableID catid.DescID,
+		ttl *catpb.RowLevelTTL,
+		getAllNonDropColumnsFn func() colinfo.ResultColumns,
+		columnLookupByNameFn schemaexpr.ColumnLookupFn,
+	) tree.Expr
 }
 
 type FunctionHelpers interface {

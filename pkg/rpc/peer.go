@@ -13,6 +13,7 @@ import (
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -271,7 +272,9 @@ func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Con
 		AsyncProbe: func(report func(error), done func()) {
 			pprofutil.Do(ctx, func(ctx context.Context) {
 				p.launch(ctx, report, done)
-			}, "tags", logtags.FromContext(ctx).String())
+			},
+				workloadid.ProfileTag, workloadid.WORKLOAD_NAME_RPC_HEARTBEAT,
+				"tags", logtags.FromContext(ctx).String())
 		},
 	})
 	p.b = b

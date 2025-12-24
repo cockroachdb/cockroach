@@ -68,6 +68,14 @@ func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	}
 }
 
+// JobSchedulerEnv returns JobSchedulerEnv.
+func JobSchedulerEnv(knobs *TestingKnobs) scheduledjobs.JobSchedulerEnv {
+	if knobs != nil && knobs.JobSchedulerEnv != nil {
+		return knobs.JobSchedulerEnv
+	}
+	return scheduledjobs.ProdJobSchedulerEnv
+}
+
 // scheduledJobNotFoundError is returned from load when the scheduled job does
 // not exist.
 type scheduledJobNotFoundError struct {

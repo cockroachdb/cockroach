@@ -27,6 +27,7 @@ go_library(
         "dep_rename_constraint.go",
         "dep_rename_table.go",
         "dep_schema_locked.go",
+        "dep_storage_param.go",
         "dep_swap_index.go",
         "dep_two_version.go",
         "helpers.go",

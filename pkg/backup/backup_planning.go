@@ -45,8 +45,6 @@ const (
 	deprecatedPrivilegesRestorePreamble = "The existing privileges are being deprecated " +
 		"in favour of a fine-grained privilege model explained here " +
 		"https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run"
-
-	deprecatedIncrementalLocationMessage = "the incremental_location option is deprecated and will be removed in a future release"
 )
 
 type tableAndIndex struct {
@@ -63,7 +61,7 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic)
 
 func resolveOptionsForBackupJobDescription(
-	opts tree.BackupOptions, kmsURIs []string, incrementalStorage []string,
+	opts tree.BackupOptions, kmsURIs []string,
 ) (tree.BackupOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -75,6 +73,7 @@ func resolveOptionsForBackupJobDescription(
 		Detached:                        opts.Detached,
 		ExecutionLocality:               opts.ExecutionLocality,
 		UpdatesClusterMonitoringMetrics: opts.UpdatesClusterMonitoringMetrics,
+		Strict:                          opts.Strict,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -88,23 +87,13 @@ func resolveOptionsForBackupJobDescription(
 		return tree.BackupOptions{}, err
 	}
 
-	newOpts.IncrementalStorage, err = sanitizeURIList(incrementalStorage)
-	if err != nil {
-		return tree.BackupOptions{}, err
-	}
-
 	return newOpts, nil
 }
 
 // GetRedactedBackupNode returns a copy of the argument `backup`, but with all
 // the secret information redacted.
 func GetRedactedBackupNode(
-	backup *tree.Backup,
-	to []string,
-	kmsURIs []string,
-	resolvedSubdir string,
-	incrementalStorage []string,
-	hasBeenPlanned bool,
+	backup *tree.Backup, to []string, kmsURIs []string, resolvedSubdir string, hasBeenPlanned bool,
 ) (*tree.Backup, error) {
 	b := &tree.Backup{
 		AsOf:           backup.AsOf,
@@ -130,8 +119,7 @@ func GetRedactedBackupNode(
 		return nil, err
 	}
 
-	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs,
-		incrementalStorage)
+	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs)
 	if err != nil {
 		return nil, err
 	}
@@ -153,15 +141,9 @@ func sanitizeURIList(uris []string) ([]tree.Expr, error) {
 }
 
 func backupJobDescription(
-	p sql.PlanHookState,
-	backup *tree.Backup,
-	to []string,
-	kmsURIs []string,
-	resolvedSubdir string,
-	incrementalStorage []string,
+	p sql.PlanHookState, backup *tree.Backup, to []string, kmsURIs []string, resolvedSubdir string,
 ) (string, error) {
-	b, err := GetRedactedBackupNode(backup, to, kmsURIs,
-		resolvedSubdir, incrementalStorage, true /* hasBeenPlanned */)
+	b, err := GetRedactedBackupNode(backup, to, kmsURIs, resolvedSubdir, true /* hasBeenPlanned */)
 	if err != nil {
 		return "", err
 	}
@@ -385,7 +367,6 @@ func backupTypeCheck(
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backupStmt.To),
-			tree.Exprs(backupStmt.Options.IncrementalStorage),
 			tree.Exprs(backupStmt.Options.EncryptionKMSURI),
 		},
 		exprutil.Bools{
@@ -433,17 +414,6 @@ func backupPlanHook(
 		return nil, nil, false, err
 	}
 
-	incrementalStorage, err := exprEval.StringArray(
-		ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
-	)
-	if err != nil {
-		return nil, nil, false, err
-	}
-
-	if len(incrementalStorage) > 0 {
-		p.BufferClientNotice(ctx, pgnotice.Newf(deprecatedIncrementalLocationMessage))
-	}
-
 	var revisionHistory bool
 	if backupStmt.Options.CaptureRevisionHistory != nil {
 		revisionHistory, err = exprEval.Bool(
@@ -464,6 +434,9 @@ func backupPlanHook(
 			if err := executionLocality.Set(s); err != nil {
 				return nil, nil, false, err
 			}
+		}
+		if backupStmt.Options.Strict {
+			return nil, nil, false, errors.New("STRICT STORAGE LOCALITY option cannot be specified with the EXECUTION LOCALITY option")
 		}
 	}
 
@@ -527,11 +500,6 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
-		if len(incrementalStorage) > 0 && (len(incrementalStorage) != len(to)) {
-			return errors.New("the incremental_location option must contain the same number of locality" +
-				" aware URIs as the full backup destination")
-		}
-
 		if includeAllSecondaryTenants && backupStmt.Coverage() != tree.AllDescriptors {
 			return errors.New("the include_all_virtual_clusters option is only supported for full cluster backups")
 		}
@@ -562,7 +530,7 @@ func backupPlanHook(
 		switch backupStmt.Coverage() {
 		case tree.RequestedDescriptors:
 			var err error
-			targetDescs, completeDBs, requestedDBs, descsByTablePattern, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			targetDescs, completeDBs, requestedDBs, descsByTablePattern, err = backupresolver.ResolveTargets(ctx, p, endTime, backupStmt.Targets)
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
 			}
@@ -599,7 +567,7 @@ func backupPlanHook(
 		}
 
 		initialDetails := jobspb.BackupDetails{
-			Destination:                     jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
+			Destination:                     jobspb.BackupDetails_Destination{To: to},
 			EndTime:                         endTime,
 			RevisionHistory:                 revisionHistory,
 			IncludeAllSecondaryTenants:      includeAllSecondaryTenants,
@@ -611,6 +579,7 @@ func backupPlanHook(
 			ApplicationName:                 p.SessionData().ApplicationName,
 			ExecutionLocality:               executionLocality,
 			UpdatesClusterMonitoringMetrics: updatesClusterMonitoringMetrics,
+			StrictLocalityFiltering:         backupStmt.Options.Strict,
 		}
 		if backupStmt.CreatedByInfo != nil {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ScheduleID()
@@ -666,11 +635,10 @@ func backupPlanHook(
 			return errors.Wrap(err, "logging backup destinations")
 		}
 
-		description, err := backupJobDescription(p,
-			backupStmt.Backup, to,
+		description, err := backupJobDescription(
+			p, backupStmt.Backup, to,
 			encryptionParams.RawKmsUris,
 			initialDetails.Destination.Subdir,
-			initialDetails.Destination.IncrementalStorage,
 		)
 		if err != nil {
 			return err

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -531,7 +532,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		desc, err := tc.LookupRange(scratchKey)
 		require.NoError(t, err, "Unable to lookup the range")
 
-		_, err = setupPartitionedRange(tc, desc.RangeID, 0, 0, true, unreliableRaftHandlerFuncs{})
+		_, err = setupPartitionedRange(tc, desc.RangeID, 0, 0, true, kvtestutils.UnreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
@@ -564,7 +565,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Unlock()
 
 		// Now stop accepting traffic to node 3 (index 2).
-		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, unreliableRaftHandlerFuncs{})
+		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, kvtestutils.UnreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(
@@ -597,7 +598,7 @@ func TestDelegateSnapshotFails(t *testing.T) {
 		senders.mu.Unlock()
 
 		// Now stop accepting traffic to node 3 (index 2).
-		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, unreliableRaftHandlerFuncs{})
+		_, err := setupPartitionedRange(tc, desc.RangeID, 0, 2, true, kvtestutils.UnreliableRaftHandlerFuncs{})
 		require.NoError(t, err)
 
 		_, err = tc.Servers[0].DB().AdminChangeReplicas(

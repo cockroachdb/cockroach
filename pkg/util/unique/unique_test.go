@@ -26,7 +26,7 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 	tests := []int64{
 		generateUniqueID(0, 0),
 		generateUniqueID(1, 0),
-		generateUniqueID(2<<15, 0),
+		generateUniqueID(1<<15-1, 0),
 		generateUniqueID(0, 1),
 		generateUniqueID(0, 10000),
 		GenerateUniqueInt(0),
@@ -36,6 +36,7 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 		if tc <= prev {
 			t.Fatalf("%d > %d", tc, prev)
 		}
+		prev = tc
 	}
 }
 
@@ -100,7 +101,7 @@ func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
 	// Run trials.
 	swapCounts := make([]int, numTrials)
 	{
-		for i := 0; i < numTrials; i++ {
+		for i := range numTrials {
 			gens := make([]int64, numGensPerTrial)
 			for i := range gens {
 				gens[i] = GenerateUniqueUnorderedID(1 /* instanceID */)

@@ -6,7 +6,6 @@
 package bulkingest
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -97,9 +96,6 @@ func pickSplits(
 // pickSplitsForSpan splits a single span based on the SSTs that overlap with
 // it. The output spans cover the entire input span, are non-overlapping, and
 // are contiguous. Each output span is assigned exactly one SST.
-//
-// This function validates that SST boundaries are already at safe split points
-// (i.e., row boundaries, not column family boundaries).
 func pickSplitsForSpan(
 	span roachpb.Span, ssts []execinfrapb.BulkMergeSpec_SST,
 ) ([]roachpb.Span, error) {
@@ -113,19 +109,6 @@ func pickSplitsForSpan(
 
 	for i := 1; i < len(ssts); i++ {
 		splitPoint := ssts[i].StartKey
-
-		// Validate that the split point is already at a safe split point.
-		safeSplitPoint, err := keys.EnsureSafeSplitKey(splitPoint)
-		if err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "SST %d has unsafe start key %s", i, splitPoint)
-		}
-		if !safeSplitPoint.Equal(splitPoint) {
-			return nil, errors.AssertionFailedf(
-				"SST %d start key %s is not at a safe split point (safe point would be %s); "+
-					"SST writer should have ensured safe boundaries",
-				i, splitPoint, safeSplitPoint)
-		}
-
 		result = append(result, roachpb.Span{
 			Key:    spanStart,
 			EndKey: splitPoint,

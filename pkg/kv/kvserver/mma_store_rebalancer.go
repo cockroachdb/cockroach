@@ -87,11 +87,13 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 
 			// Keeps rebalancing until no changes are computed. Then exit and await
 			// for the next interval.
+			periodicCall := true
 			for {
-				attemptedChanges := m.rebalance(ctx)
+				attemptedChanges := m.rebalance(ctx, periodicCall)
 				if !attemptedChanges {
 					break
 				}
+				periodicCall = false
 			}
 		}
 	}
@@ -125,7 +127,7 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 // signal to the caller that it should continue calling rebalance. Note that
 // rebalance may return true if errors happen in the process and fail to apply
 // the changes successfully.
-func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
+func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) bool {
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
@@ -135,6 +137,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 
 	changes := m.mma.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
+		PeriodicCall: periodicCall,
 	})
 
 	// TODO(wenyihu6): add allocator sync and post apply here
@@ -154,7 +157,7 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangeAsFailed(change)
+		m.as.MarkChangeAsFailed(ctx, change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
@@ -169,7 +172,7 @@ func (m *mmaStoreRebalancer) applyChange(
 	}
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
-	m.as.PostApply(changeID, err == nil /*success*/)
+	m.as.PostApply(ctx, changeID, err == nil /*success*/)
 	return err
 }
 

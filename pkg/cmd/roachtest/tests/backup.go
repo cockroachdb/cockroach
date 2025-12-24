@@ -256,6 +256,186 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
+func registerBackupIntents(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:                      "backup/intents/pending",
+		Owner:                     registry.OwnerKV,
+		Cluster:                   r.MakeClusterSpec(4),
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		Leases:                    registry.MetamorphicLeases,
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			return roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           fmt.Sprintf("%s_backup_latency", test),
+					Value:          histogram.Elapsed,
+					Unit:           "ms",
+					IsHigherBetter: false,
+				},
+			}, nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			tick, perfBuf := initBulkJobPerfArtifacts(5*time.Minute, t, exporter)
+			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
+
+			tick()
+			runBackup(ctx, t, c, false /* abandon */)
+			tick()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:                      "backup/intents/abandoned",
+		Owner:                     registry.OwnerKV,
+		Cluster:                   r.MakeClusterSpec(4),
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		Leases:                    registry.MetamorphicLeases,
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			return roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           fmt.Sprintf("%s_backup_latency", test),
+					Value:          histogram.Elapsed,
+					Unit:           "ms",
+					IsHigherBetter: false,
+				},
+			}, nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			settings := install.MakeClusterSettings()
+			settings.Env = append(settings.Env, "COCKROACH_TEST_ONLY_ASYNC_INTENT_RESOLUTION_DISABLED=true")
+			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings)
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			tick, perfBuf := initBulkJobPerfArtifacts(5*time.Minute, t, exporter)
+			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
+
+			tick()
+			runBackup(ctx, t, c, true /* abandon */)
+			tick()
+		},
+	})
+}
+
+func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool) {
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	const totalRowCount = 1000000
+	const perTransactionRowCount = 1000
+	numTxns := totalRowCount / perTransactionRowCount
+
+	// Disable automatic stats collection to avoid additional contention.
+	_, err := conn.ExecContext(ctx, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	_, err = conn.ExecContext(ctx, "CREATE TABLE foo(k INT PRIMARY KEY, v INT NOT NULL)")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	// Create a split to ensure that most intents live on a different range than
+	// the corresponding txn record. This will trigger async intent resolution
+	// after the txn is aborted.
+	statement := fmt.Sprintf("ALTER TABLE foo SPLIT AT VALUES (%d)", numTxns)
+	_, err = conn.ExecContext(ctx, statement)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	// Disable buffered writes to ensure transactions write intents.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	// Disable randomized anchor keys since the test controls in which range the
+	// transaction records live.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.transaction.randomized_anchor_key.enabled=false")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	t.Status("writing intents")
+	transactions := make([]*gosql.Tx, numTxns)
+	for i := 0; i < totalRowCount; i += perTransactionRowCount {
+		txnIndex := i / perTransactionRowCount
+		var tx *gosql.Tx
+		tx, err = conn.BeginTx(ctx, nil)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		transactions[txnIndex] = tx
+		// Anchor these transactions on the range that contains key i < numTxns.
+		statement = fmt.Sprintf("INSERT INTO foo (k, v) VALUES (%d, %d)", txnIndex, txnIndex)
+		_, err = tx.ExecContext(ctx, statement)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+		baseKey := numTxns + txnIndex*perTransactionRowCount
+		statement = fmt.Sprintf(`
+          INSERT INTO foo (k, v) 
+          SELECT %d + gs, gs %% %d 
+          FROM generate_series(0, %d) AS gs`,
+			baseKey, perTransactionRowCount, perTransactionRowCount-1)
+		_, err = tx.ExecContext(ctx, statement)
+		if err != nil {
+			t.Fatalf(err.Error())
+		}
+
+	}
+
+	// For abandoned intents, abort the transactions. We have disabled async
+	// intent resolution above, so this should result in abandoned intents.
+	if abandon {
+		t.Status("aborting the intent transactions")
+		for _, tx := range transactions {
+			if err = tx.Rollback(); err != nil {
+				t.Fatalf(err.Error())
+			}
+		}
+	}
+
+	// These cluster settings ensure that ExportRequests issued by the backup
+	// processor are not delayed for too long, especially for abandon=false, when
+	// only the final high-priority ExportRequest can push the slow pending txn.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '500ms'")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING bulkio.backup.read_retry_delay = '100ms'")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	// The backup runs with a timeout configured by bulkio.backup.read_timeout,
+	// which defaults to 5min. Currently, before the virtualized intent resolution
+	// work, this test takes ~2min for the pending case and ~3min for the
+	// abandoned case. The 5min timeout should be sufficient for this test, and
+	// if exceeded, will provide a signal that the intent resolution is taking
+	// longer than expected.
+	// TODO(mira): Adjust the timeout if the test flakes, and after the VIR work.
+	t.Status("running backup")
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE foo INTO 'nodelocal://1/%s'", destinationName(c)))
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	// Commit the pending transactions after backup.
+	if !abandon {
+		for _, tx := range transactions {
+			if err = tx.Commit(); err != nil {
+				t.Fatalf(err.Error())
+			}
+		}
+	}
+}
+
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
 // artifact directory and returns a method that when invoked records a tick.
 func initBulkJobPerfArtifacts(
@@ -550,7 +730,7 @@ func registerBackup(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:              "backup/mvcc-range-tombstones",
+		Name:              "backup/import-rollback",
 		Owner:             registry.OwnerDisasterRecovery,
 		Timeout:           4 * time.Hour,
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
@@ -562,12 +742,12 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
+			runBackupImportRollback(ctx, t, c, importRollbackConfig{})
 		},
 	})
 }
 
-type mvccRangeTombstoneConfig struct {
+type importRollbackConfig struct {
 	tenantName       string
 	skipClusterSetup bool
 
@@ -583,15 +763,15 @@ type mvccRangeTombstoneConfig struct {
 	debugSkipRollback bool
 }
 
-// runBackupMVCCRangeTombstones tests that backup and restore works in the
-// presence of MVCC range tombstones. It uses data from TPCH's order table, 16
+// runBackupImportRollback tests that backup and restore works in the
+// presence of import rollback. It uses data from TPCH's order table, 16
 // GB across 8 CSV files.
 //
 //  1. Import half of the tpch.orders table (odd-numbered files).
 //  2. Take fingerprint, time 'initial'.
 //  3. Take a full database backup.
 //  4. Import the other half (even-numbered files), but cancel the import
-//     and roll the data back using MVCC range tombstones. Done twice.
+//     and roll the data back. Done twice.
 //  5. Take fingerprint, time 'canceled'.
 //  6. Successfully import the other half.
 //  7. Take fingerprint, time 'completed'.
@@ -601,8 +781,8 @@ type mvccRangeTombstoneConfig struct {
 // We then do point-in-time restores of the database at times 'initial',
 // 'canceled', 'completed', and the latest time, and compare the fingerprints to
 // the original data.
-func runBackupMVCCRangeTombstones(
-	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
+func runBackupImportRollback(
+	ctx context.Context, t test.Test, c cluster.Cluster, config importRollbackConfig,
 ) {
 	if !config.skipClusterSetup {
 		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
@@ -762,14 +942,6 @@ func runBackupMVCCRangeTombstones(
 
 	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
 	require.NoError(t, err)
-
-	// Check that we actually wrote MVCC range tombstones.
-	var rangeKeys int
-	require.NoError(t, conn.QueryRowContext(ctx, `
-		SELECT sum((crdb_internal.range_stats(raw_start_key)->'range_key_count')::INT)
-		FROM [SHOW RANGES FROM TABLE tpch.orders WITH KEYS]
-`).Scan(&rangeKeys))
-	require.NotZero(t, rangeKeys, "no MVCC range tombstones found")
 
 	// Fingerprint for restore comparison, and assert that it matches the initial
 	// import.

@@ -208,7 +208,7 @@ func getFile(packageName, testName string) (res string, logs []string, err error
 			return
 		}
 		cmd := exec.Command(`/bin/bash`, `-c`,
-			fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep -n 'func %s(' '%s/*_test.go'`,
+			fmt.Sprintf(`cd "$(git rev-parse --show-toplevel)" && git grep --no-index -n 'func %s(' '%s/*_test.go'`,
 				testName, packageName))
 		// This command returns output such as:
 		// ../ccl/storageccl/export_test.go:31:func TestExportCmd(t *testing.T) {

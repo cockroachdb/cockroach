@@ -359,10 +359,9 @@ type zipContext struct {
 	includeRangeInfo bool
 
 	// includeStacks fetches all goroutines running on each targeted node in
-	// nodes/*/stacks.txt and nodes/*/stacks_with_labels.txt files. Note that
-	// fetching stack traces for all goroutines is a temporary "stop the world"
-	// operation, which can momentarily have negative impacts on SQL service
-	// latency.
+	// nodes/*/stacks.txt. Note that fetching debug=2 stack traces for all
+	// goroutines incurs a temporary "stop the world" operation, which can
+	// momentarily have negative impacts on SQL service latency.
 	includeStacks bool
 
 	// includeRunningJobTraces includes the active traces of each running
@@ -489,6 +488,7 @@ var startCtx struct {
 	serverNodeCertDN       string
 	serverTLSCipherSuites  []string
 	disallowRootLogin      bool
+	allowDebugUser         bool
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -545,6 +545,7 @@ func setStartContextDefaults() {
 	startCtx.serverRootCertDN = ""
 	startCtx.serverNodeCertDN = ""
 	startCtx.disallowRootLogin = false
+	startCtx.allowDebugUser = false
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""

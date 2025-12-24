@@ -313,6 +313,15 @@ func prepareRightReplicaForSplit(
 	// Raft group, there might not be any Raft traffic for quite a while.
 	rightRepl.maybeUnquiesceLocked(true /* wakeLeader */, true /* mayCampaign */)
 
+	if fn := r.store.TestingKnobs().AfterSplitApplication; fn != nil {
+		// TODO(pav-kv): we have already checked up the stack that rightDesc exists,
+		// but maybe it would be better to carry a "bus" struct with these kinds of
+		// data post checks so that we (a) don't need to repeat the computation /
+		// validation, (b) can be sure that it's consistent.
+		rightDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+		fn(rightDesc, rightRepl.shMu.state)
+	}
+
 	return rightRepl
 }
 

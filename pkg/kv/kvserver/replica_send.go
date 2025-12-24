@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -139,7 +140,21 @@ func (r *Replica) SendWithWriteBytes(
 		}
 		defer reset()
 	}
+
 	if trace.IsEnabled() {
+		foundLabel := ""
+		for i, l := range ba.ProfileLabels {
+			if i%2 == 0 && l == workloadid.ProfileTag && i < len(ba.ProfileLabels)-1 {
+				// This label is set in conn_executor_exec if tracing is active.
+				foundLabel = ba.ProfileLabels[i+1]
+				break
+			}
+		}
+		// This construction avoids calling `defer` in a loop which is
+		// not permitted by our linter.
+		if foundLabel != "" {
+			defer trace.StartRegion(ctx, foundLabel).End()
+		}
 		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
 	}
 	// Add the range log tag.

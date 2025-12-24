@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -63,7 +66,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 
 		tempDir := t.TempDir()
 		ib.spec.UseDistributedMergeSink = true
-		ib.spec.DistributedMergeFilePrefix = "nodelocal://0/index-backfill/test"
+		ib.spec.DistributedMergeFilePrefix = "nodelocal://0/job/123/map"
 		ib.flowCtx.Cfg.DB = srv.SystemLayer().InternalDB().(descs.DB)
 		ib.flowCtx.Cfg.ExternalStorageFromURI = func(
 			ctx context.Context, uri string, _ username.SQLUsername, opts ...cloud.ExternalStorageOption,
@@ -85,6 +88,104 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 		require.IsType(t, &sstIndexBackfillSink{}, sink)
 		sink.Close(ctx)
 	})
+}
+
+func TestSSTFileNamingConvention(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	tempDir := t.TempDir()
+
+	const jobID jobspb.JobID = 12345
+	const processorID = 7
+	const nodeID = 1
+
+	flowCtx := &execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			Settings: settings,
+			DB:       srv.SystemLayer().InternalDB().(descs.DB),
+			ExternalStorageFromURI: func(
+				ctx context.Context, uri string, _ username.SQLUsername, opts ...cloud.ExternalStorageOption,
+			) (cloud.ExternalStorage, error) {
+				if !strings.HasPrefix(uri, "nodelocal://") {
+					return nil, errors.New("unexpected URI")
+				}
+				es := nodelocal.TestingMakeNodelocalStorage(
+					tempDir,
+					settings,
+					cloudpb.ExternalStorage{},
+				)
+				t.Cleanup(func() { es.Close() })
+				return es, nil
+			},
+		},
+	}
+
+	// Use the same function that production code uses to set the prefix.
+	spec := execinfrapb.BackfillerSpec{}
+	backfill.EnableDistributedMergeIndexBackfillSink(nodeID, jobID, &spec)
+
+	writeTS := hlc.Timestamp{WallTime: 1000000000}
+
+	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, spec.DistributedMergeFilePrefix, writeTS, processorID)
+	require.NoError(t, err)
+	defer sink.Close(ctx)
+
+	sstSink := sink.(*sstIndexBackfillSink)
+
+	// Add some data to trigger SST file creation.
+	key := roachpb.Key("test-key-1")
+	value := []byte("test-value-1")
+	require.NoError(t, sstSink.Add(ctx, key, value))
+
+	// Set up flush callback and flush.
+	var flushed bool
+	sstSink.SetOnFlush(func(summary kvpb.BulkOpSummary) {
+		flushed = true
+	})
+	require.NoError(t, sstSink.Flush(ctx))
+	require.True(t, flushed)
+
+	// Get the manifests and verify the file naming convention.
+	manifests := sstSink.ConsumeFlushManifests()
+	require.NotEmpty(t, manifests, "expected at least one SST file to be created")
+
+	for _, manifest := range manifests {
+		uri := manifest.URI
+		t.Logf("SST file URI: %s", uri)
+
+		// Verify the URI follows the naming convention:
+		// nodelocal://<nodeID>/job/<jobID>/map/proc-<procID>/<hlc-walltime>-<hlc-logical>.sst
+		expectedPrefix := fmt.Sprintf("nodelocal://%d/job/%d/map/proc-%d/", nodeID, jobID, processorID)
+		require.True(t, strings.HasPrefix(uri, expectedPrefix),
+			"URI %q does not have expected prefix %q", uri, expectedPrefix)
+
+		// Extract the filename part after the prefix.
+		filename := strings.TrimPrefix(uri, expectedPrefix)
+
+		// Verify it ends with .sst.
+		require.True(t, strings.HasSuffix(filename, ".sst"),
+			"filename %q does not end with .sst", filename)
+
+		// Verify the format is <walltime>-<logical>.sst.
+		filenameWithoutExt := strings.TrimSuffix(filename, ".sst")
+		parts := strings.Split(filenameWithoutExt, "-")
+		require.Equal(t, 2, len(parts),
+			"filename %q should have format <walltime>-<logical>.sst", filename)
+
+		// Verify both parts are numeric (HLC timestamp components).
+		for i, part := range parts {
+			for _, ch := range part {
+				require.True(t, ch >= '0' && ch <= '9',
+					"part %d of filename %q contains non-numeric character: %c", i, filename, ch)
+			}
+		}
+	}
 }
 
 func TestRetryOfIndexEntryBatch(t *testing.T) {

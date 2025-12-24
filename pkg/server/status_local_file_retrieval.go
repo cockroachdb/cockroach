@@ -113,6 +113,11 @@ func stacksLocal(req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 		if err := pprof.Lookup("goroutine").WriteTo(buf, 1 /* debug */); err != nil {
 			return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
 		}
+	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_3:
+		buf = bytes.NewBuffer(nil)
+		if err := pprof.Lookup("goroutine").WriteTo(buf, 3 /* debug */); err != nil {
+			return nil, status.Errorf(codes.Unknown, "failed to write goroutine stack: %s", err)
+		}
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
 	}

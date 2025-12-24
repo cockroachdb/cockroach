@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
@@ -1482,6 +1483,12 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	sqlServerWrapper := s.(*tenantServerWrapper).server
 	sqlServer := sqlServerWrapper.sqlServer
+
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	admission.YieldInPacer.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+	bulk.YieldIfNoPacer.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
@@ -1869,6 +1876,11 @@ func (ts *testServer) StartTenant(
 	if err := sw.Start(ctx); err != nil {
 		return nil, err
 	}
+
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	admission.YieldInPacer.Override(ctx, &st.SV, false)
+	bulk.YieldIfNoPacer.Override(ctx, &st.SV, false)
 
 	hts := &httpTestServer{}
 	hts.t.authentication = sw.authentication

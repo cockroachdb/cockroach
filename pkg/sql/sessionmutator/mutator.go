@@ -1059,10 +1059,6 @@ func (m *SessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.Data.OptimizerUseExistsFilterHoistRule = val
 }
 
-func (m *SessionDataMutator) SetEnableInspectCommand(val bool) {
-	m.Data.EnableInspectCommand = val
-}
-
 func (m *SessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.Data.InitialRetryBackoffForReadCommitted = val
 }
@@ -1113,4 +1109,12 @@ func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMod
 
 func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
 	m.Data.UseSwapMutations = val
+}
+
+func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
+	m.Data.PreventUpdateSetColumnDrop = val
+}
+
+func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
+	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -379,6 +380,9 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	// AfterSplitApplication is called on the newly created replica's state after
+	// a split is applied. Called iff the RHS replica is not already destroyed.
+	AfterSplitApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState)
 	// AfterSnapshotApplication is run after a snapshot is applied, before
 	// releasing the replica mutex.
 	AfterSnapshotApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState, IncomingSnapshot)
@@ -483,12 +487,6 @@ type StoreTestingKnobs struct {
 	// EnqueueReplicaInterceptor intercepts calls to `store.Enqueue()`.
 	EnqueueReplicaInterceptor func(queueName string, replica *Replica)
 
-	// AllocatorCheckRangeInterceptor intercepts calls to
-	// `Store.AllocatorCheckRange()` and can be used to inject errors for testing.
-	// If returns non-nil error, the error is returned instead of calling the
-	// actual AllocatorCheckRange logic.
-	AllocatorCheckRangeInterceptor func() error
-
 	// GlobalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This will be written
 	// below all other data, and thus won't affect query results, but it does
@@ -541,10 +539,6 @@ type StoreTestingKnobs struct {
 	// rangeID should ignore the queue being disabled, and be processed anyway.
 	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
 
-	// BaseQueuePostEnqueueInterceptor is called with the storeID and rangeID of
-	// the replica right after a replica is enqueued (before it is processed)
-	BaseQueuePostEnqueueInterceptor func(storeID roachpb.StoreID, rangeID roachpb.RangeID)
-
 	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndexRaftMuLocked.
 	// If nil is returned, reproposal will be attempted.
 	InjectReproposalError func(p *ProposalData) error
@@ -571,6 +565,22 @@ type StoreTestingKnobs struct {
 	// messages because it has no updates and heartbeats are turned off. This
 	// simulation is only meaningful for ranges that use leader leases.
 	DisableUpdateLastUpdateTimesMapOnRaftGroupStep func(r *Replica) bool
+
+	// SysBytesVerificationOnRaftApply, if set, will result in SysBytes
+	// verification on every Raft command application. This is done by recomputing
+	// SysBytes from the actual applied state and comparing it with the stats in
+	// the batch being applied. If a mismatch is detected, the callback is invoked
+	// with an error describing the mismatch; otherwise it is called with nil.
+	SysBytesVerificationOnRaftApply func(mismatchErr error)
+
+	// NodeIsLiveCallbackInvoked, if set, is called every time the
+	// nodeIsLiveCallback is invoked on the store. Called regardless of any bypass
+	// logic.
+	NodeIsLiveCallbackInvoked func(livenesspb.Liveness)
+
+	// NodeIsLiveCallbackWorkDone, if set, is called after nodeIsLiveCallback
+	// completes its iteration over all replicas on the store.
+	NodeIsLiveCallbackWorkDone func(livenesspb.Liveness)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

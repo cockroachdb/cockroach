@@ -109,7 +109,6 @@ import (
 )
 
 var (
-	errEmptyInputString = pgerror.New(pgcode.InvalidParameterValue, "the input string must not be empty")
 	errZeroIP           = pgerror.New(pgcode.InvalidParameterValue, "zero length IP")
 	errChrValueTooSmall = pgerror.New(pgcode.InvalidParameterValue, "input value must be >= 0")
 	errChrValueTooLarge = pgerror.Newf(pgcode.InvalidParameterValue,
@@ -207,7 +206,7 @@ var StartCompactionJob func(
 	ctx context.Context,
 	planner interface{},
 	scheduleID jobspb.ScheduleID,
-	collectionURI, incrLoc []string,
+	collectionURI []string,
 	fullBackupPath string,
 	encryptionOpts jobspb.BackupEncryptionOptions,
 	start, end hlc.Timestamp,
@@ -1322,7 +1321,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				for _, ch := range s {
 					return tree.NewDInt(tree.DInt(ch)), nil
 				}
-				return nil, errEmptyInputString
+				return tree.NewDInt(0), nil
 			},
 			types.Int,
 			"Returns the character code of the first character in `val`. Despite the name, the function supports Unicode too.",
@@ -7866,6 +7865,9 @@ table's zone configuration this will return NULL.`,
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}
+				// The schema change below requires us to release our current timestamp, otherwise
+				// we may get stuck waiting for leases with locked leasing.
+				evalCtx.Planner.ResetLeaseTimestamp(ctx)
 				if err := evalCtx.SQLStatsController.ResetClusterSQLStats(ctx); err != nil {
 					return nil, err
 				}
@@ -7892,6 +7894,9 @@ table's zone configuration this will return NULL.`,
 				if evalCtx.SQLStatsController == nil {
 					return nil, errors.AssertionFailedf("sql stats controller not set")
 				}
+				// The schema change below requires us to release our current timestamp, otherwise
+				// we may get stuck waiting for leases.
+				evalCtx.Planner.ResetLeaseTimestamp(ctx)
 				if err := evalCtx.SQLStatsController.ResetActivityTables(ctx); err != nil {
 					return nil, err
 				}
@@ -9391,7 +9396,6 @@ WHERE object_id = table_descriptor_id
 				}
 				scheduleID := jobspb.ScheduleID(tree.MustBeDInt(args[0]))
 				collectionURI := exprSliceToStrSlice(backupAST.To)
-				incrLoc := exprSliceToStrSlice(backupAST.Options.IncrementalStorage)
 				start := tree.MustBeDDecimal(args[3])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
@@ -9408,7 +9412,7 @@ WHERE object_id = table_descriptor_id
 					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, scheduleID, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
+					ctx, evalCtx.Planner, scheduleID, collectionURI, fullPath, encryption, startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
@@ -9678,18 +9682,32 @@ WHERE object_id = table_descriptor_id
 				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
 					&evalCtx.Settings.SV,
 				))
-				targetStmt, err := parserutils.ParseOne(stmtFingerprint)
+				stmts, err := parserutils.Parse(stmtFingerprint)
 				if err != nil {
 					return nil, pgerror.Wrap(
 						err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
 					)
 				}
-				donorStmt, err := parserutils.ParseOne(donorSQL)
+				if len(stmts) != 1 {
+					return nil, pgerror.New(
+						pgcode.InvalidParameterValue,
+						"could not parse statement fingerprint as a single SQL statement",
+					)
+				}
+				targetStmt := stmts[0]
+				stmts, err = parserutils.Parse(donorSQL)
 				if err != nil {
 					return nil, pgerror.Wrap(
 						err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
 					)
 				}
+				if len(stmts) != 1 {
+					return nil, pgerror.New(
+						pgcode.InvalidParameterValue,
+						"could not parse hint donor statement as a single SQL statement",
+					)
+				}
+				donorStmt := stmts[0]
 				donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
 				if err != nil {
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")

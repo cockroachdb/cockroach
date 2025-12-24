@@ -1388,6 +1388,7 @@ func makeTenantSQLServerArgs(
 		nodeDescs:                tenantConnect,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
+		spanConfigReporter:       tenantConnect,
 		kvNodeDialer:             kvNodeDialer,
 		distSender:               ds,
 		db:                       db,

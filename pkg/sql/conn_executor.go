@@ -173,7 +173,7 @@ var canaryFraction = settings.RegisterFloatSetting(
 	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
 	0,
 	settings.Fraction,
-	settings.WithPublic,
+	settings.WithVisibility(settings.Reserved),
 )
 
 // canaryRollDice performs the probabilistic check to determine if a query
@@ -4228,6 +4228,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
+			// If a repair query was executed, then we need to confirm that the lease manager
+			// is handing out the new descirptor version. This is covered by the previous waits
+			// if the prior version was valid, but if it was invalid then we need the lease manager
+			// to have a new timestamp available.
+			ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ex.Ctx(), advInfo.txnEvent.commitTimestamp)
 
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {

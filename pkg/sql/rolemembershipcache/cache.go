@@ -69,7 +69,7 @@ func NewMembershipCache(
 func (m *MembershipCache) RunAtCacheReadTS(
 	ctx context.Context, db descs.DB, txn descs.Txn, f func(context.Context, descs.Txn) error,
 ) error {
-	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
+	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleMembersTableID)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func (m *MembershipCache) GetRolesForMember(
 	}
 
 	// Lookup table versions.
-	roleMembersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleMembersTableID)
+	roleMembersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleMembersTableID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,12 +155,12 @@ func (m *MembershipCache) GetRolesForMember(
 	}
 
 	if txn.SessionData().AllowRoleMembershipsToChangeDuringTransaction {
-		systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+		systemUsersTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.UsersTableID)
 		if err != nil {
 			return nil, err
 		}
 
-		roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+		roleOptionsTableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleOptionsTableID)
 		if err != nil {
 			return nil, err
 		}

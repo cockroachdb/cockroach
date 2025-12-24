@@ -126,6 +126,7 @@ Default: all`)
 	chaosCmd.AddCommand(cr.buildChaosNetworkPartitionCmd())
 	chaosCmd.AddCommand(cr.buildChaosNetworkLatencyCmd())
 	chaosCmd.AddCommand(cr.buildChaosDiskStallCmd())
+	chaosCmd.AddCommand(cr.buildChaosProcessKillCmd())
 
 	return chaosCmd
 }
@@ -398,11 +399,14 @@ func waitForInterrupt() <-chan os.Signal {
 	return sigCh
 }
 
-// validateClusterAndNodes validates that:
-// 1. The cluster exists
-// 2. The source and destination nodes are valid for the cluster
-func validateClusterAndNodes(clusterName string, srcNodes, destNodes install.Nodes) error {
-	// Get cluster to validate it exists and get node count
+// validateNodesInCluster validates that the cluster exists and all provided nodes
+// are within the cluster's valid range. The name parameter is used in error messages
+// to describe which node list failed validation (e.g., "source", "destination", "target").
+func validateNodesInCluster(clusterName string, nodes install.Nodes, name string) error {
+	if len(nodes) == 0 {
+		return errors.Newf("%s nodes cannot be empty", name)
+	}
+
 	c, err := roachprod.GetClusterFromCache(
 		config.Logger,
 		clusterName,
@@ -412,31 +416,11 @@ func validateClusterAndNodes(clusterName string, srcNodes, destNodes install.Nod
 		return errors.Wrapf(err, "cluster %q not found", clusterName)
 	}
 
-	// Validate source nodes
-	if err := validateNodesInCluster(c, srcNodes, "source"); err != nil {
-		return err
-	}
-
-	// Validate destination nodes
-	if err := validateNodesInCluster(c, destNodes, "destination"); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateNodesInCluster validates that all nodes are within the cluster's range
-func validateNodesInCluster(c *install.SyncedCluster, nodes install.Nodes, name string) error {
-	if len(nodes) == 0 {
-		return errors.Newf("%s nodes cannot be empty", name)
-	}
-
-	clusterNodes := c.Nodes
-	if len(clusterNodes) == 0 {
+	if len(c.Nodes) == 0 {
 		return errors.Newf("cluster has no nodes")
 	}
 
-	maxNode := clusterNodes[len(clusterNodes)-1]
+	maxNode := c.Nodes[len(c.Nodes)-1]
 	for _, n := range nodes {
 		if n < 1 || n > maxNode {
 			return errors.Newf("%s node %d is out of range (cluster has nodes 1-%d)",

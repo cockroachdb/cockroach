@@ -718,6 +718,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	srv, db, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	lm := s.LeaseManager().(*lease.Manager)
 
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 	if err != nil {
@@ -759,6 +760,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
+	ts := s.Clock().Now()
 	_, err = db.Exec(`DROP TABLE test.t`)
 	if err != nil {
 		t.Fatal(err)
@@ -783,6 +785,12 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
+	// Validate we can read the descriptor before the drop.
+	pastLease, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableDesc.GetID())
+	require.NoError(t, err)
+	require.Equalf(t, lease3.Underlying().GetVersion(), pastLease.Underlying().GetVersion(), "prior version does not match ")
+	pastLease.Release(ctx)
+
 }
 
 // TestSubqueryLeases tests that all leases acquired by a subquery are
@@ -3746,101 +3754,116 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	numTablesToCreate := 100
-	// This test can get super expensive, so under stress create fewer tables
-	// and use the parallelism to detect bugs.
-	if skip.Stress() {
-		numTablesToCreate = 10
-	}
-	st := cluster.MakeTestingClusterSettings()
-	ctx := context.Background()
-	// Disable the automatic stats collection, which can make things slower
-	// with the large number of objects in this test.
-	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
-	tc := serverutils.StartCluster(
-		t, 3, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Knobs: base.TestingKnobs{
-					SQLEvalContext: &eval.TestingKnobs{
-						ForceProductionValues: true,
+	testutils.RunTrueAndFalse(t, "oldVersionRetention", func(t *testing.T, b bool) {
+		numTablesToCreate := 100
+		// This test can get super expensive, so under stress create fewer tables
+		// and use the parallelism to detect bugs.
+		if skip.Duress() {
+			numTablesToCreate = 10
+		}
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		// Disable the automatic stats collection, which can make things slower
+		// with the large number of objects in this test.
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+		lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, b)
+		tc := serverutils.StartCluster(
+			t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						SQLEvalContext: &eval.TestingKnobs{
+							ForceProductionValues: true,
+						},
 					},
 				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
+			})
+		defer tc.Stopper().Stop(ctx)
 
-	grp := ctxgroup.WithContext(ctx)
+		grp := ctxgroup.WithContext(ctx)
 
-	nextObjectToRead := make(chan string)
-	nextObjectToModify := make(chan string)
-	var objectModified atomic.Bool
+		nextObjectToRead := make(chan string)
+		nextObjectToModify := make(chan string)
+		var objectModified atomic.Bool
 
-	// Creates tables in the background.
-	createThreads := func(ctx context.Context) (err error) {
-		defer close(nextObjectToRead)
-		conn := tc.ServerConn(0)
-		for i := range numTablesToCreate {
-			objectName := fmt.Sprintf("t%d", i)
-			sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
-			}
-			select {
-			case nextObjectToRead <- objectName:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		return nil
-	}
-
-	// Reads from the object while a modification maybe occurring.
-	readThreads := func(ctx context.Context) (err error) {
-		defer close(nextObjectToModify)
-		conn := tc.ServerConn(0)
-		for objectName := range nextObjectToRead {
-			// Initial usage of the descriptor.
-			sql := fmt.Sprintf("SELECT * FROM %s", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
-			}
-			objectModified.Store(false)
-			select {
-			case nextObjectToModify <- objectName:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			for !objectModified.Load() {
-				// Repeat usage of the descriptor.
-				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+		// Creates tables in the background.
+		createThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToRead)
+			conn := tc.ServerConn(0)
+			for i := range numTablesToCreate {
+				objectName := fmt.Sprintf("t%d", i)
+				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
 					panic(err)
 				}
+				select {
+				case nextObjectToRead <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 			}
+			return nil
 		}
-		return nil
-	}
 
-	// Alters the object in the background.
-	modifyThreads := func(ctx context.Context) (err error) {
-		defer objectModified.Store(true)
-		conn := tc.ServerConn(0)
-		for objectName := range nextObjectToModify {
-			sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
+		// Reads from the object while a modification maybe occurring.
+		readThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToModify)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToRead {
+				// Initial usage of the descriptor.
+				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					panic(err)
+				}
+				objectModified.Store(false)
+				select {
+				case nextObjectToModify <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				for !objectModified.Load() {
+					// Repeat usage of the descriptor.
+					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+					if _, err := conn.ExecContext(ctx, sql); err != nil {
+						if errors.Is(err, context.Canceled) {
+							return nil
+						}
+						panic(err)
+					}
+				}
 			}
-			objectModified.Store(true)
+			return nil
 		}
-		return nil
-	}
 
-	grp.GoCtx(createThreads)
-	grp.GoCtx(readThreads)
-	grp.GoCtx(modifyThreads)
-	require.NoError(t, grp.Wait())
+		// Alters the object in the background.
+		modifyThreads := func(ctx context.Context) (err error) {
+			defer objectModified.Store(true)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToModify {
+				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					panic(err)
+				}
+				objectModified.Store(true)
+			}
+			return nil
+		}
+
+		grp.GoCtx(createThreads)
+		grp.GoCtx(readThreads)
+		grp.GoCtx(modifyThreads)
+		require.NoError(t, grp.Wait())
+	})
 }
 
 // BenchmarkLargeDatabaseColdPgClass measures the cold performance for selecting

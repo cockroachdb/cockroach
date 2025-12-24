@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -201,13 +202,18 @@ func (rpcCtx *Context) drpcDialOptsNetwork(
 }
 
 type closeEntirePoolConn struct {
+	closeOnce sync.Once
 	drpc.Conn
 	pool *drpcpool.Pool[struct{}, drpcpool.Conn]
 }
 
-func (c *closeEntirePoolConn) Close() error {
-	_ = c.Conn.Close()
-	return c.pool.Close()
+func (c *closeEntirePoolConn) Close() (err error) {
+	// TODO(server): make drpc pooledConn.Close() idempotent
+	c.closeOnce.Do(func() {
+		_ = c.Conn.Close()
+		err = c.pool.Close()
+	})
+	return err
 }
 
 type DRPCConnection = Connection[drpc.Conn]

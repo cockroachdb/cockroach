@@ -143,6 +143,14 @@ func isSecureCluster(cmd *cobra.Command) (install.ComplexSecureOption, error) {
 	case hasInsecureFlag:
 		return install.ComplexSecureOption{ForcedInsecure: true}, nil
 
+	case insecureEnvSet:
+		// If COCKROACH_ROACHPROD_INSECURE env var was explicitly set, treat it
+		// as a forced setting that takes precedence over ephemeral project defaults.
+		if insecure {
+			return install.ComplexSecureOption{ForcedInsecure: true}, nil
+		}
+		return install.ComplexSecureOption{ForcedSecure: true}, nil
+
 	default:
 		return install.ComplexSecureOption{DefaultSecure: !insecure}, nil
 	}

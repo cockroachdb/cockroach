@@ -354,6 +354,7 @@ func runOneRoundQueryComparison(
 			sqlsmith.SetComplexity(.3),
 			sqlsmith.SetScalarComplexity(.1),
 			sqlsmith.SimpleNames(),
+			sqlsmith.DisableDoBlocks(), // TODO(#158667): unskip this.
 		)
 		if err != nil {
 			t.Fatal(err)

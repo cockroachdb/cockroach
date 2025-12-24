@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -764,6 +765,12 @@ func importPlanHook(
 		// transaction here and then in a post-commit hook we should kick of the
 		// StartableJob which we attached to the connExecutor somehow.
 
+		useDistributedMerge := UseDistributedMergeForImport.Get(&p.ExecCfg().Settings.SV)
+		if useDistributedMerge && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_1) {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"distributed merge for IMPORT requires all nodes to be running version 26.1 or later")
+		}
+
 		importDetails := jobspb.ImportDetails{
 			URIs:                  files,
 			Format:                format,
@@ -772,6 +779,7 @@ func importPlanHook(
 			Tables:                []jobspb.ImportDetails_Table{tableDetails},
 			Types:                 typeDetails,
 			DatabasePrimaryRegion: databasePrimaryRegion,
+			UseDistributedMerge:   useDistributedMerge,
 		}
 
 		jr := jobs.Record{

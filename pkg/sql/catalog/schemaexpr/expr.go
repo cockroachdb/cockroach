@@ -612,29 +612,33 @@ func ValidatePartialIndex(
 // * type-checks as a TIMESTAMPTZ.
 // * is not volatile.
 // * references valid columns in the table.
+//
+// Returns the serialized expression with UDF names replaced by OID references.
+// If the TTL does not have an expiration expression, returns an empty string.
 func ValidateTTLExpirationExpression(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
 	ttl *catpb.RowLevelTTL,
 	version clusterversion.ClusterVersion,
-) error {
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn ColumnLookupFn,
+) (string, error) {
 
 	if !ttl.HasExpirationExpr() {
-		return nil
+		return "", nil
 	}
 
 	exprs, err := parserutils.ParseExprs([]string{string(ttl.ExpirationExpr)})
 	if err != nil {
-		return pgerror.Wrapf(
+		return "", pgerror.Wrapf(
 			err,
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a valid expression`,
 			ttl.ExpirationExpr,
 		)
 	} else if len(exprs) != 1 {
-		return pgerror.Newf(
+		return "", pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a single expression`,
 			ttl.ExpirationExpr,
@@ -648,9 +652,8 @@ func ValidateTTLExpirationExpression(
 	// inside a single transaction.
 	// Only config changes can affect the results of Stable functions in the TTL
 	// job because session data cannot be modified.
-	if _, _, _, err := DequalifyAndValidateExpr(
+	serializedExpr, _, _, err := DequalifyAndValidateExprImpl(
 		ctx,
-		tableDesc,
 		exprs[0],
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
@@ -658,12 +661,15 @@ func ValidateTTLExpirationExpression(
 		volatility.Stable,
 		tableName,
 		version,
-	); err != nil {
-		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
+	)
+	if err != nil {
+		return "", pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 
 	// todo: check dropped column here?
-	return nil
+	return serializedExpr, nil
 }
 
 func MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(

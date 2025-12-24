@@ -1142,18 +1142,18 @@ func MakeRangeIDPrefixBuf(rangeID roachpb.RangeID) RangeIDPrefixBuf {
 	return RangeIDPrefixBuf(MakeRangeIDPrefix(rangeID))
 }
 
-func (b RangeIDPrefixBuf) replicatedPrefix() roachpb.Key {
+func (b RangeIDPrefixBuf) ReplicatedPrefix() roachpb.Key {
 	return append(roachpb.Key(b), LocalRangeIDReplicatedInfix...)
 }
 
-func (b RangeIDPrefixBuf) unreplicatedPrefix() roachpb.Key {
+func (b RangeIDPrefixBuf) UnreplicatedPrefix() roachpb.Key {
 	return append(roachpb.Key(b), localRangeIDUnreplicatedInfix...)
 }
 
 // AbortSpanKey returns a range-local key by Range ID for an AbortSpan
 // entry, with detail specified by encoding the supplied transaction ID.
 func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
-	key := append(b.replicatedPrefix(), LocalAbortSpanSuffix...)
+	key := append(b.ReplicatedPrefix(), LocalAbortSpanSuffix...)
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
@@ -1162,67 +1162,67 @@ func (b RangeIDPrefixBuf) AbortSpanKey(txnID uuid.UUID) roachpb.Key {
 // specific transaction should serialize on latches. The per-transaction bit is
 // achieved by encoding the supplied transaction ID into the key.
 func (b RangeIDPrefixBuf) ReplicatedSharedLocksTransactionLatchingKey(txnID uuid.UUID) roachpb.Key {
-	key := append(b.replicatedPrefix(), LocalReplicatedSharedLocksTransactionLatchingKeySuffix...)
+	key := append(b.ReplicatedPrefix(), LocalReplicatedSharedLocksTransactionLatchingKeySuffix...)
 	return encoding.EncodeBytesAscending(key, txnID.GetBytes())
 }
 
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
 // See comment on RangeAppliedStateKey function.
 func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeAppliedStateSuffix...)
 }
 
 // RangeForceFlushKey returns a system-local key for the range force flush
 // key.
 func (b RangeIDPrefixBuf) RangeForceFlushKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeForceFlushSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeForceFlushSuffix...)
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.
 func (b RangeIDPrefixBuf) RangeLeaseKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeLeaseSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeLeaseSuffix...)
 }
 
 // RangePriorReadSummaryKey returns a system-local key for a range's prior read
 // summary.
 func (b RangeIDPrefixBuf) RangePriorReadSummaryKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangePriorReadSummarySuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangePriorReadSummarySuffix...)
 }
 
 // RangeGCThresholdKey returns a system-local key for the GC threshold.
 func (b RangeIDPrefixBuf) RangeGCThresholdKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeGCThresholdSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeGCThresholdSuffix...)
 }
 
 // RangeGCHintKey returns a range-local key for the GC hint data.
 func (b RangeIDPrefixBuf) RangeGCHintKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeGCHintSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeGCHintSuffix...)
 }
 
 // RangeVersionKey returns a system-local key for the range version.
 func (b RangeIDPrefixBuf) RangeVersionKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeVersionSuffix...)
+	return append(b.ReplicatedPrefix(), LocalRangeVersionSuffix...)
 }
 
 // RangeTombstoneKey returns a system-local key for a range tombstone.
 func (b RangeIDPrefixBuf) RangeTombstoneKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRangeTombstoneSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRangeTombstoneSuffix...)
 }
 
 // RaftTruncatedStateKey returns a system-local key for a RaftTruncatedState.
 func (b RangeIDPrefixBuf) RaftTruncatedStateKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftTruncatedStateSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRaftTruncatedStateSuffix...)
 }
 
 // RaftHardStateKey returns a system-local key for a Raft HardState.
 func (b RangeIDPrefixBuf) RaftHardStateKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftHardStateSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRaftHardStateSuffix...)
 }
 
 // RaftLogPrefix returns the system-local prefix shared by all Entries
 // in a Raft log.
 func (b RangeIDPrefixBuf) RaftLogPrefix() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftLogSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRaftLogSuffix...)
 }
 
 // RaftLogKey returns a system-local key for a Raft log entry.
@@ -1232,17 +1232,17 @@ func (b RangeIDPrefixBuf) RaftLogKey(logIndex kvpb.RaftIndex) roachpb.Key {
 
 // RaftReplicaIDKey returns a system-local key for a RaftReplicaID.
 func (b RangeIDPrefixBuf) RaftReplicaIDKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRaftReplicaIDSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRaftReplicaIDSuffix...)
 }
 
 // RangeLastReplicaGCTimestampKey returns a range-local key for
 // the range's last replica GC timestamp.
 func (b RangeIDPrefixBuf) RangeLastReplicaGCTimestampKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRangeLastReplicaGCTimestampSuffix...)
 }
 
 // MVCCRangeKeyGCKey returns a range local key protecting range
 // tombstone mvcc stats calculations during range tombstone GC.
 func (b RangeIDPrefixBuf) MVCCRangeKeyGCKey() roachpb.Key {
-	return append(b.unreplicatedPrefix(), LocalRangeMVCCRangeKeyGCLockSuffix...)
+	return append(b.UnreplicatedPrefix(), LocalRangeMVCCRangeKeyGCLockSuffix...)
 }

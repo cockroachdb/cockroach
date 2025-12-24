@@ -181,7 +181,6 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 				"kv.snapshot_rebalance.max_rate":                    "256 MiB",
 				"server.debug.default_vmodule":                      "s3_storage=2",
 				"cloudstorage.s3.client_retry_token_bucket.enabled": "false",
-				"cloudstorage.azure.try.timeout":                    "0s",
 			},
 		))
 }

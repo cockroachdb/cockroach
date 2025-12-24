@@ -27,16 +27,17 @@ import (
 // scan. A scan and its logical properties are required in order to fully
 // normalize the partial index predicates.
 func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
-	// We do not want to track view/function deps here, otherwise a view/function
-	// depending on a table with a partial index predicate using an UDT will
-	// result in a type dependency being added between the view/function and the
-	// UDT.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
+	if !b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// We do not want to track view/function deps here, otherwise a
+		// view/function depending on a table with a partial index predicate using
+		// a UDT will result in a type dependency being added between the
+		// view/function and the UDT.
+		//
+		// This is the legacy path; with the session setting on, we will disable
+		// dependency tracking in buildPartialIndexPredicate below.
+		defer b.DisableSchemaDepTracking()()
 	}
+
 	tab := tabMeta.Table
 	numIndexes := tab.DeletableIndexCount()
 
@@ -120,6 +121,14 @@ func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan
 func (b *Builder) buildPartialIndexPredicate(
 	tabMeta *opt.TableMeta, tableScope *scope, expr tree.Expr, context string,
 ) (memo.FiltersExpr, error) {
+	if b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// We do not want to track view/function deps here, otherwise a view/function
+		// depending on a table with a partial index predicate will add transitive
+		// dependencies on any UDTs or columns referenced by the predicate. The
+		// partial index will already prevent dropping such UDTs or columns.
+		defer b.DisableSchemaDepTracking()()
+	}
+
 	texpr := tableScope.resolveAndRequireType(expr, types.Bool)
 
 	var scalar opt.ScalarExpr

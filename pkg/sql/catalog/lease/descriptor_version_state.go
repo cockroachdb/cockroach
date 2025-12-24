@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -82,6 +83,9 @@ type descriptorVersionState struct {
 		// a node might not necessarily be associated with a lease.
 		lease *storedLease
 	}
+	// byteSize is the size of this structure when it was initially
+	// allocated.
+	byteSize int64
 }
 
 func (s *descriptorVersionState) Release(ctx context.Context) {
@@ -101,8 +105,18 @@ func (s *descriptorVersionState) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Print(s.redactedString())
 }
 
-// getByteSize returns the full size of a descriptor version state structure.
+// getByteSize returns the size of the structure during the initial
+// allocation.
 func (s *descriptorVersionState) getByteSize() int64 {
+	return s.byteSize
+}
+
+// calculateByteSize initializes the byte size of the structure.
+func (s *descriptorVersionState) calculateByteSize() int64 {
+	// Confirm this is only used to initialize the structure.
+	if s.byteSize != 0 {
+		panic(errors.AssertionFailedf("size calculated after it has already been initialized."))
+	}
 	size := s.ByteSize() + int64(unsafe.Sizeof(*s))
 	if s.mu.lease != nil {
 		size += s.mu.lease.getByteSize()

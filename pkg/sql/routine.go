@@ -393,6 +393,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 					}
 					stmtStats := statsBuilder.
 						SessionID(g.p.ExtendedEvalContext().SessionID).
+						QueryID(g.p.execCfg.GenerateID()).
 						LatencyRecorder(latencyRecorder).
 						PlanMetadata(
 							flags.IsSet(planFlagGeneric),

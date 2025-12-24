@@ -44,3 +44,24 @@ func TestClustersCompatible(t *testing.T) {
 		require.True(t, ClustersCompatible(s1, s2, AWS))
 	})
 }
+
+func TestClustersRetainClearedInfo(t *testing.T) {
+	// Adding a test in case we switch the ClustersCompatible signature to take
+	// pointers to ClusterSpec in the future.
+	t.Run("original structs are not modified", func(t *testing.T) {
+		s1 := ClusterSpec{
+			NodeCount:              5,
+			ExposedMetamorphicInfo: map[string]string{"VolumeType": "io2"},
+		}
+		s2 := ClusterSpec{
+			NodeCount:              5,
+			ExposedMetamorphicInfo: map[string]string{"VolumeType": "gp3"},
+		}
+
+		ClustersCompatible(s1, s2, GCE)
+
+		// Original data should still be there
+		require.Equal(t, "io2", s1.ExposedMetamorphicInfo["VolumeType"])
+		require.Equal(t, "gp3", s2.ExposedMetamorphicInfo["VolumeType"])
+	})
+}

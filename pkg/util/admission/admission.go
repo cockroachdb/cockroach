@@ -155,6 +155,15 @@ func (bq burstQualification) String() string {
 	}
 }
 
+// Mutex ordering between requester and granter:
+//
+// The requester and granter call into each other. To prevent deadlock due to
+// mutex cycles, any mutex in granter is ordered before any mutex in
+// requester. Therefore, a requester must not hold its own mutex when calling
+// into granter. Of course, a granter could choose to release its own mutex
+// before calling into requester, but it is not necessary for deadlock
+// prevention.
+
 // requester is an interface implemented by an object that orders admission
 // work for a particular WorkKind. See WorkQueue for the implementation of
 // requester.

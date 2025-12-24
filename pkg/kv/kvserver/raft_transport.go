@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -931,7 +932,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
-		pprofutil.Do(ctx, worker, "remote_node_id", toNodeID.String())
+		pprofutil.Do(ctx, worker, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_RAFT, "remote_node_id", toNodeID.String())
 	}(ctx)
 	return true
 }

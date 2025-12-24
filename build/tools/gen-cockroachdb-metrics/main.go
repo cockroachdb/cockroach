@@ -96,7 +96,7 @@ var (
 	skipPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`^auth_`),
 		regexp.MustCompile(`^distsender_rpc_err_errordetailtype_`),
-		regexp.MustCompile(`^gossip_callbacks_`),
+		regexp.MustCompile(`^gossip_callbacks_[^_]+_`),
 		regexp.MustCompile(`^jobs_auto_config_env_runner_`),
 		regexp.MustCompile(`^jobs_update_table_`),
 		regexp.MustCompile(`^logical_replication_`),
@@ -304,7 +304,9 @@ func loadBaseMappings(path string) (*BaseMappingsYAML, error) {
 
 // collectAllCRDBMetrics collects all CRDB metrics from the YAML output and combines them
 // with any runtime conditional metrics that aren't documented in metrics.yaml
-func collectAllCRDBMetrics(yamlOutput *YAMLOutput, runtimeConditionalMetrics []MetricInfo) []MetricInfo {
+func collectAllCRDBMetrics(
+	yamlOutput *YAMLOutput, runtimeConditionalMetrics []MetricInfo,
+) []MetricInfo {
 	allMetrics := make([]MetricInfo, 0)
 
 	for _, layer := range yamlOutput.Layers {
@@ -328,7 +330,9 @@ func shouldSkipMetric(promName string) bool {
 }
 
 // mapMetricsToDatadog processes the CRDB metrics and maps them to Datadog names
-func mapMetricsToDatadog(metrics []MetricInfo, datadogMappings map[string]string) map[string]string {
+func mapMetricsToDatadog(
+	metrics []MetricInfo, datadogMappings map[string]string,
+) map[string]string {
 	result := make(map[string]string)
 
 	for _, metric := range metrics {
@@ -465,7 +469,7 @@ func main() {
 	flag.Parse()
 
 	args := flag.Args()
-	
+
 	// Check if running in datadog-only mode
 	if *datadogOnly {
 		if len(flag.Args()) < 2 {

@@ -1195,7 +1195,7 @@ type oneAtATimeSchemaResolver struct {
 func (r oneAtATimeSchemaResolver) getDatabaseByID(
 	id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	desc, err := descs.GetCatalogDescriptorGetter(r.p.Descriptors(), r.p.txn, &r.p.EvalContext().Settings.SV).WithoutNonPublic().Get().Database(r.ctx, id)
+	desc, err := descs.GetCatalogDescriptorGetter(r.ctx, r.p.Descriptors(), r.p.txn, r.p.EvalContext().Settings).WithoutNonPublic().Get().Database(r.ctx, id)
 	return desc, err
 }
 
@@ -1208,7 +1208,7 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 }
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
-	return descs.GetCatalogDescriptorGetter(r.p.Descriptors(), r.p.txn, &r.p.EvalContext().Settings.SV).Get().Schema(r.ctx, id)
+	return descs.GetCatalogDescriptorGetter(r.ctx, r.p.Descriptors(), r.p.txn, r.p.EvalContext().Settings).Get().Schema(r.ctx, id)
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
@@ -1605,7 +1605,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 			}
 		}
 		err := dbContext.ForEachSchema(func(id descpb.ID, name string) error {
-			schemaDescriptor, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Schema(ctx, id)
+			schemaDescriptor, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).Get().Schema(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -1806,7 +1806,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		return forEachSchema(ctx, p, dbContext, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 			pgProcTableOid := tableOid(pgProcDesc.GetID())
 			return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
-				funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Function(ctx, sig.ID)
+				funcDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).Get().Function(ctx, sig.ID)
 				if err != nil {
 					return err
 				}
@@ -2341,7 +2341,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					if sc, ok := schemadesc.GetVirtualSchemaByID(descpb.ID(ooid)); ok {
 						return sc, true, nil
 					}
-					if sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, descpb.ID(ooid)); err == nil {
+					if sc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, descpb.ID(ooid)); err == nil {
 						return sc, true, nil
 					} else if !sqlerrors.IsUndefinedSchemaError(err) {
 						return nil, false, err
@@ -2893,7 +2893,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 			func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
-						fnDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Function(ctx, sig.ID)
+						fnDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).WithoutNonPublic().Get().Function(ctx, sig.ID)
 						if err != nil {
 							return err
 						}
@@ -2913,7 +2913,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 				ooid := coid.Oid
 
 				if funcdesc.IsOIDUserDefinedFunc(ooid) {
-					fnDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
+					fnDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
 					if err != nil {
 						if errors.Is(err, tree.ErrRoutineUndefined) {
 							return false, nil //nolint:returnerrcheck
@@ -2921,7 +2921,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 						return false, err
 					}
 
-					scDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, fnDesc.GetParentSchemaID())
+					scDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, fnDesc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
@@ -3798,7 +3798,7 @@ func addPGAttributeRowForCompositeType(
 func getSchemaAndTypeByTypeID(
 	ctx context.Context, p *planner, id descpb.ID, includeMetaData bool,
 ) (catalog.SchemaDescriptor, catalog.TypeDescriptor, error) {
-	getter := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV)
+	getter := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings)
 	if includeMetaData {
 		getter = getter.WithMetaData()
 	}
@@ -3811,7 +3811,7 @@ func getSchemaAndTypeByTypeID(
 		return nil, nil, nil
 	}
 
-	sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, typDesc.GetParentSchemaID())
+	sc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, typDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3913,7 +3913,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
 				if typDesc.AsTableImplicitRecordTypeDescriptor() != nil {
-					table, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Table(ctx, id)
+					table, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Table(ctx, id)
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 							pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
@@ -4160,7 +4160,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			h.writeUInt64(uint64(statisticsID))
 			statisticsOID := h.getOid()
 
-			tbl, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Table(ctx, descpb.ID(tableID))
+			tbl, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).Get().Table(ctx, descpb.ID(tableID))
 			if err != nil {
 				if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
 					// The system.table_statistics could contain stale rows that
@@ -5686,14 +5686,14 @@ func populateVirtualIndexForTable(
 		}
 	}
 	if sc == nil {
-		sc, err = descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+		sc, err = descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
 			return false, err
 		}
 	}
 	db := dbContext
 	if db == nil {
-		db, err = descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+		db, err = descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 		if err != nil {
 			return false, err
 		}
@@ -5719,7 +5719,7 @@ func populateVirtualIndexForType(
 		return true, nil
 	}
 	h := makeOidHasher()
-	sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).WithoutNonPublic().Get().Schema(ctx, typeDesc.GetParentSchemaID())
+	sc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, typeDesc.GetParentSchemaID())
 	if err != nil {
 		return false, err
 	}

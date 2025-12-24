@@ -6,68 +6,50 @@
 package cloud
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"regexp"
 	"slices"
 	"sort"
-	"text/tabwriter"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
-	// The following constants are headers that are used for printing the VM details.
-	headerName           = "Name"
-	headerDNS            = "DNS"
-	headerPrivateIP      = "Private IP"
-	headerPublicIP       = "Public IP"
-	headerMachineType    = "Machine Type"
-	headerCPUArch        = "CPU Arch"
-	headerCPUFamily      = "CPU Family"
-	headerProvisionModel = "Provision Model"
-
-	// Provisional models that are used for printing VM details.
-	spotProvisionModel     = "spot"
-	onDemandProvisionModel = "ondemand"
-
 	errNoVMsCreated = "No VMs were created by the providers"
 )
-
-// printDetailsColumnHeaders are the headers to be printed in the defined sequence.
-var printDetailsColumnHeaders = []string{
-	headerName, headerDNS, headerPrivateIP, headerPublicIP, headerMachineType, headerCPUArch, headerCPUFamily,
-	headerProvisionModel,
-}
 
 // Cloud contains information about all known clusters (across multiple cloud
 // providers).
 type Cloud struct {
-	Clusters Clusters `json:"clusters"`
+	Clusters cloudcluster.Clusters `json:"clusters"`
 	// BadInstances contains the VMs that have the Errors field populated. They
 	// are not part of any Cluster.
 	BadInstances vm.List `json:"bad_instances"`
+
+	// providers supported for this Cloud instance
+	centralizedProviders []vm.Provider
+	localProviders       []vm.Provider
 }
 
-// BadInstanceErrors returns all bad VM instances, grouped by error.
-func (c *Cloud) BadInstanceErrors() map[error]vm.List {
-	ret := map[error]vm.List{}
+// BadInstanceErrors returns all bad VM instances, grouped by error message.
+// Note: errors are grouped by their string representation to handle cases
+// where errors have been serialized/deserialized and lost pointer identity.
+func (c *Cloud) BadInstanceErrors() map[string]vm.List {
+	ret := map[string]vm.List{}
 
 	// Expand instances and errors
-	for _, vm := range c.BadInstances {
-		for _, err := range vm.Errors {
-			ret[err] = append(ret[err], vm)
+	for _, v := range c.BadInstances {
+		for _, err := range v.Errors {
+			msg := err.Error()
+			ret[msg] = append(ret[msg], v)
 		}
 	}
 
@@ -79,217 +61,175 @@ func (c *Cloud) BadInstanceErrors() map[error]vm.List {
 	return ret
 }
 
-// Clusters contains a set of clusters (potentially across multiple providers),
-// keyed by the cluster name.
-type Clusters map[string]*Cluster
-
-// Names returns all cluster names, in alphabetical order.
-func (c Clusters) Names() []string {
-	result := make([]string, 0, len(c))
-	for n := range c {
-		result = append(result, n)
-	}
-	sort.Strings(result)
-	return result
-}
-
-// FilterByName creates a new Clusters map that only contains the clusters with
-// name matching the given regexp.
-func (c Clusters) FilterByName(pattern *regexp.Regexp) Clusters {
-	result := make(Clusters)
-	for name, cluster := range c {
-		if pattern.MatchString(name) {
-			result[name] = cluster
-		}
-	}
-	return result
-}
-
-// A Cluster is created by querying various vm.Provider instances.
-//
-// TODO(benesch): unify with syncedCluster.
-type Cluster struct {
-	Name string `json:"name"`
-	User string `json:"user"`
-	// This is the earliest creation and shortest lifetime across VMs.
-	CreatedAt time.Time     `json:"created_at"`
-	Lifetime  time.Duration `json:"lifetime"`
-	VMs       vm.List       `json:"vms"`
-	// CostPerHour is an estimate, in dollars, of how much this cluster costs to
-	// run per hour. 0 if the cost estimate is unavailable.
-	CostPerHour float64
-}
-
-// Clouds returns the names of all of the various cloud providers used
-// by the VMs in the cluster.
-func (c *Cluster) Clouds() []string {
-	present := make(map[string]bool)
-	for _, m := range c.VMs {
-		p := m.Provider
-		if m.Project != "" {
-			p = fmt.Sprintf("%s:%s", m.Provider, m.Project)
-		}
-		present[p] = true
-	}
-
-	var ret []string
-	for provider := range present {
-		ret = append(ret, provider)
-	}
-	sort.Strings(ret)
-	return ret
-}
-
-// ExpiresAt TODO(peter): document
-func (c *Cluster) ExpiresAt() time.Time {
-	return c.CreatedAt.Add(c.Lifetime)
-}
-
-// GCAt TODO(peter): document
-func (c *Cluster) GCAt() time.Time {
-	// NB: GC is performed every hour. We calculate the lifetime of the cluster
-	// taking the GC time into account to accurately reflect when the cluster
-	// will be destroyed.
-	return c.ExpiresAt().Add(time.Hour - 1).Truncate(time.Hour)
-}
-
-// LifetimeRemaining TODO(peter): document
-func (c *Cluster) LifetimeRemaining() time.Duration {
-	return time.Until(c.GCAt())
-}
-
-func (c *Cluster) String() string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s: %d", c.Name, len(c.VMs))
-	if !c.IsLocal() {
-		fmt.Fprintf(&buf, " (%s)", c.LifetimeRemaining().Round(time.Second))
-	}
-	return buf.String()
-}
-
-// PrintDetails TODO(peter): document
-func (c *Cluster) PrintDetails(logger *logger.Logger) error {
-	logger.Printf("%s: %s ", c.Name, c.Clouds())
-	if !c.IsLocal() {
-		l := c.LifetimeRemaining().Round(time.Second)
-		if l <= 0 {
-			logger.Printf("expired %s ago", -l)
-		} else {
-			logger.Printf("%s remaining", l)
-		}
-	} else {
-		logger.Printf("(no expiration)")
-	}
-	// Align columns left and separate with at least two spaces.
-	tw := tabwriter.NewWriter(logger.Stdout, 0, 8, 2, ' ', 0)
-	logPrettifiedHeader(tw, printDetailsColumnHeaders)
-
-	for _, vm := range c.VMs {
-		provisionModel := onDemandProvisionModel
-		if vm.Preemptible {
-			provisionModel = spotProvisionModel
-		}
-		fmt.Fprintf(tw, "%s\n", prettifyRow(printDetailsColumnHeaders, map[string]string{
-			headerName: vm.Name, headerDNS: vm.DNS, headerPrivateIP: vm.PrivateIP, headerPublicIP: vm.PublicIP,
-			headerMachineType: vm.MachineType, headerCPUArch: string(vm.CPUArch), headerCPUFamily: vm.CPUFamily,
-			headerProvisionModel: provisionModel,
-		}))
-	}
-	return tw.Flush()
-}
-
-// logPrettifiedHeader writes a prettified row of headers to the tab writer.
-func logPrettifiedHeader(tw *tabwriter.Writer, headers []string) {
-	for _, header := range headers {
-		fmt.Fprintf(tw, "%s\t", header)
-	}
-	fmt.Fprint(tw, "\n")
-}
-
-// prettifyRow returns a prettified row of values. the sequence of the header is maintained.
-func prettifyRow(headers []string, rowMap map[string]string) string {
-	row := ""
-	for _, header := range headers {
-		value := ""
-		if v, ok := rowMap[header]; ok {
-			value = v
-		}
-		row = fmt.Sprintf("%s%s\t", row, value)
-	}
-	return row
-}
-
-// IsLocal returns true if c is a local cluster.
-func (c *Cluster) IsLocal() bool {
-	return config.IsLocalClusterName(c.Name)
-}
-
-// IsEmptyCluster returns true if a cluster has no resources.
-func (c *Cluster) IsEmptyCluster() bool {
-	return c.VMs[0].EmptyCluster
-}
-
 // ListCloud returns information about all instances (across all available
 // providers).
 func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
-	cloud := &Cloud{
-		Clusters: make(Clusters),
-	}
 
+	// Build the list of providers to use with the static func.
+	providers := []vm.Provider{}
 	providerNames := vm.AllProviderNames()
 	if len(options.IncludeProviders) > 0 {
 		providerNames = options.IncludeProviders
 	}
-	providerVMs := make([]vm.List, len(providerNames))
-	var g errgroup.Group
-	for i, providerName := range providerNames {
-		provider := vm.Providers[providerName]
-		g.Go(func() error {
-			var err error
-			providerVMs[i], err = provider.List(l, options)
-			return errors.Wrapf(err, "provider %s", provider.Name())
+	for _, providerName := range providerNames {
+		providers = append(providers, vm.Providers[providerName])
+	}
+
+	// Init a new Cloud struct with the computed providers.
+	cloud := NewCloud(WithProviders(providers))
+
+	err := cloud.ListCloud(context.Background(), l, options)
+	if err != nil {
+		return nil, err
+	}
+
+	return cloud, nil
+}
+
+func NewCloud(options ...Option) *Cloud {
+	c := &Cloud{
+		Clusters:     make(cloudcluster.Clusters),
+		BadInstances: vm.List{},
+	}
+	for _, o := range options {
+		o.apply(c)
+	}
+	return c
+}
+
+// Option is a functional option for configuring the Client.
+type Option interface {
+	apply(*Cloud)
+}
+
+// OptionFunc is a function that implements the Option interface.
+type OptionFunc func(*Cloud)
+
+func (o OptionFunc) apply(c *Cloud) { o(c) }
+
+// WithProviders configures the Cloud with the given providers.
+func WithProviders(providers []vm.Provider) OptionFunc {
+	return func(c *Cloud) {
+		c.addProviders(providers)
+	}
+}
+
+// addProviders adds the given providers to the Cloud struct. Local providers
+// are added to the localProviders field, while remote providers are added to
+// the providers field.
+func (c *Cloud) addProviders(providers []vm.Provider) {
+	if c.centralizedProviders == nil {
+		c.centralizedProviders = []vm.Provider{}
+	}
+	if c.localProviders == nil {
+		c.localProviders = []vm.Provider{}
+	}
+	for _, p := range providers {
+		if p.IsCentralizedProvider() {
+			c.centralizedProviders = append(c.centralizedProviders, p)
+		} else {
+			c.localProviders = append(c.localProviders, p)
+		}
+	}
+}
+
+// ListCloud populates the Cloud struct with all clusters and bad instances
+// found across all providers.
+func (c *Cloud) ListCloud(ctx context.Context, l *logger.Logger, options vm.ListOptions) error {
+
+	// Reset the Clusters and BadInstance fields.
+	c.Clusters = make(cloudcluster.Clusters)
+	c.BadInstances = vm.List{}
+
+	providers := append(c.centralizedProviders, c.localProviders...)
+
+	// List all VMs across all providers in parallel.
+	providerVMs := make(map[string]vm.List)
+	g := ctxgroup.WithContext(ctx)
+
+	// Limit concurrent provider List() calls to prevent blocking all OS threads.
+	// Each provider may spawn blocking syscalls (gcloud, aws) and concurrency
+	// can starve the scheduler. Limit to ensure at least 1 CPU remains available.
+	if options.LimitConcurrency > 0 {
+		g.SetLimit(options.LimitConcurrency)
+	}
+
+	vmListLock := syncutil.Mutex{}
+	for _, provider := range providers {
+		g.GoCtx(func(ctx context.Context) error {
+			pVms, err := provider.List(ctx, l, options)
+			if err != nil {
+				return errors.Wrapf(err, "provider %s", provider.String())
+			}
+
+			// Lock the map to avoid concurrent writes.
+			vmListLock.Lock()
+			defer vmListLock.Unlock()
+			providerVMs[provider.String()] = pVms
+			return nil
 		})
 	}
 	providerErr := g.Wait()
 	if providerErr != nil {
-		// We continue despite the error as we don't want to fail for all providers if only one
-		// has an issue. The function that calls ListCloud may not even use the erring provider,
-		// so log a warning and let the caller decide how to handle the error.
-		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
+		if options.BailOnProviderError {
+			// On the roachprod-centralized path, this is executed as part
+			// of an async task, and we want to fail fast if a provider errors out
+			// or the context is cancelled or its deadline is exceeded.
+			// This avoids partial/incomplete listings when DNS entries are updated
+			// or when the results are stored in the repository.
+			return providerErr
+		} else {
+			// We continue despite the error as we don't want to fail for all providers if only one
+			// has an issue. The function that calls ListCloud may not even use the erring provider,
+			// so log a warning and let the caller decide how to handle the error.
+			l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
+		}
 	}
 
-	for _, vms := range providerVMs {
+	for providerID, vms := range providerVMs {
 		for _, v := range vms {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, err := v.UserName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidUserName)
+				v.Errors = append(v.Errors, vm.NewVMError(vm.ErrInvalidUserName))
 			}
 			clusterName, err := v.ClusterName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidClusterName)
+				v.Errors = append(v.Errors, vm.NewVMError(vm.ErrInvalidClusterName))
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
 			// the problem later on. Ignore empty clusters since BadInstances will be destroyed on
 			// the VM level. GC will destroy them instead.
 			if len(v.Errors) > 0 && !v.EmptyCluster {
-				cloud.BadInstances = append(cloud.BadInstances, v)
+				c.BadInstances = append(c.BadInstances, v)
 				continue
 			}
 
-			if _, ok := cloud.Clusters[clusterName]; !ok {
-				cloud.Clusters[clusterName] = &Cluster{
-					Name:      clusterName,
-					User:      userName,
-					CreatedAt: v.CreatedAt,
-					Lifetime:  v.Lifetime,
-					VMs:       nil,
+			if _, ok := c.Clusters[clusterName]; !ok {
+				c.Clusters[clusterName] = &cloudcluster.Cluster{
+					Name:           clusterName,
+					User:           userName,
+					CreatedAt:      v.CreatedAt,
+					Lifetime:       v.Lifetime,
+					VMs:            nil,
+					CloudProviders: []string{providerID},
+				}
+			} else {
+				found := false
+				for _, id := range c.Clusters[clusterName].CloudProviders {
+					if id == providerID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					c.Clusters[clusterName].CloudProviders = append(c.Clusters[clusterName].CloudProviders, providerID)
 				}
 			}
 
 			// Bound the cluster creation time and overall lifetime to the earliest and/or shortest VM
-			c := cloud.Clusters[clusterName]
+			c := c.Clusters[clusterName]
 			c.VMs = append(c.VMs, v)
 			if v.CreatedAt.Before(c.CreatedAt) {
 				c.CreatedAt = v.CreatedAt
@@ -303,7 +243,7 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 
 	// Sort VMs for each cluster. We want to make sure we always have the same order.
 	// Also check and warn if we find an empty cluster.
-	for _, c := range cloud.Clusters {
+	for _, c := range c.Clusters {
 		if len(c.VMs) == 0 {
 			l.Printf("WARNING: found no VMs in cluster %s\n", c.Name)
 		}
@@ -313,7 +253,7 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 		sort.Sort(c.VMs)
 	}
 
-	return cloud, providerErr
+	return nil
 }
 
 type ClusterCreateOpts struct {
@@ -341,9 +281,8 @@ func Providers(opts ...*ClusterCreateOpts) []string {
 // an additional "workload node". This node often times does not need the same CPU count as
 // the rest of the cluster. i.e. it is overkill for a 3 node 32 CPU cluster to have a 32 CPU
 // workload node, but a 50 node 8 CPU cluster might find a 8 CPU workload node inadequate.
-func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*Cluster, error) {
-
-	c := &Cluster{
+func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*cloudcluster.Cluster, error) {
+	c := &cloudcluster.Cluster{
 		Name:      opts[0].CreateOpts.ClusterName,
 		CreatedAt: timeutil.Now(),
 		Lifetime:  opts[0].CreateOpts.Lifetime,
@@ -415,7 +354,7 @@ func CreateCluster(l *logger.Logger, opts []*ClusterCreateOpts) (*Cluster, error
 }
 
 // GrowCluster adds new nodes to an existing cluster.
-func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+func GrowCluster(l *logger.Logger, c *cloudcluster.Cluster, numNodes int) error {
 	names := make([]string, 0, numNodes)
 	offset := len(c.VMs) + 1
 	for i := offset; i < offset+numNodes; i++ {
@@ -455,7 +394,7 @@ func GrowCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 }
 
 // ShrinkCluster removes tail nodes from an existing cluster.
-func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
+func ShrinkCluster(l *logger.Logger, c *cloudcluster.Cluster, numNodes int) error {
 	provider := c.VMs[0].Provider
 	if !c.IsLocal() {
 		providers := c.Clouds()
@@ -485,47 +424,8 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 	return nil
 }
 
-func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) error {
-
-	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
-	defer stopSpinner()
-
-	// We first iterate on all VMs to determine if any machine of the cluster
-	// was reachable by Prometheus and if we need to delete its config.
-	// This is done this way to avoid authenticating the promhelper client
-	// in case we don't need to delete any config.
-	needDelete := false
-	for _, node := range c.VMs {
-
-		reachability := promhelperclient.ProviderReachability(
-			node.Provider,
-			promhelperclient.CloudEnvironment(node.Project),
-		)
-		if reachability == promhelperclient.None {
-			continue
-		}
-
-		needDelete = true
-		break
-	}
-
-	if needDelete {
-		cl, err := promhelperclient.NewPromClient()
-		if err != nil {
-			return err
-		}
-
-		err = cl.DeleteClusterConfig(ctx, c.Name, l)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // DestroyCluster TODO(peter): document
-func DestroyCluster(l *logger.Logger, c *Cluster) error {
+func DestroyCluster(l *logger.Logger, c *cloudcluster.Cluster) error {
 
 	if err := c.DeletePrometheusConfig(context.Background(), l); err != nil {
 		l.Printf("WARNING: failed to delete the prometheus config (already wiped?): %s", err)
@@ -560,7 +460,7 @@ func DestroyCluster(l *logger.Logger, c *Cluster) error {
 }
 
 // ExtendCluster TODO(peter): document
-func ExtendCluster(l *logger.Logger, c *Cluster, extension time.Duration) error {
+func ExtendCluster(l *logger.Logger, c *cloudcluster.Cluster, extension time.Duration) error {
 	// Round new lifetime to nearest second.
 	newLifetime := (c.Lifetime + extension).Round(time.Second)
 	err := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {

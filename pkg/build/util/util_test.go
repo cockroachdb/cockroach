@@ -118,79 +118,79 @@ func TestOutputsOfGenrule(t *testing.T) {
 func TestMergeXml(t *testing.T) {
 	const xml1 = `<testsuites>
 	<testsuite errors="0" failures="1" skipped="0" tests="6" time="0.010" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestDataDriven" timestamp="2025-10-31T16:31:54.004Z">
-		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
-		<testcase classname="dev" name="TestDataDriven/bench" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/testlogic" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/ui" time="0.000">
+		<testcase name="TestDataDriven" time="0.010"></testcase>
+		<testcase name="TestDataDriven/bench" time="0.000"></testcase>
+		<testcase name="TestDataDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestDataDriven/generate" time="0.000"></testcase>
+		<testcase name="TestDataDriven/testlogic" time="0.000"></testcase>
+		<testcase name="TestDataDriven/ui" time="0.000">
 			<failure message="Failed" type="">FAILED</failure>
 		</testcase>
 	</testsuite>
 	<testsuite errors="0" failures="0" skipped="0" tests="11" time="0.002" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestRecorderDriven" timestamp="2025-10-31T16:31:54.010Z">
-		<testcase classname="dev" name="TestRecorderDriven" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test#01" time="0.000"></testcase>
 	</testsuite>
 </testsuites>`
 	const xml2 = `<testsuites>
 	<testsuite errors="0" failures="0" skipped="0" tests="6" time="0.010" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestDataDriven" timestamp="2025-10-31T16:31:54.004Z">
-		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
-		<testcase classname="dev" name="TestDataDriven/bench" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/testlogic" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/ui" time="0.000"></testcase>
+		<testcase name="TestDataDriven" time="0.010"></testcase>
+		<testcase name="TestDataDriven/bench" time="0.000"></testcase>
+		<testcase name="TestDataDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestDataDriven/generate" time="0.000"></testcase>
+		<testcase name="TestDataDriven/testlogic" time="0.000"></testcase>
+		<testcase name="TestDataDriven/ui" time="0.000"></testcase>
 	</testsuite>
 	<testsuite errors="0" failures="0" skipped="0" tests="11" time="0.002" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestRecorderDriven" timestamp="2025-10-31T16:31:54.010Z">
-		<testcase classname="dev" name="TestRecorderDriven" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint" time="0.000">
+		<testcase name="TestRecorderDriven" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint" time="0.000">
 			<failure message="Failed" type="">FAILED ALSO</failure>
 		</testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test#01" time="0.000"></testcase>
 	</testsuite>
 </testsuites>`
 	const expected = `<testsuites>
 	<testsuite errors="0" failures="1" skipped="0" tests="6" time="0.01" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestDataDriven" timestamp="2025-10-31T16:31:54.004Z">
-		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
-		<testcase classname="dev" name="TestDataDriven/bench" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/testlogic" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/ui" time="0.000">
+		<testcase name="TestDataDriven" time="0.010"></testcase>
+		<testcase name="TestDataDriven/bench" time="0.000"></testcase>
+		<testcase name="TestDataDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestDataDriven/generate" time="0.000"></testcase>
+		<testcase name="TestDataDriven/testlogic" time="0.000"></testcase>
+		<testcase name="TestDataDriven/ui" time="0.000">
 			<failure message="Failed" type="">FAILED</failure>
 		</testcase>
 	</testsuite>
 	<testsuite errors="0" failures="1" skipped="0" tests="11" time="0.002" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestRecorderDriven" timestamp="2025-10-31T16:31:54.010Z">
-		<testcase classname="dev" name="TestRecorderDriven" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint" time="0.000">
+		<testcase name="TestRecorderDriven" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint" time="0.000">
 			<failure message="Failed" type="">FAILED ALSO</failure>
 		</testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test#01" time="0.000"></testcase>
 	</testsuite>
 </testsuites>
 `
@@ -206,47 +206,47 @@ func TestMergeXml(t *testing.T) {
 func TestMungeTestXML(t *testing.T) {
 	beforeXml := `<testsuites>
 	<testsuite errors="0" failures="0" skipped="0" tests="6" time="0.010" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestDataDriven" timestamp="2025-10-30T21:36:57.401Z">
-		<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
-		<testcase classname="dev" name="TestDataDriven/bench" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/testlogic" time="0.000"></testcase>
-		<testcase classname="dev" name="TestDataDriven/ui" time="0.000"></testcase>
+		<testcase name="TestDataDriven" time="0.010"></testcase>
+		<testcase name="TestDataDriven/bench" time="0.000"></testcase>
+		<testcase name="TestDataDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestDataDriven/generate" time="0.000"></testcase>
+		<testcase name="TestDataDriven/testlogic" time="0.000"></testcase>
+		<testcase name="TestDataDriven/ui" time="0.000"></testcase>
 	</testsuite>
 	<testsuite errors="0" failures="0" skipped="0" tests="11" time="0.010" name="github.com/cockroachdb/cockroach/pkg/cmd/dev.TestRecorderDriven" timestamp="2025-10-30T21:36:57.406Z">
-		<testcase classname="dev" name="TestRecorderDriven" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/builder#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/generate#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/lint#01" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test" time="0.000"></testcase>
-		<testcase classname="dev" name="TestRecorderDriven/test#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/builder#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/generate#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/lint#01" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test" time="0.000"></testcase>
+		<testcase name="TestRecorderDriven/test#01" time="0.000"></testcase>
 	</testsuite>
 </testsuites>
 `
 
 	expected := `<testsuite errors="0" failures="0" skipped="0" tests="17" time="0.02" name="github.com/cockroachdb/cockroach/pkg/cmd/dev" timestamp="2025-10-30T21:36:57.401Z">
-	<testcase classname="dev" name="TestDataDriven" time="0.010"></testcase>
-	<testcase classname="dev" name="TestDataDriven/bench" time="0.000"></testcase>
-	<testcase classname="dev" name="TestDataDriven/dev-build" time="0.000"></testcase>
-	<testcase classname="dev" name="TestDataDriven/generate" time="0.000"></testcase>
-	<testcase classname="dev" name="TestDataDriven/testlogic" time="0.000"></testcase>
-	<testcase classname="dev" name="TestDataDriven/ui" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/builder" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/builder#01" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/dev-build" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/generate" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/generate#01" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/lint" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/lint#01" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/test" time="0.000"></testcase>
-	<testcase classname="dev" name="TestRecorderDriven/test#01" time="0.000"></testcase>
+	<testcase name="TestDataDriven" time="0.010"></testcase>
+	<testcase name="TestDataDriven/bench" time="0.000"></testcase>
+	<testcase name="TestDataDriven/dev-build" time="0.000"></testcase>
+	<testcase name="TestDataDriven/generate" time="0.000"></testcase>
+	<testcase name="TestDataDriven/testlogic" time="0.000"></testcase>
+	<testcase name="TestDataDriven/ui" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/builder" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/builder#01" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/dev-build" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/dev-build#01" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/generate" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/generate#01" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/lint" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/lint#01" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/test" time="0.000"></testcase>
+	<testcase name="TestRecorderDriven/test#01" time="0.000"></testcase>
 </testsuite>
 `
 	var buf bytes.Buffer

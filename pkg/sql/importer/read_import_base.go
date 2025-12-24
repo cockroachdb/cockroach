@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -70,7 +71,7 @@ func runImport(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	seqChunkProvider *row.SeqChunkProvider,
-) (*kvpb.BulkOpSummary, error) {
+) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
@@ -80,7 +81,7 @@ func runImport(
 	table := getTableFromSpec(spec)
 	cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
 	if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	table.Desc = cpy.TableDesc()
 
@@ -89,7 +90,7 @@ func runImport(
 	semaCtx := tree.MakeSemaContext(importResolver)
 	conv, err := makeInputConverter(ctx, &semaCtx, spec, evalCtx, kvCh, seqChunkProvider, flowCtx.Cfg.DB.KV())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// This group holds the go routines that are responsible for producing KV
@@ -121,13 +122,14 @@ func runImport(
 	// Ingest the KVs that the producer group emitted to the chan and the row result
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
+	var files *bulksst.SSTFiles
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh)
+		summary, files, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh)
 		return err
 	})
 
 	if err = group.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
@@ -139,10 +141,71 @@ func runImport(
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	case progCh <- prog:
-		return summary, nil
+		return summary, files, nil
 	}
+}
+
+// makeFileReader creates a fileReader for the given format, applying
+// decompression for formats that need it (CSV, Avro, etc.) or providing
+// seekable access for formats that require it (Parquet).
+func makeFileReader(
+	ctx context.Context,
+	format roachpb.IOFileFormat,
+	raw ioctx.ReadCloserCtx,
+	dataFile string,
+	dataFileSize int64,
+	storage cloud.ExternalStorage,
+) (*fileReader, io.Closer, error) {
+	var readCloser io.ReadCloser
+	var randomReader ioctx.ReaderAtSeekerCloser
+	var counter *byteCounter
+
+	switch format.Format {
+	case roachpb.IOFileFormat_Parquet:
+		// Parquet needs seekable, uncompressed access
+		// (compression is handled internally by Parquet)
+		if storage == nil {
+			// This shouldn't really happen, makeExternalStorage would have returned an error.
+			return nil, nil, errors.AssertionFailedf("storage must be non-nil for Parquet format")
+		}
+		// This works with any cloud storage that supports offset reads.
+		openAt := func(ctx context.Context, offset int64, endHint int64) (ioctx.ReadCloserCtx, error) {
+			opts := cloud.ReadOptions{
+				Offset: offset,
+			}
+			// Set LengthHint if endHint is provided and valid.
+			if endHint > offset {
+				opts.LengthHint = endHint - offset
+			}
+			r, _, err := storage.ReadFile(ctx, "", opts)
+			return r, err
+		}
+		randomReader = ioctx.NewRandomAccessReader(ctx, dataFileSize, openAt)
+		readCloser = randomReader
+		// counter = nil, since it is not very useful for random access files;
+		// we track progress on the rows read within a parquet file.
+	default:
+		// Default sequential access.
+		source := ioctx.ReaderCtxAdapter(ctx, raw)
+		counter = &byteCounter{r: source}
+		// Apply decompression wrapper
+		decompressed, err := decompressingReader(counter, dataFile, format.Compression)
+		if err != nil {
+			return nil, nil, err
+		}
+		readCloser = decompressed
+		// randomReader = nil, it is not used for sequential access.
+	}
+
+	return &fileReader{
+		Reader:   readCloser,
+		ReaderAt: randomReader, // nil for sequential access.
+		Seeker:   randomReader, // nil for sequential access.
+		counter:  counter,      // nil for parquet.
+		total:    dataFileSize,
+	}, readCloser, nil
 }
 
 // readInputFiles reads each of the passed dataFiles using the passed func. The
@@ -236,19 +299,18 @@ func readInputFiles(
 				return err
 			}
 			defer es.Close()
+
 			raw, _, err := es.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 			if err != nil {
 				return err
 			}
 			defer raw.Close(ctx)
-
-			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: ioctx.ReaderCtxAdapter(ctx, raw)}}
-			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
+			// Create fileReader with format-specific handling
+			src, closer, err := makeFileReader(ctx, format, raw, dataFile, fileSizes[dataFileIndex], es)
 			if err != nil {
 				return err
 			}
-			defer decompressed.Close()
-			src.Reader = decompressed
+			defer closer.Close()
 
 			var rejected chan string
 			if (format.Format == roachpb.IOFileFormat_CSV && format.SaveRejected) ||
@@ -373,14 +435,28 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// fileReader wraps cloud storage readers to provide io.Reader, io.ReaderAt, and io.Seeker
+// interfaces along with progress tracking.
+//
+// Thread Safety:
+// The fileReader provides different thread safety guarantees for different methods:
+//   - ReadAt: Safe for concurrent calls. Multiple goroutines can call ReadAt simultaneously.
+//     This may be used by formats like Parquet that read different file sections in parallel.
+//   - Read/Seek: NOT safe for concurrent calls. Should only be used from a single goroutine.
+//
+// Usage patterns:
+// - Sequential formats (CSV, Avro, etc.): Single goroutine uses Read/Seek
+// - Random-access formats (Parquet): Multiple goroutines could call ReadAt; Seek only during initialization
 type fileReader struct {
 	io.Reader
+	io.ReaderAt
+	io.Seeker
 	total   int64
-	counter byteCounter
+	counter *byteCounter
 }
 
 func (f fileReader) ReadFraction() float32 {
-	if f.total == 0 {
+	if f.total == 0 || f.counter == nil {
 		return 0.0
 	}
 	return float32(f.counter.n) / float32(f.total)
@@ -396,6 +472,8 @@ type inputConverter interface {
 func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
 	case roachpb.IOFileFormat_Avro:
+		return true
+	case roachpb.IOFileFormat_Parquet:
 		return true
 	}
 	return false

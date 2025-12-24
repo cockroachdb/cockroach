@@ -492,6 +492,7 @@ func (a kvAuth) selectAuthzMethod(ar authnResult) (requiredAuthzMethod, error) {
 func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb.TenantID) error {
 	rootLoginDisabledValidate := false
 	debugUserScopedCert := false
+	debugUserLoginNotAllowed := false
 
 	containsFn := func(scope security.CertificateUserScope) bool {
 		// Only consider global scopes or scopes that match this server.
@@ -510,6 +511,10 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 
 		if scope.Username == username.DebugUser {
 			debugUserScopedCert = true
+			// Check if debug user login is allowed
+			if !security.CheckDebugUserLoginAllowed() {
+				debugUserLoginNotAllowed = true
+			}
 		}
 
 		return false
@@ -518,6 +523,10 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 	if ok || err != nil || debugUserScopedCert {
 		if rootLoginDisabledValidate {
 			return authError("failed to perform RPC, as root login has been disallowed")
+		}
+
+		if debugUserLoginNotAllowed {
+			return authError("failed to perform RPC, as debug_user login is not allowed")
 		}
 
 		return err

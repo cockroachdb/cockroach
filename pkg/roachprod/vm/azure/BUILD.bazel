@@ -8,6 +8,7 @@ go_library(
         "doc.go",
         "flags.go",
         "ids.go",
+        "provider_options.go",
         "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure",

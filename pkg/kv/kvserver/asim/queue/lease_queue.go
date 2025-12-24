@@ -121,7 +121,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	}
 
 	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
-		lq.as.PostApply(lq.lastSyncChangeID, true /* success */)
+		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */)
 		lq.lastSyncChangeID = mmaintegration.InvalidSyncChangeID
 	}
 
@@ -165,7 +165,8 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 		}
 
 		lq.next, lq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as, "lease queue")
+			ctx, roachpb.StoreID(lq.storeID), change, repl, tick, lq.settings.ReplicaChangeDelayFn(),
+			lq.baseQueue.stateChanger, lq.as, "lease queue")
 	}
 
 	lq.lastTick = tick

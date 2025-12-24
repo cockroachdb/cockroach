@@ -95,6 +95,7 @@ message ElementProto {
     Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableStorageParam table_storage_param = 142 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -249,10 +250,7 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 5;
-  // Deprecated
-  // compute expression is now handled as a separate element (see ColumnComputeExpression).
-  Expression compute_expr = 6 [deprecated = true];
+  reserved 5, 6;
   bool is_virtual = 7;
   reserved 8, 9, 10;
   // ElementCreationMetadata stores information about when this element is created.
@@ -772,6 +770,10 @@ message RowLevelTTL {
   // ExpirationExpr is not set. This expression is used to establish column
   // dependencies.
   Expression ttl_expr = 3 [(gogoproto.customname) = "TTLExpr"];
+  // SeqNum differentiates different versions of the TTL configuration for the
+  // same table. When modifying TTL parameters, the old element is dropped and
+  // a new one with an incremented SeqNum is added.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message ColumnName {
@@ -972,6 +974,13 @@ message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
+// TableStorageParam models the storage parameters of a table other than `schema_locked` and RowLevelTTL-related ones.
+message TableStorageParam {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+  string value = 3;
+}
+
 // LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
 message LDRJobIDs {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -1043,7 +1052,6 @@ message FunctionSecurity {
 }
 
 message ElementCreationMetadata {
-  reserved 1;
-  bool in_24_3_or_later = 2;
+  reserved 1, 2;
   bool in_26_1_or_later = 3;
 }

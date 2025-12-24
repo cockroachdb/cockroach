@@ -1,0 +1,381 @@
+# Test adding nodes to an existing cluster
+add-nodes cluster=test-cluster nodes=(1,addr1) nodes=(2,addr2)
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets = [{
+		__address__  = "addr1",
+		node         = "1",
+		service_name = "test-cluster",
+	}, {
+		__address__  = "addr2",
+		node         = "2",
+		service_name = "test-cluster",
+	}]
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test adding more nodes to an existing cluster with nodes
+add-nodes cluster=test-cluster nodes=(3,addr3) nodes=(4,addr4) initial-nodes=(1,addr1) initial-nodes=(2,addr2)
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets = [{
+		__address__  = "addr1",
+		node         = "1",
+		service_name = "test-cluster",
+	}, {
+		__address__  = "addr2",
+		node         = "2",
+		service_name = "test-cluster",
+	}, {
+		__address__  = "addr3",
+		node         = "3",
+		service_name = "test-cluster",
+	}, {
+		__address__  = "addr4",
+		node         = "4",
+		service_name = "test-cluster",
+	}]
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test removing nodes from a cluster
+remove-nodes cluster=test-cluster nodes=(2,4) initial-nodes=(1,addr1) initial-nodes=(2,addr2) initial-nodes=(3,addr3) initial-nodes=(4,addr4)
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets = [{
+		__address__  = "addr1",
+		node         = "1",
+		service_name = "test-cluster",
+	}, {
+		__address__  = "addr3",
+		node         = "3",
+		service_name = "test-cluster",
+	}]
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test removing all nodes from a cluster
+remove-nodes cluster=test-cluster nodes=(1,2) initial-nodes=(1,addr1) initial-nodes=(2,addr2)
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test updating an existing target with secure cookie
+update-target cluster=test-cluster secure-cookie=session=SECRET123
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets      = []
+	scheme       = "https"
+	http_headers = {
+		Cookie = ["session=SECRET123"],
+	}
+
+	tls_config {
+		insecure_skip_verify = true
+	}
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test updating an existing target to remove secure cookie
+update-target cluster=test-cluster secure-cookie= initial-secure-cookie=session=OLD123
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "test_cluster" {
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test creating a new target via update-target
+update-target cluster=new-cluster secure-cookie=session=NEWSECRET new-target=true
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "new_cluster" {
+	targets      = []
+	scheme       = "https"
+	http_headers = {
+		Cookie = ["session=NEWSECRET"],
+	}
+
+	tls_config {
+		insecure_skip_verify = true
+	}
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----
+
+# Test creating a new insecure target via update-target
+update-target cluster=insecure-new-cluster secure-cookie= new-target=true
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "insecure_new_cluster" {
+	targets                  = []
+	scheme                   = "http"
+	scrape_interval          = "1m"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----

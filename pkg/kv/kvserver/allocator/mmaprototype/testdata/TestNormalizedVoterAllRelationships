@@ -13,7 +13,8 @@ table:
 	emptyVoterConstraintIndex: -1
 	relationships:
 
-# Test with intersecting voter and all constraints.
+# Test non-intersecting: same region but different zones (same type, same key,
+# different values).
 normalized-voter-all-rels num-replicas=3 num-voters=3
 constraint +zone=us-west-a +region=us-west 
 voter-constraint +zone=us-west-b +region=us-west 
@@ -34,7 +35,7 @@ table:
 	emptyConstraintIndex: -1
 	emptyVoterConstraintIndex: -1
 	relationships:
-	[idx=0][voter=+zone=us-west-b,+region=us-west:3] [all=+zone=us-west-a,+region=us-west:3] rel=possiblyIntersecting
+	[idx=0][voter=+zone=us-west-b,+region=us-west:3] [all=+zone=us-west-a,+region=us-west:3] rel=nonIntersecting
 
 # Test with equal voter and all constraints.
 normalized-voter-all-rels num-replicas=3 num-voters=3
@@ -128,7 +129,82 @@ table:
 	relationships:
 	[idx=0][voter=+region=us-east:3] [all=+region=us-west:5] rel=nonIntersecting
 
-# Test error case: multiple empty voter constraints.
+# Test with non-intersecting constraints (same type, different key, different
+# values).
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint +region=us-west 
+voter-constraint +dc=dc-1
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+ voter-constraints:
+   +dc=dc-1
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west:5
+ voter-constraints:
+   +dc=dc-1:3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	[idx=0][voter=+dc=dc-1:3] [all=+region=us-west:5] rel=nonIntersecting
+
+# Test non-intersecting: same type, same key, different values. During the
+# sorted walk, all-replica constraint has smaller zone value (us-west-a <
+# us-west-b), so the differing value is encountered from all-replica constraints
+# first.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-a
+voter-constraint +region=us-west +zone=us-west-b
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-a
+ voter-constraints:
+   +region=us-west,+zone=us-west-b
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +zone=us-west-a,+region=us-west:5
+ voter-constraints:
+   +zone=us-west-b,+region=us-west:3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	[idx=0][voter=+zone=us-west-b,+region=us-west:3] [all=+zone=us-west-a,+region=us-west:5] rel=nonIntersecting
+
+# Test non-intersecting: same type, same key, different values. During the
+# sorted walk, voter constraint has smaller zone value (us-west-a < us-west-b),
+# so the differing value is encountered from voter constraints first.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint +region=us-west +zone=us-west-b
+voter-constraint +region=us-west +zone=us-west-a
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west,+zone=us-west-b
+ voter-constraints:
+   +region=us-west,+zone=us-west-a
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   +zone=us-west-b,+region=us-west:5
+ voter-constraints:
+   +zone=us-west-a,+region=us-west:3
+table:
+	emptyConstraintIndex: -1
+	emptyVoterConstraintIndex: -1
+	relationships:
+	[idx=0][voter=+zone=us-west-a,+region=us-west:3] [all=+zone=us-west-b,+region=us-west:5] rel=nonIntersecting
+
+# Multiple empty voter constraints are combined into a single empty constraint.
 normalized-voter-all-rels num-replicas=5 num-voters=3
 voter-constraint num-replicas=1
 ----
@@ -141,13 +217,12 @@ normalized:
  constraints:
    :5
  voter-constraints:
-   :1
-   :2
+   :3
 table:
-	emptyConstraintIndex: -1
-	emptyVoterConstraintIndex: -1
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 0
 	relationships:
-	err: multiple empty voter constraints: {1 []} and {2 []}
+	[idx=0][voter=:3] [all=:5] rel=equalSet
 
 # Test error case: constraint replicas add up to more than configured replicas.
 normalized-voter-all-rels num-replicas=1 num-voters=1
@@ -159,7 +234,8 @@ input:
    +region=us-west:2
 normalization error: constraint replicas add up to more than configured replicas
 
-# Test error case: multiple empty constraints.
+# Explicit [:2] expands to [:8] after merging empty constraints. Synthesizes
+# [:4] for unconstrained voters.
 normalized-voter-all-rels num-replicas=8 num-voters=5
 constraint num-replicas=2
 voter-constraint num-replicas=1 +region=us-west
@@ -173,16 +249,68 @@ input:
 normalized:
  num-replicas=8 num-voters=5
  constraints:
-   :2
-   :6
+   :8
  voter-constraints:
    +region=us-west:1
    :4
 table:
-	emptyConstraintIndex: -1
-	emptyVoterConstraintIndex: -1
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 1
 	relationships:
-	err: multiple empty constraints: {2 []} and {6 []}
+	[idx=0][voter=:4] [all=:8] rel=equalSet
+	[idx=1][voter=+region=us-west:1] [all=:8] rel=strictSubset
+
+# Multiple explicit empty constraints [:2] and [:3] merge into [:5]. Synthesizes
+# [:2] for unconstrained voters.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint num-replicas=2
+constraint num-replicas=3
+voter-constraint num-replicas=1 +region=us-west
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   :2
+   :3
+ voter-constraints:
+   +region=us-west:1
+normalized:
+ num-replicas=5 num-voters=3
+ constraints:
+   :5
+ voter-constraints:
+   +region=us-west:1
+   :2
+table:
+	emptyConstraintIndex: 0
+	emptyVoterConstraintIndex: 1
+	relationships:
+	[idx=0][voter=:2] [all=:5] rel=equalSet
+	[idx=1][voter=+region=us-west:1] [all=:5] rel=strictSubset
+
+# Test error case: voter constraint replicas add up to more than configured voters.
+normalized-voter-all-rels num-replicas=5 num-voters=1
+voter-constraint num-replicas=2 +region=us-west
+----
+input:
+ num-replicas=5 num-voters=1
+ voter-constraints:
+   +region=us-west:2
+normalization error: constraint replicas add up to more than configured replicas
+
+# Test error case: invalid mix of constraints (NumReplicas=0 and NumReplicas>0 together).
+# A constraint without num-replicas= defaults to 0 (applies to all), mixed with one that
+# specifies num-replicas>0 is invalid.
+normalized-voter-all-rels num-replicas=5 num-voters=3
+constraint +region=us-west
+constraint num-replicas=2 +region=us-east
+----
+input:
+ num-replicas=5 num-voters=3
+ constraints:
+   +region=us-west
+   +region=us-east:2
+normalization error: cannot have zero-replica constraints mixed with non-zero-replica constraints
 
 # Test with multiple relationships.
 normalized-voter-all-rels num-replicas=8 num-voters=5

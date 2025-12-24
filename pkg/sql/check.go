@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -736,7 +737,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
@@ -802,7 +803,7 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	if !errors.HasType(validateErr, invalidTableTTLScheduledJobError) {
 		return errors.Wrap(validateErr, "error validating TTL on table")
 	}
-	sj, err := CreateRowLevelTTLScheduledJob(
+	sj, err := ttlinit.CreateRowLevelTTLScheduledJob(
 		ctx,
 		p.ExecCfg().JobsKnobs(),
 		jobs.ScheduledJobTxn(p.InternalSQLTxn()),

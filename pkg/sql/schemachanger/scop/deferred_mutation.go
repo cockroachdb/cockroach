@@ -107,3 +107,18 @@ type UpdateTTLScheduleMetadata struct {
 	TableID descpb.ID
 	NewName string
 }
+
+// UpdateTTLScheduleCron updates the cron schedule expression for a TTL job.
+type UpdateTTLScheduleCron struct {
+	deferredMutationOp
+	TableID     descpb.ID
+	ScheduleID  jobspb.ScheduleID
+	NewCronExpr string
+}
+
+// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+// This is used when adding TTL to a table that doesn't already have one.
+type CreateRowLevelTTLSchedule struct {
+	deferredMutationOp
+	TableID descpb.ID
+}

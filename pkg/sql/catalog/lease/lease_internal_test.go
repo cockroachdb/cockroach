@@ -1564,7 +1564,7 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'baz'`).Scan(&tableID)
 	descs, err := getDescriptorsFromStoreForInterval(ctx, kvDB, s.Codec(), descpb.ID(tableID),
-		beforeCreate, afterCreate)
+		beforeCreate, afterCreate, false /*isOffline */)
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
 	require.Equal(t, numRequests, 1)
@@ -1750,6 +1750,9 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	// Old versions need to be retained, since we don't have code
+	// to read them from storage in this test.
+	RetainOldVersionsForLocked.Override(ctx, &st.SV, true)
 	// Intentionally disable WaitForInitialVersion support, so that we can run
 	// historical queries at timestamps before the lease manager is fully caught
 	// up.

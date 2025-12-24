@@ -191,6 +191,7 @@ go_library(
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/multitenant/tenantcostmodel",
+        "//pkg/obs/workloadid",
         "//pkg/raft",
         "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",

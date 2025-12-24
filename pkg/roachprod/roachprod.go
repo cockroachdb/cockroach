@@ -35,12 +35,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -261,7 +263,7 @@ func CachedClusters(fn func(clusterName string, numVMs int)) {
 }
 
 // CachedCluster returns the cached information about a given cluster.
-func CachedCluster(name string) (*cloud.Cluster, bool) {
+func CachedCluster(name string) (*cloudcluster.Cluster, bool) {
 	return readSyncedClusters(name)
 }
 
@@ -642,7 +644,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	var cloudCluster *cloud.Cluster
+	var cloudCluster *cloudcluster.Cluster
 	if sync {
 		cld, err := Sync(l, vm.ListOptions{})
 		if err != nil {
@@ -2036,6 +2038,114 @@ func InitProviders() map[string]string {
 	return providersState
 }
 
+// StartPyroscope deploys and starts the Pyroscope profiling stack on a node.
+func StartPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be started on a single node")
+	}
+
+	return pyroscope.Start(ctx, l, c)
+}
+
+// StopPyroscope tears down the Pyroscope profiling stack on a node.
+func StopPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be stopped on a single node")
+	}
+
+	return pyroscope.Stop(ctx, l, c)
+}
+
+// AddPyroscopeNodes adds nodes from the target cluster to the Pyroscope scrape configuration.
+func AddPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.AddNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// RemovePyroscopeNodes removes nodes from the target cluster from the Pyroscope scrape
+// configuration.
+func RemovePyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.RemoveNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// ListPyroscopeNodes displays the nodes from the target cluster currently being scraped by
+// Pyroscope.
+func ListPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.ListNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// InitPyroscopeTarget initializes the target cluster in the Pyroscope scrape configuration,
+// setting up authentication if the target cluster is secure.
+func InitPyroscopeTarget(
+	ctx context.Context,
+	l *logger.Logger,
+	pyroscopeClusterName, targetClusterName string,
+	secure install.ComplexSecureOption,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	targetCluster, err := GetClusterFromCache(l, targetClusterName, secure)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.InitTarget(ctx, l, pyroscopeCluster, targetCluster)
+}
+
 // StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes
 // from all other nodes.
 func StartGrafana(
@@ -3089,7 +3199,7 @@ func GetClusterFromCache(
 
 // getClusterFromCloud finds and returns a specified cluster by querying
 // provider APIs. This also syncs the local cluster cache through ListCloud.
-func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, error) {
+func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloudcluster.Cluster, error) {
 	// ListCloud may fail due to a transient provider error, but
 	// we may have still found the cluster we care about. It will
 	// fail below if it can't find the cluster.
@@ -3097,9 +3207,9 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		if err != nil {
-			return &cloud.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
+			return &cloudcluster.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
 		}
-		return &cloud.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
+		return &cloudcluster.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
 	return c, nil

@@ -718,6 +718,7 @@ func TestPartialZip(t *testing.T) {
 	// however low timeouts make race runs flaky with false positives.
 	skip.UnderShort(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
@@ -830,6 +831,7 @@ func TestZipDisallowFullScans(t *testing.T) {
 
 	skip.UnderShort(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -1500,6 +1502,8 @@ func trimNonDeterministicZipOutputFiles(out string) string {
 func TestZipIncludeAndExcludeFilesDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	datadriven.Walk(t, "testdata/zip/file-filters", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

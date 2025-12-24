@@ -81,6 +81,7 @@ go_library(
         "opgen_table_locality_secondary_region.go",
         "opgen_table_partitioning.go",
         "opgen_table_schema_locked.go",
+        "opgen_table_storage_params.go",
         "opgen_table_zone_config.go",
         "opgen_temporary_index.go",
         "opgen_trigger.go",

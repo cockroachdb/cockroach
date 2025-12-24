@@ -11,6 +11,7 @@ import (
 	"io"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -875,6 +876,137 @@ func TestServerDump(t *testing.T) {
 		_, resultsMap := readDataFromDump(t, dumpClient)
 		require.Equal(t, expectedMap, resultsMap)
 	}
+}
+
+func TestServerDumpChildMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store parent metric (without labels)
+	parentMetric := "cr.node.changefeed.emitted_messages"
+	if err := tsdb.StoreData(ctx, ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name:   parentMetric,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 1000.0},
+				{TimestampNanos: 200 * 1e9, Value: 2000.0},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Store child metrics (with labels encoded in name)
+	childMetric1 := fmt.Sprintf(`%s{feed_id="123",scope="default"}`, parentMetric)
+	childMetric2 := fmt.Sprintf(`%s{feed_id="456",scope="system"}`, parentMetric)
+	if err := tsdb.StoreData(ctx, ts.Resolution1m, []tspb.TimeSeriesData{
+		{
+			Name:   childMetric1,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 500.0},
+				{TimestampNanos: 200 * 1e9, Value: 1500.0},
+			},
+		},
+		{
+			Name:   childMetric2,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 300.0},
+				{TimestampNanos: 200 * 1e9, Value: 800.0},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	t.Run("includes child metrics", func(t *testing.T) {
+		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
+			Names:      []string{parentMetric},
+			StartNanos: 100 * 1e9,
+			EndNanos:   300 * 1e9,
+		})
+		require.NoError(t, err)
+
+		resultMap := make(map[string][]tspb.TimeSeriesDatapoint)
+		for {
+			msg, err := dumpClient.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			resultMap[msg.Name] = append(resultMap[msg.Name], msg.Datapoints...)
+		}
+
+		// Should have parent metric AND both child metrics
+		require.Contains(t, resultMap, parentMetric, "parent metric should be included")
+		require.Contains(t, resultMap, childMetric1, "child metric 1 should be included")
+		require.Contains(t, resultMap, childMetric2, "child metric 2 should be included")
+		require.Equal(t, 3, len(resultMap), "should have parent and both child metrics")
+
+		// Verify data correctness for parent metric
+		require.Len(t, resultMap[parentMetric], 2, "parent metric should have 2 datapoints")
+		require.Equal(t, 1000.0, resultMap[parentMetric][0].Value)
+		require.Equal(t, 2000.0, resultMap[parentMetric][1].Value)
+
+		// Verify data correctness for child metrics
+		require.Len(t, resultMap[childMetric1], 2, "child metric 1 should have 2 datapoints")
+		require.Equal(t, 500.0, resultMap[childMetric1][0].Value)
+		require.Equal(t, 1500.0, resultMap[childMetric1][1].Value)
+
+		require.Len(t, resultMap[childMetric2], 2, "child metric 2 should have 2 datapoints")
+		require.Equal(t, 300.0, resultMap[childMetric2][0].Value)
+		require.Equal(t, 800.0, resultMap[childMetric2][1].Value)
+	})
+
+	t.Run("DumpRaw sees child metrics", func(t *testing.T) {
+		dumpRawClient, err := client.DumpRaw(ctx, &tspb.DumpRequest{
+			Names:      []string{parentMetric},
+			StartNanos: 100 * 1e9,
+			EndNanos:   300 * 1e9,
+		})
+		require.NoError(t, err)
+
+		var kvCount int
+		seenMetrics := make(map[string]bool)
+		for {
+			kv, err := dumpRawClient.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			kvCount++
+			// Decode the key to verify it contains child metrics
+			// The key contains the encoded metric name
+			keyStr := string(kv.Key)
+			if strings.Contains(keyStr, "{") {
+				seenMetrics["child"] = true
+			}
+		}
+
+		require.Greater(t, kvCount, 0, "should have raw KVs")
+		require.True(t, seenMetrics["child"], "should have seen child metrics in raw dump")
+	})
 }
 
 func BenchmarkServerQuery(b *testing.B) {

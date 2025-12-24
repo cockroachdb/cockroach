@@ -688,7 +688,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 func (c *SyncedCluster) NodeDir(node Node, storeIndex int) string {
 	if c.IsLocal() {
 		if storeIndex != 1 {
-			panic("NodeDir only supports one store for local deployments")
+			return filepath.Join(c.localVMDir(node), "data", fmt.Sprintf("data%d", storeIndex))
 		}
 		return filepath.Join(c.localVMDir(node), "data")
 	}

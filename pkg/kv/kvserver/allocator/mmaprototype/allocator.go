@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
@@ -17,6 +18,13 @@ type ChangeOptions struct {
 	// DryRun tells the allocator not to update its internal state with the
 	// proposed pending changes.
 	DryRun bool
+	// PeriodicCall is only used for observability, for deciding when to update
+	// gauges and log a summary of what happened in the rebalancing pass. We
+	// expect that when this is true, more significant changes may be produced,
+	// and the subsequent calls in a tight loop will have diminishing returns
+	// (due to pending changes from a load perspective), and so choose not to
+	// update gauges and logs in those subsequent calls.
+	PeriodicCall bool
 }
 
 // Allocator is the interface for a distributed allocator. We expect that the
@@ -29,8 +37,17 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	// LoadSummaryForAllStores returns a human-readable string summarizing the
+	// current load state of all known stores in the cluster. This is primarily
+	// used for debugging and observability purposes.
 	LoadSummaryForAllStores(context.Context) string
-	Metrics() *MMAMetrics
+
+	// InitMetricsForLocalStore initializes and registers metrics for the
+	// specified local store with the provided metric registry. This should be
+	// called once per store during startup to register metrics for mma.
+	InitMetricsForLocalStore(
+		ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry)
+
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
 
@@ -56,18 +73,25 @@ type Allocator interface {
 	// Calls to AdjustPendingChangeDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangeDisposition(change ExternalRangeChange, success bool)
+	AdjustPendingChangeDisposition(ctx context.Context, change ExternalRangeChange, success bool)
 
 	// RegisterExternalChange informs this allocator about yet to complete
-	// changes to the cluster which were not initiated by this allocator. The
-	// ownership of all state inside change is handed off to the callee. If ok
-	// is true, the change was registered, and the caller is returned an
-	// ExternalRangeChange that it should subsequently use in a call to
-	// AdjustPendingChangeDisposition when the changes are completed, either
-	// successfully or not. If ok is false, the change was not registered.
-	RegisterExternalChange(change PendingRangeChange) (_ ExternalRangeChange, ok bool)
+	// changes to the cluster (on behalf of localStoreID) which were not
+	// initiated by this allocator. The ownership of all state inside change is
+	// handed off to the callee. If ok is true, the change was registered, and
+	// the caller is returned an ExternalRangeChange that it should subsequently
+	// use in a call to AdjustPendingChangeDisposition when the changes are
+	// completed, either successfully or not. If ok is false, the change was not
+	// registered.
+	RegisterExternalChange(
+		ctx context.Context, localStoreID roachpb.StoreID, change PendingRangeChange,
+	) (_ ExternalRangeChange, ok bool)
 
-	// ComputeChanges is called periodically and frequently, say every 10s.
+	// ComputeChanges is called to compute changes. The caller may use a
+	// combination of periodic calls (say every 60s) and calling in a tight
+	// loop. The tight loop is useful when the periodic call produced changes
+	// that have been enacted, and the caller want to keep producing more
+	// changes immediately.
 	//
 	// It accepts the latest StoreLeaseholderMsg for ChangeOptions.LocalStoreID.
 	//

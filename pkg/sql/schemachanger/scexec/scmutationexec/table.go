@@ -9,7 +9,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -31,8 +33,59 @@ func (i *immediateVisitor) SetTableSchemaLocked(
 	return nil
 }
 
+func (i *immediateVisitor) SetTableStorageParam(
+	ctx context.Context, op scop.SetTableStorageParam,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
+	if err != nil {
+		return err
+	}
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
+	return setter.SetToStringValue(ctx, op.Param.Name, op.Param.Value)
+}
+
+func (i *immediateVisitor) ResetTableStorageParam(
+	ctx context.Context, op scop.ResetTableStorageParam,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.Param.TableID)
+	if err != nil {
+		return err
+	}
+	setter := tablestorageparam.NewSetter(tbl, false /* isNewObject */)
+	return setter.ResetToZeroValue(ctx, op.Param.Name)
+}
+
+func (i *immediateVisitor) UpsertRowLevelTTL(ctx context.Context, op scop.UpsertRowLevelTTL) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	if op.RowLevelTTL == (catpb.RowLevelTTL{}) {
+		tbl.RowLevelTTL = nil
+		return nil
+	}
+
+	// Make a copy of the RowLevelTTL so we can take its address.
+	ttl := op.RowLevelTTL
+	tbl.RowLevelTTL = &ttl
+	return nil
+}
+
 func (d *deferredVisitor) UpdateTTLScheduleMetadata(
 	ctx context.Context, op scop.UpdateTTLScheduleMetadata,
 ) error {
 	return d.DeferredMutationStateUpdater.UpdateTTLScheduleMetadata(ctx, op.TableID, op.NewName)
+}
+
+func (d *deferredVisitor) UpdateTTLScheduleCron(
+	ctx context.Context, op scop.UpdateTTLScheduleCron,
+) error {
+	return d.DeferredMutationStateUpdater.UpdateTTLScheduleCron(ctx, op.ScheduleID, op.NewCronExpr)
+}
+
+func (d *deferredVisitor) CreateRowLevelTTLSchedule(
+	ctx context.Context, op scop.CreateRowLevelTTLSchedule,
+) error {
+	return d.DeferredMutationStateUpdater.CreateRowLevelTTLSchedule(ctx, op.TableID)
 }

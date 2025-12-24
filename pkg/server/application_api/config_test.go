@@ -66,9 +66,7 @@ func TestAdminAPISettings(t *testing.T) {
 		"view_activity_user":          {userName: "view_activity_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITY", consoleOnly: true},
 		"view_activity_redacted_user": {userName: "view_activity_redacted_user", redactableSettings: true, grantRole: "SYSTEM VIEWACTIVITYREDACTED", consoleOnly: true},
 	}
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-	})
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(ctx)
 	forSystemTenant := ts.ApplicationLayer().Codec().ForSystemTenant()
 	conn := sqlutils.MakeSQLRunner(ts.ApplicationLayer().SQLConn(t))

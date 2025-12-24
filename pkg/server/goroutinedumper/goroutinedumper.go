@@ -10,13 +10,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime/pprof"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -162,7 +162,7 @@ func takeGoroutineDump(path string) error {
 	}
 	defer f.Close()
 	w := gzip.NewWriter(f)
-	if err = pprof.Lookup("goroutine").WriteTo(w, 2); err != nil {
+	if _, err := w.Write(allstacks.Get()); err != nil {
 		return errors.Wrapf(err, "error writing goroutine dump to %s", path)
 	}
 	// Flush and write the gzip header. It doesn't close the underlying writer.

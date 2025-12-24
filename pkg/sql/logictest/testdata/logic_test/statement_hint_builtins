@@ -943,3 +943,11 @@ statement hints count: 1
       missing stats
       table: xy@xy_pkey
       spans: FULL SCAN
+
+# Test error handling for crdb_internal.inject_hint.
+
+statement error pq: could not parse statement fingerprint as a single SQL statement
+SELECT crdb_internal.inject_hint('', '')
+
+statement error pq: could not parse hint donor statement as a single SQL statement
+SELECT crdb_internal.inject_hint('SELECT 1', 'SELECT 2; SELECT 3')

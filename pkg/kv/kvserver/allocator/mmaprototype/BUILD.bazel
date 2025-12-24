@@ -13,6 +13,7 @@ go_library(
         "load.go",
         "memo_helper.go",
         "messages.go",
+        "mma_metrics.go",
         "range_change.go",
         "rebalance_advisor.go",
         "store_load_summary.go",
@@ -25,6 +26,7 @@ go_library(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/util/buildutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",

@@ -1410,9 +1410,11 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	ctx := context.Background()
 	var testTenant base.DefaultTestTenantOptions
 	if syncutil.DeadlockEnabled {
-		// Under deadlock, the planning latency in the external process mode can
-		// sometimes exceed 1s allowed limit.
-		testTenant = base.TestSkipForExternalProcessMode()
+		// Under deadlock, the planning latency in the secondary test tenant can
+		// sometimes exceed 1s allowed limit. (Note ideally we'd have used a
+		// different test tenant option since it's not "storage-layer specific"
+		// test, but there isn't a more suitable one.)
+		testTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
 	}
 	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: testTenant,

@@ -8,12 +8,14 @@ package jobs
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/klauspost/compress/gzip"
 )
@@ -107,4 +109,48 @@ func ReadChunkedFileToJobInfo(
 	}
 
 	return buf.Bytes(), nil
+}
+
+// WriteUint64 writes a uint64 value to the info storage.
+func (i InfoStorage) WriteUint64(ctx context.Context, infoKey string, value uint64) error {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, value)
+	return i.Write(ctx, infoKey, buf)
+}
+
+// GetUint64 retrieves a uint64 value from the info storage.
+// Returns (value, found, error).
+func (i InfoStorage) GetUint64(ctx context.Context, infoKey string) (uint64, bool, error) {
+	data, found, err := i.Get(ctx, "get-uint64", infoKey)
+	if err != nil || !found {
+		return 0, found, err
+	}
+	if len(data) != 8 {
+		return 0, false, errors.Newf("invalid uint64 data length: %d", len(data))
+	}
+	return binary.LittleEndian.Uint64(data), true, nil
+}
+
+// WriteProto writes a protobuf message to the info storage.
+func (i InfoStorage) WriteProto(ctx context.Context, infoKey string, msg protoutil.Message) error {
+	data, err := protoutil.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal proto")
+	}
+	return i.Write(ctx, infoKey, data)
+}
+
+// GetProto retrieves a protobuf message from the info storage.
+// Returns (found, error). If found, the message is unmarshaled into msg.
+func (i InfoStorage) GetProto(
+	ctx context.Context, infoKey string, msg protoutil.Message,
+) (bool, error) {
+	data, found, err := i.Get(ctx, "get-proto", infoKey)
+	if err != nil || !found {
+		return found, err
+	}
+	if err := protoutil.Unmarshal(data, msg); err != nil {
+		return false, errors.Wrap(err, "failed to unmarshal proto")
+	}
+	return true, nil
 }

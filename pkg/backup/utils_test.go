@@ -65,6 +65,7 @@ const (
 // tc.WaitForFullReplication before calling this method,
 // so up-replication has usually already taken place.
 var InitManualReplication = backuptestutils.InitManualReplication
+var NoInitManipulation = func(tc *testcluster.TestCluster) {}
 
 func backupRestoreTestSetupWithParams(
 	t testing.TB,

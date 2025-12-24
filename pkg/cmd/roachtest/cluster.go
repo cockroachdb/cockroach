@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -1413,7 +1414,7 @@ func (c *clusterImpl) FetchDebugZip(
 			//
 			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			excludeFiles := "*.log,*.pprof"
+			excludeFiles := "*.log"
 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
@@ -3275,7 +3276,7 @@ func randomArch(
 }
 
 // bucketVMsByProvider buckets cachedCluster.VMs by provider.
-func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
+func bucketVMsByProvider(cachedCluster *cloudcluster.Cluster) map[string][]vm.VM {
 	providerToVMs := make(map[string][]vm.VM)
 	for _, vm := range cachedCluster.VMs {
 		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
@@ -3285,7 +3286,7 @@ func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
 
 // getCachedCluster checks if the passed cluster name is present in cached clusters
 // and returns an error if not found.
-func getCachedCluster(clusterName string) (*cloud.Cluster, error) {
+func getCachedCluster(clusterName string) (*cloudcluster.Cluster, error) {
 	cachedCluster, ok := roachprod.CachedCluster(clusterName)
 	if !ok {
 		var availableClusters []string

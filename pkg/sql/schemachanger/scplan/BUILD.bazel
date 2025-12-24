@@ -50,6 +50,7 @@ go_test(
         ":scplan",
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

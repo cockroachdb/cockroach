@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -478,6 +479,36 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			JobIDs:  tbl.TableDesc().LDRJobIDs,
 		})
 	}
+	w.walkStorageParams(tbl)
+}
+
+// walkStorageParams walks through table storage parameters and creates
+// TableStorageParam elements for each non-null parameter.
+func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
+	tableID := tbl.GetID()
+	storageParams, err := tbl.GetStorageParams(false)
+	if err != nil {
+		panic(err)
+	}
+	for _, param := range storageParams {
+		key, value, found := strings.Cut(param, "=")
+		if !found {
+			continue
+		}
+		if key == "schema_locked" {
+			// schema_locked is handled separately via the TableSchemaLocked element.
+			continue
+		}
+		if strings.HasPrefix(key, "ttl") {
+			// ttl parameters are handled separately via the RowLevelTTL element.
+			continue
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.TableStorageParam{
+			TableID: tableID,
+			Name:    key,
+			Value:   value,
+		})
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {
@@ -570,15 +601,11 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			expr, err := w.newExpression(col.GetComputeExpr())
 			onErrPanic(err)
 
-			if columnType.ElementCreationMetadata.In_24_3OrLater {
-				w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
-					TableID:    tbl.GetID(),
-					ColumnID:   col.GetID(),
-					Expression: *expr,
-				})
-			} else {
-				columnType.ComputeExpr = expr
-			}
+			w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
+				TableID:    tbl.GetID(),
+				ColumnID:   col.GetID(),
+				Expression: *expr,
+			})
 		}
 
 		if columnType.ElementCreationMetadata.In_26_1OrLater {

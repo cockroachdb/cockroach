@@ -1,0 +1,77 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT)
+----
+
+build
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true)
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT]
+  {name: exclude_data_from_backup, tableId: 104, value: "true"}
+
+build
+ALTER TABLE defaultdb.foo SET (sql_stats_histogram_buckets_count = 64)
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT]
+  {name: sql_stats_histogram_buckets_count, tableId: 104, value: "64"}
+
+build
+ALTER TABLE defaultdb.foo SET (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 64)
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[TableStorageParam:{DescID: 104, Name: exclude_data_from_backup, Value: true}, PUBLIC], ABSENT]
+  {name: exclude_data_from_backup, tableId: 104, value: "true"}
+- [[TableStorageParam:{DescID: 104, Name: sql_stats_histogram_buckets_count, Value: 64}, PUBLIC], ABSENT]
+  {name: sql_stats_histogram_buckets_count, tableId: 104, value: "64"}
+
+setup
+CREATE TABLE defaultdb.bar (x INT PRIMARY KEY) WITH (exclude_data_from_backup = true)
+----
+
+build
+ALTER TABLE defaultdb.bar SET (exclude_data_from_backup = false)
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC]
+  {name: exclude_data_from_backup, tableId: 105, value: "true"}
+- [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: false}, PUBLIC], ABSENT]
+  {name: exclude_data_from_backup, tableId: 105, value: "false"}
+
+build
+ALTER TABLE defaultdb.bar RESET (exclude_data_from_backup)
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[TableStorageParam:{DescID: 105, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC]
+  {name: exclude_data_from_backup, tableId: 105, value: "true"}
+
+setup
+CREATE TABLE defaultdb.baz (y INT PRIMARY KEY) WITH (exclude_data_from_backup = true, sql_stats_histogram_buckets_count = 100)
+----
+
+build
+ALTER TABLE defaultdb.baz RESET (exclude_data_from_backup, sql_stats_histogram_buckets_count)
+----
+- [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 106}
+- [[TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 106}
+- [[TableStorageParam:{DescID: 106, Name: exclude_data_from_backup, Value: true}, ABSENT], PUBLIC]
+  {name: exclude_data_from_backup, tableId: 106, value: "true"}
+- [[TableStorageParam:{DescID: 106, Name: sql_stats_histogram_buckets_count, Value: 100}, ABSENT], PUBLIC]
+  {name: sql_stats_histogram_buckets_count, tableId: 106, value: "100"}

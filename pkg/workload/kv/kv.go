@@ -84,6 +84,7 @@ type kv struct {
 	zipfian                              bool
 	sfuDelay                             time.Duration
 	longRunningTxn                       bool
+	longRunningTxnPriority               string
 	longRunningTxnNumWrites              int
 	splits                               int
 	scatter                              bool
@@ -96,6 +97,7 @@ type kv struct {
 	txnQoS                               string
 	prepareReadOnly                      bool
 	writesUseSelect1                     bool
+	alwaysIncKeySeq                      bool
 }
 
 func init() {
@@ -196,8 +198,12 @@ var kvMeta = workload.Meta{
 				`--sfu-writes or --sel1-writes, it will use those writes in the long-running transaction; `+
 				`otherwise, it will use regular writes. Each long-running write transaction counts for a`+
 				`single write, as measured by --read-percent.`)
+		g.flags.StringVar(&g.longRunningTxnPriority, `long-running-txn-priority`, `normal`,
+			`Priority of the long-running transaction`)
 		g.flags.IntVar(&g.longRunningTxnNumWrites, `long-running-txn-num-writes`, 10,
 			`Number of writes in the long-running transaction when using --long-running-txn.`)
+		g.flags.BoolVar(&g.alwaysIncKeySeq, `always-inc-key-seq`, false,
+			`Increment the random key seq num for all operations, not just writes.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -640,7 +646,11 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.kg.transformer.getKey(o.kg.readKey(o.ks))
+			key := o.kg.readKey(o.ks)
+			if o.config.alwaysIncKeySeq {
+				key = o.kg.writeKey(o.ks)
+			}
+			args[i] = o.kg.transformer.getKey(key)
 		}
 		start := timeutil.Now()
 		readStmt := o.readStmt
@@ -673,6 +683,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
 			args[i] = o.kg.readKey(o.ks)
+			if o.config.alwaysIncKeySeq {
+				args[i] = o.kg.writeKey(o.ks)
+			}
 		}
 		_, err := o.delStmt.Exec(ctx, args...)
 		if err != nil {
@@ -688,6 +701,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		var err error
 		if o.config.spanLimit > 0 {
 			arg := o.kg.readKey(o.ks)
+			if o.config.alwaysIncKeySeq {
+				arg = o.kg.writeKey(o.ks)
+			}
 			_, err = o.spanStmt.Exec(ctx, arg)
 		} else {
 			_, err = o.spanStmt.Exec(ctx)
@@ -723,7 +739,9 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
 		var tx pgx.Tx
-		tx, err := o.mcp.Get().BeginTx(ctx, pgx.TxOptions{})
+		txnOptions := pgx.TxOptions{}
+		txnOptions.BeginQuery = fmt.Sprintf("BEGIN PRIORITY %s", o.config.longRunningTxnPriority)
+		tx, err := o.mcp.Get().BeginTx(ctx, txnOptions)
 		if err != nil {
 			return err
 		}

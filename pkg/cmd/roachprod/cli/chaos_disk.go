@@ -66,6 +66,11 @@ Examples:
 			clusterName := args[0]
 			nodeList := parseInt32SliceToNodes(nodes)
 
+			// Validate cluster and nodes
+			if err := validateNodesInCluster(clusterName, nodeList, "target"); err != nil {
+				return err
+			}
+
 			// Validate type
 			var failureName string
 			var failureArgs failures.DiskStallArgs

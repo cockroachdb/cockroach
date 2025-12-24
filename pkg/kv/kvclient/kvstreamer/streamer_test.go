@@ -267,7 +267,7 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	// request by the Streamer will be numRowsPerRange x InitialAvgResponseSize,
 	// so we pick the blob size such that about half of rows are included in the
 	// partial responses.
-	const blobSize = 2 * kvstreamer.InitialAvgResponseSize
+	const blobSize = 2 * kvstreamer.DefaultInitialAvgResponseSize
 	const numRows = 20
 	const numRowsPerRange = 4
 
@@ -297,9 +297,9 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	// the budget. This includes 4/3 factor since the vectorized ColIndexJoin
 	// gives 3/4 of the workmem limit to the Streamer.
 	for _, workmem := range []int{
-		3 * kvstreamer.InitialAvgResponseSize * numRows / 2,
-		7 * kvstreamer.InitialAvgResponseSize * numRows / 4,
-		2 * kvstreamer.InitialAvgResponseSize * numRows,
+		3 * kvstreamer.DefaultInitialAvgResponseSize * numRows / 2,
+		7 * kvstreamer.DefaultInitialAvgResponseSize * numRows / 4,
+		2 * kvstreamer.DefaultInitialAvgResponseSize * numRows,
 	} {
 		t.Run(fmt.Sprintf("workmem=%s", humanize.Bytes(uint64(workmem))), func(t *testing.T) {
 			_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
@@ -326,7 +326,7 @@ func TestStreamerWideRows(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	const blobSize = 10 * kvstreamer.InitialAvgResponseSize
+	const blobSize = 10 * kvstreamer.DefaultInitialAvgResponseSize
 	const numRows = 2
 
 	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")

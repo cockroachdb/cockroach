@@ -1576,7 +1576,6 @@ func (t *logicTest) newCluster(
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
-			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
@@ -1844,23 +1843,6 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
-		if cfg.EnableLeasedDescriptorSupport {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = true",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = true"); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		if cfg.UseDistributedMergeIndexBackfill {
 			mode := "declarative"
 			if cfg.DisableDeclarativeSchemaChanger {

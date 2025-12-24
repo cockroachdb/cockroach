@@ -583,6 +583,8 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 	// We assume that the system is loaded if there is less than unlimited tokens
 	// available.
+	//
+	// TODO(sumeer): this condition should also incorporate disk byte tokens.
 	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens
 }
 

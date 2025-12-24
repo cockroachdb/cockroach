@@ -98,7 +98,7 @@ var tpccMultiDBMeta = workload.Meta{
 			"password used to authenticate the console API")
 		// Because this workload can create a large number of objects, the import
 		// concurrent may need to be limited.
-		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 16, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return &g
 	},
 }

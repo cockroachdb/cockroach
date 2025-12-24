@@ -45,12 +45,11 @@ type testCase struct {
 	// this isn't Java so there isn't a classname) and excluding it causes
 	// the TeamCity UI to display the same data in a slightly more coherent
 	// and usable way.
-	Classname string      `xml:"classname,attr"`
-	Name      string      `xml:"name,attr"`
-	Time      string      `xml:"time,attr"`
-	Failure   *XMLMessage `xml:"failure,omitempty"`
-	Error     *XMLMessage `xml:"error,omitempty"`
-	Skipped   *XMLMessage `xml:"skipped,omitempty"`
+	Name    string      `xml:"name,attr"`
+	Time    string      `xml:"time,attr"`
+	Failure *XMLMessage `xml:"failure,omitempty"`
+	Error   *XMLMessage `xml:"error,omitempty"`
+	Skipped *XMLMessage `xml:"skipped,omitempty"`
 }
 
 // XMLMessage is a catch-all structure containing details about a test

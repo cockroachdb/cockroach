@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/server/telemetry",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
@@ -15,11 +16,15 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/normalize",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/storageparam",
+        "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )

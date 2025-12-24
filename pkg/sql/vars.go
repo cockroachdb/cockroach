@@ -4264,26 +4264,11 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	// This is only kept for backwards compatibility and no longer has any effect.
-	`enable_scrub_job`: makeBackwardsCompatBoolVar(
-		"enable_scrub_job", false,
-	),
+	`enable_scrub_job`: makeBackwardsCompatBoolVar("enable_scrub_job", false),
 
 	// CockroachDB extension.
-	`enable_inspect_command`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_inspect_command`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_inspect_command", s)
-			if err != nil {
-				return err
-			}
-			m.SetEnableInspectCommand(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enable_inspect_command`: makeBackwardsCompatBoolVar("enable_inspect_command", true),
 
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
@@ -4475,6 +4460,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	`canary_stats_mode`: {
+		Hidden:       true,
 		GetStringVal: makePostgresBoolGetStringValFn(`canary_stats_mode`),
 		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
@@ -4507,6 +4493,40 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSwapMutations), nil
 		},
 		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`prevent_update_set_column_drop`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`prevent_update_set_column_drop`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("prevent_update_set_column_drop", s)
+			if err != nil {
+				return err
+			}
+			m.SetPreventUpdateSetColumnDrop(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PreventUpdateSetColumnDrop), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`use_improved_routine_deps_triggers_and_computed_cols`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_improved_routine_deps_triggers_and_computed_cols`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_improved_routine_deps_triggers_and_computed_cols", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseImprovedRoutineDepsTriggersAndComputedCols(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols), nil
+		},
+		GlobalDefault: globalTrue,
 	},
 }
 

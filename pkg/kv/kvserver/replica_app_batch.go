@@ -9,14 +9,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -366,7 +370,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		if _, err := kvstorage.SubsumeReplica(
+		if err := kvstorage.SubsumeReplica(
 			ctx, kvstorage.TODOReadWriter(b.batch), rhsRepl.destroyInfoRaftMuLocked(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to subsume replica before merge")
@@ -704,6 +708,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	b.recordStatsOnCommit()
 
+	// If the testing knob is enabled, verify that the tracked SysBytes matches
+	// the actual SysBytes computed from the data. This is useful for debugging
+	// MVCCStats discrepancies (e.g. issue #159331).
+	if knobs := b.r.store.TestingKnobs(); knobs != nil && knobs.SysBytesVerificationOnRaftApply != nil {
+		knobs.SysBytesVerificationOnRaftApply(b.verifySysBytes(ctx))
+	}
+
 	return nil
 }
 
@@ -732,6 +743,71 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 
 	elapsed := timeutil.Since(b.start)
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
+}
+
+// verifySysBytes recomputes SysBytes and compares it to the tracked stats.
+// Returns an error describing the mismatch if one is detected, nil otherwise.
+//
+// verifySysBytes is only intended for use in tests.
+func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
+	// Skip verification if the replica is being removed (its data has been
+	// deleted) or if stats contain estimates (we can't rely on them being exact).
+	if b.changeRemovesReplica || b.state.Stats.ContainsEstimates != 0 {
+		return nil
+	}
+
+	// NB: Read the current descriptor from the engine. This is important because
+	// b.state.Desc's bounds (specifically the EndKey) may be stale after a split
+	// or a merge -- that's because the state is read when the batch is
+	// initialized, but the descriptor isn't updated until side effects are
+	// applied via handleNonTrivialReplicatedEvalResult.
+	var desc roachpb.RangeDescriptor
+	descKey := keys.RangeDescriptorKey(b.state.Desc.StartKey)
+	ok, err := storage.MVCCGetProto(ctx, b.r.store.StateEngine(), descKey,
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, ReadCategory: fs.UnknownReadCategory})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Errorf("range descriptor not found at key %s", descKey)
+	}
+
+	// Compute stats for only the key spans that contribute to SysBytes:
+	// 1. Replicated range-ID local keys.
+	// 2. Range-local keys.
+	sysKeySpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
+		ReplicatedByRangeID: true,
+		Ranged: rditer.SelectRangedOptions{
+			RSpan:      desc.RSpan(),
+			SystemKeys: true,
+		},
+	})
+	var computedSysBytes, computedSysCount int64
+	for _, span := range sysKeySpans {
+		ms, err := storage.ComputeStats(
+			ctx, b.r.store.StateEngine(), fs.UnknownReadCategory,
+			span.Key, span.EndKey, 0 /* nowNanos */)
+		if err != nil {
+			return err
+		}
+		computedSysBytes += ms.SysBytes
+		computedSysCount += ms.SysCount
+	}
+
+	trackedSysBytes := b.state.Stats.SysBytes
+	trackedSysCount := b.state.Stats.SysCount
+	if trackedSysBytes != computedSysBytes || trackedSysCount != computedSysCount {
+		err := errors.AssertionFailedf("SysBytes/SysCount mismatch: r%d s%d at raft index %d: "+
+			"trackedBytes=%d computedBytes=%d deltaBytes=%d "+
+			"trackedCount=%d computedCount=%d deltaCount=%d desc=%s",
+			desc.RangeID, b.r.store.StoreID(), b.state.RaftAppliedIndex,
+			trackedSysBytes, computedSysBytes, trackedSysBytes-computedSysBytes,
+			trackedSysCount, computedSysCount, trackedSysCount-computedSysCount, &desc)
+		log.KvExec.Warningf(ctx, "%v", err)
+		return err
+	}
+	return nil
 }
 
 // Close implements the apply.Batch interface.

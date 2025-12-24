@@ -43,17 +43,9 @@ func collectTelemetry(command tree.ScheduleCommand) {
 	}
 }
 
-// JobSchedulerEnv returns JobSchedulerEnv.
-func JobSchedulerEnv(knobs *jobs.TestingKnobs) scheduledjobs.JobSchedulerEnv {
-	if knobs != nil && knobs.JobSchedulerEnv != nil {
-		return knobs.JobSchedulerEnv
-	}
-	return scheduledjobs.ProdJobSchedulerEnv
-}
-
 // loadSchedule loads schedule information as the node user.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
-	env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
@@ -89,7 +81,7 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 func DeleteSchedule(
 	ctx context.Context, execCfg *ExecutorConfig, txn isql.Txn, scheduleID jobspb.ScheduleID,
 ) error {
-	env := JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 	_, err := txn.ExecEx(
 		ctx,
 		"delete-schedule",
@@ -168,7 +160,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if schedule.IsPaused() {
 				err = errors.Newf("cannot execute a paused schedule; use RESUME SCHEDULE instead")
 			} else {
-				env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+				env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
 				schedule.SetNextRun(env.Now())
 				err = jobs.ScheduledJobTxn(params.p.InternalSQLTxn()).
 					Update(params.ctx, schedule)

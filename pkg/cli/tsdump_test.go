@@ -23,6 +23,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -404,6 +405,7 @@ func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
 func TestTSDumpRawGenerationWithEmbeddedMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "test too slow under race")
 
 	c := NewCLITest(TestCLIParams{})
 	defer c.Cleanup()

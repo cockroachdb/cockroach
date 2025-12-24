@@ -162,7 +162,7 @@ func ResolveDest(
 		ctx,
 		user,
 		execCfg,
-		dest.IncrementalStorage,
+		nil,
 		dest.To,
 		chosenSuffix)
 	if err != nil {
@@ -186,7 +186,7 @@ func ResolveDest(
 	defer rootStore.Close()
 	priors, err := FindAllIncrementalPaths(
 		ctx, execCfg, incrementalStore, rootStore,
-		chosenSuffix, len(dest.IncrementalStorage) > 0,
+		chosenSuffix, false, /* customIncLocation */
 	)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
@@ -475,12 +475,8 @@ func GetURIsByLocalityKV(
 // ListFullBackupsInCollection lists full backup paths in the collection
 // of an export store
 func ListFullBackupsInCollection(
-	ctx context.Context, store cloud.ExternalStorage, useIndex bool,
+	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
-	if useIndex {
-		return backupinfo.ListSubdirsFromIndex(ctx, store)
-	}
-
 	var backupPaths []string
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
 		if deprecatedBackupPathRE.MatchString(f) {

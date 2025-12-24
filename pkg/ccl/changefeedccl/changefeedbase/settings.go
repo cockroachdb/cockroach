@@ -25,6 +25,11 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	1*time.Second,
 )
 
+// DefaultHibernationPollingFrequency is the default frequency with which polling
+// should be performed while the changefeed is waiting for the tableset to be
+// non-empty.
+var DefaultHibernationPollingFrequency = 10 * time.Second
+
 // DefaultMinCheckpointFrequency is the default frequency to flush sink.
 // See comment in newChangeAggregatorProcessor for explanation on the value.
 var DefaultMinCheckpointFrequency = 30 * time.Second

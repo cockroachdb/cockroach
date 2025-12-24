@@ -181,7 +181,11 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 21.
+  // use_distributed_merge indicates whether this import should use the
+  // distributed merge pipeline. Determined at planning time.
+  optional bool use_distributed_merge = 21 [(gogoproto.nullable) = false];
+
+  // NEXTID: 22.
 }
 
 message MergeCoordinatorSpec {
@@ -342,8 +346,10 @@ message BackupDataSpec {
   // only be set on backups starting on cluster version 24.1 or
   // greater.
   optional bool include_mvcc_value_header = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IncludeMVCCValueHeader"];
+  
+  optional bool strict_locality = 14 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14.
+  // NEXTID: 15.
 }
 
 message RestoreFileSpec {
@@ -626,11 +632,23 @@ message BulkMergeSpec {
   // output_storage is the external storage connection where the merged output should be stored.
   optional cloud.cloudpb.ExternalStorage output_storage = 3 [(gogoproto.nullable) = false];
 
+  // iteration identifies which merge iteration this processor is executing.
+  optional int32 iteration = 4 [(gogoproto.nullable) = false];
+
+  // max_iterations captures the total number of merge iterations. When
+  // iteration == max_iterations, the processor should write directly to KV
+  // instead of producing SSTs in external storage.
+  optional int32 max_iterations = 5 [(gogoproto.nullable) = false];
+
+  // write_timestamp is the MVCC timestamp to use when the final iteration writes
+  // directly into KV.
+  optional util.hlc.Timestamp write_timestamp = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTimestamp"];
+
   message Output {
     // output_ssts is the list of output SSTs.
     repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
   }
-  // NEXT ID: 4.
+  // NEXT ID: 7.
 }
 
 // IndexBackfillMapProgress is emitted by map-stage processors to describe newly

@@ -311,6 +311,8 @@ type sqlServerArgs struct {
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
 
+	spanConfigReporter spanconfig.Reporter
+
 	// Used by the Key Visualizer job.
 	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
@@ -1345,6 +1347,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
+	execCfg.SpanConfigReporter = cfg.spanConfigReporter
 
 	var waitForInstanceReaderStarted func(context.Context) error
 	if cfg.sqlInstanceReader != nil {

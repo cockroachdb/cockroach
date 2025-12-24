@@ -966,6 +966,22 @@ access to that client.
 `,
 	}
 
+	AllowDebugUser = FlagInfo{
+		Name: "allow-debug-user",
+		Description: `
+When set, allows authentication attempts by clients presenting certificates
+with "debuguser" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. By default,
+the debuguser is not allowed to authenticate. Authentication attempts by debuguser
+will be rejected with an error unless this flag is explicitly set.
+<PRE>
+
+</PRE>
+Note: This flag is intended for debugging and troubleshooting purposes. The
+debuguser should only be enabled when necessary and disabled when not in use.
+`,
+	}
+
 	TLSCipherSuites = FlagInfo{
 		Name: "tls-cipher-suites",
 		Description: `
@@ -1809,12 +1825,13 @@ Labs support.
 	ZipIncludeGoroutineStacks = FlagInfo{
 		Name: "include-goroutine-stacks",
 		Description: `
-Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
-and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
-a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
-latency. Note that any periodic goroutine dumps previously taken on the node will still be
-included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
-require any additional stop-the-world operations to be collected.
+Fetch full stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt files.
+Note that fetching text stack traces for all goroutines incurs a brief "stop-the-world" pause of each
+node which can momentarily have negative impacts on SQL service latency. This flag only controls
+collection of new full dump of all current goroutine stacks -- any previously recorded, periodic
+goroutine dumps retained in the logs directories are still included (in nodes/*/goroutines/*.txt.gz)
+and collection of aggregate counts of current goroutine stacks -- which does not incur a stop-the-world
+pause -- remains enabled regardless of this flag's value.
 `,
 	}
 

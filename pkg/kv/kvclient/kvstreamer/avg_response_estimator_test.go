@@ -9,6 +9,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -22,10 +23,12 @@ func TestAvgResponseEstimator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := avgResponseEstimator{avgResponseSizeMultiple: defaultAvgResponseSizeMultiple}
+	settings := cluster.MakeTestingClusterSettings()
+	var e avgResponseEstimator
+	e.init(&settings.SV)
 
 	// Before receiving any responses, we should be using the initial estimate.
-	require.Equal(t, int64(InitialAvgResponseSize), e.getAvgResponseSize())
+	require.Equal(t, int64(DefaultInitialAvgResponseSize), e.getAvgResponseSize())
 
 	// Simulate receiving a single response.
 	firstResponseSize := int64(42)
@@ -59,7 +62,10 @@ func TestAvgResponseSizeForPartialResponses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	e := avgResponseEstimator{avgResponseSizeMultiple: defaultAvgResponseSizeMultiple}
+	settings := cluster.MakeTestingClusterSettings()
+	var e avgResponseEstimator
+	e.init(&settings.SV)
+
 	// Simulate a ScanRequest that needs to fetch 100 rows, 1KiB each in size.
 	const totalRows, rowSize = 100, 1 << 10
 	rowsLeft := int64(totalRows)

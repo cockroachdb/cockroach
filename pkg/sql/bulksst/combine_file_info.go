@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/errors"
@@ -99,8 +100,14 @@ func getMergeSpans(schemaSpans []roachpb.Span, sortedSample []roachpb.Key) ([]ro
 
 		sortedSample = sortedSample[consumed:]
 
+		// Schema spans shouldn't start on unsafe keys.
 		startKey := span.Key
 		for _, sample := range samples {
+			var err error
+			sample, err = keys.EnsureSafeSplitKey(sample)
+			if err != nil {
+				return nil, err
+			}
 			// Skip samples that would create invalid (zero-length) spans.
 			// This handles duplicates and samples at span boundaries.
 			if bytes.Compare(sample, startKey) <= 0 {

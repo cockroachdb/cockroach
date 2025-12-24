@@ -560,7 +560,7 @@ func doCreateChangefeedSchedule(
 	resultsCh chan<- tree.Datums,
 ) error {
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {

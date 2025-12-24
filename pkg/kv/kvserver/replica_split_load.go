@@ -74,7 +74,7 @@ var SplitSampleResetDuration = settings.RegisterDurationSetting(
 	"the duration after which the load based split sampler will reset its state, "+
 		"regardless of any split suggestions made, when zero, the sampler will "+
 		"never reset",
-	0, /* disabled */
+	30*time.Minute, // a multiple of the default scan interval of 10m
 	settings.DurationWithMinimumOrZeroDisable(10*time.Second),
 )
 

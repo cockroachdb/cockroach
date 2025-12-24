@@ -6,6 +6,7 @@
 package ibm
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
@@ -26,12 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -754,13 +755,14 @@ func (p *Provider) getSshKeyID(l *logger.Logger, keyName, region string) (string
 }
 
 // listRegion queries the IBM Cloud API to get all Roachprod VMs in a single region.
-func (p *Provider) listRegion(l *logger.Logger, r string, opts vm.ListOptions) (vm.List, error) {
+func (p *Provider) listRegion(
+	ctx context.Context, l *logger.Logger, r string, opts vm.ListOptions,
+) (vm.List, error) {
 
 	// We have to force the IncludeVolumes flag to get basic volume information
 	// like size and type.
 	opts.IncludeVolumes = true
 
-	var g errgroup.Group
 	var volumes map[string]*vpcV1Volume
 	var instances map[string]*instance
 
@@ -769,10 +771,12 @@ func (p *Provider) listRegion(l *logger.Logger, r string, opts vm.ListOptions) (
 		return nil, err
 	}
 
+	g := ctxgroup.WithContext(ctx)
+
 	// Fetch instances
 	g.Go(func() error {
 		var err error
-		instances, err = p.listRegionInstances(l, r, vpcService)
+		instances, err = p.listRegionInstances(ctx, l, r, vpcService)
 		if err != nil {
 			return errors.Wrap(err, "failed to list instances")
 		}
@@ -781,9 +785,9 @@ func (p *Provider) listRegion(l *logger.Logger, r string, opts vm.ListOptions) (
 
 	// Fetch volumes
 	if opts.IncludeVolumes {
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			var err error
-			volumes, err = p.listRegionVolumes(l, vpcService)
+			volumes, err = p.listRegionVolumes(ctx, l, vpcService)
 			if err != nil {
 				return errors.Wrap(err, "failed to list volumes")
 			}
@@ -857,7 +861,7 @@ func (p *Provider) listRegion(l *logger.Logger, r string, opts vm.ListOptions) (
 // listRegionInstances queries the IBM Cloud API to get all instances
 // in a region.
 func (p *Provider) listRegionInstances(
-	l *logger.Logger, r string, vpcService *vpcv1.VpcV1,
+	ctx context.Context, l *logger.Logger, r string, vpcService *vpcv1.VpcV1,
 ) (map[string]*instance, error) {
 
 	allInstances := make(map[string]*instance)
@@ -871,7 +875,7 @@ func (p *Provider) listRegionInstances(
 		return nil, errors.Wrap(err, "failed to create instances pager")
 	}
 
-	instances, err := instancesPager.GetAll()
+	instances, err := instancesPager.GetAllWithContext(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get all instances")
 	}
@@ -888,7 +892,7 @@ func (p *Provider) listRegionInstances(
 
 // listRegionVolumes queries the IBM Cloud API to get all volumes in a region.
 func (p *Provider) listRegionVolumes(
-	l *logger.Logger, vpcService *vpcv1.VpcV1,
+	ctx context.Context, l *logger.Logger, vpcService *vpcv1.VpcV1,
 ) (map[string]*vpcV1Volume, error) {
 
 	allVolumes := make(map[string]*vpcV1Volume)
@@ -900,7 +904,7 @@ func (p *Provider) listRegionVolumes(
 		return nil, errors.Wrap(err, "failed to create volumes pager")
 	}
 
-	volumes, err := volumesPager.GetAll()
+	volumes, err := volumesPager.GetAllWithContext(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get all volumes")
 	}

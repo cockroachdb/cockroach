@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func splitAndScatterSpans(ctx context.Context, db *kv.DB, spans []roachpb.Span) error {
+func SplitAndScatterSpans(ctx context.Context, db *kv.DB, spans []roachpb.Span) error {
 	// TODO(#156857): when distributing work, we should re-scatter ranges if
 	// there are a small number of nodes with remaining work.
 	for _, span := range spans {

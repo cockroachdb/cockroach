@@ -36,7 +36,6 @@ func TestInspectMetrics(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, `
 		CREATE DATABASE db;
-		SET enable_inspect_command = true;
 		CREATE TABLE db.t (
 			id INT PRIMARY KEY,
 			val INT

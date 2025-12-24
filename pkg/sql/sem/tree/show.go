@@ -107,11 +107,6 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
-		if !node.Options.IsDefault() {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
-		}
 		return
 	}
 	ctx.WriteString("SHOW BACKUP ")
@@ -149,7 +144,6 @@ type ShowBackupOptions struct {
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
-	Index                bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//
@@ -175,10 +169,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(", ")
 		}
 		addSep = true
-	}
-	// Index is only used in SHOW BACKUPS
-	if o.Index {
-		ctx.WriteString("index")
 	}
 
 	if o.AsJson {
@@ -259,8 +249,7 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
-		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
-		o.Index == options.Index
+		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -538,16 +527,25 @@ type ShowJobOptions struct {
 	// execution. These details will provide improved observability into the
 	// execution of the job.
 	ExecutionDetails bool
+	// ResolvedTimestamp, if true, will render the resolved timestamp of the job.
+	ResolvedTimestamp bool
 }
 
 func (s *ShowJobOptions) Format(ctx *FmtCtx) {
 	if s.ExecutionDetails {
 		ctx.WriteString(" EXECUTION DETAILS")
 	}
+	if s.ResolvedTimestamp {
+		if s.ExecutionDetails {
+			ctx.WriteString(",")
+		}
+		ctx.WriteString(" RESOLVED TIMESTAMP")
+	}
 }
 
 func (s *ShowJobOptions) CombineWith(other *ShowJobOptions) error {
-	s.ExecutionDetails = other.ExecutionDetails
+	s.ExecutionDetails = s.ExecutionDetails || other.ExecutionDetails
+	s.ResolvedTimestamp = s.ResolvedTimestamp || other.ResolvedTimestamp
 	return nil
 }
 

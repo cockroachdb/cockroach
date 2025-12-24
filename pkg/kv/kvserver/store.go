@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -105,6 +106,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -381,6 +383,9 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		KVFlowWaitForEvalConfig:      rac2.NewWaitForEvalConfig(st),
 		KVFlowEvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		KVFlowRangeControllerMetrics: rac2.NewRangeControllerMetrics(),
+
+		MMAllocator: mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+			rand.New(rand.NewSource(timeutil.Now().UnixNano()))),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
@@ -588,23 +593,6 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 		return rs.store.ReplicaCount()
 	}
 	return len(rs.repls) - rs.visited
-}
-
-// internalEngines contains the engines that support the operations of
-// this Store. At the time of writing, all three fields will be populated
-// with the same Engine. As work on CRDB-220 (separate raft log) proceeds,
-// we will be able to experimentally run with a separate log engine, and
-// ultimately allow doing so in production deployments.
-type internalEngines struct {
-	// stateEngine is the engine that materializes the raft logs on the system.
-	stateEngine storage.Engine
-	// todoEngine is a placeholder while we work on CRDB-220, used in cases where
-	// - the code does not yet cleanly separate between state and log engine
-	// - it is still unclear which of the two engines is the better choice for a
-	//   particular write, or there is a candidate, but it needs to be verified.
-	todoEngine storage.Engine
-	// logEngine is the engine holding the raft state.
-	logEngine storage.Engine
 }
 
 /*
@@ -885,7 +873,7 @@ NOTE: to the best of our knowledge, we don't rely on this invariant.
 type Store struct {
 	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                  StoreConfig
-	internalEngines      internalEngines
+	internalEngines      kvstorage.Engines
 	db                   *kv.DB
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions
@@ -1486,15 +1474,7 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		// NB: do not access these fields directly. Instead, use
-		// the StateEngine, TODOEngine, LogEngine methods.
-		// This simplifies going through references to these
-		// engines.
-		internalEngines: internalEngines{
-			stateEngine: eng,
-			todoEngine:  eng,
-			logEngine:   eng,
-		},
+		internalEngines:                   kvstorage.MakeEngines(eng),
 		cfg:                               cfg,
 		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
 		nodeDesc:                          nodeDesc,
@@ -2388,6 +2368,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// node transitioning from non-live to live.
 	if s.cfg.NodeLiveness != nil {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
+		// Register callbacks on settings changes for when the
+		// nodeIsLiveCallback needs to be invoked out of band.
+		s.registerNodeIsLiveCallbackSettingsChange(ctx)
 	}
 
 	// SystemConfigProvider can be nil during some tests.
@@ -2460,6 +2443,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
+	s.cfg.MMAllocator.InitMetricsForLocalStore(ctx, s.StoreID(), s.Registry())
 	s.mmaStoreRebalancer.start(ctx, s.stopper)
 
 	// Set the started flag (for unittests).
@@ -2548,12 +2532,12 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		errInterrupted := errors.New("waiting interrupted")
-		wait := func(ctx context.Context, until time.Time, interrupt <-chan struct{}) error {
-			now := timeutil.Now()
-			if !now.Before(until) {
+		wait := func(ctx context.Context, until crtime.Mono, interrupt <-chan struct{}) error {
+			wait := until.Sub(crtime.NowMono())
+			if wait <= 0 {
 				return nil
 			}
-			timer.Reset(until.Sub(now))
+			timer.Reset(wait)
 			select {
 			case <-timer.C:
 				return nil
@@ -2597,7 +2581,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				return // context canceled
 			}
 			// Aim to complete this run in exactly refresh interval.
-			now := timeutil.Now()
+			now := crtime.NowMono()
 			pacer.StartTask(now)
 
 			// We're about to perform one work cycle, where we go through all replicas
@@ -2615,7 +2599,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 					break
 				}
 
-				todo, by := pacer.Pace(timeutil.Now(), len(work))
+				todo, by := pacer.Pace(crtime.NowMono(), len(work))
 				for _, id := range work[:todo] {
 					if r := s.GetReplicaIfExists(id); r != nil {
 						cts := r.GetCurrentClosedTimestamp(ctx)
@@ -3085,22 +3069,20 @@ func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
-// StateEngine returns the statemachine engine.
+// StateEngine returns the state machine engine.
 func (s *Store) StateEngine() storage.Engine {
-	return s.internalEngines.stateEngine
+	return s.internalEngines.StateEngine()
 }
 
-// TODOEngine is a placeholder for cases in which
-// the caller needs to be updated in order to use
-// only one engine, or a closer check is still
-// pending.
+// TODOEngine is a placeholder for cases in which the caller needs to be updated
+// in order to use only one engine, or a closer check is still pending.
 func (s *Store) TODOEngine() storage.Engine {
-	return s.internalEngines.todoEngine
+	return s.internalEngines.TODOEngine()
 }
 
-// LogEngine returns the log engine.
+// LogEngine returns the raft/log engine.
 func (s *Store) LogEngine() storage.Engine {
-	return s.internalEngines.logEngine
+	return s.internalEngines.LogEngine()
 }
 
 // DB accessor.
@@ -3963,13 +3945,6 @@ func (s *Store) AllocatorCheckRange(
 	collectTraces bool,
 	overrideStorePool storepool.AllocatorStorePool,
 ) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
-	// Testing knob to inject errors.
-	if interceptor := s.cfg.TestingKnobs.AllocatorCheckRangeInterceptor; interceptor != nil {
-		if err := interceptor(); err != nil {
-			return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, tracingpb.Recording{}, err
-		}
-	}
-
 	var spanOptions []tracing.SpanOption
 	if collectTraces {
 		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingVerbose))

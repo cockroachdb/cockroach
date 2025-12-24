@@ -1074,7 +1074,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFERENCING REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
-%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
+%token <str> RELEASE RESET RESOLVED RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
@@ -1480,7 +1480,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options show_backups_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -3467,7 +3467,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_location: specify a different path to store the incremental backup
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
@@ -3578,10 +3577,6 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-  {
-    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
-  }
 | EXECUTION LOCALITY '=' string_or_placeholder
   {
     $$.val = &tree.BackupOptions{ExecutionLocality: $4.expr()}
@@ -3602,6 +3597,10 @@ backup_options:
 | UPDATES_CLUSTER_MONITORING_METRICS '=' a_expr
   {
     $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: $3.expr()}
+  }
+| STRICT STORAGE LOCALITY
+  {
+    $$.val = &tree.BackupOptions{Strict: true}
   }
 
 include_all_clusters:
@@ -9009,11 +9008,10 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list opt_with_show_backups_options
+  SHOW BACKUPS IN string_or_placeholder_opt_list
  {
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
-      Options: *$5.showBackupOptions(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -9095,38 +9093,6 @@ show_backup_details:
     /* SKIP DOC */
 	$$.val = tree.BackupValidateDetails
 	}
-
-opt_with_show_backups_options:
-  WITH show_backups_options_list
-  {
-    $$.val = $2.showBackupOptions()
-  }
-| WITH OPTIONS '(' show_backups_options_list ')'
-  {
-    $$.val = $4.showBackupOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ShowBackupOptions{}
-  }
-
-show_backups_options_list:
-  show_backups_options
-  {
-    $$.val = $1.showBackupOptions()
-  }
-| show_backups_options_list ',' show_backups_options
-  {
-    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-show_backups_options:
- INDEX
- {
-    $$.val = &tree.ShowBackupOptions{Index: true}
- }
 
 opt_with_show_backup_options:
   WITH show_backup_options_list
@@ -9649,6 +9615,12 @@ show_job_options:
   {
     $$.val = &tree.ShowJobOptions{
       ExecutionDetails: true,
+    }
+  }
+| RESOLVED TIMESTAMP
+  {
+    $$.val = &tree.ShowJobOptions{
+      ResolvedTimestamp: true,
     }
   }
 
@@ -18911,6 +18883,7 @@ unreserved_keyword:
 | REPLICATED
 | REPLICATION
 | RESET
+| RESOLVED
 | RESTART
 | RESTORE
 | RESTRICT
@@ -19499,6 +19472,7 @@ bare_label_keywords:
 | REPLICATED
 | REPLICATION
 | RESET
+| RESOLVED
 | RESTART
 | RESTORE
 | RESTRICT

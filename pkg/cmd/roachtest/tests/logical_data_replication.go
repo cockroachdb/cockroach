@@ -490,15 +490,15 @@ func TestLDRCreateTablesTPCC(
 	// - 15 mins of steady state. If the above scans take too long, the latency
 	// verifier may trip.
 	duration := 30 * time.Minute
-	warehouses := 1000
+	schemaWarehouses, workloadWarehouses := 1000, 500
 	if c.IsLocal() {
 		duration = 3 * time.Minute
-		warehouses = 10
+		schemaWarehouses, workloadWarehouses = 10, 10
 	}
 
 	workload := LDRWorkload{
 		workload: replicateTPCC{
-			warehouses:     warehouses,
+			warehouses:     workloadWarehouses,
 			duration:       duration,
 			repairOrderIDs: true,
 		},
@@ -511,7 +511,7 @@ func TestLDRCreateTablesTPCC(
 	setup.right.sysSQL.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.low_admission_priority.enabled = false")
 	c.Run(ctx,
 		option.WithNodes(setup.workloadNode),
-		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
+		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", schemaWarehouses, setup.left.nodes[0]))
 
 	workloadDoneCh := make(chan struct{})
 	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())

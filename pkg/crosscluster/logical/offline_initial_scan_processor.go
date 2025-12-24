@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -235,7 +236,8 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 			if err := o.subscription.Err(); err != nil {
 				o.sendError(errors.Wrap(err, "subscription"))
 			}
-		}, "proc", fmt.Sprintf("%d", o.ProcessorID))
+		}, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_LDR,
+			"proc", fmt.Sprintf("%d", o.ProcessorID))
 		return nil
 	})
 }

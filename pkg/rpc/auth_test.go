@@ -121,6 +121,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		clientTenantInMD string
 		certPrincipalMap string
 		certDNSName      string
+		allowDebugUser   bool
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -138,7 +139,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: stid, ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
 		{systemID: stid, ous: nil, commonName: "root"},
 		{systemID: stid, ous: nil, commonName: "node"},
-		{systemID: stid, ous: nil, commonName: "debug_user"},
+		{systemID: stid, ous: nil, commonName: "debug_user", allowDebugUser: true},
 		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
 			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
@@ -146,7 +147,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{systemID: tenTen, ous: nil, commonName: "root"},
 		{systemID: tenTen, ous: nil, commonName: "node"},
-		{systemID: tenTen, ous: nil, commonName: "debug_user"},
+		{systemID: tenTen, ous: nil, commonName: "debug_user", allowDebugUser: true},
 
 		// Passing a client ID in metadata instead of relying only on the TLS cert.
 		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from (gRPC|drpc) metadata`},
@@ -172,7 +173,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{clientTenantInMD: "10",
 			systemID: stid, ous: nil, commonName: "node", expTenID: tenTen},
 		{clientTenantInMD: "10",
-			systemID: stid, ous: nil, commonName: "debug_user", expTenID: tenTen},
+			systemID: stid, ous: nil, commonName: "debug_user", expTenID: tenTen, allowDebugUser: true},
 		// tenant ID present in MD, but not in client cert. However,
 		// client cert is valid. Use MD tenant ID.
 		// Server is secondary tenant: do not do additional tenant authorization.
@@ -181,7 +182,7 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{clientTenantInMD: "10",
 			systemID: tenTen, ous: nil, commonName: "node", expTenID: roachpb.TenantID{}},
 		{clientTenantInMD: "10",
-			systemID: tenTen, ous: nil, commonName: "debug_user", expTenID: roachpb.TenantID{}},
+			systemID: tenTen, ous: nil, commonName: "debug_user", expTenID: roachpb.TenantID{}, allowDebugUser: true},
 		// tenant ID present in MD, but not in client cert. Use MD tenant ID.
 		// Server tenant ID does not match client tenant ID.
 		{clientTenantInMD: "123",
@@ -216,12 +217,26 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		// Test case for disallow root login functionality
 		{systemID: stid, ous: nil, commonName: "root", expErr: "root login has been disallowed"},
 		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "root", expErr: "root login has been disallowed"},
+		// Test cases for allow debug user functionality
+		{systemID: stid, ous: nil, commonName: "debug_user", expErr: "debug_user login is not allowed"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "debug_user", expErr: "debug_user login is not allowed"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			// Enable root login blocking for the specific test case
 			if tc.expErr == "root login has been disallowed" {
 				security.SetDisallowRootLogin(true)
 				defer security.SetDisallowRootLogin(false)
+			}
+			// Disable debug user login for the specific test case (it's disabled by default)
+			if tc.expErr == "debug_user login is not allowed" {
+				security.SetAllowDebugUser(false)
+				defer security.SetAllowDebugUser(false)
+			}
+
+			// Enable debug user login if specified in the test case
+			if tc.allowDebugUser {
+				security.SetAllowDebugUser(true)
+				defer security.SetAllowDebugUser(false)
 			}
 
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
@@ -1356,18 +1371,37 @@ func TestServerpbEndpointAccess(t *testing.T) {
 			})
 		}
 
-		// Test debug_user authentication - should always succeed
-		t.Run("debug_user_authentication", func(t *testing.T) {
-			cert := createCert(t, "debug_user")
-			ctx := createContextWithCert(cert)
+		// Test debuguser authentication with allow-debug-user flag
+		for _, allowDebug := range []bool{false, true} {
+			testName := "allow_debug_user_disabled"
+			expectedError := "failed to perform RPC, as debug_user login is not allowed"
+			if allowDebug {
+				testName = "allow_debug_user_enabled"
+				expectedError = noError
+			}
 
-			sv := &settings.Values{}
-			sv.Init(ctx, settings.TestOpaque)
+			t.Run(testName, func(t *testing.T) {
+				security.SetAllowDebugUser(allowDebug)
+				defer security.SetAllowDebugUser(false)
 
-			// Perform authentication - debug_user should always be allowed
-			_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
-			require.NoError(t, err)
-		})
+				cert := createCert(t, "debug_user")
+				ctx := createContextWithCert(cert)
+
+				sv := &settings.Values{}
+				sv.Init(ctx, settings.TestOpaque)
+
+				// Perform authentication - this is where the debug user login check happens
+				_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
+
+				if expectedError == noError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.Equal(t, codes.Unauthenticated, status.Code(err))
+					require.Regexp(t, expectedError, err)
+				}
+			})
+		}
 	})
 
 	t.Run("authorization", func(t *testing.T) {

@@ -93,7 +93,6 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
 ColumnType :  ColumnFamilyOrderFollowsColumnID
@@ -366,6 +365,7 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 RowLevelTTL :  TTLExpr
+RowLevelTTL :  SeqNum
 
 object Schema
 
@@ -474,6 +474,12 @@ TablePartitioning :  TableID
 object TableSchemaLocked
 
 TableSchemaLocked :  TableID
+
+object TableStorageParam
+
+TableStorageParam :  TableID
+TableStorageParam :  Name
+TableStorageParam :  Value
 
 object TableZoneConfig
 
@@ -688,6 +694,7 @@ Table <|-- TableLocalityRegionalByRowUsingConstraint
 Table <|-- TableLocalitySecondaryRegion
 Table <|-- TablePartitioning
 Table <|-- TableSchemaLocked
+Table <|-- TableStorageParam
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex

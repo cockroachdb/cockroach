@@ -112,17 +112,25 @@ func (ic internedConstraint) unintern(interner *stringInterner) roachpb.Constrai
 	}
 }
 
-func (ic internedConstraint) less(b internedConstraint) bool {
+// cmp compares two internedConstraint, returning -1 if ic < b, 0 if ic == b,
+// and 1 if ic > b.
+//
+// This ordering has no semantic meaning regarding strictness or set
+// containment. It is purely lexicographic: first by typ, then key, then value.
+// Its purpose is to enable merge-based comparison of two sorted constraint
+// lists in relationship.
+//
+// Example: +region=a < -region=b because Required(0) < Prohibited(1). This does
+// not imply that +region=a is stricter than -region=b. They simply mean that
+// they are two distinct constraints.
+func (ic internedConstraint) cmp(b internedConstraint) int {
 	if ic.typ != b.typ {
-		return ic.typ < b.typ
+		return cmp.Compare(ic.typ, b.typ)
 	}
 	if ic.key != b.key {
-		return ic.key < b.key
+		return cmp.Compare(ic.key, b.key)
 	}
-	if ic.value != b.value {
-		return ic.value < b.value
-	}
-	return false
+	return cmp.Compare(ic.value, b.value)
 }
 
 // constraints are in increasing order using internedConstraint.less.
@@ -209,59 +217,102 @@ const (
 	// Example: A=[+region=a], B=[+zone=a1]
 	//   If zone=a1 happens to be in region=a, then the disjoint result is
 	//   not correct.
+	// Example: A=[+region=a, +zone=a1], B=[+region=a, +zone=a2]
+	//   Since a store cannot be in both zones, the sets are disjoint.
 	conjNonIntersecting
 )
 
+// relationship returns the logical relationship between two sets of constraints
+// (represented as sorted, de-duplicated conjunctions).
 func (cc constraintsConj) relationship(b constraintsConj) conjunctionRelationship {
 	n := len(cc)
 	m := len(b)
-	extraInCC := 0
-	extraInB := 0
-	inBoth := 0
+	extraInCC := 0 // conjuncts in cc but not in b
+	extraInB := 0  // conjuncts in b but not in cc
+	inBoth := 0    // conjuncts present in both
+
+	// We are merging two lists that are already sorted based on less(). When we
+	// see cc[i] < b[j], it simply means cc[i] comes earlier in the order defined
+	// by less. Since b is also sorted, cc[i] can’t appear anywhere later in b.
+	// That tells us that cc[i] is only in cc and not in b.
+	//
+	// Example: cc = [A, C, E] and b = [B, D, E] (where A < B < C < D < E):
+	//
+	// | Step | i | j | cc[i] | b[j] | Comparison | Action           | extraInCC | extraInB | inBoth |
+	// |------|---|---|-------|------|------------|-----------------------------|-----------|----------|--------|
+	// | 1    | 0 | 0 | A     | B    | A < B      | extraInCC++, i++ | 1         | 0        | 0      |
+	// | 2    | 1 | 0 | C     | B    | C > B      | extraInB++, j++  | 1         | 1        | 0      |
+	// | 3    | 1 | 1 | C     | D    | C < D      | extraInCC++, i++ | 2         | 1        | 0      |
+	// | 4    | 2 | 1 | E     | D    | E > D      | extraInB++, j++  | 2         | 2        | 0      |
+	// | 5    | 2 | 2 | E     | E    | E == E     | inBoth++, i++,j++| 2         | 2        | 1      |
+	//
+	// i and j are indices into cc and b respectively
 	for i, j := 0, 0; i < n || j < m; {
+		// If we've reached the end of cc, remaining items are only in b.
 		if i >= n {
 			extraInB++
 			j++
 			continue
 		}
+		// If we've reached the end of b, remaining items are only in cc.
 		if j >= m {
 			extraInCC++
 			i++
 			continue
 		}
+		// If both conjuncts are identical, increment inBoth.
 		if cc[i] == b[j] {
 			inBoth++
 			i++
 			j++
 			continue
 		}
-		if cc[i].less(b[j]) {
-			// Found a conjunct that is not in b.
+		// If the type and key are the same but value differs,
+		// then these constraints are non-intersecting.
+		// Example: +zone=a1, +zone=a2 (disjoint)
+		//
+		if cc[i].typ == b[j].typ && cc[i].key == b[j].key {
+			// For example, +zone=a1, +zone=a2.
+			return conjNonIntersecting
+			// NB: +zone=a1 and -zone=a1 are also non-intersecting, but we will
+			// not detect this case. Finding this case requires searching through
+			// b, and not simply walking in order, since the typ field is the
+			// first in the sort order and differs between these two conjuncts.
+		}
+		// If cc[i] < b[j], we've found a conjunct unique to cc.
+		if cc[i].cmp(b[j]) < 0 {
 			extraInCC++
 			i++
 			continue
 		} else {
+			// Otherwise, found a conjunct unique to b.
 			extraInB++
 			j++
 			continue
 		}
 	}
+
+	// There are four possibilities:
+	// 1. extraInCC > 0 and extraInB == 0: cc is a strict subset of b.
 	if extraInCC > 0 && extraInB == 0 {
 		return conjStrictSubset
 	}
+	// 2. extraInB > 0 and extraInCC == 0: cc is a strict superset of b.
 	if extraInB > 0 && extraInCC == 0 {
 		return conjStrictSuperset
 	}
-	// (extraInCC == 0 || extraInB > 0) && (extraInB == 0 || extraInCC > 0)
-	// =>
-	// (extraInCC == 0 && extraInB == 0) || (extraInB > 0 && extraInCC > 0)
+
+	// 3. extraInCC == 0 and extraInB == 0: sets are equal.
 	if extraInCC == 0 && extraInB == 0 {
 		return conjEqualSet
 	}
-	// (extraInB > 0 && extraInCC > 0)
+
+	// 4. extraInCC > 0 and extraInB > 0:
+	//    a) if inBoth > 0, sets may possibly intersect.
 	if inBoth > 0 {
 		return conjPossiblyIntersecting
 	}
+	//    b) if inBoth == 0, sets are disjoint.
 	return conjNonIntersecting
 }
 
@@ -305,6 +356,81 @@ func (icc internedConstraintsConjunction) unintern(
 		cc.Constraints = append(cc.Constraints, c.unintern(interner))
 	}
 	return cc
+}
+
+// cmp compares two constraintsConj, returning -1 if cc < b, 0 if cc == b, and 1
+// if cc > b. Note that this does not perform a semantic comparison and just
+// represents a sorting order.
+func (cc constraintsConj) cmp(b constraintsConj) int {
+	n := min(len(cc), len(b))
+	for i := 0; i < n; i++ {
+		cmp := cc[i].cmp(b[i])
+		if cmp != 0 {
+			return cmp
+		}
+	}
+	if n < len(cc) {
+		return +1
+	}
+	if n < len(b) {
+		return -1
+	}
+	return 0
+}
+
+// dedupAndFilterConstraints filters out constraint conjunctions with
+// numReplicas == 0 and combines duplicate conjunctions (those with the same
+// constraints) by summing their numReplicas.
+// Example:
+// constraints: [+region=us-west-1]: 1, [+region=us-west-1]: 1, []: 3, []: 1,
+// [+region=eu]: 0
+// result: [+region=us-west-1]: 2, []: 4
+// TODO(wenyihu6): we could take in a scratch space to avoid allocating indices
+func dedupAndFilterConstraints(
+	constraints []internedConstraintsConjunction,
+) []internedConstraintsConjunction {
+	n := len(constraints)
+	if n == 0 {
+		return constraints
+	}
+	// indices represents the positions in the original constraints.
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
+	// Sort the indices such that equal constraints get grouped and within a
+	// sequence of equal constraints, the smallest index sorts first. The latter
+	// allows us to preserve the original ordering after de-duplication.
+	slices.SortFunc(indices, func(i, j int) int {
+		return cmp.Or(constraints[i].constraints.cmp(constraints[j].constraints),
+			cmp.Compare(i, j))
+	})
+	// j is the index into the updated indices slice, where the value
+	// is the index of the original constraint that is preserved.
+	j := 0
+	// Say the original indices slice is the following, where the parentheses
+	// represent equal constraints: (3, 5), (1, 4), (0, 2). At the end, we will
+	// have 3, 1, 0 in the slice.
+	for i := 1; i < n; i++ {
+		if constraints[indices[j]].constraints.cmp(constraints[indices[i]].constraints) == 0 {
+			constraints[indices[j]].numReplicas += constraints[indices[i]].numReplicas
+		} else {
+			j++
+			indices[j] = indices[i]
+		}
+	}
+	indices = indices[:j+1]
+	// Sort these indices in increasing order to preserve original ordering.
+	slices.Sort(indices)
+	// Copy to result, filtering out numReplicas == 0.
+	k := 0
+	for _, idx := range indices {
+		if constraints[idx].numReplicas != 0 {
+			constraints[k] = constraints[idx]
+			k++
+		}
+	}
+	return constraints[:k]
 }
 
 type internedLeasePreference struct {
@@ -382,11 +508,32 @@ func makeBasicNormalizedSpanConfig(
 func makeNormalizedSpanConfig(
 	conf *roachpb.SpanConfig, interner *stringInterner,
 ) (*normalizedSpanConfig, error) {
+	return makeNormalizedSpanConfigWithObserver(conf, interner, nil)
+}
+
+// NormalizationPhaseObserver is an optional callback invoked after each phase
+// of structural normalization. It allows tests to observe intermediate states
+// without coupling to internal implementation details.
+type NormalizationPhaseObserver func(phaseName string, conf *normalizedSpanConfig)
+
+// makeNormalizedSpanConfigWithObserver is like makeNormalizedSpanConfig but
+// accepts an optional observer to inspect intermediate normalization states.
+// The observer is called after basic normalization (phase "basic") and after
+// each phase of structural normalization.
+func makeNormalizedSpanConfigWithObserver(
+	conf *roachpb.SpanConfig, interner *stringInterner, observer NormalizationPhaseObserver,
+) (*normalizedSpanConfig, error) {
 	nConf, err := makeBasicNormalizedSpanConfig(conf, interner)
 	if err != nil {
 		return nil, err
 	}
-	err = nConf.doStructuralNormalization()
+	if observer != nil {
+		observer("basic", nConf)
+	}
+	err = nConf.doStructuralNormalization(observer)
+	if observer != nil {
+		observer("after", nConf)
+	}
 	return nConf, err
 }
 
@@ -482,7 +629,7 @@ func normalizeConstraints(
 			constraints: interner.internConstraintsConj(nil),
 		})
 	}
-	return rv, nil
+	return dedupAndFilterConstraints(rv), nil
 }
 
 // relationshipVoterAndAll represents the relationship between a voter constraint
@@ -640,11 +787,9 @@ func makeNormalizedConstraintsEnv(conf *normalizedSpanConfig) normalizedConstrai
 func (ncEnv *normalizedConstraintsEnv) buildVoterConstraints() []internedConstraintsConjunction {
 	vc := make([]internedConstraintsConjunction, 0, len(ncEnv.voterConstraints))
 	for i := range ncEnv.voterConstraints {
-		if ncEnv.voterConstraints[i].numReplicas > 0 {
-			vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
-		}
+		vc = append(vc, ncEnv.voterConstraints[i].internedConstraintsConjunction)
 	}
-	return vc
+	return dedupAndFilterConstraints(vc)
 }
 
 // moveToEnd moves the voter constraint at idx to the end of the slice. This is
@@ -709,7 +854,7 @@ func (ncEnv *normalizedConstraintsEnv) satisfyVoterWithAll(voterIndex int, allIn
 // (TODO(wenyihu6): this is the one that I am still confused about. Sumeer
 // mentioned that it is unclear whether we truly need this. So lets revisit this
 // later.)
-func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
+func (conf *normalizedSpanConfig) normalizeEmptyConstraints() error {
 	// We are done with normalizing voter constraints. We also do some basic
 	// normalization for constraints: we have seen examples where the
 	// constraints are under-specified and give freedom in the choice of
@@ -735,7 +880,10 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 	// This is technically true, but once we have the required second voter in
 	// us-east-1, both places in that empty constraint will be consumed, and we
 	// will need to move that non-voter to us-central-1, which is wasteful.
-	rels, emptyConstraintIndex, _, _ := conf.buildVoterAndAllRelationships()
+	rels, emptyConstraintIndex, _, err := conf.buildVoterAndAllRelationships()
+	if err != nil {
+		return err
+	}
 	if emptyConstraintIndex >= 0 {
 		// Ignore conjPossiblyIntersecting.
 		index := 0
@@ -802,7 +950,9 @@ func (conf *normalizedSpanConfig) normalizeEmptyConstraints() {
 		if conf.constraints[n].numReplicas == 0 {
 			conf.constraints = conf.constraints[:n]
 		}
+		conf.constraints = dedupAndFilterConstraints(conf.constraints)
 	}
+	return nil
 }
 
 // Phase 1: Normalizing Voter Constraints
@@ -873,11 +1023,7 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 	// spanconfig contract. What should the operator do in this case?
 	//
 	// Implementation notes:
-	// - Example 1: +region=a,+zone=a1 and +region=a,+zone=a2 are classified as
-	// conjPossiblyIntersecting, but we could do better knowing zone=a1 and
-	// zone=a2 are disjoint.
-	//  TODO(wenyihu6): merge #158722
-	// - Example 2: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
+	// Example: +region=a,+zone=a1 and +region=a,-zone=a2 are classified as
 	// conjPossiblyIntersecting. If zone=a3 exists in the region, they actually
 	// intersect. We cannot do better without knowing the universe of values.
 	index := 0
@@ -1050,7 +1196,8 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 		neededReplicas := conf.voterConstraints[i].numReplicas
 		actualReplicas := ncEnv.voterConstraints[i].numReplicas + ncEnv.voterConstraints[i].additionalReplicas
 		if actualReplicas > neededReplicas {
-			panic("code bug")
+			return errors.Errorf("programmer error: actualReplicas (%d) > neededReplicas (%d) for voter constraint %d",
+				actualReplicas, neededReplicas, i)
 		}
 		if actualReplicas < neededReplicas {
 			err = errors.Errorf("could not satisfy all voter constraints due to " +
@@ -1083,16 +1230,23 @@ func (conf *normalizedSpanConfig) normalizeVoterConstraints() error {
 // (TODO(wenyihu6): we should clarify what the operator should do with the error
 // we return an error even when we re not violating spanconfig contract which is
 // confusing.)
-func (conf *normalizedSpanConfig) doStructuralNormalization() error {
+func (conf *normalizedSpanConfig) doStructuralNormalization(
+	observer NormalizationPhaseObserver,
+) error {
 	if len(conf.constraints) == 0 || len(conf.voterConstraints) == 0 {
 		return nil
 	}
 
 	// Do not return early on error from normalizeVoterConstraints since we want
 	// to continue with best-effort normalization for constraints.
-	err := conf.normalizeVoterConstraints()
-	conf.normalizeEmptyConstraints()
-	return err
+	err1 := conf.normalizeVoterConstraints()
+	if observer != nil {
+		observer("normalizeVoterConstraints", conf)
+	}
+	err2 := conf.normalizeEmptyConstraints()
+	// Use errors.Join so both errors are visible in .Error() output, since
+	// this error is surfaced to the operator.
+	return errors.Join(err1, err2)
 }
 
 type replicaKindIndex int32
@@ -1347,6 +1501,7 @@ func (ac *analyzedConstraints) initialize(
 	constraints []internedConstraintsConjunction,
 	buf *analyzeConstraintsBuf,
 	constraintMatcher storeMatchesConstraintInterface,
+	isVoterConstraints bool,
 ) {
 	ac.constraints = constraints
 	if len(ac.constraints) == 0 {
@@ -1364,8 +1519,14 @@ func (ac *analyzedConstraints) initialize(
 	// using constraintMatcher.storeMatches. In addition, it also populates
 	// ac.satisfiedNoConstraintReplica[kind][i] for stores that satisfy no
 	// constraint and ac.satisfiedByReplica[kind][i] for stores that satisfy
-	// exactly one constraint. Since we will be assigning at least one
-	// constraint to each store, these stores are unambiguous.
+	// exactly one constraint (with an exception for voter constraints).
+	//
+	// Exception for voter constraints: when ac corresponds to voter constraints,
+	// we delay assigning non-voters that satisfy only one constraint until phase
+	// 2, since we would like to give a chance for voters to satisfy the voter
+	// constraint, even if the voters satisfy multiple constraints. That is, we
+	// want to avoid a situation where we unnecessarily need to elevate a
+	// non-voter to voter.
 	//
 	// Compute the list of all constraints satisfied by each store.
 	for kind := voterIndex; kind < numReplicaKinds; kind++ {
@@ -1382,7 +1543,7 @@ func (ac *analyzedConstraints) initialize(
 			if n == 0 {
 				ac.satisfiedNoConstraintReplica[kind] =
 					append(ac.satisfiedNoConstraintReplica[kind], store.StoreID)
-			} else if n == 1 {
+			} else if n == 1 && (!isVoterConstraints || kind == voterIndex) {
 				// Satisfies exactly one constraint, so place it there.
 				constraintIndex := buf.replicaConstraintIndices[kind][i][0]
 				ac.satisfiedByReplica[kind][constraintIndex] =
@@ -1395,7 +1556,22 @@ func (ac *analyzedConstraints) initialize(
 
 	// isConstraintSatisfied checks if the given constraint index has been fully
 	// satisfied by the stores currently assigned to it.
-	// TODO(wenyihu6): voter constraint should only count voters here (#158109)
+	// isConstraintSatisfied checks if the given constraint index has been fully
+	// satisfied by the stores currently assigned to it.
+	//
+	// NB: This intentionally counts both voters and non-voters even when
+	// isVoterConstraints is true. This is correct because Phase 2 iterates over
+	// voters (kind=voterIndex) before non-voters (kind=nonVoterIndex). By
+	// counting both, we avoid over-satisfying a constraint with non-voters before
+	// other constraints get a chance to be satisfied.
+	// Example: voter constraints [+region=a]:1, [+zone=b1]:1, [+region=b]:1 with
+	// two non-voters on stores matching both region=a and zone=b1. If we only
+	// counted voters, [+region=a] would appear unsatisfied when processing the
+	// second non-voter, causing both non-voters to be assigned to [+region=a]. By
+	// counting both voters and non-voters, the first non-voter assignment marks
+	// [+region=a] as satisfied, allowing the second non-voter to be assigned to
+	// [+zone=b1]. See testdata/range_analyzed_constraints for examples
+	// illustrating this behavior.
 	isConstraintSatisfied := func(constraintIndex int) bool {
 		return len(ac.satisfiedByReplica[voterIndex][constraintIndex])+
 			len(ac.satisfiedByReplica[nonVoterIndex][constraintIndex]) >= int(ac.constraints[constraintIndex].numReplicas)
@@ -1542,17 +1718,17 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	spanConfig *normalizedSpanConfig,
 	constraintMatcher storeMatchesConstraintInterface,
 	leaseholder roachpb.StoreID,
-) {
+) error {
 	rac.spanConfig = spanConfig
 	rac.numNeededReplicas[voterIndex] = spanConfig.numVoters
 	rac.numNeededReplicas[nonVoterIndex] = spanConfig.numReplicas - spanConfig.numVoters
 	rac.replicas = rac.buf.replicas
 
 	if spanConfig.constraints != nil {
-		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher)
+		rac.constraints.initialize(spanConfig.constraints, &rac.buf, constraintMatcher, false /* isVoterConstraints */)
 	}
 	if spanConfig.voterConstraints != nil {
-		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher)
+		rac.voterConstraints.initialize(spanConfig.voterConstraints, &rac.buf, constraintMatcher, true /* isVoterConstraints */)
 	}
 
 	rac.leaseholderID = leaseholder
@@ -1577,7 +1753,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 			}
 		}
 		if rac.leaseholderPreferenceIndex == -1 {
-			panic("leaseholder not found in replicas")
+			return errors.Errorf("leaseholder not found in replicas %v", rac.replicas)
 		}
 	}
 
@@ -1593,6 +1769,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 	rac.voterLocalityTiers = makeReplicasLocalityTiers(voterLocalityTiers)
 
 	rac.votersDiversityScore, rac.replicasDiversityScore = diversityScore(rac.replicas)
+	return nil
 }
 
 // Disjunction of conjunctions.
@@ -2045,7 +2222,7 @@ func (si *stringInterner) internConstraintsConj(constraints []roachpb.Constraint
 		})
 	}
 	sort.Slice(rv, func(j, k int) bool {
-		return rv[j].less(rv[k])
+		return rv[j].cmp(rv[k]) < 0
 	})
 	j := 0
 	// De-dup conjuncts in the conjunction.

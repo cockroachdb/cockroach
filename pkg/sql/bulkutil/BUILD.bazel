@@ -2,12 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bulkutil",
-    srcs = ["external_storage_mux.go"],
+    srcs = [
+        "bulk_job_cleaner.go",
+        "external_storage_mux.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/bulkutil",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/storageccl",
         "//pkg/cloud",
+        "//pkg/jobs/jobspb",
         "//pkg/security/username",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -16,15 +20,23 @@ go_library(
 go_test(
     name = "bulkutil_test",
     srcs = [
+        "bulk_job_cleaner_test.go",
         "external_storage_mux_test.go",
         "main_test.go",
     ],
     embed = [":bulkutil"],
     deps = [
+        "//pkg/base",
+        "//pkg/blobs",
         "//pkg/cloud",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/jobs/jobspb",
         "//pkg/security/username",
+        "//pkg/settings/cluster",
+        "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

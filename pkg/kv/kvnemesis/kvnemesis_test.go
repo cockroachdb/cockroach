@@ -79,6 +79,16 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				tr.Add(key, endKey, ts, seq)
 			}
 		},
+		// Enable SysBytes verification on every Raft command application.
+		SysBytesVerificationOnRaftApply: func(mismatchErr error) {
+			if mismatchErr != nil {
+				// Fail the test if there was ever a SysBytes mismatch detected. This
+				// will likely be caught by the consistency checker at the end of the
+				// test as well, but it may not be if there is a stats recomputation for
+				// some reason.
+				t.Errorf("SysBytes mismatch detected during Raft command application: %v", mismatchErr)
+			}
+		},
 	}
 
 	isOurCommand := func(ba *kvpb.BatchRequest) (string, uint64, bool) {
@@ -169,6 +179,13 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 					*args.Cmd.ClosedTimestamp)
 			}
 			return 0, nil
+		}
+		storeKnobs.AfterSplitApplication = func(desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState) {
+			asserter.ApplySplitRHS(
+				state.Desc.RangeID, desc.ReplicaID,
+				state.RaftAppliedIndex, state.RaftAppliedIndexTerm,
+				state.LeaseAppliedIndex, state.RaftClosedTimestamp,
+			)
 		}
 		storeKnobs.AfterSnapshotApplication = func(
 			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,

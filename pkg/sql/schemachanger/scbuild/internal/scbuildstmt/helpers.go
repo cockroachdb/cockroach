@@ -10,7 +10,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -1191,13 +1190,10 @@ func checkTableSchemaChangePrerequisites(
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	// No-op by default unless schema_locked has been setup.
 	maybeCleanupSchemaLockedFn = func() {}
-	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
-		// Before 25.2 we don't support auto-unsetting schema locked.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
-			ns := tableElements.FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
-		}
-		// Unset schema_locked for the user.
+	hasSchemaLockedChange := tree.HasSetOrResetSchemaLocked(n)
+	if schemaLocked != nil && !hasSchemaLockedChange {
+		// If the user is not explicitly setting schema_locked, then we should
+		// use the auto-unset logic.
 		b.DropTransient(schemaLocked)
 		maybeCleanupSchemaLockedFn = func() {
 			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)
@@ -2036,23 +2032,19 @@ func retrieveColumnTypeElem(
 }
 
 // retrieveColumnComputeExpression returns the compute expression of the column.
-// If no expression exists, then nil is returned. This will handle older
-// versions that may store the expression as part of the ColumnType.
+// If no expression exists, then nil is returned.
 func retrieveColumnComputeExpression(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (expr *scpb.Expression) {
 	// First try to retrieve the expression from the ColumnComputeExpression. This
-	// may be unavailable because the column doesn't have a compute expression, or
-	// it's an older version that stores the expression as part of the ColumnType.
-	colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+	// may be unavailable because the column doesn't have a compute expression.
+	if colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
 		return e.ColumnID == columnID
-	}).MustGetZeroOrOneElement()
-	if colComputeExpression != nil {
+	}).MustGetZeroOrOneElement(); colComputeExpression != nil {
 		return &colComputeExpression.Expression
 	}
-	// Check the ColumnType in case this is an older version.
-	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
-	return columnType.ComputeExpr
+
+	return nil
 }
 
 // mustRetrieveColumnTypeElem retrieves the index column elements associated

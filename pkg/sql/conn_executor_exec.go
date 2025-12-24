@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -3298,6 +3300,11 @@ func (ex *connExecutor) makeExecPlan(
 		}
 		_, err := explain.DecodePlanGistToRows(ctx, &planner.extendedEvalCtx.Context, ih.planGist.String(), catalog)
 		if err != nil {
+			// Serialization failures can occur from the lease manager if a
+			// consistent view of descriptors was not observed.
+			if pgerror.GetPGCode(err) == pgcode.SerializationFailure {
+				return ctx, err
+			}
 			return ctx, errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode plan gist: %q", ih.planGist.String())
 		}
 	}
@@ -4438,24 +4445,40 @@ func (ex *connExecutor) execWithProfiling(
 	ctx context.Context, ast tree.Statement, prepared *prep.Statement, op func(context.Context) error,
 ) error {
 	var err error
-	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels || log.HasSpan(ctx) {
 		remoteAddr := "internal"
 		if rAddr := ex.sessionData().RemoteAddr; rAddr != nil {
 			remoteAddr = rAddr.String()
 		}
+		// Compute stmtNoConstants with proper FmtFlags for consistency with
+		// makeStatement and ih.Setup.
+		fmtFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV))
 		var stmtNoConstants string
 		if prepared != nil {
 			stmtNoConstants = prepared.StatementNoConstants
 		} else {
-			stmtNoConstants = tree.FormatStatementHideConstants(ast)
+			stmtNoConstants = tree.FormatStatementHideConstants(ast, fmtFlags)
 		}
-		pprofutil.Do(ctx, func(ctx context.Context) {
-			err = op(ctx)
-		},
+		// Compute fingerprint ID here since ih.Setup hasn't been called yet.
+		fingerprintID := appstatspb.ConstructStatementFingerprintID(
+			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database,
+		)
+		labels := []string{
+			workloadid.ProfileTag, sqlstatsutil.EncodeStmtFingerprintIDToString(fingerprintID),
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
+		}
+		if opName, ok := GetInternalOpName(ctx); ok {
+			labels = append(labels, "opname", opName)
+		}
+		pprofutil.Do(
+			ctx,
+			func(ctx context.Context) {
+				err = op(ctx)
+			},
+			labels...,
 		)
 	} else {
 		err = op(ctx)
