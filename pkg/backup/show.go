@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -50,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+const showBackupsMaxPageSize = 50
 
 type backupInfoReader interface {
 	showBackup(
@@ -1353,6 +1356,59 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 	{Name: "path", Typ: types.String},
 }
 
+var showBackupsWithIDsHeader = colinfo.ResultColumns{
+	{Name: "id", Typ: types.String},
+	{Name: "backup_time", Typ: types.TimestampTZ},
+	{Name: "revision_start_time", Typ: types.TimestampTZ},
+}
+
+// getTimeRangeOrDefaults parses the NEWER THAN and OLDER THAN expressions from
+// the SHOW BACKUPS command. If a NEWER THAN or OLDER THAN is not specified, a
+// zero time or current time is returned, respectively, It also returns the
+// maximum number of results to return, which is non-zero only if the time range
+// is not fully specified.
+func getTimeRangeOrDefaults(
+	ctx context.Context, p sql.PlanHookState, interval tree.ShowBackupTimeFilter,
+) (newerThan time.Time, olderThan time.Time, maxCount uint, err error) {
+	parseTime := func(t tree.Expr) (time.Time, error) {
+		asOf := tree.AsOfClause{Expr: t}
+		asTime, err := p.EvalAsOfTimestamp(ctx, asOf)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return asTime.Timestamp.GoTime(), nil
+	}
+
+	// To avoid issues with certain backups being skipped at the time boundaries
+	// due to precision differences between backup times and the times encoded in
+	// backup filenames, we round to second-level precision. We choose the most
+	// inclusive rounding, meaning we round down for AFTER and up for BEFORE.
+	precision := time.Second
+	if interval.NewerThan != nil {
+		newerThan, err = parseTime(interval.NewerThan)
+		if err != nil {
+			return time.Time{}, time.Time{}, 0, err
+		}
+		newerThan = newerThan.Truncate(precision)
+	}
+
+	if interval.OlderThan != nil {
+		olderThan, err = parseTime(interval.OlderThan)
+		if err != nil {
+			return time.Time{}, time.Time{}, 0, err
+		}
+	} else {
+		olderThan = timeutil.Now()
+	}
+	olderThan = olderThan.Add(precision - time.Nanosecond).Truncate(precision)
+
+	if interval.NewerThan == nil || interval.OlderThan == nil {
+		maxCount = showBackupsMaxPageSize
+	}
+
+	return newerThan, olderThan, maxCount, nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
@@ -1362,6 +1418,7 @@ func showBackupsInCollectionPlanHook(
 		return nil, nil, false, err
 	}
 
+	useIDs := p.SessionData().UseBackupsWithIDs
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
@@ -1370,17 +1427,70 @@ func showBackupsInCollectionPlanHook(
 		if err != nil {
 			return errors.Wrapf(err, "connect to external storage")
 		}
-		defer store.Close()
-		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
-		if err != nil {
-			return err
-		}
-		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(i)}
+		defer besteffort.Error(ctx, "show-backups-close-store", func(_ context.Context) error {
+			return store.Close()
+		})
+
+		if useIDs {
+			newerThan, olderThan, maxCount, err := getTimeRangeOrDefaults(ctx, p, showStmt.TimeRange)
+			if err != nil {
+				return err
+			}
+			res, exceededMax, err := backupinfo.ListRestorableBackups(
+				ctx, store, newerThan, olderThan, maxCount,
+			)
+			if err != nil {
+				return err
+			}
+			if exceededMax {
+				p.BufferClientNotice(
+					context.TODO(),
+					pgnotice.Newf(
+						"only showing %d most recent backups. To see more, please run `SHOW BACKUPS IN ... OLDER THAN '%s'` or specify both OLDER THAN and NEWER THAN.",
+						len(res),
+						res[len(res)-1].EndTime.GoTime().UTC().Format(time.DateTime),
+					),
+				)
+			}
+			for _, i := range res {
+				backupTime, err := tree.MakeDTimestampTZ(
+					timeutil.Unix(0, i.EndTime.WallTime), time.Second,
+				)
+				if err != nil {
+					return err
+				}
+				revStartTime := tree.DNull
+				if i.MVCCFilter == backuppb.MVCCFilter_All {
+					revStartTime, err = tree.MakeDTimestampTZ(
+						timeutil.Unix(0, i.RevisionStartTime.WallTime), time.Second,
+					)
+					if err != nil {
+						return err
+					}
+				}
+				resultsCh <- tree.Datums{
+					tree.NewDString(i.ID),
+					backupTime,
+					revStartTime,
+				}
+			}
+		} else {
+			res, err := backupdest.ListFullBackupsInCollection(ctx, store)
+			if err != nil {
+				return err
+			}
+			for _, i := range res {
+				resultsCh <- tree.Datums{tree.NewDString(i)}
+			}
 		}
 		return nil
 	}
-	return fn, showBackupsInCollectionHeader, false, nil
+
+	header := showBackupsInCollectionHeader
+	if useIDs {
+		header = showBackupsWithIDsHeader
+	}
+	return fn, header, false, nil
 }
 
 func init() {
