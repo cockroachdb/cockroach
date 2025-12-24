@@ -1122,3 +1122,7 @@ func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(va
 func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val bool) {
 	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
 }
+
+func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
+	m.Data.UseBackupsWithIDs = val
+}

@@ -950,8 +950,8 @@ table_columns
 query TTTTT colnames
 SELECT table_catalog, table_schema, table_name, table_type, is_insertable_into
 FROM system.information_schema.tables
-WHERE 
-(table_schema <> 'crdb_internal' OR table_name = 'node_build_info') 
+WHERE
+(table_schema <> 'crdb_internal' OR table_name = 'node_build_info')
 AND NOT (table_schema = 'public' AND table_name <> 'locations')
 ORDER BY table_name, table_schema
 ----
@@ -2356,9 +2356,9 @@ root      other_db       public              ALL             YES
 
 # root can see everything (filtering most of crdb_internal and system to avoid a brittle test)
 query TTTTTTTT colnames,rowsort
-SELECT * FROM system.information_schema.table_privileges 
-WHERE 
-  (table_schema <> 'crdb_internal' OR table_name = 'node_build_info') AND 
+SELECT * FROM system.information_schema.table_privileges
+WHERE
+  (table_schema <> 'crdb_internal' OR table_name = 'node_build_info') AND
   NOT (table_catalog = 'system' AND table_schema = 'public' AND 'table_name' <> 'locations')
 ORDER BY table_schema, table_name, table_schema, grantee, privilege_type
 ----
@@ -2585,9 +2585,9 @@ NULL     public   system         pg_extension        geometry_columns           
 NULL     public   system         pg_extension        spatial_ref_sys                        SELECT          NO            YES
 
 query TTTTTTTT colnames,rowsort
-SELECT * FROM system.information_schema.role_table_grants 
-WHERE 
-(table_schema <> 'crdb_internal' OR table_name = 'node_build_info') 
+SELECT * FROM system.information_schema.role_table_grants
+WHERE
+(table_schema <> 'crdb_internal' OR table_name = 'node_build_info')
 AND NOT (table_schema = 'public' AND table_name <> 'locations');
 ----
 grantor  grantee  table_catalog  table_schema        table_name                             privilege_type  is_grantable  with_hierarchy
@@ -3018,19 +3018,19 @@ statement ok
 CREATE SEQUENCE test_seq_3 AS smallint
 
 statement ok
-CREATE SEQUENCE test_seq_4 AS integer 
+CREATE SEQUENCE test_seq_4 AS integer
 
 statement ok
 CREATE SEQUENCE test_seq_5 AS bigint
 
 statement ok
-CREATE SEQUENCE test_seq_6 AS INT2 
+CREATE SEQUENCE test_seq_6 AS INT2
 
 statement ok
 CREATE SEQUENCE test_seq_7 AS INT4
 
 statement ok
-CREATE SEQUENCE test_seq_8 AS INT8 
+CREATE SEQUENCE test_seq_8 AS INT8
 
 query TTTTIIITTTTT colnames,rowsort
 SELECT * FROM information_schema.sequences
@@ -3970,6 +3970,7 @@ troubleshooting_mode                                             off
 unbounded_parallel_scans                                         off
 unconstrained_non_covering_index_scan_enabled                    off
 unsafe_allow_triggers_modifying_cascades                         off
+use_backups_with_ids                                             off
 use_cputs_on_non_unique_indexes                                  off
 use_improved_routine_dependency_tracking                         on
 use_improved_routine_deps_triggers_and_computed_cols             on

@@ -145,6 +145,11 @@ message SessionData {
   // for deadlock detection.
   google.protobuf.Duration deadlock_timeout = 33 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  // UseBackupsWithIDs, when true, enables the use of backup IDs in SHOW BACKUP
+  // and RESTORE. If set, SHOW BACKUPS with display backups with IDs that can
+  // then be used in SHOW BACKUP and RESTORE statements.
+  bool use_backups_with_ids = 34 [(gogoproto.customname) = "UseBackupsWithIDs"];
 }
 
 // DataConversionConfig contains the parameters that influence the output
