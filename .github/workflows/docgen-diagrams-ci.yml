@@ -9,9 +9,10 @@ on:
     branches:
       - master
       - release-*
-  # NOTE: pull_request_target was removed for security reasons.
-  # It allowed untrusted PR code to execute with access to secrets.
-  # Use workflow_dispatch instead for manual triggering on branches.
+  # SECURITY FIX: Removed pull_request_target trigger to prevent untrusted code execution.
+  # The pull_request_target event runs with write permissions and access to secrets,
+  # but checking out and executing code from PR head allows attackers to exfiltrate secrets.
+  # See: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
   workflow_dispatch:
     inputs:
       force_regenerate:
@@ -50,7 +51,10 @@ jobs:
   generate-diagrams:
     needs: check-label
     if: needs.check-label.outputs.should_run == 'true'
-    runs-on: [self-hosted, ubuntu_big_2004]
+    # SECURITY FIX: Changed from self-hosted runners to GitHub-hosted runners.
+    # Self-hosted runners with pull_request_target are especially dangerous as
+    # malicious code could persist on the runner and compromise future builds.
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       diagrams_changed: ${{ steps.check-changes.outputs.changed }}
@@ -61,19 +65,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          # SECURITY: For pull_request events, this safely checks out the merge commit.
+          # Never use github.event.pull_request.head.sha with pull_request_target as it
+          # would execute untrusted code with elevated privileges.
           fetch-depth: 0
 
       - name: Compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
 
       - name: Get EngFlow keys
+        # Only run on non-fork repositories for security
+        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
         run: ./build/github/get-engflow-keys.sh
 
       - name: Generate BNF files
         id: generate-bnf
         run: |
           echo "::group::Generating BNF files from sql.y"
+          # Use dev tool to generate BNF files
           ./dev generate bnf 2>&1 | tee bnf_generation.log
           echo "::endgroup::"
 
@@ -81,7 +90,38 @@ jobs:
         id: build-svg
         run: |
           echo "::group::Building SVG diagrams"
-          ./dev build docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
+
+          # Set environment variable to require railroad diagrams
+          export COCKROACH_REQUIRE_RAILROAD=1
+
+          # Build SVG diagrams using dev tool
+          echo "Building SVG diagrams..."
+          ./dev build docs/generated/sql/bnf:svg --verbose_failures 2>&1 | tee svg_build.log
+
+          # Find where HTML files were actually generated
+          echo "Searching for generated HTML files..."
+
+          # Use find to locate the actual HTML files
+          HTML_DIR=$(find . -type d -path "*bazel*/bin/docs/generated/sql/bnf" 2>/dev/null | head -1)
+
+          if [[ -z "$HTML_DIR" ]]; then
+            # Also check bazel-out paths
+            HTML_DIR=$(find . -type d -path "*bazel-out*/bin/docs/generated/sql/bnf" 2>/dev/null | head -1)
+          fi
+
+          if [[ -n "$HTML_DIR" ]]; then
+            echo "✅ Found HTML files in: $HTML_DIR"
+            HTML_COUNT=$(ls -1 $HTML_DIR/*.html 2>/dev/null | wc -l | tr -d ' ')
+            echo "Found $HTML_COUNT HTML files"
+            ls -la $HTML_DIR/*.html | head -10
+            # Export for use in packaging step
+            echo "html_dir=$HTML_DIR" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No HTML files found!"
+            echo "Searching entire workspace for any HTML files..."
+            find . -name "*.html" -type f 2>/dev/null | head -20
+          fi
+
           echo "::endgroup::"
 
       - name: Run validation tests
@@ -95,7 +135,7 @@ jobs:
 
           # Check 1: Verify all BNF files exist for diagrams.go entries
           echo "Checking for missing BNF files..."
-          missing_bnf=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingBNFFiles 2>&1) || true
+          missing_bnf=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestMissingBNFFiles 2>&1) || true
           if echo "$missing_bnf" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing BNF Files\n${missing_bnf}"
@@ -103,7 +143,7 @@ jobs:
 
           # Check 2: Verify all HTML diagrams were generated
           echo "Checking for missing HTML diagrams..."
-          missing_html=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestMissingHTMLDiagrams 2>&1) || true
+          missing_html=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestMissingHTMLDiagrams 2>&1) || true
           if echo "$missing_html" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing HTML Diagrams\n${missing_html}"
@@ -111,7 +151,7 @@ jobs:
 
           # Check 3: Look for _stmt naming conflicts
           echo "Checking for _stmt naming conflicts..."
-          stmt_conflicts=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestStmtNamingConflicts 2>&1) || true
+          stmt_conflicts=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestStmtNamingConflicts 2>&1) || true
           if echo "$stmt_conflicts" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## _stmt Naming Conflicts\n${stmt_conflicts}"
@@ -119,7 +159,7 @@ jobs:
 
           # Check 4: Detect replace/unlink mismatches
           echo "Checking for replace/unlink mismatches..."
-          replace_mismatch=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestReplaceUnlinkMismatch 2>&1) || true
+          replace_mismatch=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestReplaceUnlinkMismatch 2>&1) || true
           if echo "$replace_mismatch" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Replace/Unlink Mismatches\n${replace_mismatch}"
@@ -127,7 +167,7 @@ jobs:
 
           # Check 5: Verify grammar links are valid
           echo "Checking for broken grammar links..."
-          broken_links=$(./dev test pkg/cmd/docgen/tests:docgen_validation_test -f=TestBrokenGrammarLinks 2>&1) || true
+          broken_links=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestBrokenGrammarLinks 2>&1) || true
           if echo "$broken_links" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Broken Grammar Links\n${broken_links}"
@@ -182,8 +222,23 @@ jobs:
           # Copy BNF files
           cp -r docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
 
-          # Copy HTML files (SVG diagrams)
-          cp -r bazel-bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
+          # Copy HTML files (SVG diagrams) from the correct bazel output directory
+          HTML_DIR="${{ steps.build-svg.outputs.html_dir }}"
+          if [[ -n "$HTML_DIR" ]]; then
+            echo "Copying HTML files from $HTML_DIR"
+            cp $HTML_DIR/*.html artifacts/diagrams/ 2>/dev/null || echo "Failed to copy HTML files"
+
+            # Verify copy was successful
+            HTML_COPIED=$(ls -1 artifacts/diagrams/*.html 2>/dev/null | wc -l | tr -d ' ')
+            echo "Copied $HTML_COPIED HTML files to artifacts"
+          else
+            echo "Warning: No HTML directory found, searching for HTML files..."
+            # Fallback: find and copy any HTML files in bnf directories
+            find . -name "*.html" -path "*bnf*" -type f -exec cp {} artifacts/diagrams/ \; 2>/dev/null || true
+
+            HTML_COPIED=$(ls -1 artifacts/diagrams/*.html 2>/dev/null | wc -l | tr -d ' ')
+            echo "Found and copied $HTML_COPIED HTML files"
+          fi
 
           # Create manifest with diagram diffs
           GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -201,12 +256,14 @@ jobs:
 
           cat > artifacts/diagrams/manifest.json << MANIFEST_EOF
           {
-            "generated_at": "${GENERATED_AT}",
+            "generated_at": "$GENERATED_AT",
             "source_commit": "${{ github.sha }}",
-            "source_pr": "${{ github.event.pull_request.number || 'N/A' }}",
-            "diagram_count": ${DIAGRAM_COUNT},
-            "svg_count": ${SVG_COUNT},
-            "changed_files": ${CHANGED_JSON}
+            "source_pr": "${{ github.event.pull_request.number }}",
+            "branch": "${{ github.head_ref || github.ref_name }}",
+            "diagram_count": $DIAGRAM_COUNT,
+            "svg_count": $SVG_COUNT,
+            "changed_files": $CHANGED_JSON,
+            "validation_status": "${{ steps.validate.outputs.status }}"
           }
           MANIFEST_EOF
 
@@ -233,7 +290,7 @@ jobs:
 
       - name: Clean up EngFlow keys
         if: always()
-        run: ./build/github/cleanup-engflow-keys.sh
+        run: ./build/github/cleanup-engflow-keys.sh || true
 
   sync-to-generated-diagrams:
     needs: generate-diagrams
@@ -301,6 +358,8 @@ jobs:
             - Branch: `${{ github.head_ref || github.ref_name }}`
 
             **Validation Status:** ${{ needs.generate-diagrams.outputs.validation_status }}
+
+            **Manifest:** See `manifest.json` for detailed change information
 
             ---
 
