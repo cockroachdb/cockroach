@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1353,6 +1354,70 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 	{Name: "path", Typ: types.String},
 }
 
+var showBackupsWithIDsHeader = colinfo.ResultColumns{
+	{Name: "id", Typ: types.String},
+	{Name: "backup_time", Typ: types.TimestampTZ},
+	{Name: "revision_start_time", Typ: types.TimestampTZ},
+}
+
+// getTimeRangeOrDefaults parses the after and before expressions from the SHOW
+// BACKUPS command. If both are nil, it returns the last 24 hours as the
+// default. If only one is provided, it uses that to compute the other with a 24
+// hour difference.
+func getTimeRangeOrDefaults(
+	ctx context.Context, p sql.PlanHookState, interval tree.ShowAfterBefore,
+) (after time.Time, before time.Time, err error) {
+	parseTime := func(t tree.Expr) (time.Time, error) {
+		asOf := tree.AsOfClause{Expr: t}
+		asTime, err := p.EvalAsOfTimestamp(ctx, asOf)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return asTime.Timestamp.GoTime(), nil
+	}
+
+	if interval.After != nil && interval.Before != nil {
+		after, err = parseTime(interval.After)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		before, err = parseTime(interval.Before)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+	} else {
+		p.BufferClientNotice(
+			ctx,
+			pgnotice.Newf("no specific time range provided, defaulting to 24 hours"),
+		)
+		if interval.Before == nil && interval.After == nil {
+			before = timeutil.Now()
+			after = before.Add(-24 * time.Hour)
+		} else if interval.Before != nil {
+			before, err = parseTime(interval.Before)
+			if err != nil {
+				return time.Time{}, time.Time{}, err
+			}
+			after = before.Add(-24 * time.Hour)
+		} else {
+			after, err = parseTime(interval.After)
+			if err != nil {
+				return time.Time{}, time.Time{}, err
+			}
+			before = after.Add(24 * time.Hour)
+		}
+	}
+
+	// To avoid issues with certain backups being skipped at the time boundaries
+	// due to precision differences between backup times and the times encoded in
+	// backup filenames, we round to second-level precision. We choose the most
+	// inclusive rounding, meaning we round down for AFTER and up for BEFORE.
+	precision := time.Second
+	before = before.Add(precision - time.Nanosecond).Truncate(precision)
+	after = after.Truncate(precision)
+	return after, before, nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
@@ -1362,6 +1427,7 @@ func showBackupsInCollectionPlanHook(
 		return nil, nil, false, err
 	}
 
+	useIDs := p.SessionData().UseBackupsWithIDs
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
@@ -1370,17 +1436,58 @@ func showBackupsInCollectionPlanHook(
 		if err != nil {
 			return errors.Wrapf(err, "connect to external storage")
 		}
-		defer store.Close()
-		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
-		if err != nil {
-			return err
-		}
-		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(i)}
+		defer besteffort.Error(ctx, "show-backups-close-store", func(_ context.Context) error {
+			return store.Close()
+		})
+
+		if useIDs {
+			after, before, err := getTimeRangeOrDefaults(ctx, p, showStmt.TimeRange)
+			if err != nil {
+				return err
+			}
+			res, err := backupinfo.ListRestorableBackups(ctx, store, after, before)
+			if err != nil {
+				return err
+			}
+			for _, i := range res {
+				backupTime, err := tree.MakeDTimestampTZ(
+					timeutil.Unix(0, i.EndTime.WallTime), time.Second,
+				)
+				if err != nil {
+					return err
+				}
+				revStartTime := tree.DNull
+				if i.MVCCFilter == backuppb.MVCCFilter_All {
+					revStartTime, err = tree.MakeDTimestampTZ(
+						timeutil.Unix(0, i.RevisionStartTime.WallTime), time.Second,
+					)
+					if err != nil {
+						return err
+					}
+				}
+				resultsCh <- tree.Datums{
+					tree.NewDString(i.ID),
+					backupTime,
+					revStartTime,
+				}
+			}
+		} else {
+			res, err := backupdest.ListFullBackupsInCollection(ctx, store)
+			if err != nil {
+				return err
+			}
+			for _, i := range res {
+				resultsCh <- tree.Datums{tree.NewDString(i)}
+			}
 		}
 		return nil
 	}
-	return fn, showBackupsInCollectionHeader, false, nil
+
+	header := showBackupsInCollectionHeader
+	if useIDs {
+		header = showBackupsWithIDsHeader
+	}
+	return fn, header, false, nil
 }
 
 func init() {

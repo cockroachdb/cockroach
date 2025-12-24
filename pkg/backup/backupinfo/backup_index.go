@@ -250,6 +250,8 @@ type RestorableBackup struct {
 func ListRestorableBackups(
 	ctx context.Context, store cloud.ExternalStorage, after, before time.Time,
 ) ([]RestorableBackup, error) {
+	ctx, trace := tracing.ChildSpan(ctx, "backupinfo.ListRestorableBackups")
+	defer trace.Finish()
 	idxInRange, err := listIndexesWithinRange(ctx, store, after, before)
 	if err != nil {
 		return nil, err
@@ -271,6 +273,8 @@ func ListRestorableBackups(
 	}
 
 	backups := make([]RestorableBackup, 0, len(filteredIndexes))
+	ctx, readTrace := tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
+	defer readTrace.Finish()
 	for _, index := range filteredIndexes {
 		reader, _, err := store.ReadFile(ctx, index.filePath, cloud.ReadOptions{})
 		if err != nil {
