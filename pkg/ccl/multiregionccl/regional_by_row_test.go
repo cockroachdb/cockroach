@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -674,21 +675,39 @@ CREATE TABLE regional_by_row (
 					return errors.Wrap(err, "unexepected error querying schema change GC jobs")
 				}
 
-				actualCount := len(rows)
-				if actualCount != expectedCount {
-					return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",
+				// Count total indexes across all GC jobs.
+				// The details JSON has an "indexes" array; count occurrences of "indexId".
+				totalIndexes := 0
+				for _, r := range rows {
+					indexCount := 0
+					detailStr := r.details
+					for i := 0; i < len(detailStr); {
+						idx := strings.Index(detailStr[i:], `"indexId"`)
+						if idx == -1 {
+							break // no more indexIDs in this job
+						}
+						indexCount++
+						i += idx + 1
+					}
+					totalIndexes += indexCount
+				}
+
+				if totalIndexes != expectedCount {
+					return errors.Newf("expected GC on %d indexes with status %q, found %d. Jobs found: %v",
 						expectedCount,
 						status,
-						actualCount,
+						totalIndexes,
 						rows)
 				}
 				return nil
 			}
 
-			expectedGCJobsForDrops := 4
-			expectedGCJobsForTempIndexes := 4
-			// Now check that we have the right number of index GC jobs pending.
-			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops+expectedGCJobsForTempIndexes)
+			expectedGCIndexesForDrops := 4
+			expectedGCIndexesForTempIndexes := 4
+			// Now check that we have the right number of indexes being cleaned up.
+			// Note: indexes may be batched into multiple GC jobs in the declarative
+			// schema changer, so we count the total number of indexes across all jobs.
+			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes)
 			require.NoError(t, err)
 			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
 			require.NoError(t, err)
@@ -701,7 +720,7 @@ CREATE TABLE regional_by_row (
 			close(blockGC)
 
 			// Validate that indexes are cleaned up.
-			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes))
 			err = queryIndexGCJobsAndValidateCount(`running`, 0)
 			require.NoError(t, err)
 		})

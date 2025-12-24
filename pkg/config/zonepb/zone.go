@@ -1190,6 +1190,12 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 	return false
 }
 
+// DeleteAllSubzones removes all subzones from the ZoneConfig.
+func (z *ZoneConfig) DeleteAllSubzones() {
+	z.Subzones = z.Subzones[:0]
+	z.SubzoneSpans = z.SubzoneSpans[:0]
+}
+
 // DeleteSubzoneSpansForSubzoneIndex removes all subzoneSpans with the given
 // subzoneIndex from z, if any exist.
 func (z *ZoneConfig) DeleteSubzoneSpansForSubzoneIndex(subzoneIndex int32) {

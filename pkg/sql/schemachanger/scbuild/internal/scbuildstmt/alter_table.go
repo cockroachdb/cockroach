@@ -194,9 +194,13 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		})
 		b.IncrementSubWorkID()
 	}
+	finalizePrimaryIndexChanges(b, tbl, n.String())
+}
+
+func finalizePrimaryIndexChanges(b BuildCtx, tbl *scpb.Table, stmtSQLString string) {
 	maybeDropRedundantPrimaryIndexes(b, tbl.TableID)
 	maybeRewriteTempIDsInPrimaryIndexes(b, tbl.TableID)
-	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, n.String())
+	disallowDroppingPrimaryIndexReferencedInUDFOrView(b, tbl.TableID, stmtSQLString)
 }
 
 // disallowDroppingPrimaryIndexReferencedInUDFOrView prevents dropping old (current)

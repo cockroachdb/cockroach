@@ -39,6 +39,7 @@ func configureIndexDescForNewIndexPartitioning(
 	mutatedSpec *indexSpecMutator,
 	isPrimary bool,
 	partitionByIndex *tree.PartitionByIndex,
+	overridePartitioning *partitioningSpec,
 ) error {
 	// If there was a previous specification is missing, then the mutated spec is
 	// the starting point. Otherwise, prevSpec is the base starting point, and mutated
@@ -48,9 +49,16 @@ func configureIndexDescForNewIndexPartitioning(
 	}
 	var err error
 	partitionAllBy := b.QueryByID(tableID).FilterTablePartitioning().MustHaveZeroOrOne()
-	if partitionByIndex.ContainsPartitioningClause() || partitionAllBy != nil {
+	if partitionByIndex.ContainsPartitioningClause() || partitionAllBy != nil || overridePartitioning != nil {
 		var partitionBy *tree.PartitionBy
-		if partitionAllBy == nil {
+		if overridePartitioning != nil {
+			partitionBy = overridePartitioning.PartitionBy
+			if partitionBy == nil {
+				// remove all partitioning from the index, including implicit columns
+				mutatedSpec.partitioning = nil
+				mutatedSpec.removeImplicitColumns()
+			}
+		} else if partitionAllBy == nil {
 			if partitionByIndex.ContainsPartitions() {
 				partitionBy = partitionByIndex.PartitionBy
 			}
@@ -65,10 +73,10 @@ func configureIndexDescForNewIndexPartitioning(
 				return err
 			}
 		}
-		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().
-			MustGetZeroOrOneElement()
+		localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+		overrideImplicitPartitioning := overridePartitioning != nil && len(overridePartitioning.NewImplicitColumns) > 0
 		allowImplicitPartitioning := b.EvalCtx().SessionData().ImplicitColumnPartitioningEnabled ||
-			localityRBR != nil
+			localityRBR != nil || overrideImplicitPartitioning
 		if partitionBy != nil {
 			oldNumImplicitColumns := 0
 			if mutatedSpec.partitioning != nil {
@@ -89,6 +97,7 @@ func configureIndexDescForNewIndexPartitioning(
 				oldKeyColumns,
 				nil, /* allowedNewColumnNames */
 				allowImplicitPartitioning,
+				overridePartitioning,
 			)
 			if err != nil {
 				return err
@@ -107,14 +116,11 @@ func updateIndexPartitioning(
 	newImplicitCols []*scpb.ColumnName,
 	newPartitioning catpb.PartitioningDescriptor,
 ) {
-	oldNumImplicitCols := 0
+	var currPartitioning catpb.PartitioningDescriptor
 	if spec.partitioning != nil {
-		oldNumImplicitCols = int(spec.partitioning.NumImplicitColumns)
+		currPartitioning = spec.partitioning.PartitioningDescriptor
 	}
-	isNoOp := oldNumImplicitCols == len(newImplicitCols)
-	if isNoOp && oldNumImplicitCols > 0 {
-		isNoOp = spec.partitioning.Equal(newPartitioning)
-	}
+	isNoOp := currPartitioning.Equal(newPartitioning)
 	keyColsOnly := make([]*scpb.IndexColumn, 0, len(spec.columns))
 	for _, col := range spec.columns {
 		if col.Kind != scpb.IndexColumn_KEY {
@@ -314,6 +320,7 @@ func createPartitioning(
 	oldKeyColumnNames []string,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
+	overridePartitioning *partitioningSpec,
 ) (newImplicitCols []*scpb.ColumnName, newPartitioning catpb.PartitioningDescriptor, err error) {
 	if partBy == nil {
 		if oldNumImplicitColumns > 0 {
@@ -329,15 +336,28 @@ func createPartitioning(
 	newIdxColumnNames := oldKeyColumnNames[oldNumImplicitColumns:]
 
 	if allowImplicitPartitioning {
-		newImplicitCols, err = collectImplicitPartitionColumns(
-			b,
-			tableID,
-			newIdxColumnNames[0],
-			partBy,
-			allowedNewColumnNames,
-		)
-		if err != nil {
-			return nil, newPartitioning, err
+		if overridePartitioning != nil {
+			newImplicitCols = overridePartitioning.NewImplicitColumns
+			allowedNewColumnNames = overridePartitioning.AllowedNewColumnNames
+			i := 0
+			// no need to add the implicit key if column is already part of the index keys
+			for ; i < min(len(newImplicitCols), len(oldKeyColumnNames)); i++ {
+				if newImplicitCols[i].Name != oldKeyColumnNames[i] {
+					break
+				}
+			}
+			newImplicitCols = newImplicitCols[i:]
+		} else {
+			newImplicitCols, err = collectImplicitPartitionColumns(
+				b,
+				tableID,
+				newIdxColumnNames[0],
+				partBy,
+				allowedNewColumnNames,
+			)
+			if err != nil {
+				return nil, newPartitioning, err
+			}
 		}
 	}
 	if len(newImplicitCols) > 0 {
@@ -353,7 +373,7 @@ func createPartitioning(
 	// same implicitly partitioned columns.
 	// Having different implicitly partitioned columns requires rewrites,
 	// which is outside the scope of createPartitioning.
-	if oldNumImplicitColumns > 0 {
+	if oldNumImplicitColumns > 0 && overridePartitioning == nil {
 		if len(newImplicitCols) != oldNumImplicitColumns {
 			return nil, newPartitioning, errors.AssertionFailedf(
 				"mismatching number of implicit columns: old %d vs new %d",
