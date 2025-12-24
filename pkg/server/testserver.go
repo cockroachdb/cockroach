@@ -1768,7 +1768,6 @@ func (ts *testServer) StartTenant(
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
 	}
-
 	sqlCfg := makeTestSQLConfig(st, params.TenantID, params.TenantName)
 	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
 	if params.MemoryPoolSize != 0 {
@@ -1831,6 +1830,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	baseCfg.ExternalIODir = params.ExternalIODir
+	baseCfg.UseDRPC = ts.Cfg.UseDRPC
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
