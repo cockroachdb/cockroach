@@ -18,7 +18,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -56,10 +56,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
  │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
- │         └── 52 Mutation operations
+ │         └── 53 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
@@ -119,7 +120,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │    │    │    ├── ABSENT  → PUBLIC TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │    │    │    ├── ABSENT  → PUBLIC TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -168,7 +169,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -206,10 +207,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
  │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
- │         └── 56 Mutation operations
+ │         └── 57 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
