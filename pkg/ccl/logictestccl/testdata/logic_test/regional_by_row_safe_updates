@@ -3,6 +3,9 @@
 # Test for blocking ALTER TABLE LOCALITY to REGIONAL BY ROW with sql_safe_updates enabled
 # This addresses issue #150945 to prevent DML failures caused by the legacy schema
 # changer's simultaneous column addition and primary key alteration.
+# This test is only for the legacy schema changer.
+statement ok
+SET use_declarative_schema_changer = off;
 
 statement ok
 CREATE DATABASE safe_updates_test_db PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE
@@ -69,6 +72,7 @@ INSERT INTO t2 SELECT gen_random_uuid(), 'test' FROM generate_series(1, 10)
 
 # Step 1: Add the region column manually.
 statement ok
+SET use_declarative_schema_changer = on;
 ALTER TABLE t2 ADD COLUMN crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT 'us-east-1'::public.crdb_internal_region
 
 # Step 2: Update the default expression to use gateway_region().
@@ -77,6 +81,7 @@ ALTER TABLE t2 ALTER COLUMN crdb_region SET DEFAULT default_to_database_primary_
 
 # Step 3: Convert to REGIONAL BY ROW (should work now).
 statement ok
+SET use_declarative_schema_changer = off;
 ALTER TABLE t2 SET LOCALITY REGIONAL BY ROW
 
 # Verify DML operations work after manual workaround

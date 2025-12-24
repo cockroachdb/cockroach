@@ -85,6 +85,13 @@ func TestBackupRollbacks_multiregion_alter_table_alter_primary_key_rbr(t *testin
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacks_multiregion_alter_table_locality_global_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_global_to_rbr"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacks_multiregion_alter_table_locality_global_to_rbt_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -99,10 +106,52 @@ func TestBackupRollbacks_multiregion_alter_table_locality_global_to_rbt_secondar
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacks_multiregion_alter_table_locality_rbr_as_to_rbr_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_as_to_rbr_default"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbr_default_to_rbr_as(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_default_to_rbr_as"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbr_to_global(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_global"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbr_to_rbt_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_primary_region"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbr_to_rbt_secondary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_secondary_region"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacks_multiregion_alter_table_locality_rbt_primary_region_to_global(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_global"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbt_primary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_rbr"
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -124,6 +173,13 @@ func TestBackupRollbacks_multiregion_alter_table_locality_rbt_secondary_region_t
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_primary_region"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacks_multiregion_alter_table_locality_rbt_secondary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_rbr"
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -267,6 +323,13 @@ func TestBackupRollbacksMixedVersion_multiregion_alter_table_alter_primary_key_r
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_global_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_global_to_rbr"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_global_to_rbt_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -281,10 +344,52 @@ func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_global_to_
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbr_as_to_rbr_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_as_to_rbr_default"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbr_default_to_rbr_as(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_default_to_rbr_as"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbr_to_global(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_global"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbr_to_rbt_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_primary_region"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbr_to_rbt_secondary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_secondary_region"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbt_primary_region_to_global(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_global"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbt_primary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_rbr"
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -306,6 +411,13 @@ func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbt_second
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_primary_region"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_alter_table_locality_rbt_secondary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_rbr"
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -449,6 +561,13 @@ func TestBackupSuccess_multiregion_alter_table_alter_primary_key_rbr(t *testing.
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccess_multiregion_alter_table_locality_global_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_global_to_rbr"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccess_multiregion_alter_table_locality_global_to_rbt_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -463,10 +582,52 @@ func TestBackupSuccess_multiregion_alter_table_locality_global_to_rbt_secondary_
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccess_multiregion_alter_table_locality_rbr_as_to_rbr_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_as_to_rbr_default"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbr_default_to_rbr_as(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_default_to_rbr_as"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbr_to_global(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_global"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbr_to_rbt_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_primary_region"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbr_to_rbt_secondary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_secondary_region"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccess_multiregion_alter_table_locality_rbt_primary_region_to_global(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_global"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbt_primary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_rbr"
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -488,6 +649,13 @@ func TestBackupSuccess_multiregion_alter_table_locality_rbt_secondary_region_to_
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_primary_region"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccess_multiregion_alter_table_locality_rbt_secondary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_rbr"
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -631,6 +799,13 @@ func TestBackupSuccessMixedVersion_multiregion_alter_table_alter_primary_key_rbr
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_global_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_global_to_rbr"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_global_to_rbt_primary_region(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -645,10 +820,52 @@ func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_global_to_rb
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbr_as_to_rbr_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_as_to_rbr_default"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbr_default_to_rbr_as(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_default_to_rbr_as"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbr_to_global(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_global"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbr_to_rbt_primary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_primary_region"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbr_to_rbt_secondary_region(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbr_to_rbt_secondary_region"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbt_primary_region_to_global(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_global"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbt_primary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_primary_region_to_rbr"
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -670,6 +887,13 @@ func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbt_secondar
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_primary_region"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_alter_table_locality_rbt_secondary_region_to_rbr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_rbr"
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
