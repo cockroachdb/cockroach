@@ -21,6 +21,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Metrics aggregates metrics from storage and reconciler subsystems.
+type Metrics struct {
+	Storage    *ptstorage.Metrics
+	Reconciler *ptreconcile.Metrics
+}
+
+var _ metric.Struct = (*Metrics)(nil)
+
+// MetricStruct makes Metrics a metric.Struct.
+func (m *Metrics) MetricStruct() {}
+
 // Config configures the Provider.
 type Config struct {
 	Settings             *cluster.Settings
@@ -34,7 +45,7 @@ type Config struct {
 type Provider struct {
 	protectedts.Manager
 	protectedts.Reconciler
-	metric.Struct
+	metrics Metrics
 }
 
 // New creates a new protectedts.Provider.
@@ -48,7 +59,10 @@ func New(cfg Config) (protectedts.Provider, error) {
 	return &Provider{
 		Manager:    storage,
 		Reconciler: reconciler,
-		Struct:     reconciler.Metrics(),
+		metrics: Metrics{
+			Storage:    storage.Metrics(),
+			Reconciler: reconciler.Metrics(),
+		},
 	}, nil
 }
 
@@ -70,5 +84,5 @@ func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Metrics implements the protectedts.Provider interface.
 func (p *Provider) Metrics() metric.Struct {
-	return p.Struct
+	return &p.metrics
 }

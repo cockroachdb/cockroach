@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ptstorage",
     srcs = [
+        "metrics.go",
         "sql.go",
         "storage.go",
         "storage_with_database.go",
@@ -21,9 +22,11 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/metric",
         "//pkg/util/protoutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
@@ -32,6 +35,7 @@ go_test(
     size = "large",
     srcs = [
         "main_test.go",
+        "metrics_test.go",
         "storage_test.go",
         "validate_test.go",
     ],
