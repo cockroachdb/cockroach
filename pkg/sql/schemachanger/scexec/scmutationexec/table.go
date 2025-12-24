@@ -143,7 +143,7 @@ func (i *immediateVisitor) UnsetTableLocality(
 	if err != nil {
 		return err
 	}
-	tbl.LocalityConfig = nil
+	tbl.SetTableLocalityRegionalByTable(tree.Name(""))
 	tbl.PartitionAllBy = false
 	return nil
 }

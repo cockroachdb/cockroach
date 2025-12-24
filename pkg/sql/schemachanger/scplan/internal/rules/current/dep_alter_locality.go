@@ -21,7 +21,7 @@ func init() {
 	// This ensures we don't have two conflicting locality configurations at the same time.
 	registerDepRule(
 		"old locality must become absent before the new locality is public",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		"old-locality", "new-locality",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -32,6 +32,27 @@ func init() {
 				from.CurrentStatus(scpb.Status_PUBLIC),
 				to.TargetStatus(scpb.ToPublic),
 				to.CurrentStatus(scpb.Status_ABSENT),
+			}
+		},
+	)
+
+	// New indexes must become public before new locality becomes public.
+	// This ensures that when altering locality (e.g., to REGIONAL BY ROW),
+	// all new indexes (primary and secondary with new partitioning) are fully
+	// available before the locality change is visible.
+	registerDepRule(
+		"new indexes must become public before new locality is public",
+		scgraph.Precedence,
+		"index", "new-locality",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isIndex),
+				to.TypeFilter(rulesVersionKey, isTableLocalityElement),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToPublic),
+				from.CurrentStatus(scpb.Status_PUBLIC),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)

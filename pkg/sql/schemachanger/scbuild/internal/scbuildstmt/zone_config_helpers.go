@@ -995,6 +995,11 @@ func decodePartitionTuple(
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) bool {
 			return e.IndexID == indexID && e.Kind == scpb.IndexColumn_KEY
 		})
+	// Sort by ordinal position to ensure correct order
+	sortedKeyColumns := make([]*scpb.IndexColumn, keyColumns.Size())
+	keyColumns.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
+		sortedKeyColumns[e.OrdinalInKind] = e
+	})
 	if len(prefixDatums)+part.NumColumns() > keyColumns.Size() {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
@@ -1004,8 +1009,7 @@ func decodePartitionTuple(
 	}
 
 	for i := len(prefixDatums); i < keyColumns.Size() && i < len(prefixDatums)+part.NumColumns(); i++ {
-		_, _, keyCol := keyColumns.Get(i)
-		col := keyCol.(*scpb.IndexColumn)
+		col := sortedKeyColumns[i]
 		colType := b.QueryByID(tableID).FilterColumnType().Filter(
 			func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnType) bool {
 				return e.ColumnID == col.ColumnID
@@ -1487,7 +1491,7 @@ func configureZoneConfigForReplacementIndexPartitioning(
 		indexIDs = append(indexIDs, idx.IndexID)
 	}
 	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
-	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 	if localityRBR != nil {
 		dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
 		regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
@@ -1562,6 +1566,7 @@ func configureZoneConfigForNewTableLocality(
 		b,
 		regionConfig,
 		tableID,
+		dropZoneConfigsForMultiRegionIndexes(),
 		applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 			b, tableID,
 			localityConfig),
@@ -1803,20 +1808,19 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 
 		zc.CopyFromZone(localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
-		// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
-		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
-		if localityRBR != nil {
+		// For REGIONAL BY ROW tables, correctly configure relevant subzone configurations.
+		if localityConfig.GetRegionalByRow() != nil {
 			dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
 			regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
 			if err != nil {
 				return zonepb.ZoneConfig{}, err
 			}
 
-			indexIDs := []descpb.IndexID{}
+			var indexIDs []descpb.IndexID
 			b.QueryByID(tableID).FilterIndexName().
 				ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
 					// Only include indexes that are public or being added
-					if status != scpb.Status_ABSENT && target == scpb.ToPublic {
+					if status != scpb.Status_ABSENT || target == scpb.ToPublic {
 						indexIDs = append(indexIDs, e.IndexID)
 					}
 				})
@@ -1834,6 +1838,28 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 					})
 				}
 			}
+		}
+		return zc, nil
+	}
+}
+
+// dropZoneConfigsForMultiRegionIndexes drops the zone configs for all
+// the indexes defined on a multi-region table. This function is used to clean
+// up zone configs when transitioning from REGIONAL BY ROW.
+func dropZoneConfigsForMultiRegionIndexes() applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zc zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (newZoneConfig zonepb.ZoneConfig, err error) {
+		// Clear all multi-region fields of the subzones. If this leaves them
+		// empty, they will automatically be removed.
+		zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
+		// Strip placeholder status and spans if there are no more subzones.
+		if len(zc.Subzones) == 0 && zc.IsSubzonePlaceholder() {
+			zc.NumReplicas = nil
+			zc.SubzoneSpans = nil
 		}
 		return zc, nil
 	}

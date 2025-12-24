@@ -55,6 +55,23 @@ type alterPrimaryKeySpec struct {
 	Sharded       *tree.ShardedIndexDef
 	Name          tree.Name
 	StorageParams tree.StorageParams
+	Partitioning  *partitioningSpec
+}
+
+// partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
+// If non-nil, it overrides any existing partitioning or PARTITION ALL BY behavior.
+type partitioningSpec struct {
+	// PartitionBy is the partition definition to apply.
+	PartitionBy *tree.PartitionBy
+
+	// NumImplicitColumns specifies how many leading columns in PartitionBy.Fields
+	// are implicit (prepended to the index but not explicitly in the PK definition).
+	NewImplicitColumns []*scpb.ColumnName
+
+	// AllowedNewColumnNames specifies columns that are allowed to be referenced
+	// in partition expressions even if they don't exist yet (e.g., being added
+	// in the same transaction). Can be nil.
+	AllowedNewColumnNames []tree.Name
 }
 
 func alterPrimaryKey(
@@ -90,6 +107,11 @@ func alterPrimaryKey(
 			45510, "cannot perform multiple primary key changes on %v in the"+
 				" same transaction", tn.String()))
 	}
+
+	// Must drop all index partitioning elements when removing index partitioning.
+	// This is because inflating the primary index chain adds a copy of the current
+	// index partitioning to the builder state.
+	dropIndexPartitioningIfNeeded(t, b, tbl)
 
 	// Only worry about constraint name if it's supplied and it's not the
 	// same as the old PK name.
@@ -147,6 +169,18 @@ func alterPrimaryKey(
 	if checkIfColumnCanBeDropped(b, oldShardColToDrop) {
 		elts := b.QueryByID(oldShardColToDrop.TableID).Filter(hasColumnIDAttrFilter(oldShardColToDrop.ColumnID))
 		dropColumn(b, tn, tbl, stmt, t.n, oldShardColToDrop, elts, tree.DropRestrict)
+	}
+}
+
+// dropIndexPartitioningIfNeeded drops all existing index partitioning from the builder.
+// The function is used when removing all partitionings. For example, when altering
+// table locality from RBR to global or regional by table.
+func dropIndexPartitioningIfNeeded(t alterPrimaryKeySpec, b BuildCtx, tbl *scpb.Table) {
+	if t.Partitioning != nil && t.Partitioning.PartitionBy == nil {
+		b.QueryByID(tbl.TableID).FilterIndexPartitioning().ForEach(
+			func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+				b.Drop(e)
+			})
 	}
 }
 
@@ -279,7 +313,7 @@ func alterPKInPrimaryIndexAndItsTemp(
 			}
 			partitionByIndex = &tree.PartitionByIndex{PartitionBy: partitionBy}
 		}
-		err := configureIndexDescForNewIndexPartitioning(b, tableID, prevSpec.indexID(), prevSpec, newSpec, true /* isPrimary */, partitionByIndex)
+		err := configureIndexDescForNewIndexPartitioning(b, tableID, prevSpec.indexID(), prevSpec, newSpec, true /* isPrimary */, partitionByIndex, t.Partitioning)
 		if err != nil {
 			panic(err)
 		}
@@ -382,6 +416,11 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) bool {
 	oldPrimaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	oldPrimaryIndexKeyColumns := mustRetrieveKeyIndexColumns(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
+
+	// Check if overriding the partitioning
+	if t.Partitioning != nil {
+		return false
+	}
 
 	// If a new name is specified and it differs from the old PK name, they're
 	// not the same.
@@ -631,6 +670,7 @@ func recreateAllSecondaryIndexes(
 					columnID:  ic.ColumnID,
 					kind:      scpb.IndexColumn_KEY_SUFFIX,
 					direction: ic.Direction,
+					implicit:  ic.Implicit,
 				})
 			}
 		})
@@ -638,6 +678,17 @@ func recreateAllSecondaryIndexes(
 	// Recreate each secondary index.
 	scpb.ForEachSecondaryIndex(publicTableElts, func(currentStatus scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
+		// create new index partitioning when overriding the partitioning
+		if t.Partitioning != nil {
+			mutatedSpec := out.makeMutator()
+			err := configureIndexDescForNewIndexPartitioning(
+				b, tbl.TableID, 0 /* sourcePartitionIndexID */, nil /* prevSpec */, mutatedSpec, false /* isPrimary */, nil, t.Partitioning)
+			if err != nil {
+				panic(err)
+			}
+			out.partitioning = mutatedSpec.partitioning
+			out.columns = mutatedSpec.columns
+		}
 		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
 		// fix these references yet.
@@ -788,8 +839,9 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	newPrimaryIndex *scpb.PrimaryIndex,
 	rowidToDrop *scpb.Column,
 ) {
+	overrideIndexPartitioning := t.Partitioning != nil
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop, overrideIndexPartitioning,
 	) {
 		return
 	}
@@ -913,7 +965,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 			PartitioningDescriptor: indexPart.PartitioningDescriptor,
 		}
 	}
-	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID */, nil /* prevSpec */, idxSpec, false /* isPrimary */, nil)
+	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID */, nil /* prevSpec */, idxSpec, false /* isPrimary */, nil, nil /* overridePartitioning */)
 	if err != nil {
 		panic(err)
 	}
@@ -956,6 +1008,7 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	tbl *scpb.Table,
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
+	overrideIndexPartitioning bool,
 ) bool {
 	// A function that retrieves all KEY columns of this index.
 	// If excludeShardedCol, sharded column is excluded, if any.
@@ -993,6 +1046,11 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 			}
 		}
 		return true
+	}
+
+	// If partitioning is changing, don't create a unique index
+	if overrideIndexPartitioning {
+		return false
 	}
 
 	// If the primary key doesn't really change, don't create any unique indexes.
@@ -1167,6 +1225,8 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 				canBeDropped = false
 			}
 		case *scpb.View, *scpb.Sequence:
+			canBeDropped = false
+		case *scpb.PrimaryIndex:
 			canBeDropped = false
 		case *scpb.SecondaryIndex:
 			isOnlyKeySuffixColumn := true
