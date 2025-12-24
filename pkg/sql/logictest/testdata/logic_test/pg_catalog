@@ -4954,7 +4954,7 @@ WHERE usename IN ('testuser1', 'testuser2')
 ORDER BY usename
 ----
 usename    usecreatedb  useconfig
-testuser1  false        NULL
+testuser1  true         {timezone=America/Los_Angeles,application_name=a}
 testuser2  false        NULL
 
 query TBTBBT colnames
@@ -4963,10 +4963,10 @@ FROM pg_roles
 WHERE rolname IN ('testuser1', 'testuser2', 'testrole1')
 ORDER BY rolname
 ----
-rolname    rolcreatedb  rolconfig  rolinherit  rolcanlogin  rolvaliduntil
-testrole1  false        NULL       true        false        NULL
-testuser1  true         NULL       true        true         NULL
-testuser2  false        NULL       true        true         NULL
+rolname    rolcreatedb  rolconfig                                          rolinherit  rolcanlogin  rolvaliduntil
+testrole1  false        NULL                                               true        false        NULL
+testuser1  true         {timezone=America/Los_Angeles,application_name=a}  true        true         NULL
+testuser2  false        NULL                                               true        true         3022-01-01 00:00:00 +0000 UTC
 
 query TBBBBT colnames
 SELECT rolname, rolcreatedb, rolcreaterole, rolinherit, rolcanlogin, rolvaliduntil
@@ -4978,7 +4978,7 @@ rolname    rolcreatedb  rolcreaterole  rolinherit  rolcanlogin  rolvaliduntil
 root       true         true           true        true         NULL
 testrole1  false        false          true        false        NULL
 testuser1  true         false          true        true         NULL
-testuser2  false        true           true        true         NULL
+testuser2  false        true           true        true         3022-01-01 00:00:00 +0000 UTC
 
 # Testing users that have admin role
 
