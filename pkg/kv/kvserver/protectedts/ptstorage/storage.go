@@ -38,6 +38,7 @@ import (
 type Manager struct {
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  Metrics
 }
 
 // storage implements protectedts.Storage with a transaction.
@@ -45,11 +46,20 @@ type storage struct {
 	txn      isql.Txn
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  *Metrics
 }
 
-func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
-	if err := validateRecordForProtect(ctx, r, p.settings, p.knobs); err != nil {
-		return err
+func (p *storage) Protect(ctx context.Context, r *ptpb.Record) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.ProtectFailed.Inc(1)
+		} else {
+			p.metrics.ProtectSuccess.Inc(1)
+		}
+	}()
+
+	if validateErr := validateRecordForProtect(ctx, r, p.settings, p.knobs); validateErr != nil {
+		return validateErr
 	}
 
 	meta := r.Meta
@@ -117,7 +127,15 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	return nil
 }
 
-func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, error) {
+func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (rec *ptpb.Record, err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.GetRecordFailed.Inc(1)
+		} else {
+			p.metrics.GetRecordSuccess.Inc(1)
+		}
+	}()
+
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-GetRecord", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		getRecordQuery, id.GetBytesMut())
@@ -128,8 +146,8 @@ func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, er
 		return nil, protectedts.ErrNotExists
 	}
 	var r ptpb.Record
-	if err := rowToRecord(row, &r, false /* isDeprecatedRow */); err != nil {
-		return nil, err
+	if rowErr := rowToRecord(row, &r, false /* isDeprecatedRow */); rowErr != nil {
+		return nil, rowErr
 	}
 	return &r, nil
 }
@@ -147,7 +165,15 @@ func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (p storage) Release(ctx context.Context, id uuid.UUID) error {
+func (p storage) Release(ctx context.Context, id uuid.UUID) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.ReleaseFailed.Inc(1)
+		} else {
+			p.metrics.ReleaseSuccess.Inc(1)
+		}
+	}()
+
 	query := releaseQueryWithMeta
 	numRows, err := p.txn.ExecEx(ctx, "protectedts-Release", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
@@ -216,8 +242,19 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 	return records, nil
 }
 
-func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error {
+func (p storage) UpdateTimestamp(
+	ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp,
+) (err error) {
+	defer func() {
+		if err != nil {
+			p.metrics.UpdateTimestampFailed.Inc(1)
+		} else {
+			p.metrics.UpdateTimestampSuccess.Inc(1)
+		}
+	}()
+
 	query := updateTimestampUpsertRecordCTE
+
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-update", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		query, id.GetBytesMut(), timestamp.AsOfSystemTime())
@@ -235,6 +272,7 @@ func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
 		txn:      txn,
 		settings: p.settings,
 		knobs:    p.knobs,
+		metrics:  &p.metrics,
 	}
 }
 
@@ -245,7 +283,16 @@ func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {
 	if knobs == nil {
 		knobs = &protectedts.TestingKnobs{}
 	}
-	return &Manager{settings: settings, knobs: knobs}
+	return &Manager{
+		settings: settings,
+		knobs:    knobs,
+		metrics:  makeMetrics(),
+	}
+}
+
+// Metrics returns the storage metrics.
+func (p *Manager) Metrics() *Metrics {
+	return &p.metrics
 }
 
 // rowToRecord parses a row as returned from the variants of getRecords and
