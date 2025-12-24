@@ -191,7 +191,7 @@ func (l *raftLog) append(a LeadSlice) bool {
 // the s.prev entry doesn't match, or is missing.
 //
 // All the entries up to the returned index are already present in the log, and
-// do not need to be rewritten. The caller can safely fast-forward the appended
+// do not need to be rewritten. The caller can safely fast-forward the appending
 // LeadSlice to this index.
 func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 	if !l.matchTerm(s.prev) {
