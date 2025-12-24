@@ -11,4 +11,4 @@ CREATE TABLE multiregion_db.public.t (
 EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.t SET LOCALITY REGIONAL BY TABLE IN "us-east2";
 ----
 Schema change plan for ALTER TABLE ‹multiregion_db›.‹t› SET LOCALITY REGIONAL BY TABLE IN ‹"us-east2"›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

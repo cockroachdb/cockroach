@@ -15,31 +15,51 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹t› SET LOCALITY REG
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 108 (t)}
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
  │         │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
- │         └── 4 Mutation operations
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── UnsetTableLocality {"TableID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── DiscardTableZoneConfig {"TableID":108}
  │              └── SetTableLocalityPrimaryRegion {"TableID":108}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 1 element transitioning toward PUBLIC
-      │    │    └── PUBLIC → ABSENT TableLocalityPrimaryRegion:{DescID: 108 (t)}
-      │    ├── 2 elements transitioning toward ABSENT
-      │    │    ├── ABSENT → PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
-      │    │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 1 element transitioning toward PUBLIC
-           │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
-           ├── 2 elements transitioning toward ABSENT
-           │    ├── PUBLIC → ABSENT TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
-           │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── PUBLIC → ABSENT TableLocalityPrimaryRegion:{DescID: 108 (t)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 108 (t)}
+ │    │    ├── 2 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT → PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
+ │    │    │    └── ABSENT → PUBLIC TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 108 (t)}
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
+ │         │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 0}
+ │         └── 8 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":108}
+ │              ├── UnsetTableLocality {"TableID":108}
+ │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              ├── DiscardTableZoneConfig {"TableID":108}
+ │              ├── SetTableLocalityPrimaryRegion {"TableID":108}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (t)}
            └── 4 Mutation operations
-                ├── UnsetTableLocality {"TableID":108}
-                ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
-                ├── DiscardTableZoneConfig {"TableID":108}
-                └── SetTableLocalityPrimaryRegion {"TableID":108}
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
