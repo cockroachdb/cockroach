@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -1941,7 +1942,7 @@ func (ts *testServer) SettingsWatcher() interface{} {
 }
 
 // Engines returns the testServer's engines.
-func (ts *testServer) Engines() []storage.Engine {
+func (ts *testServer) Engines() []kvstorage.Engines {
 	return ts.engines
 }
 

@@ -105,7 +105,6 @@ func (m *migrationServer) BumpClusterVersion(
 func bumpClusterVersion(
 	ctx context.Context, st *cluster.Settings, newCV clusterversion.ClusterVersion, engines Engines,
 ) error {
-
 	versionSetting := st.Version
 	prevCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, engines, versionSetting.LatestVersion(),
@@ -165,7 +164,9 @@ func (m *migrationServer) SyncAllEngines(
 		m.server.node.waitForAdditionalStoreInit()
 
 		for _, eng := range m.server.engines {
-			if err := storage.WriteSyncNoop(eng); err != nil {
+			// TODO(sep-raft-log): figure out whether StateEngine needs a sync, or we
+			// can only sync LogEngine here.
+			if err := storage.WriteSyncNoop(eng.TODOEngine()); err != nil {
 				return err
 			}
 		}

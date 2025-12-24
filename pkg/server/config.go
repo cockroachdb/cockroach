@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -692,7 +693,7 @@ func (cfg *Config) Report(ctx context.Context) {
 }
 
 // Engines is a container of engines, allowing convenient closing.
-type Engines []storage.Engine
+type Engines []kvstorage.Engines
 
 // Close closes all the Engines.
 // This method has a pointer receiver so that the following pattern works:
@@ -909,7 +910,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// or leave ownership with the caller of Open.
 		storeEnvs[i] = nil
 		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
-		engines = append(engines, eng)
+
+		engines = append(engines, kvstorage.MakeEngines(eng))
 	}
 
 	if fileCache != nil {

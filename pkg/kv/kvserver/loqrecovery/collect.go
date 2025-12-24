@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -124,7 +123,7 @@ func CollectRemoteReplicaInfo(
 
 // CollectStoresReplicaInfo captures states of all replicas in all stores for the sake of quorum recovery.
 func CollectStoresReplicaInfo(
-	ctx context.Context, stores []storage.Engine,
+	ctx context.Context, stores []kvstorage.Engines,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
 	if len(stores) == 0 {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("no stores were provided for info collection")
@@ -145,8 +144,8 @@ func CollectStoresReplicaInfo(
 	var clusterUUID uuid.UUID
 	nodes := make(map[roachpb.NodeID]struct{})
 	var replicas []loqrecoverypb.ReplicaInfo
-	for i, reader := range stores {
-		ident, err := kvstorage.ReadStoreIdent(ctx, reader)
+	for i, store := range stores {
+		ident, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
 		if err != nil {
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
 		}
@@ -157,10 +156,10 @@ func CollectStoresReplicaInfo(
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("can't collect info from stored that belong to different clusters")
 		}
 		nodes[ident.NodeID] = struct{}{}
-		// TODO(sep-raft-log): use different readers when the raft and state machine
-		// engines are separate. Since the engines are immutable in this path, there
-		// is no question whether to and in which order to grab engine snapshots.
-		if err := visitStoreReplicas(ctx, reader, reader, ident.StoreID, ident.NodeID,
+		// NB: since the engines are immutable in this path, there is no question
+		// whether to and in which order to grab state/raft engine snapshots.
+		if err := visitStoreReplicas(
+			ctx, store.StateEngine(), store.LogEngine(), ident.StoreID, ident.NodeID,
 			func(info loqrecoverypb.ReplicaInfo) error {
 				replicas = append(replicas, info)
 				return nil

@@ -468,7 +468,7 @@ func GetBootstrapSchemaForTest(
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
+	ctx context.Context, engines Engines, initCfg initServerCfg,
 ) (*initState, error) {
 	// We expect all the stores to be empty at this point, except for
 	// the store cluster version key. Assert so.
@@ -497,7 +497,7 @@ func bootstrapCluster(
 
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
-		if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
+		if err := kvstorage.InitEngine(ctx, eng.TODOEngine(), sIdent); err != nil {
 			return nil, err
 		}
 
@@ -543,7 +543,7 @@ func bootstrapCluster(
 				storeKnobs = *kn
 			}
 			if err := kvserver.WriteInitialClusterData(
-				ctx, eng, initialValues,
+				ctx, eng.TODOEngine(), initialValues,
 				bootstrapVersion.Version, len(engines), splits,
 				timeutil.Now().UnixNano(), storeKnobs,
 			); err != nil {
@@ -984,7 +984,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // cluster and node ID have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per node. The
 // new stores are added to n.stores.
-func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage.Engine) error {
+func (n *Node) initializeAdditionalStores(ctx context.Context, engines []kvstorage.Engines) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("missing cluster ID during initialization of additional store")
 	}
@@ -1006,7 +1006,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage
 			StoreID:   startID,
 		}
 		for _, eng := range engines {
-			if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
+			if err := kvstorage.InitEngine(ctx, eng.TODOEngine(), sIdent); err != nil {
 				return err
 			}
 
@@ -1298,7 +1298,7 @@ type monitorManagerInterface interface {
 }
 
 func (dsm *diskStatsMap) initDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
 		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
@@ -1308,7 +1308,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if specs[i].Path == "" || specs[i].InMemory {
 			continue
 		}
-		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i].LogEngine())
 		if err != nil {
 			return err
 		}
@@ -1336,7 +1336,7 @@ func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, e
 }
 
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager *diskMonitorManager,
 ) (admission.PebbleMetricsProvider, error) {
 	pmp := &nodePebbleMetricsProvider{n: n}
 	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {

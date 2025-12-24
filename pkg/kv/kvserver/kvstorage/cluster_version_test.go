@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStoresClusterVersionIncompatible verifies an error occurs when
@@ -64,7 +65,7 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			engs := []storage.Engine{storage.NewDefaultInMemForTesting()}
+			engs := []Engines{MakeEngines(storage.NewDefaultInMemForTesting())}
 			defer engs[0].Close()
 			// Configure versions and write.
 			cv := clusterversion.ClusterVersion{Version: tc.engV}
@@ -103,7 +104,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	versionB := minV
 	versionB.Internal = 2
 
-	engines := make([]storage.Engine, 3)
+	engines := make([]Engines, 3)
 	for i := range engines {
 		// Create the stores without an initialized cluster version.
 		st := cluster.MakeTestingClusterSettingsWithVersions(binV, minV, false /* initializeVersion */)
@@ -111,11 +112,9 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 			ctx, storage.InMemory(), st,
 			storage.ForTesting, storage.MaxSizeBytes(1<<20),
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		stopper.AddCloser(eng)
-		engines[i] = eng
+		engines[i] = MakeEngines(eng)
 	}
 	e0 := engines[:1]
 	e01 := engines[:2]

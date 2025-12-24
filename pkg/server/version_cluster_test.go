@@ -245,10 +245,8 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
 		for _, engine := range tc.TestCluster.Servers[i].Engines() {
-			cv := engine.MinVersion()
-			if cv != newVersion {
-				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-			}
+			cv := engine.TODOEngine().MinVersion()
+			require.Equalf(t, newVersion, cv, "n%d", i+1)
 		}
 	}
 }

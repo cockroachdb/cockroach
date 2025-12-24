@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -278,7 +279,7 @@ type NodeLiveness struct {
 
 	// engines is written to before heartbeating to avoid maintaining liveness
 	// when a local disks is stalled.
-	engines []diskStorage.Engine
+	engines []kvstorage.Engines
 
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
@@ -316,7 +317,7 @@ type NodeLivenessOptions struct {
 	// OnNodeDecommissioning is invoked when a node is detected to be
 	// decommissioning.
 	OnNodeDecommissioning func(id roachpb.NodeID)
-	Engines               []diskStorage.Engine
+	Engines               []kvstorage.Engines
 	OnSelfHeartbeat       HeartbeatCallback
 	Cache                 *Cache
 }
@@ -1103,7 +1104,7 @@ func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 				InheritCancelation: false,
 			},
 			func(ctx context.Context) (interface{}, error) {
-				return nil, diskStorage.WriteSyncNoop(eng)
+				return nil, diskStorage.WriteSyncNoop(eng.TODOEngine())
 			})
 	}
 	for _, resultC := range resultCs {

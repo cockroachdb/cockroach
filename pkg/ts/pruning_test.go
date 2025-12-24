@@ -100,7 +100,7 @@ func TestFindTimeSeries(t *testing.T) {
 		}
 	}
 
-	e := tm.LocalTestCluster.Eng
+	e := tm.LocalTestCluster.Eng.TODOEngine()
 	for i, tcase := range []struct {
 		start     roachpb.RKey
 		end       roachpb.RKey
