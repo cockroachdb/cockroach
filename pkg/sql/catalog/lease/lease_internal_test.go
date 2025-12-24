@@ -1260,7 +1260,7 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			resetDescriptorState(manager, tableID, tc)
 
 			// Retrieve historicalDescriptors modification times.
-			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, tc.ts)
+			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, TimestampToReadTimestamp(tc.ts))
 			require.NoError(t, err)
 
 			// Validate retrieved descriptors match expected versions.
