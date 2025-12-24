@@ -294,6 +294,53 @@ func (tc *Collection) ensureLeasedAndKVVersionsMatch(
 	}
 }
 
+// ensureNameResolutionMatchesWithLeased confirms that name resolution between leased descriptors and
+// KV are consistent.
+func (tc *Collection) ensureNameResolutionMatchesWithLeased(
+	ctx context.Context, txn *kv.Txn, info descpb.NameInfo, foundID descpb.ID,
+) error {
+	// Check if the leased descriptors have this name resolved.
+	entry := tc.leased.cache.GetByName(info.ParentID, info.ParentSchemaID, info.Name)
+	// If both the name and entry are missing, we don't have a problem. If they both match
+	// each other are good too.
+	if (entry == nil && foundID == descpb.InvalidID) ||
+		(entry != nil && entry.GetID() == foundID) {
+		return nil
+	}
+	// Otherwise, the ID does not match between the two objects.
+	if entry != nil {
+		return &retryOnModifiedDescriptor{
+			descID:        entry.GetID(),
+			descName:      entry.GetName(),
+			expiration:    entry.(lease.LeasedDescriptor).Expiration(ctx),
+			readTimestamp: txn.ReadTimestamp(),
+			isRenamed:     true,
+			// Force a retry, so that the txn epoch gets bumped for us.
+			forcedErr: txn.GenerateForcedRetryableErr(ctx, "forcing txn to retry due to modified descriptor"),
+		}
+	}
+	// Next, check if the entry somehow is leased under a different name.
+	entry = tc.leased.cache.GetByID(foundID)
+	// No contradiction, only the KV entry exists.
+	if entry == nil {
+		return nil
+	}
+	// If the names information has changed, then we have a contradiction.
+	if entry.GetName() != info.Name {
+		return &retryOnModifiedDescriptor{
+			descID:        entry.GetID(),
+			descName:      entry.GetName(),
+			expiration:    entry.(lease.LeasedDescriptor).Expiration(ctx),
+			readTimestamp: txn.ReadTimestamp(),
+			isRenamed:     true,
+			// Force a retry, so that the txn epoch gets bumped for us.
+			forcedErr: txn.GenerateForcedRetryableErr(ctx, "forcing txn to retry due to modified descriptor"),
+		}
+
+	}
+	return nil
+}
+
 func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
 	if expected := flags.descFilters.maybeParentID; expected != descpb.InvalidID {
 		if actual := desc.GetParentID(); actual != descpb.InvalidID && actual != expected {
@@ -633,6 +680,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
+	usedStorage := false
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
@@ -640,6 +688,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		}
 		if tc.cr.IsNameInCache(ni) {
 			if e := tc.cr.Cache().LookupNamespaceEntry(ni); e != nil {
+				usedStorage = true
 				return haltLookups, e.GetID(), nil
 			}
 			return haltLookups, descpb.InvalidID, nil
@@ -668,6 +717,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if flags.layerFilters.withoutStorage {
 			return haltLookups, descpb.InvalidID, nil
 		}
+		usedStorage = true
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return haltLookups, descpb.InvalidID, nil
@@ -684,6 +734,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 
 	// Iterate through each layer until an ID is conclusively found or not, or an
 	// error is thrown.
+	id := descpb.InvalidID
 	for _, fn := range []func() (continueOrHalt, descpb.ID, error){
 		lookupTemporarySchemaID,
 		lookupSchemaID,
@@ -693,15 +744,30 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		lookupLeasedID,
 		lookupStoredID,
 	} {
-		isDone, id, err := fn()
+		var isDone continueOrHalt
+		var err error
+		isDone, id, err = fn()
 		if err != nil {
 			return descpb.InvalidID, err
 		}
 		if isDone {
-			return id, nil
+			break
 		}
 	}
-	return descpb.InvalidID, nil
+	// If we never returned results from any storage, then no further checks are needed.
+	// If we use stored descriptors, we need to ensure that any already leased descriptors
+	// resolve to the exact same name. Otherwise, there we be transactional inconsistency.
+	if !usedStorage {
+		return id, nil
+	}
+	// We will validate any returned value to detect for contradictions between the
+	// leased descriptors and KV descriptor names. ensureLeasedAndKVVersionsMatch will
+	// detect if they diverge for any other reason.
+	return id, tc.ensureNameResolutionMatchesWithLeased(ctx, txn, descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}, id)
 }
 
 // finalizeDescriptors ensures that all descriptors are (1) properly validated
