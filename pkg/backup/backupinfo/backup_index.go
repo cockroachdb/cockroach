@@ -44,6 +44,13 @@ var (
 		"if true, the backup index will be read when reading from a backup collection",
 		metamorphic.ConstantWithTestBool("backup.index.read.enabled", false),
 	)
+
+	BackupIDsEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"backup.ids.enabled",
+		"if true, SHOW/RESTORE BACKUP will output and rely on backup IDs",
+		metamorphic.ConstantWithTestBool("backup.ids.enabled", false),
+	)
 )
 
 // WriteBackupIndexMetadata writes an index file for the backup described by the
@@ -311,7 +318,7 @@ func listIndexesWithinRange(
 	// full backup end times are stored in descending order in the index, we add
 	// ten milliseconds (the maximum granularity of the timestamp encoding) to
 	// ensure an inclusive start.
-	startTS := before.Add(10 * time.Millisecond)
+	startTS := before.Add(backupbase.DirectoryTimestampGranularity)
 	startPoint, err := endTimeToIndexSubdir(startTS)
 	if err != nil {
 		return nil, err

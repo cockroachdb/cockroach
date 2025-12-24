@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -50,6 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
+
+const afterBeforeGranularityMsg = "AFTER/BEFORE filtering has a maximum granularity of 10 milliseconds"
 
 type backupInfoReader interface {
 	showBackup(
@@ -1374,6 +1377,68 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 	{Name: "path", Typ: types.String},
 }
 
+var showBackupsWithIDsHeader = colinfo.ResultColumns{
+	{Name: "id", Typ: types.String},
+	{Name: "backup_time", Typ: types.TimestampTZ},
+	{Name: "revision_start_time", Typ: types.TimestampTZ},
+}
+
+// getTimeRangeOrDefaults parses the after and before expressions from the SHOW
+// BACKUPS command. If both are nil, it returns the last 24 hours as the
+// default. If only one is provided, it uses that to compute the other with a 24
+// hour difference.
+func getTimeRangeOrDefaults(
+	ctx context.Context, p sql.PlanHookState, interval tree.ShowAfterBefore,
+) (after time.Time, before time.Time, err error) {
+	parseTime := func(t tree.Expr) (time.Time, error) {
+		asOf := tree.AsOfClause{Expr: t}
+		asTime, err := p.EvalAsOfTimestamp(ctx, asOf)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return asTime.Timestamp.GoTime(), nil
+	}
+
+	if interval.After != nil && interval.Before != nil {
+		after, err = parseTime(interval.After)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		before, err = parseTime(interval.Before)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		return after, before, nil
+	}
+
+	if interval.Before == nil && interval.After == nil {
+		// We pad BEFORE with the minimum directory timestamp granularity to ensure
+		// it fetches all backups up to and including the current time. We truncate
+		// to match the precision of SHOW BACKUPS.
+		before = timeutil.Now().
+			Add(backupbase.DirectoryTimestampGranularity).
+			Truncate(backupbase.DirectoryTimestampGranularity)
+		after = before.Add(-24 * time.Hour)
+		return after, before, nil
+	}
+
+	if interval.Before != nil {
+		before, err = parseTime(interval.Before)
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		after = before.Add(-24 * time.Hour)
+		return after, before, nil
+	}
+
+	after, err = parseTime(interval.After)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	before = after.Add(24 * time.Hour)
+	return after, before, nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
 	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
@@ -1383,6 +1448,7 @@ func showBackupsInCollectionPlanHook(
 		return nil, nil, false, err
 	}
 
+	useIDs := backupinfo.BackupIDsEnabled.Get(&p.ExecCfg().Settings.SV)
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
@@ -1391,17 +1457,76 @@ func showBackupsInCollectionPlanHook(
 		if err != nil {
 			return errors.Wrapf(err, "connect to external storage")
 		}
-		defer store.Close()
-		res, err := backupdest.ListFullBackupsInCollection(ctx, store)
-		if err != nil {
-			return err
-		}
-		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(i)}
+		defer besteffort.Error(ctx, "show-backups-close-store", func(_ context.Context) error {
+			return store.Close()
+		})
+
+		if useIDs {
+			after, before, err := getTimeRangeOrDefaults(ctx, p, showStmt.TimeRange)
+			if err != nil {
+				return err
+			}
+			if timestampGranularity(after) < backupbase.DirectoryTimestampGranularity ||
+				timestampGranularity(before) < backupbase.DirectoryTimestampGranularity {
+				p.BufferClientNotice(ctx, pgnotice.Newf(afterBeforeGranularityMsg))
+			}
+			res, err := backupinfo.ListRestorableBackups(ctx, store, after, before)
+			if err != nil {
+				return err
+			}
+			for _, i := range res {
+				backupTime, err := tree.MakeDTimestampTZ(
+					timeutil.Unix(0, i.EndTime.WallTime), time.Nanosecond,
+				)
+				if err != nil {
+					return err
+				}
+				revStartTime := tree.DNull
+				if i.MVCCFilter == backuppb.MVCCFilter_All {
+					revStartTime, err = tree.MakeDTimestampTZ(
+						timeutil.Unix(0, i.RevisionStartTime.WallTime), time.Nanosecond,
+					)
+					if err != nil {
+						return err
+					}
+				}
+				resultsCh <- tree.Datums{
+					tree.NewDString(i.ID),
+					backupTime,
+					revStartTime,
+				}
+			}
+		} else {
+			res, err := backupdest.ListFullBackupsInCollection(ctx, store)
+			if err != nil {
+				return err
+			}
+			for _, i := range res {
+				resultsCh <- tree.Datums{tree.NewDString(i)}
+			}
 		}
 		return nil
 	}
-	return fn, showBackupsInCollectionHeader, false, nil
+
+	header := showBackupsInCollectionHeader
+	if useIDs {
+		header = showBackupsWithIDsHeader
+	}
+	return fn, header, false, nil
+}
+
+// timestampGranularity returns the granularity of the least significant
+// non-zero digit in the given timestamp as a duration.
+//
+// example:
+// 2025-12-24 15:30:45.99 -> 10ms
+func timestampGranularity(ts time.Time) time.Duration {
+	unixNano := ts.UnixNano()
+	granularity := int64(time.Nanosecond)
+	for unixNano%granularity == 0 {
+		granularity *= 10
+	}
+	return time.Duration(granularity / 10)
 }
 
 func init() {
