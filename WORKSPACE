@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "b49129afe88a5de87b392fa2486df99d5db999aa16615bc67edd6f3eafe62193",
-    strip_prefix = "cockroachdb-rules_go-9ed26e2",
+    sha256 = "19e57f74c9cdb2fdf1c0ef5839edd8273032858e9eef481e0840deb266b29777",
+    strip_prefix = "cockroachdb-rules_go-efcccd2",
     urls = [
-        # cockroachdb/rules_go as of 9ed26e2be9a53655fddfe1d8dc59729518b5334a
+        # cockroachdb/rules_go as of efcccd2a5891d3abaed54d694710b2671fd2be01
         # (upstream release-0.57 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.54.0-57-g9ed26e2.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.54.0-58-gefcccd2.tar.gz",
     ],
 )
 
@@ -185,13 +185,13 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "0534a17eb0439fe1ce77d73d5c170d42bdb763af8bd60784afb4259aad51a369"),
-        "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "faac0835485699e8c755b7a3ada19cbcf8d36675bd51b5d6e9b7e8797a9bceef"),
-        "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "903e27384a71950a258612f0b9f7802669b262dd42f1b2d4273fbf1669d2c36d"),
-        "linux_s390x": ("go1.25.5.linux-s390x.tar.gz", "bfa50568f4166af6cc37df9aa461d3133cd508d4bf1d268948eca817a337ff36"),
-        "windows_amd64": ("go1.25.5.windows-amd64.tar.gz", "d77b014c0c6a7a9cf4d8e830d146a537ae885447b9b018e11d41e087d9e724ae"),
+        "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "6f692d0bf6b99c91d2eb49f3b04854fac4e9c9270efb17265a8b72caffcd227e"),
+        "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "84f6b7bb72900749831158d8b88dd7fef8f1b0878ab7f47eb77b0bc0a1323d38"),
+        "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "835d52a0cbd4200018a6211638154188dd24940ede3b1f79ad278d79f0b833f9"),
+        "linux_s390x": ("go1.25.5.linux-s390x.tar.gz", "0709100cf9cbbdb64deeea59a51fe211015bce815906474133848510719cbcb3"),
+        "windows_amd64": ("go1.25.5.windows-amd64.tar.gz", "5b658cce75236129050e4f0bf5238aa831915c987a0e6135bc9058b112aa86ee"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251216-001242/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251224-194825/{}"],
     version = "1.25.5",
 )
 
