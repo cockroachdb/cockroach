@@ -825,8 +825,8 @@ func TestListRestorableBackups(t *testing.T) {
 			afterTS := hlc.Timestamp{WallTime: int64(tc.after) * 1e9}.GoTime()
 			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
 
-			backups, err := ListRestorableBackups(
-				ctx, externalStorage, afterTS, beforeTS,
+			backups, _, err := ListRestorableBackups(
+				ctx, externalStorage, afterTS, beforeTS, 0,
 			)
 			require.NoError(t, err)
 
@@ -834,6 +834,45 @@ func TestListRestorableBackups(t *testing.T) {
 				return output{end: int(b.EndTime.WallTime / 1e9), rev: !b.RevisionStartTime.IsEmpty()}
 			})
 			require.Equal(t, tc.expectedOutput, actualOutput)
+		})
+	}
+
+	maxCountCases := []struct {
+		name             string
+		after, before    int
+		maxCount         uint
+		expectedExceeded bool
+	}{
+		{
+			"max count not exceeded",
+			2, 10,
+			10,
+			false,
+		},
+		{
+			"max count exceeded",
+			2, 62,
+			10,
+			true,
+		},
+		{
+			"max count exactly met",
+			10, 28,
+			8,
+			false,
+		},
+	}
+	for _, tc := range maxCountCases {
+		t.Run(tc.name, func(t *testing.T) {
+			afterTS := hlc.Timestamp{WallTime: int64(tc.after) * 1e9}.GoTime()
+			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
+
+			backups, exceeded, err := ListRestorableBackups(
+				ctx, externalStorage, afterTS, beforeTS, tc.maxCount,
+			)
+			require.NoError(t, err)
+			require.LessOrEqual(t, len(backups), int(tc.maxCount))
+			require.Equal(t, tc.expectedExceeded, exceeded)
 		})
 	}
 }

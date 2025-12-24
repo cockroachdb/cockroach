@@ -8,21 +8,26 @@ package backup
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -826,4 +831,173 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FROM LATEST IN %s with check_files]`, dest),
 			fileSum)
 	}
+}
+
+func TestShowBackupsWithIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup"
+
+	getSystemTime := func() (ts int64) {
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()::INT").Scan(&ts)
+		return ts
+	}
+
+	times := []int64{getSystemTime()}
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d", times[0]), collectionURI)
+
+	for i := range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[i+1]),
+			collectionURI,
+		)
+	}
+
+	// We pause the second full backup so that we can take incrementals during its
+	// running to give us overlapped chains to test against.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint'`)
+	times = append(times, getSystemTime())
+	var pausedJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d WITH detached", times[len(times)-1]),
+		collectionURI,
+	).Scan(&pausedJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, pausedJobID)
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	for range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+			collectionURI,
+		)
+	}
+
+	sqlDB.Exec(t, "RESUME JOB $1", pausedJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, pausedJobID)
+	times = append(times, getSystemTime())
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+		collectionURI,
+	)
+
+	t.Run("backup times are in descending order", func(t *testing.T) {
+		shownTimes := sqlDB.QueryStr(
+			t, fmt.Sprintf(`SELECT backup_time FROM [SHOW BACKUPS IN '%s']`, collectionURI),
+		)
+		require.Equal(t, len(times), len(shownTimes))
+		require.True(
+			t, slices.IsSortedFunc(shownTimes, func(a, b []string) int {
+				if a[0] == b[0] {
+					return 0
+				} else if a[0] > b[0] {
+					return -1
+				} else {
+					return 1
+				}
+			}),
+		)
+	})
+
+	t.Run("time filtering", func(t *testing.T) {
+		// SHOW BACKUPS is only second-precise, so we just pick a second
+		// after the first backup. If the backup times overlap a second boundary,
+		// then our filter partitions the backups. Over the course of multiple
+		// tests, this gives us good coverage of filter points.
+		filterTime := int64(time.Duration(times[0]).Truncate(time.Second) + time.Second)
+
+		t.Run("OLDER THAN", func(t *testing.T) {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN %d]`,
+					collectionURI, filterTime,
+				),
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				// We must truncate times to the same precision as backup collection
+				// blob names since that's what SHOW BACKUPS uses to filter.
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS <= filterTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups before %d", filterTime,
+			)
+		})
+
+		t.Run("NEWER THAN", func(t *testing.T) {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' NEWER THAN %d]`,
+					collectionURI, filterTime,
+				),
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS >= filterTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups after %d", filterTime,
+			)
+		})
+
+		t.Run("OLDER THAN and NEWER THAN", func(t *testing.T) {
+			// Pick a random pair of times for the range. Note that in most cases,
+			// this will end up being the same query as the tests above due to the
+			// short window of time the backups span, over the course of multiple
+			// test runs, this results in good coverage.
+			olderIdx := rand.Intn(len(times) - 1)
+			newerIdx := rand.Intn(len(times)-olderIdx-1) + olderIdx + 1
+
+			// Truncate the times to second precision like SHOW BACKUPS.
+			olderTime := int64(time.Duration(times[olderIdx]).Truncate(time.Second))
+			newerTime := int64(time.Duration(times[newerIdx]).Truncate(time.Second))
+
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN %d NEWER THAN %d]`,
+					collectionURI, newerTime, olderTime,
+				),
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS <= newerTime && truncatedTS >= olderTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups between %d and %d",
+				olderTime, newerTime,
+			)
+		})
+	})
 }
