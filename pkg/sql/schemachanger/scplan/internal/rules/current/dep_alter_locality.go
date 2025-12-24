@@ -17,11 +17,11 @@ import (
 // primary key changes.
 
 func init() {
-	// Old locality element must be absent before new locality element becomes public
-	// This ensures we don't have two conflicting locality configurations at the same time.
+	// Old locality must become absent right before the new locality is public.
+	// This is to ensure that locality will change to its target value in one step.
 	registerDepRule(
-		"old locality must become absent before the new locality is public",
-		scgraph.Precedence,
+		"old locality must become absent right before the new locality is public",
+		scgraph.SameStagePrecedence,
 		"old-locality", "new-locality",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -29,9 +29,70 @@ func init() {
 				to.TypeFilter(rulesVersionKey, isTableLocalityElement),
 				JoinOnDescID(from, to, "table-id"),
 				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	// New indexes must become public before the new locality becomes public.
+	// This ensures that when altering locality (e.g., to REGIONAL BY ROW),
+	// all new indexes (primary and secondary with new partitioning) are fully
+	// available before the locality change is visible.
+	registerDepRule(
+		"new indexes must become public before new locality is public",
+		scgraph.Precedence,
+		"index", "new-locality",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isIndex),
+				to.TypeFilter(rulesVersionKey, isTableLocalityElement),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToPublic),
 				from.CurrentStatus(scpb.Status_PUBLIC),
 				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	// New locality must become public right before the new zone config.
+	// This ensures the zone configuration is updated at the same time as
+	// the locality change takes effect.
+	registerDepRule(
+		"locality must become public right before table zone config is public",
+		scgraph.SameStagePrecedence,
+		"new-locality", "new-zone-config",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isTableLocalityElement),
+				to.Type((*scpb.TableZoneConfig)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				from.TargetStatus(scpb.ToPublic),
+				from.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	// New locality must become public right before the old zone config goes absent.
+	// This ensures the zone configuration is updated at the same time as
+	// the locality change takes effect.
+	registerDepRule(
+		"locality must become public right before old table zone config is absent",
+		scgraph.SameStagePrecedence,
+		"new-locality", "new-zone-config",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isTableLocalityElement),
+				to.Type((*scpb.TableZoneConfig)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				to.TargetStatus(scpb.ToAbsent),
 				to.CurrentStatus(scpb.Status_ABSENT),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
 			}
 		},
 	)

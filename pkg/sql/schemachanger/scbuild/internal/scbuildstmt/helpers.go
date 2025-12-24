@@ -1284,6 +1284,14 @@ func panicIfSystemColumn(column *scpb.Column, columnName tree.Name) {
 // by row and any of the regions on the database of the table are currently
 // being modified by another schema change job.
 func panicIfRegionChangeUnderwayOnRBRTable(b BuildCtx, op redact.SafeString, tableID catid.DescID) {
+	rbrString := redact.SafeString("on a REGIONAL BY ROW table ")
+	panicIfRegionChangeUnderway(b, op, rbrString, tableID)
+}
+
+// panicIfRegionChangeUnderway panics if any of the regions on the database
+// of the table are currently being modified by another schema change job.
+// the given table must either be or transitioning to/from regional by row.
+func panicIfRegionChangeUnderway(b BuildCtx, op, isRBR redact.SafeString, tableID catid.DescID) {
 	tableElems := b.QueryByID(tableID)
 	_, _, rbrElem := scpb.FindTableLocalityRegionalByRow(tableElems)
 	if rbrElem == nil {
@@ -1303,8 +1311,9 @@ func panicIfRegionChangeUnderwayOnRBRTable(b BuildCtx, op redact.SafeString, tab
 			errors.WithHintf(
 				pgerror.Newf(
 					pgcode.ObjectNotInPrerequisiteState,
-					"cannot %s on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+					"cannot %s %swhile a region is being added or dropped on the database",
 					op,
+					isRBR,
 				),
 				"cancel the job which is adding or dropping the region or try again later",
 			),
@@ -1346,6 +1355,42 @@ func haveSameIndexCols(b BuildCtx, tableID catid.DescID, indexID1, indexID2 cati
 	return haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_KEY) &&
 		haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_KEY_SUFFIX) &&
 		haveSameIndexColsByKind(b, tableID, indexID1, indexID2, scpb.IndexColumn_STORED)
+}
+
+func haveSameIndexPartitioning(spec1, spec2 indexSpec) bool {
+	// First, check if both specs have partitioning.
+	if spec1.partitioning == nil {
+		return spec2.partitioning == nil
+	} else if spec2.partitioning == nil {
+		return false
+	}
+	// Then, check if partitioning descriptors are the same.
+	if !spec1.partitioning.PartitioningDescriptor.Equal(spec2.partitioning.PartitioningDescriptor) {
+		return false
+	}
+	// Finally, check if the partitioning column IDs are the same.
+	numPartCols := int(spec1.partitioning.NumColumns)
+	// Get KEY columns from both specs.
+	keyCols1 := make([]*scpb.IndexColumn, 0, len(spec1.columns))
+	keyCols2 := make([]*scpb.IndexColumn, 0, len(spec2.columns))
+	for _, col := range spec1.columns {
+		if col.Kind == scpb.IndexColumn_KEY {
+			keyCols1 = append(keyCols1, col)
+		}
+	}
+	for _, col := range spec2.columns {
+		if col.Kind == scpb.IndexColumn_KEY {
+			keyCols2 = append(keyCols2, col)
+		}
+	}
+	// Compare the first numPartCols column IDs.
+	for i := 0; i < numPartCols; i++ {
+		if keyCols1[i].ColumnID != keyCols2[i].ColumnID ||
+			keyCols1[i].OrdinalInKind != keyCols2[i].OrdinalInKind {
+			return false
+		}
+	}
+	return true
 }
 
 // compareNumOfIndexCols compares the number of columns of `kind` in two indexes.
@@ -1739,6 +1784,7 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		markAsRedundant(&pic.inter2Spec)
 		markAsRedundant(&pic.inter2TempSpec)
 	}
+	// If the index chain elements have the same index columns, check for partitioning changes as well.
 	if haveSameIndexCols(b, tableID, pic.inter1Spec.primary.IndexID, pic.inter2Spec.primary.IndexID) {
 		if _, exist := redundantIDs[&pic.inter2Spec]; !exist {
 			markAsRedundant(&pic.inter2Spec)
@@ -1746,7 +1792,7 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		} else if _, exist = redundantIDs[&pic.inter1Spec]; !exist {
 			markAsRedundant(&pic.inter1Spec)
 			markAsRedundant(&pic.inter1TempSpec)
-		} else {
+		} else if haveSameIndexPartitioning(pic.finalSpec, pic.oldSpec) {
 			// We've inflated the chain but end up needing to drop all new primary
 			// indexes (e.g. adding a column that has no default value and no
 			// computed expression). When we inflate a chain, we mark `old` as
@@ -2189,7 +2235,7 @@ func retrieveColumnComment(
 func mustRetrievePartitioningFromIndexPartitioning(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) catalog.Partitioning {
-	idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
+	idxPart := b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)).FilterIndexPartitioning().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
 			return e.IndexID == indexID
 		}).MustGetZeroOrOneElement()

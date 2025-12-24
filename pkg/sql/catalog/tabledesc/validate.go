@@ -230,9 +230,12 @@ func (desc *wrapper) ValidateForwardReferences(
 	// Check partitioning is correctly set.
 	// We only check these for active indexes, as inactive indexes may be in the
 	// process of being backfilled without PartitionAllBy.
+	// No need to check index partitioning if locality is changing to/from RBR.
+	// Recreated secondary indexes might have a different partitioning from the
+	// primary key during the schema change.
 	// This check cannot be performed in ValidateSelf due to a conflict with
 	// AllocateIDs.
-	if desc.PartitionAllBy {
+	if desc.PartitionAllBy && !multiregion.IsLocalityChangingFromOrToRBR(desc) {
 		for _, indexI := range desc.ActiveIndexes() {
 			if !desc.matchingPartitionbyAll(indexI) {
 				vea.Report(errors.AssertionFailedf(
