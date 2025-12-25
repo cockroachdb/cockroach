@@ -103,7 +103,7 @@ var ingestSplitEvent = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"physical_replication.consumer.ingest_split_event.enabled",
 	"whether to ingest split events",
-	false,
+	true,
 )
 
 var compress = settings.RegisterBoolSetting(
