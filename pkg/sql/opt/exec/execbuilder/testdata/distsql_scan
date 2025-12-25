@@ -65,6 +65,9 @@ quality of service: regular
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMktFq20wQhe__pxjmKgEFr_7elIVCG9ulpnYcZJNSWhNGq4mzWNKquyNsY_xYfYE-WVnJTtrSQPdCaM5-e-asRgcM30rUuBhPx8MlELzP5jOg3MCnD-NsDBcEX1ulXvEbUJfw7mb0pBhIlbqEeTYaZ3D9GQimk9lkCanCBGtX8A1VHFB_wRRXCTbeGQ7B-SgdOmBS7FCrBG3dtBLlVYLGeUZ9QLFSMmpcUl5yxlSwH0TjgoVs2dlSbt5Sbu6bDe8xwaEr26oOGggTXDQUXwfqapCqeG5qKyt9to93ELsHDXXal57X1kVeOEgvia1Yg_rxPZwQtw1QsHEFF_rJJ98LB_BMhYbXCq57dZ3dDsFQWYZnsiHrz-T_UZvdDYcQhBswrq0FLngnA1vLpQY1eAaYNy8BFe2g4sr5PVBZOkMSo_UpchLzyAFcK00rGiLfXeEspApXxwT78vTtg9CaUae_DGsyQq2Oyb_PK-PQuDrwb6N6qZP6o9NVelwlyMWa-58kuNYbvvXOdGxfzjujTig4SL-b9sWkPm8F8UxVH3-V4EPptve2QI3qtK7-8jgvjAdoHeLFFo9u29ku902M9UBl4ARntOERC_vK1jaINajFt3w8_vczAAD__xOuBa4=
 
+statement ok
+SET prevent_partitioning_soft_limit_table_readers = off
+
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT a FROM abc WHERE a >= 0 AND a < 100 AND b != 5 ORDER BY a LIMIT 10
 ----

@@ -3189,7 +3189,7 @@ plan_cache_mode                                                  auto           
 plpgsql_use_strict_into                                          off                 NULL      NULL        NULL        string
 prefer_lookup_joins_for_fks                                      off                 NULL      NULL        NULL        string
 prepared_statements_cache_size                                   0 B                 NULL      NULL        NULL        string
-prevent_partitioning_soft_limit_table_readers                    off                 NULL      NULL        NULL        string
+prevent_partitioning_soft_limit_table_readers                    on                  NULL      NULL        NULL        string
 prevent_update_set_column_drop                                   on                  NULL      NULL        NULL        string
 propagate_admission_header_to_leaf_transactions                  on                  NULL      NULL        NULL        string
 propagate_input_ordering                                         off                 NULL      NULL        NULL        string
@@ -3440,7 +3440,7 @@ plan_cache_mode                                                  auto           
 plpgsql_use_strict_into                                          off                 NULL  user     NULL      off                 off
 prefer_lookup_joins_for_fks                                      off                 NULL  user     NULL      off                 off
 prepared_statements_cache_size                                   0 B                 B     user     NULL      0 B                 0 B
-prevent_partitioning_soft_limit_table_readers                    off                 NULL  user     NULL      off                 off
+prevent_partitioning_soft_limit_table_readers                    on                  NULL  user     NULL      on                  on
 prevent_update_set_column_drop                                   on                  NULL  user     NULL      on                  on
 propagate_admission_header_to_leaf_transactions                  on                  NULL  user     NULL      on                  on
 propagate_input_ordering                                         off                 NULL  user     NULL      off                 off
