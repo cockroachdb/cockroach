@@ -1486,8 +1486,6 @@ func TestImportCSVStmt(t *testing.T) {
 	rowsPerFile := 1000
 	rowsPerRaceFile := 16
 
-	var forceFailure bool
-
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
@@ -1495,21 +1493,6 @@ func TestImportCSVStmt(t *testing.T) {
 	}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
-
-	for i := 0; i < tc.NumServers(); i++ {
-		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
-					if forceFailure {
-						return errors.New("testing injected failure")
-					}
-					return nil
-				}
-				return r
-			})
-	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -3949,9 +3932,6 @@ func TestImportDefaultWithResume(t *testing.T) {
 				func(raw jobs.Resumer) jobs.Resumer {
 					resumer := raw.(*importResumer)
 					resumer.testingKnobs.alwaysFlushJobProgress = true
-					resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
-						return nil
-					}
 					if jobID == -1 {
 						return &cancellableImportResumer{
 							ctx:     jobCtx,
