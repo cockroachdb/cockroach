@@ -346,6 +346,10 @@ func runPlanInsidePlan(
 		planCtx.collectExecStats = true
 		planCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, &plannerCopy, planComponentTypeInner)
 		defer func() {
+			if ctx.Err() != nil {
+				// Skip populating ExecStats if we've been canceled.
+				return
+			}
 			sp := tracing.SpanFromContext(ctx)
 			recording := sp.GetRecording(tracingpb.RecordingStructured)
 			if recording.Len() == 0 {
