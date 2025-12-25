@@ -767,7 +767,7 @@ func (c *ChannelList) UnmarshalYAML(value *yaml.Node) error {
 
 	// It was not an array. Is it a string?
 	var s string
-	if err := value.Decode(&s); err != nil {
+	if err := value.Load(&s); err != nil {
 		return err
 	}
 	// It was a string: use the string configuration format.
@@ -962,7 +962,7 @@ func (c *ChannelFilters) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	// It was not a simple channel list. Assume a map.
-	return value.Decode(&c.Filters)
+	return value.Load(&c.Filters)
 }
 
 // fillDefaultSeverityAndPrune replaces instances of severity UNKNOWN
@@ -1196,7 +1196,7 @@ func (w *CommonBufferSinkConfigWrapper) UnmarshalYAML(value *yaml.Node) error {
 			return nil
 		}
 	}
-	return value.Decode(&w.CommonBufferSinkConfig)
+	return value.Load(&w.CommonBufferSinkConfig)
 }
 
 // IsNone before default propagation indicates that the config explicitly disables

@@ -94,8 +94,8 @@ func (h *httpHandler) serve(rw http.ResponseWriter, req *http.Request) {
 
 	fmt.Fprintf(rw, "<h3>Configuration</h3><hr>\n")
 	fmt.Fprintf(rw, "<pre>")
-	encoder := yaml.NewEncoder(rw)
-	_ = encoder.Encode(h.w.config)
+	encoder := yaml.NewEncoder(rw) //lint:ignore SA1019 deprecated
+	_ = encoder.Encode(h.w.config) //lint:ignore SA1019 deprecated
 	fmt.Fprintf(rw, "</pre>")
 
 	fmt.Fprintf(rw, "</body>\n</html>")

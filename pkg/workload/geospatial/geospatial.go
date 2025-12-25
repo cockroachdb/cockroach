@@ -52,6 +52,7 @@ func (geospatial) Tables() []workload.Table {
 			panic(err)
 		}
 		var result [][]interface{}
+		//lint:ignore SA1019 deprecated
 		if err := yaml.NewDecoder(r).Decode(&result); err != nil {
 			panic(err)
 		}

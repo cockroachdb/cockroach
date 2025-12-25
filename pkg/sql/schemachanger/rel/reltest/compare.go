@@ -92,6 +92,7 @@ func (efc entitiesForComparison) Swap(i, j int) {
 
 func (ct ComparisonTests) encode(t *testing.T) *yaml.Node {
 	var entities yaml.Node
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, entities.Encode(ct.Entities))
 	entities.Style = yaml.FlowStyle
 	return &yaml.Node{
@@ -116,6 +117,7 @@ func (ct ComparisonTests) encodeTests(t *testing.T) *yaml.Node {
 
 func (ct ComparisonTest) encode(t *testing.T) *yaml.Node {
 	var exp yaml.Node
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, exp.Encode(ct.Order))
 	exp.Style = yaml.FlowStyle
 	return &yaml.Node{

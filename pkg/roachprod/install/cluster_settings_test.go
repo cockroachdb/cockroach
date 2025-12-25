@@ -18,7 +18,7 @@ func TestClusterSettingOptionListCodec(t *testing.T) {
 		NumRacksOption(1),
 		DebugDirOption("foo"),
 	}
-	data, err := yaml.Marshal(opts)
+	data, err := yaml.Marshal(opts) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 
 	var decOpts ClusterSettingOptionList

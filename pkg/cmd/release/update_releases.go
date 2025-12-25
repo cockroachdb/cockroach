@@ -268,6 +268,7 @@ func downloadReleases() ([]Release, error) {
 	}
 
 	var data []Release
+	//lint:ignore SA1019 deprecated
 	if err := yaml.Unmarshal(blob.Bytes(), &data); err != nil { //nolint:yaml
 		return nil, fmt.Errorf("failed to YAML parse release data: %w", err)
 	}
@@ -309,6 +310,7 @@ func saveResultsInYaml(results map[string]release.Series) (retErr error) {
 			return err
 		}
 
+		//lint:ignore SA1019 deprecated
 		if err := yaml.NewEncoder(f).Encode(results); err != nil {
 			return fmt.Errorf("could not write release data file: %w", err)
 		}

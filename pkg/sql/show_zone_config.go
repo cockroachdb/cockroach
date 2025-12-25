@@ -343,17 +343,21 @@ func generateZoneConfigIntrospectionValues(
 
 func yamlMarshalFlow(v interface{}) (string, error) {
 	var n yaml.Node
+	//lint:ignore SA1019 deprecated
 	if err := n.Encode(v); err != nil {
 		return "", err
 	}
 	n.Style = yaml.FlowStyle
 
 	var buf bytes.Buffer
+	//lint:ignore SA1019 deprecated
 	e := yaml.NewEncoder(&buf)
+	//lint:ignore SA1019 deprecated
 	if err := e.Encode(&n); err != nil {
-		_ = e.Close()
+		_ = e.Close() //lint:ignore SA1019 deprecated
 		return "", err
 	}
+	//lint:ignore SA1019 deprecated
 	if err := e.Close(); err != nil {
 		return "", err
 	}

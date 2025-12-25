@@ -136,6 +136,7 @@ func (c *ConstraintsList) UnmarshalYAML(value *yaml.Node) error {
 	// Otherwise, the input must be a map that can be converted to per-replica
 	// constraints.
 	constraintsMap := make(map[string]int32)
+	//lint:ignore SA1019 deprecated
 	if err := value.Decode(&constraintsMap); err != nil {
 		return errors.New(
 			"invalid constraints format. expected an array of strings or a map of strings to ints")

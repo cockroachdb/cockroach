@@ -19,6 +19,7 @@ func Test_processReleaseData(t *testing.T) {
 	require.NoError(t, err)
 
 	var data []Release
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.Unmarshal(testReleases, &data)) //nolint:yaml
 
 	expectedReleaseData := map[string]release.Series{

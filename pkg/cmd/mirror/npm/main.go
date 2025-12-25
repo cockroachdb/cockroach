@@ -45,6 +45,7 @@ func getUnmirroredUrls(
 		if err != nil {
 			return nil, fmt.Errorf("unable to read lockfile %q: %w", path, err)
 		}
+		//lint:ignore SA1019 grpc.WithInsecure is deprecated
 		if err := yaml.Unmarshal(contents, &lf); err != nil { // nolint:yaml
 			return nil, fmt.Errorf("unable to parse contents of %q as YAML: %w", path, err)
 		}

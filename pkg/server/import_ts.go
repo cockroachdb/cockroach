@@ -156,6 +156,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 			}
 			return err
 		}
+		//lint:ignore SA1019 deprecated
 		if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
 			return err
 		}

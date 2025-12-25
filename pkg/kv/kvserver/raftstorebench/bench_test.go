@@ -84,10 +84,10 @@ func benchmarkRaftStoreInner(t testing.TB, smokeCheckOnly bool) {
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
-			dec := yaml.NewDecoder(strings.NewReader(d.Input))
-			dec.KnownFields(true)
+			dec := yaml.NewDecoder(strings.NewReader(d.Input)) //lint:ignore SA1019 deprecated
+			dec.KnownFields(true)                              //lint:ignore SA1019 deprecated
 			cfg := MakeDefaultConfig()
-			require.NoError(t, dec.Decode(&cfg))
+			require.NoError(t, dec.Decode(&cfg)) //lint:ignore SA1019 deprecated
 
 			// TODO(tbg): could support fixtures, using:
 			// testfixtures.ReuseOrGenerate(b, name, func(dir string) {})
@@ -143,6 +143,7 @@ func stripConfig(cfg Config) Config {
 
 func configToYAML(t T, cfg Config) string {
 	var buf bytes.Buffer
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.NewEncoder(&buf).Encode(&cfg))
 	return buf.String()
 }

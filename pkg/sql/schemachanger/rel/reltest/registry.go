@@ -57,6 +57,7 @@ func (r *Registry) Register(name string, v interface{}) interface{} {
 // name, and returns dest for use in a var block. Using FromYAML helps make
 // more terse yaml encodings.
 func (r *Registry) FromYAML(name, yamlData string, dest interface{}) interface{} {
+	//lint:ignore SA1019 deprecated
 	if err := yaml.NewDecoder(strings.NewReader(yamlData)).Decode(dest); err != nil {
 		panic(err)
 	}
@@ -99,8 +100,10 @@ func (r *Registry) GetName(i interface{}) (string, bool) {
 func (r *Registry) valueToYAML(t *testing.T, name string) *yaml.Node {
 	if yamlStr, hasToYAML := r.nameToYAML[name]; hasToYAML {
 		var v interface{}
+		//lint:ignore SA1019 deprecated
 		require.NoError(t, yaml.NewDecoder(strings.NewReader(yamlStr)).Decode(&v))
 		var n yaml.Node
+		//lint:ignore SA1019 deprecated
 		require.NoError(t, n.Encode(v))
 		n.Style = yaml.FlowStyle
 		return &n
@@ -122,6 +125,7 @@ func (r *Registry) EncodeToYAML(t *testing.T, v interface{}) *yaml.Node {
 		toEncode = encoder.EncodeToYAML(t, r)
 	}
 	var n yaml.Node
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, n.Encode(toEncode))
 	return &n
 }
