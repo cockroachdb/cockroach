@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -628,7 +628,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			overload.DefaultExprs = make(tree.Exprs, len(sig.DefaultExprs))
 			for j, expr := range sig.DefaultExprs {
 				var err error
-				overload.DefaultExprs[j], err = parser.ParseExpr(expr)
+				overload.DefaultExprs[j], err = parserutils.ParseExpr(expr)
 				if err != nil {
 					// We should never get an error during parsing the default
 					// expr.
