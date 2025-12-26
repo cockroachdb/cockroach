@@ -449,6 +449,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/redact:redact_test",
     "//pkg/sql/catalog/replication:replication_test",
     "//pkg/sql/catalog/resolver:resolver_test",
+    "//pkg/sql/catalog/schemadesc:schemadesc_disallowed_imports_test",
     "//pkg/sql/catalog/schemadesc:schemadesc_test",
     "//pkg/sql/catalog/schemaexpr:schemaexpr_disallowed_imports_test",
     "//pkg/sql/catalog/schemaexpr:schemaexpr_test",
