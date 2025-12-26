@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vecsettings",
+    srcs = ["settings.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/settings",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/vecpb",
+        "//pkg/util/errorutil/unimplemented",
+    ],
+)
