@@ -268,7 +268,7 @@ query TTTTTTTBB colnames
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn4'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    isolation_level   granted contended
-test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  SERIALIZABLE      false   true
+test          public      t           /Table/106/1/"b"/0  Intent       Unreplicated  SERIALIZABLE      false   true
 
 query TTTTTTTBB colnames,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn3'
@@ -431,3 +431,54 @@ awaitstatement iso2
 
 statement ok
 COMMIT
+
+user root
+
+statement ok
+BEGIN;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user testuser
+
+statement ok
+BEGIN;
+SET enable_shared_locking_for_serializable = true
+
+statement async share1
+SELECT * FROM t WHERE k = 'a' FOR SHARE;
+
+user testuser 2
+
+statement ok
+BEGIN;
+
+statement async put1
+DELETE FROM t WHERE k = 'a';
+
+user root
+
+# Verify that the waiting transaction reports Shared strength, not Exclusive.
+query TTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability    granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Unreplicated  true     true
+test           public       t           /Table/106/1/"a"/0  Shared         Unreplicated  false    true
+test           public       t           /Table/106/1/"a"/0  Intent         Unreplicated  false    true
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement share1
+
+statement ok
+COMMIT
+
+user testuser2
+
+awaitstatement put1
+
+statement ok
+ROLLBACK
