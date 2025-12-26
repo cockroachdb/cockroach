@@ -48,7 +48,6 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
-        "//pkg/sql/evalcatalog",
         "//pkg/sql/execinfra/execexpr",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/rowenc",
@@ -126,6 +125,7 @@ disallowed_imports_test(
     [
         "//pkg/sql/colexec",
         "//pkg/sql/colflow",
+        "//pkg/sql/evalcatalog",
         "//pkg/sql/flowinfra",
         "//pkg/sql/row",
         "//pkg/sql/rowexec",
