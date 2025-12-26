@@ -285,6 +285,9 @@ type streamIngestionProcessor struct {
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 
+	// debugStatus tracks the current state for debugging/observability.
+	debugStatus streampb.DebugPhysicalConsumerStatusHolder
+
 	logBufferEvery log.EveryN
 
 	// Aggregator that aggregates StructuredEvents emitted in the
@@ -413,6 +416,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = sip.StartInternal(ctx, streamIngestionProcessorName, sip.agg)
 
 	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
+
+	// Initialize and register debug status for observability.
+	sip.debugStatus.Setup(streampb.StreamID(sip.spec.StreamID), sip.ProcessorID)
+	streampb.RegisterPhysicalConsumerStatus(&sip.debugStatus)
 
 	st := sip.FlowCtx.Cfg.Settings
 	db := sip.FlowCtx.Cfg.DB
@@ -584,6 +591,7 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	defer sip.frontier.Release()
+	defer streampb.UnregisterPhysicalConsumerStatus(&sip.debugStatus)
 
 	// Stop the partition client, mergedSubscription, and
 	// cutoverPoller. All other goroutines should exit based on
@@ -695,8 +703,13 @@ func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb
 // partition.
 func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 	for {
+		sip.debugStatus.Receiving()
+		receiveStart := timeutil.Now()
 		select {
 		case event, ok := <-sip.mergedSubscription.Events():
+			waitNanos := timeutil.Since(receiveStart).Nanoseconds()
+			sip.metrics.ReceiveWaitNanos.Inc(waitNanos)
+			sip.debugStatus.ReceivedEvent(waitNanos)
 			if !ok {
 				// eventCh is closed, flush and exit.
 				if err := sip.flush(); err != nil {
@@ -725,7 +738,6 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 			}
 		}
 	}
-
 }
 
 func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
@@ -1330,11 +1342,16 @@ func (sip *streamIngestionProcessor) flush() error {
 		}
 	}
 
+	sip.debugStatus.WaitingForFlush()
+	flushWaitStart := timeutil.Now()
 	select {
 	case sip.flushCh <- flushableBuffer{
 		buffer:     bufferToFlush,
 		checkpoint: checkpoint,
 	}:
+		waitNanos := timeutil.Since(flushWaitStart).Nanoseconds()
+		sip.metrics.FlushWaitNanos.Inc(waitNanos)
+		sip.debugStatus.FlushEnqueued(waitNanos)
 		sip.lastFlushTime = timeutil.Now()
 		return nil
 	case <-sip.stopCh:
