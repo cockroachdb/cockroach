@@ -7,12 +7,14 @@ package roachtestutil
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 // TODO(darryl): Once the failure injection library is a first class citizen of roachtest,
@@ -22,8 +24,9 @@ type DiskStaller interface {
 	Setup(ctx context.Context)
 	Cleanup(ctx context.Context)
 	Stall(ctx context.Context, nodes option.NodeListOption)
+	StallCycle(ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration)
 	Slow(ctx context.Context, nodes option.NodeListOption, bytesPerSecond int)
-	Unstall(ctx context.Context, nodes option.NodeListOption)
+	Unstall(ctx context.Context, nodes option.NodeListOption) error
 	DataDir() string
 	LogDir() string
 }
@@ -38,7 +41,11 @@ func (n NoopDiskStaller) LogDir() string                                        
 func (n NoopDiskStaller) Setup(ctx context.Context)                              {}
 func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int) {}
 func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)       {}
-func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)     {}
+func (n NoopDiskStaller) StallCycle(
+	_ context.Context, _ option.NodeListOption, _, _ time.Duration,
+) {
+}
+func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption) error { return nil }
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -103,6 +110,23 @@ func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpti
 	}
 }
 
+func (s *cgroupDiskStaller) StallCycle(
+	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
+) {
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
+		StallLogs:            s.stallLogs,
+		StallWrites:          true,
+		StallReads:           s.stallReads,
+		Nodes:                nodes.InstallNodes(),
+		Cycle:                true,
+		CycleStallDuration:   stallDuration,
+		CycleUnstallDuration: unstallDuration,
+	}); err != nil {
+		s.f.Fatalf("failed to stall disk: %s", err)
+	}
+}
+
 func (s *cgroupDiskStaller) Slow(
 	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
 ) {
@@ -118,11 +142,12 @@ func (s *cgroupDiskStaller) Slow(
 	}
 }
 
-func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
+func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) error {
 	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
-	if err := s.Failer.Recover(ctx, l); err != nil {
-		s.f.Fatalf("failed to unstall disk: %s", err)
-	}
+	// cgroup may fail when unstalling the disk, usually because the node already
+	// fataled and the cgroup is no longer available. Return the error and let
+	// the caller decide if a node fatal is expected or not.
+	return errors.Wrap(s.Failer.Recover(ctx, l), "failed to unstall disk")
 }
 
 type dmsetupDiskStaller struct {
@@ -168,6 +193,20 @@ func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOpt
 	}
 }
 
+func (s *dmsetupDiskStaller) StallCycle(
+	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
+) {
+	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
+	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
+		Nodes:                nodes.InstallNodes(),
+		Cycle:                true,
+		CycleStallDuration:   stallDuration,
+		CycleUnstallDuration: unstallDuration,
+	}); err != nil {
+		s.f.Fatalf("failed to stall disk: %s", err)
+	}
+}
+
 func (s *dmsetupDiskStaller) Slow(
 	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
 ) {
@@ -175,11 +214,13 @@ func (s *dmsetupDiskStaller) Slow(
 	s.f.Fatal("Slow is not supported for dmsetupDiskStaller")
 }
 
-func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
+func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) error {
 	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
+	// Any unstall error for dmsetup is unexpected and should fail the test.
 	if err := s.Failer.Recover(ctx, l); err != nil {
 		s.f.Fatalf("failed to unstall disk: %s", err)
 	}
+	return nil
 }
 
 func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
