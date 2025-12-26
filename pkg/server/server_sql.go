@@ -1061,6 +1061,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeStatsFetcher:          rangeStatsFetcher,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
 	}
@@ -1210,6 +1211,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
 		tableStatsTestingKnobs,
+		execCfg.TenantReadOnly,
 	)
 	execCfg.StatsRefresher = statsRefresher
 	distSQLServer.ServerConfig.StatsRefresher = statsRefresher
