@@ -188,6 +188,7 @@ var nodeSpecificTableDumps = map[string]columnParserMap{
 	"crdb_internal.node_queries.txt":                                {},
 	"crdb_internal.cluster_replication_node_stream_checkpoints.txt": {},
 	"crdb_internal.logical_replication_node_processors.txt":         {},
+	"crdb_internal.cluster_replication_node_processors.txt":         {},
 	"crdb_internal.cluster_replication_node_streams.txt":            {},
 	"crdb_internal.node_inflight_trace_spans.txt":                   {},
 	"crdb_internal.node_distsql_flows.txt":                          {},

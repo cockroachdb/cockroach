@@ -423,15 +423,15 @@ CREATE INDEX ON constraint_db.t6 ((m = 'foo')) WHERE m = 'foo'
 
 ## pg_catalog.pg_namespace
 
-query OTOT colnames,rowsort
-SELECT * FROM pg_catalog.pg_namespace
+query TOT colnames,rowsort
+SELECT nspname, nspowner, nspacl FROM pg_catalog.pg_namespace
 ----
-oid         nspname             nspowner    nspacl
-4294967295  crdb_internal       3233629770  NULL
-4294967180  information_schema  3233629770  NULL
-4294967092  pg_catalog          3233629770  NULL
-4294966962  pg_extension        3233629770  NULL
-105         public              1546506610  NULL
+nspname             nspowner    nspacl
+crdb_internal       3233629770  NULL
+information_schema  3233629770  NULL
+pg_catalog          3233629770  NULL
+pg_extension        3233629770  NULL
+public              1546506610  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
 # on the current database.
@@ -442,15 +442,15 @@ REVOKE ALL ON DATABASE test FROM testuser
 
 user testuser
 
-query OTOT colnames,rowsort
-SELECT * FROM pg_catalog.pg_namespace
+query TOT colnames,rowsort
+SELECT nspname, nspowner, nspacl FROM pg_catalog.pg_namespace
 ----
-oid         nspname             nspowner    nspacl
-4294967295  crdb_internal       3233629770  NULL
-4294967180  information_schema  3233629770  NULL
-4294967092  pg_catalog          3233629770  NULL
-4294966962  pg_extension        3233629770  NULL
-105         public              1546506610  NULL
+nspname             nspowner    nspacl
+crdb_internal       3233629770  NULL
+information_schema  3233629770  NULL
+pg_catalog          3233629770  NULL
+pg_extension        3233629770  NULL
+public              1546506610  NULL
 
 user root
 
@@ -1552,12 +1552,12 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 statement ok
 SET DATABASE = constraint_db
 
-query OTOOITTTTT colnames
+query OTOOITTTTT colnames,strip-oids
 SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
-oid         collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-3903121477  en-US     4294967092     NULL       6             NULL         NULL       NULL          NULL         NULL
+oid      collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
+__OID__  en-US     __OID__        NULL       6             NULL         NULL       NULL          NULL         NULL
 
 user testuser
 
@@ -1750,22 +1750,22 @@ fk         {2}      NULL       NULL       NULL       NULL       NULL    NULL
 
 ## pg_catalog.pg_depend
 
-query OOIOOIT colnames
+query OOIOOIT colnames,strip-oids
 SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype
 FROM pg_catalog.pg_depend
 ORDER BY objid, refobjid, refobjsubid
 ----
-classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
-4294967080  111         0         4294967080  110         14           i
-4294967080  112         0         4294967080  110         15           i
-4294967034  842401391   0         4294967080  110         1            n
-4294967034  842401391   0         4294967080  110         2            n
-4294967034  842401391   0         4294967080  110         3            n
-4294967034  842401391   0         4294967080  110         4            n
-4294967077  1179276562  0         4294967080  3687884464  0            n
-4294967077  3935750373  0         4294967080  3687884465  0            n
-4294967077  4072017905  0         4294967080  0           0            n
-4294967077  4170826110  0         4294967080  0           0            n
+classid  objid    objsubid  refclassid  refobjid  refobjsubid  deptype
+__OID__  111      0         __OID__     110       14           i
+__OID__  112      0         __OID__     110       15           i
+__OID__  __OID__  0         __OID__     110       1            n
+__OID__  __OID__  0         __OID__     110       2            n
+__OID__  __OID__  0         __OID__     110       3            n
+__OID__  __OID__  0         __OID__     110       4            n
+__OID__  __OID__  0         __OID__     __OID__   0            n
+__OID__  __OID__  0         __OID__     __OID__   0            n
+__OID__  __OID__  0         __OID__     0         0            n
+__OID__  __OID__  0         __OID__     0         0            n
 
 statement ok
 CREATE TABLE t_with_pk_seq (a INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, b INT);
@@ -1809,16 +1809,16 @@ t_with_pk_seq_a_seq  a            i
 # table to the pg_class system table. Other entries are links to pg_class when it is
 # a table-view dependency.
 
-query OOTT colnames,rowsort
+query OOTT colnames,rowsort,strip-oids
 SELECT DISTINCT classid, refclassid, cla.relname AS tablename, refcla.relname AS reftablename
 FROM pg_catalog.pg_depend
 JOIN pg_class cla ON classid=cla.oid
 JOIN pg_class refcla ON refclassid=refcla.oid
 ----
-classid     refclassid  tablename      reftablename
-4294967034  4294967080  pg_rewrite     pg_class
-4294967080  4294967080  pg_class       pg_class
-4294967077  4294967080  pg_constraint  pg_class
+classid  refclassid  tablename      reftablename
+__OID__  __OID__     pg_rewrite     pg_class
+__OID__  __OID__     pg_class       pg_class
+__OID__  __OID__     pg_constraint  pg_class
 
 # Some entries in pg_depend are foreign key constraints that reference an index
 # in pg_class. Other entries are table-view dependencies
@@ -1911,130 +1911,130 @@ oid         enumtypid  enumsortorder  enumlabel
 
 ## pg_catalog.pg_type
 
-query OTOOIBT colnames
+query OTOOIBT colnames,strip-oids
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 WHERE oid < 4194967002 -- exclude implicit types for virtual tables
 ORDER BY oid
 ----
-oid     typname                typnamespace  typowner    typlen  typbyval  typtype
-16      bool                   4294967092    NULL        1       true      b
-17      bytea                  4294967092    NULL        -1      false     b
-18      char                   4294967092    NULL        1       true      b
-19      name                   4294967092    NULL        -1      false     b
-20      int8                   4294967092    NULL        8       true      b
-21      int2                   4294967092    NULL        2       true      b
-22      int2vector             4294967092    NULL        -1      false     b
-23      int4                   4294967092    NULL        4       true      b
-24      regproc                4294967092    NULL        4       true      b
-25      text                   4294967092    NULL        -1      false     b
-26      oid                    4294967092    NULL        4       true      b
-30      oidvector              4294967092    NULL        -1      false     b
-700     float4                 4294967092    NULL        4       true      b
-701     float8                 4294967092    NULL        8       true      b
-705     unknown                4294967092    NULL        0       true      b
-869     inet                   4294967092    NULL        24      true      b
-1000    _bool                  4294967092    NULL        -1      false     b
-1001    _bytea                 4294967092    NULL        -1      false     b
-1002    _char                  4294967092    NULL        -1      false     b
-1003    _name                  4294967092    NULL        -1      false     b
-1005    _int2                  4294967092    NULL        -1      false     b
-1006    _int2vector            4294967092    NULL        -1      false     b
-1007    _int4                  4294967092    NULL        -1      false     b
-1008    _regproc               4294967092    NULL        -1      false     b
-1009    _text                  4294967092    NULL        -1      false     b
-1013    _oidvector             4294967092    NULL        -1      false     b
-1014    _bpchar                4294967092    NULL        -1      false     b
-1015    _varchar               4294967092    NULL        -1      false     b
-1016    _int8                  4294967092    NULL        -1      false     b
-1021    _float4                4294967092    NULL        -1      false     b
-1022    _float8                4294967092    NULL        -1      false     b
-1028    _oid                   4294967092    NULL        -1      false     b
-1041    _inet                  4294967092    NULL        -1      false     b
-1042    bpchar                 4294967092    NULL        -1      false     b
-1043    varchar                4294967092    NULL        -1      false     b
-1082    date                   4294967092    NULL        4       true      b
-1083    time                   4294967092    NULL        8       true      b
-1114    timestamp              4294967092    NULL        8       true      b
-1115    _timestamp             4294967092    NULL        -1      false     b
-1182    _date                  4294967092    NULL        -1      false     b
-1183    _time                  4294967092    NULL        -1      false     b
-1184    timestamptz            4294967092    NULL        8       true      b
-1185    _timestamptz           4294967092    NULL        -1      false     b
-1186    interval               4294967092    NULL        24      true      b
-1187    _interval              4294967092    NULL        -1      false     b
-1231    _numeric               4294967092    NULL        -1      false     b
-1266    timetz                 4294967092    NULL        12      true      b
-1270    _timetz                4294967092    NULL        -1      false     b
-1560    bit                    4294967092    NULL        -1      false     b
-1561    _bit                   4294967092    NULL        -1      false     b
-1562    varbit                 4294967092    NULL        -1      false     b
-1563    _varbit                4294967092    NULL        -1      false     b
-1700    numeric                4294967092    NULL        -1      false     b
-1790    refcursor              4294967092    NULL        -1      false     b
-2201    _refcursor             4294967092    NULL        -1      false     b
-2202    regprocedure           4294967092    NULL        4       true      b
-2205    regclass               4294967092    NULL        4       true      b
-2206    regtype                4294967092    NULL        4       true      b
-2207    _regprocedure          4294967092    NULL        -1      false     b
-2210    _regclass              4294967092    NULL        -1      false     b
-2211    _regtype               4294967092    NULL        -1      false     b
-2249    record                 4294967092    NULL        0       true      p
-2276    any                    4294967092    NULL        -1      false     p
-2277    anyarray               4294967092    NULL        -1      false     p
-2278    void                   4294967092    NULL        0       true      p
-2279    trigger                4294967092    NULL        4       true      p
-2283    anyelement             4294967092    NULL        -1      false     p
-2287    _record                4294967092    NULL        -1      false     b
-2950    uuid                   4294967092    NULL        16      true      b
-2951    _uuid                  4294967092    NULL        -1      false     b
-3220    pg_lsn                 4294967092    NULL        8       true      b
-3221    _pg_lsn                4294967092    NULL        -1      false     b
-3614    tsvector               4294967092    NULL        -1      false     b
-3615    tsquery                4294967092    NULL        -1      false     b
-3643    _tsvector              4294967092    NULL        -1      false     b
-3645    _tsquery               4294967092    NULL        -1      false     b
-3802    jsonb                  4294967092    NULL        -1      false     b
-3807    _jsonb                 4294967092    NULL        -1      false     b
-4072    jsonpath               4294967092    NULL        -1      false     b
-4073    _jsonpath              4294967092    NULL        -1      false     b
-4089    regnamespace           4294967092    NULL        4       true      b
-4090    _regnamespace          4294967092    NULL        -1      false     b
-4096    regrole                4294967092    NULL        4       true      b
-4097    _regrole               4294967092    NULL        -1      false     b
-90000   geometry               4294967092    NULL        -1      false     b
-90001   _geometry              4294967092    NULL        -1      false     b
-90002   geography              4294967092    NULL        -1      false     b
-90003   _geography             4294967092    NULL        -1      false     b
-90004   box2d                  4294967092    NULL        32      true      b
-90005   _box2d                 4294967092    NULL        -1      false     b
-90006   vector                 4294967092    NULL        -1      false     b
-90007   _vector                4294967092    NULL        -1      false     b
-90008   citext                 4294967092    NULL        -1      false     b
-90009   _citext                4294967092    NULL        -1      false     b
-90010   ltree                  4294967092    NULL        -1      false     b
-90011   _ltree                 4294967092    NULL        -1      false     b
-100110  t1                     109           1546506610  -1      false     c
-100111  t1_m_seq               109           1546506610  -1      false     c
-100112  t1_n_seq               109           1546506610  -1      false     c
-100113  t2                     109           1546506610  -1      false     c
-100114  t3                     109           1546506610  -1      false     c
-100115  v1                     109           1546506610  -1      false     c
-100116  t4                     109           1546506610  -1      false     c
-100117  t5                     109           1546506610  -1      false     c
-100118  mytype                 109           1546506610  -1      false     e
-100119  _mytype                109           1546506610  -1      false     b
-100120  t6                     109           1546506610  -1      false     c
-100121  mv1                    109           1546506610  -1      false     c
-100128  t_with_pk_seq          109           1546506610  -1      false     c
-100129  t_with_pk_seq_a_seq    109           1546506610  -1      false     c
-100130  source_table           109           1546506610  -1      false     c
-100131  depend_view            109           1546506610  -1      false     c
-100132  view_dependingon_view  109           1546506610  -1      false     c
-100133  newtype1               109           1546506610  -1      false     e
-100134  _newtype1              109           1546506610  -1      false     b
-100135  newtype2               109           1546506610  -1      false     e
-100136  _newtype2              109           1546506610  -1      false     b
+oid     typname                typnamespace  typowner  typlen  typbyval  typtype
+16      bool                   __OID__       NULL      1       true      b
+17      bytea                  __OID__       NULL      -1      false     b
+18      char                   __OID__       NULL      1       true      b
+19      name                   __OID__       NULL      -1      false     b
+20      int8                   __OID__       NULL      8       true      b
+21      int2                   __OID__       NULL      2       true      b
+22      int2vector             __OID__       NULL      -1      false     b
+23      int4                   __OID__       NULL      4       true      b
+24      regproc                __OID__       NULL      4       true      b
+25      text                   __OID__       NULL      -1      false     b
+26      oid                    __OID__       NULL      4       true      b
+30      oidvector              __OID__       NULL      -1      false     b
+700     float4                 __OID__       NULL      4       true      b
+701     float8                 __OID__       NULL      8       true      b
+705     unknown                __OID__       NULL      0       true      b
+869     inet                   __OID__       NULL      24      true      b
+1000    _bool                  __OID__       NULL      -1      false     b
+1001    _bytea                 __OID__       NULL      -1      false     b
+1002    _char                  __OID__       NULL      -1      false     b
+1003    _name                  __OID__       NULL      -1      false     b
+1005    _int2                  __OID__       NULL      -1      false     b
+1006    _int2vector            __OID__       NULL      -1      false     b
+1007    _int4                  __OID__       NULL      -1      false     b
+1008    _regproc               __OID__       NULL      -1      false     b
+1009    _text                  __OID__       NULL      -1      false     b
+1013    _oidvector             __OID__       NULL      -1      false     b
+1014    _bpchar                __OID__       NULL      -1      false     b
+1015    _varchar               __OID__       NULL      -1      false     b
+1016    _int8                  __OID__       NULL      -1      false     b
+1021    _float4                __OID__       NULL      -1      false     b
+1022    _float8                __OID__       NULL      -1      false     b
+1028    _oid                   __OID__       NULL      -1      false     b
+1041    _inet                  __OID__       NULL      -1      false     b
+1042    bpchar                 __OID__       NULL      -1      false     b
+1043    varchar                __OID__       NULL      -1      false     b
+1082    date                   __OID__       NULL      4       true      b
+1083    time                   __OID__       NULL      8       true      b
+1114    timestamp              __OID__       NULL      8       true      b
+1115    _timestamp             __OID__       NULL      -1      false     b
+1182    _date                  __OID__       NULL      -1      false     b
+1183    _time                  __OID__       NULL      -1      false     b
+1184    timestamptz            __OID__       NULL      8       true      b
+1185    _timestamptz           __OID__       NULL      -1      false     b
+1186    interval               __OID__       NULL      24      true      b
+1187    _interval              __OID__       NULL      -1      false     b
+1231    _numeric               __OID__       NULL      -1      false     b
+1266    timetz                 __OID__       NULL      12      true      b
+1270    _timetz                __OID__       NULL      -1      false     b
+1560    bit                    __OID__       NULL      -1      false     b
+1561    _bit                   __OID__       NULL      -1      false     b
+1562    varbit                 __OID__       NULL      -1      false     b
+1563    _varbit                __OID__       NULL      -1      false     b
+1700    numeric                __OID__       NULL      -1      false     b
+1790    refcursor              __OID__       NULL      -1      false     b
+2201    _refcursor             __OID__       NULL      -1      false     b
+2202    regprocedure           __OID__       NULL      4       true      b
+2205    regclass               __OID__       NULL      4       true      b
+2206    regtype                __OID__       NULL      4       true      b
+2207    _regprocedure          __OID__       NULL      -1      false     b
+2210    _regclass              __OID__       NULL      -1      false     b
+2211    _regtype               __OID__       NULL      -1      false     b
+2249    record                 __OID__       NULL      0       true      p
+2276    any                    __OID__       NULL      -1      false     p
+2277    anyarray               __OID__       NULL      -1      false     p
+2278    void                   __OID__       NULL      0       true      p
+2279    trigger                __OID__       NULL      4       true      p
+2283    anyelement             __OID__       NULL      -1      false     p
+2287    _record                __OID__       NULL      -1      false     b
+2950    uuid                   __OID__       NULL      16      true      b
+2951    _uuid                  __OID__       NULL      -1      false     b
+3220    pg_lsn                 __OID__       NULL      8       true      b
+3221    _pg_lsn                __OID__       NULL      -1      false     b
+3614    tsvector               __OID__       NULL      -1      false     b
+3615    tsquery                __OID__       NULL      -1      false     b
+3643    _tsvector              __OID__       NULL      -1      false     b
+3645    _tsquery               __OID__       NULL      -1      false     b
+3802    jsonb                  __OID__       NULL      -1      false     b
+3807    _jsonb                 __OID__       NULL      -1      false     b
+4072    jsonpath               __OID__       NULL      -1      false     b
+4073    _jsonpath              __OID__       NULL      -1      false     b
+4089    regnamespace           __OID__       NULL      4       true      b
+4090    _regnamespace          __OID__       NULL      -1      false     b
+4096    regrole                __OID__       NULL      4       true      b
+4097    _regrole               __OID__       NULL      -1      false     b
+90000   geometry               __OID__       NULL      -1      false     b
+90001   _geometry              __OID__       NULL      -1      false     b
+90002   geography              __OID__       NULL      -1      false     b
+90003   _geography             __OID__       NULL      -1      false     b
+90004   box2d                  __OID__       NULL      32      true      b
+90005   _box2d                 __OID__       NULL      -1      false     b
+90006   vector                 __OID__       NULL      -1      false     b
+90007   _vector                __OID__       NULL      -1      false     b
+90008   citext                 __OID__       NULL      -1      false     b
+90009   _citext                __OID__       NULL      -1      false     b
+90010   ltree                  __OID__       NULL      -1      false     b
+90011   _ltree                 __OID__       NULL      -1      false     b
+100110  t1                     109           __OID__   -1      false     c
+100111  t1_m_seq               109           __OID__   -1      false     c
+100112  t1_n_seq               109           __OID__   -1      false     c
+100113  t2                     109           __OID__   -1      false     c
+100114  t3                     109           __OID__   -1      false     c
+100115  v1                     109           __OID__   -1      false     c
+100116  t4                     109           __OID__   -1      false     c
+100117  t5                     109           __OID__   -1      false     c
+100118  mytype                 109           __OID__   -1      false     e
+100119  _mytype                109           __OID__   -1      false     b
+100120  t6                     109           __OID__   -1      false     c
+100121  mv1                    109           __OID__   -1      false     c
+100128  t_with_pk_seq          109           __OID__   -1      false     c
+100129  t_with_pk_seq_a_seq    109           __OID__   -1      false     c
+100130  source_table           109           __OID__   -1      false     c
+100131  depend_view            109           __OID__   -1      false     c
+100132  view_dependingon_view  109           __OID__   -1      false     c
+100133  newtype1               109           __OID__   -1      false     e
+100134  _newtype1              109           __OID__   -1      false     b
+100135  newtype2               109           __OID__   -1      false     e
+100136  _newtype2              109           __OID__   -1      false     b
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -2549,13 +2549,13 @@ oid    typname  typowner  typlen  typbyval  typtype
 
 user root
 
-query OTOOIBT colnames
+query OTOOIBT colnames,strip-oids
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 WHERE oid = 1000
 ----
 oid   typname  typnamespace  typowner  typlen  typbyval  typtype
-1000  _bool    4294967092    NULL      -1      false     b
+1000  _bool    __OID__       NULL      -1      false     b
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -2607,13 +2607,13 @@ FROM pg_catalog.pg_type
 WHERE typname = 'pg_proc'
 
 # Verify that the index on pg_type works for virtual tables OIDs.
-query OTOOIBT colnames
+query OTOOIBT colnames,strip-oids
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
 FROM pg_catalog.pg_type
 WHERE oid = $vtableSourceId
 ----
-oid         typname  typnamespace  typowner    typlen  typbyval  typtype
-4294967042  pg_proc  4294967092    3233629770  -1      false     c
+oid      typname  typnamespace  typowner  typlen  typbyval  typtype
+__OID__  pg_proc  __OID__       __OID__   -1      false     c
 
 ## pg_catalog.pg_proc
 
@@ -2624,14 +2624,14 @@ JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
 proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
-substring  4294967092    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
+substring  4294967091    pg_catalog  NULL      12       NULL     NULL     0
 
 query TTBB colnames,rowsort
 SELECT proname, prokind, prosecdef, proleakproof
@@ -2727,7 +2727,7 @@ pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16
 pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16 16
 
-query TTOTOT colnames
+query TTOTOT colnames,strip-oids
 SELECT proname, prosrc, pronamespace, nspname, prorettype, proargtypes
 FROM pg_catalog.pg_proc p
 JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
@@ -2735,7 +2735,7 @@ WHERE proname='_pg_char_max_length'
 ORDER BY p.oid
 ----
 proname              prosrc               pronamespace  nspname             prorettype  proargtypes
-_pg_char_max_length  _pg_char_max_length  4294967180    information_schema  20          26 23
+_pg_char_max_length  _pg_char_max_length  __OID__       information_schema  20          26 23
 
 query TOIOTTB colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
@@ -2916,7 +2916,7 @@ COMMENT ON COLUMN testtable.x IS 'mycomment2';
 COMMENT ON INDEX testtable_x_idx IS 'mycomment3';
 CREATE SCHEMA testschema; COMMENT ON SCHEMA testschema IS 'mycomment4';
 
-query TOOIT colnames
+query TOOIT colnames,strip-oids
 SELECT c.relname, d.objoid, d.classoid, d.objsubid, regexp_replace(description, e'\n.*', '') AS description
   FROM pg_catalog.pg_description d
 JOIN pg_catalog.pg_class c ON d.classoid = c.oid
@@ -2928,26 +2928,26 @@ OR (c.relname = 'pg_class' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_class 
 OR (c.relname = 'pg_namespace' AND d.objoid IN (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = 'testschema'))
 ORDER BY d.objoid, description
 ----
-relname       objoid      classoid    objsubid  description
-pg_class      138         4294967080  0         mycomment1
-pg_class      138         4294967080  1         mycomment2
-pg_namespace  139         4294967051  0         mycomment4
-pg_proc       738         4294967042  0         Calculates the absolute value of `val`.
-pg_proc       739         4294967042  0         Calculates the absolute value of `val`.
-pg_proc       740         4294967042  0         Calculates the absolute value of `val`.
-pg_class      385466581   4294967080  0         mycomment3
-pg_class      4294966964  4294967080  0         database users
+relname       objoid   classoid  objsubid  description
+pg_class      138      __OID__   0         mycomment1
+pg_class      138      __OID__   1         mycomment2
+pg_namespace  139      __OID__   0         mycomment4
+pg_proc       738      __OID__   0         Calculates the absolute value of `val`.
+pg_proc       739      __OID__   0         Calculates the absolute value of `val`.
+pg_proc       740      __OID__   0         Calculates the absolute value of `val`.
+pg_class      __OID__  __OID__   0         mycomment3
+pg_class      __OID__  __OID__   0         database users
 
 ## pg_catalog.pg_shdescription
 
 statement ok
 COMMENT ON DATABASE defaultdb IS 'mydbcomment'
 
-query OOT colnames
+query OOT colnames,strip-oids
 SELECT objoid, classoid, description FROM pg_catalog.pg_shdescription
 ----
-objoid  classoid    description
-100     4294967074  mydbcomment
+objoid  classoid  description
+100     __OID__   mydbcomment
 
 ## pg_catalog.pg_event_trigger
 
@@ -3783,11 +3783,11 @@ SELECT * FROM pg_catalog.pg_sequence
 
 ## pg_catalog.pg_operator
 
-query OTOOTBBOOOOOOOO colnames
+query OTOOTBBOOOOOOOO colnames,strip-oids
 SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
 ----
 oid       oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
-74817020  +        4294967092    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+74817020  +        __OID__       NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 
@@ -4716,10 +4716,10 @@ subtest end
 
 # Regression #59561.
 # database_name would not be populated even when the SELECT does not use the virtual index.
-query TTI
+query TTI strip-oids
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
-test  pg_views  4294966963
+test  pg_views  __OID__
 
 # Verify INCLUDED columns appear in pg_index. See issue #59563
 statement ok

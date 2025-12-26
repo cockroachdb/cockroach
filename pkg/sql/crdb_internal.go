@@ -228,6 +228,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalPCRStreamSpansTableID:              crdbInternalPCRStreamSpansTable,
 		catconstants.CrdbInternalPCRStreamCheckpointsTableID:        crdbInternalPCRStreamCheckpointsTable,
 		catconstants.CrdbInternalLDRProcessorTableID:                crdbInternalLDRProcessorTable,
+		catconstants.CrdbInternalPCRProcessorTableID:                crdbInternalPCRProcessorTable,
 		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
@@ -9568,6 +9569,69 @@ CREATE TABLE crdb_internal.logical_replication_node_processors (
 				tree.NewDInt(tree.DInt(status.Checkpoints.Count)),                                                               // checkpoints
 				tree.NewDInt(tree.DInt(status.Purgatory.CurrentCount)),                                                          // retry_size
 				age(status.Checkpoints.Resolved),                                                                                // resolved_age
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalPCRProcessorTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running physical replication consumer processors`,
+	schema: `
+CREATE TABLE crdb_internal.cluster_replication_node_processors (
+	stream_id INT,
+	processor_id INT,
+	state STRING,
+	recv_wait INTERVAL,
+	last_recv_wait INTERVAL,
+	flush_wait INTERVAL,
+	last_flush_wait INTERVAL,
+	events_received INT,
+	flush_cnt INT,
+	last_event_age INTERVAL,
+	last_flush_age INTERVAL
+);`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		sm, err := p.EvalContext().StreamManagerFactory.GetReplicationStreamManager(ctx)
+		if err != nil {
+			// A non-CCL binary can't have anything to inspect so just return empty.
+			if err.Error() == "replication streaming requires a CCL binary" {
+				return nil
+			}
+			return err
+		}
+		if err := sm.AuthorizeViaReplicationPriv(ctx); err != nil {
+			return err
+		}
+		now := p.EvalContext().GetStmtTimestamp()
+		dur := func(nanos int64) tree.Datum {
+			return tree.NewDInterval(duration.MakeDuration(nanos, 0, 0), types.DefaultIntervalTypeMetadata)
+		}
+		age := func(micros int64) tree.Datum {
+			if micros == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, time.UnixMicro(micros)), types.DefaultIntervalTypeMetadata)
+		}
+		statuses, err := sm.DebugGetPhysicalConsumerStatuses(ctx)
+		if err != nil {
+			return err
+		}
+		for _, status := range statuses {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(status.StreamID)),        // stream_id
+				tree.NewDInt(tree.DInt(status.ProcessorID)),     // processor_id
+				tree.NewDString(status.State.String()),          // state
+				dur(status.ReceiveWaitNanos),                    // recv_wait
+				dur(status.LastReceiveWaitNanos),                // last_recv_wait
+				dur(status.FlushWaitNanos),                      // flush_wait
+				dur(status.LastFlushWaitNanos),                  // last_flush_wait
+				tree.NewDInt(tree.DInt(status.EventsReceived)),  // events_received
+				tree.NewDInt(tree.DInt(status.FlushesEnqueued)), // flush_cnt
+				age(status.LastEventMicros),                     // last_event_age
+				age(status.LastFlushMicros),                     // last_flush_age
 			); err != nil {
 				return err
 			}

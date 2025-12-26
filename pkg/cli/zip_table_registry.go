@@ -1232,6 +1232,21 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
+	"crdb_internal.cluster_replication_node_processors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"processor_id",
+			"state",
+			"recv_wait",
+			"last_recv_wait",
+			"flush_wait",
+			"last_flush_wait",
+			"events_received",
+			"flush_cnt",
+			"last_event_age",
+			"last_flush_age",
+		},
+	},
 }
 
 // NB: The following system tables explicitly forbidden:

@@ -428,7 +428,8 @@ vectorized: true
 
 
 query T
-SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
+SELECT regexp_replace(info, 'classoid = [0-9]+', 'classoid = <oid>') AS info
+FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
 vectorized: true
@@ -482,7 +483,7 @@ vectorized: true
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = 4294967080
+        │       │                               │ filter: classoid = <oid>
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary
