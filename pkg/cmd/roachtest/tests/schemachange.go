@@ -417,6 +417,11 @@ func makeSchemaChangeBulkIngestTest(
 				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 
+				// Enable distributed merge for index backfills.
+				if _, err := db.Exec("SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'enabled'"); err != nil {
+					t.Fatal(err)
+				}
+
 				t.L().Printf("Computing table statistics manually")
 				if _, err := db.Exec("CREATE STATISTICS stats from bulkingest.bulkingest"); err != nil {
 					t.Fatal(err)
