@@ -248,6 +248,13 @@ func TestLogic_buffered_writes(
 	runLogicTest(t, "buffered_writes")
 }
 
+func TestLogic_canary_stats_deletion(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats_deletion")
+}
+
 func TestLogic_cascade(
 	t *testing.T,
 ) {

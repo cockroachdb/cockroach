@@ -552,7 +552,11 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		tableID descpb.ID, columnIDs [][]descpb.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return DeleteOldStatsForOtherColumns(ctx, txn, tableID, columnIDs, defaultKeepTime)
+			columnIDsPlaceholders, placeholderVals, err := GetPlaceholderValsFromColumnIDs(tableID, columnIDs, defaultKeepTime)
+			if err != nil {
+				return err
+			}
+			return DeleteOldStatsForOtherColumns(ctx, txn, columnIDsPlaceholders, placeholderVals)
 		}); err != nil {
 			return err
 		}

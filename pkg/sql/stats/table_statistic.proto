@@ -58,4 +58,10 @@ message TableStatisticProto {
   // that it was created from. It is 0 for full statistics which will be
   // NULL when stored in system.table_statistics.
   uint64 full_statistic_id = 12 [(gogoproto.customname) = "FullStatisticID"];
+  // Indicates whether this statistic is marked for delayed deletion as part of
+  // the canary stats rollout. When canary stats are enabled, old statistics
+  // are marked with delay_delete=true instead of being immediately deleted,
+  // allowing queries using the "stable" path to continue using these stats
+  // until they age out beyond the stats_canary_window.
+  bool delay_delete = 13;
 }
