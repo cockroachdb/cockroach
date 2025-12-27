@@ -56,7 +56,7 @@ a  b  v
 1  1  2
 2  2  4
 
-statement ok
+statement count 2
 DELETE FROM t WHERE a > 0
 
 statement ok
@@ -75,7 +75,7 @@ a  b   v
 3  30  33
 4  40  44
 
-statement ok
+statement count 1
 DELETE FROM t WHERE v = 33
 
 query III colnames,rowsort
@@ -160,7 +160,7 @@ SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_
 4  6  10  10
 5  0  5   5
 
-statement ok
+statement count 1
 DELETE FROM t_idx WHERE v = 6
 
 query IIIII colnames,rowsort
@@ -172,7 +172,7 @@ a  b  c  v   w
 4  6  4  10  5
 5  0  5  5   6
 
-statement ok
+statement count 2
 DELETE FROM t_idx WHERE a+b = 10
 
 query IIIII colnames,rowsort
@@ -1210,7 +1210,7 @@ statement ok
 INSERT INTO c_delete_cascade VALUES (2), (3);
 INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
 
-statement ok
+statement count 1
 DELETE FROM p WHERE p = 3
 
 query II colnames,rowsort

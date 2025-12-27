@@ -22,10 +22,10 @@ UPDATE jars SET j = j + 4
 query error violates foreign key constraint
 DELETE FROM jars WHERE j = 2
 
-statement ok
+statement count 1
 DELETE FROM cookies WHERE c = 1
 
-statement ok
+statement count 1
 DELETE FROM jars WHERE j = 2
 
 # Test that we do not use parallel FK checks under RC (see #111888).
@@ -204,10 +204,10 @@ SELECT * FROM child_150282;
 4 4
 
 # Test the fk delete fast path
-statement ok
+statement count 1
 DELETE FROM parent_150282;
 
-statement ok
+statement count 0
 DELETE FROM child_150282;
 
 statement ok

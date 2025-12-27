@@ -2836,7 +2836,7 @@ node
 root
 testuser
 
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'non_cached_user'
 
 ## rolreplication from pg_catalog.pg_authid and pg_catalog.pg_roles

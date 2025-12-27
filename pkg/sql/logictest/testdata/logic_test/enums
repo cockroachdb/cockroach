@@ -2061,7 +2061,7 @@ WHERE stat->>'columns' = '["a"]'
 
 # Now drop the enum value that is the first bucket in the 2-bucket histogram.
 
-statement ok
+statement count 2
 DELETE FROM t154461 WHERE a = 'e'
 
 statement ok

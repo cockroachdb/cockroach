@@ -491,7 +491,7 @@ UPDATE messages_rbr SET account_id = -account_id WHERE account_id NOT IN (SELECT
 # Delete does not fail when accessing all rows in messages_rbr because lookup
 # join does not error out the lookup table in phase 1.
 retry
-statement ok
+statement count 0
 DELETE FROM messages_rbt WHERE account_id NOT IN (SELECT account_id FROM messages_rbr)
 
 # Delete should fail accessing all rows in messages_rbr.
@@ -1476,7 +1476,7 @@ DELETE FROM xy;
 statement ok
 INSERT INTO xy (z, x, y) SELECT z, x, y FROM xyz;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE x=1;
 
 statement ok
@@ -1522,7 +1522,7 @@ statement error pq: Query has no home region\. Try running the query from region
 UPDATE xy set x=3 WHERE x = 1;
 
 # Deleting a local row is allowed.
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 1;
 
 statement ok

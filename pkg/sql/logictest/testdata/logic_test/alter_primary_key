@@ -1366,7 +1366,7 @@ ALTER TABLE t54629 ALTER PRIMARY KEY USING COLUMNS (c);
 statement ok
 INSERT INTO t54629 VALUES (1);
 
-statement ok
+statement count 1
 DELETE FROM t54629 WHERE c = 1
 
 statement ok
@@ -1384,7 +1384,7 @@ DROP INDEX t54629_a_key CASCADE;
 statement ok
 INSERT INTO t54629 VALUES (1, 1);
 
-statement ok
+statement count 1
 DELETE FROM t54629 WHERE c = 1;
 
 # Validate ALTER ADD PRIMARY KEY idempotence for #59307

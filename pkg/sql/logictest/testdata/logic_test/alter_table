@@ -127,7 +127,7 @@ INSERT INTO t (a, f) VALUES (-2, 9)
 statement error validation of CHECK "a > 0:::INT8" failed on row: a=-2, f=9, b=NULL, c=NULL
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = -2
 
 statement ok
@@ -1041,7 +1041,7 @@ INSERT INTO t VALUES (1), (NULL)
 statement error (.*validation of CHECK "a IS NOT NULL" failed on row: a=NULL, rowid=\d+|pq: validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+)
 ALTER TABLE t ALTER COLUMN a SET NOT NULL
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a IS NULL
 
 statement ok
@@ -1120,7 +1120,7 @@ INSERT INTO t VALUES (20)
 statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = 17
 
 statement ok
@@ -1762,7 +1762,8 @@ statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
-statement ok
+skipif config #126592 weak-iso-level-configs
+statement count 1
 DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
 
 statement ok
@@ -1826,7 +1827,7 @@ statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.
-statement ok
+statement count 1
 DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
 
 statement ok
@@ -4814,7 +4815,7 @@ ALTER TABLE y DROP CONSTRAINT y_computed_col_fkey;
 statement ok
 ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE CASCADE;
 
-statement ok
+statement count 2
 DELETE FROM x WHERE A IN (0,2);
 
 query II rowsort

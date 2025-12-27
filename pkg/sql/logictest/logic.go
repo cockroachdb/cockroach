@@ -228,6 +228,11 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//    Usage of 'statement count N' is preferred whenever applicable (e.g. for
+//    DML statements) and in some cases is actually required by the framework.
+//    Use 'statement nocount ok' to explicitly opt out of the count check (e.g.
+//    because the count is non-determinstic).
+//
 //  - statement disable-cf-mutator ok
 //    Like "statement ok" but disables the column family mutator if applicable.
 //
@@ -2777,6 +2782,7 @@ func (t *logicTest) processSubtest(
 			}
 			fullyConsumed := len(fields) == 1
 			var disableCFMutator bool
+			var matchedStatementOK bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2788,15 +2794,33 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
 				disableCFMutator = true
 				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "nocount" && fields[2] == "ok" {
+				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
 				fullyConsumed = true
+				matchedStatementOK = true
 			}
 			if !fullyConsumed {
 				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
+			}
+			isSQLite := strings.Contains(path, "sqllogictest")
+			if matchedStatementOK && !isSQLite {
+				// Require that DML stmts use 'statement count N', currently we
+				// only do this for "simple" DELETEs.
+				//
+				// We don't apply this to SQLite suite since we haven't adjusted
+				// it yet.
+				// TODO(yuzefovich): expand this to other DML statements.
+				// TODO(yuzefovich): apply this to more complex stmts with CTEs,
+				// etc.
+				// TODO(yuzefovich): expand this to sqllogictest too.
+				if strings.HasPrefix(strings.TrimSpace(strings.ToUpper(stmt.sql)), "DELETE") {
+					return errors.New("DELETE should use 'statement count N' directive instead of 'statement ok'")
+				}
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
