@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
@@ -607,24 +608,58 @@ func userIsSuper(
 	return tree.DBool(isSuper), err
 }
 
+// userHasReplicationPrivilegeOrRoleOption checks if a user has replication
+// capability either from their role options or from global synthetic
+// privileges. The role option check is done first as it's a cheap in-memory
+// check, and the global privilege check is only done if needed.
 func userHasReplicationPrivilegeOrRoleOption(
-	ctx context.Context, p *planner, userName username.SQLUsername,
-) (tree.DBool, error) {
-	replication, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATION, userName)
+	ctx context.Context, p *planner, userName username.SQLUsername, options roleOptions,
+) (bool, error) {
+	ok, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.REPLICATION)
 	if err != nil {
-		return *tree.DBoolFalse, err
+		return false, err
+	} else if ok {
+		return true, nil
 	}
+	ok, err = userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.REPLICATIONDEST)
+	if err != nil {
+		return false, err
+	} else if ok {
+		return true, nil
+	}
+	ok, err = userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.REPLICATIONSOURCE)
+	if err != nil {
+		return false, err
+	} else if ok {
+		return true, nil
+	}
+	return false, nil
+}
 
-	replicationDest, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATIONDEST, userName)
+// userHasPrivilegeOrRoleOption checks if a user has a privilege either from
+// their role options (from the roleOptionsJSON) or from a global synthetic
+// privilege. The roleOption check is done first as it's a cheap in-memory
+// check, and the global privilege check is only done if needed.
+func userHasPrivilegeOrRoleOption(
+	ctx context.Context,
+	p *planner,
+	userName username.SQLUsername,
+	options roleOptions,
+	priv privilege.Kind,
+) (bool, error) {
+	roleOptionKey := string(priv.InternalKey())
+	hasRoleOption, err := options.Exists(roleOptionKey)
 	if err != nil {
-		return *tree.DBoolFalse, err
+		return false, err
 	}
-
-	replicationSrc, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATIONSOURCE, userName)
+	if hasRoleOption {
+		return true, nil
+	}
+	hasPriv, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, priv, userName)
 	if err != nil {
-		return *tree.DBoolFalse, err
+		return false, err
 	}
-	return tree.DBool(replication || replicationDest || replicationSrc), nil
+	return hasPriv, nil
 }
 
 var pgCatalogAuthIDTable = virtualSchemaTable{
@@ -649,17 +684,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				return err
 			}
 
-			bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
+			bypassRLS, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.BYPASSRLS)
 			if err != nil {
 				return err
 			}
 
-			createRole, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE, userName)
+			createRole, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.CREATEROLE)
 			if err != nil {
 				return err
 			}
 
-			createDB, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB, userName)
+			createDB, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.CREATEDB)
 			if err != nil {
 				return err
 			}
@@ -669,7 +704,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				return err
 			}
 
-			replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName)
+			replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName, options)
 			if err != nil {
 				return err
 			}
@@ -682,7 +717,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				tree.MakeDBool(isRoot || tree.DBool(createRole)), // rolcreaterole
 				tree.MakeDBool(isRoot || tree.DBool(createDB)),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),                     // rolcanlogin.
-				tree.MakeDBool(replication),                      // rolreplication
+				tree.MakeDBool(tree.DBool(replication)),          // rolreplication
 				tree.MakeDBool(tree.DBool(bypassRLS)),            // rolbypassrls
 				negOneVal,                                        // rolconnlimit
 				passwdStarString,                                 // rolpassword
@@ -3028,17 +3063,17 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					return err
 				}
 
-				bypassRLS, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.BYPASSRLS, userName)
+				bypassRLS, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.BYPASSRLS)
 				if err != nil {
 					return err
 				}
 
-				createRole, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE, userName)
+				createRole, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.CREATEROLE)
 				if err != nil {
 					return err
 				}
 
-				createDB, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEDB, userName)
+				createDB, err := userHasPrivilegeOrRoleOption(ctx, p, userName, options, privilege.CREATEDB)
 				if err != nil {
 					return err
 				}
@@ -3048,7 +3083,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					return err
 				}
 
-				replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName)
+				replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName, options)
 				if err != nil {
 					return err
 				}
@@ -3062,7 +3097,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					tree.MakeDBool(isSuper || tree.DBool(createDB)),   // rolcreatedb
 					tree.DBoolFalse,                                   // rolcatupdate
 					tree.MakeDBool(roleCanLogin),                      // rolcanlogin.
-					tree.MakeDBool(replication),                       // rolreplication
+					tree.MakeDBool(tree.DBool(replication)),           // rolreplication
 					negOneVal,                                         // rolconnlimit
 					passwdStarString,                                  // rolpassword
 					rolValidUntil,                                     // rolvaliduntil

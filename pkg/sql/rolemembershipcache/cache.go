@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -33,8 +34,10 @@ import (
 // MembershipCache is a shared cache for role membership information.
 type MembershipCache struct {
 	syncutil.Mutex
-	tableVersion descpb.DescriptorVersion
-	boundAccount mon.BoundAccount
+	roleMembersVersion    descpb.DescriptorVersion
+	roleOptionsVersion    descpb.DescriptorVersion
+	dbRoleSettingsVersion descpb.DescriptorVersion
+	boundAccount          mon.BoundAccount
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[username.SQLUsername]userRoleMembership
 	// populateCacheGroup ensures that there is at most one request in-flight
@@ -49,6 +52,37 @@ type MembershipCache struct {
 
 // userRoleMembership is a mapping of "rolename" -> "with admin option".
 type userRoleMembership map[username.SQLUsername]bool
+
+// cacheReadTSOptions contains options for RunAtCacheReadTS.
+type cacheReadTSOptions struct {
+	checkRoleOptionsVersion          bool
+	checkDatabaseRoleSettingsVersion bool
+}
+
+// CacheReadTSOption is a functional option for RunAtCacheReadTS.
+type CacheReadTSOption interface {
+	apply(*cacheReadTSOptions)
+}
+
+type cacheReadTSOptionFunc func(*cacheReadTSOptions)
+
+func (f cacheReadTSOptionFunc) apply(o *cacheReadTSOptions) { f(o) }
+
+// CheckRoleOptionsVersion returns an option that causes RunAtCacheReadTS to
+// also check the version of the system.role_options table.
+func CheckRoleOptionsVersion() CacheReadTSOption {
+	return cacheReadTSOptionFunc(func(o *cacheReadTSOptions) {
+		o.checkRoleOptionsVersion = true
+	})
+}
+
+// CheckDatabaseRoleSettingsVersion returns an option that causes RunAtCacheReadTS
+// to also check the version of the system.database_role_settings table.
+func CheckDatabaseRoleSettingsVersion() CacheReadTSOption {
+	return cacheReadTSOptionFunc(func(o *cacheReadTSOptions) {
+		o.checkDatabaseRoleSettingsVersion = true
+	})
+}
 
 // NewMembershipCache initializes a new MembershipCache.
 func NewMembershipCache(
@@ -67,31 +101,93 @@ func NewMembershipCache(
 // table version matches the cached table version, and if it does, db is
 // used to start a separate transaction at the cached timestamp.
 func (m *MembershipCache) RunAtCacheReadTS(
-	ctx context.Context, db descs.DB, txn descs.Txn, f func(context.Context, descs.Txn) error,
+	ctx context.Context,
+	db descs.DB,
+	txn descs.Txn,
+	f func(context.Context, descs.Txn) error,
+	opts ...CacheReadTSOption,
 ) error {
-	tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleMembersTableID)
+	var options cacheReadTSOptions
+	for _, opt := range opts {
+		opt.apply(&options)
+	}
+
+	roleMembersDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleMembersTableID)
 	if err != nil {
 		return err
+	}
+
+	var roleOptionsDesc, dbRoleSettingsDesc catalog.TableDescriptor
+	if options.checkRoleOptionsVersion {
+		roleOptionsDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleOptionsTableID)
+		if err != nil {
+			return err
+		}
+	}
+	if options.checkDatabaseRoleSettingsVersion {
+		dbRoleSettingsDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.DatabaseRoleSettingsTableID)
+		if err != nil {
+			return err
+		}
 	}
 
 	var readTS hlc.Timestamp
 	func() {
 		m.Lock()
 		defer m.Unlock()
-		if tableDesc.IsUncommittedVersion() {
+
+		// If the option was specified, we need to verify that the cache is aware
+		// of the latest version of the role_options table.
+		defer func() {
+			if roleOptionsDesc != nil {
+				if roleOptionsDesc.IsUncommittedVersion() {
+					readTS = hlc.Timestamp{}
+				} else if roleOptionsDesc.GetVersion() > m.roleOptionsVersion {
+					// Update versions and moved the read timestamp forward. For the
+					// in-progress read, use the current transaction's timestamp.
+					readTS = hlc.Timestamp{}
+					m.roleOptionsVersion = roleOptionsDesc.GetVersion()
+					if m.readTS.Less(roleOptionsDesc.GetModificationTime()) {
+						m.readTS = roleOptionsDesc.GetModificationTime()
+					}
+					return
+				}
+			}
+		}()
+
+		// If the option was specified, we need to verify that the cache is aware
+		// of the latest version of the database_role_settings table.
+		defer func() {
+			if dbRoleSettingsDesc != nil {
+				if dbRoleSettingsDesc.IsUncommittedVersion() {
+					readTS = hlc.Timestamp{}
+				} else if dbRoleSettingsDesc.GetVersion() > m.dbRoleSettingsVersion {
+					// Update versions and moved the read timestamp forward. For the
+					// in-progress read, use the current transaction's timestamp.
+					readTS = hlc.Timestamp{}
+					m.dbRoleSettingsVersion = dbRoleSettingsDesc.GetVersion()
+					if m.readTS.Less(dbRoleSettingsDesc.GetModificationTime()) {
+						m.readTS = dbRoleSettingsDesc.GetModificationTime()
+					}
+					return
+				}
+			}
+		}()
+
+		if roleMembersDesc.IsUncommittedVersion() {
 			return
 		}
-		if tableDesc.GetVersion() > m.tableVersion {
+		if roleMembersDesc.GetVersion() > m.roleMembersVersion {
 			return
 		}
-		if tableDesc.GetVersion() < m.tableVersion {
-			readTS = tableDesc.GetModificationTime()
+		if roleMembersDesc.GetVersion() < m.roleMembersVersion {
+			readTS = roleMembersDesc.GetModificationTime()
 			return
 		}
 		// The cached ts could be from long ago, so use the table modification
 		// if it's more recent.
-		if m.readTS.Less(tableDesc.GetModificationTime()) {
-			readTS = tableDesc.GetModificationTime()
+		if m.readTS.Less(roleMembersDesc.GetModificationTime()) {
+			readTS = roleMembersDesc.GetModificationTime()
 			return
 		}
 		readTS = m.readTS
@@ -116,15 +212,30 @@ func (m *MembershipCache) RunAtCacheReadTS(
 			func() {
 				m.Lock()
 				defer m.Unlock()
-				m.tableVersion = 0
+				m.roleMembersVersion = 0
 			}()
-			txn.Descriptors().ReleaseSpecifiedLeases(ctx, []lease.IDVersion{
+			leasesToRelease := []lease.IDVersion{
 				{
-					Name:    tableDesc.GetName(),
-					ID:      tableDesc.GetID(),
-					Version: tableDesc.GetVersion(),
+					Name:    roleMembersDesc.GetName(),
+					ID:      roleMembersDesc.GetID(),
+					Version: roleMembersDesc.GetVersion(),
 				},
-			})
+			}
+			if roleOptionsDesc != nil {
+				leasesToRelease = append(leasesToRelease, lease.IDVersion{
+					Name:    roleOptionsDesc.GetName(),
+					ID:      roleOptionsDesc.GetID(),
+					Version: roleOptionsDesc.GetVersion(),
+				})
+			}
+			if dbRoleSettingsDesc != nil {
+				leasesToRelease = append(leasesToRelease, lease.IDVersion{
+					Name:    dbRoleSettingsDesc.GetName(),
+					ID:      dbRoleSettingsDesc.GetID(),
+					Version: dbRoleSettingsDesc.GetVersion(),
+				})
+			}
+			txn.Descriptors().ReleaseSpecifiedLeases(ctx, leasesToRelease)
 			return m.RunAtCacheReadTS(ctx, db, txn, f)
 		}
 		return err
@@ -149,7 +260,7 @@ func (m *MembershipCache) GetRolesForMember(
 		return nil, err
 	}
 
-	tableVersion := roleMembersTableDesc.GetVersion()
+	roleMembersVersion := roleMembersTableDesc.GetVersion()
 	if roleMembersTableDesc.IsUncommittedVersion() {
 		return resolveRolesForMember(ctx, txn, member)
 	}
@@ -183,7 +294,7 @@ func (m *MembershipCache) GetRolesForMember(
 				{
 					Name:    roleMembersTableDesc.GetName(),
 					ID:      roleMembersTableDesc.GetID(),
-					Version: tableVersion,
+					Version: roleMembersVersion,
 				},
 				{
 					Name:    systemUsersTableDesc.GetName(),
@@ -205,14 +316,14 @@ func (m *MembershipCache) GetRolesForMember(
 	userMapping, found, refreshCache := func() (userRoleMembership, bool, bool) {
 		m.Lock()
 		defer m.Unlock()
-		if m.tableVersion < tableVersion {
+		if m.roleMembersVersion < roleMembersVersion {
 			// If the cache is based on an old table version, then update version and
 			// drop the map.
-			m.tableVersion = tableVersion
+			m.roleMembersVersion = roleMembersVersion
 			m.userCache = make(map[username.SQLUsername]userRoleMembership)
 			m.boundAccount.Empty(ctx)
 			return nil, false, true
-		} else if m.tableVersion > tableVersion {
+		} else if m.roleMembersVersion > roleMembersVersion {
 			// If the cache is based on a newer table version, then this transaction
 			// should not use the cached data.
 			return nil, false, true
@@ -253,7 +364,7 @@ func (m *MembershipCache) GetRolesForMember(
 	// ensure that we are reading from the right version of the table.
 	newTxnTimestamp := txn.KV().ReadTimestamp()
 	future, _ := m.populateCacheGroup.DoChan(ctx,
-		fmt.Sprintf("refreshMembershipCache-%d", tableVersion),
+		fmt.Sprintf("refreshMembershipCache-%d", roleMembersVersion),
 		singleflight.DoOpts{
 			Stop:               m.stopper,
 			InheritCancelation: false,
@@ -287,7 +398,7 @@ func (m *MembershipCache) GetRolesForMember(
 				// Update membership if the table version hasn't changed.
 				m.Lock()
 				defer m.Unlock()
-				if m.tableVersion != tableVersion {
+				if m.roleMembersVersion != roleMembersVersion {
 					// Table version has changed while we were looking: don't cache the data.
 					return
 				}
