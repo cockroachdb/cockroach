@@ -93,9 +93,9 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	replicaID, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
+	mark, err := kvstorage.MakeStateLoader(desc.RangeID).LoadReplicaMark(ctx, store.StateEngine())
 	require.NoError(t, err)
-	require.Equal(t, repl.ReplicaID(), replicaID.ReplicaID)
+	require.True(t, mark.Is(repl.ReplicaID()))
 
 	// RHS of a split also has ReplicaID.
 	splitKey := append(scratchKey, '0', '0')
@@ -103,10 +103,10 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	rhsRepl, err := store.GetReplica(rhsDesc.RangeID)
 	require.NoError(t, err)
-	rhsReplicaID, err :=
-		kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadRaftReplicaID(ctx, store.StateEngine())
+	rhsMark, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadReplicaMark(
+		ctx, store.StateEngine())
 	require.NoError(t, err)
-	require.Equal(t, rhsRepl.ReplicaID(), rhsReplicaID.ReplicaID)
+	require.True(t, rhsMark.Is(rhsRepl.ReplicaID()))
 }
 
 // TestStoreLoadReplicaQuiescent tests whether replicas are initially quiescent
