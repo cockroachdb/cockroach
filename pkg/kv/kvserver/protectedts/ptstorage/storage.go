@@ -38,6 +38,7 @@ import (
 type Manager struct {
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  Metrics
 }
 
 // storage implements protectedts.Storage with a transaction.
@@ -45,10 +46,12 @@ type storage struct {
 	txn      isql.Txn
 	settings *cluster.Settings
 	knobs    *protectedts.TestingKnobs
+	metrics  *Metrics
 }
 
 func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	if err := validateRecordForProtect(ctx, r, p.settings, p.knobs); err != nil {
+		p.metrics.ProtectFailed.Inc(1)
 		return err
 	}
 
@@ -80,6 +83,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 	encodedTarget, err := protoutil.Marshal(&ptpb.Target{Union: r.Target.GetUnion(),
 		IgnoreIfExcludedFromBackup: r.Target.IgnoreIfExcludedFromBackup})
 	if err != nil { // how can this possibly fail?
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 
@@ -103,14 +107,17 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		query,
 		args...)
 	if err != nil {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
 
 	ok, err := it.Next(ctx)
 	if err != nil {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
 	if !ok {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Newf("failed to write record %v", r.ID)
 	}
 
@@ -126,15 +133,18 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 			curBytes := int64(*row[1].(*tree.DInt))
 			recordBytes := int64(len(encodedTarget) + len(r.Meta) + len(r.MetaType))
 			if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
+				p.metrics.ProtectFailed.Inc(1)
 				return errors.WithHint(
 					errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
 						s.maxBytes),
 					"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
 			}
 		}
+		p.metrics.ProtectFailed.Inc(1)
 		return protectedts.ErrExists
 	}
 
+	p.metrics.ProtectSuccess.Inc(1)
 	return nil
 }
 
@@ -146,15 +156,19 @@ func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (*ptpb.Record, er
 		sessiondata.NodeUserSessionDataOverride,
 		getRecordQuery, id.GetBytesMut())
 	if err != nil {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
 	}
 	if len(row) == 0 {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, protectedts.ErrNotExists
 	}
 	var r ptpb.Record
 	if err := rowToRecord(row, &r, false /* isDeprecatedRow */); err != nil {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, err
 	}
+	p.metrics.GetRecordSuccess.Inc(1)
 	return &r, nil
 }
 
@@ -163,11 +177,14 @@ func (p storage) MarkVerified(ctx context.Context, id uuid.UUID) error {
 		sessiondata.NodeUserSessionDataOverride,
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
+		p.metrics.MarkVerifiedFailed.Inc(1)
 		return errors.Wrapf(err, "failed to mark record %v as verified", id)
 	}
 	if numRows == 0 {
+		p.metrics.MarkVerifiedFailed.Inc(1)
 		return protectedts.ErrNotExists
 	}
+	p.metrics.MarkVerifiedSuccess.Inc(1)
 	return nil
 }
 
@@ -180,11 +197,14 @@ func (p storage) Release(ctx context.Context, id uuid.UUID) error {
 		sessiondata.NodeUserSessionDataOverride,
 		query, id.GetBytesMut())
 	if err != nil {
+		p.metrics.ReleaseFailed.Inc(1)
 		return errors.Wrapf(err, "failed to release record %v", id)
 	}
 	if numRows == 0 {
+		p.metrics.ReleaseFailed.Inc(1)
 		return protectedts.ErrNotExists
 	}
+	p.metrics.ReleaseSuccess.Inc(1)
 	return nil
 }
 
@@ -255,11 +275,14 @@ func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hl
 		sessiondata.NodeUserSessionDataOverride,
 		query, id.GetBytesMut(), timestamp.AsOfSystemTime())
 	if err != nil {
+		p.metrics.UpdateTimestampFailed.Inc(1)
 		return errors.Wrapf(err, "failed to update record %v", id)
 	}
 	if len(row) == 0 {
+		p.metrics.UpdateTimestampFailed.Inc(1)
 		return protectedts.ErrNotExists
 	}
+	p.metrics.UpdateTimestampSuccess.Inc(1)
 	return nil
 }
 
@@ -268,6 +291,7 @@ func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
 		txn:      txn,
 		settings: p.settings,
 		knobs:    p.knobs,
+		metrics:  &p.metrics,
 	}
 }
 
@@ -295,7 +319,16 @@ func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {
 	if knobs == nil {
 		knobs = &protectedts.TestingKnobs{}
 	}
-	return &Manager{settings: settings, knobs: knobs}
+	return &Manager{
+		settings: settings,
+		knobs:    knobs,
+		metrics:  makeMetrics(),
+	}
+}
+
+// Metrics returns the storage metrics.
+func (p *Manager) Metrics() *Metrics {
+	return &p.metrics
 }
 
 // rowToRecord parses a row as returned from the variants of getRecords and
@@ -349,6 +382,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 	s := makeSettings(p.settings)
 	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.DeprecatedSpans})
 	if err != nil { // how can this possibly fail?
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrap(err, "failed to marshal spans")
 	}
 	it, err := p.txn.QueryIteratorEx(ctx, "protectedts-deprecated-protect", p.txn.KV(),
@@ -359,13 +393,16 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedSpans)
 	if err != nil {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
 	ok, err := it.Next(ctx)
 	if err != nil {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Wrapf(err, "failed to write record %v", r.ID)
 	}
 	if !ok {
+		p.metrics.ProtectFailed.Inc(1)
 		return errors.Newf("failed to write record %v", r.ID)
 	}
 	row := it.Cur()
@@ -375,6 +412,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
 		if s.maxSpans > 0 && curNumSpans+int64(len(r.DeprecatedSpans)) > s.maxSpans {
+			p.metrics.ProtectFailed.Inc(1)
 			return errors.WithHint(
 				errors.Errorf("protectedts: limit exceeded: %d+%d > %d spans", curNumSpans,
 					len(r.DeprecatedSpans), s.maxSpans),
@@ -383,13 +421,16 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 		curBytes := int64(*row[2].(*tree.DInt))
 		recordBytes := int64(len(encodedSpans) + len(r.Meta) + len(r.MetaType))
 		if s.maxBytes > 0 && curBytes+recordBytes > s.maxBytes {
+			p.metrics.ProtectFailed.Inc(1)
 			return errors.WithHint(
 				errors.Errorf("protectedts: limit exceeded: %d+%d > %d bytes", curBytes, recordBytes,
 					s.maxBytes),
 				"SET CLUSTER SETTING kv.protectedts.max_bytes to a higher value")
 		}
+		p.metrics.ProtectFailed.Inc(1)
 		return protectedts.ErrExists
 	}
+	p.metrics.ProtectSuccess.Inc(1)
 	return nil
 }
 
@@ -398,15 +439,19 @@ func (p *storage) deprecatedGetRecord(ctx context.Context, id uuid.UUID) (*ptpb.
 		sessiondata.NodeUserSessionDataOverride,
 		getRecordWithoutTargetQuery, id.GetBytesMut())
 	if err != nil {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, errors.Wrapf(err, "failed to read record %v", id)
 	}
 	if len(row) == 0 {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, protectedts.ErrNotExists
 	}
 	var r ptpb.Record
 	if err := rowToRecord(row, &r, true /* isDeprecatedRow */); err != nil {
+		p.metrics.GetRecordFailed.Inc(1)
 		return nil, err
 	}
+	p.metrics.GetRecordSuccess.Inc(1)
 	return &r, nil
 }
 
