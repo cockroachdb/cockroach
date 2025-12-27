@@ -27,19 +27,20 @@ type Logger interface {
 	WriteFile(basename string, contents string) string
 }
 
-type Restarter interface {
+type ServerController interface {
 	StopServer(idx int)
 	RestartServer(idx int) error
+	CrashNode(idx int)
 }
 
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
-	SQLDBs      []*gosql.DB
-	Tracker     *SeqTracker
-	L           Logger
-	Partitioner *rpc.Partitioner
-	Restarter   Restarter
+	SQLDBs           []*gosql.DB
+	Tracker          *SeqTracker
+	L                Logger
+	Partitioner      *rpc.Partitioner
+	ServerController ServerController
 }
 
 func (e *Env) anyNode() *gosql.DB {

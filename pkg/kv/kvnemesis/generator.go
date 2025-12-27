@@ -423,6 +423,8 @@ type FaultConfig struct {
 	StopNode int
 	// RestartNode is an operation that restarts a randomly chosen node.
 	RestartNode int
+	// CrashNode is an operation that crashes a randomly chosen node.
+	CrashNode int
 	// Disk stalls and other faults belong here.
 }
 
@@ -554,6 +556,7 @@ func newAllOperationsConfig() GeneratorConfig {
 			RemoveNetworkPartition: 1,
 			StopNode:               1,
 			RestartNode:            1,
+			CrashNode:              1,
 		},
 	}}
 }
@@ -654,6 +657,7 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.RemoveNetworkPartition = 0
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
+	config.Ops.Fault.CrashNode = 0
 	return config
 }
 
@@ -811,6 +815,7 @@ type nodes struct {
 	mu      syncutil.RWMutex
 	running map[int]struct{}
 	stopped map[int]struct{}
+	crashed map[int]struct{}
 }
 
 func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
@@ -825,11 +830,26 @@ func (n *nodes) removeRandRunning(rng *rand.Rand) int {
 	return nodeID
 }
 
-func (n *nodes) removeRandStopped(rng *rand.Rand) int {
+// removeRandStoppedOrCrashed randomly picks a node from either the stopped or
+// crashed sets with uniform probability across all nodes.
+func (n *nodes) removeRandStoppedOrCrashed(rng *rand.Rand) int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	nodeID := randNodeFromMap(n.stopped, rng)
-	delete(n.stopped, nodeID)
+	stopped := len(n.stopped)
+	crashed := len(n.crashed)
+
+	if stopped == 0 && crashed == 0 {
+		panic("no stopped or crashed nodes available")
+	}
+
+	var nodeID int
+	if rng.Intn(stopped+crashed) < stopped {
+		nodeID = randNodeFromMap(n.stopped, rng)
+		delete(n.stopped, nodeID)
+	} else {
+		nodeID = randNodeFromMap(n.crashed, rng)
+		delete(n.crashed, nodeID)
+	}
 	return nodeID
 }
 
@@ -843,6 +863,12 @@ func (n *nodes) setStopped(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.stopped[nodeID] = struct{}{}
+}
+
+func (n *nodes) setCrashed(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -929,8 +955,11 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	if len(g.nodes.running) > 0 {
 		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
 	}
-	if len(g.nodes.stopped) > 0 {
+	if len(g.nodes.stopped) > 0 || len(g.nodes.crashed) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashNode)
 	}
 
 	return step(g.selectOp(rng, allowed))
@@ -1877,8 +1906,13 @@ func stopRandNode(g *generator, rng *rand.Rand) Operation {
 }
 
 func restartRandNode(g *generator, rng *rand.Rand) Operation {
-	randNode := g.nodes.removeRandStopped(rng)
+	randNode := g.nodes.removeRandStoppedOrCrashed(rng)
 	return restartNode(randNode)
+}
+
+func crashRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return crashNode(randNode)
 }
 
 func isFollowerReadEligibleOp(op Operation) bool {
@@ -2527,6 +2561,10 @@ func stopNode(nodeID int) Operation {
 
 func restartNode(nodeID int) Operation {
 	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func crashNode(nodeID int) Operation {
+	return Operation{CrashNode: &CrashNodeOperation{NodeId: int32(nodeID)}}
 }
 
 type countingRandSource struct {
