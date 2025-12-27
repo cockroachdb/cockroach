@@ -2137,6 +2137,26 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	s.externalStorageBuilder.init(
+		s.cfg.EarlyBootExternalStorageAccessor,
+		s.cfg.ExternalIODirConfig,
+		s.st,
+		s.sqlServer.sqlIDContainer,
+		s.kvNodeDialer,
+		s.cfg.TestingKnobs,
+		true, /* allowLocalFastPath */
+		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
+		nil, /* TenantExternalIORecorder */
+		s.appRegistry,
+		s.cfg.ExternalIODir,
+	)
+
 	if !s.cfg.DisableSQLServer {
 		// Start the SQL subsystem.
 		if err := s.sqlServer.preStart(
@@ -2198,26 +2218,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	s.externalStorageBuilder.init(
-		s.cfg.EarlyBootExternalStorageAccessor,
-		s.cfg.ExternalIODirConfig,
-		s.st,
-		s.sqlServer.sqlIDContainer,
-		s.kvNodeDialer,
-		s.cfg.TestingKnobs,
-		true, /* allowLocalFastPath */
-		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
-		nil, /* TenantExternalIORecorder */
-		s.appRegistry,
-		s.cfg.ExternalIODir,
-	)
 
 	if err := s.runIdempontentSQLForInitType(ctx, state.initType); err != nil {
 		return err
