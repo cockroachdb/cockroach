@@ -1163,3 +1163,43 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 			})
 	}
 }
+
+// TestStatementTimeoutForSchemaChangeCommit confirms that waiting new versions
+// also respects the statement timeout.
+func TestStatementTimeoutForSchemaChangeWaitForOneVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	skip.UnderDuress(t, "sets a long timeout")
+
+	numNodes := 1
+	tc := serverutils.StartCluster(t, numNodes,
+		base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	url, cleanup := tc.ApplicationLayer(0).PGUrl(t)
+	defer cleanup()
+	baseConn, err := pq.NewConnector(url.String())
+	require.NoError(t, err)
+	actualNotices := make([]string, 0)
+	connector := pq.ConnectorWithNoticeHandler(baseConn, func(n *pq.Error) {
+		actualNotices = append(actualNotices, n.Message)
+	})
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	conn := sqlutils.MakeSQLRunner(dbWithHandler)
+	conn.Exec(t, "SET create_table_with_schema_locked=false")
+	conn.Exec(t, "CREATE TYPE GREETING AS ENUM('hello', 'howdy', 'hi')")
+	conn.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints="typeschemachanger.before.exec"`)
+	txn := conn.Begin(t)
+	_, err = txn.Exec("SELECT 'greeting'::REGTYPE::OID")
+	require.NoError(t, err)
+	conn.Exec(t, `SET statement_timeout = '1s'`)
+	conn.ExpectErr(t, "pq: query execution canceled due to statement timeout", "ALTER TYPE GREETING DROP VALUE 'hi'")
+	err = txn.Commit()
+	require.NoError(t, err)
+	// We expect 2 notices, one for the job and one for the wait on the job being cancelled.
+	require.Equalf(t, 2, len(actualNotices), "detected notices: %v", actualNotices)
+	require.Regexp(t, "waiting for job\\(s\\) to complete: \\d+", actualNotices[0])
+	require.Regexp(t, "The statement has timed out, but the following background jobs have been created and will continue running: \\d+", actualNotices[1])
+}

@@ -373,7 +373,7 @@ func (m *Manager) WaitForInitialVersion(
 	for _, id := range descriptorsIds {
 		ids.Add(id)
 	}
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		descs, err := m.maybeGetDescriptorsWithoutValidation(ctx, ids.Ordered(), false /* existenceExpected */)
 		if err != nil {
 			return err
@@ -573,7 +573,7 @@ func (m *Manager) WaitForOneVersion(
 	defer wsTracker.end()
 
 	var desc catalog.Descriptor
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -626,7 +626,7 @@ func (m *Manager) WaitForNewVersion(
 	// also holds a lease on the current version of the descriptor (`for all
 	// session: (session in Prev => session in Curr)` for the set theory
 	// enjoyers).
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -696,6 +696,10 @@ func (m *Manager) WaitForNewVersion(
 		}
 	}
 	if !success {
+		// Return context cancellation back if detected.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("Exited lease acquisition loop before success")
 	}
 
