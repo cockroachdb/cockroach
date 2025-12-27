@@ -1207,12 +1207,11 @@ func (t *Test) assertExpectedUserHooks(plan *TestPlan) error {
 	}
 
 	// Visit each step and remove the corresponding	user hook.
-	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, _ bool) {
 		from := ss.context.FromVersion().String()
 		if hook, ok := ss.impl.(runHookStep); ok {
 			delete(userHooks[from], hook.hook.name+"_"+hook.hook.id)
 		}
-		return nil
 	})
 	// Check that no unused hooks remain. If so, that's likely a bug in the planner, so we return an error.
 	for from := range userHooks {
