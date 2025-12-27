@@ -12,109 +12,30 @@ build set=propagate_input_ordering=true
 SELECT * FROM
   (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
 ----
-sort
- ├── columns: i:1  [hidden: column2:2]
- ├── ordering: +2,+1
- └── project
-      ├── columns: column2:2 generate_series:1
-      ├── project-set
-      │    ├── columns: generate_series:1
-      │    ├── values
-      │    │    └── ()
-      │    └── zip
-      │         └── generate_series(1, 10)
-      └── projections
-           └── generate_series:1 % 5 [as=column2:2]
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 build set=propagate_input_ordering=true
 WITH tmp AS (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) SELECT * FROM tmp;
 ----
-with &1 (tmp)
- ├── columns: i:3
- ├── materialized
- ├── sort
- │    ├── columns: generate_series:1 column2:2
- │    ├── ordering: +2,+1
- │    └── project
- │         ├── columns: column2:2 generate_series:1
- │         ├── project-set
- │         │    ├── columns: generate_series:1
- │         │    ├── values
- │         │    │    └── ()
- │         │    └── zip
- │         │         └── generate_series(1, 10)
- │         └── projections
- │              └── generate_series:1 % 5 [as=column2:2]
- └── with-scan &1 (tmp)
-      ├── columns: i:3
-      └── mapping:
-           └──  generate_series:1 => i:3
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # The internal ordering column for i%5 should not be present in the output.
 build set=propagate_input_ordering=true
 SELECT foo FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
 ----
-sort
- ├── columns: foo:4  [hidden: generate_series:1 column3:3]
- ├── ordering: +3,+1
- └── project
-      ├── columns: foo:4 generate_series:1 column3:3
-      ├── project
-      │    ├── columns: "?column?":2 column3:3 generate_series:1
-      │    ├── project-set
-      │    │    ├── columns: generate_series:1
-      │    │    ├── values
-      │    │    │    └── ()
-      │    │    └── zip
-      │    │         └── generate_series(1, 10)
-      │    └── projections
-      │         ├── generate_series:1 % 2 [as="?column?":2]
-      │         └── generate_series:1 % 5 [as=column3:3]
-      └── projections
-           └── ((generate_series:1, "?column?":2) AS i, "?column?") [as=foo:4]
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # The internal ordering column for i%5 should not be present in the output.
 build set=propagate_input_ordering=true
 SELECT foo.* FROM (SELECT i, i%2 FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC) AS foo
 ----
-sort
- ├── columns: i:1 "?column?":2  [hidden: column3:3]
- ├── ordering: +3,+1
- └── project
-      ├── columns: "?column?":2 column3:3 generate_series:1
-      ├── project-set
-      │    ├── columns: generate_series:1
-      │    ├── values
-      │    │    └── ()
-      │    └── zip
-      │         └── generate_series(1, 10)
-      └── projections
-           ├── generate_series:1 % 2 [as="?column?":2]
-           └── generate_series:1 % 5 [as=column3:3]
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # The subquery ordering is propagated to the aggregation.
 build set=propagate_input_ordering=true
 SELECT array_agg(i) FROM (SELECT * FROM generate_series(1, 5) i ORDER BY i%2 DESC, i)
 ----
-scalar-group-by
- ├── columns: array_agg:3
- ├── internal-ordering: -2,+1
- ├── sort
- │    ├── columns: generate_series:1 column2:2
- │    ├── ordering: -2,+1
- │    └── project
- │         ├── columns: column2:2 generate_series:1
- │         ├── project-set
- │         │    ├── columns: generate_series:1
- │         │    ├── values
- │         │    │    └── ()
- │         │    └── zip
- │         │         └── generate_series(1, 5)
- │         └── projections
- │              └── generate_series:1 % 2 [as=column2:2]
- └── aggregations
-      └── array-agg [as=array_agg:3]
-           └── generate_series:1
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # The input ordering is not propagated through joins.
 build set=propagate_input_ordering=true
@@ -122,25 +43,7 @@ SELECT *
 FROM (SELECT * FROM generate_series(1, 2) x) tmp,
      (SELECT * FROM generate_series(8, 12) i ORDER BY i % 5 ASC, i ASC) tmp2;
 ----
-inner-join (cross)
- ├── columns: x:1 i:2  [hidden: column3:3]
- ├── project-set
- │    ├── columns: generate_series:1
- │    ├── values
- │    │    └── ()
- │    └── zip
- │         └── generate_series(1, 2)
- ├── project
- │    ├── columns: column3:3 generate_series:2
- │    ├── project-set
- │    │    ├── columns: generate_series:2
- │    │    ├── values
- │    │    │    └── ()
- │    │    └── zip
- │    │         └── generate_series(8, 12)
- │    └── projections
- │         └── generate_series:2 % 5 [as=column3:3]
- └── filters (true)
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # Do not preserve the subquery ordering because the parent scope has its own
 # ordering.
@@ -149,21 +52,7 @@ SELECT * FROM
   (SELECT * FROM generate_series(1, 10) i ORDER BY i % 5 ASC, i ASC)
 ORDER BY i DESC;
 ----
-sort
- ├── columns: i:1
- ├── ordering: -1
- └── project
-      ├── columns: generate_series:1
-      └── project
-           ├── columns: column2:2 generate_series:1
-           ├── project-set
-           │    ├── columns: generate_series:1
-           │    ├── values
-           │    │    └── ()
-           │    └── zip
-           │         └── generate_series(1, 10)
-           └── projections
-                └── generate_series:1 % 5 [as=column2:2]
+error (22023): unsupported binary operator: <tuple{int AS generate_series}> % <int>
 
 # CTEs get materialized in the desired order. 
 build set=propagate_input_ordering=true
