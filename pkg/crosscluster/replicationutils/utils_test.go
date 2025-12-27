@@ -134,3 +134,70 @@ func TestScanSST(t *testing.T) {
 	checkScan(roachpb.Span{Key: roachpb.Key("da"), EndKey: roachpb.Key("e")},
 		[]storage.MVCCKeyValue{}, []storage.MVCCRangeKey{})
 }
+
+func TestResolveHeartbeatTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Helper to create timestamps more easily.
+	ts := func(seconds int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: seconds * 1e9}
+	}
+
+	testCases := []struct {
+		name                 string
+		replicatedTime       hlc.Timestamp
+		replicationStartTime hlc.Timestamp
+		cutoverTime          hlc.Timestamp
+		ttlSeconds           int32
+		expected             hlc.Timestamp
+	}{
+		{
+			name:                 "basic formula: replicated - TTL",
+			replicatedTime:       ts(100),
+			replicationStartTime: ts(50),
+			cutoverTime:          hlc.Timestamp{},
+			ttlSeconds:           10,
+			expected:             ts(90),
+		},
+		{
+			name:                 "clamped to start time when result would be earlier",
+			replicatedTime:       ts(55),
+			replicationStartTime: ts(50),
+			cutoverTime:          hlc.Timestamp{},
+			ttlSeconds:           10,
+			expected:             ts(50), // 55-10=45, but clamped to 50
+		},
+		{
+			name:                 "clamped to cutover time when cutover is earlier",
+			replicatedTime:       ts(100),
+			replicationStartTime: ts(50),
+			cutoverTime:          ts(85),
+			ttlSeconds:           10,
+			expected:             ts(85), // 100-10=90, but clamped to cutover 85
+		},
+		{
+			name:                 "cutover later than calculated time has no effect",
+			replicatedTime:       ts(100),
+			replicationStartTime: ts(50),
+			cutoverTime:          ts(95),
+			ttlSeconds:           10,
+			expected:             ts(90), // 100-10=90, cutover 95 doesn't affect
+		},
+		{
+			name:                 "zero TTL returns replicated time",
+			replicatedTime:       ts(100),
+			replicationStartTime: ts(50),
+			cutoverTime:          hlc.Timestamp{},
+			ttlSeconds:           0,
+			expected:             ts(100),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ResolveHeartbeatTime(tc.replicatedTime, tc.replicationStartTime, tc.cutoverTime, tc.ttlSeconds)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
