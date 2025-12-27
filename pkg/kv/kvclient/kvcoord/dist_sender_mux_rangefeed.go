@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -67,9 +68,9 @@ func muxRangeFeed(
 ) (retErr error) {
 	if log.V(1) {
 		log.KvExec.Infof(ctx, "Establishing MuxRangeFeed (%s...; %d spans)", spans[0], len(spans))
-		start := timeutil.Now()
+		start := crtime.NowMono()
 		defer func() {
-			log.KvExec.Infof(ctx, "MuxRangeFeed terminating after %s with err=%v", timeutil.Since(start), retErr)
+			log.KvExec.Infof(ctx, "MuxRangeFeed terminating after %s with err=%v", start.Elapsed(), retErr)
 		}()
 	}
 
@@ -382,10 +383,10 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 
 	if log.V(1) {
 		log.KvExec.Infof(ctx, "Establishing MuxRangeFeed to node %d", nodeID)
-		start := timeutil.Now()
+		start := crtime.NowMono()
 		defer func() {
 			log.KvExec.Infof(ctx, "MuxRangeFeed to node %d terminating after %s with err=%v",
-				nodeID, timeutil.Since(start), retErr)
+				nodeID, start.Elapsed(), retErr)
 		}()
 	}
 

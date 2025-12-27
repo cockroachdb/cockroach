@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "taskpacer",
+    srcs = ["pacer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/taskpacer",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "taskpacer_test",
+    size = "small",
+    srcs = ["pacer_test.go"],
+    embed = [":taskpacer"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

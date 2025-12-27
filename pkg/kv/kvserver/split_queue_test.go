@@ -49,7 +49,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		priority   float64
 	}{
 		// No intersection, no bytes, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 0, 64 << 20, false, 0},
+		{roachpb.RKeyMin, roachpb.RKey(keys.Meta1KeyMax), 0, 64 << 20, false, 0},
 		// Intersection in zone, no bytes, no load.
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// Already split at largest ID, no load.
@@ -57,13 +57,26 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		// Multiple intersections, no bytes, no load.
 		{roachpb.RKeyMin, roachpb.RKeyMax, 0, 64 << 20, true, 1},
 		// No intersection, max bytes, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 20, 64 << 20, false, 0},
+		//{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 20, 64 << 20, false, 0},
+		{roachpb.RKeyMin, roachpb.RKey(keys.Meta1KeyMax), 64 << 20, 64 << 20, false, 0},
 		// No intersection, max bytes+1, no load.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<20 + 1, 64 << 20, true, 1},
+		{roachpb.RKeyMin, roachpb.RKey(keys.Meta1KeyMax), 64<<20 + 1, 64 << 20, true, 1},
 		// No intersection, max bytes * 2 + 2, no load, should backpressure.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64<<21 + 2, 64 << 20, true, 52},
+		{roachpb.RKeyMin, roachpb.RKey(keys.Meta1KeyMax), 64<<21 + 2, 64 << 20, true, 52},
 		// No intersection, max bytes * 4, no load, should not backpressure.
-		{roachpb.RKeyMin, roachpb.RKey(keys.MetaMax), 64 << 22, 64 << 20, true, 4},
+		{roachpb.RKeyMin, roachpb.RKey(keys.Meta1KeyMax), 64 << 22, 64 << 20, true, 4},
+		// Meta2 range, Intersection, no bytes, no load.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 0, 64 << 20, false, 0},
+		// Meta2 range, Intersection, max bytes, no load.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 0, 64 << 20, false, 0},
+		// Meta2 range, Intersection, max bytes, no load.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 64 << 20, 64 << 20, false, 0},
+		// Meta2 range, Intersection, max bytes +1, no load.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 64<<20 + 1, 64 << 20, true, 1},
+		// Meta2 range, Intersection, max bytes *2, no load.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 64 << 21, 64 << 20, true, 2},
+		// Meta2 range, Intersection, max bytes *2 +2, no load, should backpressure.
+		{roachpb.RKey(keys.Meta2Prefix), roachpb.RKey(keys.Meta2KeyMax), 64<<21 + 2, 64 << 20, true, 52},
 		// Intersection, max bytes +1, no load.
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2000)), roachpb.RKeyMax, 32<<20 + 1, 32 << 20, true, 2},
 		// Split needed at table boundary, but no zone config, no load.

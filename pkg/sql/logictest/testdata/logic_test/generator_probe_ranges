@@ -13,6 +13,6 @@ SELECT count(1) FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'read') WHERE
 # Test that the trace has a string matching `proposing command` to verify trace events
 # from the kvserver write path are received.
 query I
-SELECT count(1) FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE range_id = 1 AND verbose_trace LIKE '%proposing command%'
+SELECT count(1) FROM crdb_internal.probe_ranges(INTERVAL '1000ms', 'write') WHERE range_id = 2 AND verbose_trace LIKE '%proposing command%'
 ----
 1

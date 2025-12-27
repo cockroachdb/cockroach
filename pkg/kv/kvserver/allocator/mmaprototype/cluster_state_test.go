@@ -128,7 +128,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				case "raft-cpu":
 					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
 					rMsg.MaybeSpanConfIsPopulated = true
-				case "not-populated":
+				case "span-config-not-populated":
 					notPopulatedOverride = true
 				}
 			}

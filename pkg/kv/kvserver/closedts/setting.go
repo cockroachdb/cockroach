@@ -98,3 +98,28 @@ var PolicySwitchWhenLatencyExceedsBucketFraction = settings.RegisterFloatSetting
 		"exceeded before the closed timestamp policy will be changed",
 	0.2,
 )
+
+// SideTransportPacingRefreshInterval controls the task pacer refresh interval
+// for pacing broadcast updates in the side transport. This determines how long
+// the pacer takes to complete signaling all waiting connections.
+var SideTransportPacingRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.side_transport_pacing_refresh_interval",
+	"the refresh interval for the task pacer that controls pacing of sending "+
+		"sidetransport updates to avoid overloading the system when many connections are waiting",
+	10*time.Millisecond,
+	settings.WithPublic,
+)
+
+// SideTransportPacingSmearInterval controls the time interval between batches
+// when broadcasting side transport updates. The pacer uses this to spread out
+// work over time, sleeping between batches to avoid creating spikes in runnable
+// goroutines when many connections are waiting for updates.
+var SideTransportPacingSmearInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.side_transport_pacing_smear_interval",
+	"the smear interval for the task pacer that controls the amount of time "+
+		"each paced batch is going to take when broadcasting sidetransport updates",
+	1*time.Millisecond,
+	settings.WithPublic,
+)

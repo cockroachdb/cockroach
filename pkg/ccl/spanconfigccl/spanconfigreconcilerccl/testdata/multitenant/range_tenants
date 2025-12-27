@@ -35,7 +35,7 @@ initialize tenant=11
 # We should observe placeholder entries for both tenants (installed when
 # creating tenant records). tenant=11 should start off with whatever RANGE
 # TENANT was at the time.
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -81,7 +81,7 @@ reconcile tenant=10
 mutations discard tenant=10
 ----
 
-state offset=47
+state offset=48
 ----
 ...
 /Table/4{6-7}                              database system (host)
@@ -214,7 +214,7 @@ reconcile tenant=11
 mutations discard tenant=11
 ----
 
-state offset=81
+state offset=82
 ----
 ...
 /Tenant/10/Table/{7-8}                     database system (tenant)
