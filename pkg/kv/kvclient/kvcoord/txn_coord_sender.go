@@ -217,11 +217,11 @@ type txnInterceptor interface {
 
 	// createSavepointLocked is used to populate a savepoint with all the state
 	// that needs to be restored on a rollback.
-	createSavepointLocked(context.Context, *savepoint)
+	createSavepointLocked(context.Context, *savepoint) error
 
 	// rollbackToSavepointLocked is used to restore the state previously saved by
 	// createSavepointLocked().
-	rollbackToSavepointLocked(context.Context, savepoint)
+	rollbackToSavepointLocked(context.Context, savepoint) error
 
 	// releaseSavepointLocked is called when a savepoint is being
 	// released.

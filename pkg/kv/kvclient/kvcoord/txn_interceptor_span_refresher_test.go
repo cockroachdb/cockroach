@@ -1412,7 +1412,7 @@ func TestTxnSpanRefresherSavepoint(t *testing.T) {
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, tsr.refreshFootprint.asSlice())
 
 		s := savepoint{}
-		tsr.createSavepointLocked(ctx, &s)
+		require.NoError(t, tsr.createSavepointLocked(ctx, &s))
 
 		// Another read after the savepoint was created.
 		read(keyB)
@@ -1422,7 +1422,7 @@ func TestTxnSpanRefresherSavepoint(t *testing.T) {
 		require.False(t, s.refreshInvalid)
 
 		// Rollback the savepoint.
-		tsr.rollbackToSavepointLocked(ctx, s)
+		require.NoError(t, tsr.rollbackToSavepointLocked(ctx, s))
 		if keepRefreshSpans {
 			// Check that refresh spans were kept as such.
 			require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, tsr.refreshFootprint.asSlice())
@@ -1432,7 +1432,7 @@ func TestTxnSpanRefresherSavepoint(t *testing.T) {
 		}
 
 		tsr.refreshInvalid = true
-		tsr.rollbackToSavepointLocked(ctx, s)
+		require.NoError(t, tsr.rollbackToSavepointLocked(ctx, s))
 		if keepRefreshSpans {
 			// Check that rolling back to the savepoint keeps refreshInvalid as such.
 			require.True(t, tsr.refreshInvalid)
@@ -1444,10 +1444,10 @@ func TestTxnSpanRefresherSavepoint(t *testing.T) {
 		// Set refreshInvalid and then create a savepoint.
 		tsr.refreshInvalid = true
 		s = savepoint{}
-		tsr.createSavepointLocked(ctx, &s)
+		require.NoError(t, tsr.createSavepointLocked(ctx, &s))
 		require.True(t, s.refreshInvalid)
 		// Rollback to the savepoint check that refreshes are still invalid.
-		tsr.rollbackToSavepointLocked(ctx, s)
+		require.NoError(t, tsr.rollbackToSavepointLocked(ctx, s))
 		require.True(t, tsr.refreshInvalid)
 	})
 }
