@@ -13,7 +13,7 @@ SET distsql=auto
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
-ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
+ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[(i+1)%5+1], i FROM generate_series(1, 5) as g(i);
 
 # Full table scan (no stats) - distribute.
 query T
@@ -113,12 +113,11 @@ SELECT info FROM [EXPLAIN SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distributio
 ----
 distribution: local
 
-# TODO(yuzefovich): we shouldn't distribute this query due to a soft limit, but
-# soft limits are currently ignored.
+# Soft limit in a large scan - don't distribute.
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM kv UNION SELECT * FROM kv LIMIT 1] WHERE info LIKE 'distribution%'
 ----
-distribution: full
+distribution: local
 
 # Now consider all constrained scans through the end of the file small.
 statement ok
@@ -299,14 +298,14 @@ ALTER TABLE a SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 retry
 statement ok
-ALTER TABLE a EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+ALTER TABLE a EXPERIMENTAL_RELOCATE SELECT ARRAY[(i+1)%5+1], i FROM generate_series(0, 9) AS g(i)
 
 statement ok
 ALTER TABLE b SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 retry
 statement ok
-ALTER TABLE b EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+ALTER TABLE b EXPERIMENTAL_RELOCATE SELECT ARRAY[(i+1)%5+1], i FROM generate_series(0, 9) AS g(i)
 
 statement ok
 ALTER TABLE a INJECT STATISTICS '[
