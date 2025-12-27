@@ -519,7 +519,7 @@ SELECT * FROM u_c;
 # Test if DELETE FROM ... USING works with LATERAL.
 
 statement ok
-DELETE FROM u_a USING u_b, LATERAL (SELECT u_c.a, u_c.b, u_c.c FROM u_c WHERE u_b.b = u_c.b) AS other WHERE other.c = 1 AND u_a.c = 35
+DELETE FROM u_a USING u_b, LATERAL (SELECT u_c.a, u_c.b, u_c.c FROM u_c WHERE u_b.b = u_c.b) AS other WHERE other.c = 1 AND u_a.c = 45
 
 query ITI rowsort
 SELECT * FROM u_a
@@ -529,7 +529,6 @@ SELECT * FROM u_a
 3  c  15
 4  d  20
 8  d  40
-9  d  45
 
 # Test if DELETE FROM ... USING works with partial indexes.
 
