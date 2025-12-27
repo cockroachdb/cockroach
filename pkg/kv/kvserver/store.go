@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
-	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -2227,12 +2226,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
-	// Create the Store Liveness SupportManager.
-	sm := storeliveness.NewSupportManager(
-		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.LogEngine(),
-		s.cfg.StoreLiveness.Options, s.cfg.Settings, s.stopper, s.cfg.Clock,
-		s.cfg.StoreLiveness.HeartbeatTicker, s.cfg.StoreLiveness.Transport,
-		s.cfg.StoreLiveness.SupportManagerKnobs(),
+	sm := s.cfg.StoreLiveness.NewSupportManager(
+		s.StoreID(), s.LogEngine(), s.cfg.Settings, s.cfg.Clock,
 	)
 	s.cfg.StoreLiveness.Transport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm

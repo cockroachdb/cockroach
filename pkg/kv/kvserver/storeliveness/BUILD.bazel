@@ -52,8 +52,10 @@ go_test(
     name = "storeliveness_test",
     size = "large",
     srcs = [
+        "fabric_test.go",
         "main_test.go",
         "multi_store_test.go",
+        "node_manager_test.go",
         "persist_test.go",
         "store_liveness_test.go",
         "support_manager_test.go",

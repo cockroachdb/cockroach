@@ -686,7 +686,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		if storeKnobs := cfg.TestingKnobs.Store; storeKnobs != nil {
 			knobs = storeKnobs.(*kvserver.StoreTestingKnobs).StoreLivenessKnobs
 		}
-		storeLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
+		storeLiveness = storeliveness.NewNodeContainer(stopper, nodeIDContainer, options, transport, knobs)
 	}
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
