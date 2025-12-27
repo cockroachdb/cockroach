@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/kv/kvserver/protectedts/ptcache",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/protectedts/ptstorage",
         "//pkg/settings/cluster",
