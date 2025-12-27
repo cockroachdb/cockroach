@@ -62,6 +62,16 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				tr.Add(key, endKey, ts, seq)
 			}
 		},
+		// Enable SysBytes verification on every Raft command application.
+		SysBytesVerificationOnRaftApply: func(mismatchErr error) {
+			if mismatchErr != nil {
+				// Fail the test if there was ever a SysBytes mismatch detected. This
+				// will likely be caught by the consistency checker at the end of the
+				// test as well, but it may not be if there is a stats recomputation for
+				// some reason.
+				t.Errorf("SysBytes mismatch detected during Raft command application: %v", mismatchErr)
+			}
+		},
 	}
 
 	isOurCommand := func(ba *kvpb.BatchRequest) (string, uint64, bool) {
