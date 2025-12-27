@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -65,13 +66,18 @@ const (
 func logBackupTelemetry(
 	ctx context.Context, initialDetails jobspb.BackupDetails, jobID jobspb.JobID,
 ) {
-	event := createBackupRecoveryEvent(ctx, initialDetails, jobID)
-	log.StructuredEvent(ctx, severity.INFO, &event)
+	besteffort.Warning(ctx, "log-backup-telemetry", func(ctx context.Context) error {
+		event, err := createBackupRecoveryEvent(ctx, initialDetails, jobID)
+		if err == nil {
+			log.StructuredEvent(ctx, severity.INFO, &event)
+		}
+		return err
+	})
 }
 
 func createBackupRecoveryEvent(
 	ctx context.Context, initialDetails jobspb.BackupDetails, jobID jobspb.JobID,
-) eventpb.RecoveryEvent {
+) (eventpb.RecoveryEvent, error) {
 	recoveryType := backupEventType
 	if initialDetails.ScheduleID != 0 {
 		recoveryType = scheduledBackupEventType
@@ -98,21 +104,19 @@ func createBackupRecoveryEvent(
 	storageTypes := make(map[string]struct{})
 	defaultURI, urisByLocalityKV, err := backupdest.GetURIsByLocalityKV(initialDetails.Destination.To, "")
 	if err != nil {
-		log.Dev.Warningf(ctx, "failed to get URIs by locality: %v", err)
+		return eventpb.RecoveryEvent{}, errors.Wrap(err, "failed to get URIs by locality")
 	}
 
-	if defaultURI != "" {
-		if storageType, authType, err := parseStorageAndAuth(defaultURI); err != nil {
-			log.Dev.Warningf(ctx, "failed to parse backup default URI: %v", err)
-		} else {
-			storageTypes[storageType] = struct{}{}
-			authTypes[authType] = struct{}{}
-		}
+	if storageType, authType, err := parseStorageAndAuth(defaultURI); err != nil {
+		return eventpb.RecoveryEvent{}, errors.Wrap(err, "failed to parse backup default URI")
+	} else {
+		storageTypes[storageType] = struct{}{}
+		authTypes[authType] = struct{}{}
 	}
 
 	for _, uri := range urisByLocalityKV {
 		if storageType, authType, err := parseStorageAndAuth(uri); err != nil {
-			log.Dev.Warningf(ctx, "failed to parse locality URI: %v", err)
+			return eventpb.RecoveryEvent{}, errors.Wrap(err, "failed to parse locality URI")
 		} else {
 			storageTypes[storageType] = struct{}{}
 			authTypes[authType] = struct{}{}
@@ -156,7 +160,7 @@ func createBackupRecoveryEvent(
 		event.DestinationStorageTypes = append(event.DestinationStorageTypes, typ)
 	}
 	sort.Strings(event.DestinationStorageTypes)
-	return event
+	return event, nil
 }
 
 func getLargestScope(fullCluster bool, requestedDescriptors []descpb.Descriptor) targetScope {
