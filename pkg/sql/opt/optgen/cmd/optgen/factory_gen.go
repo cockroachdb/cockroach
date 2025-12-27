@@ -132,6 +132,8 @@ func (g *factoryGen) genConstructFuncs() {
 
 			g.w.writeIndent("SKIP_RULES:\n")
 
+			// TODO(mgartner): This is too specific for optgen. Move it
+			// elsewhere.
 			if define.Name == "Scan" {
 				// The name of the scanPrivate element
 				spName := unTitle(g.md.fieldName(fields[0]))
