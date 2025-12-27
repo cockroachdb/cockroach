@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -34,7 +33,6 @@ type Config struct {
 // Provider is the concrete implementation of protectedts.Provider interface.
 type Provider struct {
 	protectedts.Manager
-	protectedts.Cache
 	protectedts.Reconciler
 	metric.Struct
 }
@@ -46,15 +44,9 @@ func New(cfg Config) (protectedts.Provider, error) {
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.Knobs)
 	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
-	cache := ptcache.New(ptcache.Config{
-		DB:       cfg.DB,
-		Storage:  storage,
-		Settings: cfg.Settings,
-	})
 
 	return &Provider{
 		Manager:    storage,
-		Cache:      cache,
 		Reconciler: reconciler,
 		Struct:     reconciler.Metrics(),
 	}, nil
@@ -73,9 +65,6 @@ func validateConfig(cfg Config) error {
 
 // Start implements the protectedts.Provider interface.
 func (p *Provider) Start(ctx context.Context, stopper *stop.Stopper) error {
-	if cache, ok := p.Cache.(*ptcache.Cache); ok {
-		return cache.Start(ctx, stopper)
-	}
 	return nil
 }
 
