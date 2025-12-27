@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -96,7 +94,6 @@ func updateStatusForGCElements(
 	if cfg == nil {
 		return false, false, maxDeadline
 	}
-	protectedtsCache := execCfg.ProtectedTimestampProvider
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
@@ -123,7 +120,7 @@ func updateStatusForGCElements(
 
 		// Update the status of any indexes waiting for GC.
 		indexesExpired, deadline := updateIndexesStatus(
-			ctx, execCfg, jobID, tableTTL, table, protectedtsCache, zoneCfg, indexDropTimes, progress,
+			ctx, execCfg, jobID, tableTTL, table, zoneCfg, indexDropTimes, progress,
 		)
 		if indexesExpired {
 			expired = true
@@ -177,7 +174,6 @@ func updateTableStatus(
 			tableDropTimes[t.ID],
 			execCfg,
 			execCfg.SpanConfigKVAccessor,
-			execCfg.ProtectedTimestampProvider,
 			sp,
 		)
 		if err != nil {
@@ -220,7 +216,6 @@ func updateIndexesStatus(
 	jobID jobspb.JobID,
 	tableTTL int32,
 	table catalog.TableDescriptor,
-	protectedtsCache protectedts.Cache,
 	zoneCfg *zonepb.ZoneConfig,
 	indexDropTimes map[descpb.IndexID]int64,
 	progress *jobspb.SchemaChangeGCProgress,
@@ -245,7 +240,6 @@ func updateIndexesStatus(
 			indexDropTimes[idxProgress.IndexID],
 			execCfg,
 			execCfg.SpanConfigKVAccessor,
-			protectedtsCache,
 			sp,
 		)
 		if err != nil {
@@ -307,19 +301,11 @@ func isProtected(
 	droppedAtTime int64,
 	execCfg *sql.ExecutorConfig,
 	kvAccessor spanconfig.KVAccessor,
-	ptsCache protectedts.Cache,
 	sp roachpb.Span,
 ) (bool, error) {
-	// Wrap this in a closure sp we can pass the protection status to the testing
+	// Wrap this in a closure so we can pass the protection status to the testing
 	// knob.
 	isProtected, err := func() (bool, error) {
-		// We check the old protected timestamp subsystem for protected timestamps
-		// if this is the GC job of the system tenant.
-		if execCfg.Codec.ForSystemTenant() &&
-			deprecatedIsProtected(ctx, ptsCache, droppedAtTime, sp) {
-			return true, nil
-		}
-
 		spanConfigRecords, err := kvAccessor.GetSpanConfigRecords(ctx, spanconfig.Targets{
 			spanconfig.MakeTargetFromSpan(sp),
 		})
@@ -374,28 +360,6 @@ func isProtected(
 	}
 
 	return isProtected, nil
-}
-
-// Returns whether or not a key in the given spans is protected.
-// TODO(pbardea): If the TTL for this index/table expired and we're only blocked
-// on a protected timestamp, this may be useful information to surface to the
-// user.
-func deprecatedIsProtected(
-	ctx context.Context, protectedtsCache protectedts.Cache, atTime int64, sp roachpb.Span,
-) bool {
-	protected := false
-	protectedtsCache.Iterate(ctx,
-		sp.Key, sp.EndKey,
-		func(r *ptpb.Record) (wantMore bool) {
-			// If we encounter any protected timestamp records in this span, we
-			// can't GC.
-			if r.Timestamp.WallTime < atTime {
-				protected = true
-				return false
-			}
-			return true
-		})
-	return protected
 }
 
 // isTenantProtected returns true if there exist any protected timestamp records
