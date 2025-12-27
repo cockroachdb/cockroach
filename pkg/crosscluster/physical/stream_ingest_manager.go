@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,7 +96,18 @@ func getReplicationStatsAndStatus(
 
 	details.SourceClusterConnUri = uri.Redacted()
 
-	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, job.Progress())
+	progressBytes, exists, err := jobs.InfoStorageForJob(txn, job.ID()).GetLegacyProgress(ctx, "get-stream-ingestion-stats")
+	if err != nil {
+		return nil, jobspb.ReplicationError.String(), err
+	}
+	if !exists {
+		return nil, jobspb.ReplicationError.String(), errors.Newf("job %d progress not found", job.ID())
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		return nil, jobspb.ReplicationError.String(), err
+	}
+	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, progress)
 	if err != nil {
 		return nil, jobspb.ReplicationError.String(), err
 	}
