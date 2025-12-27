@@ -187,6 +187,12 @@ will then convert it to the --format requested in the current invocation.
 			} else {
 				w = makeOpenMetricsWriter(os.Stdout)
 			}
+		case tsDumpParquet:
+			var err error
+			w, err = newParquetTSWriter(false /* toStdout */, "tsdump")
+			if err != nil {
+				return err
+			}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
 		}
@@ -823,6 +829,9 @@ const (
 	// to push older timestamps. There's no way to enable historical
 	// ingestion if DD doesn't already know your metric name.
 	tsDumpDatadogInit
+	// tsDumpParquet outputs time series data in parquet format for
+	// efficient storage and analysis. Files are split at 1GiB boundaries.
+	tsDumpParquet
 )
 
 // Type implements the pflag.Value interface.
@@ -847,6 +856,8 @@ func (m *tsDumpFormat) String() string {
 		return "datadog"
 	case tsDumpDatadogInit:
 		return "datadoginit"
+	case tsDumpParquet:
+		return "parquet"
 	}
 	return ""
 }
@@ -870,7 +881,8 @@ func (m *tsDumpFormat) Set(s string) error {
 		*m = tsDumpDatadog
 	case "datadoginit":
 		*m = tsDumpDatadogInit
-
+	case "parquet":
+		*m = tsDumpParquet
 	default:
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}

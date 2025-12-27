@@ -150,11 +150,11 @@ func (zc *debugZipContext) collectClusterData(
 		if zipCtx.files.shouldIncludeFile(nodesFile) {
 			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
 				// running on non system tenant, use data from redacted NodesList()
-				if cErr := zc.z.createJSONOrError(s, debugBase+"/"+nodesFile, nodesListRedacted, err); cErr != nil {
+				if cErr := zc.createJSONOrError(s, debugBase+"/"+nodesFile, nodesListRedacted, err); cErr != nil {
 					return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 				}
 			} else {
-				if cErr := zc.z.createJSONOrError(s, debugBase+"/"+nodesFile, nodesStatus, err); cErr != nil {
+				if cErr := zc.createJSONOrError(s, debugBase+"/"+nodesFile, nodesStatus, err); cErr != nil {
 					return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 				}
 			}
@@ -188,7 +188,7 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if zipCtx.files.shouldIncludeFile(livenessFile) {
-			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
+			if cErr := zc.createJSONOrError(s, zc.prefix+"/"+livenessFile, nodes, err); cErr != nil {
 				return &serverpb.NodesListResponse{}, &serverpb.NodesListResponse{}, nil, cErr
 			}
 		} else {
@@ -241,7 +241,7 @@ func (zc *debugZipContext) getTenantRange(ctx context.Context) error {
 					continue
 				}
 				s := zc.clusterPrinter.start(redact.Sprintf("writing tenant ranges for locality %s", locality))
-				if err := zc.z.createJSON(s, name+".json", rangeList.Ranges); err != nil {
+				if err := zc.createJSON(s, name+".json", rangeList.Ranges); err != nil {
 					return s.fail(err)
 				}
 				sLocality.done()

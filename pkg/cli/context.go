@@ -374,6 +374,9 @@ type zipContext struct {
 	// validateZipFile indicates whether the generated zip file should be validated
 	// post debug zip file generation.
 	validateZipFile bool
+
+	// format specifies the output format (json or parquet).
+	format zipFormat
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This

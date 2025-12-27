@@ -65,6 +65,10 @@ type debugZipContext struct {
 	firstNodeSQLConn clisqlclient.Conn
 
 	sem semaphore.Semaphore
+
+	// parquetCollector collects data for parquet output mode.
+	// nil when using JSON output mode.
+	parquetCollector *parquetZipCollector
 }
 
 var filterFlags = map[string]struct{}{
@@ -108,7 +112,52 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 		data = thisData
 		return err
 	})
-	return zc.z.createJSONOrError(s, r.pathName+".json", data, err)
+	return zc.createJSONOrError(s, r.pathName, data, err)
+}
+
+// createJSONOrError creates a JSON file or error file, or adds to parquet collector.
+// pathName can be with or without ".json" suffix.
+func (zc *debugZipContext) createJSONOrError(s *zipReporter, pathName string, data interface{}, err error) error {
+	// Normalize path - ensure it has .json for error handling
+	jsonPath := pathName
+	if !strings.HasSuffix(jsonPath, ".json") {
+		jsonPath = pathName + ".json"
+	}
+	if err != nil {
+		return zc.z.createError(s, jsonPath, err)
+	}
+	return zc.createJSON(s, pathName, data)
+}
+
+// createJSON creates a JSON file or adds data to parquet collector.
+// pathName can be with or without ".json" suffix.
+func (zc *debugZipContext) createJSON(s *zipReporter, pathName string, data interface{}) error {
+	// Normalize path - strip .json for parquet mode, ensure it has .json for JSON mode
+	basePath := strings.TrimSuffix(pathName, ".json")
+	jsonPath := basePath + ".json"
+
+	// In parquet mode, add to collector instead of writing JSON.
+	if zc.parquetCollector != nil {
+		if err := zc.parquetCollector.AddJSONData(basePath, 0, basePath, data); err != nil {
+			return s.fail(err)
+		}
+		s.done()
+		return nil
+	}
+	return zc.z.createJSON(s, jsonPath, data)
+}
+
+// createJSONForNode creates a JSON file or adds data to parquet collector with node ID.
+func (zc *debugZipContext) createJSONForNode(s *zipReporter, dataType string, nodeID int32, key string, data interface{}) error {
+	if zc.parquetCollector != nil {
+		if err := zc.parquetCollector.AddJSONData(dataType, nodeID, key, data); err != nil {
+			return s.fail(err)
+		}
+		s.done()
+		return nil
+	}
+	// For JSON mode, dataType is used as the file path
+	return zc.z.createJSON(s, key+".json", data)
 }
 
 // forAllNodes runs fn on every node, possibly concurrently.
@@ -362,6 +411,15 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 				prefix:           debugBase + prefix,
 			}
 
+			// Initialize parquet collector if parquet format is requested.
+			if zipCtx.format == zipFormatParquet {
+				collector, err := newParquetZipCollector()
+				if err != nil {
+					return err
+				}
+				zc.parquetCollector = collector
+			}
+
 			// Fetch the cluster-wide details.
 			// For a SQL only server, the nodeList will be a list of SQL nodes
 			// and livenessByNodeID is null. For a KV server, the nodeList will
@@ -428,6 +486,13 @@ done
 
 			if err := z.createRaw(s, zc.prefix+"/"+debugZipCommandFlagsFileName, []byte(flags)); err != nil {
 				return err
+			}
+
+			// Flush parquet data if in parquet mode.
+			if zc.parquetCollector != nil {
+				if err := zc.parquetCollector.Flush(z, zc.prefix, zr); err != nil {
+					return err
+				}
 			}
 
 			return nil
@@ -558,6 +623,21 @@ func (zc *debugZipContext) dumpTableDataForZip(
 ) error {
 	ctx := context.Background()
 	fileName := sanitizeFilename(table)
+
+	// In parquet mode, use the parquet-specific code path.
+	if zc.parquetCollector != nil {
+		s := zr.start(redact.Sprintf("retrieving SQL data for %s (parquet)", table))
+		err := zc.dumpTableDataForZipParquet(ctx, conn, base, table, tableQuery.query)
+		if err != nil {
+			// Log error but don't fail - create error file instead
+			s.shout("error: %v", err)
+			s.done()
+			return nil
+		}
+		s.done()
+		return nil
+	}
+
 	baseName := path.Join(base, fileName)
 	fileNameWithExtension := fileName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
 	if !zipCtx.files.shouldIncludeFile(fileNameWithExtension) {
