@@ -137,6 +137,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				d.codec,
 				d.rangeCounter,
 				d.job,
+				d.db,
 				pl.GetNewSchemaChange().BackfillProgress,
 				pl.GetNewSchemaChange().MergeProgress,
 			),
