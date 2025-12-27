@@ -82,9 +82,11 @@ vectorized: true
   spans: /"vtable/crdb_internal/tables"-/"vtable/crdb_internal/tables"/PrefixEnd
 
 # Regression test for not showing the execution statistics that correspond to
-# scans of the virtual tables.
+# scans of the virtual tables. Mask large (3+ digit) actual row counts to avoid
+# test brittleness when virtual tables are added or removed.
 query T
-EXPLAIN ANALYZE SHOW TABLES;
+SELECT regexp_replace(info, 'actual row count: [0-9]{3,}', 'actual row count: <N>') AS info
+FROM [EXPLAIN ANALYZE SHOW TABLES]
 ----
 planning time: 10µs
 execution time: 100µs
@@ -169,21 +171,21 @@ quality of service: regular
         │       │           └── • filter
         │       │               │ sql nodes: <hidden>
         │       │               │ regions: <hidden>
-        │       │               │ actual row count: 333
+        │       │               │ actual row count: <N>
         │       │               │ execution time: 0µs
         │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
         │       │               │
         │       │               └── • virtual table
         │       │                     sql nodes: <hidden>
         │       │                     regions: <hidden>
-        │       │                     actual row count: 363
+        │       │                     actual row count: <N>
         │       │                     execution time: 0µs
         │       │                     table: pg_class@primary
         │       │
         │       └── • distinct
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 333
+        │           │ actual row count: <N>
         │           │ execution time: 0µs
         │           │ estimated max memory allocated: 0 B
         │           │ distinct on: table_id
@@ -191,7 +193,7 @@ quality of service: regular
         │           └── • virtual table
         │                 sql nodes: <hidden>
         │                 regions: <hidden>
-        │                 actual row count: 333
+        │                 actual row count: <N>
         │                 execution time: 0µs
         │                 table: table_row_statistics@primary
         │

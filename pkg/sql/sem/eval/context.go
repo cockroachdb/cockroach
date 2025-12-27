@@ -1009,6 +1009,7 @@ type ReplicationStreamManager interface {
 
 	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
 	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
+	DebugGetPhysicalConsumerStatuses(ctx context.Context) ([]streampb.DebugPhysicalConsumerStatus, error)
 
 	PlanLogicalReplication(
 		ctx context.Context,
