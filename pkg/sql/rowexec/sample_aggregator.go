@@ -241,7 +241,9 @@ func (s *sampleAggregator) mainLoop(
 			return job.NoTxn().CheckState(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
+		return s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(jobID).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	var rowsProcessed uint64
