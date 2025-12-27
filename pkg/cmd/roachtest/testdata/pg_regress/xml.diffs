@@ -511,7 +511,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  SELECT xmlroot (
    xmlelement (
      name gazonk,
-@@ -292,380 +329,371 @@
+@@ -292,380 +329,368 @@
    version '1.0',
    standalone yes
  );
@@ -1155,7 +1155,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- Round-trip non-ASCII data through xpath().
  DO $$
  DECLARE
-@@ -701,185 +729,161 @@
+@@ -701,185 +726,161 @@
      RAISE LOG 'skip: %', SQLERRM;
  END
  $$;
@@ -1450,7 +1450,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- Since xpath() deals with namespaces, it's a bit stricter about
  -- what's well-formed and what's not. If we don't obey these rules
  -- (i.e. ignore namespace-related errors from libxml), xpath()
-@@ -892,34 +896,31 @@
+@@ -892,34 +893,31 @@
  -- error messages, we suppress the DETAIL in this test.
  \set VERBOSITY terse
  SELECT xpath('/*', '<invalidns xmlns=''&lt;''/>');
@@ -1497,7 +1497,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  INSERT INTO xmldata VALUES('<ROWS>
  <ROW id="1">
    <COUNTRY_ID>AU</COUNTRY_ID>
-@@ -952,10 +953,7 @@
+@@ -952,10 +950,7 @@
    <REGION_ID>3</REGION_ID><SIZE unit="km">791</SIZE>
  </ROW>
  </ROWS>');
@@ -1509,7 +1509,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- XMLTABLE with columns
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
-@@ -969,10 +967,13 @@
+@@ -969,10 +964,13 @@
                                    size float PATH 'SIZE',
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1527,7 +1527,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  CREATE VIEW xmltableview1 AS SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
          LATERAL XMLTABLE('/ROWS/ROW'
-@@ -985,83 +986,70 @@
+@@ -985,83 +983,70 @@
                                    size float PATH 'SIZE',
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1651,7 +1651,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- used in prepare statements
  PREPARE pp AS
  SELECT  xmltable.*
-@@ -1076,73 +1064,78 @@
+@@ -1076,73 +1061,78 @@
                                    size float PATH 'SIZE',
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1782,7 +1782,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  EXPLAIN (VERBOSE, COSTS OFF)
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
-@@ -1156,37 +1149,24 @@
+@@ -1156,37 +1146,24 @@
                                    size float PATH 'SIZE',
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1834,7 +1834,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- should to work with more data
  INSERT INTO xmldata VALUES('<ROWS>
  <ROW id="10">
-@@ -1205,10 +1185,7 @@
+@@ -1205,10 +1182,7 @@
    <REGION_ID>2</REGION_ID>
  </ROW>
  </ROWS>');
@@ -1846,7 +1846,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  INSERT INTO xmldata VALUES('<ROWS>
  <ROW id="20">
    <COUNTRY_ID>EG</COUNTRY_ID>
-@@ -1221,10 +1198,7 @@
+@@ -1221,10 +1195,7 @@
    <REGION_ID>1</REGION_ID>
  </ROW>
  </ROWS>');
@@ -1858,7 +1858,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
          LATERAL XMLTABLE('/ROWS/ROW'
-@@ -1237,10 +1211,13 @@
+@@ -1237,10 +1208,13 @@
                                    size float PATH 'SIZE',
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1876,7 +1876,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
          LATERAL XMLTABLE('/ROWS/ROW'
-@@ -1254,10 +1231,13 @@
+@@ -1254,10 +1228,13 @@
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified')
    WHERE region_id = 2;
@@ -1894,7 +1894,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  EXPLAIN (VERBOSE, COSTS OFF)
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
-@@ -1272,18 +1252,11 @@
+@@ -1272,18 +1249,11 @@
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified')
    WHERE region_id = 2;
@@ -1918,7 +1918,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- should fail, NULL value
  SELECT  xmltable.*
     FROM (SELECT data FROM xmldata) x,
-@@ -1297,10 +1270,13 @@
+@@ -1297,10 +1267,13 @@
                                    size float PATH 'SIZE' NOT NULL,
                                    unit text PATH 'SIZE/@unit',
                                    premier_name text PATH 'PREMIER_NAME' DEFAULT 'not specified');
@@ -1936,7 +1936,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- if all is ok, then result is empty
  -- one line xml test
  WITH
-@@ -1324,8 +1300,15 @@
+@@ -1324,8 +1297,15 @@
                                           proargtypes text))
     SELECT * FROM z
     EXCEPT SELECT * FROM x;
@@ -1954,7 +1954,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/xml_1.out --label
  -- multi line xml test, result should be empty too
  WITH
     x AS (SELECT proname, proowner, procost::numeric, pronargs,
-@@ -1348,57 +1331,60 @@
+@@ -1348,57 +1328,60 @@
                                           proargtypes text))
     SELECT * FROM z
     EXCEPT SELECT * FROM x;
