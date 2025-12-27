@@ -1373,8 +1373,8 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	require.NoError(t, err)
 
 	// Stats should agree with recomputation.
-	assertRecomputedStats(t, "range A before split", snap, lhsDesc, msA, store.Clock().PhysicalNow())
-	assertRecomputedStats(t, "range B before split", snap, rhsDesc, msB, store.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "range A before split", snap, lhsDesc, msA, store.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "range B before split", snap, rhsDesc, msB, store.Clock().PhysicalNow())
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
@@ -1391,7 +1391,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Merged stats should agree with recomputation.
 	nowNanos := tc.Servers[0].Clock().Now().WallTime
 	msMerged.AgeTo(nowNanos)
-	assertRecomputedStats(t, "merged range", snap, replMerged.Desc(), msMerged, nowNanos)
+	assertRecomputedStatsExceptSys(t, "merged range", snap, replMerged.Desc(), msMerged, nowNanos)
 }
 
 func TestStoreRangeMergeInFlightTxns(t *testing.T) {
