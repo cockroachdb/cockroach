@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1023,8 +1024,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		})
 
 		// Partition the replica from the rest of its range.
-		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    rangeID,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    rangeID,
 			IncomingRaftMessageHandler: partitionStore,
 		})
 
@@ -1058,11 +1059,11 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		}
 
 		// Remove the partition. Snapshot should follow.
-		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    rangeID,
+		partitionStore.Transport().ListenIncomingRaftMessages(partitionStore.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    rangeID,
 			IncomingRaftMessageHandler: partitionStore,
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -1070,8 +1071,8 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
-				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 
