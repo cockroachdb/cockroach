@@ -248,7 +248,7 @@ func runUserFileGet(cmd *cobra.Command, args []string) (resErr error) {
 	defer f.Close()
 
 	var files []string
-	if err := f.List(ctx, "", "", func(s string) error {
+	if err := f.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 		if pattern != "" {
 			if ok, err := path.Match(pattern, s); err != nil || !ok {
 				return err
@@ -442,7 +442,7 @@ func listUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]s
 
 	displayPrefix := strings.TrimPrefix(conf.Path, "/")
 	var res []string
-	if err := f.List(ctx, "", "", func(s string) error {
+	if err := f.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 		if pattern != "" {
 			ok, err := path.Match(pattern, s)
 			if err != nil || !ok {
@@ -519,7 +519,7 @@ func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([
 	displayRoot := strings.TrimPrefix(userFileTableConf.FileTableConfig.Path, "/")
 	var deleted []string
 
-	if err := f.List(ctx, "", "", func(s string) error {
+	if err := f.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 		if pattern != "" {
 			ok, err := path.Match(pattern, s)
 			if err != nil || !ok {

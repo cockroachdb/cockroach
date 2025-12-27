@@ -88,7 +88,9 @@ func (n *nullSinkStorage) Writer(_ context.Context, _ string) (io.WriteCloser, e
 	return nullWriter{}, nil
 }
 
-func (n *nullSinkStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+func (n *nullSinkStorage) List(
+	_ context.Context, _ string, _ cloud.ListOptions, _ cloud.ListingFn,
+) error {
 	return nil
 }
 

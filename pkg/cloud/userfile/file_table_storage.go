@@ -247,9 +247,10 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 
 // List implements the ExternalStorage interface.
 func (f *fileTableStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
+	afterKey := opts.CanonicalAfterKey(f.prefix)
 
 	res, err := f.fs.ListFiles(ctx, dest)
 	if err != nil {
@@ -260,15 +261,21 @@ func (f *fileTableStorage) List(
 	var prevPrefix string
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
-		if delim != "" {
-			if i := strings.Index(f, delim); i >= 0 {
-				f = f[:i+len(delim)]
+		if opts.Delimiter != "" {
+			if i := strings.Index(f, opts.Delimiter); i >= 0 {
+				f = f[:i+len(opts.Delimiter)]
 			}
 			if f == prevPrefix {
 				continue
 			}
 			prevPrefix = f
 		}
+
+		// afterKey is a full key so we must compare against the full file key.
+		if dest+f <= afterKey {
+			continue
+		}
+
 		if err := fn(f); err != nil {
 			return err
 		}

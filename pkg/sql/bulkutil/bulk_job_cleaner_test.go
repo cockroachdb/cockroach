@@ -46,7 +46,7 @@ func (m *mockStorageWithTracking) Delete(ctx context.Context, basename string) e
 }
 
 func (m *mockStorageWithTracking) List(
-	ctx context.Context, prefix, delimiter string, fn cloud.ListingFn,
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	m.listed = append(m.listed, prefix)
 	if m.listError != nil {
