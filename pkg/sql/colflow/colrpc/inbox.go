@@ -86,9 +86,9 @@ type Inbox struct {
 	// done prevents double closing. It should not be used by the RunWithStream
 	// goroutine.
 	done bool
-	// bufferedMeta buffers any metadata found in Next when reading from the
-	// stream and is returned by DrainMeta.
-	bufferedMeta []execinfrapb.ProducerMetadata
+	// remoteMeta, if set, contains the remaining pieces of remote metadata that
+	// have already been recv'ed but not yet propagated out.
+	remoteMeta []execinfrapb.ProducerMetadata
 
 	// stream is the RPC stream. It is set when RunWithStream is called but
 	// only the Next/DrainMeta goroutine may access it.
@@ -300,9 +300,15 @@ func (i *Inbox) Init(ctx context.Context) {
 // Next returns the next batch. It will block until there is data available.
 // The Inbox will exit when either the context passed in Init() is canceled or
 // when DrainMeta goroutine tells it to do so.
-func (i *Inbox) Next() coldata.Batch {
+func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if i.done {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
+	}
+	if len(i.remoteMeta) > 0 {
+		meta := i.remoteMeta[0]
+		i.remoteMeta[0] = execinfrapb.ProducerMetadata{}
+		i.remoteMeta = i.remoteMeta[1:]
+		return nil, &meta
 	}
 
 	var ungracefulStreamTermination bool
@@ -336,7 +342,7 @@ func (i *Inbox) Next() coldata.Batch {
 			if err == io.EOF {
 				// Done.
 				i.close()
-				return coldata.ZeroBatch
+				return coldata.ZeroBatch, nil
 			}
 			// Note that here err can be stream's context cancellation.
 			// Regardless of the cause we want to propagate such an error as
@@ -351,8 +357,7 @@ func (i *Inbox) Next() coldata.Batch {
 		if len(m.Data.Metadata) != 0 {
 			log.VEvent(i.Ctx, 2, "Inbox received metadata")
 			// If an error was encountered, it needs to be propagated
-			// immediately. All other metadata will simply be buffered and
-			// returned in DrainMeta.
+			// immediately via the panic mechanism.
 			var receivedErr error
 			for _, rpm := range m.Data.Metadata {
 				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, rpm)
@@ -362,22 +367,17 @@ func (i *Inbox) Next() coldata.Batch {
 				if meta.Err != nil && receivedErr == nil {
 					receivedErr = meta.Err
 				} else {
-					// Note that if multiple errors are sent in a single
-					// message, then we'll propagate the first one right away
-					// (via a panic below) and will buffer the rest to be
-					// returned in DrainMeta. The caller will catch the panic
-					// and will transition to draining, so this all works out.
-					//
-					// We choose this way of handling multiple errors rather
-					// than something like errors.CombineErrors() since we want
-					// to keep errors unchanged (e.g. kvpb.ErrPriority() will
-					// be called on each error in the DistSQLReceiver).
-					i.bufferedMeta = append(i.bufferedMeta, meta)
-					colexecutils.AccountForMetadata(i.Ctx, i.allocator.Acc(), i.bufferedMeta[len(i.bufferedMeta)-1:])
+					i.remoteMeta = append(i.remoteMeta, meta)
 				}
 			}
 			if receivedErr != nil {
 				colexecerror.ExpectedError(receivedErr)
+			}
+			if len(i.remoteMeta) > 0 {
+				meta := i.remoteMeta[0]
+				i.remoteMeta[0] = execinfrapb.ProducerMetadata{}
+				i.remoteMeta = i.remoteMeta[1:]
+				return nil, &meta
 			}
 			// Continue until we get the next batch or EOF.
 			continue
@@ -409,7 +409,7 @@ func (i *Inbox) Next() coldata.Batch {
 		// processed), so we update the allocator accordingly.
 		i.allocator.AdjustMemoryUsage(-numSerializedBytes)
 		atomic.AddInt64(&i.statsAtomics.rowsRead, int64(batch.Length()))
-		return batch
+		return batch, nil
 	}
 }
 
@@ -446,14 +446,12 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 // DrainMeta is part of the colexecop.MetadataSource interface. DrainMeta may
 // not be called concurrently with Next.
 func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
-	allMeta := i.bufferedMeta
-	// Eagerly lose the reference to the metadata since it might be of
-	// non-trivial footprint.
-	i.bufferedMeta = nil
+	allMeta := i.remoteMeta
+	i.remoteMeta = nil
 	// We also no longer need the deserializer.
 	i.deserializer.Close(i.Ctx)
-	// The allocator tracks the memory usage for a few things (the scratch batch
-	// as well as the metadata), and when this function returns, we no longer
+	// The allocator tracks the memory usage for a few things (e.g. the scratch
+	// batch in the deserializer), and when this function returns, we no longer
 	// reference any of those, so we can release all of the allocations.
 	defer i.allocator.ReleaseAll()
 

@@ -63,8 +63,9 @@ type Outbox struct {
 	draining uint32
 
 	scratch struct {
-		buf *bytes.Buffer
-		msg *execinfrapb.ProducerMessage
+		buf  *bytes.Buffer
+		msg  *execinfrapb.ProducerMessage
+		meta [1]execinfrapb.RemoteProducerMetadata
 	}
 
 	span *tracing.Span
@@ -265,7 +266,23 @@ func (o *Outbox) sendBatches(
 				return
 			}
 
-			batch := o.Input.Next()
+			batch, meta := o.Input.Next()
+			if meta != nil {
+				o.scratch.msg.Data.RawBytes = nil
+				o.scratch.msg.Data.Metadata = o.scratch.meta[:]
+				o.scratch.msg.Data.Metadata[0] = execinfrapb.LocalMetaToRemoteProducerMeta(ctx, *meta)
+				// o.scratch.msg can be reused as soon as Send returns.
+				log.VEvent(ctx, 2, "Outbox sending streaming metadata")
+				// TODO(yuzefovich): we could consider piggy-backing on the
+				// message that we'll send with the next batch, if we ever need
+				// to reduce the number of DistSQL messages. We'll need to teach
+				// the Inbox about that too.
+				if err := stream.Send(o.scratch.msg); err != nil {
+					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel)
+					return
+				}
+				continue
+			}
 			n := batch.Length()
 			if n == 0 {
 				terminatedGracefully = true
@@ -293,6 +310,7 @@ func (o *Outbox) sendBatches(
 			// increases (if it didn't increase, this call becomes a noop).
 			o.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(int64(o.scratch.buf.Cap() - oldBufCap))
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+			o.scratch.msg.Data.Metadata = nil
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
 			// soon as the message is written to the control buffer. The message is
@@ -307,10 +325,12 @@ func (o *Outbox) sendBatches(
 	return terminatedGracefully, errToSend
 }
 
-// sendMetadata drains the Outbox.metadataSources and sends the metadata over
-// the given stream, returning the Send error, if any. sendMetadata also sends
-// errToSend as metadata if non-nil.
-func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
+// sendDrainedMetadata drains the Outbox.metadataSources and sends the metadata
+// over the given stream, returning the Send error, if any. sendDrainedMetadata
+// also sends errToSend as metadata if non-nil.
+func (o *Outbox) sendDrainedMetadata(
+	ctx context.Context, stream flowStreamClient, errToSend error,
+) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
 		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
@@ -403,8 +423,8 @@ func (o *Outbox) runWithStream(
 			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
 		}
 		o.moveToDraining(ctx, reason)
-		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			flowinfra.HandleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
+		if err := o.sendDrainedMetadata(ctx, stream, errToSend); err != nil {
+			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.

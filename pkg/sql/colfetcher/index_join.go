@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -52,6 +51,10 @@ type ColIndexJoin struct {
 
 	// spanAssembler is used to construct the lookup spans for each input batch.
 	spanAssembler colexecspan.ColSpanAssembler
+
+	// rowCount tracks the number of rows that we've already buffered spans for
+	// in the spanAssembler.
+	rowCount int64
 
 	// batch keeps track of the input batch currently being processed; if we only
 	// generate spans for a portion of the batch on one iteration, we need to keep
@@ -167,27 +170,29 @@ const (
 )
 
 // Next is part of the Operator interface.
-func (s *ColIndexJoin) Next() coldata.Batch {
+func (s *ColIndexJoin) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch s.state {
 		case indexJoinConstructingSpans:
-			var rowCount int64
-			var spans roachpb.Spans
-			s.mem.inputBatchSize = 0
-			for s.next() {
+			for {
+				if readMore, meta := s.next(); meta != nil {
+					return nil, meta
+				} else if !readMore {
+					break
+				}
 				// Because index joins discard input rows, we do not have to maintain a
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
-				endIdx := s.findEndIndex(rowCount > 0)
+				endIdx := s.findEndIndex(s.rowCount > 0)
 				// If we have a limit hint, make sure we don't include more rows
 				// than needed.
-				if l := s.limitHintHelper.LimitHint(); l != 0 && rowCount+int64(endIdx-s.startIdx) > l {
-					endIdx = s.startIdx + int(l-rowCount)
+				if l := s.limitHintHelper.LimitHint(); l != 0 && s.rowCount+int64(endIdx-s.startIdx) > l {
+					endIdx = s.startIdx + int(l-s.rowCount)
 				}
-				rowCount += int64(endIdx - s.startIdx)
+				s.rowCount += int64(endIdx - s.startIdx)
 				s.spanAssembler.ConsumeBatch(s.batch, s.startIdx, endIdx)
 				s.startIdx = endIdx
-				if l := s.limitHintHelper.LimitHint(); l != 0 && rowCount == l {
+				if l := s.limitHintHelper.LimitHint(); l != 0 && s.rowCount == l {
 					// Reached the limit hint. Note that rowCount cannot be
 					// larger than l because we chopped the former off above.
 					break
@@ -197,10 +202,10 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 					break
 				}
 			}
-			if err := s.limitHintHelper.ReadSomeRows(rowCount); err != nil {
+			if err := s.limitHintHelper.ReadSomeRows(s.rowCount); err != nil {
 				colexecerror.InternalError(err)
 			}
-			spans = s.spanAssembler.GetSpans()
+			spans := s.spanAssembler.GetSpans()
 			if len(spans) == 0 {
 				// No lookups left to perform.
 				s.state = indexJoinDone
@@ -222,8 +227,8 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// For memory accounting, we assume the index join will return
 			// exactly one output row per input row. This is true most of the
 			// time, except when the locking wait policy is SKIP LOCKED.
-			s.cf.setEstimatedRowCount(uint64(rowCount))
-			s.scanRowCounts.expected = rowCount
+			s.cf.setEstimatedRowCount(uint64(s.rowCount))
+			s.scanRowCounts.expected = s.rowCount
 			// Note that the fetcher takes ownership of the spans slice - it
 			// will modify it and perform the memory accounting. We don't care
 			// about the modification here, but we want to be conscious about
@@ -257,6 +262,8 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// still has the references to it.
 				s.spanAssembler.AccountForSpans()
 				s.state = indexJoinConstructingSpans
+				s.mem.inputBatchSize = 0
+				s.rowCount = 0
 				s.assertScanRowCounts()
 				s.scanRowCounts.actual = 0
 				continue
@@ -265,12 +272,12 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			s.mu.Lock()
 			s.mu.rowsRead += int64(n)
 			s.mu.Unlock()
-			return batch
+			return batch, nil
 		case indexJoinDone:
 			// Eagerly close the index joiner. Note that closeInternal() is
 			// idempotent, so it's ok if it'll be closed again.
 			s.closeInternal()
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 	}
 }
@@ -374,18 +381,22 @@ func (s *ColIndexJoin) getBatchSize() int64 {
 // and performs initial processing of the batch. This includes performing
 // interface conversions up front and retrieving the overall memory footprint of
 // the data. next returns false once the input is finished, and otherwise true.
-func (s *ColIndexJoin) next() bool {
+func (s *ColIndexJoin) next() (bool, *execinfrapb.ProducerMetadata) {
 	if s.batch == nil || s.startIdx >= s.batch.Length() {
 		// The current batch is finished.
+		var meta *execinfrapb.ProducerMetadata
+		s.batch, meta = s.Input.Next()
+		if meta != nil {
+			return false, meta
+		}
 		s.startIdx = 0
-		s.batch = s.Input.Next()
 		if s.batch.Length() == 0 {
-			return false
+			return false, nil
 		}
 		s.mem.currentBatchSize = s.getBatchSize()
 	}
 	if !s.mem.hasVarSizeCols {
-		return true
+		return true, nil
 	}
 	s.mem.byteLikeCols = s.mem.byteLikeCols[:0]
 	s.mem.decimalCols = s.mem.decimalCols[:0]
@@ -403,7 +414,7 @@ func (s *ColIndexJoin) next() bool {
 			s.mem.datumCols = append(s.mem.datumCols, vec.Datum())
 		}
 	}
-	return true
+	return true, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
