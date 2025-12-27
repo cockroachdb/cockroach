@@ -7,23 +7,26 @@ package testcat_test
 
 import (
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/datadriven"
+	"time"
 )
 
+func init() {
+	// Sleep during package initialization, before any tests run
+	panic("init")
+	//time.Sleep(10 * time.Second)
+}
+
 func TestCatalog(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		catalog := testcat.New()
-
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			tester := opttester.New(catalog, d.Input)
-			return tester.RunCommand(t, d)
-		})
-	})
+	//defer leaktest.AfterTest(t)()
+	//
+	//datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+	//	catalog := testcat.New()
+	//
+	//	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+	//		tester := opttester.New(catalog, d.Input)
+	//		return tester.RunCommand(t, d)
+	//	})
+	//})
+	time.Sleep(10)
+	t.FailNow()
 }
