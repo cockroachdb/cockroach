@@ -2194,7 +2194,7 @@ CREATE TABLE t61414_c (
   FAMILY (k, a, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 
