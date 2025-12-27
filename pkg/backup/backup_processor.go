@@ -666,7 +666,15 @@ func runBackupProcessor(
 						// Even if the ExportRequest did not export any data we want to report
 						// the span as completed for accurate progress tracking.
 						if len(resp.Files) == 0 {
-							sink.WriteWithNoData(backupsink.ExportedSpan{CompletedSpans: completedSpans})
+							var revStart hlc.Timestamp
+							if spec.MVCCFilter == kvpb.MVCCFilter_All {
+								// Even if no data is written, we need to track the revision
+								// start time.
+								revStart = spec.BackupStartTime
+							}
+							sink.WriteWithNoData(
+								backupsink.ExportedSpan{CompletedSpans: completedSpans, RevStart: revStart},
+							)
 						}
 						for i, file := range resp.Files {
 							entryCounts := countRows(file.Exported, spec.PKIDs)
