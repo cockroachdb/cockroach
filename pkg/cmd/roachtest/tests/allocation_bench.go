@@ -302,7 +302,6 @@ func setupAllocationBench(
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
 		settings := install.MakeClusterSettings()
-		settings.Env = append(settings.Env, "COCKROACH_ALLOW_MMA=true")
 		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
