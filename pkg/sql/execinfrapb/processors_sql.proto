@@ -407,7 +407,8 @@ message DistinctSpec {
   // check for distinct rows. If A,B,C are in distinct_columns and there is a
   // 4th column D which is not included in distinct_columns, its values are not
   // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
-  // only one of them (the first) is output.
+  // only one of them (the first) is output. distinct_columns can be empty
+  // (which means that all rows are considered equal).
   repeated uint32 distinct_columns = 2;
   // If true, then NULL values are treated as not equal to one another. Each NULL
   // value will cause a new row group to be created. For example:
