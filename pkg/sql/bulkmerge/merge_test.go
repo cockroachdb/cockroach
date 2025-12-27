@@ -125,8 +125,8 @@ func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
 	}}
 
 	writeTS := hlc.Timestamp{WallTime: 1}
-	_, err := Merge(ctx, jobExecCtx, ssts, spans, func(instanceID base.SQLInstanceID) string {
-		return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
+	_, err := Merge(ctx, jobExecCtx, ssts, spans, func(instanceID base.SQLInstanceID) (string, error) {
+		return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
 	}, 1 /* iteration */, 1 /* maxIterations */, &writeTS)
 	require.ErrorIs(t, err, injectedErr)
 }
@@ -189,8 +189,8 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		jobExecCtx,
 		inputSSTs,
 		spans,
-		func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/merge/iter-1/", instanceID)
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/iter-1/", instanceID), nil
 		},
 		1, /* iteration */
 		2, /* maxIterations */
@@ -206,8 +206,8 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		jobExecCtx,
 		iter1Out,
 		spans,
-		func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/merge/iter-2/", instanceID)
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/iter-2/", instanceID), nil
 		},
 		2, /* iteration */
 		2, /* maxIterations */
@@ -343,12 +343,13 @@ func testMergeProcessors(
 		jobExecCtx,
 		ssts,
 		spans,
-		func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
 		},
-		1, /* iteration */
-		2, /* maxIterations */
-		nil /* writeTS */)
+		1,   /* iteration */
+		2,   /* maxIterations */
+		nil, /* writeTS */
+	)
 	require.NoError(t, err)
 	defer plan.Release()
 
@@ -548,8 +549,8 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 		jobExecCtx,
 		ssts,
 		spans,
-		func(instanceID base.SQLInstanceID) string {
-			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID)
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
 		},
 		1,        /* iteration */
 		2,        /* maxIterations */

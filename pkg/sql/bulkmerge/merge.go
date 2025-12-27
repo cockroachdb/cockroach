@@ -26,14 +26,14 @@ func Merge(
 	execCtx sql.JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	genOutputURI func(sqlInstance base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	execCfg := execCtx.ExecCfg()
 
-	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURI, iteration, maxIterations, writeTS)
+	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, iteration, maxIterations, writeTS)
 	if err != nil {
 		return nil, err
 	}

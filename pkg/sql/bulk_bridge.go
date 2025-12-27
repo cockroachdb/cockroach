@@ -20,7 +20,7 @@ type bulkMergeFunc func(
 	execCtx JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	outputURI func(base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
@@ -53,7 +53,7 @@ func invokeBulkMerge(
 	execCtx JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	outputURI func(base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
@@ -61,7 +61,7 @@ func invokeBulkMerge(
 	if registeredBulkMerge == nil {
 		return nil, errors.AssertionFailedf("bulk merge implementation not registered")
 	}
-	return registeredBulkMerge(ctx, execCtx, ssts, spans, outputURI, iteration, maxIterations, writeTS)
+	return registeredBulkMerge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, iteration, maxIterations, writeTS)
 }
 
 func invokeBulkIngest(
