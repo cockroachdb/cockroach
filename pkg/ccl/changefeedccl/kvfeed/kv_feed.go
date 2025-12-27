@@ -490,7 +490,26 @@ func (f *kvFeed) scanIfShould(
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.scan_if_should")
 	defer sp.Finish()
 
-	highWater := resumeFrontier.Frontier()
+	// Snapshot the frontier entries and compute highWater in a single iteration.
+	// This prevents a race where checkpoints arrive between when we compute
+	// scanTime and when we filter spans, causing spans that were advanced past
+	// scanTime to be incorrectly skipped during schema change backfills.
+	//
+	// The concurrentFrontier holds its lock during Entries() iteration, so we
+	// capture everything we need in one pass.
+	type spanTimestamp struct {
+		span roachpb.Span
+		ts   hlc.Timestamp
+	}
+	var frontierSnapshot []spanTimestamp
+	var highWater hlc.Timestamp
+	for sp, ts := range resumeFrontier.Entries() {
+		frontierSnapshot = append(frontierSnapshot, spanTimestamp{span: sp, ts: ts})
+		if highWater.IsEmpty() || ts.Less(highWater) {
+			highWater = ts
+		}
+	}
+
 	scanTime := func() hlc.Timestamp {
 		if highWater.IsEmpty() {
 			return f.initialHighWater
@@ -552,11 +571,13 @@ func (f *kvFeed) scanIfShould(
 	}
 
 	// Filter out any spans that have already been backfilled.
+	// Use the snapshot taken at the start of this function to avoid a race
+	// with concurrent checkpoint processing.
 	var spansToBackfill roachpb.SpanGroup
 	spansToBackfill.Add(spansToScan...)
-	for sp, ts := range resumeFrontier.Entries() {
-		if scanTime.LessEq(ts) {
-			spansToBackfill.Sub(sp)
+	for _, entry := range frontierSnapshot {
+		if scanTime.LessEq(entry.ts) {
+			spansToBackfill.Sub(entry.span)
 		}
 	}
 
