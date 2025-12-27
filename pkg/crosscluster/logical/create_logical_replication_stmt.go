@@ -448,11 +448,16 @@ func doLDRPlan(
 			ingestedCatalog externalpb.ExternalCatalog
 		)
 		if details.CreateTable {
+			descTransformer := ldrDestTableDescTransformerFactory(details.ReverseStreamCommand == "" /* unidirectional */)
 			ingestingTableNames := make([]string, len(resolvedDestObjects.TableNames))
 			for i := range resolvedDestObjects.TableNames {
 				ingestingTableNames[i] = resolvedDestObjects.TableNames[i].Table()
 			}
-			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */, ingestingTableNames)
+			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(
+				ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(),
+				resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID,
+				true /* setOffline */, ingestingTableNames, descTransformer,
+			)
 			if err != nil {
 				return err
 			}
@@ -779,4 +784,24 @@ func checkReplicationPrivileges(
 		}
 	}
 	return nil
+}
+
+// ldrDestTableDescTransformerFactory returns a transformer function that is
+// applied to created destination table descriptors before they are written to
+// the descriptors table.
+func ldrDestTableDescTransformerFactory(
+	unidirectional bool,
+) func(descpb.TableDescriptor, *tabledesc.Mutable) {
+	if !unidirectional {
+		return nil
+	}
+
+	return func(_ descpb.TableDescriptor, td *tabledesc.Mutable) {
+		for idx := range td.Columns {
+			// Unidrectional LDR streams support sequences by simply ignoring the
+			// sequence dependency on the destination table and replicating the raw
+			// values in the columns.
+			td.Columns[idx].UsesSequenceIds = []descpb.ID{}
+		}
+	}
 }
