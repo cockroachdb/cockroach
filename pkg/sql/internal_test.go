@@ -13,14 +13,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -770,6 +773,76 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 				}),
 			)
 		})
+}
+
+// TestDescriptorLeaseAfterTableCreation tests that we can successfully lease
+// a descriptor immediately after creating a table, even when the safe
+// replication timestamp might lag behind the table creation timestamp.
+// This is a regression test for a bug where GetReadTimestamp would return
+// a LeaseTimestamp that was before the descriptor was created, causing
+// GetLeasedImmutableTableByID to return (nil, nil) and panic.
+func TestDescriptorLeaseAfterTableCreation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	settings := []string{
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+	}
+	sysConn := s.SystemLayer().SQLConn(t)
+	defer sysConn.Close()
+
+	for _, setting := range settings {
+		_, err := sysConn.Exec(setting)
+		require.NoError(t, err)
+	}
+
+	_, err := db.Exec(`CREATE TABLE test_table (id INT PRIMARY KEY, value TEXT)`)
+	require.NoError(t, err)
+
+	_, err = db.Exec(`CREATE TABLE test_table_b (id INT PRIMARY KEY, value TEXT)`)
+	require.NoError(t, err)
+
+	// Get the table ID from system.namespace
+	var tableID descpb.ID
+	err = db.QueryRow(`
+		SELECT id FROM system.namespace
+		WHERE name = 'test_table'
+	`).Scan(&tableID)
+	require.NoError(t, err)
+	require.NotZero(t, tableID, "table ID should not be zero")
+
+	// Get the table's modification time and compare with safe replication TS
+	err = s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
+	) error {
+		desc, err := txn.Descriptors().GetLeasedImmutableTableByID(ctx, txn.KV(), tableID)
+		require.NoError(t, err)
+		require.NotNil(t, desc, "descriptor should not be nil for table ID %d", tableID)
+		tableModTime := desc.GetModificationTime()
+
+		// Check the safe replication timestamp
+		lm := s.LeaseManager().(*lease.Manager)
+		safeTS := lm.GetSafeReplicationTS()
+
+		t.Logf("Table modification time: %s", tableModTime)
+		t.Logf("Safe replication TS:     %s", safeTS)
+		t.Logf("Safe TS < Mod time:      %t", safeTS.Less(tableModTime))
+
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 // TODO(andrei): Test that descriptor leases are released by the
