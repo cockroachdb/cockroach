@@ -479,15 +479,18 @@ func GetEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]
 	var files []string
 	// Look for all files in dest that start with "/ENCRYPTION-INFO"
 	// and return them.
-	err := dest.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		paths := strings.Split(p, "/")
-		p = paths[len(paths)-1]
-		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
-			files = append(files, p)
-		}
+	err := dest.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(p string) error {
+			paths := strings.Split(p, "/")
+			p = paths[len(paths)-1]
+			if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
+				files = append(files, p)
+			}
 
-		return nil
-	})
+			return nil
+		},
+	)
 	if len(files) < 1 {
 		return nil, errors.New("no ENCRYPTION-INFO files found")
 	}

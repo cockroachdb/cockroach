@@ -464,14 +464,17 @@ func (s *azureStorage) ReadFile(
 	return r, r.Size, nil
 }
 
-func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *azureStorage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.List")
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
-	pager := s.container.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &dest})
+	pager := s.container.NewListBlobsHierarchyPager(opts.Delimiter, &container.ListBlobsHierarchyOptions{Prefix: &dest})
 	for pager.More() {
 		response, err := pager.NextPage(ctx)
 
@@ -479,11 +482,17 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
 		for _, blob := range response.Segment.BlobPrefixes {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}

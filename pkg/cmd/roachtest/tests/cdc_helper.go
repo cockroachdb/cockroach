@@ -93,7 +93,7 @@ func getRandomIndex(sizeOfSlice int) int {
 func listFilesOfTargetTable(
 	cs cloud.ExternalStorage, selectedTargetTable string,
 ) (csFileNames []string, _ error) {
-	err := cs.List(context.Background(), "", "", func(str string) error {
+	err := cs.List(context.Background(), "", cloud.ListOptions{}, func(str string) error {
 		targetTableName, err := extractTableNameFromFileName(str)
 		if err != nil {
 			return err
