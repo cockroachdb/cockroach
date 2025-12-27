@@ -67,6 +67,16 @@ var DistributedMergeIndexBackfillMode = settings.RegisterEnumSetting(
 	settings.WithRetiredName("bulkio.index_backfill.distributed_merge.enabled"),
 )
 
+// DistributedMergeIterations controls the number of merge iterations to perform
+// during index backfills using the distributed merge pipeline.
+var DistributedMergeIterations = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.distributed_merge.iterations",
+	"number of merge iterations to perform during index backfills",
+	1,
+	settings.IntWithMinimum(1),
+)
+
 // shouldEnableDistributedMergeIndexBackfill determines whether the specified
 // backfill consumer should opt into the distributed merge pipeline based on the
 // current cluster setting and version state.

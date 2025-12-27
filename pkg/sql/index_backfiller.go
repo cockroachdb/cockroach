@@ -173,15 +173,7 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if !useDistributedMerge {
 		return nil
 	}
-	merged, err := ib.runDistributedMerge(ctx, job, descriptor, progress, sstManifestBuf.Snapshot())
-	if err != nil {
-		return err
-	}
-	progress.SSTManifests = merged
-	if err := tracker.SetBackfillProgress(ctx, progress); err != nil {
-		return err
-	}
-	return ib.runDistributedIngest(ctx, job, descriptor, progress, merged)
+	return ib.runDistributedMerge(ctx, job, descriptor, &progress, tracker, sstManifestBuf.Snapshot())
 }
 
 // Index backfilling ingests SSTs that don't play nicely with running txns
@@ -293,23 +285,25 @@ func getIndexBackfillDistributedMergeMode(
 	return details.DistributedMergeMode, nil
 }
 
-// runDistributedMerge runs a distributed merge of the provided SSTs into larger
-// SSTs. This is part of the distributed merge pipeline and is only run if the
-// index backfill has enabled distributed merging.
+// runDistributedMerge runs a multi-pass distributed merge of the provided SSTs.
+// Intermediate iterations emit merged SSTs to nodelocal storage and update the
+// progress with the new manifests; the final iteration ingests them directly
+// into KV and clears the manifests.
 func (ib *IndexBackfillPlanner) runDistributedMerge(
 	ctx context.Context,
 	job *jobs.Job,
 	descriptor catalog.TableDescriptor,
-	progress scexec.BackfillProgress,
+	progress *scexec.BackfillProgress,
+	tracker scexec.BackfillerProgressWriter,
 	manifests []jobspb.IndexBackfillSSTManifest,
-) ([]jobspb.IndexBackfillSSTManifest, error) {
+) error {
 	if len(manifests) == 0 {
-		return nil, nil
+		return nil
 	}
 	ssts := make([]execinfrapb.BulkMergeSpec_SST, 0, len(manifests))
 	for _, manifest := range manifests {
 		if manifest.Span == nil {
-			return nil, errors.AssertionFailedf("manifest missing span metadata")
+			return errors.AssertionFailedf("manifest missing span metadata")
 		}
 		ssts = append(ssts, execinfrapb.BulkMergeSpec_SST{
 			URI:      manifest.URI,
@@ -323,83 +317,86 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		targetSpans = append(targetSpans, span)
 	}
 	if len(targetSpans) == 0 {
-		return nil, errors.AssertionFailedf("no destination index spans provided for merge")
+		return errors.AssertionFailedf("no destination index spans provided for merge")
 	}
 
 	mem := &MemoryMetrics{}
 	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-distributed-merge", username.NodeUserName(), mem, ib.execCfg)
 	defer cleanup()
 
-	outputURI := func(instanceID base.SQLInstanceID) string {
-		// Use nodelocal for temporary storage of merged SSTs. These SSTs are
-		// only needed during the lifetime of the job. The '/job/<jobID>' prefix
-		// allows for easy cleanup in the event of job cancellation or failure.
-		// TODO(158873): handle cleanup of nodelocal SSTs
-		//
-		// The 'iter-0' suffix is to allow for future iterations of
-		// merging in case we want to do multiple stages of merging.
-		return fmt.Sprintf("nodelocal://%d/job/%d/merge/iter-0/", instanceID, job.ID())
-	}
+	maxIterations := int(backfill.DistributedMergeIterations.Get(&ib.execCfg.Settings.SV))
 
-	writeTS := progress.MinimumWriteTimestamp
-
-	// TODO(159374): use single-pass merge by setting iteration < maxIterations
-	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, outputURI,
-		1 /* iteration */, 2 /* maxIterations */, &writeTS)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
-	for _, sst := range merged {
-		span := roachpb.Span{
-			Key:    append([]byte(nil), sst.StartKey...),
-			EndKey: append([]byte(nil), sst.EndKey...),
+	// Iterate through merge passes, with all but the final iteration writing to
+	// intermediate storage, and the final iteration ingesting directly into KV.
+	currentSSTs := ssts
+	for iteration := 1; iteration <= maxIterations; iteration++ {
+		intermediateOutputURI := func(instanceID base.SQLInstanceID) string {
+			// Use nodelocal for temporary storage of merged SSTs. These SSTs are
+			// only needed during the lifetime of the job. The '/job/<jobID>' prefix
+			// allows for easy cleanup in the event of job cancellation or failure.
+			// TODO(158873): handle cleanup of nodelocal SSTs.
+			return fmt.Sprintf("nodelocal://%d/job/%d/merge/iter-%d/", instanceID, job.ID(), iteration)
 		}
-		ts := writeTS
-		out = append(out, jobspb.IndexBackfillSSTManifest{
-			URI:            sst.URI,
-			Span:           &span,
-			WriteTimestamp: &ts,
-		})
-	}
-	return out, nil
-}
 
-// runDistributedIngest runs a final ingest of the SSTs produced by
-// the runDistributedMerge call. This is only used when the distributed
-// merge pipeline is enabled for index backfills.
-// TODO(159374): we can remove this stage of the pipeline if the merge processor
-// can write directly into the KV in it's final iteration.
-func (ib *IndexBackfillPlanner) runDistributedIngest(
-	ctx context.Context,
-	job *jobs.Job,
-	descriptor catalog.TableDescriptor,
-	progress scexec.BackfillProgress,
-	outputs []jobspb.IndexBackfillSSTManifest,
-) error {
-	if len(outputs) == 0 {
-		return nil
-	}
-	spans := make([]roachpb.Span, len(progress.DestIndexIDs))
-	for i, idxID := range progress.DestIndexIDs {
-		spans[i] = descriptor.IndexSpan(ib.execCfg.Codec, idxID)
-	}
-	ssts := make([]execinfrapb.BulkMergeSpec_SST, len(outputs))
-	for i, manifest := range outputs {
-		if manifest.Span == nil {
-			return errors.AssertionFailedf("manifest missing span metadata")
+		var writeTS *hlc.Timestamp
+		if iteration == maxIterations {
+			// Final iteration: ingest directly into KV.
+			ts := progress.MinimumWriteTimestamp
+			writeTS = &ts
 		}
-		ssts[i] = execinfrapb.BulkMergeSpec_SST{
-			URI:      manifest.URI,
-			StartKey: append([]byte(nil), manifest.Span.Key...),
-			EndKey:   append([]byte(nil), manifest.Span.EndKey...),
+
+		merged, err := invokeBulkMerge(
+			ctx,
+			jobExecCtx,
+			currentSSTs,
+			targetSpans,
+			intermediateOutputURI,
+			iteration,
+			maxIterations,
+			writeTS,
+		)
+		if err != nil {
+			return err
 		}
+
+		// If this is the final iteration, we're done (merged will be nil as the
+		// final iteration writes to KV, not external storage). Keep the manifests
+		// from the previous iteration so they can be used for cleanup or debugging.
+		if iteration == maxIterations {
+			return nil
+		}
+
+		if len(merged) == 0 {
+			return errors.AssertionFailedf("expected merged sst output: iteration %d", iteration)
+		}
+
+		// Convert merged SSTs to manifests and append them to the existing manifests.
+		// This accumulates SSTs from all iterations, allowing for potential resume
+		// and cleanup operations.
+		newManifests := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
+		for _, sst := range merged {
+			span := roachpb.Span{
+				Key:    append([]byte(nil), sst.StartKey...),
+				EndKey: append([]byte(nil), sst.EndKey...),
+			}
+			newManifests = append(newManifests, jobspb.IndexBackfillSSTManifest{
+				URI:  sst.URI,
+				Span: &span,
+			})
+		}
+		progress.SSTManifests = newManifests
+		if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
+			return err
+		}
+
+		// Call testing knob after updating progress for this iteration.
+		if fn := ib.execCfg.DistSQLSrv.TestingKnobs.AfterDistributedMergeIteration; fn != nil {
+			fn(ctx, iteration, progress.SSTManifests)
+		}
+
+		// Use the output of this iteration as input to the next.
+		currentSSTs = merged
 	}
 
-	mem := &MemoryMetrics{}
-	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-ingest", username.NodeUserName(), mem, ib.execCfg)
-	defer cleanup()
-
-	return invokeBulkIngest(ctx, jobExecCtx, spans, ssts)
+	return nil
 }
