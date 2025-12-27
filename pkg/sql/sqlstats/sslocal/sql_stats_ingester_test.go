@@ -8,6 +8,7 @@ package sslocal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -162,7 +164,7 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -196,7 +198,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	defer stopper.Stop(ingesterCtx)
 	settings := cluster.MakeTestingClusterSettings()
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -240,7 +242,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -283,7 +285,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -341,7 +343,7 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			},
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics())
+		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), nil /* parentMon */)
 		ingester.Start(ctx, stopper)
 		ingester.BufferStatement(statementA)
 		ingester.BufferStatement(statementB)
@@ -398,7 +400,7 @@ func TestStatsCollectorIngester(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	fakeSink := &capturingSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), fakeSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, fakeSink)
 	ingester.Start(ctx, stopper, WithFlushInterval(10))
 
 	// Set up a StatsCollector with the ingester.
@@ -447,4 +449,201 @@ func TestStatsCollectorIngester(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSQLStatsIngesterMemoryAccounting verifies memory tracking behavior
+// including buffering, flushing, limits, and multi-session scenarios.
+func TestSQLStatsIngesterMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name        string
+		memoryLimit int64
+		record      func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink)
+		flush       func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink)
+	}{
+		{
+			name:        "basic buffering and flushing",
+			memoryLimit: 10 * 1024, // 10KB
+			record: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+
+				stmt1 := &sqlstats.RecordedStmtStats{
+					Query:         "SELECT * FROM foo WHERE bar = 1 AND baz = 2",
+					SessionID:     sessionID,
+					FingerprintID: appstatspb.StmtFingerprintID(1),
+					App:           "testapp",
+					Database:      "testdb",
+				}
+				stmt1Size := stmt1.Size()
+				ingester.RecordStatement(stmt1)
+
+				memUsedAfterFirst := ingester.acc.Used()
+				require.Greater(t, memUsedAfterFirst, int64(0),
+					"expected memory tracking after buffering statement")
+				require.Equal(t, memUsedAfterFirst, stmt1Size,
+					"account should track at least the statement size")
+
+				stmt2 := &sqlstats.RecordedStmtStats{
+					Query:         "UPDATE foo SET baz = 3 WHERE id = 4",
+					SessionID:     sessionID,
+					FingerprintID: appstatspb.StmtFingerprintID(2),
+					App:           "testapp",
+				}
+				ingester.RecordStatement(stmt2)
+
+				memUsedAfterSecond := ingester.acc.Used()
+				require.Greater(t, memUsedAfterSecond, memUsedAfterFirst,
+					"expected account to increase after buffering second statement")
+			},
+			flush: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+				ingester.FlushBuffer(sessionID)
+				ingester.guard.ForceSync()
+				<-ingester.syncStatsTestingCh
+
+				require.Equal(t, int64(0), ingester.acc.Used(),
+					"expected account memory to be released after flushing")
+			},
+		},
+		{
+			name:        "respects memory limits and drops statements when exhausted",
+			memoryLimit: 50 * 1024, // 50KB
+			record: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+				largeQuery := strings.Repeat("SELECT * FROM table_with_very_long_name_to_increase_size ", 50)
+				largeIndexRec := strings.Repeat("CREATE INDEX idx ON table(column) ", 20)
+
+				const totalAttempts = 20
+				var bufferedStmts int
+				for i := 0; i < totalAttempts; i++ {
+					stmt := &sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionID,
+						FingerprintID:        appstatspb.StmtFingerprintID(i + 1),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					}
+
+					memBefore := ingester.acc.Used()
+					ingester.RecordStatement(stmt)
+					memAfter := ingester.acc.Used()
+
+					if memAfter == memBefore && i > 0 {
+						t.Logf("Hit memory limit after buffering %d statements", bufferedStmts)
+						break
+					}
+					bufferedStmts++
+				}
+
+				require.Greater(t, bufferedStmts, 10, "should have buffered more than ten statements")
+				require.Less(t, bufferedStmts, totalAttempts, "should have hit memory limit")
+				require.Greater(t, ingester.acc.Used(), int64(0),
+					"statement memory should have been recorded")
+			},
+			flush: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+				ingester.FlushBuffer(sessionID)
+				ingester.guard.ForceSync()
+				<-ingester.syncStatsTestingCh
+
+				testSink.mu.RLock()
+				sinkStmtCount := len(testSink.mu.stmts)
+				testSink.mu.RUnlock()
+
+				const totalAttempts = 20
+				require.Greater(t, sinkStmtCount, 10,
+					"sink should have received more than ten statements")
+				t.Logf("Sink received %d statements out of %d attempted", sinkStmtCount, totalAttempts)
+				require.Less(t, sinkStmtCount, totalAttempts,
+					"sink should not have received all statements due to memory limits")
+			},
+		},
+		{
+			name:        "releases memory on session clear (single and multiple sessions)",
+			memoryLimit: 100 * 1024, // 100KB
+			record: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				const numSessions = 5
+				const stmtsPerSession = 5
+				sessions := make([]clusterunique.ID, numSessions)
+				for i := range sessions {
+					sessions[i] = clusterunique.IDFromBytes([]byte(fmt.Sprintf("session%d%s", i, strings.Repeat("0", 20))))
+				}
+
+				memBefore := ingester.acc.Used()
+
+				for sessionIdx, sessionID := range sessions {
+					for stmtIdx := 0; stmtIdx < stmtsPerSession; stmtIdx++ {
+						stmt := &sqlstats.RecordedStmtStats{
+							Query:         fmt.Sprintf("SELECT * FROM table_%d_%d", sessionIdx, stmtIdx),
+							SessionID:     sessionID,
+							FingerprintID: appstatspb.StmtFingerprintID(sessionIdx*10 + stmtIdx + 1),
+							App:           fmt.Sprintf("app%d", sessionIdx),
+						}
+						ingester.RecordStatement(stmt)
+					}
+				}
+
+				require.Greater(t, ingester.acc.Used(), memBefore,
+					"expected memory to increase after buffering statements")
+			},
+			flush: func(t *testing.T, ingester *SQLStatsIngester, testSink *sqlStatsTestSink) {
+				const numSessions = 5
+				sessions := make([]clusterunique.ID, numSessions)
+				for i := range sessions {
+					sessions[i] = clusterunique.IDFromBytes([]byte(fmt.Sprintf("session%d%s", i, strings.Repeat("0", 20))))
+				}
+
+				memBeforeFlush := ingester.acc.Used()
+				require.Greater(t, memBeforeFlush, int64(0),
+					"expected memory to be tracked after buffering")
+
+				for _, sessionID := range sessions {
+					ingester.FlushBuffer(sessionID)
+					ingester.guard.ForceSync()
+					<-ingester.syncStatsTestingCh
+
+					memAfterFlush := ingester.acc.Used()
+					require.Less(t, memAfterFlush, memBeforeFlush,
+						"expected memory to be released as sessions are flushed")
+					memBeforeFlush = memAfterFlush // for the next iteration
+				}
+
+				require.Equal(t, int64(0), ingester.acc.Used(),
+					"expected all memory to be released after flushing all sessions")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			settings := cluster.MakeTestingClusterSettings()
+
+			parentMon := mon.NewMonitor(mon.Options{
+				Name:     mon.MakeName("test-sql-stats-mon"),
+				Settings: settings,
+			})
+			parentMon.Start(ctx, nil, mon.NewStandaloneBudget(tc.memoryLimit))
+			defer parentMon.Stop(ctx)
+
+			testSink := &sqlStatsTestSink{}
+			knobs := &sqlstats.TestingKnobs{
+				SynchronousSQLStats: true,
+			}
+			ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), parentMon, testSink)
+			ingester.Start(ctx, stopper, WithoutTimedFlush())
+
+			tc.record(t, ingester, testSink)
+			tc.flush(t, ingester, testSink)
+
+			if ingester.acc != nil {
+				ingester.acc.Close(ctx)
+			}
+		})
+	}
 }

@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/sql/execstats",
+        "//pkg/sql/memsize",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlcommenter",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",

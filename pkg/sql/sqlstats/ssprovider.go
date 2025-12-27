@@ -11,11 +11,13 @@ package sqlstats
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -99,6 +101,48 @@ type RecordedStmtStats struct {
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
+}
+
+var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
+
+// Size returns the approximate memory footprint of RecordedStmtStats.
+func (r *RecordedStmtStats) Size() int64 {
+	size := recordedStmtStatsSize
+
+	// Account for variable-length string fields.
+	size += int64(len(r.Query))
+	size += int64(len(r.App))
+	size += int64(len(r.Database))
+	size += int64(len(r.QuerySummary))
+	size += int64(len(r.PlanGist))
+
+	// Account for slices.
+	size += int64(cap(r.Nodes)) * memsize.Int64
+	size += int64(cap(r.KVNodeIDs)) * memsize.Int32
+	size += int64(cap(r.IndexRecommendations)) * memsize.String
+	for _, rec := range r.IndexRecommendations {
+		size += int64(len(rec))
+	}
+	size += int64(cap(r.Indexes)) * memsize.String
+	for _, idx := range r.Indexes {
+		size += int64(len(idx))
+	}
+
+	size += int64(cap(r.QueryTags)) * int64(unsafe.Sizeof(sqlcommenter.QueryTag{}))
+	for _, tag := range r.QueryTags {
+		size += int64(len(tag.Key))
+		size += int64(len(tag.Value))
+	}
+
+	// Account for pointer fields.
+	if r.Plan != nil {
+		size += int64(r.Plan.Size())
+	}
+	if r.ExecStats != nil {
+		size += int64(unsafe.Sizeof(*r.ExecStats))
+	}
+
+	return size
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
