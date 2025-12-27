@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -253,7 +253,7 @@ func makeIndexDescriptor(
 	if n.Type == idxtype.VECTOR {
 		// Disable vector indexes by default in 25.2.
 		// TODO(andyk): Remove this check after 25.2.
-		if err = vecindex.CheckEnabled(&params.EvalContext().Settings.SV); err != nil {
+		if err = vecsettings.CheckEnabled(&params.EvalContext().Settings.SV); err != nil {
 			return nil, err
 		}
 
@@ -262,7 +262,7 @@ func makeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
-		indexDesc.VecConfig, err = vecindex.MakeVecConfig(
+		indexDesc.VecConfig, err = vecsettings.MakeVecConfig(
 			params.ctx, params.EvalContext(), column.GetType(), vecCol.OpClass)
 		if err != nil {
 			return nil, err

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "scbuildstmt",
@@ -124,8 +125,8 @@ go_library(
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/storageparam/tablestorageparam",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/vecpb",
+        "//pkg/sql/vecindex/vecsettings",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
@@ -148,4 +149,9 @@ go_test(
         "//pkg/sql/sem/tree",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+disallowed_imports_test(
+    "scbuildstmt",
+    ["//pkg/sql/vecindex"],
 )
