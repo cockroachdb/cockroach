@@ -667,6 +667,12 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
 	require.NoError(t, err)
 
+	// Enable latch wait contention event registration so that high-contention
+	// insights triggered by latch contention have corresponding events in the
+	// contention registry.
+	_, err = conn.ExecContext(ctx, "SET register_latch_wait_contention_events = true")
+	require.NoError(t, err)
+
 	_, err = conn.Exec("CREATE TABLE t (id string, s string);")
 	require.NoError(t, err)
 
