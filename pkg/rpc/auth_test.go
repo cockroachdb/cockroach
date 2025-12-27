@@ -39,7 +39,6 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"storj.io/drpc/drpcctx"
-	"storj.io/drpc/drpcmetadata"
 )
 
 // mockServerStream is an implementation of grpc.ServerStream that receives a
@@ -284,9 +283,6 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 			if enableDRPC {
 				ctx = drpcctx.WithPeerConnectionInfo(context.Background(),
 					drpcctx.PeerConnectionInfo{Certificates: []*x509.Certificate{cert}})
-				if tc.clientTenantInMD != "" {
-					ctx = drpcmetadata.Add(ctx, "client-tid", tc.clientTenantInMD)
-				}
 			} else {
 				tlsInfo := credentials.TLSInfo{
 					State: tls.ConnectionState{
@@ -295,10 +291,10 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 				}
 				p := peer.Peer{AuthInfo: tlsInfo}
 				ctx = peer.NewContext(context.Background(), &p)
-				if tc.clientTenantInMD != "" {
-					md := metadata.MD{"client-tid": []string{tc.clientTenantInMD}}
-					ctx = metadata.NewIncomingContext(ctx, md)
-				}
+			}
+			if tc.clientTenantInMD != "" {
+				md := metadata.MD{"client-tid": []string{tc.clientTenantInMD}}
+				ctx = metadata.NewIncomingContext(ctx, md)
 			}
 
 			sv := &settings.Values{}

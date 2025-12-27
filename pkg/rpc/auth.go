@@ -25,7 +25,6 @@ import (
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcctx"
-	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
 
@@ -113,10 +112,10 @@ func (a kvAuth) unaryDRPCInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
-		// Clear any leftover incoming DRPC metadata, if this call is
+		// Clear any leftover incoming RPC metadata, if this call is
 		// originating from a RPC handler function called as a result of a
 		// tenant call. See unaryInterceptor for more details.
-		ctx = drpcmetadata.ClearContext(ctx)
+		ctx = grpcutil.ClearIncomingContext(ctx)
 
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, req); err != nil {
 			return nil, err
@@ -215,9 +214,9 @@ func (a kvAuth) streamDRPCInterceptor(
 		// tenant call. See streamInterceptor for more details.
 
 		if rpc == "/cockroach.blobs.Blob/PutStream" {
-			ctx = drpcmetadata.ClearContextExcept(ctx, "filename")
+			ctx = grpcutil.ClearIncomingContextExcept(ctx, "filename")
 		} else {
-			ctx = drpcmetadata.ClearContext(ctx)
+			ctx = grpcutil.ClearIncomingContext(ctx)
 		}
 
 		originalStream := stream
@@ -618,13 +617,6 @@ func newPerRPCTIDMetdata(tid roachpb.TenantID) (string, string) {
 // tenantIDFromRPCMetadata checks if there is a tenant ID in
 // the incoming gRPC metadata.
 func (a kvAuth) tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
-	if a.isDRPC {
-		val, ok := drpcmetadata.GetValue(ctx, clientTIDMetadataHeaderKey)
-		if !ok {
-			return roachpb.TenantID{}, nil
-		}
-		return tenantIDFromString(val, "drpc metadata")
-	}
 	val, ok := grpcutil.FastFirstValueFromIncomingContext(ctx, clientTIDMetadataHeaderKey)
 	if !ok {
 		return roachpb.TenantID{}, nil
