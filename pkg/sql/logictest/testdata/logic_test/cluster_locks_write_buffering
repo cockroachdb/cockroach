@@ -291,7 +291,7 @@ query TTTTTTTBB colnames
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn4'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    isolation_level   granted contended
-test          public      t           /Table/106/1/"b"/0  Exclusive       Unreplicated  SERIALIZABLE      false   true
+test          public      t           /Table/106/1/"b"/0  Intent       Unreplicated  SERIALIZABLE      false   true
 
 query TTTTTTTBB colnames,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r2 AND txn_id='$txn3'
