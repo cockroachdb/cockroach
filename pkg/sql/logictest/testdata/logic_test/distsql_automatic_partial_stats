@@ -1,5 +1,9 @@
 # LogicTest: !metamorphic-batch-sizes
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Test a simple update and insert case for partial statistics
 
 statement ok
