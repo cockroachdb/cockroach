@@ -8,6 +8,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 	gohex "encoding/hex"
 	"fmt"
@@ -16,15 +17,25 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+	_ "unsafe" // for go:linkname
 
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
+	"github.com/gogo/protobuf/protoc-gen-gogo/descriptor"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
-func runDebugDecodeProto(_ *cobra.Command, _ []string) error {
+func runDebugDecodeProto(_ *cobra.Command, args []string) error {
+	if debugDecodeProtoDumpDescriptorSet {
+		if debugDecodeProtoOutputFile == "" {
+			return errors.Errorf("--out is required when --dump-descriptor-set is specified")
+		}
+		return dumpFileDescriptorSet()
+	}
+
 	if debugDecodeProtoBinaryOutput && debugDecodeProtoOutputFile == "" {
 		return errors.Errorf("--out is required when --binary is specified. Redirecting stdout is not " +
 			"supported because that can introduce a trailing newline character.")
@@ -202,4 +213,75 @@ func convertFromUTF8(bytes []byte) (out []byte, ok bool) {
 		bytes = bytes[n:]
 	}
 	return out, true
+}
+
+//go:linkname gogoProtoFiles github.com/gogo/protobuf/proto.protoFiles
+var gogoProtoFiles map[string][]byte
+
+// dumpFileDescriptorSet outputs all registered file descriptors as a single FileDescriptorSet.
+func dumpFileDescriptorSet() error {
+	// Access the gogo protobuf registry directly
+	if gogoProtoFiles == nil {
+		return errors.Errorf("gogo protobuf registry is not accessible")
+	}
+
+	fmt.Fprintf(os.Stderr, "# Accessing gogo protobuf registry directly\n")
+	fmt.Fprintf(os.Stderr, "# Total registered proto files: %d\n", len(gogoProtoFiles))
+
+	descriptorSet := &descriptor.FileDescriptorSet{}
+
+	for filename, fileDescData := range gogoProtoFiles {
+		fmt.Fprintf(os.Stderr, "# Processing: %s\n", filename)
+
+		// Each file descriptor is gzipped - decompress it first
+		reader, err := gzip.NewReader(bytes.NewReader(fileDescData))
+		if err != nil {
+			return errors.Wrapf(err, "failed to create gzip reader for %s", filename)
+		}
+
+		decompressedData, err := io.ReadAll(reader)
+		reader.Close()
+		if err != nil {
+			return errors.Wrapf(err, "failed to decompress %s", filename)
+		}
+
+		// Now unmarshal the decompressed data into FileDescriptorProto
+		var fileDesc descriptor.FileDescriptorProto
+		if err := proto.Unmarshal(decompressedData, &fileDesc); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal %s", filename)
+		}
+
+		// Fix proto paths to match import statements
+		switch filename {
+		case "gogo.proto":
+			correctName := "gogoproto/gogo.proto"
+			fileDesc.Name = &correctName
+		case "descriptor.proto":
+			correctName := "google/protobuf/descriptor.proto"
+			fileDesc.Name = &correctName
+		}
+		descriptorSet.File = append(descriptorSet.File, &fileDesc)
+	}
+	// Marshal the complete FileDescriptorSet
+	data, err := proto.Marshal(descriptorSet)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal FileDescriptorSet")
+	}
+
+	// Output directly to the specified file (--out is required for --dump-descriptor-set)
+	out, err := os.OpenFile(debugDecodeProtoOutputFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open output file %s", debugDecodeProtoOutputFile)
+	}
+	defer out.Close()
+
+	// Write the raw protobuf data directly to the file
+	_, err = out.Write(data)
+	if err != nil {
+		return errors.Wrap(err, "failed to write descriptor data")
+	}
+
+	// Print a helpful message to stderr
+	fmt.Fprintf(os.Stderr, "# Successfully wrote: %s\n", debugDecodeProtoOutputFile)
+	return nil
 }
