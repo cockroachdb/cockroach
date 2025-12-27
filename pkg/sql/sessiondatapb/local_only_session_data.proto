@@ -770,6 +770,10 @@ message LocalOnlySessionData {
   // triggers or computed columns. The fix applies at routine creation time and
   // prevents unnecessary column dependencies from being recorded.
   bool use_improved_routine_deps_triggers_and_computed_cols = 196;
+  // StatsAsOf is an optional timestamp that, when set, stats selection
+  // will be based on the age gap between the stats creation timestamp and
+  // the StatsAsOf timestamp, rather than the current time.
+  util.hlc.Timestamp stats_as_of = 197 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

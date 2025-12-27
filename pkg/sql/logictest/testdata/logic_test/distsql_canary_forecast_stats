@@ -1,0 +1,152 @@
+let $forecastsEnabledPrev
+SHOW CLUSTER SETTING sql.stats.forecasts.enabled
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = true
+
+statement ok
+SET stats_as_of='2025-12-10 00:01:00.000000'
+
+statement ok
+CREATE TABLE canarytable1 (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_canary_window = '120s')
+
+statement ok
+ALTER TABLE canarytable1 INJECT STATISTICS '[
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2025-12-07 00:00:00.000000",
+          "distinct_count": 3,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 3
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2025-12-08 00:00:00.000000",
+          "distinct_count": 6,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 6
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2025-12-09 00:00:00.000000",
+          "distinct_count": 9,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 9
+      },
+      {
+          "avg_size": 1,
+          "columns": [
+              "a"
+          ],
+          "created_at": "2025-12-10 00:00:00.000000",
+          "distinct_count": 12,
+          "histo_col_type": "INT8",
+          "histo_version": 2,
+          "name": "__auto__",
+          "null_count": 0,
+          "row_count": 12
+      }
+]'
+
+query TTTIIII colnames
+SELECT statistics_name, column_names, created, row_count, distinct_count, null_count, avg_size
+FROM [SHOW STATISTICS FOR TABLE canarytable1 WITH FORECAST]
+ORDER BY created
+----
+statistics_name  column_names  created                        row_count  distinct_count  null_count  avg_size
+__auto__         {a}           2025-12-07 00:00:00 +0000 UTC  3          3               0           1
+__auto__         {a}           2025-12-08 00:00:00 +0000 UTC  6          6               0           1
+__auto__         {a}           2025-12-09 00:00:00 +0000 UTC  9          9               0           1
+__auto__         {a}           2025-12-10 00:00:00 +0000 UTC  12         12              0           1
+__forecast__     {a}           2025-12-11 00:00:00 +0000 UTC  15         15              0           1
+
+
+# For query that picked the canary path, it should use the most-recent
+# forcast result (row_count=15).
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable1;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 15 (100% of the table; stats collected <hidden> ago; using stats forecast)
+      table: canarytable1@canarytable1_pkey
+      spans: FULL SCAN
+
+
+# For query that picked the stable path, it should use the forecast stats
+# that was generated from the second most-stable stats on (row_count = {3, 6, 9} => 12)
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable1;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 12 (100% of the table; stats collected <hidden> ago; using stats forecast)
+      table: canarytable1@canarytable1_pkey
+      spans: FULL SCAN
+
+# Time travel to a later timestamp where the canary stats (created at 2025-12-10 00:00:00 +0000)
+# has aged over the stats_canary_window.
+# At this time, for stable query path, it should use the most-recent
+# forecast stats (row_count=15).
+statement ok
+SET stats_as_of='2025-12-10 00:02:00.000000'
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable1;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 15 (100% of the table; stats collected <hidden> ago; using stats forecast)
+      table: canarytable1@canarytable1_pkey
+      spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -49,7 +50,7 @@ func CheckMaxSchemaObjects(
 	if err != nil {
 		return err
 	}
-	tableStats, err := tableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+	tableStats, err := tableStatsCache.GetTableStats(ctx, desc, nil, false, 0, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}

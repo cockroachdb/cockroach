@@ -1,0 +1,246 @@
+let $forecastsEnabledPrev
+SHOW CLUSTER SETTING sql.stats.forecasts.enabled
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = false
+
+let $autoPartialEnabledPrev
+SHOW CLUSTER SETTING sql.stats.automatic_partial_collection.enabled
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = false
+
+# This test will not interact with forecast stats.
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = false, sql_stats_canary_window = '15s')
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(1, 1000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           1000       false
+
+# For a table with canary_window set, we don't immediately evict the
+# existing most-recent stats (row_count=1000) right away, but mark it
+# with delay_delete=true.
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(1001, 2000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           2000       false
+NULL             {a}           1000       true
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(2001, 3000);
+CREATE STATISTICS s FROM t;
+
+# The previously marked stats (row_count=1000) is now deleted,
+# and the current most-recent stats (row_count=2000) is marked with
+# delay_delete=true.
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+s                {a}           3000       false
+NULL             {a}           2000       true
+
+# But such 2-phases deletion is disabled for table with canary_window unset.
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '0s');
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(3001, 4000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           4000       false
+
+# Test with auto stats.
+statement ok
+CREATE TABLE canarytable (a INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_canary_window = '15s')
+
+statement ok
+INSERT INTO canarytable (a) SELECT * FROM generate_series(1, 1000);
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE canarytable] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           1000       false
+__auto__         {a}           0          false
+
+statement ok
+INSERT INTO canarytable (a) SELECT * FROM generate_series(1001, 2000)
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE canarytable] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+__auto__         {a}           0          false
+
+statement ok
+ALTER TABLE canarytable SET (sql_stats_automatic_collection_enabled = false)
+
+statement ok
+INSERT INTO canarytable (a) SELECT * FROM generate_series(2001, 3000)
+
+statement ok
+analyze canarytable
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE canarytable] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           3000       false
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+__auto__         {a}           0          false
+
+statement ok
+INSERT INTO canarytable (a) SELECT * FROM generate_series(3001, 4000)
+
+statement ok
+analyze canarytable
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE canarytable] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           4000       false
+NULL             {a}           3000       true
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+__auto__         {a}           0          false
+
+# The for query that picked the canary path, it should use the most-recent
+# stats (row_count=4000).
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 4,000 (100% of the table; stats collected <hidden> ago)
+      table: canarytable@canarytable_pkey
+      spans: FULL SCAN
+
+# The for query that picked the canary path, it should use the second most-recent
+# stats (row_count=3000).
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 3,000 (100% of the table; stats collected <hidden> ago)
+      table: canarytable@canarytable_pkey
+      spans: FULL SCAN
+
+
+statement ok
+ALTER TABLE canarytable SET (sql_stats_automatic_collection_enabled = true)
+
+statement ok
+INSERT INTO canarytable (a) SELECT * FROM generate_series(4001, 5000);
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE canarytable] ORDER BY column_names, created DESC
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           5000       false
+NULL             {a}           4000       true
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+__auto__         {a}           0          false
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 5,000 (100% of the table; stats collected <hidden> ago)
+      table: canarytable@canarytable_pkey
+      spans: FULL SCAN
+
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT COUNT(*) FROM canarytable;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 4,000 (100% of the table; stats collected <hidden> ago)
+      table: canarytable@canarytable_pkey
+      spans: FULL SCAN
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecastsEnabledPrev
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = $autoPartialEnabledPrev
+

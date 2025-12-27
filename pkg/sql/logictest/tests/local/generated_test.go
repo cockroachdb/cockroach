@@ -675,6 +675,20 @@ func TestLogic_distsql_automatic_stats(
 	runLogicTest(t, "distsql_automatic_stats")
 }
 
+func TestLogic_distsql_canary_forecast_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_canary_forecast_stats")
+}
+
+func TestLogic_distsql_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_canary_stats")
+}
+
 func TestLogic_distsql_event_log(
 	t *testing.T,
 ) {
