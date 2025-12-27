@@ -100,7 +100,7 @@ type StatementDetailsResponse =
 const { TabPane } = Tabs;
 
 export type StatementDetailsProps = StatementDetailsOwnProps &
-  RouteComponentProps<{ implicitTxn: string; statement: string }>;
+  RouteComponentProps<{ statement: string }>;
 
 export interface StatementDetailsState {
   currentTab?: string;
@@ -208,13 +208,6 @@ function NodeLink(props: { node: string }) {
       N{props.node}
     </Link>
   );
-}
-
-function renderTransactionType(implicitTxn: boolean) {
-  if (implicitTxn) {
-    return "Implicit";
-  }
-  return "Explicit";
 }
 
 export class StatementDetails extends React.Component<
@@ -567,7 +560,6 @@ export class StatementDetails extends React.Component<
       full_scan_count: fullScanCount,
       vec_count: vecCount,
       total_count: totalCount,
-      implicit_txn: implicitTxn,
     } = this.props.statementDetails.statement.metadata;
     const statementStatisticsPerAggregatedTs =
       this.props.statementDetails.statement_statistics_per_aggregated_ts;
@@ -773,10 +765,6 @@ export class StatementDetails extends React.Component<
                 <SummaryCardItem
                   label="Vectorized execution?"
                   value={RenderCount(vecCount, totalCount)}
-                />
-                <SummaryCardItem
-                  label="Transaction type"
-                  value={renderTransactionType(implicitTxn)}
                 />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
               </SummaryCard>

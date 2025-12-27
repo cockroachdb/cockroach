@@ -15,7 +15,6 @@ export const databaseNameAttr = "database_name";
 export const databaseNameCCAttr = "databaseName";
 export const databaseIDAttr = "dbID";
 export const fingerprintIDAttr = "fingerprint_id";
-export const implicitTxnAttr = "implicitTxn";
 export const executionIdAttr = "execution_id";
 export const nodeIDAttr = "node_id";
 export const nodeQueryString = "node";
