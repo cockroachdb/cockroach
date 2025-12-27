@@ -131,26 +131,29 @@ func LegacyFindPriorBackups(
 	defer sp.Finish()
 
 	var prev []string
-	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
-		if err != nil {
-			return err
-		} else if !matchesGlob {
-			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
+	if err := store.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(p string) error {
+			matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
 			if err != nil {
 				return err
+			} else if !matchesGlob {
+				matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
+				if err != nil {
+					return err
+				}
 			}
-		}
 
-		if matchesGlob {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
+			if matchesGlob {
+				if !includeManifest {
+					p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
+				}
+				prev = append(prev, p)
+				return nil
 			}
-			prev = append(prev, p)
 			return nil
-		}
-		return nil
-	}); err != nil {
+		},
+	); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
 	sort.Strings(prev)

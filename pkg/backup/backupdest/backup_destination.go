@@ -303,18 +303,21 @@ func FindLatestFile(
 	// empty object with a trailing '/'. The latter is never created by our code
 	// but can be created by other tools, e.g., AWS DataSync to transfer an existing backup to
 	// another bucket. (See https://github.com/cockroachdb/cockroach/issues/106070.)
-	err := exportStore.List(ctx, backupbase.LatestHistoryDirectory, "", func(p string) error {
-		p = strings.TrimPrefix(p, "/")
-		if p == "" {
-			// N.B. skip the empty object with a trailing '/', created by a third-party tool.
-			return nil
-		}
-		latestFile = p
-		latestFileFound = true
-		// We only want the first latest file so return an error that it is
-		// done listing.
-		return cloud.ErrListingDone
-	})
+	err := exportStore.List(
+		ctx, backupbase.LatestHistoryDirectory, cloud.ListOptions{},
+		func(p string) error {
+			p = strings.TrimPrefix(p, "/")
+			if p == "" {
+				// N.B. skip the empty object with a trailing '/', created by a third-party tool.
+				return nil
+			}
+			latestFile = p
+			latestFileFound = true
+			// We only want the first latest file so return an error that it is
+			// done listing.
+			return cloud.ErrListingDone
+		},
+	)
 	// If the list failed because the storage used does not support listing,
 	// such as http, we can try reading the non-timestamped backup latest
 	// file directly. This can still fail if it is a mixed cluster and the
@@ -478,12 +481,15 @@ func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) ([]string, error) {
 	var backupPaths []string
-	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(f string) error {
-		if deprecatedBackupPathRE.MatchString(f) {
-			backupPaths = append(backupPaths, f)
-		}
-		return nil
-	}); err != nil {
+	if err := store.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(f string) error {
+			if deprecatedBackupPathRE.MatchString(f) {
+				backupPaths = append(backupPaths, f)
+			}
+			return nil
+		},
+	); err != nil {
 		// Can't happen, just required to handle the error for lint.
 		return nil, err
 	}

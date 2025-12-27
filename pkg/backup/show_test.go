@@ -8,21 +8,27 @@ package backup
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -826,4 +832,102 @@ func TestShowBackupCheckFiles(t *testing.T) {
 			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FROM LATEST IN %s with check_files]`, dest),
 			fileSum)
 	}
+}
+
+func TestShowBackupWithIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.ids.enabled = true")
+
+	const collectionURI = "nodelocal://1/backup"
+
+	getSystemTime := func() (ts int64) {
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()::INT").Scan(&ts)
+		return ts
+	}
+
+	times := []int64{getSystemTime()}
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d", times[0]), collectionURI)
+
+	for i := range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[i+1]),
+			collectionURI,
+		)
+	}
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint'`)
+	times = append(times, getSystemTime())
+	var pausedJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d WITH detached", times[len(times)-1]),
+		collectionURI,
+	).Scan(&pausedJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, pausedJobID)
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	for range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+			collectionURI,
+		)
+	}
+
+	sqlDB.Exec(t, "RESUME JOB $1", pausedJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, pausedJobID)
+	times = append(times, getSystemTime())
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+		collectionURI,
+	)
+
+	t.Run("backup times are in descending order", func(t *testing.T) {
+		shownTimes := sqlDB.QueryStr(
+			t, fmt.Sprintf(`SELECT backup_time FROM [SHOW BACKUPS IN '%s']`, collectionURI),
+		)
+		require.Equal(t, len(times), len(shownTimes))
+		require.True(
+			t, slices.IsSortedFunc(shownTimes, func(a, b []string) int {
+				if a[0] == b[0] {
+					return 0
+				} else if a[0] > b[0] {
+					return -1
+				} else {
+					return 1
+				}
+			}),
+		)
+	})
+
+	t.Run("before and after filtering", func(t *testing.T) {
+		// We truncate the times to match the filter granularity.
+		truncateFactor := int64(backupbase.DirectoryTimestampGranularity / time.Nanosecond)
+		after := rand.Intn(len(times) - 1)
+		afterTime := times[after] / truncateFactor * truncateFactor
+
+		before := rand.Intn(len(times)-after-1) + after + 1
+		beforeTime := times[before] / truncateFactor * truncateFactor
+
+		var count int
+		sqlDB.QueryRow(
+			t,
+			fmt.Sprintf(
+				`SELECT count(*) FROM [SHOW BACKUPS IN '%s' AFTER %d BEFORE %d]`,
+				collectionURI, afterTime, beforeTime,
+			),
+		).Scan(&count)
+		require.Equal(
+			t, before-after+1, count,
+			"unexpected number of backups between t[%d] and t[%d]", after, before,
+		)
+	})
 }

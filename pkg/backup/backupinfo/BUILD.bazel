@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/storage",
         "//pkg/util",
+        "//pkg/util/besteffort",
         "//pkg/util/bulk",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
