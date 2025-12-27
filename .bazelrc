@@ -85,8 +85,7 @@ test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
 test:ci --test_tmpdir=/artifacts/tmp
 
-# TODO(ricky): This should be v1.0.0.
-build:fips --@io_bazel_rules_go//go/config:gofips140=latest
+build:fips --@io_bazel_rules_go//go/config:gofips140=v1.0.0
 
 build:cross --stamp
 
