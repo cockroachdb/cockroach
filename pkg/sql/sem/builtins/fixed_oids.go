@@ -2860,6 +2860,7 @@ var builtinOidsArray = []string{
 	2905: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
 	2906: `levenshtein_less_equal(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int, max_d: int) -> int`,
 	2907: `crdb_internal.request_transaction_bundle(transaction_fingerprint_id: string, sampling_probability: float, min_execution_latency: interval, expires_after: interval, redacted: bool) -> tuple{int AS request_id, bool AS created}`,
+	2908: `crdb_internal.inject_hint(statement_fingerprint: string, donor_sql: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

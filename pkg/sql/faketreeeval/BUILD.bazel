@@ -11,6 +11,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/hintpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",

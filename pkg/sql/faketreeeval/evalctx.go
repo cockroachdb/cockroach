@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -587,6 +588,13 @@ func (ep *DummyEvalPlanner) ProcessVectorIndexFixups(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) error {
 	return nil
+}
+
+// InsertStatementHint is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) InsertStatementHint(
+	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+) (int64, error) {
+	return 0, nil
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
