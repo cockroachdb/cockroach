@@ -54,7 +54,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS STRING
  │   	LANGUAGE SQL
- │   	AS $$SELECT x'40':::@100055::STRING;$$
+ │   	AS $$SELECT 'MON':::workday::STRING;$$
  └── dependencies
       └── workday
 

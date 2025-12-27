@@ -367,7 +367,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	isSetReturning := cf.ReturnType != nil && cf.ReturnType.SetOf
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
-	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames)
 
 	defer func(origValue bool) {
 		b.insideSQLRoutine = origValue
