@@ -8,10 +8,8 @@ package bulkingest
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -334,80 +332,6 @@ func TestPickSplitsForSpan(t *testing.T) {
 			result, err := pickSplitsForSpan(tc.span, tc.ssts)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-func TestPickSplitsForSpanErrors(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testCases := []struct {
-		name          string
-		span          roachpb.Span
-		ssts          []execinfrapb.BulkMergeSpec_SST
-		expectedError string
-	}{
-		{
-			name: "SST with column family suffix - not at safe split point",
-			span: func() roachpb.Span {
-				// Create a span covering table 50, index 1
-				codec := keys.SystemSQLCodec
-				start := codec.IndexPrefix(50, 1)
-				end := codec.IndexPrefix(50, 2)
-				return roachpb.Span{Key: start, EndKey: end}
-			}(),
-			ssts: func() []execinfrapb.BulkMergeSpec_SST {
-				codec := keys.SystemSQLCodec
-				rowPrefix := encoding.EncodeUvarintAscending(codec.IndexPrefix(50, 1), 100)
-				// Create SSTs where the second SST starts at a column family boundary
-				// (not a safe split point)
-				sst1Start := codec.IndexPrefix(50, 1)
-				sst1End := encoding.EncodeUvarintAscending(codec.IndexPrefix(50, 1), 50)
-				// SST 2 starts at row 100, column family 2 (not a safe split point)
-				sst2Start := keys.MakeFamilyKey(rowPrefix, 2)
-				sst2End := codec.IndexPrefix(50, 2)
-
-				return []execinfrapb.BulkMergeSpec_SST{
-					{StartKey: sst1Start, EndKey: sst1End},
-					{StartKey: sst2Start, EndKey: sst2End},
-				}
-			}(),
-			expectedError: "SST 1 start key .* is not at a safe split point.*SST writer should have ensured safe boundaries",
-		},
-		{
-			name: "SST with malformed table key that EnsureSafeSplitKey cannot handle",
-			span: func() roachpb.Span {
-				codec := keys.SystemSQLCodec
-				start := codec.IndexPrefix(50, 1)
-				end := codec.IndexPrefix(50, 2)
-				return roachpb.Span{Key: start, EndKey: end}
-			}(),
-			ssts: func() []execinfrapb.BulkMergeSpec_SST {
-				codec := keys.SystemSQLCodec
-				// Create a properly formed first SST
-				sst1Start := codec.IndexPrefix(50, 1)
-				sst1End := encoding.EncodeUvarintAscending(codec.IndexPrefix(50, 1), 100)
-
-				// Create a malformed second SST with truncated/invalid encoding
-				// This will start with the table prefix but have invalid varint encoding
-				sst2Start := append(append(roachpb.Key(nil), codec.IndexPrefix(50, 1)...), 0xff, 0xff, 0xff, 0xff, 0xff)
-				sst2End := codec.IndexPrefix(50, 2)
-
-				return []execinfrapb.BulkMergeSpec_SST{
-					{StartKey: sst1Start, EndKey: sst1End},
-					{StartKey: sst2Start, EndKey: sst2End},
-				}
-			}(),
-			expectedError: "SST 1 has unsafe start key",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := pickSplitsForSpan(tc.span, tc.ssts)
-			require.Error(t, err)
-			require.Regexp(t, tc.expectedError, err.Error())
 		})
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,6 +43,12 @@ import (
 )
 
 var csvOutputTypes = []*types.T{
+	types.Bytes,
+	types.Bytes,
+}
+
+var distributedMergeOutputTypes = []*types.T{
+	types.Bytes,
 	types.Bytes,
 	types.Bytes,
 }
@@ -114,6 +122,7 @@ type readImportDataProcessor struct {
 
 	importErr error
 	summary   *kvpb.BulkOpSummary
+	files     *bulksst.SSTFiles
 }
 
 var (
@@ -132,7 +141,11 @@ func newReadImportDataProcessor(
 		spec:   spec,
 		progCh: make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, nil, /* memMonitor */
+	outputTypes := csvOutputTypes
+	if spec.UseDistributedMerge {
+		outputTypes = distributedMergeOutputTypes
+	}
+	if err := idp.Init(ctx, idp, post, outputTypes, flowCtx, processorID, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
@@ -168,7 +181,7 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	idp.wg = ctxgroup.WithContext(grpCtx)
 	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
-		idp.summary, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
+		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
 		return nil
 	})
@@ -204,10 +217,24 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 		return nil, idp.DrainHelper()
 	}
 
-	return rowenc.EncDatumRow{
+	// When using distributed merge, the processor will emit the SSTs and their
+	// start and end keys.
+	var fileDatums rowenc.EncDatumRow
+	if idp.files != nil {
+		bytes, err := protoutil.Marshal(idp.files)
+		if err != nil {
+			idp.MoveToDraining(err)
+			return nil, idp.DrainHelper()
+		}
+		sstInfo := tree.NewDBytes(tree.DBytes(bytes))
+		fileDatums = rowenc.EncDatumRow{
+			rowenc.DatumToEncDatumUnsafe(types.Bytes, sstInfo),
+		}
+	}
+	return append(rowenc.EncDatumRow{
 		rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, nil
+	}, fileDatums...), nil
 }
 
 func (idp *readImportDataProcessor) ConsumerClosed() {
@@ -313,6 +340,11 @@ func makeInputConverter(
 	}
 }
 
+var UseDistributedMergeForImport = settings.RegisterBoolSetting(settings.ApplicationLevel,
+	"bulkio.import.distributed_merge.enabled",
+	"enable distributed merge support for IMPORT",
+	false)
+
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
 func ingestKvs(
@@ -322,15 +354,15 @@ func ingestKvs(
 	tableName string,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-) (*kvpb.BulkOpSummary, error) {
+) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
 
 	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	pkAdderName := fmt.Sprintf("%s rows", tableName)
-	indexAdderName := fmt.Sprintf("%s indexes", tableName)
+	pkAdderName := fmt.Sprintf("%s_rows", tableName)
+	indexAdderName := fmt.Sprintf("%s_indexes", tableName)
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
@@ -347,35 +379,85 @@ func ingestKvs(
 	bulkAdderImportEpoch := table.Desc.ImportEpoch
 	pkID := table.Desc.PrimaryIndex.ID
 
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     pkAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    true,
-		ImportEpoch:              bulkAdderImportEpoch,
-	})
-	if err != nil {
-		return nil, err
+	// Setup external storage on node local for our generated SSTs.
+	var err error
+	var pkIndexAdder, indexAdder kvserverbase.BulkAdder
+	var generateFileList func() *bulksst.SSTFiles
+	if spec.UseDistributedMerge {
+		rowURI := fmt.Sprintf("nodelocal://%d/job/%d/map/%s/", flowCtx.Cfg.NodeID.SQLInstanceID(),
+			spec.JobID, pkAdderName)
+		rowStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, rowURI, spec.User())
+		if err != nil {
+			return nil, nil, err
+		}
+		defer rowStorage.Close()
+		rowAllocator := bulksst.NewExternalFileAllocator(rowStorage, rowURI, flowCtx.Cfg.DB.KV().Clock())
+
+		indexURI := fmt.Sprintf("nodelocal://%d/job/%d/map/%s/", flowCtx.Cfg.NodeID.SQLInstanceID(), spec.JobID,
+			indexAdderName)
+		indexStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, indexURI, spec.User())
+		if err != nil {
+			return nil, nil, err
+		}
+		defer indexStorage.Close()
+		indexAllocator := bulksst.NewExternalFileAllocator(indexStorage, indexURI, flowCtx.Cfg.DB.KV().Clock())
+
+		// For the purpose of debugging dump out the list of SSTs generated.
+		if log.V(2) {
+			defer func() {
+				log.Dev.Infof(ctx, "Generated SSTs file for primary indexes: %v", rowAllocator.GetFileList())
+				log.Dev.Infof(ctx, "Generated SSTs file for secondary indexes: %v", indexAllocator.GetFileList())
+			}()
+		}
+
+		// Setup a BulkAdder to generate SSTs into node local.
+		t := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, rowAllocator)
+		t.SetWriteTS(writeTS)
+		pkIndexAdder = t
+
+		t = bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, indexAllocator)
+		t.SetWriteTS(writeTS)
+		indexAdder = t
+
+		generateFileList = func() *bulksst.SSTFiles {
+			files := rowAllocator.GetFileList()
+			indexFiles := indexAllocator.GetFileList()
+			files.Append(indexFiles)
+			return files
+		}
+	} else {
+		generateFileList = func() *bulksst.SSTFiles {
+			return nil
+		}
+		pkIndexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     pkAdderName,
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              bulkAdderImportEpoch,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		indexAdder, err = flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
+			Name:                     indexAdderName,
+			DisallowShadowingBelow:   writeTS,
+			SkipDuplicates:           true,
+			MinBufferSize:            minBufferSize,
+			MaxBufferSize:            maxBufferSize,
+			InitialSplitsIfUnordered: int(spec.InitialSplits),
+			WriteAtBatchTimestamp:    true,
+			ImportEpoch:              bulkAdderImportEpoch,
+		})
+		if err != nil {
+			pkIndexAdder.Close(ctx)
+			return nil, nil, err
+		}
 	}
 	defer pkIndexAdder.Close(ctx)
-
-	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
-		Name:                     indexAdderName,
-		DisallowShadowingBelow:   writeTS,
-		SkipDuplicates:           true,
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		InitialSplitsIfUnordered: int(spec.InitialSplits),
-		WriteAtBatchTimestamp:    true,
-		ImportEpoch:              bulkAdderImportEpoch,
-	})
-	if err != nil {
-		return nil, err
-	}
 	defer indexAdder.Close(ctx)
 
 	// Setup progress tracking:
@@ -541,26 +623,26 @@ func ingestKvs(
 	})
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := pkIndexAdder.Flush(ctx); err != nil {
 		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-			return nil, errors.Wrap(err, "duplicate key in primary index")
+			return nil, nil, errors.Wrap(err, "duplicate key in primary index")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := indexAdder.Flush(ctx); err != nil {
 		if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
-			return nil, errors.Wrap(err, "duplicate key in index")
+			return nil, nil, errors.Wrap(err, "duplicate key in index")
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	addedSummary := pkIndexAdder.GetSummary()
 	addedSummary.Add(indexAdder.GetSummary())
-	return &addedSummary, nil
+	return &addedSummary, generateFileList(), nil
 }
 
 func init() {

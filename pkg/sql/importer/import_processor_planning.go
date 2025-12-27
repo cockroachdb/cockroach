@@ -7,11 +7,13 @@ package importer
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -20,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -71,6 +76,11 @@ func distImport(
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
 
+	// When using distributed merge the processor will emit the SST's and their
+	// start and end keys.
+	details := job.Details().(jobspb.ImportDetails)
+	useDistributedMerge := details.UseDistributedMerge
+
 	dsp := execCtx.DistSQLPlanner()
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		evalCtx := execCtx.ExtendedEvalContext()
@@ -104,17 +114,24 @@ func distImport(
 			corePlacement[i].SQLInstanceID = sqlInstanceIDs[i%len(sqlInstanceIDs)]
 			corePlacement[i].Core.ReadImport = inputSpecs[i]
 		}
+		outputTypes := []*types.T{types.Bytes, types.Bytes}
+		if useDistributedMerge {
+			outputTypes = []*types.T{types.Bytes, types.Bytes, types.Bytes}
+		}
 		p.AddNoInputStage(
 			corePlacement,
 			execinfrapb.PostProcessSpec{},
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-			[]*types.T{types.Bytes, types.Bytes},
+			outputTypes,
 			execinfrapb.Ordering{},
 			nil, /* finalizeLastStageCb */
 		)
-
-		p.PlanToStreamColMap = []int{0, 1}
-
+		// Map the output directly back.
+		colMap := make([]int, len(outputTypes))
+		for i := range colMap {
+			colMap[i] = i
+		}
+		p.PlanToStreamColMap = colMap
 		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}
@@ -204,12 +221,20 @@ func distImport(
 	}
 
 	var res kvpb.BulkOpSummary
+	var processorOutput []bulksst.SSTFiles
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
 		}
 		res.Add(counts)
+		if len(row) == 3 {
+			var sstFiles bulksst.SSTFiles
+			if err := protoutil.Unmarshal([]byte(*row[2].(*tree.DBytes)), &sstFiles); err != nil {
+				return err
+			}
+			processorOutput = append(processorOutput, sstFiles)
+		}
 		return nil
 	})
 
@@ -271,10 +296,37 @@ func distImport(
 		execCfg := execCtx.ExecCfg()
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, job.ID())
 
-		// Copy the eval.Context, as dsp.Run() might change it.
+		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := planCtx.ExtendedEvalCtx.Context.Copy()
 		dsp.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, testingKnobs.onSetupFinish)
-		return rowResultWriter.Err()
+		if err := rowResultWriter.Err(); err != nil {
+			return err
+		}
+		if !useDistributedMerge {
+			return nil
+		}
+
+		// TODO(jeffswenson): this isn't complete. We don't actually want to
+		// generate splits for each index. What we want to do is generate splits
+		// for each span config produced by the table that does not coalesce. For
+		// example, a single RBR index would get split points between each of the
+		// ranges.
+		//
+		// We should also consider making bulkingest tolerate ingesting an SST
+		// that has data for multiple ranges. At the very least that will handle
+		// the case where KV decides to run splits we were not expecting.
+		schemaSpans := tabledesc.NewBuilder(table.Desc).BuildImmutableTable().AllIndexSpans(execCfg.Codec)
+		inputSSTs, spans, err := bulksst.CombineFileInfo(processorOutput, schemaSpans)
+		if err != nil {
+			return err
+		}
+
+		writeTS := &hlc.Timestamp{WallTime: walltime}
+		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) string {
+			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID())
+		}, 1 /* iteration */, 1 /* maxIterations */, writeTS)
+
+		return err
 	})
 
 	g.GoCtx(replanChecker)
@@ -329,6 +381,7 @@ func makeImportReaderSpecs(
 				UserProto:             user.EncodeProto(),
 				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
 				InitialSplits:         int32(initialSplitsPerProc),
+				UseDistributedMerge:   details.UseDistributedMerge,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

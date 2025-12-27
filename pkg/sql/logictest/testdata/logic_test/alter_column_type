@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: default-configs 3node-tenant !local-legacy-schema-changer local-dist-merge-backfill-declarative-schema-changer
 
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck

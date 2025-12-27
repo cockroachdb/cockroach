@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package bulkingest
+package bulkingest_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkingest"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -78,7 +79,7 @@ func TestSplitAndScatterSpans(t *testing.T) {
 	}
 
 	// Run split and scatter on the spans
-	err := splitAndScatterSpans(ctx, db, spans)
+	err := bulkingest.SplitAndScatterSpans(ctx, db, spans)
 	require.NoError(t, err)
 
 	// Wait for splits to take effect

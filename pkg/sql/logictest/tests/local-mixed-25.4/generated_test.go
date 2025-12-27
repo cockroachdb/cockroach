@@ -1277,6 +1277,13 @@ func TestLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestLogic_mixed_version_distributed_merge(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_distributed_merge")
+}
+
 func TestLogic_multi_statement(
 	t *testing.T,
 ) {

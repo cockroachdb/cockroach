@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
