@@ -30,6 +30,10 @@ type ElasticCPUWorkHandle struct {
 	// duration to count against what it was allotted, but we still want to
 	// track to deduct an appropriate number of granter tokens.
 	preWork time.Duration
+	// yield decides whether Overlimit will call runtime.Yield.
+	yield bool
+	// bypassedAdmission is true if the allotment happened without waiting.
+	bypassedAdmission bool
 
 	// This handle is used in tight loops that are sensitive to per-iteration
 	// overhead (checking against the running time too can have an effect). To
@@ -49,9 +53,10 @@ type ElasticCPUWorkHandle struct {
 }
 
 func newElasticCPUWorkHandle(
-	tenantID roachpb.TenantID, allotted time.Duration,
+	tenantID roachpb.TenantID, allotted time.Duration, yield bool, bypassedAdmission bool,
 ) *ElasticCPUWorkHandle {
-	h := &ElasticCPUWorkHandle{tenantID: tenantID, allotted: allotted}
+	h := &ElasticCPUWorkHandle{
+		tenantID: tenantID, allotted: allotted, yield: yield, bypassedAdmission: bypassedAdmission}
 	h.cpuStart = grunning.Time()
 	return h
 }
@@ -85,6 +90,13 @@ func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
 	return grunning.Elapsed(h.cpuStart, grunning.Time())
 }
 
+// SetYield sets the behavior of whether to call runtime.Yield. It should only
+// be used when it is not possible to set the value correctly at construction
+// time.
+func (h *ElasticCPUWorkHandle) SetYield(yield bool) {
+	h.yield = yield
+}
+
 // OverLimit is used to check whether we're over the allotted elastic CPU
 // tokens. If StartTimer was invoked, we start measuring on-CPU time only after
 // the invocation. It also returns the total time difference between how long we
@@ -103,7 +115,9 @@ func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Dura
 	if h == nil { // not applicable
 		return false, time.Duration(0)
 	}
-
+	if h.yield {
+		runtimeYield()
+	}
 	// What we're effectively doing is just:
 	//
 	// 		runningTime := h.runningTime()
@@ -190,7 +204,7 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // TestingNewElasticCPUHandle exports the ElasticCPUWorkHandle constructor for
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
-	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour) // use a very high allotment
+	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour, false, false) // use a very high allotment
 }
 
 // TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
