@@ -17,6 +17,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -204,6 +205,7 @@ func (tt *telemetryTest) RunTest(
 			}
 			return fmt.Sprintf("error: %v\n", err)
 		}
+		waitForSchemaChangesToSucceed(tt.t, sqlutils.MakeSQLRunner(db))
 		return ""
 
 	case "schema":
@@ -308,6 +310,23 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	// Disable plan caching to get accurate counts if the same statement is
 	// issued multiple times.
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
+}
+
+func waitForSchemaChangesToSucceed(t *testing.T, tdb *sqlutils.SQLRunner) {
+	tdb.CheckQueryResultsRetry(
+		t, schemaChangeWaitQuery(`('succeeded')`), [][]string{},
+	)
+}
+
+func schemaChangeWaitQuery(statusInString string) string {
+	q := fmt.Sprintf(
+		`SELECT status, job_type, description FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status NOT IN %s`,
+		jobspb.TypeSchemaChange,
+		jobspb.TypeTypeSchemaChange,
+		jobspb.TypeNewSchemaChange,
+		statusInString,
+	)
+	return q
 }
 
 type featureList []struct {
