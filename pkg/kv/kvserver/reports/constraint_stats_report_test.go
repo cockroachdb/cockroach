@@ -42,10 +42,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestConformanceReport(t *testing.T) {
@@ -466,7 +466,7 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 	}
 	if z.constraints != "" {
 		var constraintsList zonepb.ConstraintsList
-		if err := yaml.UnmarshalStrict([]byte(z.constraints), &constraintsList); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(z.constraints), &constraintsList); err != nil {
 			panic(err)
 		}
 		cfg.Constraints = constraintsList.Constraints
@@ -474,7 +474,7 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 	}
 	if z.voterConstraints != "" {
 		var constraintsList zonepb.ConstraintsList
-		if err := yaml.UnmarshalStrict([]byte(z.voterConstraints), &constraintsList); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(z.voterConstraints), &constraintsList); err != nil {
 			panic(err)
 		}
 		cfg.VoterConstraints = constraintsList.Constraints

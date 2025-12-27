@@ -53,10 +53,12 @@ func (e eqDecl) MarshalYAML() (interface{}, error) {
 
 func exprToString(e expr) (string, error) {
 	var expr yaml.Node
-	if err := expr.Encode(e.encoded()); err != nil {
+	//lint:ignore SA1019 deprecated
+	if err := expr.Encode(e.encoded()); err != nil { //lint:ignore SA1019
 		return "", err
 	}
 	expr.Style = yaml.FlowStyle
+	//lint:ignore SA1019 deprecated
 	out, err := yaml.Marshal(&expr)
 	if err != nil {
 		return "", err
@@ -82,6 +84,7 @@ func ruleInvocationStr(name string, args []Var) string {
 // MarshalYAML marshals a rule to YAML.
 func (r RuleDef) MarshalYAML() (interface{}, error) {
 	var cl yaml.Node
+	//lint:ignore SA1019 deprecated
 	if err := cl.Encode(r.Clauses()); err != nil {
 		return nil, err
 	}

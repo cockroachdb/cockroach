@@ -162,7 +162,7 @@ func (w *Wrapper[T]) UnmarshalYAML(value *yaml.Node) error {
 		return fmt.Errorf("unknown type %s.%s", typeName.pkg, typeName.name)
 	}
 	objValuePtr := reflect.New(objType).Interface()
-	if err := value.Content[3].Decode(objValuePtr); err != nil {
+	if err := value.Content[3].Load(objValuePtr); err != nil {
 		return err
 	}
 	objValue := reflect.ValueOf(objValuePtr).Elem().Interface()
@@ -199,7 +199,7 @@ func (w *ListWrapper[T]) UnmarshalYAML(value *yaml.Node) error {
 	}
 	for i, v := range value.Content {
 		var e Wrapper[T]
-		if err := v.Decode(&e); err != nil {
+		if err := v.Load(&e); err != nil {
 			return err
 		}
 		w.Val[i] = e.Val

@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 // spanRe matches strings of the form "[start, end)", capturing both the "start"
@@ -134,17 +134,17 @@ func ParseZoneConfig(t testing.TB, s string) zonepb.ZoneConfig {
 		case strings.HasPrefix(part, "constraints="):
 			cl := zonepb.ConstraintsList{}
 			part = strings.TrimPrefix(part, "constraints=")
-			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			require.NoError(t, yamlutil.UnmarshalStrict([]byte(part), &cl))
 			config.Constraints = cl.Constraints
 		case strings.HasPrefix(part, "voter_constraints="):
 			cl := zonepb.ConstraintsList{}
 			part = strings.TrimPrefix(part, "voter_constraints=")
-			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			require.NoError(t, yamlutil.UnmarshalStrict([]byte(part), &cl))
 			config.VoterConstraints = cl.Constraints
 		case strings.HasPrefix(part, "lease_preferences="):
 			cl := []zonepb.LeasePreference{}
 			part = strings.TrimPrefix(part, "lease_preferences=")
-			require.NoError(t, yaml.UnmarshalStrict([]byte(part), &cl))
+			require.NoError(t, yamlutil.UnmarshalStrict([]byte(part), &cl))
 			config.LeasePreferences = cl
 		default:
 			t.Fatalf("unrecognized suffix for %s, expected 'num_replicas=', 'num_voters=', 'constraints=', or 'voter_constraints='", part)

@@ -5,7 +5,7 @@ go_library(
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/build/tools/gen-cockroachdb-metrics",
     visibility = ["//visibility:private"],
-    deps = ["@in_gopkg_yaml_v2//:yaml_v2"],
+    deps = ["@in_yaml_go_yaml_v4//:yaml"],
 )
 
 go_binary(

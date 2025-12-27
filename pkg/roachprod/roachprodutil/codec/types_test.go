@@ -56,7 +56,7 @@ func TestDynamicTypes(t *testing.T) {
 		&Cat{Name: "Mely"},
 	}
 
-	data, err := yaml.Marshal(WrapList(animals))
+	data, err := yaml.Marshal(WrapList(animals)) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 
 	var decoded ListWrapper[Animal]

@@ -27,7 +27,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_spf13_cobra//:cobra",
-        "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

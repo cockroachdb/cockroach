@@ -60,11 +60,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
 )
 
 // TestDataDriven tests the tenant-side cost controller in an isolated setting.
@@ -534,7 +534,7 @@ func timesToString(times []time.Time) string {
 // configure the test provider.
 func (ts *testState) configure(t *testing.T, d *datadriven.TestData, _ cmdArgs) string {
 	var cfg testProviderConfig
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &cfg); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &cfg); err != nil {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
 	ts.provider.configure(cfg)

@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/iancoleman/strcase"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -79,7 +79,7 @@ type DNSProvider struct {
 
 // String returns a YAML representation of the config.
 func (c *Config) String() string {
-	o, _ := yaml.Marshal(c)
+	o, _ := yaml.Dump(c)
 	return string(o)
 }
 

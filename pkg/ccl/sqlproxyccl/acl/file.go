@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 type FromFile interface {
@@ -45,10 +45,12 @@ func newAccessControllerFromFile[T FromFile](
 // T is expected to be either a DenyList or an AllowList but this is just a utility method
 // for unmarshaling YAML from an io.Reader.
 func Deserialize[T any](reader io.Reader) (T, error) {
-	decoder := yaml.NewDecoder(reader)
-	var t T
-	err := decoder.Decode(&t)
+	loader, err := yaml.NewLoader(reader, yaml.WithUniqueKeys(false))
 	if err != nil {
+		return *new(T), err
+	}
+	var t T
+	if err := loader.Load(&t); err != nil {
 		return *new(T), err
 	}
 	return t, nil

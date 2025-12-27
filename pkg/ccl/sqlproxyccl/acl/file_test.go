@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestDenyListFileParsing(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDenyListFileParsing(t *testing.T) {
 		}
 		for _, tc := range cases {
 			var parsed DenyType
-			err := yaml.UnmarshalStrict([]byte(tc.raw), &parsed)
+			err := yamlutil.UnmarshalStrict([]byte(tc.raw), &parsed)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, parsed)
 		}
@@ -155,7 +155,7 @@ denylist:
 			},
 		}
 
-		raw, err := yaml.Marshal(file)
+		raw, err := yamlutil.Marshal(file)
 		require.NoError(t, err)
 		deserialized, err := Deserialize[DenylistFile](bytes.NewBuffer(raw))
 		require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestAllowListFileParsing(t *testing.T) {
 		}
 		for _, tc := range cases {
 			var parsed AllowEntry
-			err := yaml.UnmarshalStrict([]byte(tc.raw), &parsed)
+			err := yamlutil.UnmarshalStrict([]byte(tc.raw), &parsed)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, parsed)
 		}

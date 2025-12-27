@@ -15,9 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type OptionValue struct {
@@ -37,7 +37,7 @@ type ZoneConfigOption struct {
 }
 
 func loadYAML(dst interface{}, yamlString string) {
-	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(yamlString), dst); err != nil {
 		panic(err)
 	}
 }

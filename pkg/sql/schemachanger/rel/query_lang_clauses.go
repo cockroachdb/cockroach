@@ -92,6 +92,7 @@ func flattened(c Clauses) Clauses {
 func (c Clauses) MarshalYAML() (interface{}, error) {
 	fc := flattened(c)
 	var n yaml.Node
+	//lint:ignore SA1019 deprecated
 	if err := n.Encode([]Clause(fc)); err != nil {
 		return nil, err
 	}

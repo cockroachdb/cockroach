@@ -61,6 +61,7 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 					return errors.AssertionFailedf("no unsatisfied clause found: %d >= %d",
 						stats.FirstUnsatisfiedClause, len(cl))
 				}
+				//lint:ignore SA1019 deprecated
 				clauseStr, err := yaml.Marshal(cl[stats.FirstUnsatisfiedClause])
 				if err != nil {
 					return errors.Wrapf(err, "failed to marshal clause %d", stats.FirstUnsatisfiedClause)
@@ -78,7 +79,7 @@ func (r *Registry) MarshalDepRules() (string, error) {
 	sort.SliceStable(s, func(i, j int) bool {
 		return s[i].name < s[j].name
 	})
-	out, err := yaml.Marshal(s)
+	out, err := yaml.Marshal(s) //lint:ignore SA1019 deprecated
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to marshal deprules")
 	}
@@ -238,6 +239,7 @@ func MkNodeVars(elStr string) NodeVars {
 
 func (r registeredDepRule) MarshalYAML() (interface{}, error) {
 	var query yaml.Node
+	//lint:ignore SA1019 deprecated
 	if err := query.Encode(r.q.Clauses()); err != nil {
 		return nil, err
 	}

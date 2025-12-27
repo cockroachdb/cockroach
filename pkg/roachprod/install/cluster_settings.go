@@ -226,7 +226,7 @@ func (o ClusterSettingOptionList) MarshalYAML() (any, error) {
 
 func (o *ClusterSettingOptionList) UnmarshalYAML(value *yaml.Node) error {
 	var lw codec.ListWrapper[ClusterSettingOption]
-	if err := value.Decode(&lw); err != nil {
+	if err := value.Load(&lw, yaml.WithKnownFields()); err != nil {
 		return err
 	}
 	*o = lw.Get()

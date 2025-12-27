@@ -30,8 +30,8 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/yamlutil",
         "@com_github_kylelemons_godebug//diff",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

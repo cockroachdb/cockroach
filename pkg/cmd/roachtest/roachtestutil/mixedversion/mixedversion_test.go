@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 // testPredecessorMapping is a test-only artificial mapping from
@@ -54,7 +54,7 @@ var rawTestReleaseData []byte
 // are able to test the `randomPredecessor` function.
 var testReleaseData = func() map[string]release.Series {
 	var result map[string]release.Series
-	err := yaml.UnmarshalStrict(rawTestReleaseData, &result)
+	err := yamlutil.UnmarshalStrict(rawTestReleaseData, &result)
 	if err != nil {
 		panic(fmt.Errorf("invalid test_releases.yaml: %w", err))
 	}

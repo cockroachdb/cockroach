@@ -35,12 +35,13 @@ func TestRulesYAML(t *testing.T) {
 				})
 				for _, def := range s {
 					var rule yaml.Node
+					//lint:ignore SA1019 deprecated
 					if err := rule.Encode(def); err != nil {
 						panic(err)
 					}
 					m.Content = append(m.Content, rule.Content...)
 				}
-				out, err := yaml.Marshal(m)
+				out, err := yaml.Marshal(m) //lint:ignore SA1019 deprecated
 				if err != nil {
 					d.Fatalf(t, "failed to marshal rules: %v", err)
 				}

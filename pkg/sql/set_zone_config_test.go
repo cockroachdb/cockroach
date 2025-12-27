@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestValidateNoRepeatKeysInZone(t *testing.T) {
@@ -49,7 +49,7 @@ func TestValidateNoRepeatKeysInZone(t *testing.T) {
 	}
 	validate := func(constraint []byte, expectSuccess bool) {
 		var zone zonepb.ZoneConfig
-		err := yaml.UnmarshalStrict(constraint, &zone)
+		err := yamlutil.UnmarshalStrict(constraint, &zone)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 		sqlclustersettings.SecondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
 		for _, tc := range testCases {
 			var zone zonepb.ZoneConfig
-			err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
+			err := yamlutil.UnmarshalStrict([]byte(tc.cfg), &zone)
 			require.NoError(t, err)
 
 			err = validateZoneLocalitiesForSecondaryTenants(ctx, getRegions, zonepb.NewZoneConfig(), &zone, codec, settings)
@@ -301,7 +301,7 @@ func TestValidateZoneAttrsAndLocalitiesForSystemTenant(t *testing.T) {
 		{`voter_constraints: ["-fake"]`, expectSuccess, getNodes},
 	} {
 		var zone zonepb.ZoneConfig
-		err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
+		err := yamlutil.UnmarshalStrict([]byte(tc.cfg), &zone)
 		if err != nil && tc.expectErr == expectSuccess {
 			t.Fatalf("#%d: expected success for %q; got %v", i, tc.cfg, err)
 		} else if err == nil && tc.expectErr == expectParseErr {
@@ -384,8 +384,8 @@ func TestValidateVoterConstraints(t *testing.T) {
 		zone.NumVoters = proto.Int32(3)
 		zone.NumReplicas = proto.Int32(3)
 
-		require.NoError(t, yaml.UnmarshalStrict([]byte(`constraints: `+tc.constraints), &zone))
-		require.NoError(t, yaml.UnmarshalStrict([]byte(`voter_constraints: `+tc.voterConstraints), &zone))
+		require.NoError(t, yamlutil.UnmarshalStrict([]byte(`constraints: `+tc.constraints), &zone))
+		require.NoError(t, yamlutil.UnmarshalStrict([]byte(`voter_constraints: `+tc.voterConstraints), &zone))
 		err := zone.Validate()
 		if err != nil && tc.shouldFail {
 			require.Regexp(t, tc.errRegex, err)

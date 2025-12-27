@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 func Run(t T, cfg Config) Result {
@@ -178,6 +178,7 @@ type T = testing.TB
 
 func yamlEncode(t T, obj any) string {
 	var buf strings.Builder
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.NewEncoder(&buf).Encode(obj))
 	return buf.String()
 }

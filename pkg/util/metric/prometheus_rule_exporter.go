@@ -91,5 +91,5 @@ func (re *PrometheusRuleExporter) ScrapeRegistry(ctx context.Context) {
 func (re *PrometheusRuleExporter) PrintAsYAML() ([]byte, error) {
 	re.mu.Lock()
 	defer re.mu.Unlock()
-	return yaml.Marshal(re.mu.RuleGroups)
+	return yaml.Marshal(re.mu.RuleGroups) //lint:ignore SA1019 deprecated
 }

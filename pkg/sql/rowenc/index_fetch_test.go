@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
-	"gopkg.in/yaml.v2"
 )
 
 func TestInitIndexFetchSpec(t *testing.T) {
@@ -52,7 +52,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 					Index   string
 					Columns []string
 				}
-				if err := yaml.UnmarshalStrict([]byte(d.Input), &params); err != nil {
+				if err := yamlutil.UnmarshalStrict([]byte(d.Input), &params); err != nil {
 					d.Fatalf(t, "failed to parse index-fetch params: %v", err)
 				}
 				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "testdb", params.Table)

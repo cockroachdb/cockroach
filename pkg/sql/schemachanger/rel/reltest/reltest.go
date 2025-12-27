@@ -84,6 +84,7 @@ func (s Suite) Run(t *testing.T) {
 }
 
 func (s Suite) writeYAML(t *testing.T) {
+	//lint:ignore SA1019 deprecated
 	out, err := yaml.Marshal(s.toYAML(t))
 	require.NoError(t, err)
 	tdp := datapathutils.TestDataPath(t, s.Name)
@@ -163,6 +164,7 @@ func (s Suite) encodeRules(t *testing.T) *yaml.Node {
 	n := yaml.Node{Kind: yaml.SequenceNode}
 	s.Schema.ForEachRule(func(def rel.RuleDef) {
 		var r yaml.Node
+		//lint:ignore SA1019 deprecated
 		require.NoError(t, r.Encode(def))
 		n.Content = append(n.Content, &r)
 	})

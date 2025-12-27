@@ -11,6 +11,6 @@ go_library(
         "//pkg/roachprod/vm/gce",
         "//pkg/roachprod/vm/ibm",
         "@com_github_iancoleman_strcase//:strcase",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )

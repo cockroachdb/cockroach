@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -268,7 +268,7 @@ func (c *PromClient) buildCreateRequestBody(nodes NodeTargets) (io.Reader, error
 			configs = append(configs, params)
 		}
 	}
-	cb, err := yaml.Marshal(&configs)
+	cb, err := yamlutil.Marshal(&configs)
 	if err != nil {
 		return nil, err
 	}

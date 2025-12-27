@@ -34,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/kylelemons/godebug/diff"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 // WithBuilderDependenciesFromTestServer sets up and tears down an
@@ -127,7 +127,7 @@ func ProtoToYAML(
 	for _, rewrite := range rewrites {
 		scviz.WalkMap(target, rewrite)
 	}
-	out, err := yaml.Marshal(target)
+	out, err := yamlutil.Marshal(target)
 	if err != nil {
 		return "", err
 	}

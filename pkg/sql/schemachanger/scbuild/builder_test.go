@@ -276,7 +276,7 @@ func formatElementForDisplay(t *testing.T, e scpb.Element) []byte {
 	var n yaml.Node
 	require.NoError(t, yamlutil.UnmarshalStrict([]byte(marshaled), &n))
 	walkYaml(&n, func(node *yaml.Node) { node.Style = yaml.FlowStyle })
-	data, err := yaml.Marshal(&n)
+	data, err := yaml.Marshal(&n) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 	return data
 }

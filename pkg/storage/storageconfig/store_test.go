@@ -63,7 +63,7 @@ l0_stop_writes_threshold=10`,
 			if !ok {
 				t.Fatalf("unknown config %q", td.CmdArgs[0].Key)
 			}
-			out, err := yaml.Marshal(cfg)
+			out, err := yaml.Marshal(cfg) //lint:ignore SA1019 deprecated
 			require.NoError(t, err)
 			return string(out)
 
@@ -72,7 +72,7 @@ l0_stop_writes_threshold=10`,
 			if err != nil {
 				return err.Error()
 			}
-			out, err := yaml.Marshal(s)
+			out, err := yaml.Marshal(s) //lint:ignore SA1019 deprecated
 			require.NoError(t, err)
 			return string(out)
 
@@ -82,7 +82,7 @@ l0_stop_writes_threshold=10`,
 			if err := s.Validate(); err != nil {
 				return err.Error()
 			}
-			out, err := yaml.Marshal(s)
+			out, err := yaml.Marshal(s) //lint:ignore SA1019 deprecated
 			require.NoError(t, err)
 			return string(out)
 
@@ -94,7 +94,7 @@ l0_stop_writes_threshold=10`,
 }
 
 func testRoundtrip(t *testing.T, input Store) {
-	marshaled, err := yaml.Marshal(input)
+	marshaled, err := yaml.Marshal(input) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 
 	parsed, err := unmarshal(marshaled)

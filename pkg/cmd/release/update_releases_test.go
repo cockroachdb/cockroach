@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 func Test_processReleaseData(t *testing.T) {
@@ -19,6 +19,7 @@ func Test_processReleaseData(t *testing.T) {
 	require.NoError(t, err)
 
 	var data []Release
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.Unmarshal(testReleases, &data)) //nolint:yaml
 
 	expectedReleaseData := map[string]release.Series{

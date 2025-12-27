@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // BenchmarkRaftStore runs the experiments in the testdata directory. It sets up
@@ -84,10 +84,10 @@ func benchmarkRaftStoreInner(t testing.TB, smokeCheckOnly bool) {
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}
 
-			dec := yaml.NewDecoder(strings.NewReader(d.Input))
-			dec.SetStrict(true)
+			dec := yaml.NewDecoder(strings.NewReader(d.Input)) //lint:ignore SA1019 deprecated
+			dec.KnownFields(true)                              //lint:ignore SA1019 deprecated
 			cfg := MakeDefaultConfig()
-			require.NoError(t, dec.Decode(&cfg))
+			require.NoError(t, dec.Decode(&cfg)) //lint:ignore SA1019 deprecated
 
 			// TODO(tbg): could support fixtures, using:
 			// testfixtures.ReuseOrGenerate(b, name, func(dir string) {})
@@ -143,6 +143,7 @@ func stripConfig(cfg Config) Config {
 
 func configToYAML(t T, cfg Config) string {
 	var buf bytes.Buffer
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.NewEncoder(&buf).Encode(&cfg))
 	return buf.String()
 }

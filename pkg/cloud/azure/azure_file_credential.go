@@ -15,8 +15,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 type FileCredential struct {
@@ -142,7 +142,7 @@ func (c *FileCredential) reloadCredentialsFromFile() error {
 
 	// Unmarshal the credentials.
 	var credsYAML azureCredentialsYAML
-	if err := yaml.UnmarshalStrict(data, &credsYAML); err != nil {
+	if err := yamlutil.UnmarshalStrict(data, &credsYAML); err != nil {
 		return errors.Wrapf(err, "failed to unmarshal credentials")
 	}
 

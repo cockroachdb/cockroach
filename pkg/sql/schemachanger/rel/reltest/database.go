@@ -175,7 +175,7 @@ func encodeIdx(idx rel.Index) *yaml.Node {
 			var n yaml.Node
 			if w.Attr == rel.Type {
 				n = *scalarYAML(fmt.Sprintf("%v", w.Eq))
-			} else if err := n.Encode(w.Eq); err != nil {
+			} else if err := n.Encode(w.Eq); err != nil { //lint:ignore SA1019 deprecated
 				n = *scalarYAML("ERROR: " + err.Error())
 			}
 			clause.Content = append(clause.Content,
@@ -220,6 +220,7 @@ func (tc DatabaseTest) encodeQueries(t *testing.T, r *Registry) *yaml.Node {
 				seq.Content = append(seq.Content, scalarYAML(typ.String()))
 			} else {
 				var content yaml.Node
+				//lint:ignore SA1019 deprecated
 				require.NoError(t, content.Encode(v))
 				seq.Content = append(seq.Content, &content)
 			}
@@ -243,6 +244,7 @@ func (tc DatabaseTest) encodeQueries(t *testing.T, r *Registry) *yaml.Node {
 	}
 	addQuery := func(t *testing.T, qt QueryTest) {
 		var query yaml.Node
+		//lint:ignore SA1019 deprecated
 		require.NoError(t, query.Encode(qt.Query))
 
 		var qtNode *yaml.Node
@@ -272,6 +274,7 @@ func (tc DatabaseTest) encodeQueries(t *testing.T, r *Registry) *yaml.Node {
 			}
 			if len(qt.UnsatisfiableIndexes) > 0 {
 				var n yaml.Node
+				//lint:ignore SA1019 deprecated
 				_ = n.Encode(qt.UnsatisfiableIndexes)
 				n.Style = yaml.FlowStyle
 				qtNode.Content = append(qtNode.Content,
