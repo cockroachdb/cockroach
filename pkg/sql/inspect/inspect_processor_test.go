@@ -9,11 +9,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -246,6 +248,12 @@ func runProcessorAndWait(t *testing.T, proc *inspectProcessor, expectErr bool) {
 	}
 }
 
+// testProcessorOpts contains optional configuration for makeProcessor.
+type testProcessorOpts struct {
+	// ptsProtector is an optional override for PTS protection logic.
+	ptsProtector func(ctx context.Context, ts hlc.Timestamp) (jobsprotectedts.Cleaner, error)
+}
+
 // makeProcessor will create an inspect processor for test.
 func makeProcessor(
 	t *testing.T,
@@ -253,6 +261,7 @@ func makeProcessor(
 	src spanSource,
 	concurrency int,
 	asOf hlc.Timestamp,
+	opts ...testProcessorOpts,
 ) (*inspectProcessor, *testIssueCollector) {
 	t.Helper()
 	clock := hlc.NewClockForTesting(nil)
@@ -282,6 +291,14 @@ func makeProcessor(
 		concurrency:    concurrency,
 		clock:          clock,
 	}
+
+	// Apply optional configuration.
+	for _, opt := range opts {
+		if opt.ptsProtector != nil {
+			proc.testingPTSProtector = opt.ptsProtector
+		}
+	}
+
 	return proc, logger
 }
 
@@ -462,6 +479,84 @@ func TestInspectProcessor_AsOfTime(t *testing.T) {
 			// Run the test-specific timestamp verification
 			actualTime := logger.issue(0).AOST
 			tc.verifyTimestamp(t, actualTime, capturedTimestamp, testStartTime)
+		})
+	}
+}
+
+// TestInspectProcessor_PTSProtection verifies that protected timestamp protection
+// is called appropriately when AsOf is empty (using "now" as AOST).
+func TestInspectProcessor_PTSProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name             string
+		asOf             hlc.Timestamp
+		numSpans         int
+		expectPTSCalls   bool
+		expectedCleanups int
+		expectedProtects int
+	}{
+		{
+			name:             "empty AsOf calls PTS protection per span",
+			asOf:             hlc.Timestamp{}, // Empty timestamp - should trigger PTS protection
+			numSpans:         3,
+			expectPTSCalls:   true,
+			expectedProtects: 3, // One per span
+			expectedCleanups: 3, // One cleanup per span
+		},
+		{
+			name:             "specific AsOf does not call PTS protection",
+			asOf:             hlc.Timestamp{WallTime: 12345},
+			numSpans:         3,
+			expectPTSCalls:   false,
+			expectedProtects: 0, // PTS protection should not be called
+			expectedCleanups: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spanSrc := &testingSpanSource{
+				mode:     spanModeNormal,
+				maxSpans: tc.numSpans,
+			}
+
+			factory := func(asOf hlc.Timestamp) inspectCheck {
+				return &testingInspectCheck{
+					configs: []testingCheckConfig{
+						{mode: checkModeNone, stopAfter: 1},
+					},
+				}
+			}
+
+			// Track PTS protection calls.
+			var ptsProtectCalls atomic.Int32
+			var ptsCleanupCalls atomic.Int32
+
+			ptsProtector := func(ctx context.Context, ts hlc.Timestamp) (jobsprotectedts.Cleaner, error) {
+				ptsProtectCalls.Add(1)
+				return func(ctx context.Context) error {
+					ptsCleanupCalls.Add(1)
+					return nil
+				}, nil
+			}
+
+			proc, _ := makeProcessor(t, factory, spanSrc, 1, tc.asOf, testProcessorOpts{
+				ptsProtector: ptsProtector,
+			})
+
+			runProcessorAndWait(t, proc, false /* expectErr */)
+
+			if tc.expectPTSCalls {
+				require.Equal(t, int32(tc.expectedProtects), ptsProtectCalls.Load(),
+					"expected %d PTS protect calls, got %d", tc.expectedProtects, ptsProtectCalls.Load())
+				require.Equal(t, int32(tc.expectedCleanups), ptsCleanupCalls.Load(),
+					"expected %d PTS cleanup calls, got %d", tc.expectedCleanups, ptsCleanupCalls.Load())
+			} else {
+				require.Equal(t, int32(0), ptsProtectCalls.Load(),
+					"expected no PTS protect calls when AsOf is specified, got %d", ptsProtectCalls.Load())
+			}
 		})
 	}
 }
