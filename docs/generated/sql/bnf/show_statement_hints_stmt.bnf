@@ -1,0 +1,3 @@
+show_statement_hints_stmt ::=
+	'SHOW' 'STATEMENT' 'HINTS' 'FOR' explainable_stmt
+	| 'SHOW' 'STATEMENT' 'HINTS' 'WITH' 'DETAILS' 'FOR' explainable_stmt

@@ -277,6 +277,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:show_sequences.html",
     "//docs/generated/sql/bnf:show_session.html",
     "//docs/generated/sql/bnf:show_sessions.html",
+    "//docs/generated/sql/bnf:show_statement_hints.html",
     "//docs/generated/sql/bnf:show_statements.html",
     "//docs/generated/sql/bnf:show_stats.html",
     "//docs/generated/sql/bnf:show_survival_goal.html",

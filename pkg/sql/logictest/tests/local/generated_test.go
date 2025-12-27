@@ -2257,6 +2257,13 @@ func TestLogic_show_source(
 	runLogicTest(t, "show_source")
 }
 
+func TestLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
+}
+
 func TestLogic_show_tables(
 	t *testing.T,
 ) {

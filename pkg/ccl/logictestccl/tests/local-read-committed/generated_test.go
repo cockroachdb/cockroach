@@ -2071,6 +2071,13 @@ func TestReadCommittedLogic_show_inspect_errors(
 	runLogicTest(t, "show_inspect_errors")
 }
 
+func TestReadCommittedLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
+}
+
 func TestReadCommittedLogic_show_transfer_state(
 	t *testing.T,
 ) {

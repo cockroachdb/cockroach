@@ -2364,3 +2364,152 @@ at or near "on": syntax error
 DETAIL: source SQL:
 SHOW CREATE TRIGGERS ON foo
                      ^
+
+parse
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = 10
+----
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = 10
+SHOW STATEMENT HINTS FOR SELECT (*) FROM t WHERE ((x) = (10)) -- fully parenthesized
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = _ -- literals removed
+SHOW STATEMENT HINTS FOR SELECT * FROM _ WHERE _ = 10 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS WITH DETAILS FOR SELECT * FROM t WHERE x = 10
+----
+SHOW STATEMENT HINTS WITH DETAILS FOR SELECT * FROM t WHERE x = 10
+SHOW STATEMENT HINTS WITH DETAILS FOR SELECT (*) FROM t WHERE ((x) = (10)) -- fully parenthesized
+SHOW STATEMENT HINTS WITH DETAILS FOR SELECT * FROM t WHERE x = _ -- literals removed
+SHOW STATEMENT HINTS WITH DETAILS FOR SELECT * FROM _ WHERE _ = 10 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = _
+----
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = _
+SHOW STATEMENT HINTS FOR SELECT (*) FROM t WHERE ((x) = (_)) -- fully parenthesized
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = _ -- literals removed
+SHOW STATEMENT HINTS FOR SELECT * FROM _ WHERE _ = _ -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = $1
+----
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = $1
+SHOW STATEMENT HINTS FOR SELECT (*) FROM t WHERE ((x) = ($1)) -- fully parenthesized
+SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = $1 -- literals removed
+SHOW STATEMENT HINTS FOR SELECT * FROM _ WHERE _ = $1 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR WITH foo AS (SELECT * FROM t WHERE x = 10) SELECT * FROM foo
+----
+SHOW STATEMENT HINTS FOR WITH foo AS (SELECT * FROM t WHERE x = 10) SELECT * FROM foo
+SHOW STATEMENT HINTS FOR WITH foo AS (SELECT (*) FROM t WHERE ((x) = (10))) SELECT (*) FROM foo -- fully parenthesized
+SHOW STATEMENT HINTS FOR WITH foo AS (SELECT * FROM t WHERE x = _) SELECT * FROM foo -- literals removed
+SHOW STATEMENT HINTS FOR WITH _ AS (SELECT * FROM _ WHERE _ = 10) SELECT * FROM _ -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR PREPARE stmt1 AS SELECT 1
+----
+SHOW STATEMENT HINTS FOR PREPARE stmt1 AS SELECT 1
+SHOW STATEMENT HINTS FOR PREPARE stmt1 AS SELECT (1) -- fully parenthesized
+SHOW STATEMENT HINTS FOR PREPARE stmt1 AS SELECT _ -- literals removed
+SHOW STATEMENT HINTS FOR PREPARE _ AS SELECT 1 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR EXECUTE stmt1
+----
+SHOW STATEMENT HINTS FOR EXECUTE stmt1
+SHOW STATEMENT HINTS FOR EXECUTE stmt1 -- fully parenthesized
+SHOW STATEMENT HINTS FOR EXECUTE stmt1 -- literals removed
+SHOW STATEMENT HINTS FOR EXECUTE _ -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR CREATE TABLE foo (x INT, y INT)
+----
+SHOW STATEMENT HINTS FOR CREATE TABLE foo (x INT8, y INT8) -- normalized!
+SHOW STATEMENT HINTS FOR CREATE TABLE foo (x INT8, y INT8) -- fully parenthesized
+SHOW STATEMENT HINTS FOR CREATE TABLE foo (x INT8, y INT8) -- literals removed
+SHOW STATEMENT HINTS FOR CREATE TABLE _ (_ INT8, _ INT8) -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR GRANT ALL ON TABLE the_table TO rolEC
+----
+SHOW STATEMENT HINTS FOR GRANT ALL ON TABLE the_table TO rolec -- normalized!
+SHOW STATEMENT HINTS FOR GRANT ALL ON TABLE (the_table) TO rolec -- fully parenthesized
+SHOW STATEMENT HINTS FOR GRANT ALL ON TABLE the_table TO rolec -- literals removed
+SHOW STATEMENT HINTS FOR GRANT ALL ON TABLE _ TO _ -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR COMMENT ON COLUMN a.b IS NULL
+----
+SHOW STATEMENT HINTS FOR COMMENT ON COLUMN a.b IS NULL
+SHOW STATEMENT HINTS FOR (COMMENT ON COLUMN (a.b) IS NULL) -- fully parenthesized
+SHOW STATEMENT HINTS FOR COMMENT ON COLUMN a.b IS NULL -- literals removed
+SHOW STATEMENT HINTS FOR COMMENT ON COLUMN _._ IS NULL -- identifiers removed
+
+parse
+EXPLAIN SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = 10
+----
+EXPLAIN SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = 10
+EXPLAIN SHOW STATEMENT HINTS FOR SELECT (*) FROM t WHERE ((x) = (10)) -- fully parenthesized
+EXPLAIN SHOW STATEMENT HINTS FOR SELECT * FROM t WHERE x = _ -- literals removed
+EXPLAIN SHOW STATEMENT HINTS FOR SELECT * FROM _ WHERE _ = 10 -- identifiers removed
+
+parse
+SHOW STATEMENT HINTS FOR SELECT a, b FROM t1 JOIN t2 ON t1.x = t2.y
+----
+SHOW STATEMENT HINTS FOR SELECT a, b FROM t1 JOIN t2 ON t1.x = t2.y
+SHOW STATEMENT HINTS FOR SELECT (a), (b) FROM t1 JOIN t2 ON ((t1.x) = (t2.y)) -- fully parenthesized
+SHOW STATEMENT HINTS FOR SELECT a, b FROM t1 JOIN t2 ON t1.x = t2.y -- literals removed
+SHOW STATEMENT HINTS FOR SELECT _, _ FROM _ JOIN _ ON _._ = _._ -- identifiers removed
+
+error
+SHOW STATEMENT HINTS FOR
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS FOR
+                        ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT HINTS
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINTS
+                    ^
+HINT: try \h SHOW STATEMENT HINTS
+
+error
+SHOW STATEMENT
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT
+              ^
+HINT: try \h SHOW
+
+error
+SHOW STATEMENT HINT FOR SELECT 1
+----
+at or near "hint": syntax error
+DETAIL: source SQL:
+SHOW STATEMENT HINT FOR SELECT 1
+               ^
+HINT: try \h SHOW
+
+error
+SHOW HINT FOR SELECT 1
+----
+at or near "for": syntax error
+DETAIL: source SQL:
+SHOW HINT FOR SELECT 1
+          ^
+
+error
+SHOW HINTS FOR SELECT 1
+----
+at or near "hints": syntax error
+DETAIL: source SQL:
+SHOW HINTS FOR SELECT 1
+     ^
+HINT: try \h SHOW
