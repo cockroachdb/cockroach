@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -331,13 +332,14 @@ var encodeURIOpts = struct {
 }{}
 
 func encodeURI(cmd *cobra.Command, args []string) error {
+	schemePrefixPtn := regexp.MustCompile(`^postgres(ql)?://`)
+	if !schemePrefixPtn.MatchString(args[0]) {
+		args[0] = "postgresql://" + args[0]
+	}
+
 	pgURL, err := url.Parse(args[0])
 	if err != nil {
 		return err
-	}
-
-	if pgURL.Scheme == "" {
-		pgURL.Scheme = "postgresql://"
 	}
 
 	if encodeURIOpts.database != "" {
