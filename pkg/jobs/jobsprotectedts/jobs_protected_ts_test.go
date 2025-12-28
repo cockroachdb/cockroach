@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -90,10 +89,9 @@ func testJobsProtectedTimestamp(
 			if err != nil {
 				return err
 			}
-			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
-				deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+				jobsprotectedts.Jobs, targetToProtect)
 			if err := ptp.WithTxn(txn).Protect(ctx, rec); err != nil {
 				return err
 			}
@@ -225,10 +223,9 @@ func testSchedulesProtectedTimestamp(
 			schedules := jobs.ScheduledJobTxn(txn)
 			sj = mkScheduledJobRec(scheduleLabel)
 			require.NoError(t, schedules.Create(ctx, sj))
-			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(sj.ScheduleID()), ts,
-				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
+				jobsprotectedts.Schedules, targetToProtect)
 			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))
 		return sj, rec

@@ -62,10 +62,9 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		return insqlDB.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
-			deprecatedTenantSpan := roachpb.Spans{makeTenantSpan(tenantID)}
 			tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenantID)})
 			record := jobsprotectedts.MakeRecord(
-				ptsID, int64(jr.JobID), ts, deprecatedTenantSpan,
+				ptsID, int64(jr.JobID), ts,
 				jobsprotectedts.Jobs, tenantTarget,
 			)
 			if err := ptp.WithTxn(txn).Protect(ctx, record); err != nil {

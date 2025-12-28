@@ -889,7 +889,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		fn := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs).ProtectedTSReaderOverrideFn
 		protectedTSReader = fn(clock)
 	} else {
-		protectedTSReader = spanconfigptsreader.NewAdapter(protectedtsProvider.(*ptprovider.Provider).Cache,
+		protectedTSReader = spanconfigptsreader.NewAdapter(
 			spanConfig.subscriber, cfg.Settings)
 	}
 
