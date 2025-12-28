@@ -2107,7 +2107,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			return err
 		}
 		ptr := createUserTablesProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
+			ctx, cf.spec.JobID, targets, tableHighWater,
 		)
 		uuid := ptr.ID.GetUUID()
 		ptsEntries.UserTables[tableID] = uuid
@@ -2196,7 +2196,7 @@ func (cf *changeFrontier) advanceProtectedTimestamp(
 		// in the single PTS record for the changefeed with all other targets
 		// in a combined record.
 		ptr := createCombinedProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, timestamp,
+			ctx, cf.spec.JobID, cf.targets, timestamp,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
 		return true, pts.Protect(ctx, ptr)
@@ -2255,7 +2255,7 @@ func (cf *changeFrontier) remakePTSRecord(
 ) error {
 	prevRecordId := progress.ProtectedTimestampRecord
 	ptr := createCombinedProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, resolved,
+		ctx, cf.spec.JobID, cf.targets, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
 		return err
@@ -2279,7 +2279,7 @@ func (cf *changeFrontier) remakeSystemTablesPTSRecord(
 	resolved hlc.Timestamp,
 ) error {
 	ptr := createSystemTablesProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, resolved,
+		ctx, cf.spec.JobID, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
 		return err

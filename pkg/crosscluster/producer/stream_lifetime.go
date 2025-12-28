@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -124,10 +123,9 @@ func StartReplicationProducerJob(
 	}
 
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
-	deprecatedSpansToProtect := roachpb.Spans{keys.MakeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
-		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+		jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return streampb.ReplicationProducerSpec{}, err

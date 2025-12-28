@@ -341,7 +341,6 @@ func changefeedPlanHook(
 			// ptsRecords is the protected timestamp records object containing all per-table protected
 			// timestamp records. Its format matches what will be persisted to the job info table.
 			var ptsRecords *cdcprogresspb.ProtectedTimestampRecords
-			codec := p.ExecCfg().Codec
 
 			// We do not yet have the progress config here, so we need to check the settings directly.
 			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(&p.ExecCfg().Settings.SV)
@@ -358,7 +357,6 @@ func changefeedPlanHook(
 					ptsTargets.Add(target)
 					ptsRecord := createUserTablesProtectedTimestampRecord(
 						ctx,
-						codec,
 						jobID,
 						ptsTargets,
 						details.StatementTime,
@@ -372,7 +370,6 @@ func changefeedPlanHook(
 				}
 				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					details.StatementTime,
 				)
@@ -383,7 +380,6 @@ func changefeedPlanHook(
 			} else {
 				ptr = createCombinedProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					targets,
 					details.StatementTime,

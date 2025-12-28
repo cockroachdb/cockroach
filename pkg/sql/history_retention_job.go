@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"math"
 	"os/exec"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -69,13 +67,9 @@ func StartHistoryRetentionJob(
 	}
 
 	targetToProtect := ptpb.MakeClusterTarget()
-	allTablesSpan := roachpb.Span{
-		Key:    execConfig.Codec.TablePrefix(0),
-		EndKey: execConfig.Codec.TablePrefix(math.MaxUint32).PrefixEnd(),
-	}
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), protectTime,
-		[]roachpb.Span{allTablesSpan}, jobsprotectedts.Jobs, targetToProtect)
+		jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return 0, err

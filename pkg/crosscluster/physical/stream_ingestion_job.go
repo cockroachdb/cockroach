@@ -542,7 +542,7 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 		pts := jobsprotectedts.MakeRecord(ptsID, int64(s.job.ID()), replicationStartTime,
-			nil /* deprecatedSpans */, jobsprotectedts.Jobs, target)
+			jobsprotectedts.Jobs, target)
 		if err := ptp.Protect(ctx, pts); err != nil {
 			return err
 		}

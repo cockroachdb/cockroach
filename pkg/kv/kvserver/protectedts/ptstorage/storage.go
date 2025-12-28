@@ -62,7 +62,6 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		meta = []byte{}
 	}
 
-
 	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
 	// Once the `AlterSystemProtectedTimestampAddColumn` migration has run, we
 	// only want to persist the `target` on which the pts record applies. We have
@@ -241,8 +240,6 @@ func (p *Manager) WithTxn(txn isql.Txn) protectedts.Storage {
 
 var _ protectedts.Manager = (*Manager)(nil)
 
-
-
 // New creates a new Storage.
 func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) *Manager {
 	if knobs == nil {
@@ -297,7 +294,6 @@ func rowToRecord(row tree.Datums, r *ptpb.Record, isDeprecatedRow bool) error {
 	}
 	return nil
 }
-
 
 type settings struct {
 	maxSpans int64
