@@ -67,7 +67,6 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 
 			rec := jobsprotectedts.MakeRecord(
 				uuid.MakeV4(), int64(jobID), ts,
-				nil, /* deprecatedSpans */
 				jobsprotectedts.Jobs, testCase.target,
 			)
 			require.NoError(t, pts.Protect(ctx, rec))

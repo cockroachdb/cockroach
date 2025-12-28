@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,19 +26,16 @@ import (
 // were introduced where we protect system tables in their own record.
 func createCombinedProtectedTimestampRecord(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
-	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeCombinedTargetToProtect(targets)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		ptsID, int64(jobID), resolved, deprecatedSpansToProtect,
-		jobsprotectedts.Jobs, targetToProtect)
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs, targetToProtect)
 }
 
 // createSystemTablesProtectedTimestampRecord will create a record to
@@ -48,13 +44,13 @@ func createCombinedProtectedTimestampRecord(
 // timestamps are enabled to avoid duplicating the system tables protections
 // in each of the user tables' protected timestamp records.
 func createSystemTablesProtectedTimestampRecord(
-	ctx context.Context, codec keys.SQLCodec, jobID jobspb.JobID, resolved hlc.Timestamp,
+	ctx context.Context, jobID jobspb.JobID, resolved hlc.Timestamp,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
 
 	log.VEventf(ctx, 2, "creating protected timestamp for system tables %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		ptsID, int64(jobID), resolved, nil, jobsprotectedts.Jobs, makeSystemTablesTargetToProtect(),
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs, makeSystemTablesTargetToProtect(),
 	)
 }
 
@@ -64,7 +60,6 @@ func createSystemTablesProtectedTimestampRecord(
 // enabled.
 func createUserTablesProtectedTimestampRecord(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	jobID jobspb.JobID,
 	targets changefeedbase.Targets,
 	resolved hlc.Timestamp,
@@ -73,7 +68,7 @@ func createUserTablesProtectedTimestampRecord(
 
 	log.VEventf(ctx, 2, "creating protected timestamp for user tables %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		ptsID, int64(jobID), resolved, nil, jobsprotectedts.Jobs,
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs,
 		makeUserTablesTargetToProtect(targets),
 	)
 }
@@ -123,23 +118,4 @@ func makeUserTablesTargetToProtect(targets changefeedbase.Targets) *ptpb.Target 
 // In that case we protect the system tables separately from the user tables.
 func makeSystemTablesTargetToProtect() *ptpb.Target {
 	return ptpb.MakeSchemaObjectsTarget(systemTablesToProtect)
-}
-
-func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []roachpb.Span {
-	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
-	addTablePrefix := func(id uint32) {
-		tablePrefix := codec.TablePrefix(id)
-		spansToProtect = append(spansToProtect, roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		})
-	}
-	_ = targets.EachTableID(func(id descpb.ID) error {
-		addTablePrefix(uint32(id))
-		return nil
-	})
-	for _, id := range systemTablesToProtect {
-		addTablePrefix(uint32(id))
-	}
-	return spansToProtect
 }

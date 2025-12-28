@@ -358,7 +358,6 @@ func changefeedPlanHook(
 					ptsTargets.Add(target)
 					ptsRecord := createUserTablesProtectedTimestampRecord(
 						ctx,
-						codec,
 						jobID,
 						ptsTargets,
 						details.StatementTime,
@@ -372,7 +371,6 @@ func changefeedPlanHook(
 				}
 				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					details.StatementTime,
 				)
@@ -383,7 +381,6 @@ func changefeedPlanHook(
 			} else {
 				ptr = createCombinedProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					targets,
 					details.StatementTime,
