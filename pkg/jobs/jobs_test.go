@@ -3213,7 +3213,7 @@ func TestJobTypeMetrics(t *testing.T) {
 	writePTSRecord := func(jobID jobspb.JobID) (uuid.UUID, error) {
 		id := uuid.MakeV4()
 		record := jobsprotectedts.MakeRecord(
-			id, int64(jobID), s.Clock().Now(), nil,
+			id, int64(jobID), s.Clock().Now(),
 			jobsprotectedts.Jobs, ptpb.MakeClusterTarget(),
 		)
 		return id,

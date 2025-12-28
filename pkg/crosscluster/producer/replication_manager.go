@@ -134,14 +134,9 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		return streampb.ReplicationProducerSpec{}, err
 	}
 
-	// TODO(ssd): Update this to protect the right set of
-	// tables. Perhaps we can just protect the tables and depend
-	// on something else to protect the namespace and descriptor
-	// tables.
-	deprecatedSpansToProtect := roachpb.Spans(spans)
 	targetToProtect := ptpb.MakeClusterTarget()
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
-		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+		jobsprotectedts.Jobs, targetToProtect)
 
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(r.txn)
 	if err := ptp.Protect(ctx, pts); err != nil {

@@ -211,7 +211,6 @@ type testContext struct {
 	tc  *testcluster.TestCluster
 	db  isql.DB
 
-
 	state ptpb.State
 }
 
@@ -416,11 +415,7 @@ func largeTableTarget(targetBytesSize int64) *ptpb.Target {
 }
 
 func newRecord(
-	tCtx *testContext,
-	ts hlc.Timestamp,
-	metaType string,
-	meta []byte,
-	target *ptpb.Target,
+	tCtx *testContext, ts hlc.Timestamp, metaType string, meta []byte, target *ptpb.Target,
 ) ptpb.Record {
 	return ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),

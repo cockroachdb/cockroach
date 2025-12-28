@@ -10,7 +10,6 @@ import "github.com/cockroachdb/cockroach/pkg/base"
 // TestingKnobs provide fine-grained control over the various span config
 // components for testing.
 type TestingKnobs struct {
-
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
