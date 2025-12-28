@@ -1373,7 +1373,7 @@ statement ok
 set role buck
 
 # Try to delete the row. The delete policy will prevent us from reading the row.
-statement ok
+statement count 0
 DELETE FROM bbteams;
 
 query TT
@@ -1396,7 +1396,7 @@ create policy restrict_delete on bbteams for delete to buck using (is_valid(leag
 statement ok
 set role buck
 
-statement ok
+statement count 1
 DELETE FROM bbteams WHERE team != 'pirates';
 
 query TT
@@ -2243,7 +2243,7 @@ INSERT INTO child VALUES ('bedroom', 4);
 statement ok
 ALTER TABLE parent NO FORCE ROW LEVEL SECURITY;
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE key = 1;
 
 statement ok
@@ -2452,7 +2452,7 @@ SELECT a, b FROM trunc ORDER BY a;
 3  c
 
 # This should not delete anything because the expression for delete is false.
-statement ok
+statement count 0
 DELETE FROM trunc;
 
 query IT
@@ -2550,7 +2550,7 @@ SELECT a, b FROM trunc ORDER BY a;
 7  a
 9  c
 
-statement ok
+statement count 0
 DELETE FROM trunc;
 
 query IT
@@ -3663,7 +3663,7 @@ query I
 delete from cnt where counter is not null returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 query I
@@ -3682,7 +3682,7 @@ query I
 delete from cnt where counter > 0 returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 statement ok
@@ -3704,7 +3704,7 @@ query I
 delete from cnt where counter > 0 returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 statement ok
@@ -3732,7 +3732,7 @@ query I
 DELETE FROM cnt WHERE counter > 0 RETURNING counter;
 ----
 
-statement ok
+statement count 0
 DELETE FROM cnt;
 
 statement ok
@@ -4503,7 +4503,7 @@ SELECT comment, c FROM ups WHERE pk = 3;
 ----
 original value 2
 
-statement ok
+statement count 1
 DELETE FROM ups WHERE pk = 3;
 
 statement ok
@@ -5814,7 +5814,7 @@ statement ok
 RESET row_security;
 
 # Test DELETE and UPSERT.
-statement ok
+statement count 1
 DELETE FROM accounts WHERE id = 1;
 
 statement ok

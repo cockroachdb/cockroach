@@ -1134,7 +1134,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT INSERT ON TABLES TO roach_a;
 
 # Create some descriptor corruptions with an orphaned role that is being granted
 # a default privilege.
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'roach_a';
 
 # Force the role membership cache to be updated.
@@ -1169,11 +1169,11 @@ SET ROLE root;
 
 # Create a descriptor corruption with an orphaned role that is granting a
 # default privilege.
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'roach_d';
 
 # Create a descriptor corruption with all orphaned roles.
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'roach_c';
 
 # We see that roach_c and roach_d still exist in our default privileges on our

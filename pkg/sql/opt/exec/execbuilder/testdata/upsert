@@ -1235,7 +1235,7 @@ CPut /Table/123/2/11/0 -> /BYTES/0x89
 statement ok
 DEALLOCATE p
 
-statement ok
+statement count 1
 DELETE FROM t137352 WHERE true
 
 statement ok

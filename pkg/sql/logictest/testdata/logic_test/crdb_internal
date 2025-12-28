@@ -1738,8 +1738,10 @@ ORDER BY role, inheriting_member
 admin  real_user  true  false
 admin  root       true  true
 
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'non_cached_user';
+
+statement count 1
 DELETE FROM system.role_members WHERE member = 'non_cached_user';
 
 statement ok

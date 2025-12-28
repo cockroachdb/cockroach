@@ -213,7 +213,7 @@ SELECT array_agg(bar ORDER BY pk) FROM foo
 ----
 {"{\"a\": \"b\"}","[1, 2, 3]","\"hello\"",1.000,true,false,NULL,"{\"x\": [1, 2, 3]}","{\"x\": {\"y\": \"z\"}}"}
 
-statement ok
+statement count 9
 DELETE FROM foo
 
 statement ok

@@ -71,7 +71,7 @@ SELECT * FROM t
 let $del_ts
 SELECT crdb_internal_mvcc_timestamp FROM t WHERE x = 2
 
-statement ok
+statement count 1
 DELETE FROM t WHERE crdb_internal_mvcc_timestamp = $del_ts
 
 query III

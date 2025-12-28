@@ -2,6 +2,10 @@
 
 skip under race
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Note that we disable the "forced disk spilling" config because the histograms
 # are dropped if the stats collection reaches the memory budget limit.
 

@@ -1985,7 +1985,7 @@ INSERT INTO kv VALUES (12, -1, DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 query error argument of nth_value\(\) must be greater than zero
 SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 12
 
 query error FILTER specified but rank\(\) is not an aggregate function

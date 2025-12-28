@@ -1372,7 +1372,7 @@ RESET CLUSTER SETTING sql.stats.histogram_samples.count
 statement ok
 SET optimizer_use_merged_partial_statistics = off
 
-statement ok
+statement count 5
 DELETE FROM ka
 
 statement ok
@@ -1454,7 +1454,7 @@ statement ok
 GRANT node TO root;
 
 # Keep only partial stats on the target table.
-statement ok
+statement count 1
 DELETE FROM system.table_statistics WHERE name NOT LIKE '%partial%' AND "tableID" = 'ka'::REGCLASS::OID;
 
 query TT

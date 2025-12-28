@@ -23,7 +23,7 @@ SELECT * FROM child
 10  1
 20  2
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p >= 2
 
 query II rowsort
@@ -32,7 +32,7 @@ SELECT * FROM child
 1   1
 10  1
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p <= 2
 
 query II
@@ -55,22 +55,22 @@ INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
 statement ok
 INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11);
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p = 2
 
 statement error delete on table "child" violates foreign key constraint "grandchild_c_fkey" on table "grandchild"\nDETAIL: Key \(c\)\=\(1[01]\) is still referenced from table "grandchild"
 DELETE FROM parent WHERE p = 1
 
-statement ok
+statement count 2
 DELETE FROM grandchild WHERE c = 10
 
 statement error delete on table "child" violates foreign key constraint "grandchild_c_fkey" on table "grandchild"\nDETAIL: Key \(c\)=\(11\) is still referenced from table "grandchild"
 DELETE FROM parent WHERE p = 1
 
-statement ok
+statement count 1
 DELETE FROM grandchild WHERE c = 11
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p = 1
 
 statement ok
@@ -92,7 +92,7 @@ INSERT INTO child VALUES (10, 1), (11, 1), (20, 2), (21, 2);
 statement ok
 INSERT INTO grandchild VALUES (100, 10), (101, 10), (110, 11), (200, 20)
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p = 1
 
 query II rowsort
@@ -106,7 +106,7 @@ SELECT * FROM grandchild
 ----
 200  20
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p = 2
 
 query II
@@ -174,7 +174,7 @@ SELECT a,b,c FROM child_multi_2
 2  20  200
 3  30  300
 
-statement ok
+statement count 1
 DELETE FROM parent_multi WHERE pa = 1
 
 query III rowsort
@@ -197,7 +197,7 @@ SELECT a,b,c FROM child_multi_2
 2  20  200
 3  30  300
 
-statement ok
+statement count 1
 DELETE FROM parent_multi WHERE pb = 20
 
 query III rowsort
@@ -217,7 +217,7 @@ SELECT a,b,c FROM child_multi_2
 3  30  300
 
 # Deleting NULLs should not cause any changes in a child.
-statement ok
+statement count 1
 DELETE FROM parent_multi WHERE pa IS NULL
 
 query III rowsort
@@ -248,7 +248,7 @@ statement ok
 INSERT INTO self VALUES (1, NULL);
 INSERT INTO self SELECT x, x-1 FROM generate_series(2, 10) AS g(x)
 
-statement ok
+statement count 1
 DELETE FROM self WHERE a = 4
 
 query II rowsort
@@ -258,7 +258,7 @@ SELECT * FROM self
 2   1
 3   2
 
-statement ok
+statement count 1
 DELETE FROM self WHERE a = 1
 
 query II
@@ -333,7 +333,7 @@ statement error pq: update on table "a" violates foreign key constraint "b_updat
 UPDATE a SET id = 1000 WHERE id = 4;
 
 # 5. ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 5;
 
 query I
@@ -359,7 +359,7 @@ statement error pq: duplicate key value violates unique constraint "a_pkey"\nDET
 UPDATE a SET id = 1 WHERE id = 1006;
 
 # 7. ON DELETE SET NULL
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 7;
 
 query IIIIIIIIII
@@ -377,7 +377,7 @@ SELECT * FROM b;
 1  2  3  4  5  1006  NULL  NULL  9  10
 
 # 9. ON DELETE SET DEFAULT
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 9
 
 query IIIIIIIIII
@@ -459,7 +459,7 @@ INSERT INTO c2 VALUES
 INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a-pk1';
 
 query IIIIII
@@ -519,7 +519,7 @@ INSERT INTO c1 VALUES ('pk1');
 INSERT INTO c2 VALUES ('pk1');
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'pk1';
 
 query IIIII
@@ -608,7 +608,7 @@ INSERT INTO c2 VALUES
 ;
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a-pk1';
 
 query IIIII
@@ -697,7 +697,7 @@ INSERT INTO c2 VALUES
 ;
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a-pk1';
 
 query IIIII
@@ -802,7 +802,7 @@ INSERT INTO self VALUES (2, 1);
 INSERT INTO self VALUES (3, 2);
 INSERT INTO self VALUES (4, 3);
 
-statement ok
+statement count 1
 DELETE FROM self WHERE id = 1;
 
 query I
@@ -833,7 +833,7 @@ INSERT INTO self VALUES (4, 3);
 statement ok
 UPDATE self SET other_id = 4 WHERE id = 1;
 
-statement ok
+statement count 1
 DELETE FROM self WHERE id = 1;
 
 query I
@@ -879,7 +879,7 @@ INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
 statement ok
 UPDATE loop_a SET cascade_delete = 'loop_b-pk3' WHERE id = 'loop_a-pk1';
 
-statement ok
+statement count 1
 DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
 query II
@@ -925,7 +925,7 @@ INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk2', 'loop_a-pk2');
 INSERT INTO loop_a (id, cascade_delete) VALUES ('loop_a-pk3', 'loop_b-pk2');
 INSERT INTO loop_b (id, cascade_delete) VALUES ('loop_b-pk3', 'loop_a-pk3');
 
-statement ok
+statement count 1
 DELETE FROM loop_a WHERE id = 'loop_a-pk1';
 
 query II
@@ -957,7 +957,7 @@ INSERT INTO self_x2 (x, y, z) VALUES ('pk1', NULL, NULL);
 INSERT INTO self_x2 (x, y, z) VALUES ('pk2', 'pk1', NULL);
 INSERT INTO self_x2 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
 
-statement ok
+statement count 1
 DELETE FROM self_x2 WHERE x = 'pk1';
 
 query I
@@ -1015,7 +1015,7 @@ INSERT INTO c (id, a_id) VALUES ('c1', 'a1');
 INSERT INTO d (id, c_id) VALUES ('d1', 'c1');
 INSERT INTO e (id, b_id, d_id) VALUES ('e1', 'b1', 'd1');
 
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a1';
 
 query IIIII
@@ -1049,7 +1049,7 @@ statement ok
 INSERT INTO a VALUES (1), (2), (3);
 INSERT INTO b VALUES (1, 1), (2, NULL), (3, 2), (4, 1), (5, NULL);
 
-statement ok
+statement count 3
 DELETE FROM a;
 
 query II rowsort
@@ -1521,7 +1521,7 @@ INSERT INTO d1 VALUES ('d1-pk1', 'original');
 statement error pq: update on table "c2" violates foreign key constraint "d1_update_restrict_fkey" on table "d1"\nDETAIL: Key \(update_cascade\)=\('original'\) is still referenced from table "d1"\.
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
-statement ok
+statement count 1
 DELETE FROM d1 WHERE id = 'd1-pk1';
 
 # Test a primary key restrict.
@@ -2080,7 +2080,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
 INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'delete_me';
 
 query TT rowsort
@@ -2164,7 +2164,7 @@ INSERT INTO c3 VALUES
 
 # This query expects to cascade the deletion in a into b1 and b2, but not into
 # the c tables which have ON DELETE SET NULL instead.
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a-pk1';
 
 query TT rowsort
@@ -2269,7 +2269,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'delete-me';
 
 query I
@@ -2616,7 +2616,7 @@ INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
 INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
 
 # ON DELETE CASCADE
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'delete_me';
 
 query TT rowsort
@@ -2744,7 +2744,7 @@ INSERT INTO c3 VALUES
 
 # This query expects to cascade the deletion in a into b1 and b2, but not into
 # the c tables which have ON DELETE SET DEFAULT instead.
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'a-pk1';
 
 query TT rowsort
@@ -2921,7 +2921,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'delete-me';
 
 query T rowsort
@@ -2980,7 +2980,7 @@ INSERT INTO c VALUES
 ;
 
 # Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c
-statement ok
+statement count 1
 DELETE FROM a WHERE id = 'delete-me';
 
 query TT rowsort
@@ -3464,7 +3464,7 @@ INSERT INTO example VALUES (20, NULL);
 INSERT INTO example VALUES (30, 20);
 INSERT INTO example VALUES (NULL, 30);
 
-statement ok
+statement count 1
 DELETE FROM example where a = 30;
 
 query II colnames
@@ -3510,7 +3510,7 @@ NULL 1
 3    3
 
 # Remove everything from a. x=3,y=3 should be the only cascading values.
-statement ok
+statement count 4
 DELETE FROM a;
 
 # A match consisting of only NULLs is not cascaded.
@@ -3595,7 +3595,7 @@ NULL NULL
 3    3
 
 # Remove everything from a. x=3,y=3 should be the only cascading value.
-statement ok
+statement count 4
 DELETE FROM a;
 
 # A match consisting of only NULLs is not cascaded.
@@ -3726,7 +3726,7 @@ INSERT INTO b VALUES (2,2), (3,3);
 INSERT INTO c VALUES (2,2), (3,3);
 
 # This will populate b and c with (null, null) where (2,2) used to be.
-statement ok
+statement count 1
 DELETE FROM a WHERE x = 2;
 
 # We can't cascade the null value though to c, since it would break MATCH FULL.
@@ -4071,7 +4071,7 @@ COMMIT;
 statement ok
 RESET autocommit_before_ddl
 
-statement ok
+statement count 2
 DELETE FROM parent WHERE p = 1
 
 query II rowsort
@@ -4089,7 +4089,7 @@ NULL  3
 3     3
 3     3
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE q = 2
 
 query II rowsort
@@ -4105,7 +4105,7 @@ NULL  3
 3     3
 3     3
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE true
 
 query II rowsort
@@ -4166,7 +4166,7 @@ statement ok
 CREATE TABLE a (a INT UNIQUE);
 CREATE TABLE b (b INT, FOREIGN KEY (b) REFERENCES a (a) ON DELETE CASCADE);
 
-statement ok
+statement count 0
 DELETE FROM a WHERE EXISTS (SELECT a FROM a)
 
 statement ok

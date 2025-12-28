@@ -336,7 +336,7 @@ SELECT count(DISTINCT (v)) FROM kv
 
 # Test that transaction_timestamp() is consistent in transaction
 # spanning multiple batches of statements.
-statement ok
+statement count 9
 DELETE FROM kv
 
 statement ok
@@ -392,7 +392,7 @@ SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 
-statement ok
+statement count 3
 DELETE FROM kv
 
 let $old_default_transaction_isolation

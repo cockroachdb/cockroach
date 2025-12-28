@@ -97,7 +97,7 @@ INSERT INTO t14601 VALUES
   ('b', FALSE),
   ('c', FALSE)
 
-statement ok
+statement count 1
 DELETE FROM t14601 WHERE a > 'a' AND a < 'c'
 
 query T
@@ -156,7 +156,7 @@ a  false
 b  false
 c  false
 
-statement ok
+statement count 3
 DELETE FROM t14601a
 
 statement ok

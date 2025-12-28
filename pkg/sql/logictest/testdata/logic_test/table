@@ -625,7 +625,7 @@ SELECT estimated_row_count FROM [SHOW TABLES] where table_name = 't1'
 ----
 1024
 
-statement ok
+statement count 24
 DELETE FROM rowtest.t1 WHERE a > 1000;
 
 statement ok

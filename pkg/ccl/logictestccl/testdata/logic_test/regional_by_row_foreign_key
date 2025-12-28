@@ -1560,7 +1560,7 @@ k  v   child_region    parent_cascade_region
 5  50  ap-southeast-2  ap-southeast-2
 6  60  us-east-1       us-east-1
 
-statement ok
+statement count 2
 DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
 
 query IITT colnames
@@ -1594,8 +1594,10 @@ DROP FUNCTION display_child;
 statement ok
 DROP TABLE child;
 
-statement ok
+statement count 4
 DELETE FROM parent_cascade WHERE true;
+
+statement ok
 INSERT INTO parent_cascade (k, crdb_region) (SELECT k, crdb_region FROM parent_rbr);
 
 statement ok
@@ -1634,7 +1636,7 @@ k1  k2  v   child_region    parent_rbr_region  parent_cascade_region
 5   5   50  ap-southeast-2  ap-southeast-2     ap-southeast-2
 6   6   60  us-east-1       us-east-1          us-east-1
 
-statement ok
+statement count 2
 DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
 
 query IIITTT colnames

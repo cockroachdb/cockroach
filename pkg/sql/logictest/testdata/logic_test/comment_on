@@ -484,7 +484,7 @@ SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
 ----
 111  test  public  t_99316  invalid comment type: 4294967122 on object ID: 111
 
-statement ok
+statement count 1
 DELETE FROM system.comments WHERE type = 4294967122
 
 statement ok
@@ -572,7 +572,7 @@ SELECT * FROM crdb_internal.invalid_objects ORDER BY id;
 1      system  ·  ·  invalid comment type: 32 on object ID: 1
 11111  ·       ·  ·  comment exists for non-existent descriptor 11111
 
-statement ok
+statement count 2
 DELETE FROM system.comments WHERE type=32;
 
 query ITTTT

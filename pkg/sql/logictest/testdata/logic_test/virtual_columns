@@ -56,7 +56,7 @@ a  b  v
 1  1  2
 2  2  4
 
-statement ok
+statement count 2
 DELETE FROM t WHERE a > 0
 
 statement ok
@@ -75,7 +75,7 @@ a  b   v
 3  30  33
 4  40  44
 
-statement ok
+statement count 1
 DELETE FROM t WHERE v = 33
 
 query III colnames,rowsort
@@ -160,7 +160,7 @@ SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_
 4  6  10  10
 5  0  5   5
 
-statement ok
+statement count 1
 DELETE FROM t_idx WHERE v = 6
 
 query IIIII colnames,rowsort
@@ -172,7 +172,7 @@ a  b  c  v   w
 4  6  4  10  5
 5  0  5  5   6
 
-statement ok
+statement count 2
 DELETE FROM t_idx WHERE a+b = 10
 
 query IIIII colnames,rowsort
@@ -721,27 +721,27 @@ CREATE TABLE uniq_no_index (
   UNIQUE WITHOUT INDEX (v)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (1, 10), (2, 20)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index VALUES (3, 8)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index SET b=b+11 WHERE a < 2
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index VALUES (2, 30), (5, 6)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 query III colnames,rowsort
 SELECT * FROM uniq_no_index
 ----
@@ -758,23 +758,23 @@ CREATE TABLE uniq_no_index_multi (
   UNIQUE WITHOUT INDEX (v, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 3)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index_multi VALUES (4, 2, 2)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index_multi SET c=2 WHERE a=3
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 10)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 2)
 
@@ -1210,7 +1210,7 @@ statement ok
 INSERT INTO c_delete_cascade VALUES (2), (3);
 INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
 
-statement ok
+statement count 1
 DELETE FROM p WHERE p = 3
 
 query II colnames,rowsort

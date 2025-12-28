@@ -343,8 +343,10 @@ INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a,
 statement error could not create unique constraint "uniq_idx"\nDETAIL: Key \(a\)=\(5\) is duplicated
 CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a)
 
-statement ok
+statement count 1
 DELETE FROM regional_by_row_table WHERE pk = 5;
+
+statement ok
 CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a)
 
 query TTB colnames
@@ -375,8 +377,10 @@ INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a,
 statement error could not create unique constraint "uniq_idx"\nDETAIL: Key \(a\)=\(5\) is duplicated
 CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
 
-statement ok
+statement count 1
 DELETE FROM regional_by_row_table WHERE pk = 5;
+
+statement ok
 CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
 
 query TI
@@ -447,7 +451,7 @@ INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1000, 1, 1000, 2000)
 statement error Key \(pk2\)=\(1\) already exists\.
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS (pk2)
 
-statement ok
+statement count 1
 DELETE FROM regional_by_row_table WHERE pk = 1000
 
 statement ok

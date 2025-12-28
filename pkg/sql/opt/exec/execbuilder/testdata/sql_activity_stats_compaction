@@ -15,7 +15,7 @@ SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ - '2h'::I
 let $current_agg_ts
 SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ)::STRING, '''::TIMESTAMPTZ')
 
-statement ok
+statement count 0
 DELETE FROM system.table_statistics WHERE true;
 
 
@@ -572,5 +572,5 @@ RESET CLUSTER SETTING sql.stats.flush.interval
 statement ok
 REVOKE node FROM root;
 
-statement ok
+statement count 1
 DELETE FROM system.users WHERE username = 'node';

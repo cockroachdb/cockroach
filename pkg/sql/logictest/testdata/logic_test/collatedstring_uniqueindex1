@@ -100,7 +100,7 @@ SELECT b, a FROM t ORDER BY b, a
 
 # Delete and try again
 
-statement ok
+statement count 2
 DELETE FROM t WHERE a > ('a' COLLATE da) AND a < ('c' COLLATE da)
 
 query TI

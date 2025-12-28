@@ -509,7 +509,7 @@ query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'baz' ORDER BY row_id
 ----
 
-statement ok
+statement count 1
 DELETE FROM system.statement_hints WHERE fingerprint = 'foo'
 
 query ITTT

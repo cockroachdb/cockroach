@@ -3452,7 +3452,7 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 		}
 		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
-				110873, "explicit unique checks are not yet supported under read committed isolation",
+				126592, "explicit unique checks are not yet supported under read committed isolation",
 			)
 		}
 		// Check if we can actually use shared locks here, or we need to use

@@ -127,7 +127,7 @@ INSERT INTO t (a, f) VALUES (-2, 9)
 statement error validation of CHECK "a > 0:::INT8" failed on row: a=-2, f=9, b=NULL, c=NULL
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = -2
 
 statement ok
@@ -1041,7 +1041,7 @@ INSERT INTO t VALUES (1), (NULL)
 statement error (.*validation of CHECK "a IS NOT NULL" failed on row: a=NULL, rowid=\d+|pq: validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+)
 ALTER TABLE t ALTER COLUMN a SET NOT NULL
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a IS NULL
 
 statement ok
@@ -1120,7 +1120,7 @@ INSERT INTO t VALUES (20)
 statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = 17
 
 statement ok
@@ -1735,19 +1735,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1757,19 +1757,20 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
-statement ok
+skipif config #126592 weak-iso-level-configs
+statement count 1
 DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
 
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
@@ -1826,7 +1827,7 @@ statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.
-statement ok
+statement count 1
 DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
 
 statement ok
@@ -4814,7 +4815,7 @@ ALTER TABLE y DROP CONSTRAINT y_computed_col_fkey;
 statement ok
 ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE CASCADE;
 
-statement ok
+statement count 2
 DELETE FROM x WHERE A IN (0,2);
 
 query II rowsort

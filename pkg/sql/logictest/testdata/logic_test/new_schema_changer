@@ -1109,7 +1109,7 @@ CREATE VIEW v4ev AS (SELECT name FROM V1EV);
 statement ok
 CREATE VIEW v3ev AS (SELECT name FROM V2EV);
 
-statement ok
+statement nocount ok
 DELETE FROM system.eventlog;
 
 statement ok
@@ -1134,7 +1134,7 @@ CREATE VIEW v1ev AS (SELECT name FROM T1EV);
 statement ok
 CREATE VIEW v4ev AS (SELECT name FROM V1EV);
 
-statement ok
+statement nocount ok
 DELETE FROM system.eventlog;
 
 statement ok
@@ -1153,7 +1153,7 @@ ORDER BY timestamp, info DESC;
 statement ok
 CREATE TABLE fooev (i INT PRIMARY KEY);
 
-statement ok
+statement nocount ok
 DELETE FROM system.eventlog;
 
 statement ok
@@ -1198,7 +1198,7 @@ CREATE INDEX "'t1-esc-index'" ON "'db1-a'"."'t1-esc'"(name)
 statement error index with name "'t1-esc-index'" already exists
 CREATE INDEX "'t1-esc-index'" ON "'db1-a'"."'t1-esc'"(name)
 
-statement ok
+statement nocount ok
 delete from system.eventlog;
 
 statement ok
