@@ -1488,7 +1488,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  --
  -- Additional string functions
  --
-@@ -2468,7 +2109,11 @@
+@@ -2468,7 +2113,11 @@
  (1 row)
  
  SELECT chr(0);
@@ -1501,7 +1501,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  SELECT repeat('Pg', 4);
    repeat  
  ----------
-@@ -2508,59 +2153,32 @@
+@@ -2508,59 +2157,32 @@
  SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
  ERROR:  negative substring length not allowed
  SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
@@ -1579,7 +1579,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/strings.out --lab
  SELECT bit_count('\x1234567890'::bytea);
   bit_count 
  -----------
-@@ -2568,38 +2186,25 @@
+@@ -2568,38 +2190,25 @@
  (1 row)
  
  SELECT unistr('\0064at\+0000610');

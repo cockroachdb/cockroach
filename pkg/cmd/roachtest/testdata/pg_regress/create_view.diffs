@@ -977,7 +977,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  ALTER TABLE a2 RENAME TO tx1;
 +ERROR:  relation "a2" does not exist
  ALTER TABLE tx1 SET SCHEMA temp_view_test;
-+ERROR:  cannot set schema on relation "tx1" because view "aliased_view_1" depends on it
++ERROR:  cannot set schema on relation "root.testviewschm2.tx1" because view "aliased_view_1" depends on it
 +HINT:  consider dropping "aliased_view_1" first.
  \d+ aliased_view_1
 -                    View "testviewschm2.aliased_view_1"
@@ -2037,7 +2037,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Check cases involving dropped/altered columns in a function's rowtype result
  --
-@@ -1581,26 +1045,33 @@
+@@ -1581,26 +1045,32 @@
  end;
  $$
  language plpgsql;
@@ -2086,7 +2086,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -1614,46 +1085,28 @@
+@@ -1614,46 +1084,28 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2143,7 +2143,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- ... but some bug might let it happen, so check defenses
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -1664,124 +1117,63 @@
+@@ -1664,124 +1116,62 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2299,7 +2299,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i, lateral(values(i.*::int8_tbl)) ss;
          q1        |        q2         |               column1                
  ------------------+-------------------+--------------------------------------
-@@ -1804,14 +1196,8 @@
+@@ -1804,14 +1194,8 @@
  (5 rows)
  
  select pg_get_viewdef('tt17v', true);
@@ -2316,7 +2316,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i where i.* in (values(i.*::int8_tbl));
          q1        |        q2         
  ------------------+-------------------
-@@ -1823,48 +1209,48 @@
+@@ -1823,48 +1207,48 @@
  (5 rows)
  
  create table tt15v_log(o tt15v, n tt15v, incr bool);
@@ -2397,7 +2397,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of ScalarArrayOp with a sub-select
  select 'foo'::text = any(array['abc','def','foo']::text[]);
   ?column? 
-@@ -1873,10 +1259,7 @@
+@@ -1873,10 +1257,7 @@
  (1 row)
  
  select 'foo'::text = any((select array['abc','def','foo']::text[]));  -- fail
@@ -2409,7 +2409,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select 'foo'::text = any((select array['abc','def','foo']::text[])::text[]);
   ?column? 
  ----------
-@@ -1887,12 +1270,8 @@
+@@ -1887,12 +1268,8 @@
  select 'foo'::text = any(array['abc','def','foo']::text[]) c1,
         'foo'::text = any((select array['abc','def','foo']::text[])::text[]) c2;
  select pg_get_viewdef('tt19v', true);
@@ -2424,7 +2424,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of assorted RTE_FUNCTION expressions
  create view tt20v as
  select * from
-@@ -1902,23 +1281,14 @@
+@@ -1902,23 +1279,14 @@
    localtimestamp(3) as t,
    cast(1+2 as int4) as i4,
    cast(1+2 as int8) as i8;
@@ -2455,7 +2455,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- reverse-listing of various special function syntaxes required by SQL
  create view tt201v as
  select
-@@ -1974,136 +1344,41 @@
+@@ -1974,136 +1342,41 @@
    (select * from SESSION_USER) as seu2,
    SYSTEM_USER as su,
    (select * from SYSTEM_USER) as su2;
@@ -2611,7 +2611,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test extraction of FieldSelect field names (get_name_for_var_field)
  create view tt24v as
  with cte as materialized (select r from (values(1,2),(3,4)) r)
-@@ -2111,66 +1386,29 @@
+@@ -2111,66 +1384,29 @@
    cte join (select rr from (values(1,7),(3,8)) rr limit 2) ss
    on (r).column1 = (rr).column1;
  select pg_get_viewdef('tt24v', true);
@@ -2692,7 +2692,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test pretty-print parenthesization rules, and SubLink deparsing
  create view tt26v as
  select x + y + z as c1,
-@@ -2186,128 +1424,9 @@
+@@ -2186,128 +1422,9 @@
         (x,y) <= ANY (values(1,2),(3,4)) as c11
  from (values(1,2,3)) v(x,y,z);
  select pg_get_viewdef('tt26v', true);
