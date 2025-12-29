@@ -1125,6 +1125,12 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if shouldClaim {
+					// A nudge to claim and adopt suggests someone is waiting for periodic
+					// registry behaviors like claiming to happen; some of those behaviors
+					// are in the cancel loop, like clearing stale claims or detecting a
+					// cancel request, so run that fn as well when nudged in case that is
+					// or is part of what the nudge was sent to hasten.
+					cancelLoopTask(ctx)
 					claimJobs(ctx)
 				}
 				processClaimedJobs(ctx)
