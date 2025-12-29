@@ -143,14 +143,11 @@ func (m *MembershipCache) RunAtCacheReadTS(
 				if roleOptionsDesc.IsUncommittedVersion() {
 					readTS = hlc.Timestamp{}
 				} else if roleOptionsDesc.GetVersion() > m.roleOptionsVersion {
-					// Update versions and moved the read timestamp forward. For the
-					// in-progress read, use the current transaction's timestamp.
+					// Update versions and invalidate the cache. For the in-progress read,
+					// use the current transaction's timestamp.
 					readTS = hlc.Timestamp{}
 					m.roleOptionsVersion = roleOptionsDesc.GetVersion()
-					if m.readTS.Less(roleOptionsDesc.GetModificationTime()) {
-						m.readTS = roleOptionsDesc.GetModificationTime()
-					}
-					return
+					m.roleMembersVersion = 0
 				}
 			}
 		}()
@@ -162,14 +159,11 @@ func (m *MembershipCache) RunAtCacheReadTS(
 				if dbRoleSettingsDesc.IsUncommittedVersion() {
 					readTS = hlc.Timestamp{}
 				} else if dbRoleSettingsDesc.GetVersion() > m.dbRoleSettingsVersion {
-					// Update versions and moved the read timestamp forward. For the
-					// in-progress read, use the current transaction's timestamp.
+					// Update versions and invalidate the cache. For the in-progress read,
+					// use the current transaction's timestamp.
 					readTS = hlc.Timestamp{}
 					m.dbRoleSettingsVersion = dbRoleSettingsDesc.GetVersion()
-					if m.readTS.Less(dbRoleSettingsDesc.GetModificationTime()) {
-						m.readTS = dbRoleSettingsDesc.GetModificationTime()
-					}
-					return
+					m.roleMembersVersion = 0
 				}
 			}
 		}()
