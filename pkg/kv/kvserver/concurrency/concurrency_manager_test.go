@@ -59,7 +59,7 @@ import (
 // The input files use the following DSL:
 //
 // new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
-// new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
+// new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [read-uncommitted] [wait-policy=<policy>] [lock-timeout]
 // [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
@@ -161,6 +161,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				readConsistency := kvpb.CONSISTENT
 				if d.HasArg("inconsistent") {
 					readConsistency = kvpb.INCONSISTENT
+				}
+				if d.HasArg("read-uncommitted") {
+					readConsistency = kvpb.READ_UNCOMMITTED
 				}
 
 				priority := scanUserPriority(t, d)

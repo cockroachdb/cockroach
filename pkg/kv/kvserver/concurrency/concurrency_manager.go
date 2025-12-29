@@ -464,8 +464,10 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 // they could wait on them, even if they don't acquire latches.
 func shouldIgnoreLatches(req Request) bool {
 	switch {
-	case req.ReadConsistency != kvpb.CONSISTENT:
-		// Only acquire latches for consistent operations.
+	case req.ReadConsistency == kvpb.INCONSISTENT:
+		// INCONSISTENT reads skip latches as they don't need real-time ordering.
+		// READ_UNCOMMITTED reads acquire latches to provide real-time ordering
+		// guarantees, even though they may read uncommitted data.
 		return true
 	case req.isSingle(kvpb.RequestLease):
 		// Ignore latches for lease requests. These requests are run on replicas

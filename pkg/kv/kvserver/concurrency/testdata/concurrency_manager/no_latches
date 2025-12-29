@@ -25,6 +25,33 @@ reset
 ----
 
 # -------------------------------------------------------------
+# READ_UNCOMMITTED reads DO acquire latches (unlike INCONSISTENT)
+# -------------------------------------------------------------
+
+new-request name=readUncommittedReq txn=none ts=10,1 read-uncommitted
+  get key=k
+----
+
+sequence req=readUncommittedReq
+----
+[1] sequence readUncommittedReq: sequencing request
+[1] sequence readUncommittedReq: acquiring latches
+[1] sequence readUncommittedReq: scanning lock table for conflicting locks
+[1] sequence readUncommittedReq: sequencing complete, returned guard
+
+debug-latch-manager
+----
+write count: 0
+ read count: 1
+
+finish req=readUncommittedReq
+----
+[-] finish readUncommittedReq: finishing request
+
+reset
+----
+
+# -------------------------------------------------------------
 # Lease requests do not acquire latches
 # -------------------------------------------------------------
 
