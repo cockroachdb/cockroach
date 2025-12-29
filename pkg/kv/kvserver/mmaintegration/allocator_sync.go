@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +32,8 @@ type SyncChangeID uint64
 // storePool is an interface that defines the methods that the allocator sync
 // needs to call on the store pool. Using an interface to simplify testing.
 type storePool interface {
+	// GetStoreStatuses returns the store statuses for all stores in the store pool.
+	GetStoreStatuses() map[roachpb.StoreID]storepool.StoreStatus
 	// UpdateLocalStoresAfterLeaseTransfer is called by the allocator sync to
 	// update the store pool after a lease transfer operation.
 	UpdateLocalStoresAfterLeaseTransfer(transferFrom, transferTo roachpb.StoreID, usage allocator.RangeUsageInfo)
@@ -275,4 +278,15 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 				chg.Target.StoreID, trackedChange.usage, chg.ChangeType)
 		}
 	}
+}
+
+// GetMMAStoreStatuses returns the store statuses from StorePool translated to
+// MMA format. This centralizes all StorePool → MMA status translation.
+func (as *AllocatorSync) GetMMAStoreStatuses() map[roachpb.StoreID]mmaprototype.Status {
+	spStatuses := as.sp.GetStoreStatuses()
+	mmaStatuses := make(map[roachpb.StoreID]mmaprototype.Status, len(spStatuses))
+	for storeID, status := range spStatuses {
+		mmaStatuses[storeID] = translateStorePoolStatusToMMA(status)
+	}
+	return mmaStatuses
 }
