@@ -212,6 +212,9 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 			if err := h.System.Exec(r, "SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 				return errors.Wrap(err, "failed to enable rangefeeds")
 			}
+			if err := h.System.Exec(r, "SET CLUSTER SETTING sql.pgwire.max_repeated_error_count = 256"); err != nil {
+				return err
+			}
 			close(cm.sourceStartedChan)
 
 			l.Printf("generating pgurl")
@@ -245,6 +248,10 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 			l.Printf("waiting to hear from source cluster")
 			sourceInfo := chanReadCtx(ctx, sourceInfoChan)
+
+			if err := h.System.Exec(r, "SET CLUSTER SETTING sql.pgwire.max_repeated_error_count = 256"); err != nil {
+				return err
+			}
 
 			if err := h.Exec(r, fmt.Sprintf(
 				"CREATE TENANT %q FROM REPLICATION OF %q ON $1 WITH READ VIRTUAL CLUSTER",
