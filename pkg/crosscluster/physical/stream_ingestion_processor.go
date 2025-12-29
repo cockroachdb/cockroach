@@ -103,13 +103,6 @@ var ingestSplitEvent = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"physical_replication.consumer.ingest_split_event.enabled",
 	"whether to ingest split events",
-	false,
-)
-
-var compress = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"physical_replication.consumer.stream_compression.enabled",
-	"enables requesting a compressed stream from the producer when resumed",
 	true,
 )
 
@@ -455,7 +448,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		} else {
 			streamClient, err = streamclient.NewStreamClient(ctx, uri, db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)),
-				streamclient.WithCompression(compress.Get(&st.SV)))
+				streamclient.WithCompression(true))
 			if err != nil {
 
 				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, uri.Redacted()))
