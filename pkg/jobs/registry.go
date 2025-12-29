@@ -1125,6 +1125,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if shouldClaim {
+					cancelLoopTask(ctx)
 					claimJobs(ctx)
 				}
 				processClaimedJobs(ctx)
