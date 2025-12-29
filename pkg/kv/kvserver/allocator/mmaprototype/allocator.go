@@ -60,6 +60,11 @@ type Allocator interface {
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
+	// UpdateStoreStatus updates the health and disposition for the stores in storeStatuses according to the statuses in storeStatuses.
+	// Stores not known to the allocator are ignored with logging.
+	// TODO(wenyihu6): if this is too expensive, we should only update status for stores that have changed.
+	UpdateStoreStatus(ctx context.Context, storeStatuses map[roachpb.StoreID]Status)
+
 	// Methods related to making changes.
 
 	// AdjustPendingChangeDisposition is optional feedback to inform the

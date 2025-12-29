@@ -1,0 +1,11 @@
+# This test verifies the translation layer from StorePool status to mma's
+# (Health, Disposition) model.
+echo
+----
+dead: health=Dead, lease=Shedding, replica=Shedding
+unknown: health=Unknown, lease=Refusing, replica=Refusing
+throttled: health=OK, lease=OK, replica=Refusing
+available: health=OK, lease=OK, replica=OK
+decommissioning: health=OK, lease=Shedding, replica=Shedding
+suspect: health=Unhealthy, lease=Shedding, replica=Refusing
+draining: health=OK, lease=Shedding, replica=Refusing
