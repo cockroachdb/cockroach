@@ -1421,7 +1421,7 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # Test a basic INSERT trigger.
@@ -1539,7 +1539,7 @@ SELECT * FROM xy;
 5  -6
 7  -8
 
-statement ok
+statement count 4
 DELETE FROM xy WHERE True;
 
 statement ok
@@ -1609,7 +1609,7 @@ SELECT * FROM xy;
 3  14
 5  230
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 INSERT INTO xy VALUES (1, 2), (3, 4);
 
@@ -1654,7 +1654,7 @@ SELECT * FROM xy;
 3  150
 5  16
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # UPSERT with ON CONFLICT syntax. Note that the effect of the INSERT trigger
@@ -1694,7 +1694,7 @@ SELECT * FROM xy;
 3  23
 5  25
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # UPSERT with explicit syntax.
@@ -1714,7 +1714,7 @@ SELECT * FROM xy;
 3  24
 5  16
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # The old version of conflicting rows can be accessed via the relation's name.
@@ -1797,7 +1797,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -1944,7 +1944,7 @@ DROP TABLE nullable;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2020,7 +2020,7 @@ DROP TRIGGER foo2 ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2149,7 +2149,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 4
 DELETE FROM xy WHERE True;
 
 # The return value of an AFTER trigger is ignored.
@@ -2180,7 +2180,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2253,7 +2253,7 @@ DROP TRIGGER foo2 ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2306,7 +2306,7 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2395,8 +2395,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 statement ok
@@ -2458,8 +2460,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 # Test mutually cyclical BEFORE and AFTER triggers.
@@ -2515,8 +2519,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 statement ok
@@ -2571,7 +2577,7 @@ SELECT * FROM t1;
 4  1
 5  1
 
-statement ok
+statement count 5
 DELETE FROM t1 WHERE True;
 
 statement ok
@@ -2620,7 +2626,7 @@ SELECT * FROM t1;
 4  1
 5  1
 
-statement ok
+statement count 5
 DELETE FROM t1 WHERE True;
 
 statement ok
@@ -2697,8 +2703,10 @@ NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 
-statement ok
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 statement ok
@@ -2764,8 +2772,10 @@ NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 statement ok
 DROP TRIGGER foo ON ab;
 
-statement ok
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 statement ok
@@ -2815,9 +2825,13 @@ DROP TRIGGER foo ON ab;
 statement ok
 DROP FUNCTION h;
 
-statement ok
+statement count 8
 DELETE FROM ab WHERE True;
+
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 # FK checks happen before AFTER triggers that were fired by the main query.
@@ -2911,9 +2925,13 @@ CREATE FUNCTION filter() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
+
+statement count 3
 DELETE FROM parent WHERE True;
+
+statement ok
 INSERT INTO parent VALUES (1), (2), (3);
 INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 
@@ -2932,7 +2950,7 @@ SET unsafe_allow_triggers_modifying_cascades = true;
 statement ok
 UPDATE parent SET k = k + 10 WHERE k < 3;
 
-statement ok
+statement count 0
 DELETE FROM parent WHERE k < 3;
 
 statement ok
@@ -2941,9 +2959,13 @@ RESET unsafe_allow_triggers_modifying_cascades;
 statement ok
 DROP TRIGGER mod ON child;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
+
+statement count 3
 DELETE FROM parent WHERE True;
+
+statement ok
 INSERT INTO parent VALUES (1), (2), (3);
 INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 
@@ -2962,7 +2984,7 @@ SET unsafe_allow_triggers_modifying_cascades = true;
 statement ok
 UPDATE parent SET k = k + 10 WHERE k < 3;
 
-statement ok
+statement count 0
 DELETE FROM parent WHERE k < 3;
 
 statement ok
@@ -2971,7 +2993,7 @@ RESET unsafe_allow_triggers_modifying_cascades;
 statement ok
 DROP TRIGGER filter ON child;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
 DELETE FROM parent WHERE True;
 INSERT INTO parent VALUES (1), (2), (3);
@@ -3222,7 +3244,7 @@ DROP TRIGGER c_trig ON xy;
 statement ok
 DROP TRIGGER d_trig ON xy;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 subtest after_row_order
@@ -3265,7 +3287,7 @@ DROP FUNCTION g;
 statement ok
 DROP FUNCTION h;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 subtest before_after_row_order
@@ -3317,7 +3339,7 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 3
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -4253,7 +4275,7 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE true;
 
 # ==============================================================================

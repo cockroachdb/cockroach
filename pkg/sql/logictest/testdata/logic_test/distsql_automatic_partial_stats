@@ -1,5 +1,9 @@
 # LogicTest: !metamorphic-batch-sizes
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Test a simple update and insert case for partial statistics
 
 statement ok
@@ -170,7 +174,7 @@ __auto_partial__  {c}           76         4               0           (c IS NUL
 __auto_partial__  {d}           276        3               16          (d IS NULL) OR ((d < 1:::DECIMAL) OR (d > 1:::DECIMAL))
 
 # Delete more than 5% of the table.
-statement ok
+statement count 60
 DELETE FROM data WHERE a > 11
 
 query TTIIIT colnames,retry

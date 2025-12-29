@@ -1559,7 +1559,7 @@ SELECT * FROM kv;
 3    4
 100  100
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 100;
 
 statement ok
@@ -1663,7 +1663,7 @@ SELECT f(-1)
 ----
 NOTICE: outside IF
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE x >= 100;
 
 # Testing rollback behavior for EXCEPTION blocks.
@@ -1706,7 +1706,7 @@ SELECT * FROM xy;
 3     4
 -200  -200
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # The error raised in the exception handler should prevent the second insert
@@ -1779,7 +1779,7 @@ SELECT * FROM xy;
 3     4
 -100  -100
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # Test interaction with IF statements.
@@ -1840,7 +1840,7 @@ SELECT * FROM xy;
 100   100
 -200  -200
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # Test interaction with loops.
@@ -1892,7 +1892,7 @@ SELECT * FROM xy;
 202  202
 204  204
 
-statement ok
+statement count 3
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # Catching a Transaction Retry error is not supported, because such errors
@@ -2442,7 +2442,7 @@ SELECT f();
 ----
 0
 
-statement ok
+statement count 1
 DELETE FROM t_text WHERE True;
 INSERT INTO t_text VALUES ('False');
 

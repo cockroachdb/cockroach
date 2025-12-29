@@ -219,7 +219,7 @@ SELECT * FROM t@idx WHERE i IN (1, 2, 3) AND s IN ('foo', 'baz') AND j @> '{"x":
 3  baz  {"num": 3, "x": "y"}
 
 # Delete a row.
-statement ok
+statement count 1
 DELETE FROM t WHERE i = 3
 
 query ITT
@@ -431,7 +431,7 @@ SELECT id, foo, bar FROM d@idx where foo = '"foo"' AND bar->0 <@ '[0]' ORDER BY 
 5  "foo"  [[0], [7, 8, 9, 10]]
 
 # Testing deleting
-statement ok
+statement count 1
 DELETE FROM d WHERE  id = 5
 
 query ITT

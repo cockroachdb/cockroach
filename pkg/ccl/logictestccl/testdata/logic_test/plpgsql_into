@@ -51,7 +51,7 @@ SELECT f();
 3
 
 # If the INTO query returns no rows, the target variables are set to NULL.
-statement ok
+statement count 2
 DELETE FROM xy WHERE true;
 
 statement ok

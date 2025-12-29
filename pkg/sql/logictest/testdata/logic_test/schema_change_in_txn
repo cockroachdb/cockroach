@@ -1830,7 +1830,7 @@ SELECT * FROM self_ref_fk
 
 # Check that the cascade delete takes effect and there are now no rows.
 
-statement ok
+statement count 1
 DELETE FROM self_ref_fk WHERE id = 1;
 
 query II rowsort

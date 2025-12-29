@@ -1540,7 +1540,7 @@ INSERT INTO stored1 VALUES (2147483648),(2147483647);
 statement error pq: validate check constraint: integer out of range for type int4
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
-statement ok
+statement count 1
 DELETE FROM stored1 WHERE a = 2147483648;
 
 statement ok
@@ -1683,7 +1683,7 @@ virt1  CREATE TABLE public.virt1 (
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
 
-statement ok
+statement count 1
 DELETE FROM virt1 WHERE c1 = 2147483647;
 
 statement ok
