@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -214,8 +215,12 @@ func assertGreaterThanInDelta(t *testing.T, expected float64, actual float64, de
 func TestWriteLoadStatsAccounting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
 
+	// This test is known to flake. E.g. in #160265, a request raced in after
+	// clearing the load stats and before asserting they are 0.
+	skip.UnderDeadlock(t, "timing sensitive")
+
+	ctx := context.Background()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 	}
