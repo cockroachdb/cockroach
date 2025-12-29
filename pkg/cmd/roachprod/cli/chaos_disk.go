@@ -58,8 +58,8 @@ Examples:
   # Stall for 15 minutes before recovery
   roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --wait-before-cleanup 15m
 
-  # dmsetup stall on an insecure cluster
-  roachprod chaos disk-stall mycluster --type dmsetup --nodes 1 --wait-before-cleanup 30s --insecure
+  # For a secure cluster, specify the local path to certificates
+  roachprod chaos disk-stall mycluster --type cgroup --nodes 1 --certs-dir /path/to/certs --secure
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -67,7 +67,8 @@ Examples:
 			nodeList := parseInt32SliceToNodes(nodes)
 
 			// Validate cluster and nodes
-			if err := validateNodesInCluster(clusterName, nodeList, "target"); err != nil {
+			c, err := validateNodesInCluster(clusterName, nodeList, "target")
+			if err != nil {
 				return err
 			}
 
@@ -124,12 +125,12 @@ Examples:
 				return err
 			}
 
-			// Create failer from registry
+			// Create failer from registry using computed Secure value from cluster
 			failer, err := createFailer(
 				clusterName,
 				failureName,
 				opts,
-				getClusterOptions()...,
+				getClusterOptions(c.Secure)...,
 			)
 			if err != nil {
 				return err
@@ -146,7 +147,7 @@ Examples:
 
 	cmd.Flags().Int32SliceVarP(&nodes, "nodes", "n", nil,
 		"nodes on which to inject the disk stall")
-	cmd.Flags().StringVar(&stallType, "type", "",
+	cmd.Flags().StringVar(&stallType, "type", "cgroup",
 		"disk staller type: cgroup (throttles I/O via cgroups v2) or dmsetup (freezes I/O via device-mapper)")
 	cmd.Flags().BoolVar(&restartNodes, "restart-nodes", true,
 		"allow the failure mode to restart nodes as needed")
@@ -160,7 +161,6 @@ Examples:
 		"skip waiting for node unavailability after inject")
 
 	_ = cmd.MarkFlagRequired("nodes")
-	_ = cmd.MarkFlagRequired("type")
 	initFlagInsecureForCmd(cmd)
 
 	return cmd

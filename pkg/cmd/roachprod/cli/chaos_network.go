@@ -73,10 +73,11 @@ Examples:
 			clusterName := args[0]
 			src := parseInt32SliceToNodes(srcNodes)
 			dest := parseInt32SliceToNodes(destNodes)
-			if err := validateNodesInCluster(clusterName, src, "source"); err != nil {
+			c, err := validateNodesInCluster(clusterName, src, "source")
+			if err != nil {
 				return err
 			}
-			if err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
+			if _, err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
 				return err
 			}
 
@@ -106,12 +107,12 @@ Examples:
 				return err
 			}
 
-			// Create failer from registry
+			// Create failer from registry using computed Secure value from cluster
 			failer, err := createFailer(
 				clusterName,
 				failures.IPTablesNetworkPartitionName,
 				opts,
-				getClusterOptions()...,
+				getClusterOptions(c.Secure)...,
 			)
 			if err != nil {
 				return err
@@ -178,10 +179,11 @@ Examples:
 			clusterName := args[0]
 			src := parseInt32SliceToNodes(srcNodes)
 			dest := parseInt32SliceToNodes(destNodes)
-			if err := validateNodesInCluster(clusterName, src, "source"); err != nil {
+			c, err := validateNodesInCluster(clusterName, src, "source")
+			if err != nil {
 				return err
 			}
-			if err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
+			if _, err := validateNodesInCluster(clusterName, dest, "destination"); err != nil {
 				return err
 			}
 
@@ -202,12 +204,12 @@ Examples:
 				return err
 			}
 
-			// Create failer from registry
+			// Create failer from registry using computed Secure value from cluster
 			failer, err := createFailer(
 				clusterName,
 				failures.NetworkLatencyName,
 				opts,
-				getClusterOptions()...,
+				getClusterOptions(c.Secure)...,
 			)
 			if err != nil {
 				return err
