@@ -694,7 +694,7 @@ func listDir(
 	if log.V(1) {
 		log.Dev.Infof(ctx, "Listing %s", dir)
 	}
-	return es.List(ctx, dir, "/", lsFn)
+	return es.List(ctx, dir, cloud.ListOptions{Delimiter: "/"}, lsFn)
 }
 
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
