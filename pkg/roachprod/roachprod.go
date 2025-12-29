@@ -843,6 +843,11 @@ func updatePrometheusTargets(
 			if reachability == promhelperclient.Public {
 				nodeIP = v.PublicIP
 			}
+			// N.B. nodeIP can be missing, e.g., if the VM is stopped.
+			if nodeIP == "" {
+				l.Errorf("no reachable IP found for node %d (is the VM running?)", nodeID)
+				return
+			}
 
 			// ensure atomicity in map update
 			nodeIPPortsMutex.Lock()
