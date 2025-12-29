@@ -2180,16 +2180,10 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	if !ok {
 		// This is the first time seeing this store.
 		ss := newStoreState()
-		// TODO(tbg): below is what we should be doing once asim and production code actually
-		// have a way to update the health status. For now, we just set it to healthy initially
-		// and that's where it will stay (outside of unit tests).
-		//
-		// At this point, the store's health is unknown. It will need to be marked
-		// as healthy separately. Until we know more, we won't place leases or
-		// replicas on it (nor will we try to shed any that are already reported to
-		// have replicas on it).
-		// ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
-		ss.status = MakeStatus(HealthOK, LeaseDispositionOK, ReplicaDispositionOK)
+		// At this point, the store's health is unknown. It will be updated by cs.updateStoreStatuses. Until we know more, we
+		// won't place leases or replicas on it (nor will we try to shed any that
+		// are already reported to have replicas on it).
+		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
 		cs.stores[sal.StoreID] = ss
@@ -2213,6 +2207,21 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 		cs.stores[sal.StoreID].localityTiers = cs.localityTierInterner.intern(loc)
 		cs.stores[sal.StoreID].storeAttributesAndLocalityWithNodeTier = sal
 		cs.constraintMatcher.setStore(sal)
+	}
+}
+
+// updateStoreStatuses updates each known store's health and disposition from storeStatuses.
+// Stores unknown in mma yet but are known to store pool are ignored with logging.
+func (cs *clusterState) updateStoreStatuses(ctx context.Context, storeStatuses map[roachpb.StoreID]Status) {
+	for storeID, storeStatus := range storeStatuses {
+		if _, ok := cs.stores[storeID]; !ok {
+			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
+			// setStore when gossip arrives, and then subsequent status updates will
+			// take effect.
+			log.KvDistribution.Infof(ctx, "store %d not found in cluster state, skipping update", storeID)
+			continue
+		}
+		cs.stores[storeID].status = storeStatus
 	}
 }
 

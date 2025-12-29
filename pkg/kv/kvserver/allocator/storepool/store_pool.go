@@ -713,6 +713,21 @@ func (sp *StorePool) GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor {
 	return stores
 }
 
+// GetStoreStatuses returns a map of store ID to store status for all known stores.
+// TODO(wenyihu6): optimize for the allocation cost on this
+func (sp *StorePool) GetStoreStatuses() map[roachpb.StoreID]StoreStatus {
+	now := sp.clock.Now()
+	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
+	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
+
+	result := make(map[roachpb.StoreID]StoreStatus)
+	sp.Details.StoreDetails.Range(func(storeID roachpb.StoreID, sd *StoreDetailMu) bool {
+		result[storeID] = sd.status(now, timeUntilNodeDead, sp.NodeLivenessFn, timeAfterNodeSuspect)
+		return true
+	})
+	return result
+}
+
 // GetStoreDetail returns the store detail for the given storeID.
 func (sp *StorePool) GetStoreDetail(storeID roachpb.StoreID) *StoreDetailMu {
 	detail, ok := sp.Details.StoreDetails.Load(storeID)
@@ -879,6 +894,11 @@ func (sp *StorePool) storeStatus(
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
 	return sd.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect), nil
+}
+
+// GetStoreStatus returns the store status for the given store ID.
+func (sp *StorePool) GetStoreStatus(storeID roachpb.StoreID) (StoreStatus, error) {
+	return sp.storeStatus(storeID, sp.NodeLivenessFn)
 }
 
 // LiveAndDeadReplicas divides the provided repls slice into two slices: the
