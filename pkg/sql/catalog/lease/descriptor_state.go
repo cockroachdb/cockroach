@@ -98,8 +98,10 @@ func (t *descriptorState) findForTimestamp(
 	if len(t.mu.active.data) == 0 {
 		// If the descriptor is marked as offline, we should attempt
 		// a historical query to fetch it, since it's likely querying
-		// the past. A non-historical query will fail instantly.
-		if t.mu.takenOffline {
+		// the past. If the requested time is past the offline time,
+		// then attempt to renew again, since it could have come online
+		// again.
+		if t.mu.takenOffline && timestamp.GetTimestamp().Less(t.mu.takenOfflineAt) {
 			return nil, false, errReadOlderVersion
 		}
 		return nil, false, errRenewLease
@@ -130,7 +132,6 @@ func (t *descriptorState) findForTimestampImpl(
 			if err := catalog.FilterDroppedDescriptor(desc); err != nil {
 				return nil, false, err
 			}
-
 			latest := i+1 == len(t.mu.active.data)
 			if !desc.hasExpired(ctx, readTimestamp) {
 				// Existing valid descriptor version.

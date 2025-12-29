@@ -948,26 +948,41 @@ func (m *Manager) readOlderVersionForTimestamp(
 		// We permit gaps in historical versions. We want to find the timestamp
 		// that represents the start of the validity interval for the known version
 		// which immediately follows the timestamps we're searching for.
-		i := sort.Search(len(t.mu.active.data), func(i int) bool {
+		tsForComparison := timestamp.GetTimestamp()
+		indexAfterTS := sort.Search(len(t.mu.active.data), func(i int) bool {
 			return timestamp.GetTimestamp().Less(t.mu.active.data[i].GetModificationTime())
 		})
+
+		// If the read timestamp and base timestamp are different, additionally,
+		// check if we need a slightly later end timestamp. This guarantees we will
+		// populate every possible descriptor needed for this request.
+		if timestamp.GetTimestamp() != timestamp.GetBaseTimestamp() {
+			baseTimeStampIndex := sort.Search(len(t.mu.active.data), func(i int) bool {
+				return timestamp.GetBaseTimestamp().Less(t.mu.active.data[i].GetModificationTime())
+			})
+			if baseTimeStampIndex != len(t.mu.active.data) {
+				indexAfterTS = baseTimeStampIndex
+				tsForComparison = timestamp.GetBaseTimestamp()
+			}
+		}
 
 		// If the timestamp we're searching for is somehow after the last descriptor
 		// we have in play, then either we have the right descriptor, or some other
 		// shenanigans where we've evicted the descriptor has occurred.
-		//
-		// TODO(ajwerner): When we come to modify this code to allow us to find
-		// historical descriptors which have been dropped, we'll need to rework
-		// this case and support providing no upperBound to
-		// getDescriptorFromStoreForInterval.
-		if i == len(t.mu.active.data) ||
+		if indexAfterTS == len(t.mu.active.data) ||
 			// If we found a descriptor that isn't the first descriptor, go and check
 			// whether the descriptor for which we're searching actually exists. This
 			// will deal with cases where a concurrent fetch filled it in for us.
-			i > 0 && timestamp.GetTimestamp().Less(t.mu.active.data[i-1].getExpiration(ctx)) {
-			return hlc.Timestamp{}, false, true
+			indexAfterTS > 0 && tsForComparison.Less(t.mu.active.data[indexAfterTS-1].getExpiration(ctx)) {
+			// If the descriptor is offline, then nothing newer can exist.
+			if !t.mu.takenOffline {
+				return hlc.Timestamp{}, false, true
+			}
+			// Otherwise, the table is offline, so there may be newer descriptor
+			// versions before the offline timestamp.
+			return t.mu.takenOfflineAt, true, false
 		}
-		return t.mu.active.data[i].GetModificationTime(), false, false
+		return t.mu.active.data[indexAfterTS].GetModificationTime(), false, false
 	}()
 	if done {
 		return nil, nil
