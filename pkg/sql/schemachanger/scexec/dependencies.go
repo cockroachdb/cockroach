@@ -425,7 +425,7 @@ type ProtectedTimestampManager interface {
 	// function assumes the in-memory job is up to date with the persisted job
 	// record.
 	TryToProtectBeforeGC(
-		ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+		ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
 
 	// Protect adds a protected timestamp record for a historical transaction for
