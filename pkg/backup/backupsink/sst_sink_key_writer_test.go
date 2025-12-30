@@ -527,7 +527,7 @@ func sstSinkKeyWriterTestSetup(
 	t *testing.T, settings *cluster.Settings, elideMode execinfrapb.ElidePrefix,
 ) (*SSTSinkKeyWriter, cloud.ExternalStorage) {
 	conf, store := sinkTestSetup(t, settings, elideMode)
-	sink, err := MakeSSTSinkKeyWriter(conf, store)
+	sink, err := MakeSSTSinkKeyWriter(conf, store, "")
 	require.NoError(t, err)
 	return sink, store
 }

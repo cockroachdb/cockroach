@@ -164,7 +164,32 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if !ok {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(p.spec.DefaultURI, user)
+
+	destURI := p.spec.DefaultURI
+	var destLocalityKV string
+	if len(p.spec.URIsByLocalityKV) > 0 {
+		var localitySinkURI string
+		// When matching, more specific KVs in the node locality take precedence
+		// over less specific ones so search back to front.
+		for i := len(p.FlowCtx.EvalCtx.Locality.Tiers) - 1; i >= 0; i-- {
+			tier := p.FlowCtx.EvalCtx.Locality.Tiers[i].String()
+			if dest, ok := p.spec.URIsByLocalityKV[tier]; ok {
+				localitySinkURI = dest
+				destLocalityKV = tier
+				break
+			}
+		}
+		if localitySinkURI != "" {
+			destURI = localitySinkURI
+		} else if p.spec.StrictLocality {
+			// This shouldn't happen unless there was a bug in distsql planning.
+			return errors.Errorf(
+				"sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality",
+				p.FlowCtx.EvalCtx.Locality, p.spec.URIsByLocalityKV,
+			)
+		}
+	}
+	defaultConf, err := cloud.ExternalStorageConfFromURI(destURI, user)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
@@ -224,7 +249,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			return p.processSpanEntries(
-				ctx, execCfg, entryCh, encryption, defaultStore,
+				ctx, execCfg, entryCh, encryption, destLocalityKV, defaultStore,
 			)
 		},
 	}
@@ -239,6 +264,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	execCfg *sql.ExecutorConfig,
 	entryCh chan execinfrapb.RestoreSpanEntry,
 	encryption *jobspb.BackupEncryptionOptions,
+	localityKV string,
 	store cloud.ExternalStorage,
 ) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
@@ -252,7 +278,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 		Settings:  &execCfg.Settings.SV,
 		ElideMode: p.spec.ElideMode,
 	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store)
+	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, localityKV)
 	if err != nil {
 		return err
 	}
