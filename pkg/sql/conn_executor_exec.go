@@ -2148,6 +2148,18 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	return nil, nil, nil
 }
 
+func (ex *connExecutor) stepReadSequence(ctx context.Context) error {
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	if prevSteppingMode == kv.SteppingEnabled {
+		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+			return err
+		}
+	} else {
+		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+	}
+	return nil
+}
+
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
 // the timestamps of the transaction accordingly.
 func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) error {
@@ -2416,13 +2428,8 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 	// write-write contention between transactions by inflating the contention
 	// footprint of each transaction (i.e. the duration measured in MVCC time that
 	// the transaction holds locks).
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	if prevSteppingMode == kv.SteppingEnabled {
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
-			return err
-		}
-	} else {
-		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+	if err := ex.stepReadSequence(ctx); err != nil {
+		return err
 	}
 
 	if err := ex.createJobs(ctx); err != nil {
@@ -2547,7 +2554,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		isKVTxnOpen = ex.state.mu.txn.IsOpen()
 	}
 	if isKVTxnOpen {
-		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
+		// Step the read sequence before rolling back because the read sequence
+		// may be in the span reverted by a savepoint.
+		err := ex.stepReadSequence(ctx)
+		err = errors.CombineErrors(err, ex.state.mu.txn.Rollback(ctx))
+		if err != nil {
+			if buildutil.CrdbTestBuild && errors.IsAssertionFailure(err) {
+				log.Dev.Fatalf(ctx, "txn rollback failed: %+v", err)
+			}
 			log.Dev.Warningf(ctx, "txn rollback failed: %s", err)
 		}
 	}
