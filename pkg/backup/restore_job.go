@@ -2631,9 +2631,7 @@ func insertStats(
 						return nil
 					}
 					if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-						if err := stats.InsertNewStats(
-							ctx, execCfg.Settings, txn, b,
-						); err != nil {
+						if err := stats.InsertNewStats(ctx, txn, b); err != nil {
 							return errors.Wrapf(err, "inserting stats from backup")
 						}
 						return nil

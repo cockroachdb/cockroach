@@ -1020,7 +1020,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> DISABLE DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> EACH ELSE ENABLE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ERRORS ESCAPE
-%token <str> EXCEPT EXCLUDE EXCLUDING EXISTS EXECUTE EXECUTION EXPERIMENTAL
+%token <str> EXCEPT EXCLUDE EXCLUDING EXPLICIT EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
@@ -1072,7 +1072,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PERMISSIVE PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLICIES POLICY POLYGON POLYGONM POLYGONZ POLYGONZM
-%token <str> POSITION PRECEDING PRECISION PREPARE PREPARED PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
+%token <str> POSITION PRECEDING PRECISION PREPARE PREPARED PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES PUSH
 %token <str> PROCEDURAL PROCEDURE PROCEDURES PROVISIONSRC PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
@@ -1348,6 +1348,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> drop_trigger_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
+%type <bool>           opt_with_explicit_columns
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -3103,6 +3104,15 @@ alter_table_cmd:
       Stats: $3.expr(),
     }
   }
+  // ALTER TABLE <name> PUSH STATISTICS [WITH EXPLICIT COLUMNS] <json>
+| PUSH STATISTICS opt_with_explicit_columns a_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTablePushStats{
+      Stats: $4.expr(),
+      ExplicitColumns: $3.bool(),
+    }
+  }
 | SET '(' storage_parameter_list ')'
   {
     $$.val = &tree.AlterTableSetStorageParams{
@@ -3184,6 +3194,15 @@ opt_alter_column_using:
      $$.val = nil
   }
 
+opt_with_explicit_columns:
+  WITH EXPLICIT COLUMNS
+  {
+    $$.val = true
+  }
+| /* EMPTY */
+  {
+    $$.val = false
+  }
 
 opt_drop_behavior:
   CASCADE
@@ -18721,6 +18740,7 @@ unreserved_keyword:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXPLICIT
 | EXECUTE
 | EXECUTION
 | EXPERIMENTAL
@@ -18927,6 +18947,7 @@ unreserved_keyword:
 | PRIOR
 | PRIORITY
 | PRIVILEGES
+| PUSH
 | PROCEDURE
 | PROCEDURES
 | PROVISIONSRC
@@ -19261,6 +19282,7 @@ bare_label_keywords:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXPLICIT
 | EXECUTE
 | EXECUTION
 | EXISTS
@@ -19515,6 +19537,7 @@ bare_label_keywords:
 | PRIOR
 | PRIORITY
 | PRIVILEGES
+| PUSH
 | PROCEDURE
 | PROCEDURES
 | PROVISIONSRC
