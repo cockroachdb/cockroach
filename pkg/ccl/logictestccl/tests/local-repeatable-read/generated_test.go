@@ -1575,6 +1575,13 @@ func TestRepeatableReadLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
+func TestRepeatableReadLogic_push_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "push_stats")
+}
+
 func TestRepeatableReadLogic_reassign_owned_by(
 	t *testing.T,
 ) {
