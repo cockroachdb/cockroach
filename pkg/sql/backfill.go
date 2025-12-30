@@ -1716,7 +1716,7 @@ func ValidateInvertedIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
@@ -1931,7 +1931,7 @@ func ValidateForwardIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
