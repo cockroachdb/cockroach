@@ -6944,12 +6944,28 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: physical_replication.flush_wait_nanos
+      exported_name: physical_replication_flush_wait_nanos
+      description: Cumulative time spent waiting to send buffer to flush loop; use rate() to compare against receive_wait_nanos
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: physical_replication.flushes
       exported_name: physical_replication_flushes
       description: Total flushes across all replication jobs
       y_axis_label: Flushes
       type: COUNTER
       unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: physical_replication.receive_wait_nanos
+      exported_name: physical_replication_receive_wait_nanos
+      description: Cumulative time spent waiting to receive events from producer; use rate() to compare against flush_wait_nanos
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: physical_replication.resolved_events_ingested

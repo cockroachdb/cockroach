@@ -428,6 +428,32 @@ func (r *replicationStreamManagerImpl) DebugGetLogicalConsumerStatuses(
 	return res, nil
 }
 
+// DebugGetPhysicalConsumerStatuses gets all physical consumer debug statuses
+// active in this process.
+func (r *replicationStreamManagerImpl) DebugGetPhysicalConsumerStatuses(
+	ctx context.Context,
+) ([]streampb.DebugPhysicalConsumerStatus, error) {
+	// NB: we don't check license here since if a stream started but the license
+	// expired or was removed, we still want visibility into it during debugging.
+
+	// TODO(dt): since this is per-process, not per-server, we can only let the
+	// the sys tenant inspect it; remove this when we move this into job registry.
+	if !r.evalCtx.Codec.ForSystemTenant() {
+		return nil, nil
+	}
+	if err := r.Authorized("DebugGetPhysicalConsumerStatuses"); err != nil {
+		return nil, err
+	}
+
+	res := streampb.GetActivePhysicalConsumerStatuses()
+
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].ProcessorID < res[j].ProcessorID
+	})
+
+	return res, nil
+}
+
 func (r *replicationStreamManagerImpl) AuthorizeViaJob(
 	ctx context.Context, streamID streampb.StreamID,
 ) error {

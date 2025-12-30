@@ -226,6 +226,7 @@ const (
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
 	CrdbInternalLDRProcessorTableID
+	CrdbInternalPCRProcessorTableID
 	CrdbInternalFullyQualifiedNamesViewID
 	CrdbInternalStoreLivenessSupportFrom
 	CrdbInternalStoreLivenessSupportFor

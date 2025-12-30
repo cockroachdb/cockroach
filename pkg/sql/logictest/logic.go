@@ -337,6 +337,12 @@ import (
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
 //      - allowunsafe: allows access to unsafe internals during execution.
+//      - scrub-row-counts: removes lines containing "row count" from results
+//            to avoid test brittleness when virtual tables are added/removed.
+//      - strip-oids: replaces virtual table OIDs (9+ digit numbers) with
+//            "__OID__" placeholders. Automatically enabled for queries containing
+//            "pg_" references. To test specific OID values when enabled, adjust the
+// 						query projection to prefix, e.g 'oid='||t.oid.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -546,6 +552,9 @@ var (
 	sendingBatchRE = regexp.MustCompile(`r\d+: (sending batch .*)`)
 	beforeTableRE  = regexp.MustCompile(`(<before:/Table/)\d+(>)`)
 	afterTableRE   = regexp.MustCompile(`(<after:/Table/)\d+(/.*>)`)
+	// virtualOidRE matches large OIDs (9+ digits) to strip them for test stability.
+	// These OIDs shift when virtual tables or other objects are added/removed.
+	virtualOidRE = regexp.MustCompile(`\b[1-9]\d{8,9}\b`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -982,6 +991,17 @@ type logicQuery struct {
 
 	// allowUnsafe indicates whether unsafe operations are allowed during execution.
 	allowUnsafe bool
+
+	// scrubRowCounts indicates whether to remove lines containing "row count"
+	// from results to avoid brittleness when virtual tables are added/removed.
+	scrubRowCounts bool
+
+	// stripOids indicates whether to replace virtual table OIDs (matching
+	// 429\d{7}) with a placeholder to avoid test brittleness. This is
+	// automatically enabled for queries containing "pg_" unless explicitly
+	// disabled with no-strip-oids. If you need to test actual OID values,
+	// offset them below the detection range or use no-strip-oids.
+	stripOids bool
 }
 
 var allowedKVOpTypes = []string{
@@ -3025,6 +3045,12 @@ func (t *logicTest) processSubtest(
 						case "allowunsafe":
 							query.allowUnsafe = true
 
+						case "scrub-row-counts":
+							query.scrubRowCounts = true
+
+						case "strip-oids":
+							query.stripOids = true
+
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
 								significantFigures, err := floatcmp.ParseRoundInStringsDirective(opt)
@@ -4140,6 +4166,25 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 			if err := rows.Err(); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Filter out lines containing "row count" if scrub-row-counts is enabled.
+	if query.scrubRowCounts {
+		filtered := actualResultsRaw[:0]
+		for _, result := range actualResultsRaw {
+			if !strings.Contains(result, "row count") {
+				filtered = append(filtered, result)
+			}
+		}
+		actualResultsRaw = filtered
+	}
+
+	// Replace virtual table OIDs with placeholders if strip-oids is enabled.
+	// Test files should use "oidX" placeholders in expected results.
+	if query.stripOids {
+		for i, result := range actualResultsRaw {
+			actualResultsRaw[i] = virtualOidRE.ReplaceAllString(result, "__OID__")
 		}
 	}
 

@@ -82,9 +82,10 @@ vectorized: true
   spans: /"vtable/crdb_internal/tables"-/"vtable/crdb_internal/tables"/PrefixEnd
 
 # Regression test for not showing the execution statistics that correspond to
-# scans of the virtual tables.
-query T
-EXPLAIN ANALYZE SHOW TABLES;
+# scans of the virtual tables. Scrub row counts to avoid test brittleness when
+# virtual tables are added or removed.
+query T scrub-row-counts
+EXPLAIN ANALYZE SHOW TABLES
 ----
 planning time: 10µs
 execution time: 100µs
@@ -101,7 +102,6 @@ quality of service: regular
 • sort
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 1
 │ execution time: 0µs
 │ estimated max memory allocated: 0 B
 │ order: +nspname,+relname
@@ -111,7 +111,6 @@ quality of service: regular
     └── • hash join (left outer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 1
         │ execution time: 0µs
         │ estimated max memory allocated: 0 B
         │ equality: (column80) = (table_id)
@@ -121,7 +120,6 @@ quality of service: regular
         │   └── • hash join (left outer)
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
-        │       │ actual row count: 1
         │       │ execution time: 0µs
         │       │ estimated max memory allocated: 0 B
         │       │ equality: (column62) = (table_id)
@@ -132,7 +130,6 @@ quality of service: regular
         │       │   └── • hash join (right outer)
         │       │       │ sql nodes: <hidden>
         │       │       │ regions: <hidden>
-        │       │       │ actual row count: 1
         │       │       │ execution time: 0µs
         │       │       │ estimated max memory allocated: 0 B
         │       │       │ equality: (oid) = (relowner)
@@ -140,14 +137,12 @@ quality of service: regular
         │       │       ├── • virtual table
         │       │       │     sql nodes: <hidden>
         │       │       │     regions: <hidden>
-        │       │       │     actual row count: 4
         │       │       │     execution time: 0µs
         │       │       │     table: pg_roles@primary
         │       │       │
         │       │       └── • hash join
         │       │           │ sql nodes: <hidden>
         │       │           │ regions: <hidden>
-        │       │           │ actual row count: 1
         │       │           │ execution time: 0µs
         │       │           │ estimated max memory allocated: 0 B
         │       │           │ equality: (oid) = (relnamespace)
@@ -155,35 +150,30 @@ quality of service: regular
         │       │           ├── • filter
         │       │           │   │ sql nodes: <hidden>
         │       │           │   │ regions: <hidden>
-        │       │           │   │ actual row count: 1
         │       │           │   │ execution time: 0µs
         │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
         │       │           │   │
         │       │           │   └── • virtual table
         │       │           │         sql nodes: <hidden>
         │       │           │         regions: <hidden>
-        │       │           │         actual row count: 5
         │       │           │         execution time: 0µs
         │       │           │         table: pg_namespace@primary
         │       │           │
         │       │           └── • filter
         │       │               │ sql nodes: <hidden>
         │       │               │ regions: <hidden>
-        │       │               │ actual row count: 333
         │       │               │ execution time: 0µs
         │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
         │       │               │
         │       │               └── • virtual table
         │       │                     sql nodes: <hidden>
         │       │                     regions: <hidden>
-        │       │                     actual row count: 363
         │       │                     execution time: 0µs
         │       │                     table: pg_class@primary
         │       │
         │       └── • distinct
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 333
         │           │ execution time: 0µs
         │           │ estimated max memory allocated: 0 B
         │           │ distinct on: table_id
@@ -191,14 +181,12 @@ quality of service: regular
         │           └── • virtual table
         │                 sql nodes: <hidden>
         │                 regions: <hidden>
-        │                 actual row count: 333
         │                 execution time: 0µs
         │                 table: table_row_statistics@primary
         │
         └── • virtual table
               sql nodes: <hidden>
               regions: <hidden>
-              actual row count: 1
               execution time: 0µs
               table: tables@tables_database_name_idx (partial index)
               spans: [/'test' - /'test']
