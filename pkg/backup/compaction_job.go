@@ -77,8 +77,8 @@ func maybeStartCompactionJob(
 		return 0, errors.New("only scheduled backups can be compacted")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
-	case len(triggerJob.URIsByLocalityKV) != 0:
-		return 0, errors.New("locality aware backups not supported for compaction")
+	case triggerJob.StrictLocalityFiltering:
+		return 0, errors.New("WITH STRICT STORAGE LOCALITY not supported in backup compactions")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -217,6 +217,11 @@ func StartCompactionJob(
 				"expected string value, got %+v", options.ExecutionLocality,
 			)
 		}
+	}
+	if options.Strict {
+		return jobspb.InvalidJobID, errors.AssertionFailedf(
+			"WITH STRICT STORAGE LOCALITY not supported in backup compactions",
+		)
 	}
 
 	encryption := jobspb.BackupEncryptionOptions{
@@ -388,15 +393,6 @@ func (b *backupResumer) ResumeCompaction(
 		); err != nil {
 			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
-	}
-
-	storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
-	for kv, uri := range updatedDetails.URIsByLocalityKV {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, execCtx.User())
-		if err != nil {
-			return err
-		}
-		storageByLocalityKV[kv] = &conf
 	}
 
 	mem := execCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
@@ -677,6 +673,7 @@ func (c compactionChain) createCompactionManifest(
 	// manifest of the last incremental.
 	cManifest.DescriptorChanges = nil
 	cManifest.Files = nil
+	cManifest.PartitionDescriptorFilenames = nil
 	cManifest.EntryCounts = roachpb.RowCount{}
 
 	// The StatisticsFileNames is inherited from the stats of the latest

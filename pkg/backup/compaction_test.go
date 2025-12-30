@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/fatih/structs"
 	"github.com/stretchr/testify/require"
 )
@@ -605,7 +608,7 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 
 	west1Node, east0Node := sqlutils.MakeSQLRunner(tc.Conns[1]), sqlutils.MakeSQLRunner(tc.Conns[2])
 
-	targets := "DATABASE data"
+	const targets = "DATABASE data"
 
 	// initBackupChain will create an identical chain of backups in all four node directories.
 	initBackupChain := func(subCollection string) (hlc.Timestamp, hlc.Timestamp) {
@@ -638,17 +641,6 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 	}
 	const numInitialBackups = 4
 
-	countBackups := func(collection string) int {
-		var count int
-		db.QueryRow(
-			t, fmt.Sprintf(
-				"SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM LATEST IN '%s']",
-				collection,
-			),
-		).Scan(&count)
-		return count
-	}
-
 	t.Run("pin-tier", func(t *testing.T) {
 		ensureLeaseholder(t, db)
 		start, end := initBackupChain("pin-tier")
@@ -671,10 +663,10 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 			),
 		)
 
-		numWest0 := countBackups("nodelocal://1/pin-tier")
-		numWest1 := countBackups("nodelocal://2/pin-tier")
-		numEast0 := countBackups("nodelocal://3/pin-tier")
-		numEast1 := countBackups("nodelocal://4/pin-tier")
+		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-tier"})
+		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-tier"})
+		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-tier"})
+		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-tier"})
 
 		// Validate that at least one node matching the locality filter processed the compaction,
 		// and that all nodes which don't match the locality filter did not.
@@ -699,10 +691,10 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 			),
 		)
 
-		numWest0 := countBackups("nodelocal://1/pin-region")
-		numWest1 := countBackups("nodelocal://2/pin-region")
-		numEast0 := countBackups("nodelocal://3/pin-region")
-		numEast1 := countBackups("nodelocal://4/pin-region")
+		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-region"})
+		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-region"})
+		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-region"})
+		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-region"})
 
 		require.True(t, numEast0 == numInitialBackups+1 || numEast1 == numInitialBackups+1)
 		require.Equal(t, numWest0, numInitialBackups)
@@ -725,10 +717,10 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 			),
 		)
 
-		numWest0 := countBackups("nodelocal://1/pin-single")
-		numWest1 := countBackups("nodelocal://2/pin-single")
-		numEast0 := countBackups("nodelocal://3/pin-single")
-		numEast1 := countBackups("nodelocal://4/pin-single")
+		numWest0 := countBackups(t, db, []string{"nodelocal://1/pin-single"})
+		numWest1 := countBackups(t, db, []string{"nodelocal://2/pin-single"})
+		numEast0 := countBackups(t, db, []string{"nodelocal://3/pin-single"})
+		numEast1 := countBackups(t, db, []string{"nodelocal://4/pin-single"})
 
 		// Validate that the expected node processed the compaction, and the rest did not.
 		require.Equal(t, numWest1, numInitialBackups+1)
@@ -773,6 +765,287 @@ func TestBackupCompactionExecLocality(t *testing.T) {
 	})
 }
 
+func TestBackupCompactionLocAware(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "too slow")
+
+	var hookFn func(processorLocality roachpb.Locality, fileLocality string) error
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				OnCompactionFileAccess: &hookFn,
+			},
+		},
+	}
+	args := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
+		},
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: {
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "west"},
+					{Key: "az", Value: "az1"},
+					{Key: "dc", Value: "dc1"},
+				}},
+				Knobs: knobs,
+			},
+			1: {
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "east"},
+					{Key: "az", Value: "az1"},
+					{Key: "dc", Value: "dc2"},
+				}},
+				Knobs: knobs,
+			},
+			2: {
+				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
+					{Key: "region", Value: "east"},
+					{Key: "az", Value: "az2"},
+					{Key: "dc", Value: "dc3"},
+				}},
+				Knobs: knobs,
+			},
+		},
+	}
+
+	const numAccounts = 1000
+	_, db, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+
+	getLatestFullDir := func(collectionURI []string) string {
+		t.Helper()
+		var backupPath string
+		db.QueryRow(
+			t,
+			fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+		).Scan(&backupPath)
+		return backupPath
+	}
+
+	const targets = "DATABASE data"
+	const numInitialBackups = 4
+	initBackupChain := func(uris []string, opts string) (hlc.Timestamp, hlc.Timestamp) {
+		start := getTime()
+		db.Exec(t, fullBackupQuery(targets, uris, start, opts))
+		db.Exec(t, "UPDATE data.bank SET balance = 200")
+		db.Exec(t, incBackupQuery(targets, uris, noAOST, opts))
+		db.Exec(t, "UPDATE data.bank SET balance = 201")
+		db.Exec(t, incBackupQuery(targets, uris, noAOST, opts))
+		db.Exec(t, "UPDATE data.bank SET balance = 202")
+		end := getTime()
+		db.Exec(t, incBackupQuery(targets, uris, end, opts))
+		return start, end
+	}
+
+	validateCounts := func(uris []string, shouldCompact ...string) {
+		rows := db.Query(t, fmt.Sprintf(`
+			WITH with_dir AS (
+	  			SELECT *, regexp_replace(path, '/data/[^/]+\.sst$', '') AS dir
+	  			FROM [SHOW BACKUP FILES FROM LATEST IN (%s)]
+			)
+			SELECT count(DISTINCT dir), locality
+			FROM with_dir
+			GROUP BY  locality`,
+			stringifyCollectionURI(uris),
+		))
+		for rows.Next() {
+			var count int
+			var locality string
+			require.NoError(t, rows.Scan(&count, &locality))
+
+			if slices.Contains(shouldCompact, locality) {
+				require.Equal(t, numInitialBackups+1, count)
+			} else {
+				t.Fatalf("invalid locality in file counts: %s", locality)
+			}
+		}
+		require.NoError(t, rows.Err())
+		require.Equal(t, numInitialBackups+1, countBackups(t, db, uris))
+	}
+
+	// Make RestoreSpanEntry smaller than it typically is,
+	// so that we have many entries to divy up among workers.
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.target_size = '1KB'")
+	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.max_file_count = 2")
+
+	// Test the common/recommended usage, where all nodes match a locality-specific URI.
+	t.Run("fully-matching", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+
+		testSubDir := t.Name()
+		uris := []string{
+			localFoo + "/" + testSubDir + "/1?COCKROACH_LOCALITY=" + url.QueryEscape("default"),
+			localFoo + "/" + testSubDir + "/2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1"),
+			localFoo + "/" + testSubDir + "/3?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc2"),
+			localFoo + "/" + testSubDir + "/4?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc3"),
+		}
+
+		hookFn = func(processorLocality roachpb.Locality, fileLocality string) error {
+			// All data should be in one of the dc=dcn URIs.
+			if fileLocality == "" || fileLocality == "default" {
+				return errors.New("unexpected default data")
+			}
+
+			processorDC, ok := processorLocality.Find("dc")
+			if !ok {
+				return errors.Newf(
+					"processor has no dc locality but is processing file from %s",
+					fileLocality,
+				)
+			}
+
+			expectedFileLocality := "dc=" + processorDC
+			if fileLocality != expectedFileLocality {
+				return errors.Newf(
+					"processor in %s attempted to read file from %s",
+					expectedFileLocality, fileLocality,
+				)
+			}
+
+			return nil
+		}
+
+		start, end := initBackupChain(uris, noOpts)
+		fullBackupPath := getLatestFullDir(uris)
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, db,
+				incBackupQuery(targets, uris, end, noOpts),
+				fullBackupPath,
+				start, end,
+			),
+		)
+
+		// Validate that each locality-specific URI recieved an additional backup,
+		// and that the default URI did not.
+		validateCounts(uris, "dc=dc1", "dc=dc2", "dc=dc3")
+
+		// Validate that the backup chain restores correctly using the expected number of backups.
+		validateCompactedBackupForTables(t, db, uris, []string{"bank"},
+			start, end, noOpts, noOpts, 2)
+	})
+
+	// Validate that data in the default URI is handled by non-matching nodes.
+	t.Run("some-default", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+
+		testSubDir := t.Name()
+		uris := []string{
+			localFoo + "/" + testSubDir + "/1?COCKROACH_LOCALITY=" + url.QueryEscape("default"),
+			localFoo + "/" + testSubDir + "/2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1"),
+			localFoo + "/" + testSubDir + "/3?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc2"),
+		}
+
+		hookFn = func(processorLocality roachpb.Locality, fileLocality string) error {
+			processorDC, ok := processorLocality.Find("dc")
+			if !ok {
+				return errors.Newf(
+					"processor has no dc locality but is processing file from %s",
+					fileLocality,
+				)
+			}
+
+			// Files from default location should be processed by non-matching node (dc=dc3).
+			if fileLocality == "" || fileLocality == "default" {
+				if processorDC != "dc3" {
+					return errors.Newf(
+						"file from default uri is incorrectly being processed by a node with locality: %+v",
+						processorLocality,
+					)
+				}
+				return nil
+			}
+
+			// The rest of the files should be processed by their respective matching node.
+			expectedFileLocality := "dc=" + processorDC
+			if fileLocality != expectedFileLocality {
+				return errors.Newf(
+					"processor in %s attempted to read file from %s",
+					expectedFileLocality, fileLocality,
+				)
+			}
+
+			return nil
+		}
+
+		start, end := initBackupChain(uris, noOpts)
+		fullBackupPath := getLatestFullDir(uris)
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, db,
+				incBackupQuery(targets, uris, end, noOpts),
+				fullBackupPath,
+				start, end,
+			),
+		)
+
+		validateCounts(uris, "default", "dc=dc1", "dc=dc2")
+		validateCompactedBackupForTables(t, db, uris, []string{"bank"},
+			start, end, noOpts, noOpts, 2)
+	})
+
+	// Test that workers send compacted data to the most specific matching URI.
+	t.Run("most-specific", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+
+		testSubDir := t.Name()
+		uris := []string{
+			localFoo + "/" + testSubDir + "/1?COCKROACH_LOCALITY=" + url.QueryEscape("default"),
+			localFoo + "/" + testSubDir + "/2?COCKROACH_LOCALITY=" + url.QueryEscape("region=east"),
+			localFoo + "/" + testSubDir + "/3?COCKROACH_LOCALITY=" + url.QueryEscape("az=az1"),
+			localFoo + "/" + testSubDir + "/4?COCKROACH_LOCALITY=" + url.QueryEscape("az=az2"),
+		}
+
+		hookFn = func(processorLocality roachpb.Locality, fileLocality string) error {
+			if fileLocality == "" || fileLocality == "default" {
+				return errors.New("unexpected default data")
+			}
+			if fileLocality == "region=east" {
+				return errors.New("unexpected east region data")
+			}
+
+			processorAZ, ok := processorLocality.Find("az")
+			if !ok {
+				return errors.Newf(
+					"processor has no dc locality but is processing file from %s",
+					fileLocality,
+				)
+			}
+
+			expectedFileLocality := "az=" + processorAZ
+			if fileLocality != expectedFileLocality {
+				return errors.Newf(
+					"processor in %s attempted to read file from %s",
+					expectedFileLocality, fileLocality,
+				)
+			}
+
+			return nil
+		}
+
+		start, end := initBackupChain(uris, noOpts)
+		fullBackupPath := getLatestFullDir(uris)
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, db,
+				incBackupQuery(targets, uris, end, noOpts),
+				fullBackupPath,
+				start, end,
+			),
+		)
+
+		validateCounts(uris, "az=az1", "az=az2")
+		validateCompactedBackupForTables(t, db, uris, []string{"bank"},
+			start, end, noOpts, noOpts, 2)
+	})
+}
+
 func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -810,16 +1083,6 @@ func TestBackupCompactionUnsupportedOptions(t *testing.T) {
 				IncludeAllSecondaryTenants: true,
 			},
 			"backups of tenants not supported for compaction",
-		},
-		{
-			"locality aware backups not supported",
-			jobspb.BackupDetails{
-				ScheduleID: 1,
-				URIsByLocalityKV: map[string]string{
-					"region=us-east-2": "nodelocal://1/backup",
-				},
-			},
-			"locality aware backups not supported for compaction",
 		},
 	}
 
@@ -967,6 +1230,7 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		"DescriptorCoverage",
 		"StatisticsFilenames",
 		"ElidedPrefix",
+		"LocalityKVs",
 	}
 	overridden := []string{
 		"ID",
@@ -979,6 +1243,7 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		"Dir",
 		"DescriptorChanges",
 		"Files",
+		"PartitionDescriptorFilenames",
 		"EntryCounts",
 	}
 	// Ignored fields are fields that we do not check because either:
@@ -999,8 +1264,6 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		// createCompactedManifest will have filled this out.
 		"Descriptors",
 		"Tenants",
-		"LocalityKVs",
-		"PartitionDescriptorFilenames",
 		"RevisionStartTime",
 	}
 
@@ -1045,13 +1308,15 @@ func TestCheckCompactionManifestFields(t *testing.T) {
 		BuildInfo: build.Info{
 			Tag: "v1.0.0",
 		},
-		ClusterVersion:      roachpb.Version{Major: 1},
-		ID:                  uuid.MakeV4(),
-		StatisticsFilenames: statisticsFilenames,
-		DescriptorCoverage:  tree.AllDescriptors,
-		ElidedPrefix:        execinfrapb.ElidePrefix_TenantAndTable,
-		MVCCFilter:          backuppb.MVCCFilter_All,
-		IsCompacted:         false,
+		ClusterVersion:               roachpb.Version{Major: 1},
+		ID:                           uuid.MakeV4(),
+		StatisticsFilenames:          statisticsFilenames,
+		DescriptorCoverage:           tree.AllDescriptors,
+		ElidedPrefix:                 execinfrapb.ElidePrefix_TenantAndTable,
+		MVCCFilter:                   backuppb.MVCCFilter_All,
+		IsCompacted:                  false,
+		PartitionDescriptorFilenames: []string{"BACKUP_PART_1_tier=value"},
+		LocalityKVs:                  []string{"tier=value"},
 	}
 	lastBackupStruct := structs.New(lastBackup)
 
@@ -1333,4 +1598,15 @@ func getDescUri(t *testing.T, db *sqlutils.SQLRunner, jobId jobspb.JobID) string
 	uriStart := inStart + strings.Index(desc[inStart:], "'") + 1
 	uriEnd := uriStart + strings.Index(desc[uriStart:], "'")
 	return desc[uriStart:uriEnd]
+}
+func countBackups(t *testing.T, db *sqlutils.SQLRunner, uris []string) int {
+	uri := stringifyCollectionURI(uris)
+	var count int
+	db.QueryRow(
+		t, fmt.Sprintf(
+			"SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM LATEST IN (%s)]",
+			uri,
+		),
+	).Scan(&count)
+	return count
 }

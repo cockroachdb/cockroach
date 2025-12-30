@@ -29,15 +29,22 @@ type SSTSinkKeyWriter struct {
 	// Caching the targetFileSize from the cluster settings to avoid multiple
 	// lookups during writes.
 	targetFileSize int64
+
+	// The FileSSTSink gets its locality information from the ExportedSpan passed to Write.
+	// Since we're doing things more manually here, we need to keep this information ourselves.
+	LocalityKV string
 }
 
-func MakeSSTSinkKeyWriter(conf SSTSinkConf, dest cloud.ExternalStorage) (*SSTSinkKeyWriter, error) {
+func MakeSSTSinkKeyWriter(
+	conf SSTSinkConf, dest cloud.ExternalStorage, localityKV string,
+) (*SSTSinkKeyWriter, error) {
 	if conf.ElideMode == execinfrapb.ElidePrefix_None {
 		return nil, errors.New("KeyWriter does not support ElidePrefix_None")
 	}
 	return &SSTSinkKeyWriter{
 		FileSSTSink:    *MakeFileSSTSink(conf, dest, nil),
 		targetFileSize: targetFileSize.Get(conf.Settings),
+		LocalityKV:     localityKV,
 	}, nil
 }
 
@@ -166,8 +173,9 @@ func (s *SSTSinkKeyWriter) Reset(ctx context.Context, newSpan roachpb.Span) erro
 			// the span is reused to optimize memory usage, we need to clone the keys
 			// to ensure that the BackupManifest_File's span is not unintentionally
 			// mutated outside of the SSTSinkKeyWriter.
-			Span: newSpan.Clone(),
-			Path: s.outName,
+			Span:       newSpan.Clone(),
+			Path:       s.outName,
+			LocalityKV: s.LocalityKV,
 		},
 	)
 	s.prevKey = nil
