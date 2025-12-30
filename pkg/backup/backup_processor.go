@@ -356,38 +356,11 @@ func runBackupProcessor(
 
 	log.Dev.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
 
-	destURI := spec.DefaultURI
-	var destLocalityKV string
-
-	if len(spec.URIsByLocalityKV) > 0 {
-		var localitySinkURI string
-		// When matching, more specific KVs in the node locality take precedence
-		// over less specific ones so search back to front.
-		for i := len(flowCtx.EvalCtx.Locality.Tiers) - 1; i >= 0; i-- {
-			tier := flowCtx.EvalCtx.Locality.Tiers[i].String()
-			if dest, ok := spec.URIsByLocalityKV[tier]; ok {
-				localitySinkURI = dest
-				destLocalityKV = tier
-				break
-			}
-		}
-		if localitySinkURI != "" {
-			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
-			destURI = localitySinkURI
-		} else if spec.StrictLocality {
-			// This shouldn't happen unless there was a bug in distsql planning.
-			return errors.Errorf("sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality", flowCtx.EvalCtx.Locality, spec.URIsByLocalityKV)
-		} else {
-			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
-			for _, i := range flowCtx.EvalCtx.Locality.Tiers {
-				nodeLocalities = append(nodeLocalities, i.String())
-			}
-			backupLocalities := make([]string, 0, len(spec.URIsByLocalityKV))
-			for i := range spec.URIsByLocalityKV {
-				backupLocalities = append(backupLocalities, i)
-			}
-			log.Dev.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
-		}
+	destURI, destLocalityKV, err := selectLocalityMatchingURI(
+		ctx, spec.DefaultURI, spec.URIsByLocalityKV, spec.StrictLocality, flowCtx.EvalCtx.Locality,
+	)
+	if err != nil {
+		return errors.Wrap(err, "selecting locality matching uri")
 	}
 	if testingDiscardBackupData {
 		destURI = "null:///discard"
@@ -726,6 +699,40 @@ func runBackupProcessor(
 			}
 		}
 	})
+}
+
+func selectLocalityMatchingURI(
+	ctx context.Context,
+	defaultURI string,
+	urisByLocalityKV map[string]string,
+	strict bool,
+	processorLocality roachpb.Locality,
+) (string, string, error) {
+	destURI := defaultURI
+	var destLocalityKV string
+
+	if len(urisByLocalityKV) > 0 {
+		var localitySinkURI string
+		// When matching, more specific KVs in the node locality take precedence
+		// over less specific ones so search back to front.
+		for i := len(processorLocality.Tiers) - 1; i >= 0; i-- {
+			tier := processorLocality.Tiers[i].String()
+			if dest, ok := urisByLocalityKV[tier]; ok {
+				localitySinkURI = dest
+				destLocalityKV = tier
+				break
+			}
+		}
+		if localitySinkURI != "" {
+			destURI = localitySinkURI
+			log.Dev.Infof(ctx, "processor backing up to destination URI %s with locality %s", destURI, destLocalityKV)
+		} else if strict {
+			// This shouldn't happen unless there was a bug in distsql planning.
+			return "", "", errors.Errorf("sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality", processorLocality, urisByLocalityKV)
+		}
+	}
+
+	return destURI, destLocalityKV, nil
 }
 
 // recordExportStats emits a StructuredEvent containing the stats about the
