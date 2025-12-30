@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -93,6 +94,18 @@ func (i ProgressStorage) Get(
 	}
 
 	return fraction, ts, written.Time, nil
+}
+
+// SetFraction is a short-hand for Set() with an empty resolved timestamp.
+func (i ProgressStorage) SetFraction(ctx context.Context, txn isql.Txn, fraction float64) error {
+	return i.Set(ctx, txn, fraction, hlc.Timestamp{})
+}
+
+// SetResolved is a short-hand for Set() with an empty fraction.
+func (i ProgressStorage) SetResolved(
+	ctx context.Context, txn isql.Txn, resolved hlc.Timestamp,
+) error {
+	return i.Set(ctx, txn, math.NaN(), resolved)
 }
 
 // Set records a progress update. If fraction is NaN or resolved is empty, that
@@ -726,4 +739,64 @@ func (i InfoStorage) writeFirstLegacyProgress(ctx context.Context, progress []by
 // info record does not already exist.
 func (i InfoStorage) writeFirstLegacyPayload(ctx context.Context, payload []byte) error {
 	return i.WriteFirstKey(ctx, LegacyPayloadKey, payload)
+}
+
+// LoadLegacyPayload loads and unwraps job-specific payload details from the
+// legacy_payload key.
+//
+// Callers should type-assert the returned Details to their concrete type, e.g.:
+// details.(jobspb.StreamIngestionDetails).
+func LoadLegacyPayload(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID,
+) (jobspb.Details, error) {
+	progressBytes, exists, err := InfoStorageForJob(txn, jobID).GetLegacyPayload(ctx, "load-payload-details")
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, &JobNotFoundError{jobID: jobID}
+	}
+	var payload jobspb.Payload
+	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
+		return nil, err
+	}
+	return payload.UnwrapDetails(), nil
+}
+
+// LoadLegacyProgress loads and unwraps job-specific progress details
+// from the legacy_progress key.
+//
+// Callers should type-assert the returned ProgressDetails to their concrete
+// type, e.g.: details.(jobspb.RowLevelTTLProgress).
+func LoadLegacyProgress(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID,
+) (jobspb.ProgressDetails, error) {
+	progressBytes, exists, err := InfoStorageForJob(txn, jobID).GetLegacyProgress(ctx, "load-progress-details")
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, NewJobNotFoundError(jobID)
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		return nil, err
+	}
+	return progress.UnwrapDetails(), nil
+}
+
+// StoreLegacyProgress wraps and stores job-specific progress details in the
+// job_info legacy_progress key.
+//
+// Only the Details field off the legacy jobspb.Progress wrapper is set; the
+// fraction and status fields deprecated in favor of their dedicated tables now.
+func StoreLegacyProgress(
+	ctx context.Context, txn isql.Txn, jobID jobspb.JobID, details jobspb.ProgressDetails,
+) error {
+	progress := &jobspb.Progress{Details: jobspb.WrapProgressDetails(details)}
+	progressBytes, err := protoutil.Marshal(progress)
+	if err != nil {
+		return err
+	}
+	return InfoStorageForJob(txn, jobID).WriteLegacyProgress(ctx, progressBytes)
 }

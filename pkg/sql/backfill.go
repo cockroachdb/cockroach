@@ -1156,9 +1156,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err != nil {
 					return err
 				}
-				if err := sc.job.WithTxn(txn).FractionProgressed(
-					ctx, jobs.FractionUpdater(fractionCompleted),
-				); err != nil {
+				if err := jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStateError(err)
 				}
 			}
@@ -1297,7 +1295,16 @@ func (sc *SchemaChanger) distColumnBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
+
+	var origFractionCompleted float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ts, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		origFractionCompleted = float32(ts)
+		return err
+	}); err != nil {
+		return err
+	}
+
 	fractionLeft := 1 - origFractionCompleted
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
@@ -1322,13 +1329,11 @@ func (sc *SchemaChanger) distColumnBackfill(
 		}
 		fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 		fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-		// Note that this explicitly uses a nil txn, which will lead to a new
-		// transaction being created as a part of this update. We want this
-		// update operation to be short and to not be coupled to any other
-		// backfill work, which may take much longer.
-		return sc.job.NoTxn().FractionProgressed(
-			ctx, jobs.FractionUpdater(fractionCompleted),
-		)
+		// Use a short dedicated transaction for this progress update so it's
+		// not coupled to any other backfill work, which may take much longer.
+		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	readAsOf := sc.clock.Now()
@@ -2318,7 +2323,16 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	fractionScaler := &multiStageFractionScaler{initial: sc.job.FractionCompleted(), stages: backfillStageFractions}
+	var initalFrac float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		f, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		initalFrac = float32(f)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	fractionScaler := &multiStageFractionScaler{initial: initalFrac, stages: backfillStageFractions}
 	if writeAtRequestTimestamp {
 		fractionScaler.stages = mvccCompatibleBackfillStageFractions
 	}
@@ -3090,7 +3104,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
 		return NumRangesInSpans(ctx, sc.db.KV(), sc.distSQLPlanner, spans)
 	}
-	tracker := NewIndexMergeTracker(progress, sc.job, rc, fractionScaler)
+	tracker := NewIndexMergeTracker(progress, sc.job, sc.db, rc, fractionScaler)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {

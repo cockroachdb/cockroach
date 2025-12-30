@@ -1484,7 +1484,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			if err := jobs.StatusStorage(sc.job.ID()).Set(ctx, txn, string(runStatus)); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}

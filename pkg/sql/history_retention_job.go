@@ -38,14 +38,7 @@ var historyRetentionExpirationPollInterval = settings.RegisterDurationSetting(
 func ExtendHistoryRetention(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, jobID jobspb.JobID,
 ) error {
-	execConfig := evalCtx.Planner.ExecutorConfig().(*ExecutorConfig)
-	registry := execConfig.JobRegistry
-	return registry.UpdateJobWithTxn(ctx, jobID, txn, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		historyProgress := md.Progress.GetDetails().(*jobspb.Progress_HistoryRetentionProgress).HistoryRetentionProgress
-		historyProgress.LastHeartbeatTime = timeutil.Now()
-		ju.UpdateProgress(md.Progress)
-		return nil
-	})
+	return jobs.StoreLegacyProgress(ctx, txn, jobID, jobspb.HistoryRetentionProgress{LastHeartbeatTime: timeutil.Now()})
 }
 
 // StartHistoryRetentionJob creates a cluster-level protected timestamp and a
@@ -112,7 +105,18 @@ func (h *historyRetentionResumer) Resume(ctx context.Context, execCtx interface{
 			return ctx.Err()
 		case <-t.C:
 			t.Reset(historyRetentionExpirationPollInterval.Get(execCfg.SV()))
-			p, err := jobs.LoadJobProgress(ctx, execCfg.InternalDB, h.job.ID())
+			var historyProgress jobspb.HistoryRetentionProgress
+			err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				details, err := jobs.LoadLegacyProgress(ctx, txn, h.job.ID())
+				if err != nil {
+					return err
+				}
+				if details == nil {
+					return errors.Errorf("job progress not found")
+				}
+				historyProgress = details.(jobspb.HistoryRetentionProgress)
+				return nil
+			})
 			if err != nil {
 				if jobs.HasJobNotFoundError(err) {
 					return errors.Wrapf(err, "job progress not found")
@@ -121,11 +125,6 @@ func (h *historyRetentionResumer) Resume(ctx context.Context, execCtx interface{
 					"failed loading job progress (retrying): %v", err)
 				continue
 			}
-			if p == nil {
-				log.Dev.Errorf(ctx, "job progress not found (retrying)")
-				continue
-			}
-			historyProgress := p.GetDetails().(*jobspb.Progress_HistoryRetentionProgress).HistoryRetentionProgress
 			expiration := historyProgress.LastHeartbeatTime.Add(exprWindow)
 			if expiration.Before(timeutil.Now()) {
 				return errors.Errorf("reached history protection expiration")

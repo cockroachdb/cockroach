@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -593,7 +594,7 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	// Ensure that 0 progress has been recorded since there are no existing
 	// stats available to estimate progress.
-	fractionCompleted := getFractionCompleted(t, sqlDB, jobID)
+	fractionCompleted := getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 	if fractionCompleted != 0 {
 		t.Fatalf(
 			"create stats should not have recorded progress, but progress is %f",
@@ -610,7 +611,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Verify that full progress is now recorded.
-	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+	fractionCompleted = getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 	if fractionCompleted != 1 {
 		t.Fatalf(
 			"create stats should have recorded full progress, but progress is %f",
@@ -647,7 +648,7 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	// Ensure that partial progress has been recorded since there are existing
 	// stats available.
-	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+	fractionCompleted = getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 	if fractionCompleted <= 0 || fractionCompleted > 0.99 {
 		t.Fatalf(
 			"create stats should have recorded partial progress, but progress is %f",
@@ -664,7 +665,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	}
 
 	// Verify that full progress is now recorded.
-	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+	fractionCompleted = getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 	if fractionCompleted != 1 {
 		t.Fatalf(
 			"create stats should have recorded full progress, but progress is %f",
@@ -774,7 +775,7 @@ func TestCreateStatsUsingExtremesProgress(t *testing.T) {
 	jobID := getLastRunningCreateStatsJobID(t, sqlDB)
 
 	var fractionCompleted float32
-	prevFractionCompleted := getFractionCompleted(t, sqlDB, jobID)
+	prevFractionCompleted := getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 
 	// Allow the job to progress until it finishes scanning both indexes.
 Loop:
@@ -782,7 +783,7 @@ Loop:
 		select {
 		case allowRequest <- struct{}{}:
 			// Ensure that job progress never regresses throughout both index scans.
-			fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+			fractionCompleted = getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 			if fractionCompleted < prevFractionCompleted {
 				close(errCh)
 				t.Fatalf("create partial stats job should not regress progress between indexes: %f -> %f", prevFractionCompleted, fractionCompleted)
@@ -802,7 +803,7 @@ Loop:
 	allowRequestClosed = true
 
 	// Verify that full progress is now recorded.
-	fractionCompleted = getFractionCompleted(t, sqlDB, jobID)
+	fractionCompleted = getFractionCompleted(t, s.InternalDB().(isql.DB), jobID)
 	if fractionCompleted != 1 {
 		t.Fatalf(
 			"create partial stats should have recorded full progress, but progress is %f",
@@ -885,16 +886,22 @@ func getLastRunningCreateStatsJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb
 	return jobID
 }
 
-func getFractionCompleted(t testing.TB, sqlDB *sqlutils.SQLRunner, jobID jobspb.JobID) float32 {
-	var progress *jobspb.Progress
+func getFractionCompleted(t testing.TB, db isql.DB, jobID jobspb.JobID) float32 {
+	var fraction float32
 	testutils.SucceedsSoon(t, func() error {
-		progress = jobutils.GetJobProgress(t, sqlDB, jobID)
-		if progress.Progress == nil {
-			return errors.Errorf("progress is nil. jobID: %d", jobID)
-		}
-		return nil
+		return db.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+			f, _, when, err := jobs.ProgressStorage(jobID).Get(ctx, txn)
+			if err != nil {
+				return err
+			}
+			if when.IsZero() {
+				return errors.Errorf("progress row not found for job %d", jobID)
+			}
+			fraction = float32(f)
+			return nil
+		})
 	})
-	return progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
+	return fraction
 }
 
 func getNumberOfTableStats(

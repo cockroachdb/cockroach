@@ -234,6 +234,7 @@ type IndexMergeTracker struct {
 		job *jobs.Job
 	}
 
+	db             isql.DB
 	rangeCounter   rangeCounter
 	fractionScaler *multiStageFractionScaler
 }
@@ -246,10 +247,12 @@ type rangeCounter func(ctx context.Context, spans []roachpb.Span) (int, error)
 func NewIndexMergeTracker(
 	progress *MergeProgress,
 	job *jobs.Job,
+	db isql.DB,
 	rangeCounter rangeCounter,
 	scaler *multiStageFractionScaler,
 ) *IndexMergeTracker {
 	imt := IndexMergeTracker{
+		db:             db,
 		rangeCounter:   rangeCounter,
 		fractionScaler: scaler,
 	}
@@ -311,11 +314,15 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 			return err
 		}
 
-		imt.jobMu.Lock()
-		defer imt.jobMu.Unlock()
-		if err := imt.jobMu.job.NoTxn().FractionProgressed(
-			ctx, jobs.FractionUpdater(frac),
-		); err != nil {
+		jobID := func() jobspb.JobID {
+			imt.jobMu.Lock()
+			defer imt.jobMu.Unlock()
+			return imt.jobMu.job.ID()
+		}()
+
+		if err := imt.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(jobID).SetFraction(ctx, txn, float64(frac))
+		}); err != nil {
 			return jobs.SimplifyInvalidStateError(err)
 		}
 	}
