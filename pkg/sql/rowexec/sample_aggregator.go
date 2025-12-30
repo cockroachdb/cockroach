@@ -542,48 +542,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded, if the new statistic
-			// is not partial.
-			if si.spec.PartialPredicate == "" {
-				tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, s.tableID)
-				if err != nil {
-					return err
-				}
-
-				canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0
-				if canaryEnabled && s.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
-					// We don't immediately delete the "stale" stats, but keep it
-					// until another canary stats is collected. It is because if a
-					// query picked the stable path for stats selection, we will
-					// need to reuse the stale stats.
-					if err = stats.DeleteExpiredStats(
-						ctx,
-						txn,
-						s.tableID,
-						columnIDs,
-					); err != nil {
-						return errors.Wrapf(err, "fail to delete expired stats for table %d columns %v", s.tableID, columnIDs)
-					}
-
-					if err := stats.MarkDelayDelete(ctx, txn, s.tableID, columnIDs); err != nil {
-						return errors.Wrapf(err, "failed to mark rows for delayed deletion for table %d columns %v", s.tableID, columnIDs)
-					}
-				} else {
-					if err := stats.DeleteOldStatsForColumns(
-						ctx,
-						txn,
-						s.tableID,
-						columnIDs,
-					); err != nil {
-						return err
-					}
-				}
-			}
-
-			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			if err := stats.WriteStatsWithOldDeleted(
 				ctx,
-				s.FlowCtx.Cfg.Settings,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -595,6 +555,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
+				"", /* createdAt */
+				0,  /* statisticID */
 			); err != nil {
 				return err
 			}
