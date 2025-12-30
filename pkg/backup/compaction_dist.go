@@ -153,8 +153,19 @@ func createCompactionPlan(
 		return nil, nil, errors.Wrap(err, "counting number of restore span entries")
 	}
 
-	evalCtx := execCtx.ExtendedEvalContext()
 	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
+	if details.StrictLocalityFiltering {
+		locFilter = make([]roachpb.Locality, 0, len(details.URIsByLocalityKV))
+		for kv := range details.URIsByLocalityKV {
+			kvLoc := roachpb.Locality{}
+			if err := kvLoc.Set(kv); err != nil {
+				return nil, nil, errors.Wrapf(err, "parsing locality from key value %s", kv)
+			}
+			locFilter = append(locFilter, kvLoc)
+		}
+	}
+
+	evalCtx := execCtx.ExtendedEvalContext()
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
 		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
@@ -168,7 +179,7 @@ func createCompactionPlan(
 
 	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
 		ctx, evalCtx, execCtx.ExecCfg(),
-		oracle, locFilter, sql.NoStrictLocalityFiltering,
+		oracle, locFilter, details.StrictLocalityFiltering,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -239,17 +250,19 @@ func createCompactionCorePlacements(
 	for i := range corePlacements {
 		corePlacements[i].SQLInstanceID = sqlInstanceIDs[i]
 		corePlacements[i].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
-			JobID:       int64(jobID),
-			DefaultURI:  details.URI,
-			Destination: details.Destination,
-			Encryption:  details.EncryptionOptions,
-			StartTime:   details.StartTime,
-			EndTime:     details.EndTime,
-			ElideMode:   elideMode,
-			UserProto:   user.EncodeProto(),
-			Spans:       spansToCompact,
-			TargetSize:  targetSize,
-			MaxFiles:    maxFiles,
+			JobID:            int64(jobID),
+			DefaultURI:       details.URI,
+			Destination:      details.Destination,
+			Encryption:       details.EncryptionOptions,
+			StartTime:        details.StartTime,
+			EndTime:          details.EndTime,
+			ElideMode:        elideMode,
+			UserProto:        user.EncodeProto(),
+			Spans:            spansToCompact,
+			TargetSize:       targetSize,
+			MaxFiles:         maxFiles,
+			URIsByLocalityKV: details.URIsByLocalityKV,
+			StrictLocality:   details.StrictLocalityFiltering,
 		}
 	}
 
