@@ -84,17 +84,19 @@ func getInspectQoS(sv *settings.Values) sessiondatapb.QoSLevel {
 type inspectCheckFactory func(asOf hlc.Timestamp) inspectCheck
 
 type inspectProcessor struct {
-	processorID       int32
-	flowCtx           *execinfra.FlowCtx
-	spec              execinfrapb.InspectSpec
-	cfg               *execinfra.ServerConfig
-	checkFactories    []inspectCheckFactory
-	spanSrc           spanSource
-	loggerBundle      *inspectLoggerBundle
-	concurrency       int
-	clock             *hlc.Clock
-	spansProcessedCtr *metric.Counter
-	mu                struct {
+	processorID         int32
+	flowCtx             *execinfra.FlowCtx
+	spec                execinfrapb.InspectSpec
+	cfg                 *execinfra.ServerConfig
+	checkFactories      []inspectCheckFactory
+	spanSrc             spanSource
+	loggerBundle        *inspectLoggerBundle
+	concurrency         int
+	clock               *hlc.Clock
+	spansProcessedCtr   *metric.Counter
+	numActiveSpansGauge *metric.Gauge
+
+	mu struct {
 		// Guards calls to output.Push because DistSQLReceiver.Push is not
 		// concurrency safe and progress metadata can be emitted from multiple
 		// worker goroutines.
@@ -265,6 +267,11 @@ func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) *inspectLo
 func (p *inspectProcessor) processSpan(
 	ctx context.Context, span roachpb.Span, workerIndex int, output execinfra.RowReceiver,
 ) (err error) {
+	if p.numActiveSpansGauge != nil {
+		p.numActiveSpansGauge.Inc(1)
+		defer p.numActiveSpansGauge.Dec(1)
+	}
+
 	asOfToUse := p.getTimestampForSpan()
 
 	// Only create checks that apply to this span.
@@ -420,22 +427,25 @@ func newInspectProcessor(
 		return nil, err
 	}
 	var spansProcessedCtr *metric.Counter
+	var numActiveSpansGauge *metric.Gauge
 	if execCfg, ok := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig); ok {
 		inspectMetrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
 		spansProcessedCtr = inspectMetrics.SpansProcessed
+		numActiveSpansGauge = inspectMetrics.NumActiveSpans
 	}
 
 	return &inspectProcessor{
-		spec:              spec,
-		processorID:       processorID,
-		flowCtx:           flowCtx,
-		checkFactories:    checkFactories,
-		cfg:               flowCtx.Cfg,
-		spanSrc:           newSliceSpanSource(spec.Spans),
-		loggerBundle:      getInspectLogger(flowCtx, spec.JobID),
-		concurrency:       getProcessorConcurrency(flowCtx),
-		clock:             flowCtx.Cfg.DB.KV().Clock(),
-		spansProcessedCtr: spansProcessedCtr,
+		spec:                spec,
+		processorID:         processorID,
+		flowCtx:             flowCtx,
+		checkFactories:      checkFactories,
+		cfg:                 flowCtx.Cfg,
+		spanSrc:             newSliceSpanSource(spec.Spans),
+		loggerBundle:        getInspectLogger(flowCtx, spec.JobID),
+		concurrency:         getProcessorConcurrency(flowCtx),
+		clock:               flowCtx.Cfg.DB.KV().Clock(),
+		spansProcessedCtr:   spansProcessedCtr,
+		numActiveSpansGauge: numActiveSpansGauge,
 	}, nil
 }
 
