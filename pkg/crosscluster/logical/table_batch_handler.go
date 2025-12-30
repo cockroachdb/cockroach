@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,7 +28,7 @@ var useSwapMutations = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.use_swap_mutations.enabled",
 	"determines whether the consumer uses swap mutations for update and delete operations",
-	metamorphic.ConstantWithTestBool("logical_replication.consumer.use_swap_mutations.enabled", true),
+	false, // metamorphic.ConstantWithTestBool("logical_replication.consumer.use_swap_mutations.enabled", true),
 )
 
 // tableHandler applies batches of replication events that are destined for a
