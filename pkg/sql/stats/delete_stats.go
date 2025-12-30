@@ -11,13 +11,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -116,10 +120,10 @@ func GetPlaceholderValsFromColumnIDs(
 	return columnIDsPlaceholders, placeholderVals, keepTimeIdx, nil
 }
 
-// DeleteOldStatsForOtherColumns deletes statistics from the
+// deleteOldStatsForOtherColumnsImpl deletes statistics from the
 // system.table_statistics table for columns *not* in the given set of column
 // IDs that are older than keepTime.
-func DeleteOldStatsForOtherColumns(
+func deleteOldStatsForOtherColumnsImpl(
 	ctx context.Context,
 	txn isql.Txn,
 	columnIDsPlaceholders bytes.Buffer,
@@ -186,6 +190,46 @@ func DeleteExpiredStatsForOtherColumns(
 		withZeroTime...,
 	)
 	return err
+}
+
+// DeleteOldStatsForOtherColumns deletes or soft-deletes the statistics
+// that belong to the given table but not in the given column set. The
+// soft or immediate deletion is determined by if canary stats rollout
+// has been enabled for the table. A soft deletion is to mark the
+// to-delete stats with delayDelete = true, and delete them when the
+// next round of stats collection happens.
+func DeleteOldStatsForOtherColumns(
+	ctx context.Context,
+	txn descs.Txn,
+	desc *descpb.TableDescriptor,
+	settings *cluster.Settings,
+	columnIDsPlaceholders bytes.Buffer,
+	placeholderVals []interface{},
+	keepTimeIdx int,
+) error {
+	canaryEnabled := desc.StatsCanaryWindow != 0
+	if canaryEnabled &&
+		settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+		if err := DeleteExpiredStatsForOtherColumns(
+			ctx,
+			txn,
+			columnIDsPlaceholders,
+			placeholderVals,
+			keepTimeIdx,
+		); err != nil {
+			return errors.Wrapf(err, "fail to delete expired stats for other columns for table id: %d", desc.ID)
+		}
+		return MarkDelayDeleteForOtherColumns(ctx, txn, columnIDsPlaceholders, placeholderVals)
+	}
+	if err := deleteOldStatsForOtherColumnsImpl(
+		ctx,
+		txn,
+		columnIDsPlaceholders,
+		placeholderVals,
+	); err != nil {
+		return errors.Wrap(err, "failed to delete other stats")
+	}
+	return nil
 }
 
 // deleteStatsForDroppedTables deletes all statistics for at most 'limit' number

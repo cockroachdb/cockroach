@@ -556,7 +556,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			return DeleteOldStatsForOtherColumns(ctx, txn, columnIDsPlaceholders, placeholderVals)
+			return deleteOldStatsForOtherColumnsImpl(ctx, txn, columnIDsPlaceholders, placeholderVals)
 		}); err != nil {
 			return err
 		}
