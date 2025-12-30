@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -107,7 +106,7 @@ func NewManager(
 // timestamp. Note, the function assumes the in-memory job is up to date with
 // the persisted job record.
 func (p *Manager) TryToProtectBeforeGC(
-	ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+	ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 ) Cleaner {
 	waitGrp := ctxgroup.WithContext(ctx)
 	protectedTSInstallCancel := make(chan struct{})
@@ -123,7 +122,7 @@ func (p *Manager) TryToProtectBeforeGC(
 		// figure out when to apply a protected timestamp as a percentage of the
 		// time until GC can occur.
 		zoneCfg, err := systemConfig.GetZoneConfigForObject(p.codec,
-			config.ObjectID(tableDesc.GetID()))
+			config.ObjectID(tableID))
 		if err != nil {
 			return err
 		}
@@ -138,7 +137,7 @@ func (p *Manager) TryToProtectBeforeGC(
 
 		select {
 		case <-time.After(waitBeforeProtectedTS):
-			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableID})
 			unprotectCallback, err = p.Protect(ctx, job, target, readAsOf)
 			if err != nil {
 				return err

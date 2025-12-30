@@ -330,20 +330,7 @@ func (t *inspectProgressTracker) setupSpanPTS(
 		return
 	}
 
-	// Load table descriptor for TryToProtectBeforeGC.
-	var cleaner jobsprotectedts.Cleaner
-	err = t.internalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		tableDesc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
-		if err != nil {
-			return err
-		}
-		cleaner = t.ptsManager.TryToProtectBeforeGC(ctx, t.job, tableDesc, tsToProtect)
-		return nil
-	})
-	if err != nil {
-		log.Dev.Warningf(ctx, "failed to set up PTS for span %s: %v", spanStarted, err)
-		return
-	}
+	cleaner := t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), tsToProtect)
 
 	// Store the cleaner for later cleanup when span completes.
 	func() {
