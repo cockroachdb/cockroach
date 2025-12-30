@@ -67,6 +67,9 @@ type inspectProgressTracker struct {
 		// spanCleaners stores PTS cleanup functions for active spans (keyed by span.String()).
 		// When a span completes, we call the cleaner to remove the protected timestamp.
 		spanCleaners map[string]jobsprotectedts.Cleaner
+		// lastLoggedPercent tracks the last percentage milestone we logged, to avoid
+		// spamming logs with progress updates. We log at every 1% increment.
+		lastLoggedPercent int
 	}
 
 	// Goroutine management.
@@ -502,20 +505,40 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 		defer frontier.Release()
 		return jobfrontier.Store(ctx, txn, t.jobID, inspectCompletedSpansKey, frontier)
 	})
-
-	// If the checkpoint write succeeded, update the last checkpointed span count.
-	// This prevents unnecessary future writes when no new spans have been completed.
-	if err == nil {
-		func() {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			if capturedReceivedCount > t.mu.lastCheckpointedSpanCount {
-				t.mu.lastCheckpointedSpanCount = capturedReceivedCount
-			}
-		}()
+	if err != nil {
+		return err
 	}
 
-	return err
+	// If the checkpoint write succeeded, update the last checkpointed span count.
+	// This prevents unnecessary future writes when no new spans have been
+	// completed. Also check if we should log a progress milestone.
+	var shouldLog bool
+	var currentPercent int
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if capturedReceivedCount > t.mu.lastCheckpointedSpanCount {
+			t.mu.lastCheckpointedSpanCount = capturedReceivedCount
+		}
+		// Check if we've crossed a 1% threshold since last log.
+		inspectProgress := t.mu.cachedProgress.GetInspect()
+		if inspectProgress != nil && inspectProgress.JobTotalCheckCount > 0 {
+			currentPercent = int(float64(inspectProgress.JobCompletedCheckCount) / float64(inspectProgress.JobTotalCheckCount) * 100)
+			if currentPercent > t.mu.lastLoggedPercent {
+				t.mu.lastLoggedPercent = currentPercent
+				shouldLog = true
+			}
+		}
+	}()
+
+	// Log progress at 1% milestones so operators can monitor long-running jobs.
+	if shouldLog {
+		totalChecks, completedChecks := t.getCachedCheckCounts()
+		log.Dev.Infof(ctx, "INSPECT job %d progress: %d%% complete (%d/%d checks, %d spans checkpointed)",
+			t.jobID, currentPercent, completedChecks, totalChecks, len(completedSpans))
+	}
+
+	return nil
 }
 
 // getCachedCheckCounts returns the current cached check counts (total and completed).
