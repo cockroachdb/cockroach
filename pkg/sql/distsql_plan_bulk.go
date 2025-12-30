@@ -52,12 +52,24 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 		}
 	}
 
+	var planCtx *PlanningCtx
+	var instanceIDs []base.SQLInstanceID
+	var err error
 	if dsp.codec.ForSystemTenant() {
 		// TODO(yuzefovich): evaluate whether we can remove system tenant
 		// specific code.
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
+		planCtx, instanceIDs, err = dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
+	} else {
+		planCtx, instanceIDs, err = dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
+	if err != nil {
+		return planCtx, instanceIDs, err
+	}
+	if len(instanceIDs) == 0 {
+		err = errors.Newf("no healthy instances found matching filters: %+v", localityFilters)
+	}
+
+	return planCtx, instanceIDs, err
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
@@ -86,6 +98,13 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// Because we're not going through the normal pathways, we have to set up the
 	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
 	// populate it.
+	if len(localityFilters) != 0 {
+		// The planCtx.nodeStatuses map will be populated with the gateway node before we check
+		// filters, so if we are filtering, we should clear the map first.
+		for id := range planCtx.nodeStatuses {
+			delete(planCtx.nodeStatuses, id)
+		}
+	}
 	for _, node := range resp.Nodes {
 		if len(localityFilters) == 0 {
 			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))

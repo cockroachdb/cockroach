@@ -77,8 +77,6 @@ func maybeStartCompactionJob(
 		return 0, errors.New("only scheduled backups can be compacted")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
-	case len(triggerJob.URIsByLocalityKV) != 0:
-		return 0, errors.New("locality aware backups not supported for compaction")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -205,6 +203,11 @@ func StartCompactionJob(
 
 	var executionLocality roachpb.Locality
 	if options.ExecutionLocality != nil {
+		if options.Strict {
+			return jobspb.InvalidJobID, errors.AssertionFailedf(
+				"cannot set both ExecutionLocality and StrictLocalityFiltering",
+			)
+		}
 		if strVal, ok := options.ExecutionLocality.(*tree.StrVal); ok {
 			s := strVal.RawString()
 			if s != "" {
@@ -245,9 +248,10 @@ func StartCompactionJob(
 			Subdir: fullBackupPath,
 			Exists: true,
 		},
-		EncryptionOptions: &encryption,
-		ExecutionLocality: executionLocality,
-		Compact:           true,
+		EncryptionOptions:       &encryption,
+		ExecutionLocality:       executionLocality,
+		StrictLocalityFiltering: options.Strict,
+		Compact:                 true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
 	description, err := compactionJobDescription(details)
@@ -388,15 +392,6 @@ func (b *backupResumer) ResumeCompaction(
 		); err != nil {
 			return errors.Wrapf(err, "creating encryption info file to %s", redactedURI)
 		}
-	}
-
-	storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
-	for kv, uri := range updatedDetails.URIsByLocalityKV {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, execCtx.User())
-		if err != nil {
-			return err
-		}
-		storageByLocalityKV[kv] = &conf
 	}
 
 	mem := execCtx.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
@@ -625,14 +620,15 @@ func updateCompactionBackupDetails(
 		// EncryptionOptions at planning, and then add the key at the beginning of
 		// resume using the same data structure in details. NB: EncryptionInfo is
 		// left blank and only added on the full backup (i think).
-		EncryptionOptions:   baseEncryptOpts,
-		CollectionURI:       resolvedDest.CollectionURI,
-		ResolvedTargets:     allDescsPb,
-		ResolvedCompleteDbs: lastBackup.CompleteDbs,
-		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
-		ScheduleID:          initialDetails.ScheduleID,
-		ExecutionLocality:   initialDetails.ExecutionLocality,
-		Compact:             true,
+		EncryptionOptions:       baseEncryptOpts,
+		CollectionURI:           resolvedDest.CollectionURI,
+		ResolvedTargets:         allDescsPb,
+		ResolvedCompleteDbs:     lastBackup.CompleteDbs,
+		FullCluster:             lastBackup.DescriptorCoverage == tree.AllDescriptors,
+		ScheduleID:              initialDetails.ScheduleID,
+		ExecutionLocality:       initialDetails.ExecutionLocality,
+		StrictLocalityFiltering: initialDetails.StrictLocalityFiltering,
+		Compact:                 true,
 	}
 	return compactedDetails, nil
 }
@@ -677,6 +673,7 @@ func (c compactionChain) createCompactionManifest(
 	// manifest of the last incremental.
 	cManifest.DescriptorChanges = nil
 	cManifest.Files = nil
+	cManifest.PartitionDescriptorFilenames = nil
 	cManifest.EntryCounts = roachpb.RowCount{}
 
 	// The StatisticsFileNames is inherited from the stats of the latest
