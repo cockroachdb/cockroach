@@ -58,6 +58,7 @@ func TestFixtureRegistry(t *testing.T) {
 		kind           string
 		createdAt      time.Time
 		readyAt        time.Time
+		preventGC      time.Time
 		isLatestOfKind bool
 		survivesGC     bool
 	}
@@ -127,6 +128,35 @@ func TestFixtureRegistry(t *testing.T) {
 			survivesGC:     true,
 			isLatestOfKind: false,
 		},
+		{
+			// This fixture was marked to prevent GC long ago, so it will be deleted
+			// despite the flag.
+			kind:           "kind-prevent-gc",
+			createdAt:      makeTime(-10),
+			readyAt:        makeTime(-9),
+			preventGC:      makeTime(-8),
+			survivesGC:     false,
+			isLatestOfKind: false,
+		},
+		{
+			// This fixture was marked to prevent GC recently, so despite the fact
+			// that it has been obsolete for more than a day, it will not be
+			// deleted.
+			kind:           "kind-prevent-gc",
+			createdAt:      makeTime(-6),
+			readyAt:        makeTime(-5),
+			preventGC:      makeTime(-4),
+			survivesGC:     true,
+			isLatestOfKind: false,
+		},
+		{
+			// This is the most recent fixture of its kind, so it will not be deleted.
+			kind:           "kind-prevent-gc",
+			createdAt:      makeTime(-1),
+			readyAt:        makeTime(-0.5),
+			survivesGC:     true,
+			isLatestOfKind: true,
+		},
 	}
 
 	type fixturesCreated struct {
@@ -167,6 +197,11 @@ func TestFixtureRegistry(t *testing.T) {
 		if !f.readyAt.IsZero() {
 			now = f.readyAt
 			require.NoError(t, handle.SetReadyAt(ctx))
+		}
+
+		if !f.preventGC.IsZero() {
+			now = f.preventGC
+			require.NoError(t, handle.PreventGC(ctx))
 		}
 
 		created = append(created, fixturesCreated{

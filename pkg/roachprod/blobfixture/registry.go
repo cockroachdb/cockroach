@@ -347,3 +347,13 @@ func (s *ScratchHandle) SetFingerprint(
 	s.logger.Printf("fixture '%s' fingerprint set to '%s' with asOf time %s ", s.metadata.DataPath, s.metadata.Fingerprint, s.metadata.FingerprintTime)
 	return nil
 }
+
+func (s *ScratchHandle) PreventGC(ctx context.Context) error {
+	setTime := s.registry.clock()
+	s.metadata.PreventGC = &setTime
+	if err := s.registry.upsertMetadata(s.metadata); err != nil {
+		return err
+	}
+	s.logger.Printf("fixture '%s' marked to prevent gc at '%s'", s.metadata.DataPath, s.metadata.PreventGC)
+	return nil
+}

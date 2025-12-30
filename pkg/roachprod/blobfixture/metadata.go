@@ -43,6 +43,12 @@ type FixtureMetadata struct {
 
 	// FingerprintTime is the aost used by the fingerprint command.
 	FingerprintTime string `json:"fingerprint_time,omitempty"`
+
+	// PreventGC indicates that this fixture should not be garbage collected. This
+	// can be set by tests using this fixture that want to ensure the fixture
+	// remains available for investigation purposes in the event of failure. The
+	// fixture will be subject to GC a week after this flag is set.
+	PreventGC *time.Time `json:"prevent_gc,omitempty"`
 }
 
 func (f *FixtureMetadata) MarshalJson() ([]byte, error) {
@@ -113,6 +119,10 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 	// made ready more than 24 hours ago.
 	obsoleteThreshold := gcAt.Add(-24 * time.Hour)
 
+	// A fixture that has been marked to prevent GC will be GC'd a week after it
+	// the flag was set.
+	preventGCThreshold := gcAt.Add(-7 * 24 * time.Hour)
+
 	toDelete := []fixtureToDelete{}
 
 	byKind := make(map[string][]FixtureMetadata)
@@ -144,10 +154,16 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 		// NOTE: starting at 1 because index 0 is the most recent fixture and is
 		// not eligible for garbage collection.
 		for i := 1; i < len(fixtures); i++ {
+			fixture := fixtures[i]
 			successor := fixtures[i-1]
 			if successor.ReadyAt.Before(obsoleteThreshold) {
+				if fixture.PreventGC != nil && !fixture.PreventGC.Before(preventGCThreshold) {
+					// This fixture is marked to prevent GC and the flag has not been set
+					// long enough to allow GC.
+					continue
+				}
 				toDelete = append(toDelete, fixtureToDelete{
-					metadata: fixtures[i],
+					metadata: fixture,
 					reason:   fmt.Sprintf("fixture '%s' is was mode obsolete by '%s' at '%s'", fixtures[i].DataPath, successor.DataPath, successor.ReadyAt),
 				})
 			}
