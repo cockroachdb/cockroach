@@ -4960,6 +4960,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.num_active_spans
+      exported_name: jobs_inspect_num_active_spans
+      description: Number of spans currently being processed by INSPECT jobs
+      y_axis_label: Spans
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: jobs.inspect.protected_age_sec
       exported_name: jobs_inspect_protected_age_sec
       labeled_name: 'jobs.protected_age_sec{type: inspect}'

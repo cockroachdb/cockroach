@@ -901,6 +901,7 @@ jobs_inspect_expired_pts_records: jobs.inspect.expired_pts_records
 jobs_inspect_fail_or_cancel_completed: jobs.inspect.fail_or_cancel_completed
 jobs_inspect_fail_or_cancel_retry_error: jobs.inspect.fail_or_cancel_retry_error
 jobs_inspect_issues_found: jobs.inspect.issues_found
+jobs_inspect_num_active_spans: jobs.inspect.num_active_spans
 jobs_inspect_protected_age_sec: jobs.inspect.protected_age_sec
 jobs_inspect_protected_record_count: jobs.inspect.protected_record_count
 jobs_inspect_resume_completed: jobs.inspect.resume_completed
