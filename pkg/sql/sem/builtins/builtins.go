@@ -208,7 +208,7 @@ var StartCompactionJob func(
 	scheduleID jobspb.ScheduleID,
 	collectionURI []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	options tree.BackupOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error)
 
@@ -9390,12 +9390,12 @@ WHERE object_id = table_descriptor_id
 				if StartCompactionJob == nil {
 					return nil, errors.Newf("missing StartCompactionJob")
 				}
-				backupAST, encryption, err := makeBackupASTFromStmt(args[1])
+				backupAST, options, err := makeBackupASTFromStmt(args[1])
 				if err != nil {
 					return nil, err
 				}
 				scheduleID := jobspb.ScheduleID(tree.MustBeDInt(args[0]))
-				collectionURI := exprSliceToStrSlice(backupAST.To)
+				collectionURI := ExprSliceToStrSlice(backupAST.To)
 				start := tree.MustBeDDecimal(args[3])
 				startTs, err := hlc.DecimalToHLC(&start.Decimal)
 				if err != nil {
@@ -9411,8 +9411,11 @@ WHERE object_id = table_descriptor_id
 				if fullPath == "LATEST" {
 					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
 				}
+
 				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, scheduleID, collectionURI, fullPath, encryption, startTs, endTs,
+					ctx, evalCtx.Planner, scheduleID,
+					collectionURI, fullPath, options,
+					startTs, endTs,
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
@@ -12843,38 +12846,21 @@ func makeJsonpathMatch(_ context.Context, _ *eval.Context, args tree.Datums) (tr
 	return jsonpath.JsonpathMatch(target, path, vars, silent)
 }
 
-func makeBackupASTFromStmt(
-	backupStmt tree.Datum,
-) (*tree.Backup, jobspb.BackupEncryptionOptions, error) {
+func makeBackupASTFromStmt(backupStmt tree.Datum) (*tree.Backup, tree.BackupOptions, error) {
 	stmt := string(tree.MustBeDString(backupStmt))
 	ast, err := parserutils.ParseOne(stmt)
 	if err != nil {
-		return nil, jobspb.BackupEncryptionOptions{}, err
+		return nil, tree.BackupOptions{}, err
 	}
 	backupAST, ok := ast.AST.(*tree.Backup)
 	if !ok {
-		return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("expected BACKUP statement, got %s", stmt)
+		return nil, tree.BackupOptions{}, errors.Newf("expected BACKUP statement, got %s", stmt)
 	}
 	opts := backupAST.Options
-	encryption := jobspb.BackupEncryptionOptions{
-		Mode: jobspb.EncryptionMode_None,
-	}
-	if opts.EncryptionPassphrase != nil {
-		encryption.Mode = jobspb.EncryptionMode_Passphrase
-		encryption.RawPassphrase = tree.AsStringWithFlags(
-			opts.EncryptionPassphrase,
-			tree.FmtBareStrings,
-		)
-	} else if opts.EncryptionKMSURI != nil {
-		if encryption.Mode != jobspb.EncryptionMode_None {
-			return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("only one encryption mode can be specified")
-		}
-		encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
-	}
-	return backupAST, encryption, nil
+	return backupAST, opts, nil
 }
 
-func exprSliceToStrSlice(exprs []tree.Expr) []string {
+func ExprSliceToStrSlice(exprs []tree.Expr) []string {
 	return util.Map(exprs, func(expr tree.Expr) string {
 		return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
 	})
