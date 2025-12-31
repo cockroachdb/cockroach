@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -266,6 +267,7 @@ func registerRestore(r registry.Registry) {
 						if status == string(jobs.StateSucceeded) {
 							isJobComplete = true
 						} else if status == string(jobs.StateFailed) || status == string(jobs.StateCanceled) {
+							rd.markFixtureWithFailure(ctx)
 							t.Fatalf("job unexpectedly found in %s state", status)
 						}
 					}
@@ -873,6 +875,9 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	_, err = conn.ExecContext(
 		ctx, rd.restoreCmd(ctx, target, "WITH unsafe_restore_incompatible_version"),
 	)
+	if err != nil {
+		rd.markFixtureWithFailure(ctx)
+	}
 	return err
 }
 
@@ -945,7 +950,23 @@ func (rd *restoreDriver) maybeValidateFingerprint(ctx context.Context) {
 	fingerprint := fingerprintDatabase(
 		rd.t, conn, rd.sp.backup.fixture.DatabaseName(), "", /* aost */
 	)
-	require.Equal(rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch after restore")
+	if !assert.Equal(
+		rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch before restore",
+	) {
+		rd.markFixtureWithFailure(ctx)
+		rd.t.FailNow()
+	}
+}
+
+// markFixtureWithFailure flags the fixture being restored to have caused a test
+// failure. This is useful when a test fails and we want to preserve the backup
+// for investigation. This is a best-effort operation.
+func (rd *restoreDriver) markFixtureWithFailure(ctx context.Context) {
+	registry := GetFixtureRegistry(ctx, rd.t, rd.sp.backup.cloud)
+	err := registry.MarkFailure(ctx, rd.t.L(), rd.fixtureMetadata.MetadataPath)
+	if err != nil {
+		rd.t.L().ErrorfCtx(ctx, "failed to mark fixture with failure: %v", err)
+	}
 }
 
 // exportToRoachperf exports a single perf metric for the given test to roachperf.
