@@ -44,6 +44,11 @@ type FlowCtx struct {
 
 	Mon *mon.BytesMonitor
 
+	// ParentMon is the parent monitor of Mon (or Mon itself). It should not be
+	// used directly and is only plumbed here for reporting memory usage for
+	// EXPLAIN ANALYZE only of the _gateway_ flow. It's nil for remote flows.
+	ParentMon *mon.BytesMonitor
+
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
 	// This field is generally not nil, except for flows that don't run in a

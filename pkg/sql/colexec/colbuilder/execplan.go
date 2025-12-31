@@ -1166,8 +1166,13 @@ func NewColOperator(
 					args.CloserRegistry.AddCloser(diskSpiller)
 				}
 			} else {
-				evalCtx.SingleDatumAggMemAccount = getStreamingMemAccount(args, flowCtx)
-				newAggArgs.Allocator = getStreamingAllocator(ctx, args, flowCtx)
+				// Create an unlimited memory monitor and two accounts bound to
+				// it to attribute the memory usage to the aggregator correctly.
+				accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
+					ctx, flowCtx, "ordered-aggregator" /* opName */, spec.ProcessorID, 2, /* numAccounts */
+				)
+				evalCtx.SingleDatumAggMemAccount = accounts[0]
+				newAggArgs.Allocator = colmem.NewAllocator(ctx, accounts[1], factory)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
 				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
 			}

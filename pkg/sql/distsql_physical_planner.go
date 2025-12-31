@@ -485,9 +485,9 @@ type PlanningCtx struct {
 	// path it will get called.
 	onFlowCleanup []func()
 
-	// OverridePlannerMon, if set, will be used instead of the Planner.Mon() as
-	// the parent monitor for the DistSQL flow.
-	OverridePlannerMon *mon.BytesMonitor
+	// OverridePlannerExecMon, if set, will be used instead of the
+	// Planner.ExecMon() as the parent monitor for the DistSQL flow.
+	OverridePlannerExecMon *mon.BytesMonitor
 }
 
 var _ physicalplan.ExprContext = &PlanningCtx{}
