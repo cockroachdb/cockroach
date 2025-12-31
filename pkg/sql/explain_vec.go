@@ -94,10 +94,11 @@ func newFlowCtxForExplainPurposes(ctx context.Context, p *planner) *execinfra.Fl
 	// will be garbage collected.
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	return &execinfra.FlowCtx{
-		NodeID:  p.EvalContext().NodeID,
-		EvalCtx: p.EvalContext(),
-		Mon:     monitor,
-		Txn:     p.txn,
+		NodeID:    p.EvalContext().NodeID,
+		EvalCtx:   p.EvalContext(),
+		Mon:       monitor,
+		ParentMon: monitor,
+		Txn:       p.txn,
 		Cfg: &execinfra.ServerConfig{
 			Settings:          p.execCfg.Settings,
 			LogicalClusterID:  p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,

@@ -1208,6 +1208,19 @@ func (s *Server) newConnExecutor(
 		MaxHist:  memMetrics.TxnMaxBytesHist,
 		Settings: s.cfg.Settings,
 	})
+	// The exec monitor is started when dispatching to execution engine.
+	execMon := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("exec"),
+		CurCount: s.cfg.DistSQLSrv.Metrics.CurBytesCount,
+		MaxHist:  s.cfg.DistSQLSrv.Metrics.MaxBytesHist,
+		Settings: s.cfg.Settings,
+	})
+	ppExecMon := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("exec-pausable-portal"),
+		CurCount: s.cfg.DistSQLSrv.Metrics.CurBytesCount,
+		MaxHist:  s.cfg.DistSQLSrv.Metrics.MaxBytesHist,
+		Settings: s.cfg.Settings,
+	})
 	txnFingerprintIDCacheAcc := sessionMon.MakeBoundAccount()
 
 	nodeIDOrZero, _ := s.cfg.NodeInfo.NodeID.OptionalNodeID()
@@ -1218,11 +1231,13 @@ func (s *Server) newConnExecutor(
 		clientComm:          clientComm,
 		mon:                 sessionRootMon,
 		sessionMon:          sessionMon,
+		execMon:             execMon,
+		ppExecMon:           ppExecMon,
 		sessionPreparedMon:  sessionPreparedMon,
 		sessionDataStack:    sdMutIterator.Sds,
 		dataMutatorIterator: sdMutIterator,
 		state: txnState{
-			mon:                          txnMon,
+			txnMon:                       txnMon,
 			connCtx:                      ctx,
 			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 			execType:                     executorType,
@@ -1498,13 +1513,17 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	ex.txnFingerprintIDAcc.Close(ctx)
 	if closeType != panicClose {
-		ex.state.mon.Stop(ctx)
+		ex.execMon.Stop(ctx)
+		ex.state.txnMon.Stop(ctx)
 		ex.sessionPreparedMon.Stop(ctx)
+		ex.ppExecMon.Stop(ctx)
 		ex.sessionMon.Stop(ctx)
 		ex.mon.Stop(ctx)
 	} else {
-		ex.state.mon.EmergencyStop(ctx)
+		ex.execMon.EmergencyStop(ctx)
+		ex.state.txnMon.EmergencyStop(ctx)
 		ex.sessionPreparedMon.EmergencyStop(ctx)
+		ex.ppExecMon.EmergencyStop(ctx)
 		ex.sessionMon.EmergencyStop(ctx)
 		ex.mon.EmergencyStop(ctx)
 	}
@@ -1550,6 +1569,15 @@ type connExecutor struct {
 	// statistics for result sets (which escape transactions).
 	mon        *mon.BytesMonitor
 	sessionMon *mon.BytesMonitor
+
+	// execMon is the monitor bound to the scope of a single query planning
+	// and execution step.
+	execMon *mon.BytesMonitor
+
+	// ppExecMon is the pausable portal model exec monitor.
+	// TODO: think about changing the order to guarantee that portals close
+	// before finishTxn is called.
+	ppExecMon *mon.BytesMonitor
 
 	// sessionPreparedMon tracks memory usage by prepared statements.
 	sessionPreparedMon *mon.BytesMonitor
@@ -2256,6 +2284,7 @@ func (ex *connExecutor) activate(
 	// single threaded, and the point of buffering is just to avoid contention.
 	ex.mon.Start(ctx, parentMon, reserved)
 	ex.sessionMon.StartNoReserved(ctx, ex.mon)
+	ex.ppExecMon.StartNoReserved(ctx, parentMon)
 	ex.sessionPreparedMon.StartNoReserved(ctx, ex.sessionMon)
 
 	ex.activated = true
@@ -2525,6 +2554,12 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			)
 			if portal.pauseInfo != nil {
 				portal.pauseInfo.curRes = stmtRes
+				//portal.pauseInfo.execMon = mon.NewMonitor(mon.Options{
+				//	Name:     mon.MakeName("exec-pausable-portal"),
+				//	CurCount: ex.server.cfg.DistSQLSrv.Metrics.CurBytesCount,
+				//	MaxHist:  ex.server.cfg.DistSQLSrv.Metrics.MaxBytesHist,
+				//	Settings: ex.server.cfg.Settings,
+				//})
 			}
 			res = stmtRes
 
@@ -3035,6 +3070,7 @@ func (ex *connExecutor) execCopyOut(
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 
 	defer func() {
+		defer ex.execMon.Stop(ctx)
 		ex.removeActiveQuery(queryID, cmd.Stmt)
 		cancelQuery()
 		ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1,
@@ -3069,6 +3105,7 @@ func (ex *connExecutor) execCopyOut(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, &ex.planner, ex.state.mu.txn, stmtTS)
+	ex.execMon.StartNoReserved(ctx, ex.state.txnMon)
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
 	var queryTimeoutTicker *time.Timer
@@ -3289,6 +3326,7 @@ func (ex *connExecutor) execCopyIn(
 		resetPlanner: func(ctx context.Context, p *planner, txn *kv.Txn, txnTS time.Time, stmtTS time.Time) {
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, stmtTS)
+			ex.execMon.StartNoReserved(ctx, ex.state.txnMon)
 			ex.setCopyLoggingFields(cmd.ParsedStmt)
 		},
 	}
@@ -3328,12 +3366,12 @@ func (ex *connExecutor) execCopyIn(
 
 	var copyErr error
 	if isCopyToExternalStorage(cmd) {
-		cm, copyErr = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, &ex.planner, ex.state.mon)
+		cm, copyErr = newFileUploadMachine(ctx, cmd.Conn, cmd.Stmt, txnOpt, &ex.planner, ex.state.txnMon)
 	} else {
 		// The planner will be prepared before use.
 		p := ex.planner
 		cm, copyErr = newCopyMachine(
-			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt, ex.state.mon, ex.implicitTxn(),
+			ctx, cmd.Conn, cmd.Stmt, &p, txnOpt, ex.state.txnMon, ex.implicitTxn(),
 			// execInsertPlan
 			func(ctx context.Context, p *planner, res RestrictedCommandResult) error {
 				defer p.curPlan.close(ctx)
@@ -4063,7 +4101,7 @@ func (ex *connExecutor) maybeAdjustMaxTimestampBound(p *planner, txn *kv.Txn) {
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
-	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.mon, ex.sessionMon)
+	p.resetPlanner(ctx, txn, ex.sessionData(), ex.state.txnMon, ex.execMon, ex.sessionMon)
 	ex.maybeAdjustMaxTimestampBound(p, txn)
 	ex.resetEvalCtx(&p.extendedEvalCtx, txn, stmtTS)
 }
@@ -4472,8 +4510,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			TxnDescription:        txn.String(),
 			// TODO(yuzefovich): this seems like not a concurrency safe call.
 			Implicit:            ex.implicitTxn(),
-			AllocBytes:          ex.state.mon.AllocBytes(),
-			MaxAllocBytes:       ex.state.mon.MaximumBytes(),
+			AllocBytes:          ex.state.txnMon.AllocBytes(),
+			MaxAllocBytes:       ex.state.txnMon.MaximumBytes(),
 			IsHistorical:        ex.state.isHistorical.Load(),
 			ReadOnly:            ex.state.readOnly.Load(),
 			Priority:            ex.state.mu.priority.String(),

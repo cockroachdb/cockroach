@@ -78,12 +78,9 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: mon.MakeName("distsql"),
-			// Note that we don't use 'sql.mem.distsql.*' metrics here since
-			// that would double count them with the 'flow' monitor in
-			// setupFlow.
-			CurCount:   nil,
-			MaxHist:    nil,
+			Name:       mon.MakeName("distsql"),
+			CurCount:   cfg.Metrics.CurBytesCount,
+			MaxHist:    cfg.Metrics.MaxBytesHist,
 			Settings:   cfg.Settings,
 			LongLiving: true,
 		}),
@@ -260,8 +257,6 @@ func (ds *ServerImpl) setupFlow(
 
 	monitor = mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("flow").WithUUID(req.Flow.FlowID.Short()),
-		CurCount: ds.Metrics.CurBytesCount,
-		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
@@ -384,7 +379,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, parentMonitor, diskMonitor, makeLeaf, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
@@ -482,7 +477,7 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
-	monitor, diskMonitor *mon.BytesMonitor,
+	monitor, parentMonitor, diskMonitor *mon.BytesMonitor,
 	makeLeafTxn func(context.Context) (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
@@ -496,6 +491,7 @@ func (ds *ServerImpl) newFlowContext(
 		ID:             id,
 		EvalCtx:        evalCtx,
 		Mon:            monitor,
+		ParentMon:      parentMonitor,
 		Txn:            evalCtx.Txn,
 		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,

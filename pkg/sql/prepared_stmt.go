@@ -227,6 +227,14 @@ type portalPauseInfo struct {
 	// curRes is the result channel of the current (or last, if the portal is
 	// closing) portal execution. It is assumed to be a pgwire.limitedCommandResult.
 	curRes RestrictedCommandResult
+
+	// TODO
+	// execMon is the monitor bound to the scope of a single query planning
+	// and execution step. Since we intertwine execution of multiple pausable
+	// portals, we cannot use the one from the connExecutor, so each pausable
+	// portal has a separate one.
+	//execMon *mon.BytesMonitor
+
 	// The following 4 structs store information to persist for a portal's
 	// execution, as well as cleanup functions to be called when the portal is
 	// closed. These structs correspond to a function call chain for a query's

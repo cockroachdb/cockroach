@@ -315,7 +315,7 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
+		subqueryResultMemAcc := params.p.ExecMon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		// Note that planAndRunSubquery updates recv.stats with top-level
 		// subquery stats.

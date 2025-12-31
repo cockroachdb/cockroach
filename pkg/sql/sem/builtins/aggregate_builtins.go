@@ -555,7 +555,7 @@ var aggregates = map[string]builtinDefinition{
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stMakeLineAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -826,7 +826,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stUnionAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -1042,7 +1042,7 @@ type stCollectAgg struct {
 
 func newSTCollectAgg(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &stCollectAgg{
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}
 }
 
@@ -1462,7 +1462,7 @@ const (
 // will be used by the new struct which will operate in "shared" mode
 func makeSingleDatumAggregateBase(evalCtx *eval.Context) singleDatumAggregateBase {
 	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Planner.Mon().MakeBoundAccount()
+		newAcc := evalCtx.Planner.ExecMon().MakeBoundAccount()
 		return singleDatumAggregateBase{
 			mode: nonSharedSingleDatumAggregateBaseMode,
 			acc:  &newAcc,
@@ -1589,7 +1589,7 @@ type arrayAggregate struct {
 func newArrayAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}
 }
 
@@ -2005,7 +2005,7 @@ func newArrayCatAggregate(
 ) eval.AggregateFunc {
 	return &arrayCatAggregate{
 		arr: tree.NewDArray(params[0].ArrayContents()),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}
 }
 
@@ -5115,7 +5115,7 @@ func newPercentileDiscAggregate(
 ) eval.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}
 }
 
@@ -5213,7 +5213,7 @@ func newPercentileContAggregate(
 ) eval.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}
 }
 

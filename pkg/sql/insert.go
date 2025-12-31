@@ -168,7 +168,7 @@ func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
 		return
 	}
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		params.p.ExecMon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 
