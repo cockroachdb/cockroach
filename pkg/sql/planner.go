@@ -202,9 +202,12 @@ type planner struct {
 		innerPlansMustUseLeafTxn int32
 	}
 
-	// monitor tracks the memory usage of txn-bound objects - for example,
-	// execution operators.
-	monitor *mon.BytesMonitor
+	// txnMon tracks the memory usage of txn-bound objects.
+	txnMon *mon.BytesMonitor
+
+	// execMon tracks the memory usage of a single query planning and execution
+	// step.
+	execMon *mon.BytesMonitor
 
 	// sessionMonitor tracks the memory of session-bound objects. It is currently
 	// only used internally for tracking SQL cursors declared using WITH HOLD.
@@ -443,16 +446,21 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	plannerMon := mon.NewMonitor(mon.Options{
+	txnMon := mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("internal-planner." + opName),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: execCfg.Settings,
 	})
-	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
+	txnMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
+	execMon := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("internal-planner.exec." + opName),
+		Settings: execCfg.Settings,
+	})
+	execMon.StartNoReserved(ctx, txnMon)
 
 	p := &planner{execCfg: execCfg, datumAlloc: &tree.DatumAlloc{}}
-	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
+	p.resetPlanner(ctx, txn, sd, txnMon, execMon, nil /* sessionMon */)
 
 	smi := sessionmutator.MakeSessionDataMutatorIterator(
 		sds,
@@ -518,8 +526,9 @@ func newInternalPlanner(
 			p.Descriptors().ReleaseAll(ctx)
 		}
 
-		// Stop the memory monitor.
-		plannerMon.Stop(ctx)
+		// Stop the memory monitors.
+		execMon.Stop(ctx)
+		txnMon.Stop(ctx)
 	}
 }
 
@@ -615,9 +624,14 @@ func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
 }
 
-// Mon is part of the eval.Planner interface.
-func (p *planner) Mon() *mon.BytesMonitor {
-	return p.monitor
+// TxnMon is part of the eval.Planner interface.
+func (p *planner) TxnMon() *mon.BytesMonitor {
+	return p.txnMon
+}
+
+// ExecMon is part of the eval.Planner interface.
+func (p *planner) ExecMon() *mon.BytesMonitor {
+	return p.execMon
 }
 
 // ExecCfg implements the PlanHookState interface.
@@ -974,14 +988,16 @@ func (p *planner) resetPlanner(
 	ctx context.Context,
 	txn *kv.Txn,
 	sd *sessiondata.SessionData,
-	plannerMon *mon.BytesMonitor,
+	txnMon *mon.BytesMonitor,
+	execMon *mon.BytesMonitor,
 	sessionMon *mon.BytesMonitor,
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
 	p.curPlan = planTop{}
-	p.monitor = plannerMon
+	p.txnMon = txnMon
+	p.execMon = execMon
 	p.sessionMonitor = sessionMon
 
 	p.cancelChecker.Reset(ctx)

@@ -668,7 +668,7 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 	cursorHelper.ctx = context.Background()
 	cursorHelper.resultCols = make(colinfo.ResultColumns, len(planCols))
 	copy(cursorHelper.resultCols, planCols)
-	mon := g.p.Mon()
+	mon := g.p.TxnMon()
 	if withHold {
 		mon = g.p.sessionMonitor
 		if mon == nil {

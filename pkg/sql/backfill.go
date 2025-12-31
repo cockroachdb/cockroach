@@ -2956,7 +2956,7 @@ func columnBackfillInTxn(
 		return nil
 	}
 	columnBackfillerMon := execinfra.NewMonitor(
-		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-column-backfill-mon"),
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-column-backfill-mon"),
 	)
 
 	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
@@ -2999,7 +2999,7 @@ func indexBackfillInTxn(
 	traceKV bool,
 ) error {
 	indexBackfillerMon := execinfra.NewMonitor(
-		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-index-backfill-mon"),
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-index-backfill-mon"),
 	)
 
 	var backfiller backfill.IndexBackfiller

@@ -526,9 +526,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 		batchReceiver = recv
 	}
 	origCtx := ctx
-	parentMonitor := evalCtx.Planner.Mon()
-	if planCtx.OverridePlannerMon != nil {
-		parentMonitor = planCtx.OverridePlannerMon
+	parentMonitor := evalCtx.Planner.ExecMon()
+	if planCtx.OverridePlannerExecMon != nil {
+		parentMonitor = planCtx.OverridePlannerExecMon
 	}
 	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, parentMonitor, &setupReq, recv, batchReceiver, localState)
 	if err == nil && planCtx.saveFlows != nil {
@@ -2028,7 +2028,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := planner.Mon().MakeBoundAccount()
+		subqueryResultMemAcc := planner.ExecMon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !dsp.PlanAndRunSubqueries(
 			ctx,
