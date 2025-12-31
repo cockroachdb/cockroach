@@ -198,6 +198,7 @@ type Context struct {
 	// where each aggregate function struct grows its own memory account by
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
+	// TODO: comment about other aggregates.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
