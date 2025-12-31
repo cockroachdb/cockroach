@@ -348,6 +348,10 @@ type TestingKnobs struct {
 	// TableReaderStartScanCb, when non-nil, will be called whenever the
 	// TableReader processor starts its scan.
 	TableReaderStartScanCb func()
+
+	// SampleAggregatorTestingKnobRowHook, if non-nil, is called for each row
+	// processed by the sample aggregator. Used for testing, e.g., to inject panics.
+	SampleAggregatorTestingKnobRowHook func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
