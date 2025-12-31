@@ -22,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/spf13/pflag"
-	"gopkg.in/yaml.v2"
 )
 
 // FKRef is a struct that holds the foreign key reference information for the Placeholder struct.
@@ -222,7 +222,7 @@ func (w *workloadGenerator) initializeGenerator() error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to read schema YAML from %s", w.inputYAML)
 		}
-		if err := yaml.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
+		if err := yamlutil.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
 			return errors.Wrapf(err, "failed to unmarshal schema YAML from %s", w.inputYAML)
 		}
 	}
@@ -233,7 +233,7 @@ func (w *workloadGenerator) initializeGenerator() error {
 
 // writeSchemaToFile writes the workload schema to a YAML file in the output directory.
 func (w *workloadGenerator) writeSchemaToFile() error {
-	data, err := yaml.Marshal(w.workloadSchema)
+	data, err := yamlutil.Marshal(w.workloadSchema)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal workload schema to YAML")
 	}
@@ -715,7 +715,7 @@ func (w *workloadGenerator) loadYamlData() error {
 	if err != nil {
 		return errors.Wrapf(err, "could not read schema YAML from %s", path)
 	}
-	if err := yaml.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
+	if err := yamlutil.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
 		return errors.Wrapf(err, "couldn't unmarshal schema YAML")
 	}
 	return nil

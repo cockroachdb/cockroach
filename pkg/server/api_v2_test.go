@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 func TestListSessionsV2(t *testing.T) {
@@ -263,6 +263,7 @@ func TestRulesV2(t *testing.T) {
 
 	// Check that the response was valid YAML.
 	ruleGroups := make(map[string]metric.PrometheusRuleGroup)
+	//lint:ignore SA1019 deprecated
 	require.NoError(t, yaml.NewDecoder(resp.Body).Decode(&ruleGroups))
 	require.NoError(t, resp.Body.Close())
 }

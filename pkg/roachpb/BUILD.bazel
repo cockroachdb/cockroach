@@ -51,6 +51,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_golang_mock//gomock",  # keep
+        "@in_yaml_go_yaml_v4//:yaml",
         "@org_golang_google_grpc//metadata",  # keep
     ],
 )

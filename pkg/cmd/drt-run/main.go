@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 var rootCmd = &cobra.Command{
@@ -58,7 +58,8 @@ func runDRT(configFile string) (retErr error) {
 	if err != nil {
 		return err
 	}
-	decoder := yaml.NewDecoder(f)
+	decoder := yaml.NewDecoder(f) //lint:ignore SA1019 deprecated
+	//lint:ignore SA1019 deprecated
 	if err := decoder.Decode(&c); err != nil {
 		return err
 	}

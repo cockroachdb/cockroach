@@ -973,7 +973,8 @@ func (d *datadogWriter) populateNodeAndStoreMap(fileName string) {
 		}
 	}(file)
 
-	decoder := yaml.NewDecoder(file)
+	decoder := yaml.NewDecoder(file) //lint:ignore SA1019 deprecated
+	//lint:ignore SA1019 deprecated
 	if err := decoder.Decode(&d.storeToNodeMap); err != nil {
 		fmt.Printf("error decoding store to node mapping file YAML: %v\n", err)
 		return

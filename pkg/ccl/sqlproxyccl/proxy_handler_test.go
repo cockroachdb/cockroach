@@ -1261,7 +1261,7 @@ func TestDenylistUpdate(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = os.Remove(denyList.Name()) }()
 	dlf := acl.DenylistFile{Seq: 0}
-	bytes, err := yaml.Marshal(&dlf)
+	bytes, err := yaml.Marshal(&dlf) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
@@ -1343,7 +1343,7 @@ func TestDenylistUpdate(t *testing.T) {
 			Reason:     "test-denied",
 		},
 	}
-	bytes, err = yaml.Marshal(&dlf)
+	bytes, err = yaml.Marshal(&dlf) //lint:ignore SA1019 deprecated
 	require.NoError(t, err)
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)

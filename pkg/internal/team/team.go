@@ -12,8 +12,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 // Alias is the name of a team.
@@ -113,7 +113,7 @@ func LoadTeams(f io.Reader) (Map, error) {
 		return nil, err
 	}
 	var src map[Alias]Team
-	if err := yaml.UnmarshalStrict(b, &src); err != nil {
+	if err := yamlutil.UnmarshalStrict(b, &src); err != nil {
 		return nil, err
 	}
 	// Populate the Alias value of each team.

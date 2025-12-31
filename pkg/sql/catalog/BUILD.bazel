@@ -77,9 +77,9 @@ go_test(
         "//pkg/util",
         "//pkg/util/intsets",
         "//pkg/util/randutil",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 

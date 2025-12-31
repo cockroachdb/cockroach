@@ -28,9 +28,9 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
@@ -75,9 +75,9 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

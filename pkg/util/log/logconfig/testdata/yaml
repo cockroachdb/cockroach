@@ -102,7 +102,8 @@ sinks:
   stderr:
      channels: [all,dev]
 ----
-ERROR: cannot use ALL if there are other channel names present in the list
+ERROR: yaml: unmarshal errors:
+  line 3: cannot use ALL if there are other channel names present in the list
 
 
 # Verify that the inverse of a channel list can be selected.
@@ -205,7 +206,8 @@ sinks:
    stderr:
       channels: DEV,DEV
 ----
-ERROR: duplicate channel name: "DEV"
+ERROR: yaml: unmarshal errors:
+  line 3: duplicate channel name: "DEV"
 
 # Check that supported permission formats are accepted.
 yaml
@@ -235,22 +237,26 @@ yaml
 file-defaults:
   file-permissions: foobar
 ----
-ERROR: file-permissions unparsable: foobar
+ERROR: yaml: unmarshal errors:
+  line 2: file-permissions unparsable: foobar
 
 yaml
 file-defaults:
   file-permissions: 02222
 ----
-ERROR: file-permissions out-of-range: 02222
+ERROR: yaml: unmarshal errors:
+  line 2: file-permissions out-of-range: 02222
 
 yaml
 file-defaults:
   file-permissions: -222
 ----
-ERROR: file-permissions out-of-range: -222
+ERROR: yaml: unmarshal errors:
+  line 2: file-permissions out-of-range: -222
 
 yaml
 file-defaults:
   file-permissions: 0454
 ----
-ERROR: file-permissions must not be executable: 0454
+ERROR: yaml: unmarshal errors:
+  line 2: file-permissions must not be executable: 0454

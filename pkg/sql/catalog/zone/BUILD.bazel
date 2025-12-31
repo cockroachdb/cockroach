@@ -17,8 +17,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/protoutil",
+        "//pkg/util/yamlutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
-        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

@@ -31,12 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestCloser(t *testing.T) {
@@ -274,7 +274,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 		WriteRequests int64
 		WriteBytes    int64
 	}
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &cmds); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &cmds); err != nil {
 		d.Fatalf(t, "failed to parse launch command: %v", err)
 	}
 	for _, cmd := range cmds {
@@ -382,7 +382,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 		ReadRequests int64
 		ReadBytes    int64
 	}
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &reads); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &reads); err != nil {
 		d.Fatalf(t, "failed to unmarshal reads: %v", err)
 	}
 	for _, r := range reads {
@@ -577,7 +577,7 @@ func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
 		ReadSize       int64
 		WriteSize      int64
 	}
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &workload); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &workload); err != nil {
 		d.Fatalf(t, "failed to parse workload information: %v", err)
 	}
 	if workload.ReadPercentage < 0 || workload.ReadPercentage > 100 {
@@ -715,7 +715,7 @@ func (ts *testState) IsExemptFromRateLimiting(_ context.Context, tenID roachpb.T
 
 func parseTenantIDs(t *testing.T, d *datadriven.TestData) []uint64 {
 	var tenantIDs []uint64
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &tenantIDs); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &tenantIDs); err != nil {
 		d.Fatalf(t, "failed to parse getTenants command: %v", err)
 	}
 	return tenantIDs
@@ -748,7 +748,7 @@ func parseSettings(
 	capabilties map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities,
 ) {
 	var vals SettingValues
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
 
@@ -772,7 +772,7 @@ func parseSettings(
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {
 	var ids []string
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &ids); err != nil {
+	if err := yamlutil.UnmarshalStrict([]byte(d.Input), &ids); err != nil {
 		d.Fatalf(t, "failed to parse strings: %v", err)
 	}
 	return ids

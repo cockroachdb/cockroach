@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	yaml "gopkg.in/yaml.v2"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 // maxBatchSize governs the maximum size of the kv batch comprising of ts data
@@ -156,6 +156,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 			}
 			return err
 		}
+		//lint:ignore SA1019 deprecated
 		if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
 			return err
 		}

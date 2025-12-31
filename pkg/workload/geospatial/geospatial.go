@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 type geospatial struct{}
@@ -52,6 +52,7 @@ func (geospatial) Tables() []workload.Table {
 			panic(err)
 		}
 		var result [][]interface{}
+		//lint:ignore SA1019 deprecated
 		if err := yaml.NewDecoder(r).Decode(&result); err != nil {
 			panic(err)
 		}

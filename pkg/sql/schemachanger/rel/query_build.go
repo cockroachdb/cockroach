@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
 )
 
 type queryBuilder struct {
@@ -126,7 +126,7 @@ func (p *queryBuilder) processClause(t Clause, cib *clauseIDBuilder) {
 			if !ok {
 				rErr = errors.AssertionFailedf("processClause: panic: %v", r)
 			}
-			encoded, err := yaml.Marshal(t)
+			encoded, err := yamlutil.Marshal(t)
 			if err != nil {
 				panic(errors.CombineErrors(rErr, errors.Wrap(
 					err, "failed to encode clause",

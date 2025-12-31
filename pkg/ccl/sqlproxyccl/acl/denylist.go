@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"gopkg.in/yaml.v2"
+	"go.yaml.in/yaml/v4"
 )
 
 // File represents a on-disk version of the denylist config.
@@ -33,9 +33,9 @@ var _ AccessController = &Denylist{}
 var _ yaml.Unmarshaler = &Denylist{}
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (dl *Denylist) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (dl *Denylist) UnmarshalYAML(value *yaml.Node) error {
 	var f DenylistFile
-	if err := unmarshal(&f); err != nil {
+	if err := value.Load(&f, yaml.WithUniqueKeys(false)); err != nil {
 		return err
 	}
 	dl.entries = make(map[DenyEntity]*DenyEntry)
@@ -106,9 +106,9 @@ var typeToStrMap = map[DenyType]string{
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (typ *DenyType) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (typ *DenyType) UnmarshalYAML(value *yaml.Node) error {
 	var raw string
-	err := unmarshal(&raw)
+	err := value.Load(&raw)
 	if err != nil {
 		return err
 	}

@@ -10,19 +10,19 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/datadriven"
-	"gopkg.in/yaml.v2"
 )
 
 func TestValidate(t *testing.T) {
 	datadriven.RunTest(t, "testdata/validate", func(t *testing.T, d *datadriven.TestData) string {
 		c := DefaultConfig()
-		if err := yaml.UnmarshalStrict([]byte(d.Input), &c); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(d.Input), &c); err != nil {
 			t.Fatal(err)
 		}
 		var buf bytes.Buffer
 		fmt.Fprintln(&buf, "## before validate:\n#")
-		b, err := yaml.Marshal(&c)
+		b, err := yamlutil.Marshal(&c)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func TestValidate(t *testing.T) {
 		} else {
 			clearExpectedValues(&c)
 
-			b, err := yaml.Marshal(&c)
+			b, err := yamlutil.Marshal(&c)
 			if err != nil {
 				t.Fatal(err)
 			}

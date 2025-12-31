@@ -9646,7 +9646,19 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU utilization percentage of the\n\t\tunderlying server, virtual machine, or container hosting the\n\t\tCockroachDB process. It includes CPU usage from both CockroachDB\n\t\tand non-CockroachDB processes. It also accounts for time spent\n\t\tprocessing hardware (irq) and software (softirq) interrupts, as\n\t\twell as nice time, which represents low-priority user-mode\n\t\tactivity.\n\n    A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid\n    running the CockroachDB process in an environment where the CPU\n    remains overloaded for extended periods (e.g. multiple hours). This\n    metric appears in the DB Console on the Host CPU Percent graph."
+      how_to_use: |-
+        This metric gives the CPU utilization percentage of the
+        		underlying server, virtual machine, or container hosting the
+        		CockroachDB process. It includes CPU usage from both CockroachDB
+        		and non-CockroachDB processes. It also accounts for time spent
+        		processing hardware (irq) and software (softirq) interrupts, as
+        		well as nice time, which represents low-priority user-mode
+        		activity.
+
+            A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid
+            running the CockroachDB process in an environment where the CPU
+            remains overloaded for extended periods (e.g. multiple hours). This
+            metric appears in the DB Console on the Host CPU Percent graph.
       visibility: ESSENTIAL
     - name: sys.cpu.sys.percent
       exported_name: sys_cpu_sys_percent
@@ -9656,7 +9668,12 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU usage percentage at the system\n\t\t(Linux kernel) level by the CockroachDB process only. This is\n\t\tsimilar to the Linux top command output. The metric value can be\n\t\tmore than 1 (or 100%) on multi-core systems. It is best to combine\n\t\tuser and system metrics."
+      how_to_use: |-
+        This metric gives the CPU usage percentage at the system
+        		(Linux kernel) level by the CockroachDB process only. This is
+        		similar to the Linux top command output. The metric value can be
+        		more than 1 (or 100%) on multi-core systems. It is best to combine
+        		user and system metrics.
       visibility: ESSENTIAL
     - name: sys.cpu.user.percent
       exported_name: sys_cpu_user_percent
@@ -9666,7 +9683,12 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU usage percentage at the user\n\t\tlevel by the CockroachDB process only. This is similar to the Linux\n\t\ttop command output. The metric value can be more than 1 (or 100%)\n\t\ton multi-core systems. It is best to combine user and system\n\t\tmetrics."
+      how_to_use: |-
+        This metric gives the CPU usage percentage at the user
+        		level by the CockroachDB process only. This is similar to the Linux
+        		top command output. The metric value can be more than 1 (or 100%)
+        		on multi-core systems. It is best to combine user and system
+        		metrics.
       visibility: ESSENTIAL
     - name: sys.host.disk.iopsinprogress
       exported_name: sys_host_disk_iopsinprogress
@@ -9746,7 +9768,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the amount of RAM used by the\n\t\tCockroachDB process. Persistently low values over an extended\n\t\tperiod of time suggest there is underutilized memory that can be\n\t\tput to work with adjusted settings for --cache or --max_sql_memory\n\t\tor both. Conversely, a high utilization, even if a temporary spike,\n\t\tindicates an increased risk of Out-of-memory (OOM) crash\n\t\t(particularly since the swap is generally disabled)."
+      how_to_use: |-
+        This metric gives the amount of RAM used by the
+        		CockroachDB process. Persistently low values over an extended
+        		period of time suggest there is underutilized memory that can be
+        		put to work with adjusted settings for --cache or --max_sql_memory
+        		or both. Conversely, a high utilization, even if a temporary spike,
+        		indicates an increased risk of Out-of-memory (OOM) crash
+        		(particularly since the swap is generally disabled).
       visibility: ESSENTIAL
     - name: sys.runnable.goroutines.per.cpu
       exported_name: sys_runnable_goroutines_per_cpu
@@ -11675,7 +11704,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_requests.cross_region.bytes
       exported_name: batch_requests_cross_region_bytes
-      description: "Total byte count of batch requests processed cross region when region\n\t\ttiers are configured"
+      description: |-
+        Total byte count of batch requests processed cross region when region
+        		tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11683,7 +11714,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_requests.cross_zone.bytes
       exported_name: batch_requests_cross_zone_bytes
-      description: "Total bytes of batch requests processed cross zones within the same\n\t\tregion when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Total bytes of batch requests processed cross zones within the same
+        		region when zone tiers are configured. If region tiers are not set, it is
+        		assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11699,7 +11735,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_responses.cross_region.bytes
       exported_name: batch_responses_cross_region_bytes
-      description: "Total byte count of batch responses received cross region when region\n\t\ttiers are configured"
+      description: |-
+        Total byte count of batch responses received cross region when region
+        		tiers are configured
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
@@ -11707,7 +11745,12 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: batch_responses.cross_zone.bytes
       exported_name: batch_responses_cross_zone_bytes
-      description: "Total bytes of batch responses received cross zones within the same\n\t\tregion when zone tiers are configured. If region tiers are not set, it is\n\t\tassumed to be within the same region. To ensure accurate monitoring of\n\t\tcross-zone data transfer, region and zone tiers should be consistently\n\t\tconfigured across all nodes."
+      description: |-
+        Total bytes of batch responses received cross zones within the same
+        		region when zone tiers are configured. If region tiers are not set, it is
+        		assumed to be within the same region. To ensure accurate monitoring of
+        		cross-zone data transfer, region and zone tiers should be consistently
+        		configured across all nodes.
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES

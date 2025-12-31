@@ -26,9 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestAzureFileCredential(t *testing.T) {
@@ -240,7 +240,7 @@ func writeAzureCredentialsFile(
 		AzureClientSecret: clientSecret,
 	}
 
-	bytes, err := yaml.Marshal(creds)
+	bytes, err := yamlutil.Marshal(creds)
 	if err != nil {
 		return err
 	}

@@ -40,10 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v2"
 )
 
 func TestValidIndexPartitionSetShowZones(t *testing.T) {
@@ -431,7 +431,7 @@ func (pt partitioningTest) parse() (parsed parsedPartitioningTest, _ error) {
 		}
 
 		var parsedConstraints zonepb.ConstraintsList
-		if err := yaml.UnmarshalStrict([]byte("["+constraints+"]"), &parsedConstraints); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte("["+constraints+"]"), &parsedConstraints); err != nil {
 			return parsed, errors.Wrapf(err, "parsing constraints: %s", constraints)
 		}
 		subzone.Config.Constraints = parsedConstraints.Constraints

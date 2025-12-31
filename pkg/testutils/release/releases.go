@@ -11,8 +11,8 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/version"
-	"gopkg.in/yaml.v2"
 )
 
 // Series contains information about a cockroachdb release
@@ -43,7 +43,7 @@ var (
 
 func parseReleases() (map[string]Series, error) {
 	var result map[string]Series
-	err := yaml.UnmarshalStrict(rawReleases, &result)
+	err := yamlutil.UnmarshalStrict(rawReleases, &result)
 	if err != nil {
 		return nil, fmt.Errorf("invalid cockroach_releases.yaml: %w", err)
 	}

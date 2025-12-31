@@ -5,30 +5,27 @@
 
 package yamlutil
 
-import (
-	"bytes"
+import "go.yaml.in/yaml/v4"
 
-	"go.yaml.in/yaml/v4"
-)
-
-// Marshal is like yaml.v3.Marshal but indents to 2 spaces.
-func Marshal(in interface{}) ([]byte, error) {
-	var buf bytes.Buffer
-	e := yaml.NewEncoder(&buf)
-	e.SetIndent(2)
-	if err := e.Encode(in); err != nil {
-		return nil, err
-	}
-	if err := e.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+var marshalOpts = []yaml.Option{
+	yaml.WithIndent(2),
+	yaml.WithCompactSeqIndent(true),
+	yaml.WithLineWidth(-1),
 }
 
-// UnmarshalStrict is like yaml.v3.Unmarshal but fails if unknown fields are
-// encountered.
+// Marshal encodes a value to YAML using 2 space indents, compact sequence
+// indentation, and no line wrapping.
+func Marshal(in interface{}) ([]byte, error) {
+	return yaml.Dump(in, marshalOpts...)
+}
+
+var unmarshalStrictOpts = []yaml.Option{
+	yaml.WithUniqueKeys(false),
+	yaml.WithKnownFields(),
+}
+
+// UnmarshalStrict decodes a YAML document, returning an error if the input
+// contains unknown fields.
 func UnmarshalStrict(in []byte, out interface{}) error {
-	d := yaml.NewDecoder(bytes.NewReader(in))
-	d.KnownFields(true)
-	return d.Decode(out)
+	return yaml.Load(in, out, unmarshalStrictOpts...)
 }

@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestZoneConfigValidate(t *testing.T) {
@@ -832,20 +832,20 @@ lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
 			original.Constraints = tc.constraints
 			original.VoterConstraints = tc.voterConstraints
 			original.LeasePreferences = tc.leasePreferences
-			body, err := yaml.Marshal(original)
+			body, err := yamlutil.Marshal(original)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if string(body) != tc.expected {
-				t.Fatalf("yaml.Marshal(%+v)\ngot:\n%s\nwant:\n%s", original, body, tc.expected)
+				t.Fatalf("yamlutil.Marshal(%+v)\ngot:\n%s\nwant:\n%s", original, body, tc.expected)
 			}
 
 			var unmarshaled ZoneConfig
-			if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
+			if err := yamlutil.UnmarshalStrict(body, &unmarshaled); err != nil {
 				t.Fatal(err)
 			}
 			if !unmarshaled.Equal(&original) {
-				t.Errorf("yaml.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
+				t.Errorf("yamlutil.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
 			}
 		})
 	}
@@ -922,7 +922,7 @@ func TestExperimentalLeasePreferencesYAML(t *testing.T) {
 
 	for _, tc := range testCases {
 		zone := originalZone
-		if err := yaml.UnmarshalStrict([]byte(tc.input), &zone); err != nil {
+		if err := yamlutil.UnmarshalStrict([]byte(tc.input), &zone); err != nil {
 			t.Fatal(err)
 		}
 		if !reflect.DeepEqual(zone.LeasePreferences, tc.expected) {
@@ -957,7 +957,7 @@ func TestConstraintsListYAML(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.input, func(t *testing.T) {
 			var constraints ConstraintsList
-			err := yaml.UnmarshalStrict([]byte(tc.input), &constraints)
+			err := yamlutil.UnmarshalStrict([]byte(tc.input), &constraints)
 			if err == nil && tc.expectErr {
 				t.Errorf("expected error, but got constraints %+v", constraints)
 			}
