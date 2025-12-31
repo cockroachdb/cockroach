@@ -191,15 +191,21 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
 	s.input.Start(ctx)
 
-	earlyExit, err := s.mainLoop(ctx, output)
-	if err != nil {
-		execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
-	} else if !earlyExit {
-		execinfra.SendTraceData(ctx, s.FlowCtx, output)
-		s.input.ConsumerClosed()
-		output.ProducerDone()
-	}
-	s.MoveToDraining(nil /* err */)
+	// Use defer to ensure cleanup happens even on panic (fix for issue #160337).
+	var earlyExit bool
+	var err error
+	defer func() {
+		if err != nil {
+			execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
+		} else if !earlyExit {
+			execinfra.SendTraceData(ctx, s.FlowCtx, output)
+			s.input.ConsumerClosed()
+			output.ProducerDone()
+		}
+		s.MoveToDraining(nil /* err */)
+	}()
+
+	earlyExit, err = s.mainLoop(ctx, output)
 }
 
 // Close is part of the execinfra.Processor interface.
@@ -251,6 +257,11 @@ func (s *sampleAggregator) mainLoop(
 	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
+
+		// Testing knob to inject panics or other test behavior
+		if row != nil && s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook != nil {
+			s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook()
+		}
 		if meta != nil {
 			if meta.SamplerProgress != nil {
 				rowsProcessed += meta.SamplerProgress.RowsProcessed
