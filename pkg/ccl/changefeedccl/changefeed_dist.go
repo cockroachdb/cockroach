@@ -326,7 +326,7 @@ func startDistChangefeed(
 		// prevent a race between the connection that started the changefeed
 		// closing (which closes the current planner's monitor) and changefeed
 		// DistSQL flow being cleaned up.
-		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
+		planCtx.OverridePlannerExecMon = execCfg.DistSQLSrv.ChangefeedMonitor
 		// Copy the eval.Context, as dsp.Run() might change it.
 		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
 		// p is the physical plan, recv is the DistSQLReceiver.

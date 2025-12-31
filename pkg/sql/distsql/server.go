@@ -79,12 +79,9 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: mon.MakeName("distsql"),
-			// Note that we don't use 'sql.mem.distsql.*' metrics here since
-			// that would double count them with the 'flow' monitor in
-			// setupFlow.
-			CurCount:   nil,
-			MaxHist:    nil,
+			Name:       mon.MakeName("distsql"),
+			CurCount:   cfg.Metrics.CurBytesCount,
+			MaxHist:    cfg.Metrics.MaxBytesHist,
 			Settings:   cfg.Settings,
 			LongLiving: true,
 		}),
@@ -261,8 +258,6 @@ func (ds *ServerImpl) setupFlow(
 
 	monitor = mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("flow").WithUUID(req.Flow.FlowID.Short()),
-		CurCount: ds.Metrics.CurBytesCount,
-		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
@@ -490,7 +485,6 @@ func (ds *ServerImpl) newFlowContext(
 	localState LocalState,
 	isGatewayNode bool,
 ) execinfra.FlowCtx {
-	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,

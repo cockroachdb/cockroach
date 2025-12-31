@@ -543,8 +543,13 @@ type fakePlannerWithMonitor struct {
 	monitor *mon.BytesMonitor
 }
 
-// Mon is part of the Planner interface.
-func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+// TxnMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) TxnMon() *mon.BytesMonitor {
+	return p.monitor
+}
+
+// ExecMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 	return p.monitor
 }
 

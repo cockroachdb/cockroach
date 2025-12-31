@@ -138,9 +138,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	testCases := []struct {
 		desc string
 		spec *execinfrapb.ProcessorSpec
-		// spillingSupported, if set to true, indicates that disk spilling for the
-		// operator is supported and we expect success only.
-		spillingSupported bool
 	}{
 		{
 			desc: "SORTER",
@@ -157,7 +154,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				},
 				ResultTypes: oneInput[0].ColumnTypes,
 			},
-			spillingSupported: true,
 		},
 		{
 			desc: "HASH AGGREGATOR",
@@ -189,16 +185,14 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 				},
 				ResultTypes: append(twoInputs[0].ColumnTypes, twoInputs[1].ColumnTypes...),
 			},
-			spillingSupported: true,
 		},
 	}
 
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithFixedCapacity(typs, 1 /* size */)
 	for _, tc := range testCases {
-		for _, success := range []bool{true, false} {
-			expectNoMemoryError := success || tc.spillingSupported
-			t.Run(fmt.Sprintf("%s-success-expected-%t", tc.desc, expectNoMemoryError), func(t *testing.T) {
+		for _, forceDiskSpill := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s-force-spilling-%t", tc.desc, forceDiskSpill), func(t *testing.T) {
 				sources := []colexecop.Operator{colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)}
 				if len(tc.spec.Input) > 1 {
 					sources = append(sources, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
@@ -208,19 +202,8 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					Settings: st,
 				})
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
-				if expectNoMemoryError {
-					memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
-					if !success {
-						// These are the cases that we expect in-memory operators to hit a
-						// memory error. To enable testing this case, force disk spills. We
-						// do this in this if branch to allow the external algorithms to use
-						// an unlimited monitor.
-						flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
-					}
-				} else {
-					memMon.Start(ctx, nil, mon.NewStandaloneBudget(1))
-					flowCtx.Cfg.TestingKnobs.ForceDiskSpill = true
-				}
+				memMon.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
+				flowCtx.Cfg.TestingKnobs.ForceDiskSpill = forceDiskSpill
 				defer memMon.Stop(ctx)
 				acc := memMon.MakeBoundAccount()
 				defer acc.Close(ctx)
@@ -250,11 +233,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						colexecop.NextNoMeta(result.Root)
 					})
 				}
-				if expectNoMemoryError {
-					require.NoError(t, err, "expected success, found: ", err)
-				} else {
-					require.Error(t, err, "expected memory error, found nothing")
-				}
+				require.NoError(t, err, "expected success, found: ", err)
 			})
 		}
 	}
