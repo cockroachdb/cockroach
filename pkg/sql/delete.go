@@ -77,7 +77,7 @@ func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		params.p.ExecMon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))

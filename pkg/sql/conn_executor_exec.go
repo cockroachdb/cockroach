@@ -291,7 +291,7 @@ func (ex *connExecutor) execPortal(
 	defer func() {
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
-				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(_ context.Context) {
+				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(context.Context) {
 					ex.exhaustPortal(portal.Name)
 				})
 				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
@@ -1208,7 +1208,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if !portal.isPausable() {
 			f()
 		} else if !portal.pauseInfo.execStmtInOpenState.cleanup.isComplete {
-			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(func(_ context.Context) {
+			portal.pauseInfo.execStmtInOpenState.cleanup.appendFunc(func(context.Context) {
 				f()
 				// Some cleanup steps modify the retErr and retPayload. We need to
 				// ensure that cleanup after them can see the update.
@@ -2744,15 +2744,31 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
+		// This is ugly, but we need to override the execMon to the specific one
+		// owned by the pausable portals.
+		planner.execMon = ex.ppExecMon
+	} else {
+		// Guarantee that we use the global execMon in case we had some pausable
+		// portal executions in between.
+		planner.execMon = ex.execMon
+		planner.execMon.StartNoReserved(ctx, planner.txnMon)
+	}
 	defer func() {
 		if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(context.Context) {
+					// Restore the original execMon since we overrode it.
+					planner.execMon = ex.execMon
+				})
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
 			if retErr != nil || res.Err() != nil {
 				ppInfo.resumableFlow.cleanup.run(ctx)
 				ppInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			}
+		} else {
+			planner.execMon.Stop(ctx)
 		}
 	}()
 
@@ -2834,6 +2850,14 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 					}
 					// This stmt is not supported via the pausable portals model
 					// - set it back to an un-pausable (normal) portal.
+					//
+					// But before we do that, we need to set the right execMon.
+					// Note that we might have made reservations against the
+					// pausable portal execMon when creating the logical plan,
+					// and that's ok - those will be released when the plan is
+					// closed in a defer below.
+					planner.execMon = ex.execMon
+					planner.execMon.StartNoReserved(ctx, planner.txnMon)
 					ex.disablePortalPausability(planner.pausablePortal)
 					planner.pausablePortal = nil
 					err = res.RevokePortalPausability()
@@ -2846,9 +2870,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				} else {
 					ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
 					defer func() {
-						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-							ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-						})
+						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(
+							ppInfo.dispatchToExecutionEngine.planTop.close,
+						)
 					}()
 				}
 			} else {
@@ -3496,6 +3520,10 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	now := ex.server.cfg.Clock.PhysicalTime()
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil, now)
+	// Note that here we don't use the txnMon (we use its parent) given that
+	// we're in the NoTxn txn state, so the txnMon hasn't been started yet.
+	ex.execMon.StartNoReserved(ctx, ex.sessionMon)
+	defer ex.execMon.Stop(ctx)
 	var modes tree.TransactionModes
 	if s != nil {
 		modes = s.Modes
