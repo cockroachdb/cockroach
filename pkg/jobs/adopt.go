@@ -95,6 +95,11 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
+
+	timeout := claimQueryTimeout.Get(&r.settings.SV)
+	ctx, cancel := context.WithDeadlineCause(ctx, timeutil.Now().Add(timeout), errors.New("claim jobs transaction took too long"))
+	defer cancel()
+
 	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
