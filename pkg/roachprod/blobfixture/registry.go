@@ -1,5 +1,3 @@
-// Copyright 2025 The Cockroach Authors.
-//
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
@@ -183,6 +181,36 @@ func (r *Registry) URI(path string) url.URL {
 	copy := r.uri
 	copy.Path = path
 	return copy
+}
+
+// OpenFixtureMeta opens an existing fixture metadata for modification.
+func (r *Registry) OpenFixtureMeta(
+	ctx context.Context, logger *logger.Logger, metadata FixtureMetadata,
+) (ScratchHandle, error) {
+	exists, err := r.checkFixtureExists(ctx, metadata)
+	if err != nil {
+		return ScratchHandle{}, err
+	}
+	if !exists {
+		return ScratchHandle{}, errors.Errorf("fixture metadata %q does not exist", metadata.MetadataPath)
+	}
+	return ScratchHandle{
+		registry: r,
+		logger:   logger,
+		metadata: metadata,
+	}, nil
+}
+
+// checkFixtureExists checks if the fixture metadata file exists.
+func (r *Registry) checkFixtureExists(ctx context.Context, metadata FixtureMetadata) (bool, error) {
+	_, _, err := r.storage.ReadFile(ctx, metadata.MetadataPath, cloud.ReadOptions{})
+	if err != nil {
+		if errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "failed to check existence of fixture metadata %q", metadata.MetadataPath)
+	}
+	return true, nil
 }
 
 // maybeReadFile attempts to read a file and returns its contents. Returns nil bytes

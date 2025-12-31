@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -266,6 +267,7 @@ func registerRestore(r registry.Registry) {
 						if status == string(jobs.StateSucceeded) {
 							isJobComplete = true
 						} else if status == string(jobs.StateFailed) || status == string(jobs.StateCanceled) {
+							rd.flagFixturePreventGC(ctx)
 							t.Fatalf("job unexpectedly found in %s state", status)
 						}
 					}
@@ -873,6 +875,9 @@ func (rd *restoreDriver) run(ctx context.Context, target string) error {
 	_, err = conn.ExecContext(
 		ctx, rd.restoreCmd(ctx, target, "WITH unsafe_restore_incompatible_version"),
 	)
+	if err != nil {
+		rd.flagFixturePreventGC(ctx)
+	}
 	return err
 }
 
@@ -945,7 +950,26 @@ func (rd *restoreDriver) maybeValidateFingerprint(ctx context.Context) {
 	fingerprint := fingerprintDatabase(
 		rd.t, conn, rd.sp.backup.fixture.DatabaseName(), "", /* aost */
 	)
-	require.Equal(rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch after restore")
+	if !assert.Equal(
+		rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch before restore",
+	) {
+		rd.flagFixturePreventGC(ctx)
+		rd.t.FailNow()
+	}
+}
+
+// flagFixturePreventGC flags the fixture being restored to prevent garbage
+// collection. This is useful when a test fails and we want to preserve the
+// backup for investigation. This is a best-effort operation.
+func (rd *restoreDriver) flagFixturePreventGC(ctx context.Context) {
+	fixture, err := OpenFixtureMeta(rd.t, ctx, rd.sp.backup.cloud, rd.fixtureMetadata)
+	if err != nil {
+		rd.t.L().ErrorfCtx(ctx, "failed to open fixture to prevent GC: %v", err)
+	}
+	err = fixture.PreventGC(ctx)
+	if err != nil {
+		rd.t.L().ErrorfCtx(ctx, "failed to flag fixture to prevent GC: %v", err)
+	}
 }
 
 // exportToRoachperf exports a single perf metric for the given test to roachperf.

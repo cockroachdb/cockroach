@@ -566,6 +566,14 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 	return registry
 }
 
+// OpenFixtureMeta returns a handle to an existing fixture metadata.
+func OpenFixtureMeta(
+	t test.Test, ctx context.Context, cloud spec.Cloud, metadata blobfixture.FixtureMetadata,
+) (blobfixture.ScratchHandle, error) {
+	registry := GetFixtureRegistry(ctx, t, cloud)
+	return registry.OpenFixtureMeta(ctx, t.L(), metadata)
+}
+
 func registerBackupFixtures(r registry.Registry) {
 	specs := []backupFixtureSpecs{
 		{
