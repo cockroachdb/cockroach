@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package sqlwriter
 
 import (
 	"context"
@@ -16,36 +16,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type sqlRowReader interface {
+type RowReader interface {
 	// ReadRows reads the rows from the table using the provided transaction. A row
 	// will only be present in the result set if it exists. The index of the row in
 	// the input is the key to the output map.
 	//
 	// E.g. result[i] and rows[i] are the same row.
-	ReadRows(ctx context.Context, rows []tree.Datums) (map[int]priorRow, error)
+	ReadRows(ctx context.Context, rows []tree.Datums) (map[int]PriorRow, error)
 }
 
-// priorRow is a row returned by the SQL reader. It contains the rows local
+// PriorRow is a row returned by the SQL reader. It contains the rows local
 // value.
-type priorRow struct {
-	// The row is the local value of the row. It is in the correct order to use
+type PriorRow struct {
+	// The Row is the local value of the Row. It is in the correct order to use
 	// with the crud insert/update/delete statements that are condition based on
-	// the previous row values.
-	row tree.Datums
-	// logicalTimestamp is the origin timestamp if it exists or the mvcc
+	// the previous Row values.
+	Row tree.Datums
+	// LogicalTimestamp is the origin timestamp if it exists or the mvcc
 	// timestamp if the row was generated localy.
-	logicalTimestamp hlc.Timestamp
-	// isLocal is true if the row was generated locally. This implies the logical
+	LogicalTimestamp hlc.Timestamp
+	// IsLocal is true if the row was generated locally. This implies the logical
 	// timestamp is the rows mvcc timestamp.
-	isLocal bool
+	IsLocal bool
 }
 
-func newSQLRowReader(
+func NewRowReader(
 	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
-) (sqlRowReader, error) {
+) (RowReader, error) {
 	hasArrayPrimaryKey := false
-	for _, col := range getColumnSchema(table) {
-		if col.isPrimaryKey && col.columnType.Family() == types.ArrayFamily {
+	for _, col := range GetColumnSchema(table) {
+		if col.IsPrimaryKey && col.ColumnType.Family() == types.ArrayFamily {
 			hasArrayPrimaryKey = true
 			break
 		}
@@ -67,16 +67,16 @@ type bulkRowReader struct {
 
 	// keyColumnIndices is the index of the datums that are part of the primary key.
 	keyColumnIndices []int
-	columns          []columnSchema
+	columns          []ColumnSchema
 }
 
 func newBulkRowReader(
 	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
 ) (*bulkRowReader, error) {
-	cols := getColumnSchema(table)
+	cols := GetColumnSchema(table)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
-		if col.isPrimaryKey {
+		if col.IsPrimaryKey {
 			keyColumns = append(keyColumns, i)
 		}
 	}
@@ -100,7 +100,7 @@ func newBulkRowReader(
 
 func (r *bulkRowReader) ReadRows(
 	ctx context.Context, rows []tree.Datums,
-) (map[int]priorRow, error) {
+) (map[int]PriorRow, error) {
 	// TODO(jeffswenson): optimize allocations. It may require a change to the
 	// API. For now, this probably isn't a performance bottleneck because:
 	// 1. Many of the allocations are one per batch instead of one per row.
@@ -113,7 +113,7 @@ func (r *bulkRowReader) ReadRows(
 
 	params := make([]tree.Datum, 0, len(r.keyColumnIndices))
 	for _, index := range r.keyColumnIndices {
-		array := tree.NewDArray(r.columns[index].columnType)
+		array := tree.NewDArray(r.columns[index].ColumnType)
 		for _, row := range rows {
 			if err := array.Append(row[index]); err != nil {
 				return nil, err
@@ -130,7 +130,7 @@ func (r *bulkRowReader) ReadRows(
 		return nil, err
 	}
 
-	result := make(map[int]priorRow, len(rows))
+	result := make(map[int]PriorRow, len(rows))
 	for _, row := range rows {
 		// The extra columns are:
 		// 0. The row index (used to match input rows to refreshed rows).
@@ -163,10 +163,10 @@ func (r *bulkRowReader) ReadRows(
 			return nil, err
 		}
 
-		result[int(*rowIndex)-1] = priorRow{
-			row:              row[prefixColumns:],
-			logicalTimestamp: logicalTimestamp,
-			isLocal:          isLocal,
+		result[int(*rowIndex)-1] = PriorRow{
+			Row:              row[prefixColumns:],
+			LogicalTimestamp: logicalTimestamp,
+			IsLocal:          isLocal,
 		}
 	}
 
@@ -180,16 +180,16 @@ type pointReadRowReader struct {
 
 	// keyColumnIndices is the index of the datums that are part of the primary key.
 	keyColumnIndices []int
-	columns          []columnSchema
+	columns          []ColumnSchema
 }
 
 func newPointRowReader(
 	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
 ) (*pointReadRowReader, error) {
-	cols := getColumnSchema(table)
+	cols := GetColumnSchema(table)
 	keyColumns := make([]int, 0, len(cols))
 	for i, col := range cols {
-		if col.isPrimaryKey {
+		if col.IsPrimaryKey {
 			keyColumns = append(keyColumns, i)
 		}
 	}
@@ -213,12 +213,12 @@ func newPointRowReader(
 
 func (p *pointReadRowReader) ReadRows(
 	ctx context.Context, rows []tree.Datums,
-) (map[int]priorRow, error) {
+) (map[int]PriorRow, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
 
-	result := make(map[int]priorRow, len(rows))
+	result := make(map[int]PriorRow, len(rows))
 
 	for i, row := range rows {
 		params := make([]tree.Datum, 0, len(p.keyColumnIndices))
@@ -265,10 +265,10 @@ func (p *pointReadRowReader) ReadRows(
 			return nil, err
 		}
 
-		result[i] = priorRow{
-			row:              resultRow[prefixColumns:],
-			logicalTimestamp: logicalTimestamp,
-			isLocal:          isLocal,
+		result[i] = PriorRow{
+			Row:              resultRow[prefixColumns:],
+			LogicalTimestamp: logicalTimestamp,
+			IsLocal:          isLocal,
 		}
 	}
 

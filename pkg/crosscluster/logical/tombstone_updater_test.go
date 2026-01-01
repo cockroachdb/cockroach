@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -147,18 +148,19 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 	tu := newTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
 	defer tu.ReleaseLeases(ctx)
 
-	columnSchemas := getColumnSchema(desc)
+	columnSchemas := sqlwriter.GetColumnSchema(desc)
 	cols := make([]catalog.Column, len(columnSchemas))
 	for i, cs := range columnSchemas {
-		cols[i] = cs.column
+		cols[i] = cs.Column
 	}
 
 	config := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	session := newInternalSession(t, s)
+	session, err := sqlwriter.NewInternalSession(ctx, s.InternalDB().(isql.DB), sd, s.ClusterSettings())
+	require.NoError(t, err)
 	defer session.Close(ctx)
 
-	writer, err := newSQLRowWriter(ctx, desc, session)
+	writer, err := sqlwriter.NewRowWriter(ctx, desc, session)
 	require.NoError(t, err)
 
 	for i := 0; i < 10; i++ {
