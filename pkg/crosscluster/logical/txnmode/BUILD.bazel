@@ -8,8 +8,4 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/repstream/streampb",
-        "//pkg/util/hlc",
-    ],
 )
