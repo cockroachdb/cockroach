@@ -52,6 +52,7 @@ go_library(
 go_test(
     name = "cdcevent_test",
     srcs = [
+        "event_bench_test.go",
         "event_test.go",
         "main_test.go",
         "projection_test.go",
@@ -90,6 +91,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
