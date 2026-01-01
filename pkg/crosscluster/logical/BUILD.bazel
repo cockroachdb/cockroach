@@ -148,6 +148,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/crosscluster",
         "//pkg/crosscluster/ldrrandgen",
+        "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/crosscluster/streamclient",
         "//pkg/crosscluster/streamclient/randclient",
