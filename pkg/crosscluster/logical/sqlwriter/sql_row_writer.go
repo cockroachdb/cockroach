@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package sqlwriter
 
 import (
 	"context"
@@ -16,14 +16,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// errStalePreviousValue is returned if the row supplied to UpdateRow,
+// ErrStalePreviousValue is returned if the row supplied to UpdateRow,
 // UpdateTombstone, or DeleteRow does not match the value in the local
 // database.
-var errStalePreviousValue = errors.New("stale previous value")
+var ErrStalePreviousValue = errors.New("stale previous value")
 
-// sqlRowWriter is configured to write rows to a specific table and descriptor
+// RowWriter is configured to write rows to a specific table and descriptor
 // version.
-type sqlRowWriter struct {
+type RowWriter struct {
 	session isql.Session
 
 	insert isql.PreparedStatement
@@ -34,9 +34,7 @@ type sqlRowWriter struct {
 	columns       []string
 }
 
-func (s *sqlRowWriter) setOriginTimestamp(
-	ctx context.Context, originTimestamp hlc.Timestamp,
-) error {
+func (s *RowWriter) setOriginTimestamp(ctx context.Context, originTimestamp hlc.Timestamp) error {
 	return s.session.ModifySession(ctx, func(m sessionmutator.SessionDataMutator) {
 		m.Data.OriginTimestampForLogicalDataReplication = originTimestamp
 	})
@@ -44,7 +42,7 @@ func (s *sqlRowWriter) setOriginTimestamp(
 
 // DeleteRow deletes a row from the table. It returns errStalePreviousValue
 // if the oldRow argument does not match the value in the local database.
-func (s *sqlRowWriter) DeleteRow(
+func (s *RowWriter) DeleteRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
@@ -60,14 +58,14 @@ func (s *sqlRowWriter) DeleteRow(
 		return errors.Wrap(err, "deleting row")
 	}
 	if rowsAffected != 1 {
-		return errStalePreviousValue
+		return ErrStalePreviousValue
 	}
 	return nil
 }
 
 // InsertRow inserts a row into the table. It will return an error if the row
 // already exists.
-func (s *sqlRowWriter) InsertRow(
+func (s *RowWriter) InsertRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
@@ -90,7 +88,7 @@ func (s *sqlRowWriter) InsertRow(
 
 // UpdateRow updates a row in the table. It returns errStalePreviousValue
 // if the oldRow argument does not match the value in the local database.
-func (s *sqlRowWriter) UpdateRow(
+func (s *RowWriter) UpdateRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums, newRow tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
@@ -107,18 +105,18 @@ func (s *sqlRowWriter) UpdateRow(
 		return errors.Wrap(err, "updating row")
 	}
 	if rowsAffected != 1 {
-		return errStalePreviousValue
+		return ErrStalePreviousValue
 	}
 	return err
 }
 
-func newSQLRowWriter(
+func NewRowWriter(
 	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
-) (*sqlRowWriter, error) {
-	columnsToDecode := getColumnSchema(table)
+) (*RowWriter, error) {
+	columnsToDecode := GetColumnSchema(table)
 	columns := make([]string, len(columnsToDecode))
 	for i, col := range columnsToDecode {
-		columns[i] = col.column.GetName()
+		columns[i] = col.Column.GetName()
 	}
 
 	insert, insertParamTypes, err := newInsertStatement(table)
@@ -148,7 +146,7 @@ func newSQLRowWriter(
 		return nil, errors.Wrap(err, "unable to prepare delete statement")
 	}
 
-	return &sqlRowWriter{
+	return &RowWriter{
 		session: session,
 		insert:  preparedInsert,
 		update:  preparedUpdate,
