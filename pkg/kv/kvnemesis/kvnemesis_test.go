@@ -270,7 +270,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	reg := fs.NewStickyRegistry()
+	reg := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
@@ -583,6 +583,47 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 	})
 }
 
+func TestKVNemesisMultiNode_Crash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		// assertRaftApply is disabled because the asserter assumes no node
+		// restarts (see asserter.go:29).
+		//
+		// Crashing nodes violates this assumption since node crashes differ
+		// from graceful restarts (abrupt stop vs a graceful shutdown).
+		//
+		// There's a race condition in crash simulation where
+		// CrashNode/CrashClone() can run while the server is still active, so
+		// WAL syncs and Raft applies can complete between the snapshot and
+		// stopServerLocked(). When assertRaftApply is true, the Asserter may
+		// record applies that aren't in the crash snapshot; after restart, the
+		// replica recovers from an earlier snapshot and re-applies, causing the
+		// Asserter to flag a false regression. This is a bug in the crash
+		// simulation code, not a bug in the database logic.
+		// TODO(dodeca12): resolve crash simulation bug for kvnemesis crashes for
+		// when assertRaftApply is true.
+		assertRaftApply: false,
+		mode:            Liveness,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		},
+	},
+	)
+}
+
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -697,7 +738,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, Restarter: tc}
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, ServerController: tc}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
