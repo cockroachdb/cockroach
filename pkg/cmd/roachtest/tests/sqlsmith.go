@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
@@ -184,11 +185,16 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}()
 
-					stmt = smither.Generate()
-					if stmt == "" {
-						// If an empty statement is generated, then ignore it.
-						done <- errors.Newf("Empty statement returned by generate")
-						return nil
+					for {
+						stmt = smither.Generate()
+						if stmt == "" {
+							// If an empty statement is generated, then ignore it.
+							done <- errors.Newf("Empty statement returned by generate")
+							return nil
+						}
+						if !expectedToTimeout(t, stmt) {
+							break
+						}
 					}
 
 					// TODO(yuzefovich): investigate why using the context with
@@ -196,10 +202,10 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
-						stmt = "EXPLAIN " + stmt
-						_, err = conn.Exec(stmt)
+						explainStmt := "EXPLAIN " + stmt
+						_, err = conn.Exec(explainStmt)
 						if err == nil {
-							logStmt(stmt)
+							logStmt(explainStmt)
 						}
 					}
 					done <- err
@@ -327,6 +333,27 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 	settings["multi-region"] = sqlsmith.Settings["multi-region"]
 	register("tpcc", "ddl-nodrop")
 	register("seed-multi-region", "multi-region")
+}
+
+// expectedToTimeout returns whether the given stmt is likely to timeout due to
+// expected edge case behavior.
+func expectedToTimeout(t test.Test, stmt string) bool {
+	// The only known scenario right now (see #157971) is when we have runtime
+	// assertions enabled AND the query uses a system column that requires MVCC
+	// decoding.
+	if !roachtestutil.UsingRuntimeAssertions(t) {
+		return false
+	}
+	for _, sysCol := range []string{
+		"crdb_internal_mvcc_timestamp",
+		"crdb_internal_origin_id",
+		"crdb_internal_origin_timestamp",
+	} {
+		if strings.Contains(stmt, sysCol) {
+			return true
+		}
+	}
+	return false
 }
 
 // setupMultiRegionDatabase is used to set up a multi-region database.
