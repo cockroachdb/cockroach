@@ -665,7 +665,7 @@ func (ex *connExecutor) execDescribe(
 			}
 			// Sending a nil formatCodes is equivalent to sending all text format
 			// codes.
-			res.SetPortalOutput(ctx, cursor.Rows.Types(), nil /* formatCodes */)
+			res.SetPortalOutput(ctx, cursor.Rows.Types(), nil /* formatCodes */, false /* skipRowDescription */)
 			return nil, nil
 		}
 
@@ -676,7 +676,15 @@ func (ex *connExecutor) execDescribe(
 		if stmtHasNoData(ast, portal.Stmt.Columns) {
 			res.SetNoDataRowDescription()
 		} else {
-			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
+			skipRowDescription := false
+			if _, isCallStmt := ast.(*tree.Call); isCallStmt {
+				if ex.extraTxnState.storedProcTxnState.callRowDescSent {
+					skipRowDescription = true
+				} else {
+					ex.extraTxnState.storedProcTxnState.callRowDescSent = true
+				}
+			}
+			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats, skipRowDescription)
 		}
 	default:
 		return retErr(pgerror.Newf(

@@ -1272,7 +1272,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					))
 				}
 			}
-			b.checkDuplicateTargets(target, "CALL")
+			b.checkDuplicateTargets(target, tree.CallStmtTag)
 			if len(target) == 0 {
 				// When there is no INTO target, build the nested procedure call into a
 				// body statement that is only executed for its side effects.

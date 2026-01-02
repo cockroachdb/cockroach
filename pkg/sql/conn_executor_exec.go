@@ -3781,7 +3781,7 @@ func (ex *connExecutor) runObserverStatement(
 func (ex *connExecutor) runShowSyntax(
 	ctx context.Context, stmt string, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ShowSyntaxColumns)
+	res.SetColumns(ctx, colinfo.ShowSyntaxColumns, false /* skipRowDescription */)
 	var commErr error
 	parser.RunShowSyntax(ctx, stmt,
 		func(ctx context.Context, field, msg string) {
@@ -3800,7 +3800,7 @@ func (ex *connExecutor) runShowSyntax(
 func (ex *connExecutor) runShowTransactionState(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}}, false /* skipWriteRowDesc */)
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
@@ -3863,7 +3863,7 @@ func (ex *connExecutor) runShowTransferState(
 	for i := 0; i < len(colNames); i++ {
 		cols[i] = colinfo.ResultColumn{Name: colNames[i], Typ: types.String}
 	}
-	res.SetColumns(ctx, cols)
+	res.SetColumns(ctx, cols, false /* skipRowDescription */)
 
 	var sessionState, sessionRevivalToken tree.Datum
 	var row tree.Datums
@@ -3897,7 +3897,7 @@ func (ex *connExecutor) runShowTransferState(
 func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
+	res.SetColumns(ctx, colinfo.ShowCompletionsColumns, false /* skipWriteRowDesc */)
 	log.Dev.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
 	sd := ex.planner.SessionData()
 	override := sessiondata.InternalExecutorOverride{
@@ -3964,7 +3964,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	for i, n := range stmt.Columns {
 		resColumns[i] = colinfo.ResultColumn{Name: string(n), Typ: types.String}
 	}
-	res.SetColumns(ctx, resColumns)
+	res.SetColumns(ctx, resColumns, false /* skipRowDescription */)
 
 	phaseTimes := ex.statsCollector.PreviousPhaseTimes()
 

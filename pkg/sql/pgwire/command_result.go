@@ -343,10 +343,12 @@ func (r *commandResult) SendNotice(
 }
 
 // SetColumns is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+func (r *commandResult) SetColumns(
+	ctx context.Context, cols colinfo.ResultColumns, skipWriteRowDesc bool,
+) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
-	if r.descOpt == sql.NeedRowDesc {
+	if r.descOpt == sql.NeedRowDesc && !skipWriteRowDesc {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
 	}
 	r.types = make([]*types.T, len(cols))
@@ -378,11 +380,16 @@ func (r *commandResult) SetPrepStmtOutput(ctx context.Context, cols colinfo.Resu
 
 // SetPortalOutput is part of the sql.DescribeResult interface.
 func (r *commandResult) SetPortalOutput(
-	ctx context.Context, cols colinfo.ResultColumns, formatCodes []pgwirebase.FormatCode,
+	ctx context.Context,
+	cols colinfo.ResultColumns,
+	fmtCode []pgwirebase.FormatCode,
+	skipRowDescription bool,
 ) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
-	_ /* err */ = r.conn.writeRowDescription(ctx, cols, formatCodes, &r.conn.writerState.buf)
+	if !skipRowDescription {
+		_ /* err */ = r.conn.writeRowDescription(ctx, cols, fmtCode, &r.conn.writerState.buf)
+	}
 }
 
 // SendCopyOut is part of the sql.CopyOutResult interface.
