@@ -25,15 +25,47 @@ SELECT 1;
 END;
 ----
 
+exec-sql db=max_txn_stmts_test app-name=exec
+CREATE FUNCTION random_int()
+RETURNS INT
+LANGUAGE SQL
+AS $$
+    SELECT floor(random() * 100)::INT;
+    SELECT floor(random() * 100)::INT;
+$$
+VOLATILE;
+----
+
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT random_int();
+END;
+----
+
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT random_int();
+SELECT random_int();
+END;
+----
+
 show-stats db=max_txn_stmts_test app-name=exec
 ----
+{"count": "1", "fingerprint_id": "2f42d58f4511d411", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "802168c3c31063ce"}
+{"count": "2", "fingerprint_id": "9c68d1af291596d5", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT floor(random() * _)::INT8", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT floor(random() ...)...", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1ab6df6aa396addd"}
+{"count": "4", "fingerprint_id": "9c68d1af291596d5", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT floor(random() * _)::INT8", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT floor(random() ...)...", "svc_lat_not_zero": true, "transaction_fingerprint_id": "4ebe1d15dc9e7485"}
+{"count": "1", "fingerprint_id": "b5d5622625971a02", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1ab6df6aa396addd"}
+{"count": "2", "fingerprint_id": "b5d5622625971a02", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "4ebe1d15dc9e7485"}
 {"count": "5", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
 {"count": "3", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
 
 show-txn-stats db=max_txn_stmts_test app-name=exec
 ----
 {"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["b5d5622625971a02"], "svc_lat_not_zero": true, "txn_fingerprint_id": "1ab6df6aa396addd"}
 {"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["b5d5622625971a02", "b5d5622625971a02"], "svc_lat_not_zero": true, "txn_fingerprint_id": "4ebe1d15dc9e7485"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["2f42d58f4511d411"], "svc_lat_not_zero": true, "txn_fingerprint_id": "802168c3c31063ce"}
 
 exec-sql db=max_txn_stmts_test app-name=setup-limit
 SET CLUSTER SETTING sql.metrics.transaction_details.max_statement_stats=4;
@@ -49,6 +81,14 @@ SELECT 1;
 END;
 ----
 
+# This is over the configured settings but below the threshold for force flush,
+# so it will still contribute to the same SQL Stats rows as above.
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT random_int();
+END;
+----
+
 # This is over the threshold for force flush, so it results in a new row in
 # SQL stats with a blank transaction fingerprint ID.
 exec-sql db=max_txn_stmts_test app-name=exec
@@ -61,8 +101,27 @@ SELECT 1;
 END;
 ----
 
+# This is over the threshold for force flush, so it results in a new row in
+# SQL stats with a blank transaction fingerprint ID. The flush occurs in the
+# middle of the second `random_int` execution, the second `SELECT random_int()`
+# and the first 3 sub statements of `random_int` will be associated with the
+# `ffffffffffffffff` transaction_fingerprint_id.
+exec-sql db=max_txn_stmts_test app-name=exec
+BEGIN;
+SELECT random_int();
+SELECT random_int();
+END;
+----
+
 show-stats db=max_txn_stmts_test app-name=exec
 ----
+{"count": "1", "fingerprint_id": "2f42d58f4511d411", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": true, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "run_lat_not_zero": true, "sql_type": "TypeDDL", "summary": "CREATE FUNCTION random_int()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tVOLATILE\n\tAS $$_$$", "svc_lat_not_zero": true, "transaction_fingerprint_id": "802168c3c31063ce"}
+{"count": "4", "fingerprint_id": "9c68d1af291596d5", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT floor(random() * _)::INT8", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT floor(random() ...)...", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1ab6df6aa396addd"}
+{"count": "5", "fingerprint_id": "9c68d1af291596d5", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT floor(random() * _)::INT8", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT floor(random() ...)...", "svc_lat_not_zero": true, "transaction_fingerprint_id": "4ebe1d15dc9e7485"}
+{"count": "3", "fingerprint_id": "9c68d1af291596d5", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT floor(random() * _)::INT8", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT floor(random() ...)...", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
+{"count": "2", "fingerprint_id": "b5d5622625971a02", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "1ab6df6aa396addd"}
+{"count": "3", "fingerprint_id": "b5d5622625971a02", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "4ebe1d15dc9e7485"}
+{"count": "1", "fingerprint_id": "b5d5622625971a02", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT random_int()", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT random_int()", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
 {"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "023097855475259c"}
 {"count": "6", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "3b5be2cb288f18aa"}
 {"count": "4", "fingerprint_id": "bdb329db6493db17", "nodes": [1], "parse_lat_not_zero": true, "plan_distributed": false, "plan_full_scan": false, "plan_hash_set": true, "plan_implicit_txn": false, "plan_lat_not_zero": true, "plan_vectorized": true, "query": "SELECT _", "run_lat_not_zero": true, "sql_type": "TypeDML", "summary": "SELECT _", "svc_lat_not_zero": true, "transaction_fingerprint_id": "ffffffffffffffff"}
@@ -70,4 +129,7 @@ show-stats db=max_txn_stmts_test app-name=exec
 show-txn-stats db=max_txn_stmts_test app-name=exec
 ----
 {"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "023097855475259c"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["b5d5622625971a02"], "svc_lat_not_zero": true, "txn_fingerprint_id": "1ab6df6aa396addd"}
 {"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["bdb329db6493db17", "bdb329db6493db17", "bdb329db6493db17"], "svc_lat_not_zero": true, "txn_fingerprint_id": "3b5be2cb288f18aa"}
+{"commit_lat_not_zero": true, "count": "2", "statement_fingerprint_ids": ["b5d5622625971a02", "b5d5622625971a02"], "svc_lat_not_zero": true, "txn_fingerprint_id": "4ebe1d15dc9e7485"}
+{"commit_lat_not_zero": true, "count": "1", "statement_fingerprint_ids": ["2f42d58f4511d411"], "svc_lat_not_zero": true, "txn_fingerprint_id": "802168c3c31063ce"}

@@ -255,6 +255,16 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			// we can send immediately to the sinks.
 			if e.statement.UnderOuterTxn {
 				i.flushBuffer(ctx, e.statement.SessionID, nil)
+			} else {
+				// Statements that are flushed cannot be associated with the
+				// transaction in since this association can only be done once a
+				// transaction has been committed. As a result, these recorded stats
+				// will be given a static transaction fingerprint ID to indicate that
+				// they are flushed. Since these flushes may occur in the middle of a
+				// transaction, any remaining statement stats will be flushed when the
+				// transaction is committed, causing them to be associated with the
+				// correct transaction fingerprint.
+				i.maybeFlushStatements(ctx, e.statement.SessionID)
 			}
 		} else if e.transaction != nil {
 			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction)
@@ -483,5 +493,17 @@ func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID cl
 
 	for _, sink := range i.sinks {
 		sink.ObserveTransaction(ctx, nil, statements)
+	}
+}
+
+// maybeFlushStatements flushes the buffered statements for a given sessionID
+// if the number of buffered statements has reached the configured limit. This
+// may occur even if the session is in the middle of a transaction.
+func (i *SQLStatsIngester) maybeFlushStatements(ctx context.Context, sessionID clusterunique.ID) {
+	if sessionStatements, ok := i.statementsBySessionID[sessionID]; ok {
+		maxStatements := sqlstats.TxnStatsNumStmtFingerprintStatsToRecord.Get(&i.settings.SV)
+		if int64(len(*sessionStatements)) >= maxStatements {
+			i.flushStatementsOnly(ctx, sessionID)
+		}
 	}
 }

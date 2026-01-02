@@ -188,7 +188,6 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.metrics.EngineMetrics.StatementIndexRowsWritten.Inc(stats.indexRowsWritten)
 	ex.metrics.EngineMetrics.StatementIndexBytesWritten.Inc(stats.indexBytesWritten)
 	if ex.statsCollector.EnabledForTransaction() {
-		maxRecordedStats := sqlstats.TxnStatsNumStmtFingerprintStatsToRecord.Get(&ex.server.cfg.Settings.SV)
 		b := sqlstats.NewRecordedStatementStatsBuilder(
 			stmtFingerprintID,
 			planner.SessionData().Database,
@@ -228,19 +227,6 @@ func (ex *connExecutor) recordStatementSummary(
 		}
 
 		ex.statsCollector.RecordStatement(ctx, b.Build())
-		if int64(ex.state.mu.stmtCount)%(maxRecordedStats) == 0 {
-			// If the statement count is equal to the configured limit,
-			// force flush the SQL stats ingestion buffer.
-			// Note that these statements that are force flushed cannot be associated
-			// with the transaction in SQL Stats since this association can only be
-			// done once a transaction has been committed. As a result, these
-			// recorded stats will be given a static transaction fingerprint ID to
-			// indicate that they are force flushed. Since these force flushes occur
-			// in batches, any leftover statement stats will be flushed when the
-			// transaction is committed, causing them to be associated with the
-			// correct transaction fingerprint.
-			ex.statsCollector.Flush(ex.planner.extendedEvalCtx.SessionID)
-		}
 	}
 
 	// Record statement execution statistics if span is recorded and no error was
