@@ -273,9 +273,7 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 
 	testIdx := 0
 	// getStores returns a set of stores rooted at the root of the collection URI,
-	// the full backup subdir for incrementals, and the full backup subdir for
-	// custom incremental locations. It also returns the collection URI and the
-	// URI specified by `incremental_location`.
+	// the full backup subdir for incrementals.
 	getStores := func(t *testing.T, subdir string) (
 		store struct {
 			cleanup func()

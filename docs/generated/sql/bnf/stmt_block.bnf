@@ -1284,8 +1284,6 @@ unreserved_keyword ::=
 	| 'INCLUDE_ALL_SECONDARY_TENANTS'
 	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS'
 	| 'INCREMENT'
-	| 'INCREMENTAL'
-	| 'INCREMENTAL_LOCATION'
 	| 'INDEX'
 	| 'INDEXES'
 	| 'INHERITS'
@@ -3103,7 +3101,6 @@ restore_options ::=
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| virtual_cluster_name '=' string_or_placeholder
 	| virtual_cluster_opt '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
@@ -3764,7 +3761,6 @@ show_backup_options ::=
 	| 'CHECK_FILES'
 	| 'SKIP' 'SIZE'
 	| 'DEBUG_IDS'
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'PRIVILEGES'
@@ -4234,8 +4230,6 @@ bare_label_keywords ::=
 	| 'INCLUDE_ALL_VIRTUAL_CLUSTERS'
 	| 'INCLUDING'
 	| 'INCREMENT'
-	| 'INCREMENTAL'
-	| 'INCREMENTAL_LOCATION'
 	| 'INDEX'
 	| 'INDEXES'
 	| 'INDEX'

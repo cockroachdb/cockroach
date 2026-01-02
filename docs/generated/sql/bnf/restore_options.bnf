@@ -10,7 +10,6 @@ restore_options ::=
 	| 'DETACHED'
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'VIRTUAL_CLUSTER_NAME' '=' string_or_placeholder
 	| 'VIRTUAL_CLUSTER' '=' string_or_placeholder
 	| 'SCHEMA_ONLY'
