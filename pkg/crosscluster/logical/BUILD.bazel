@@ -33,6 +33,7 @@ go_library(
         "//pkg/crosscluster",
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/sqlwriter",
+        "//pkg/crosscluster/logical/txnmode",
         "//pkg/crosscluster/physical",
         "//pkg/crosscluster/replicationutils",
         "//pkg/crosscluster/streamclient",
