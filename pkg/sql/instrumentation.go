@@ -976,7 +976,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	trace tracingpb.Recording,
 ) (commErr error) {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
-	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns, false /* skipRowDescription */)
 
 	if res.Err() != nil {
 		// Can't add rows if there was an error.
