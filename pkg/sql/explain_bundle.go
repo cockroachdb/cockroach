@@ -60,7 +60,7 @@ func setExplainBundleResult(
 	warnings []string,
 ) error {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
-	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns, false /* skipRowDescription */)
 
 	var text []string
 	if bundle.collectionErr != nil {

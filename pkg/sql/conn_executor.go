@@ -1712,6 +1712,11 @@ type connExecutor struct {
 			// will be used to synthesize an ExecStmt command to avoid attempting to
 			// execute the portal twice.
 			resumeStmt statements.Statement[tree.Statement]
+
+			// callRowDescSent tracks whether RowDescription has already been
+			// sent for a CALL statement to prevent duplicate RowDescription
+			// messages when stored procedures contain COMMIT/ROLLBACK.
+			callRowDescSent bool
 		}
 
 		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
@@ -2801,6 +2806,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ex.extraTxnState.storedProcTxnState.resumeProc = nil
 		ex.extraTxnState.storedProcTxnState.resumeStmt = statements.Statement[tree.Statement]{}
 		ex.extraTxnState.storedProcTxnState.txnModes = nil
+		ex.extraTxnState.storedProcTxnState.callRowDescSent = false
 	}
 
 	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
@@ -3502,6 +3508,11 @@ func stmtHasNoData(stmt tree.Statement, resultColumns colinfo.ResultColumns) boo
 		return true
 	}
 	if stmt.StatementReturnType() == tree.Rows {
+		// If the procedure doesn't contain output parameters, write a NoData
+		// message.
+		if stmt.StatementTag() == tree.CallStmtTag {
+			return len(resultColumns) == 0
+		}
 		return false
 	}
 	// The statement may not always return rows (e.g. EXECUTE), but if it does,
@@ -4384,8 +4395,17 @@ func (ex *connExecutor) initStatementResult(
 	// ANALYZE), then the columns will be set later.
 	if ex.planner.instrumentation.outputMode == unmodifiedOutput &&
 		ast.StatementReturnType() == tree.Rows {
+		// Only write RowDescription message if the procedure has output parameters.
+		skipRowDescription := false
+		if ast.StatementTag() == tree.CallStmtTag {
+			if len(cols) == 0 || ex.extraTxnState.storedProcTxnState.callRowDescSent {
+				skipRowDescription = true
+			} else {
+				ex.extraTxnState.storedProcTxnState.callRowDescSent = true
+			}
+		}
 		// Note that this call is necessary even if cols is nil.
-		res.SetColumns(ctx, cols)
+		res.SetColumns(ctx, cols, skipRowDescription)
 	}
 	return nil
 }
