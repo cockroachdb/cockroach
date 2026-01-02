@@ -3108,6 +3108,28 @@ func LoadBalancerIP(
 	return addr.IP, nil
 }
 
+// ListLoadBalancers returns all load balancers for the given cluster.
+func ListLoadBalancers(l *logger.Logger, clusterName string) ([]vm.ServiceAddress, error) {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	return c.ListLoadBalancers(l)
+}
+
+// DeleteLoadBalancer deletes all load balancers for the given cluster.
+func DeleteLoadBalancer(l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Delete all load balancers for the cluster (port=0 means delete all).
+	return vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		return provider.DeleteLoadBalancer(l, vms, 0)
+	})
+}
+
 // Deploy deploys a new version of cockroach to the given cluster. It currently
 // does not support clusters running external SQL instances.
 // TODO(herko): Add support for virtual clusters (external SQL processes)
