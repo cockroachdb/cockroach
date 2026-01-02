@@ -99,7 +99,7 @@ func registerDBConsoleEndpointsMixedVersion(r registry.Registry) {
 		Name:             "db-console/mixed-version-endpoints",
 		Owner:            registry.OwnerObservability,
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Monitor:          true,
 		Randomized:       true,
