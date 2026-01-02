@@ -569,7 +569,7 @@ func drpcGatewayRequestRecoveryInterceptor(
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		val := md.Get(gwRequestKey)
-		if len(val) > 0 {
+		if len(val) == 1 && val[0] != "" {
 			defer func() {
 				if p := recover(); p != nil {
 					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
