@@ -11408,3 +11408,43 @@ func TestRestoreConformanceSingleNode(t *testing.T) {
 	query2 := fmt.Sprintf(`SELECT count(*) FROM system.job_message WHERE job_id = %d AND message = 'span config conformance check completed'`, jobId)
 	sqlDB.CheckQueryResults(t, query2, [][]string{{"1"}})
 }
+
+func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, cleanupFn := backupRestoreTestSetupEmpty(t, singleNode, "", InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+
+	const collectionURI = "nodelocal://1/"
+
+	// Queries the revision start time from the first incremental in a given
+	// collection.
+	queryRevStartTime := func(collectionURI string) int64 {
+		var unixTS int64
+		sqlDB.QueryRow(
+			t,
+			`WITH x AS (SHOW BACKUP FROM LATEST IN $1 WITH as_json)
+			SELECT manifest->'revisionStartTime'->>'wallTime' FROM x OFFSET 1 LIMIT 1
+			`,
+			collectionURI,
+		).Scan(&unixTS)
+		return unixTS
+	}
+
+	t.Run("revision history empty incs should still set revision start time", func(t *testing.T) {
+		uri := fmt.Sprintf("%s%s", collectionURI, t.Name())
+		sqlDB.Exec(t, "BACKUP INTO $1 WITH revision_history", uri)
+		sqlDB.Exec(t, "BACKUP INTO LATEST IN $1 WITH revision_history", uri)
+		revStartTime := queryRevStartTime(uri)
+		require.Positive(t, revStartTime)
+	})
+
+	t.Run("non-revision history empty incs should not set revision start time", func(t *testing.T) {
+		uri := fmt.Sprintf("%s%s", collectionURI, t.Name())
+		sqlDB.Exec(t, "BACKUP INTO $1", uri)
+		sqlDB.Exec(t, "BACKUP INTO LATEST IN $1", uri)
+		revStartTime := queryRevStartTime(uri)
+		require.Zero(t, revStartTime)
+	})
+}
