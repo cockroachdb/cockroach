@@ -133,12 +133,12 @@ func (p *inspectProcessor) Run(ctx context.Context, output execinfra.RowReceiver
 		ctx, span = execinfra.ProcessorSpan(ctx, p.flowCtx, "inspect", p.processorID)
 		defer span.Finish()
 	}
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, p.flowCtx, output)
 	err := p.runInspect(ctx, output)
 	if err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
-	execinfra.SendTraceData(ctx, p.flowCtx, output)
-	output.ProducerDone()
 }
 
 // runInspect starts a set of worker goroutines to process spans concurrently.
