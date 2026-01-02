@@ -16,6 +16,7 @@ import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDeriv
 const emptyMetricsMetadata: MetricsMetadata = {
   metadata: {},
   recordedNames: {},
+  metricLayers: {},
 };
 describe("Custom charts page", function () {
   describe("Getting metric sources", function () {

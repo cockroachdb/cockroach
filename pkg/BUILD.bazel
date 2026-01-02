@@ -1226,6 +1226,8 @@ GO_TARGETS = [
     "//pkg/cmd/generate-binary:generate-binary_lib",
     "//pkg/cmd/generate-cgo:generate-cgo",
     "//pkg/cmd/generate-cgo:generate-cgo_lib",
+    "//pkg/cmd/generate-dashboard:generate-dashboard",
+    "//pkg/cmd/generate-dashboard:generate-dashboard_lib",
     "//pkg/cmd/generate-distdir:generate-distdir",
     "//pkg/cmd/generate-distdir:generate-distdir_lib",
     "//pkg/cmd/generate-logictest:generate-logictest",

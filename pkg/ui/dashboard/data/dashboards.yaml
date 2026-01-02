@@ -1,0 +1,14 @@
+# Dashboard Configuration File
+# This file defines multiple dashboards and their associated charts.
+# Each dashboard contains a name, description, and a list of charts.
+# Chart metadata (axis, tooltip, options, metrics) is derived from metrics.yaml.
+
+dashboards:
+  - name: "Overview"
+    description: "High-level cluster overview metrics"
+    charts:
+      - "SQL Queries Per Second"
+      - "Service Latency: SQL Statements, 99th percentile"
+      - "SQL Statement Contention"
+      - "Replicas per Node"
+      - "Capacity"
