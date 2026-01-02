@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -58,27 +59,27 @@ func TestTransactionWriter_Smoketest(t *testing.T) {
 
 	originTime := s.Clock().Now()
 
-	batch := []Transaction{
+	batch := []ldrdecoder.Transaction{
 		{
 			Timestamp: s.Clock().Now(),
-			Rows: []Row{{
-				Value:             tree.Datums{tree.NewDInt(1), tree.NewDString("new-value")},
-				PreviousValue:     tree.Datums{tree.NewDInt(1), tree.NewDString("old-value")},
-				PreviousTimestamp: originTime,
-				IsTombstone:       false,
-				Table:             descID,
+			WriteSet: []ldrdecoder.DecodedRow{{
+				Row:              tree.Datums{tree.NewDInt(1), tree.NewDString("new-value")},
+				PrevRow:				  tree.Datums{tree.NewDInt(1), tree.NewDString("old-value")},
+				PrevRowTimestamp: originTime,
+				IsDelete:         false,
+				TableID:          descID,
 			}, {
-				Value:             tree.Datums{tree.NewDInt(2), tree.NewDString("delete-me")},
-				PreviousValue:     tree.Datums{tree.NewDInt(2), tree.NewDString("delete-me")},
-				PreviousTimestamp: originTime,
-				IsTombstone:       true,
-				Table:             descID,
+				Row:              tree.Datums{tree.NewDInt(2), tree.NewDString("delete-me")},
+				PrevRow:          tree.Datums{tree.NewDInt(2), tree.NewDString("delete-me")},
+				PrevRowTimestamp: originTime,
+				IsDelete:         true,
+				TableID:          descID,
 			}, {
-				Value:             tree.Datums{tree.NewDInt(3), tree.NewDString("inserted-value")},
-				PreviousValue:     nil,
-				PreviousTimestamp: originTime,
-				IsTombstone:       false,
-				Table:             descID,
+				Row:              tree.Datums{tree.NewDInt(3), tree.NewDString("inserted-value")},
+				PrevRow:          nil,
+				PrevRowTimestamp: originTime,
+				IsDelete:         false,
+				TableID:          descID,
 			}},
 		},
 	}

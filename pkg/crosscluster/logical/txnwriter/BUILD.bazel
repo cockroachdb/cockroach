@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
@@ -32,6 +33,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/storageccl",
+        "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -1568,7 +1568,7 @@ func TestForeignKeyConstraints(t *testing.T) {
 		var jobID jobspb.JobID
 		stmt := "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab WITH MODE = " + mode
 		if immediateMode {
-			dbA.ExpectErr(t, "foreign keys are only supported with MODE = 'validated'", stmt, dbBURL.String())
+			dbA.ExpectErr(t, "foreign keys are not supported with MODE = 'immediate'", stmt, dbBURL.String())
 		} else {
 			dbA.QueryRow(t, stmt, dbBURL.String()).Scan(&jobID)
 			dbA.Exec(t, "CANCEL JOB $1", jobID)

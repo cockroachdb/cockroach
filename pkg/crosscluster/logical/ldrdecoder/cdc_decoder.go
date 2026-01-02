@@ -1,3 +1,8 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package ldrdecoder
 
 import (
@@ -38,5 +43,5 @@ func NewCdcEventDecoder(
 		return nil, err
 	}
 
-	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false), nil
+	return cdcevent.NewEventDecoderWithCache(ctx, rfCache, false, false, cdcevent.DecoderOptions{}), nil
 }

@@ -8,6 +8,7 @@ package txnwriter
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -16,11 +17,11 @@ import (
 )
 
 func (tw *TransactionWriter) ApplyBatch(
-	ctx context.Context, transactions []Transaction,
+	ctx context.Context, transactions []ldrdecoder.Transaction,
 ) ([]ApplyResult, error) {
 	for _, transaction := range transactions {
-		for _, row := range transaction.Rows {
-			err := tw.initTable(ctx, row.Table)
+		for _, row := range transaction.WriteSet {
+			err := tw.initTable(ctx, row.TableID)
 			if err != nil {
 				return nil, err
 			}
@@ -53,7 +54,7 @@ func (tw *TransactionWriter) ApplyBatch(
 	return results, nil
 }
 
-func (tw *TransactionWriter) refresh(ctx context.Context, transactions []Transaction) error {
+func (tw *TransactionWriter) refresh(ctx context.Context, transactions []ldrdecoder.Transaction) error {
 	type rowIndex struct {
 		txn int
 		row int
@@ -65,11 +66,11 @@ func (tw *TransactionWriter) refresh(ctx context.Context, transactions []Transac
 
 	tables := make(map[descpb.ID]tableToRefresh)
 	for txnIdx, transaction := range transactions {
-		for rowIdx, row := range transaction.Rows {
-			table := tables[row.Table]
-			table.rows = append(table.rows, row.PreviousValue)
+		for rowIdx, row := range transaction.WriteSet {
+			table := tables[row.TableID]
+			table.rows = append(table.rows, row.PrevRow)
 			table.indexes = append(table.indexes, rowIndex{txn: txnIdx, row: rowIdx})
-			tables[row.Table] = table
+			tables[row.TableID] = table
 		}
 	}
 
@@ -81,14 +82,14 @@ func (tw *TransactionWriter) refresh(ctx context.Context, transactions []Transac
 		for _, index := range table.indexes {
 			priorRow, ok := priorRows[index.row]
 			if ok {
-				row := &(transactions[index.txn].Rows[index.row])
-				row.PreviousValue = priorRow.Row
-				row.PreviousTimestamp = priorRow.LogicalTimestamp
+				row := &(transactions[index.txn].WriteSet[index.row])
+				row.PrevRow = priorRow.Row
+				row.PrevRowTimestamp = priorRow.LogicalTimestamp
 			} else {
 				// NOTE: the fact we don't observe tombstones here means we need to
 				// depend on insert/delete cputs implementing lww correctly.
-				transactions[index.txn].Rows[index.row].PreviousValue = nil
-				transactions[index.txn].Rows[index.row].PreviousTimestamp = hlc.Timestamp{}
+				transactions[index.txn].WriteSet[index.row].PrevRow = nil
+				transactions[index.txn].WriteSet[index.row].PrevRowTimestamp = hlc.Timestamp{}
 			}
 		}
 	}
@@ -97,7 +98,7 @@ func (tw *TransactionWriter) refresh(ctx context.Context, transactions []Transac
 }
 
 func (tw *TransactionWriter) tryApply(
-	ctx context.Context, txn []Transaction, results []ApplyResult,
+	ctx context.Context, txn []ldrdecoder.Transaction, results []ApplyResult,
 ) error {
 	for i, transaction := range txn {
 		err := tw.session.Savepoint(ctx, func(ctx context.Context) error {
@@ -113,30 +114,30 @@ func (tw *TransactionWriter) tryApply(
 }
 
 func (tw *TransactionWriter) tryApplyTransaction(
-	ctx context.Context, transaction Transaction,
+	ctx context.Context, transaction ldrdecoder.Transaction,
 ) (ApplyResult, error) {
-	for _, row := range transaction.Rows {
-		tableWriter := tw.tableWriters[row.Table]
+	for _, row := range transaction.WriteSet {
+		tableWriter := tw.tableWriters[row.TableID]
 		switch {
-		case row.IsTombstone && len(row.PreviousValue) != 0:
-			err := tableWriter.DeleteRow(ctx, transaction.Timestamp, row.PreviousValue)
+		case row.IsDeleteRow():
+			err := tableWriter.DeleteRow(ctx, transaction.Timestamp, row.PrevRow)
 			if err != nil {
 				return ApplyResult{}, err
 			}
-		case row.IsTombstone && len(row.PreviousValue) == 0:
+		case row.IsTombstoneUpdate():
 			// TODO(jeffswenson): handle the tombstone update case. For ordered mode,
 			// this case is only needed for racing updates.
-		case len(row.PreviousValue) == 0:
-			err := tableWriter.InsertRow(ctx, transaction.Timestamp, row.Value)
+		case row.IsInsertRow():
+			err := tableWriter.InsertRow(ctx, transaction.Timestamp, row.Row)
 			if err != nil {
 				return ApplyResult{}, err
 			}
-		case len(row.PreviousValue) != 0:
+		case row.IsUpdateRow():
 			err := tableWriter.UpdateRow(
 				ctx,
 				transaction.Timestamp,
-				row.PreviousValue,
-				row.Value,
+				row.PrevRow,
+				row.Row,
 			)
 			if err != nil {
 				return ApplyResult{}, err
@@ -148,7 +149,7 @@ func (tw *TransactionWriter) tryApplyTransaction(
 	result := ApplyResult{
 		// TODO(jeffswenson): detect dlq reasons
 		// TODO(jeffswenson): count lww losers
-		AppliedRows: len(transaction.Rows),
+		AppliedRows: len(transaction.WriteSet),
 	}
 	return result, nil
 }
