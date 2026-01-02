@@ -185,11 +185,14 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 		// tombstone was written at a later timestamp. It may fail with integer out
 		// of range error if the table has computed columns and the random datums
 		// add to produces something out of range.
-		err = writer.InsertRow(ctx, before, row)
-		require.Error(t, err)
-		if !(strings.Contains(err.Error(), "integer out of range") || isLwwLoser(err)) {
-			t.Fatalf("expected LWW or integer out of range error, got: %v", err)
-		}
+		require.NoError(t, session.Txn(ctx, func(ctx context.Context) error {
+			err = writer.InsertRow(ctx, before, row)
+			require.Error(t, err)
+			if !(strings.Contains(err.Error(), "integer out of range") || isLwwLoser(err)) {
+				t.Fatalf("expected LWW or integer out of range error, got: %v", err)
+			}
+			return nil
+		}))
 	}
 }
 

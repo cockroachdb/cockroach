@@ -14,23 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
-
-type Row struct {
-	Value             tree.Datums
-	PreviousValue     tree.Datums
-	PreviousTimestamp hlc.Timestamp
-	IsTombstone       bool
-	Table             descpb.ID
-}
-
-type Transaction struct {
-	Timestamp hlc.Timestamp
-	Rows      []Row
-}
 
 type ApplyResult struct {
 	// DlqReason is set if the transaction could not be applied and should be sent

@@ -22,6 +22,27 @@ type WriteSet struct {
 	Rows      []streampb.StreamEvent_KV
 }
 
+// TODO(jeffswenson): consider refreshing the stream client API. The whole
+// approach of creating a distsql plan on the source side seems awkward.
+// Generally, the destination wants to control the plan so that it can
+// optimize local ingestion and do thing like plan the number of processors
+// based on the number of nodes in the destination.
+//
+// An alternative approach would be to simplify the stream client API to return:
+// - A set of spans and nodes that can serve those spans (source topology).
+// - An API for fetching/watching schema changes on the source cluster.
+// - An API for streaming events for a given span that is closer to the API
+// of a rangefeed.
+func NewOrderedFeed(
+	rawSubscription streamclient.Subscription, initialFrontier span.Frontier,
+) (*OrderedFeed, error) {
+	return &OrderedFeed{
+		rawSubscription: rawSubscription,
+		frontier:        initialFrontier,
+		readyFrontier:   initialFrontier.Frontier(),
+	}, nil
+}
+
 type OrderedFeed struct {
 	rawSubscription streamclient.Subscription
 	frontier        span.Frontier
@@ -35,6 +56,10 @@ type OrderedFeed struct {
 	ready         []WriteSet
 
 	buffer []streampb.StreamEvent_KV
+}
+
+func (o *OrderedFeed) Run(ctx context.Context) error {
+	return o.rawSubscription.Subscribe(ctx)
 }
 
 func (o *OrderedFeed) Next(ctx context.Context) (WriteSet, error) {

@@ -37,4 +37,26 @@ type DecodedRow struct {
 	// The datums in PrevRow are in col id order for the destination table. nil
 	// PrevRow may still lose LWW if there is a recent tombstone.
 	PrevRow tree.Datums
+
+	// PrevRowTimestamp is the mvcc timestamp of the previous row in the source
+	// in the source cluster.
+	//
+	// TODO(jeffswenson): populate this field when constructing DecodedRow.
+	PrevRowTimestamp hlc.Timestamp
+}
+
+func (d *DecodedRow) IsDeleteRow() bool {
+	return d.IsDelete && len(d.PrevRow) != 0
+}
+
+func (d *DecodedRow) IsTombstoneUpdate() bool {
+	return d.IsDelete && len(d.PrevRow) == 0
+}
+
+func (d *DecodedRow) IsInsertRow() bool {
+	return !d.IsDelete && len(d.PrevRow) == 0
+}
+
+func (d *DecodedRow) IsUpdateRow() bool {
+	return !d.IsDelete && len(d.PrevRow) > 0
 }

@@ -69,22 +69,27 @@ func (s *RowWriter) DeleteRow(
 func (s *RowWriter) InsertRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
-	s.scratchDatums = s.scratchDatums[:0]
-	s.scratchDatums = append(s.scratchDatums, row...)
+	// We use a savepoint here to prevent the insert from causing the entire
+	// transaction to abort if it fails due to a uniqueness violation.
+	err := s.session.Savepoint(ctx, func(ctx context.Context) error {
+		s.scratchDatums = s.scratchDatums[:0]
+		s.scratchDatums = append(s.scratchDatums, row...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
-	if err != nil {
-		return err
-	}
+		err := s.setOriginTimestamp(ctx, originTimestamp)
+		if err != nil {
+			return err
+		}
 
-	rowsImpacted, err := s.session.ExecutePrepared(ctx, s.insert, s.scratchDatums)
-	if err != nil {
-		return errors.Wrap(err, "inserting row")
-	}
-	if rowsImpacted != 1 {
-		return errors.AssertionFailedf("expected 1 row impacted, got %d", rowsImpacted)
-	}
-	return nil
+		rowsImpacted, err := s.session.ExecutePrepared(ctx, s.insert, s.scratchDatums)
+		if err != nil {
+			return errors.Wrap(err, "inserting row")
+		}
+		if rowsImpacted != 1 {
+			return errors.AssertionFailedf("expected 1 row impacted, got %d", rowsImpacted)
+		}
+		return nil
+	})
+	return err
 }
 
 // UpdateRow updates a row in the table. It returns errStalePreviousValue

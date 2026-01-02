@@ -12,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -110,6 +112,11 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 	if r.jobUsesUDF() && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&jobExecCtx.ExecCfg().Settings.SV) {
 		r.updateStatusMessage(ctx, "job paused because UDF-based logical replication writer is disabled")
 		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
+	}
+
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+	if payload.Mode == jobspb.LogicalReplicationDetails_Transaction {
+		return r.handleResumeError(ctx, jobExecCtx, r.resumeWithTxnCoordinator(ctx, jobExecCtx))
 	}
 
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
@@ -918,6 +925,96 @@ func (rh *rowHandler) handleRow(ctx context.Context, row tree.Datums) error {
 		return errOfflineInitialScanComplete
 	}
 	return nil
+}
+
+func (r *logicalReplicationResumer) resumeWithTxnCoordinator(
+	ctx context.Context, jobExecCtx sql.JobExecContext,
+) error {
+	var (
+		execCfg  = jobExecCtx.ExecCfg()
+		payload  = r.job.Details().(jobspb.LogicalReplicationDetails)
+		progress = r.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	)
+
+	uris, err := r.getClusterUris(ctx, r.job, execCfg.InternalDB)
+	if err != nil {
+		return err
+	}
+
+	client, err := streamclient.GetFirstActiveClient(ctx,
+		uris,
+		execCfg.InternalDB,
+		streamclient.WithStreamID(streampb.StreamID(payload.StreamID)),
+		streamclient.WithLogical(),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Close(ctx) }()
+
+	status, err := client.Heartbeat(ctx, streampb.StreamID(payload.StreamID), progress.ReplicatedTime)
+	if err != nil {
+		log.Dev.Warningf(ctx, "could not heartbeat source cluster with stream id %d", payload.StreamID)
+	}
+	if status.StreamStatus == streampb.StreamReplicationStatus_STREAM_INACTIVE {
+		return jobs.MarkAsPermanentJobError(errors.Newf("history retention job is no longer active"))
+	}
+
+	// Build table mappings for the transaction coordinator
+	tableMappings, err := buildTableMappings(ctx, execCfg, client, payload, progress)
+	if err != nil {
+		return errors.Wrap(err, "building table mappings")
+	}
+
+	coordinator := txnmode.NewTxnLdrCoordinator(ctx, jobExecCtx, r.job, client, tableMappings)
+	return coordinator.Resume(ctx)
+}
+
+func buildTableMappings(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	client streamclient.Client,
+	payload jobspb.LogicalReplicationDetails,
+	progress *jobspb.LogicalReplicationProgress,
+) ([]ldrdecoder.TableMapping, error) {
+	// Get source table descriptors from the replication plan
+	asOf := payload.ReplicationStartTime
+	if !progress.ReplicatedTime.IsEmpty() {
+		asOf = progress.ReplicatedTime
+	}
+	req := streampb.LogicalReplicationPlanRequest{
+		StreamID: streampb.StreamID(payload.StreamID),
+		PlanAsOf: asOf,
+	}
+	for _, pair := range payload.ReplicationPairs {
+		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
+	}
+
+	plan, err := client.PlanLogicalReplication(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "planning logical replication")
+	}
+
+	crossClusterResolver := crosscluster.MakeCrossClusterTypeResolver(plan.SourceTypes)
+	tableMappings := make([]ldrdecoder.TableMapping, 0, len(payload.ReplicationPairs))
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+		for _, pair := range payload.ReplicationPairs {
+			srcTableDesc := plan.DescriptorMap[pair.SrcDescriptorID]
+			cpy := tabledesc.NewBuilder(&srcTableDesc).BuildCreatedMutableTable()
+			if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, crossClusterResolver); err != nil {
+				return err
+			}
+			tableMappings = append(tableMappings, ldrdecoder.TableMapping{
+				SourceDescriptor: cpy,
+				DestID:           descpb.ID(pair.DstDescriptorID),
+			})
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return tableMappings, nil
 }
 
 func (r *logicalReplicationResumer) ingestWithRetries(

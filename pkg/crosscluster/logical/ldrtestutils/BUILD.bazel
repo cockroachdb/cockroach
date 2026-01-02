@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ldrtestutils",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrtestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/testutils",
+        "//pkg/testutils/jobutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
