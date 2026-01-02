@@ -7,6 +7,7 @@ package sqlwriter
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -123,7 +124,7 @@ func NewRowWriter(
 	if err != nil {
 		return nil, err
 	}
-	preparedInsert, err := session.Prepare(ctx, "insert", insert, insertParamTypes)
+	preparedInsert, err := session.Prepare(ctx, fmt.Sprintf("insert_%d", table.GetID()), insert, insertParamTypes)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to prepare insert statement")
 	}
@@ -132,7 +133,7 @@ func NewRowWriter(
 	if err != nil {
 		return nil, err
 	}
-	preparedUpdate, err := session.Prepare(ctx, "update", update, updateParamTypes)
+	preparedUpdate, err := session.Prepare(ctx, fmt.Sprintf("update_%d", table.GetID()), update, updateParamTypes)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to prepare update statement")
 	}
@@ -141,7 +142,7 @@ func NewRowWriter(
 	if err != nil {
 		return nil, err
 	}
-	preparedDelete, err := session.Prepare(ctx, "delete", delete, deleteParamTypes)
+	preparedDelete, err := session.Prepare(ctx, fmt.Sprintf("delete_%d", table.GetID()), delete, deleteParamTypes)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to prepare delete statement")
 	}
