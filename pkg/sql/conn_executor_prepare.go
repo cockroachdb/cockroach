@@ -665,7 +665,7 @@ func (ex *connExecutor) execDescribe(
 			}
 			// Sending a nil formatCodes is equivalent to sending all text format
 			// codes.
-			res.SetPortalOutput(ctx, cursor.Rows.Types(), nil /* formatCodes */)
+			res.SetPortalOutput(ctx, cursor.Rows.Types(), nil)
 			return nil, nil
 		}
 

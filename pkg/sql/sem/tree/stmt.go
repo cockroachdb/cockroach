@@ -737,6 +737,8 @@ func (*BeginTransaction) StatementType() StatementType { return TypeTCL }
 // StatementTag returns a short string identifying the type of statement.
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
+const CallStmtTag = `CALL`
+
 // StatementReturnType implements the Statement interface.
 func (*Call) StatementReturnType() StatementReturnType { return Rows }
 
@@ -744,7 +746,7 @@ func (*Call) StatementReturnType() StatementReturnType { return Rows }
 func (*Call) StatementType() StatementType { return TypeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Call) StatementTag() string { return "CALL" }
+func (*Call) StatementTag() string { return CallStmtTag }
 
 // StatementReturnType implements the Statement interface.
 func (*ControlJobs) StatementReturnType() StatementReturnType { return RowsAffected }
