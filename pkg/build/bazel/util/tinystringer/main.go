@@ -332,7 +332,7 @@ func (s tinyStringer) computeConstantValues(
 			if genDecl.Tok != token.CONST {
 				continue
 			}
-			var inferAppropriateType, inIota bool
+			var inferAppropriateType, inIota, inShift bool
 			var iotaVal int
 			for _, spec := range genDecl.Specs {
 				valueSpec, ok := spec.(*ast.ValueSpec)
@@ -360,7 +360,11 @@ func (s tinyStringer) computeConstantValues(
 				if valueSpec.Values == nil {
 					if inIota {
 						nameToInt[constName] = iotaVal
-						iotaVal += 1
+						if inShift {
+							iotaVal <<= 1
+						} else {
+							iotaVal += 1
+						}
 					} else {
 						nameToInt[constName] = 0
 					}
@@ -401,19 +405,26 @@ func (s tinyStringer) computeConstantValues(
 						inIota = false
 					}
 				} else if binExpr, ok := valueSpec.Values[0].(*ast.BinaryExpr); ok {
-					// Handle iota + N or iota - N.
-					iotaIdent, ok := binExpr.X.(*ast.Ident)
+					inShift = false
+					xArg, yArg := binExpr.X, binExpr.Y
+					if binExpr.Op == token.SHL {
+						// Handle 1 << iota - the order of arguments is switched.
+						inShift = true
+						xArg, yArg = yArg, xArg
+					}
+					// Handle iota + N, iota - N, 1 << iota.
+					iotaIdent, ok := xArg.(*ast.Ident)
 					if !ok || iotaIdent.Name != "iota" {
-						err = fmt.Errorf("expected 'iota' in binary expression %+v; found %+v", binExpr, binExpr.X)
+						err = fmt.Errorf("expected 'iota' in binary expression %+v; found %+v", binExpr, xArg)
 						return
 					}
 					var otherNumParsed int64
-					if otherNum, ok := binExpr.Y.(*ast.BasicLit); ok && otherNum.Kind == token.INT {
+					if otherNum, ok := yArg.(*ast.BasicLit); ok && otherNum.Kind == token.INT {
 						otherNumParsed, err = strconv.ParseInt(otherNum.Value, 0, 0)
 						if err != nil {
 							return
 						}
-					} else if otherRef, ok := binExpr.Y.(*ast.Ident); ok {
+					} else if otherRef, ok := yArg.(*ast.Ident); ok {
 						otherNum, ok := nameToInt[otherRef.Name]
 						if !ok {
 							err = fmt.Errorf("could not find value of %s", otherRef.Name)
@@ -421,17 +432,28 @@ func (s tinyStringer) computeConstantValues(
 						}
 						otherNumParsed = int64(otherNum)
 					} else {
-						err = fmt.Errorf("couldn't parse second argument of binary expression %+v; found %+v", binExpr, binExpr.Y)
+						err = fmt.Errorf("couldn't parse second argument of binary expression %+v; found %+v", binExpr, yArg)
 						return
 					}
 					if binExpr.Op == token.ADD {
 						iotaVal = iotaVal + int(otherNumParsed)
 					} else if binExpr.Op == token.SUB {
 						iotaVal = iotaVal - int(otherNumParsed)
+					} else if binExpr.Op == token.SHL {
+						// We currently assume 1 << iota and not N << iota.
+						if otherNumParsed != 1 {
+							err = fmt.Errorf("only 1 << iota is supported; found %d << iota", otherNumParsed)
+							return
+						}
+						iotaVal = int(otherNumParsed)
 					}
 					inIota = true
 					nameToInt[constName] = iotaVal
-					iotaVal += 1
+					if inShift {
+						iotaVal <<= 1
+					} else {
+						iotaVal += 1
+					}
 				} else {
 					err = fmt.Errorf("don't know how to process %+v", valueSpec.Values[0])
 					return
