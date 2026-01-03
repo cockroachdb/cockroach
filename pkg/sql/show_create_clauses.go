@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -417,24 +419,46 @@ func formatFunctionQueryTypesForDisplay(
 			return true, expr, nil
 		}
 
+		// Attempt TypeCheck to convert fully walked expressions (with
+		// serialized enum data) back to human-readable format. If TypeCheck
+		// fails due to "column does not exist" errors (because column
+		// references are not available in this context), we skip the
+		// conversion and return the expression as-is.
+		//
+		// This is a workaround for the fundamental issue that we lack table
+		// descriptor context in this function. The proper fix would be to
+		// provide table descriptors to resolve column references, but that
+		// requires significant architectural changes.
 		typedExpr, err := expr.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+				// This is likely a column reference in an expression like
+				// "y::cast_udt_enum" that cannot be resolved in this context.
+				// Return the expression unchanged rather than failing the
+				// entire operation.
+				return true, expr, nil
+			}
 			return false, expr, err
 		}
 
-		dEnum, ok := typedExpr.(*tree.DEnum)
-		if !ok {
-			return false, expr, errors.Newf("unsupported expression type %T", typedExpr)
+		// Currently, only enum types need deserialization from binary form
+		// back to human-readable logical representation. Other UDT types
+		// (like composite types) either don't get serialized to binary
+		// form, or are handled differently by TypeCheck.
+		if dEnum, ok := typedExpr.(*tree.DEnum); ok {
+			switch n := expr.(type) {
+			case *tree.CastExpr:
+				n.Expr = tree.NewStrVal(dEnum.LogicalRep)
+			case *tree.AnnotateTypeExpr:
+				n.Expr = tree.NewStrVal(dEnum.LogicalRep)
+			}
+			return false, expr, nil
 		}
-		switch n := expr.(type) {
-		case *tree.CastExpr:
-			n.Expr = tree.NewStrVal(dEnum.LogicalRep)
-			n.Type = dEnum.EnumTyp
-		case *tree.AnnotateTypeExpr:
-			n.Expr = tree.NewStrVal(dEnum.LogicalRep)
-			n.Type = dEnum.EnumTyp
-		}
-		return false, expr, nil
+
+		// For other UDT types (composite, domain, etc.), TypeCheck
+		// succeeded but we don't have specific deserialization logic.
+		// Return the typedExpr as-is.
+		return false, typedExpr, nil
 	}
 	// replaceTypeFunc is a visitor function that replaces type annotations
 	// containing user defined types IDs with their name. This is currently only
