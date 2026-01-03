@@ -46,6 +46,7 @@ STRINGER_SRCS = [
     "//pkg/sql/sem/tree:statementreturntype_string.go",
     "//pkg/sql/sem/tree:statementtype_string.go",
     "//pkg/sql:advancecode_string.go",
+    "//pkg/sql:distsqlblocker_string.go",
     "//pkg/sql:nodestatus_string.go",
     "//pkg/sql:txneventtype_string.go",
     "//pkg/sql:txntype_string.go",

@@ -336,7 +336,7 @@ quality of service: regular
 │       │ estimated max sql temp disk usage: 0 B
 │       │ group by: lk
 │       │
-│       └── • lookup join (left outer)
+│       └── • lookup join (left outer) (streamer)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
 │           │ actual row count: 0
