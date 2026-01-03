@@ -160,4 +160,7 @@ message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
+  // SingleNodeWrap, if set, indicates that exactly one local planNode is
+  // wrapped by this LocalPlanNodeSpec.
+  optional bool SingleNodeWrap = 4 [(gogoproto.nullable) = false];
 }
