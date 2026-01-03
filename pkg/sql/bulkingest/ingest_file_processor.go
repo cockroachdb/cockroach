@@ -89,12 +89,12 @@ func (p *ingestFileProcessor) Run(ctx context.Context, output execinfra.RowRecei
 		ctx, span = execinfra.ProcessorSpan(ctx, p.flowCtx, "ingestFile", p.processorID)
 		defer span.Finish()
 	}
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, p.flowCtx, output)
 	err := p.runIngest(ctx)
 	if err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
-	execinfra.SendTraceData(ctx, p.flowCtx, output)
-	output.ProducerDone()
 }
 
 // runIngest starts a set of worker goroutines to process SST files concurrently.

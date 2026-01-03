@@ -117,12 +117,12 @@ func (t *ttlProcessor) Start(context.Context) {}
 // Run implements the execinfra.Processor interface.
 func (t *ttlProcessor) Run(ctx context.Context, output execinfra.RowReceiver) {
 	ctx = t.StartInternal(ctx, "ttl")
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, t.FlowCtx, output)
 	err := t.work(ctx, output)
 	if err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
-	execinfra.SendTraceData(ctx, t.FlowCtx, output)
-	output.ProducerDone()
 }
 
 func getTableInfo(
