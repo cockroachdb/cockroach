@@ -86,6 +86,7 @@ go_library(
         "descriptor.go",
         "discard.go",
         "distinct.go",
+        "distsql_check.go",
         "distsql_leaf_txn.go",
         "distsql_physical_planner.go",
         "distsql_plan_backfill.go",
