@@ -4369,14 +4369,26 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		}}
 	}
 	name := nodeName(n)
+	var singleNodeWrap bool
+	switch n.InputCount() {
+	case 0:
+		singleNodeWrap = true
+	case 1:
+		if input, err := n.Input(0); err != nil {
+			return nil, err
+		} else {
+			singleNodeWrap = input == firstNotWrapped
+		}
+	}
 	proc := physicalplan.Processor{
 		SQLInstanceID: dsp.gatewaySQLInstanceID,
 		Spec: execinfrapb.ProcessorSpec{
 			Input: input,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
-				RowSourceIdx: uint32(localProcIdx),
-				NumInputs:    uint32(len(input)),
-				Name:         name,
+				RowSourceIdx:   uint32(localProcIdx),
+				NumInputs:      uint32(len(input)),
+				Name:           name,
+				SingleNodeWrap: singleNodeWrap,
 			}},
 			Post: execinfrapb.PostProcessSpec{},
 			Output: []execinfrapb.OutputRouterSpec{{
