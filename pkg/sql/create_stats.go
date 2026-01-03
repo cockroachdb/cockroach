@@ -661,7 +661,7 @@ func createStatsDefaultColumns(
 		}
 		var distSQLVisitor distSQLExprCheckVisitor
 		for i, col := range desc.PublicColumns() {
-			cannotDistribute[i] = col.IsVirtual() && checkExprForDistSQL(exprs[i], &distSQLVisitor) != nil
+			cannotDistribute[i] = col.IsVirtual() && checkExprForDistSQL(exprs[i], &distSQLVisitor) != 0
 		}
 	}
 

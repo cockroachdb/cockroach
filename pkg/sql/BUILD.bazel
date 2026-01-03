@@ -298,6 +298,7 @@ go_library(
         "zone_config.go",
         "zone_config_helper.go",
         ":gen-advancecode-stringer",  # keep
+        ":gen-distsqlprohibitedcause-stringer",  # keep
         ":gen-nodestatus-stringer",  # keep
         ":gen-txneventtype-stringer",  # keep
         ":gen-txntype-stringer",  # keep
@@ -680,6 +681,7 @@ go_test(
         "delete_preserving_index_test.go",
         "descriptor_mutation_test.go",
         "descriptor_test.go",
+        "distsql_check_test.go",
         "distsql_leaf_txn_test.go",
         "distsql_physical_planner_test.go",
         "distsql_plan_backfill_test.go",
@@ -871,6 +873,7 @@ go_test(
         "//pkg/sql/execstats",
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
+        "//pkg/sql/inverted",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/mutations",
@@ -1023,6 +1026,12 @@ stringer(
     name = "gen-advancecode-stringer",
     src = "txn_state.go",
     typ = "advanceCode",
+)
+
+stringer(
+    name = "gen-distsqlprohibitedcause-stringer",
+    src = "distsql_check.go",
+    typ = "distSQLProhibitedCause",
 )
 
 stringer(

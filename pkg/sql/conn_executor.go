@@ -3339,7 +3339,7 @@ func (ex *connExecutor) execCopyIn(
 				defer p.curPlan.close(ctx)
 				_, err := ex.execWithDistSQLEngine(
 					ctx, p, tree.RowsAffected, res, LocalDistribution,
-					nil /* progressAtomic */, nil, /* distSQLProhibitedErr */
+					nil /* progressAtomic */, 0, /* distSQLProhibitedCauses */
 				)
 				return err
 			},

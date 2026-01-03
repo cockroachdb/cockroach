@@ -422,11 +422,11 @@ type PlanningCtx struct {
 
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
-	// distSQLProhibitedErr, if set, indicates why the plan couldn't be
-	// distributed. If any part of the plan isn't distributable, then this is
-	// guaranteed to be non-nil.
-	distSQLProhibitedErr error
-	planner              *planner
+	// distSQLProhibitedCauses is a bit-map describing all reasons for why a
+	// query couldn't be distributed. It's zero when the query can be
+	// distributed.
+	distSQLProhibitedCauses
+	planner *planner
 
 	stmtType tree.StatementReturnType
 	// planDepth is set to the current depth of the planNode tree. It's used to

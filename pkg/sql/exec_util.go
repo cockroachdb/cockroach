@@ -2328,10 +2328,9 @@ func shouldDistributeGivenRecAndMode(
 // tree), then we traverse that tree in order to determine the distribution of
 // the plan.
 //
-// The returned error, if any, indicates why we couldn't distribute the plan.
-// Note that it's possible that we choose to not distribute the plan while nil
-// error is returned (but it's guaranteed that if some part of the plan isn't
-// distributable, then non-nil error is returned).
+// The returned distSQLProhibitedCauses indicates all reasons why we couldn't
+// distribute the plan. Note that it's possible that we choose to not distribute
+// the plan while zero value is returned.
 //
 // WARNING: in some cases when this method returns
 // physicalplan.FullyDistributedPlan, the plan might actually run locally. This
@@ -2344,11 +2343,11 @@ func shouldDistributeGivenRecAndMode(
 // completed but is quite annoying to do at the moment.
 func (p *planner) getPlanDistribution(
 	ctx context.Context, plan planMaybePhysical, info postqueryInfo,
-) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
+) (physicalplan.PlanDistribution, distSQLProhibitedCauses) {
 	if plan.isPhysicalPlan() {
-		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
+		// TODO(#47473): store the distSQLProhibitedCauses for DistSQL spec factory
 		// too.
-		return plan.physPlan.Distribution, nil
+		return plan.physPlan.Distribution, 0
 	}
 
 	// Check DistSQL-supportability as the first order of business in order to
@@ -2373,32 +2372,34 @@ func (p *planner) getPlanDistribution(
 		// allocate a fresh one.
 		distSQLVisitor = &distSQLExprCheckVisitor{}
 	}
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd, txnHasBufferedWrites)
-	if err != nil {
-		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
-		return physicalplan.LocalPlan, err
+	rec, noDistSQLCauses := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd, txnHasBufferedWrites)
+	if noDistSQLCauses != 0 {
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.VEventf(ctx, 1, "query not supported for distSQL: %s", noDistSQLCauses)
+		}
+		return physicalplan.LocalPlan, noDistSQLCauses
 	}
 
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
 	if p.Descriptors().HasUncommittedDescriptors() {
-		return physicalplan.LocalPlan, nil
+		return physicalplan.LocalPlan, 0
 	}
 
 	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
-		return physicalplan.LocalPlan, nil
+		return physicalplan.LocalPlan, 0
 	}
 
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.planNode.(*zeroNode); ok {
-		return physicalplan.LocalPlan, nil
+		return physicalplan.LocalPlan, 0
 	}
 
 	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
-		return physicalplan.FullyDistributedPlan, nil
+		return physicalplan.FullyDistributedPlan, 0
 	}
-	return physicalplan.LocalPlan, nil
+	return physicalplan.LocalPlan, 0
 }
 
 // golangFillQueryArguments transforms Go values into datums.

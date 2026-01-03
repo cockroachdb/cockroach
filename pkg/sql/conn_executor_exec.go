@@ -2893,7 +2893,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
-	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
+	distributePlan, noDistSQLCauses := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
 	}
@@ -2941,7 +2941,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, noDistSQLCauses,
 	)
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
@@ -3393,7 +3393,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	res RestrictedCommandResult,
 	distribute DistributionType,
 	progressAtomic *uint64,
-	distSQLProhibitedErr error,
+	distSQLProhibitedCauses distSQLProhibitedCauses,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
 	recv := MakeDistSQLReceiver(
@@ -3418,7 +3418,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		evalCtx := planner.ExtendedEvalContext()
 		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 		planCtx.setUpForMainQuery(ctx, planner, recv)
-		planCtx.distSQLProhibitedErr = distSQLProhibitedErr
+		planCtx.distSQLProhibitedCauses = distSQLProhibitedCauses
 
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||

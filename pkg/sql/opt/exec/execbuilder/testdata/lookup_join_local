@@ -34,3 +34,82 @@ vectorized: true
 
 statement ok
 RESET parallelize_multi_key_lookup_joins_enabled;
+
+# Ensure that the streamer is used even though we have 'scan buffer' node (which
+# is unsupported by DistSQL directly).
+query T
+EXPLAIN ANALYZE
+WITH cte AS MATERIALIZED (SELECT x FROM xyz)
+SELECT ARRAY(SELECT cte.x FROM cte INNER LOOKUP JOIN uv ON cte.x = uv.u);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│
+├── • values
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 1
+│     execution time: 0µs
+│     size: 1 column, 1 row
+│
+├── • subquery
+│   │ id: @S1
+│   │ original sql: SELECT x FROM xyz
+│   │ exec mode: discard all rows
+│   │
+│   └── • buffer
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 0
+│       │ execution time: 0µs
+│       │ label: buffer 1 (cte)
+│       │
+│       └── • scan
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             actual row count: 0
+│             KV time: 0µs
+│             KV rows decoded: 0
+│             KV bytes read: 0 B
+│             KV gRPC calls: 0
+│             estimated max memory allocated: 0 B
+│             missing stats
+│             table: xyz@xyz_pkey
+│             spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S2
+    │ original sql: (SELECT cte.x FROM cte INNER LOOKUP JOIN uv ON cte.x = uv.u)
+    │ exec mode: all rows
+    │
+    └── • lookup join (streamer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ KV bytes read: 0 B
+        │ KV gRPC calls: 0
+        │ execution time: 0µs
+        │ estimated max memory allocated: 0 B
+        │ table: uv@uv_pkey
+        │ equality: (x) = (u)
+        │
+        └── • scan buffer
+              sql nodes: <hidden>
+              regions: <hidden>
+              actual row count: 0
+              execution time: 0µs
+              label: buffer 1 (cte)
