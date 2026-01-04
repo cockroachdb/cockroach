@@ -2893,7 +2893,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
-	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main)
+	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
 	}

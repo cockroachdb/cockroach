@@ -532,7 +532,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
-			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main)
+			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main, notPostquery)
 			isLocal := !planDistribution.WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),

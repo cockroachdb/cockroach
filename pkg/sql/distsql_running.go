@@ -2123,7 +2123,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	innerPlansMustUseLeafTxn bool,
 ) error {
-	subqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, subqueryPlan.plan)
+	subqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, subqueryPlan.plan, notPostquery)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
@@ -2720,7 +2720,8 @@ var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 type postqueryInfo byte
 
 const (
-	sequentialPostquery postqueryInfo = iota
+	notPostquery postqueryInfo = iota
+	sequentialPostquery
 	parallelCheckMainGoroutine
 	parallelCheckWorkerGoroutine
 )
@@ -2729,7 +2730,7 @@ const (
 // use if parallelCheck is true.
 //
 // - postqueryInfo indicates whether this is a check query that runs in parallel
-// with other check queries. If parallelCheck is not sequentialPostquery, then
+// with other check queries. If postqueryInfo is not sequentialPostquery, then
 // getSaveFlowsFunc, associateNodeWithComponents, and addTopLevelQueryStats must
 // be concurrency-safe (if non-nil).
 // - getSaveFlowsFunc will only be called if
@@ -2745,7 +2746,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	postqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, postqueryPlan)
+	postqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, postqueryPlan, postqueryInfo)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
