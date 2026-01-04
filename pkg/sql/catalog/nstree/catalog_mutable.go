@@ -176,8 +176,8 @@ func (mc *MutableCatalog) DeleteComment(key catalogkeys.CommentKey) {
 		if uint32(subID) == key.SubID {
 			return
 		}
-		cbt.comments = append(cbt.comments, oldCommentsByType.comments[oldOrdinal])
 		cbt.subObjectOrdinals.Set(subID, len(cbt.comments))
+		cbt.comments = append(cbt.comments, oldCommentsByType.comments[oldOrdinal])
 	})
 	mc.byteSize += e.ByteSize() - oldByteSize
 }

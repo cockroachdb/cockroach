@@ -80,9 +80,9 @@ type Collection struct {
 	// not visible to other transactions.
 	uncommitted uncommittedDescriptors
 
-	uncommittedComments uncommittedComments
-
-	uncommittedZoneConfigs uncommittedZoneConfigs
+	// uncommittedMetadata tracks uncommitted comments and zone configs using
+	// a single nstree.MutableCatalog for storage.
+	uncommittedMetadata uncommittedMetadata
 
 	// A cached implementation of catkv.CatalogReader used for accessing stored
 	// descriptors, namespace entries, comments and zone configs. The cache
@@ -733,8 +733,7 @@ func (tc *Collection) WriteCommentToBatch(
 		return err
 	}
 
-	tc.AddUncommittedComment(key, cmt)
-	return nil
+	return tc.AddUncommittedComment(key, cmt)
 }
 
 // DeleteCommentInBatch deletes a comment with the given (objID, subID, cmtType) key in
@@ -1286,14 +1285,14 @@ func (tc *Collection) aggregateAllLayers(
 	})
 	// Add stored comments which are not shadowed.
 	_ = stored.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
-		if _, _, isShadowed := tc.uncommittedComments.getUncommitted(key); !isShadowed {
+		if !tc.uncommittedMetadata.isCommentCached(key) {
 			return ret.UpsertComment(key, cmt)
 		}
 		return nil
 	})
 	// Add stored zone configs which are not shadowed.
 	_ = stored.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
-		if _, isShadowed := tc.uncommittedZoneConfigs.getUncommitted(id); !isShadowed {
+		if !tc.uncommittedMetadata.isZoneConfigCached(id) {
 			ret.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
 		}
 		return nil
@@ -1330,10 +1329,10 @@ func (tc *Collection) aggregateAllLayers(
 		})
 	}
 	// Add uncommitted comments and zone configs.
-	if err := tc.uncommittedComments.addAllToCatalog(ret); err != nil {
+	if err := tc.uncommittedMetadata.addAllCommentsToCatalog(&ret); err != nil {
 		return nstree.MutableCatalog{}, err
 	}
-	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
+	tc.uncommittedMetadata.addAllZoneConfigsToCatalog(&ret)
 	// Remove deleted descriptors from consideration, re-read and add the rest.
 	tc.deletedDescs.ForEach(descIDs.Remove)
 	allDescs := make([]catalog.Descriptor, descIDs.Len())
@@ -1501,8 +1500,7 @@ func (tc *Collection) ResetSyntheticDescriptors() {
 // ResetUncommitted resets all uncommitted state in the Collection.
 func (tc *Collection) ResetUncommitted(ctx context.Context) {
 	tc.uncommitted.reset(ctx)
-	tc.uncommittedComments.reset()
-	tc.uncommittedZoneConfigs.reset()
+	tc.uncommittedMetadata.reset()
 	tc.shadowedNames = nil
 	tc.validationLevels = nil
 	tc.ResetSyntheticDescriptors()
