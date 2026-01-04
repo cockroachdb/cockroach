@@ -2343,7 +2343,7 @@ func shouldDistributeGivenRecAndMode(
 // TODO(yuzefovich): this will be easy to solve once the DistSQL spec factory is
 // completed but is quite annoying to do at the moment.
 func (p *planner) getPlanDistribution(
-	ctx context.Context, plan planMaybePhysical,
+	ctx context.Context, plan planMaybePhysical, info postqueryInfo,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
 	if plan.isPhysicalPlan() {
 		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
@@ -2367,7 +2367,13 @@ func (p *planner) getPlanDistribution(
 			txnHasBufferedWrites = true
 		}
 	}
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
+	distSQLVisitor := &p.distSQLVisitor
+	if info == parallelCheckWorkerGoroutine {
+		// We cannot use the planner's visitor on the worker goroutines, so we
+		// allocate a fresh one.
+		distSQLVisitor = &distSQLExprCheckVisitor{}
+	}
+	rec, err := checkSupportForPlanNode(ctx, plan.planNode, distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return physicalplan.LocalPlan, err

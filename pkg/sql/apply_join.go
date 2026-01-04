@@ -333,7 +333,7 @@ func runPlanInsidePlan(
 		}
 	}
 
-	distributePlan, distSQLProhibitedErr := plannerCopy.getPlanDistribution(ctx, plan.main)
+	distributePlan, distSQLProhibitedErr := plannerCopy.getPlanDistribution(ctx, plan.main, notPostquery)
 	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distributeType = FullDistribution
