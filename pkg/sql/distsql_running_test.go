@@ -619,7 +619,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 				},
 			},
 			Insecure:          true,
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(112960),
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(160517),
 		}})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
