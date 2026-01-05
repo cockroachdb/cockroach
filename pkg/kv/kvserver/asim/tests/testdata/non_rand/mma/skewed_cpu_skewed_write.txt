@@ -43,6 +43,7 @@ setting split_queue_enabled=false
 
 eval duration=38m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases) full=true
 ----
+mma-only:
 cpu#1: last:  [s1=828832772, s2=828777212, s3=831508475, s4=832387737, s5=844311104, s6=830032953] (stddev=5381626.87, mean=832641708.83, sum=4995850253)
 cpu#1: thrash_pct: [s1=8%, s2=37%, s3=54%, s4=22%, s5=16%, s6=14%]  (sum=152%)
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
@@ -55,8 +56,9 @@ replicas#1: last:  [s1=41, s2=52, s3=50, s4=25, s5=25, s6=23] (stddev=12.17, mea
 replicas#1: thrash_pct: [s1=56%, s2=20%, s3=31%, s4=42%, s5=47%, s6=37%]  (sum=233%)
 write_bytes_per_second#1: last:  [s1=8367672, s2=10580757, s3=10581322, s4=10531763, s5=10531421, s6=9420524] (stddev=840699.22, mean=10002243.17, sum=60013459)
 write_bytes_per_second#1: thrash_pct: [s1=1%, s2=5%, s3=7%, s4=2%, s5=115%, s6=110%]  (sum=241%)
-artifacts[mma-only]: 31964600a8a5db0a
+hash: 31964600a8a5db0a
 ==========================
+mma-count:
 cpu#1: last:  [s1=832135023, s2=829718568, s3=829738010, s4=845587865, s5=833948228, s6=829560377] (stddev=5658868.56, mean=833448011.83, sum=5000688071)
 cpu#1: thrash_pct: [s1=59%, s2=84%, s3=90%, s4=46%, s5=47%, s6=44%]  (sum=370%)
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
@@ -69,7 +71,7 @@ replicas#1: last:  [s1=36, s2=35, s3=37, s4=34, s5=37, s6=37] (stddev=1.15, mean
 replicas#1: thrash_pct: [s1=815%, s2=525%, s3=571%, s4=680%, s5=632%, s6=402%]  (sum=3624%)
 write_bytes_per_second#1: last:  [s1=8867846, s2=10027943, s3=10524259, s4=10023228, s5=9973422, s6=10582360] (stddev=562404.06, mean=9999843.00, sum=59999058)
 write_bytes_per_second#1: thrash_pct: [s1=160%, s2=129%, s3=99%, s4=244%, s5=250%, s6=228%]  (sum=1111%)
-artifacts[mma-count]: d266bb6748d76c02
+hash: d266bb6748d76c02
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,5vcpu): {s1:(256GiB)}
