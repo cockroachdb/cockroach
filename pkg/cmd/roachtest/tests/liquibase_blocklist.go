@@ -8,7 +8,7 @@ package tests
 var liquibaseBlocklist = blocklist{}
 
 var liquibaseIgnorelist = blocklist{
-	`liquibase.harness.change.ChangeObjectTests.apply addCheckConstraint against cockroachdb 24.1`:  "requires enterprise version of liquibase",
-	`liquibase.harness.change.ChangeObjectTests.apply createPackage against cockroachdb 24.1`:       "requires enterprise version of liquibase",
-	`liquibase.harness.change.ChangeObjectTests.apply dropCheckConstraint against cockroachdb 24.1`: "requires enterprise version of liquibase",
+	`ChangeObjectTests.apply addCheckConstraint against cockroachdb 24.1`:  "requires enterprise version of liquibase",
+	`ChangeObjectTests.apply createPackage against cockroachdb 24.1`:       "requires enterprise version of liquibase",
+	`ChangeObjectTests.apply dropCheckConstraint against cockroachdb 24.1`: "requires enterprise version of liquibase",
 }
