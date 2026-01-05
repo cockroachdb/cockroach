@@ -2193,6 +2193,9 @@ func TestImportCSVStmt(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
