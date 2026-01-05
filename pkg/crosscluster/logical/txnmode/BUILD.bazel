@@ -8,4 +8,13 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnmode",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster/logical/txnfeed",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/sql",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
