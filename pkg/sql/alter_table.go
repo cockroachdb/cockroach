@@ -1850,6 +1850,7 @@ func pushTableStats(
 		if err := stats.WriteStatsWithOldDeleted(
 			params.ctx,
 			params.p.InternalSQLTxn(),
+			params.ExecCfg().Settings,
 			desc.GetID(),
 			s.Name,
 			columnIDs,
@@ -1876,12 +1877,15 @@ func pushTableStats(
 	shouldDeleteOtherStats := !usingExtreme && (isAuto || !explicitColumns)
 	if shouldDeleteOtherStats && len(columnsUsed) > 0 {
 		keepTime := stats.TableStatisticsRetentionPeriod.Get(&params.p.ExecCfg().Settings.SV)
+		columnIDsPlaceholders, placeHolderVals, err := stats.GetPlaceholderValsFromColumnIDs(desc.TableDesc().ID, columnsUsed, keepTime)
+		if err != nil {
+			return err
+		}
 		if err := stats.DeleteOldStatsForOtherColumns(
 			ctx,
 			params.p.InternalSQLTxn(),
-			desc.GetID(),
-			columnsUsed,
-			keepTime,
+			columnIDsPlaceholders,
+			placeHolderVals,
 		); err != nil {
 			return errors.Wrap(err, "failed to delete other stats")
 		}

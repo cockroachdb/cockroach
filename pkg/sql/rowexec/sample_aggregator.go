@@ -545,6 +545,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			if err := stats.WriteStatsWithOldDeleted(
 				ctx,
 				txn,
+				s.FlowCtx.Cfg.Settings,
 				s.tableID,
 				si.spec.StatName,
 				columnIDs,

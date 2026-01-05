@@ -10,11 +10,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
 )
 
 // InsertNewStats inserts a slice of statistics at the current time into the
@@ -53,7 +57,8 @@ func InsertNewStats(ctx context.Context, txn isql.Txn, tableStats []*TableStatis
 // system.table_statistics schema for the INSERT.
 func WriteStatsWithOldDeleted(
 	ctx context.Context,
-	txn isql.Txn,
+	txn descs.Txn,
+	settings *cluster.Settings,
 	tableID descpb.ID,
 	name string,
 	columnIDs []descpb.ColumnID,
@@ -67,13 +72,38 @@ func WriteStatsWithOldDeleted(
 	// Delete old stats that have been superseded, if the new statistic
 	// is not partial.
 	if partialPredicate == "" {
-		if err := DeleteOldStatsForColumns(
-			ctx,
-			txn,
-			tableID,
-			columnIDs,
-		); err != nil {
+		tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
+		if err != nil {
 			return err
+		}
+		canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0
+
+		if canaryEnabled && settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+			// We don't immediately delete the "stale" stats, but keep it
+			// until another canary stats is collected. It is because if a
+			// query picked the stable path for stats selection, we will
+			// need to reuse the stale stats.
+			if err = DeleteExpiredStats(
+				ctx,
+				txn,
+				tableID,
+				columnIDs,
+			); err != nil {
+				return errors.Wrapf(err, "fail to delete expired stats for table %d columns %v", tableID, columnIDs)
+			}
+
+			if err := MarkDelayDelete(ctx, txn, tableID, columnIDs); err != nil {
+				return errors.Wrapf(err, "failed to mark rows for delayed deletion for table %d columns %v", tableID, columnIDs)
+			}
+		} else {
+			if err := DeleteOldStatsForColumns(
+				ctx,
+				txn,
+				tableID,
+				columnIDs,
+			); err != nil {
+				return err
+			}
 		}
 	}
 
