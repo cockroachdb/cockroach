@@ -694,6 +694,7 @@ func TestDataDriven(t *testing.T) {
 
 							runs = append(runs, run)
 
+							_, _ = fmt.Fprintf(&buf, "%s:\n", mv)
 							// Generate artifacts. Hash artifact input data to ensure they are
 							// up to date.
 							hasher := fnv.New64a()
@@ -706,7 +707,7 @@ func TestDataDriven(t *testing.T) {
 
 							// For each sample that had at least one failing assertion,
 							// report the sample and every failing assertion.
-							_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
+							_, _ = fmt.Fprintf(&buf, "hash: %x\n", artifactsHash)
 							for sample, failString := range sampleAssertFailures {
 								if failString != "" {
 									_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s\n",

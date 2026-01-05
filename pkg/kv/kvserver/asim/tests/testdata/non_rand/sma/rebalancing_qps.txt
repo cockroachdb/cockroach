@@ -42,6 +42,7 @@ setting rebalance_objective=0
 # printed. If no assertions fail, then OK is printed.
 eval duration=3m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only) full=true
 ----
+sma-count:
 qps#1: last:  [s1=996, s2=1001, s3=999, s4=994, s5=1001, s6=1002, s7=1007] (stddev=3.93, mean=1000.00, sum=7000)
 qps#1: thrash_pct: [s1=12%, s2=9%, s3=4%, s4=8%, s5=5%, s6=6%, s7=4%]  (sum=48%)
 replica_moves#1: last:  [s1=2, s2=1, s3=0, s4=1, s5=1, s6=1, s7=0] (stddev=0.64, mean=0.86, sum=6)
@@ -50,13 +51,14 @@ qps#2: last:  [s1=999, s2=999, s3=997, s4=998, s5=997, s6=1002, s7=998] (stddev=
 qps#2: thrash_pct: [s1=11%, s2=8%, s3=4%, s4=103%, s5=4%, s6=105%, s7=5%]  (sum=240%)
 replica_moves#2: last:  [s1=2, s2=1, s3=0, s4=1, s5=0, s6=1, s7=0] (stddev=0.70, mean=0.71, sum=5)
 replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[sma-count]: df2fd03851620873
+hash: df2fd03851620873
 ==========================
+mma-only:
 qps#1: last:  [s1=3998, s2=1998, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.41, mean=999.71, sum=6998)
 qps#1: thrash_pct: [s1=5%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
 qps#2: last:  [s1=3997, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.30, mean=999.86, sum=6999)
 qps#2: thrash_pct: [s1=5%, s2=4%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=13%)
-artifacts[mma-only]: 5f746caa968e0ee
+hash: 5f746caa968e0ee
 failed assertion sample 1
   balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
@@ -109,6 +111,7 @@ setting gossip_delay=20s
 # thrashing on the fourth sample here.
 eval duration=5m samples=2 seed=42 metrics=(qps,replica_moves) cfgs=(sma-count,mma-only)
 ----
+sma-count:
 qps#1: last:  [s1=994, s2=999, s3=1005, s4=1000, s5=998, s6=1002, s7=999] (stddev=3.16, mean=999.57, sum=6997)
 qps#1: thrash_pct: [s1=117%, s2=59%, s3=54%, s4=53%, s5=104%, s6=105%, s7=53%]  (sum=543%)
 replica_moves#1: last:  [s1=5, s2=4, s3=0, s4=4, s5=3, s6=5, s7=2] (stddev=1.67, mean=3.29, sum=23)
@@ -117,13 +120,14 @@ qps#2: last:  [s1=1001, s2=1003, s3=994, s4=997, s5=1002, s6=1001, s7=998] (stdd
 qps#2: thrash_pct: [s1=256%, s2=47%, s3=43%, s4=2%, s5=284%, s6=126%, s7=125%]  (sum=882%)
 replica_moves#2: last:  [s1=12, s2=7, s3=1, s4=0, s5=10, s6=8, s7=3] (stddev=4.26, mean=5.86, sum=41)
 replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[sma-count]: 1bd16e771629608b
+hash: 1bd16e771629608b
 ==========================
+mma-only:
 qps#1: last:  [s1=4002, s2=1995, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1414.32, mean=999.86, sum=6999)
 qps#1: thrash_pct: [s1=6%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=16%)
 qps#2: last:  [s1=3996, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.00, mean=999.71, sum=6998)
 qps#2: thrash_pct: [s1=6%, s2=5%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
-artifacts[mma-only]: d714a7f83140a093
+hash: d714a7f83140a093
 failed assertion sample 1
   balance stat=qps threshold=(≤1.15) ticks=6
 	max/mean=4.00 tick=0
