@@ -1629,6 +1629,10 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This test depends on time-based waiting for coordination and is thus
+	// subjects to flakes if the test runner is too slow.
+	skip.UnderDuress(t)
+
 	// Backpressured writes react differently depending on whether there is an
 	// ongoing split or not. If there is an ongoing split then the writes wait
 	// on the split are only allowed to proceed if the split succeeds. If there
@@ -1746,13 +1750,16 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}
 			}
 
+			putCtx := contextWithRecordingSpanForTest(ctx, store.DB().Tracer, t, "put")
+			delCtx := contextWithRecordingSpanForTest(ctx, store.DB().Tracer, t, "del")
+
 			// Send a Put request. This should be backpressured on the split, so it should
 			// not be able to succeed until we allow the split to continue.
 			putRes := make(chan error)
 			go func() {
 				// Write to the first key of the range to make sure that
 				// we don't end up on the wrong side of the split.
-				putRes <- store.DB().Put(ctx, splitKey, "test")
+				putRes <- store.DB().Put(putCtx, splitKey, "test")
 			}()
 
 			// Send a Delete request in a transaction. Should also be backpressured on the split,
@@ -1761,7 +1768,8 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			go func() {
 				// Write to the first key of the range to make sure that
 				// we don't end up on the wrong side of the split.
-				delRes <- store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				//
+				delRes <- store.DB().Txn(delCtx, func(ctx context.Context, txn *kv.Txn) error {
 					b := txn.NewBatch()
 					b.Del(splitKey)
 					return txn.CommitInBatch(ctx, b)
@@ -1782,6 +1790,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 				}
 
 				// Let split through. Write should follow.
+				t.Logf("unblocking splits")
 				close(blockSplits)
 			}
 
@@ -1802,6 +1811,20 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 		})
 	}
+}
+
+func contextWithRecordingSpanForTest(
+	ctx context.Context, tr *tracing.Tracer, t testing.TB, name string,
+) context.Context {
+	ctx, finishAndGetRec := tracing.ContextWithRecordingSpan(ctx, tr, name)
+	t.Cleanup(func() {
+		rec := finishAndGetRec()
+		if !t.Failed() {
+			return
+		}
+		t.Logf("TRACE FOR %s:\n%s", name, rec)
+	})
+	return ctx
 }
 
 // runSetupSplitSnapshotRace engineers a situation in which a range has
