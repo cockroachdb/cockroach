@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -164,7 +164,14 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			bucketCapacity[testTier1][canBurst] = 10
 			bucketCapacity[testTier1][noBurst] = 1
 			granter.refill(delta, bucketCapacity)
-			fmt.Fprintf(&buf, "refill(%v %v)\n", delta, bucketCapacity)
+			fmt.Fprint(&buf, "refill(\n")
+			for tier := int(numResourceTiers - 1); tier >= 0; tier-- {
+				for qual := int(numBurstQualifications - 1); qual >= 0; qual-- {
+					fmt.Fprintf(&buf, "\ttier%d %s -> delta: %v, cap: %v\n",
+						tier, burstQualification(qual).String(), delta[tier][qual], bucketCapacity[tier][qual])
+				}
+			}
+			fmt.Fprint(&buf, ")\n")
 			return flushAndReset(false /* init */)
 
 		case "reset-tokens-used":

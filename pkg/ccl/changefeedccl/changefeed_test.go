@@ -7361,7 +7361,7 @@ func TestChangefeedErrors(t *testing.T) {
 
 	// Backup has the same bad error message #28170.
 	sqlDB.ExpectErrWithTimeout(
-		t, `"information_schema.tables" does not exist`,
+		t, `CHANGEFEED cannot target virtual tables: tables`,
 		`EXPERIMENTAL CHANGEFEED FOR information_schema.tables`,
 	)
 
@@ -7885,6 +7885,14 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErrWithTimeout(
 		t, `unknown enriched_properties: potato, valid values are: source, schema`,
 		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH enriched_properties='schema,potato'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_schema_prefix must start with \[A-Za-z_\] and subsequently contain only \[A-Za-z0-9_\]`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH avro_schema_prefix='1abc'`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `avro_schema_prefix must start with \[A-Za-z_\] and subsequently contain only \[A-Za-z0-9_\]`,
+		`CREATE CHANGEFEED FOR foo INTO 'null://' WITH avro_schema_prefix='abc-d'`,
 	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {

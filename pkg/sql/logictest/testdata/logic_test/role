@@ -1082,7 +1082,7 @@ CREATE ROLE rolej
 # Testing LOGIN and VALID UNTIL role privilege
 user root
 
-statement ok
+statement count 15
 DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
 
 statement ok

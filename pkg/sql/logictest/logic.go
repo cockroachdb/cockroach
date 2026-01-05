@@ -228,6 +228,11 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//    Usage of 'statement count N' is preferred whenever applicable (e.g. for
+//    DML statements) and in some cases is actually required by the framework.
+//    Use 'statement nocount ok' to explicitly opt out of the count check (e.g.
+//    because the count is non-determinstic).
+//
 //  - statement disable-cf-mutator ok
 //    Like "statement ok" but disables the column family mutator if applicable.
 //
@@ -332,6 +337,12 @@ import (
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
 //      - allowunsafe: allows access to unsafe internals during execution.
+//      - scrub-row-counts: removes lines containing "row count" from results
+//            to avoid test brittleness when virtual tables are added/removed.
+//      - strip-oids: replaces virtual table OIDs (9+ digit numbers) with
+//            "__OID__" placeholders. Automatically enabled for queries containing
+//            "pg_" references. To test specific OID values when enabled, adjust the
+// 						query projection to prefix, e.g 'oid='||t.oid.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -541,6 +552,9 @@ var (
 	sendingBatchRE = regexp.MustCompile(`r\d+: (sending batch .*)`)
 	beforeTableRE  = regexp.MustCompile(`(<before:/Table/)\d+(>)`)
 	afterTableRE   = regexp.MustCompile(`(<after:/Table/)\d+(/.*>)`)
+	// virtualOidRE matches large OIDs (9+ digits) to strip them for test stability.
+	// These OIDs shift when virtual tables or other objects are added/removed.
+	virtualOidRE = regexp.MustCompile(`\b[1-9]\d{8,9}\b`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -977,6 +991,17 @@ type logicQuery struct {
 
 	// allowUnsafe indicates whether unsafe operations are allowed during execution.
 	allowUnsafe bool
+
+	// scrubRowCounts indicates whether to remove lines containing "row count"
+	// from results to avoid brittleness when virtual tables are added/removed.
+	scrubRowCounts bool
+
+	// stripOids indicates whether to replace virtual table OIDs (matching
+	// 429\d{7}) with a placeholder to avoid test brittleness. This is
+	// automatically enabled for queries containing "pg_" unless explicitly
+	// disabled with no-strip-oids. If you need to test actual OID values,
+	// offset them below the detection range or use no-strip-oids.
+	stripOids bool
 }
 
 var allowedKVOpTypes = []string{
@@ -1576,7 +1601,6 @@ func (t *logicTest) newCluster(
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
-			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
@@ -1844,23 +1868,6 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
-		if cfg.EnableLeasedDescriptorSupport {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = true",
-			); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = true"); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		if cfg.UseDistributedMergeIndexBackfill {
 			mode := "declarative"
 			if cfg.DisableDeclarativeSchemaChanger {
@@ -2795,6 +2802,7 @@ func (t *logicTest) processSubtest(
 			}
 			fullyConsumed := len(fields) == 1
 			var disableCFMutator bool
+			var matchedStatementOK bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2806,15 +2814,33 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
 				disableCFMutator = true
 				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "nocount" && fields[2] == "ok" {
+				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
 				fullyConsumed = true
+				matchedStatementOK = true
 			}
 			if !fullyConsumed {
 				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
+			}
+			isSQLite := strings.Contains(path, "sqllogictest")
+			if matchedStatementOK && !isSQLite {
+				// Require that DML stmts use 'statement count N', currently we
+				// only do this for "simple" DELETEs.
+				//
+				// We don't apply this to SQLite suite since we haven't adjusted
+				// it yet.
+				// TODO(yuzefovich): expand this to other DML statements.
+				// TODO(yuzefovich): apply this to more complex stmts with CTEs,
+				// etc.
+				// TODO(yuzefovich): expand this to sqllogictest too.
+				if strings.HasPrefix(strings.TrimSpace(strings.ToUpper(stmt.sql)), "DELETE") {
+					return errors.New("DELETE should use 'statement count N' directive instead of 'statement ok'")
+				}
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
@@ -3018,6 +3044,12 @@ func (t *logicTest) processSubtest(
 
 						case "allowunsafe":
 							query.allowUnsafe = true
+
+						case "scrub-row-counts":
+							query.scrubRowCounts = true
+
+						case "strip-oids":
+							query.stripOids = true
 
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
@@ -4134,6 +4166,25 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 			if err := rows.Err(); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Filter out lines containing "row count" if scrub-row-counts is enabled.
+	if query.scrubRowCounts {
+		filtered := actualResultsRaw[:0]
+		for _, result := range actualResultsRaw {
+			if !strings.Contains(result, "row count") {
+				filtered = append(filtered, result)
+			}
+		}
+		actualResultsRaw = filtered
+	}
+
+	// Replace virtual table OIDs with placeholders if strip-oids is enabled.
+	// Test files should use "oidX" placeholders in expected results.
+	if query.stripOids {
+		for i, result := range actualResultsRaw {
+			actualResultsRaw[i] = virtualOidRE.ReplaceAllString(result, "__OID__")
 		}
 	}
 

@@ -143,7 +143,7 @@ SELECT * FROM [$num_ref_id as num_ref_alias]
 4     40    400
 5     NULL  NULL
 
-statement ok
+statement count 1
 DELETE FROM [$num_ref_id AS num_ref_alias]@bc WHERE p=5
 
 query I

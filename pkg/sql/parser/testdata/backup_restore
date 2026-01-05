@@ -53,15 +53,6 @@ BACKUP TABLE _ INTO LATEST IN '*****' -- identifiers removed
 BACKUP TABLE foo INTO LATEST IN 'bar' -- passwords exposed
 
 parse
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_location = 'baz'
-----
-BACKUP TABLE foo INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!
-BACKUP TABLE (foo) INTO LATEST IN ('*****') WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (incremental_location = '_') -- literals removed
-BACKUP TABLE _ INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
-
-parse
 BACKUP TABLE foo INTO 'subdir' IN 'bar'
 ----
 BACKUP TABLE foo INTO 'subdir' IN '*****' -- normalized!
@@ -151,15 +142,6 @@ SHOW BACKUPS IN '*****' -- identifiers removed
 SHOW BACKUPS IN 'bar' -- passwords exposed
 
 parse
-SHOW BACKUPS IN 'bar' WITH index
-----
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ('*****') WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN '_' WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- identifiers removed
-SHOW BACKUPS IN 'bar' WITH OPTIONS (index) -- passwords exposed
-
-parse
 SHOW BACKUPS IN $1
 ----
 SHOW BACKUPS IN $1
@@ -168,12 +150,57 @@ SHOW BACKUPS IN $1 -- literals removed
 SHOW BACKUPS IN $1 -- identifiers removed
 
 parse
-SHOW BACKUPS IN $1 WITH index
+SHOW BACKUPS IN 'bar' AFTER '1'
 ----
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ($1) WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- identifiers removed
+SHOW BACKUPS IN '*****' AFTER '1' -- normalized!
+SHOW BACKUPS IN ('*****') AFTER ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' AFTER '_' -- literals removed
+SHOW BACKUPS IN '*****' AFTER '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' AFTER '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' BEFORE '1'
+----
+SHOW BACKUPS IN '*****' BEFORE '1' -- normalized!
+SHOW BACKUPS IN ('*****') BEFORE ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' BEFORE '_' -- literals removed
+SHOW BACKUPS IN '*****' BEFORE '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' BEFORE '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2'
+----
+SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- normalized!
+SHOW BACKUPS IN ('*****') AFTER ('1') BEFORE ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' AFTER '_' BEFORE '_' -- literals removed
+SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' BEFORE '2' AFTER '1'
+----
+SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- normalized!
+SHOW BACKUPS IN ('*****') AFTER ('1') BEFORE ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' AFTER '_' BEFORE '_' -- literals removed
+SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 AFTER $2 BEFORE $3
+----
+SHOW BACKUPS IN $1 AFTER $2 BEFORE $3
+SHOW BACKUPS IN ($1) AFTER ($2) BEFORE ($3) -- fully parenthesized
+SHOW BACKUPS IN $1 AFTER $1 BEFORE $1 -- literals removed
+SHOW BACKUPS IN $1 AFTER $2 BEFORE $3 -- identifiers removed
+
+parse
+SHOW BACKUPS IN $1 BEFORE $2 AFTER $3
+----
+SHOW BACKUPS IN $1 AFTER $3 BEFORE $2 -- normalized!
+SHOW BACKUPS IN ($1) AFTER ($3) BEFORE ($2) -- fully parenthesized
+SHOW BACKUPS IN $1 AFTER $1 BEFORE $1 -- literals removed
+SHOW BACKUPS IN $1 AFTER $3 BEFORE $2 -- identifiers removed
+
 
 parse
 SHOW BACKUP 'foo' IN 'bar'

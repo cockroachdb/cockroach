@@ -124,6 +124,11 @@ retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 skipping s2 for lease transfer: replica lease disposition refusing (health ok)
 [1 3]
 
+# The leaseholder is exempt from the disposition check.
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1 leaseholder=2
+----
+[1 2 3]
+
 # Restore s2's replica disposition.
 store-leaseholder-msg
 store-id=1
@@ -135,5 +140,9 @@ store-id=1
 ----
 
 retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+[1 2 3]
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1 leaseholder=2
 ----
 [1 2 3]

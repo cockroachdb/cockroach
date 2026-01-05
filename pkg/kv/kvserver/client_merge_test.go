@@ -647,29 +647,29 @@ func mergeCheckingTimestampCaches(
 		}
 
 		// Applied to the leaseholder's raft transport during the partition.
-		partitionedLeaseholderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaseholderFuncs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
+		partitionedLeaseholderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		partitionedLeaseholderFuncs.DropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from new leader.
 			return true
 		}
 
 		// Applied to the leader and other follower's raft transport during the
 		// partition.
-		partitionedLeaderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+		partitionedLeaderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		partitionedLeaderFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from leaseholder, except forwarded proposals.
 			return req.FromReplica.StoreID == lhsStore.StoreID() &&
 				req.Message.Type != raftpb.MsgProp
 		}
-		partitionedLeaderFuncs.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+		partitionedLeaderFuncs.DropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 			// Ignore heartbeats from leaseholder, results in campaign.
 			return hb.FromReplicaID == roachpb.ReplicaID(lhsRepls[0].RaftStatus().ID)
 		}
 
 		// Applied to leaseholder after the partition heals.
 		var truncIndex kvpb.RaftIndex
-		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
-		restoredLeaseholderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+		restoredLeaseholderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		restoredLeaseholderFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Make sure that even going forward no MsgApp for what we just
 			// truncated can make it through. The Raft transport is asynchronous
 			// so this is necessary to make the test pass reliably - otherwise
@@ -695,16 +695,16 @@ func mergeCheckingTimestampCaches(
 		filterMu.mergeCommitFilter = func() {
 			// Install leader-leaseholder partition.
 			for i, s := range lhsStores {
-				var funcs unreliableRaftHandlerFuncs
+				var funcs kvtestutils.UnreliableRaftHandlerFuncs
 				if i == 0 {
 					funcs = partitionedLeaseholderFuncs
 				} else {
 					funcs = partitionedLeaderFuncs
 				}
-				tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s.StoreID(), &unreliableRaftHandler{
-					rangeID:                    lhsDesc.GetRangeID(),
+				tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    lhsDesc.GetRangeID(),
 					IncomingRaftMessageHandler: s,
-					unreliableRaftHandlerFuncs: funcs,
+					UnreliableRaftHandlerFuncs: funcs,
 				})
 			}
 
@@ -804,10 +804,10 @@ func mergeCheckingTimestampCaches(
 		for i, s := range lhsStores {
 			var h kvserver.IncomingRaftMessageHandler
 			if i == 0 {
-				h = &unreliableRaftHandler{
-					rangeID:                    lhsDesc.GetRangeID(),
+				h = &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    lhsDesc.GetRangeID(),
 					IncomingRaftMessageHandler: s,
-					unreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
+					UnreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
 				}
 			} else {
 				h = s
@@ -2734,11 +2734,11 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    lhsDesc.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3022,11 +3022,11 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 
 	// Start dropping all Raft traffic to the LHS replica on store2 so that it
 	// won't be aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    lhsDesc.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(*kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(*kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3420,11 +3420,11 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// from range 1, which will be the LHS of the split, so that store2's replica
 	// of range 1 never processes the split trigger, which would create an
 	// initialized replica of A.
-	unreliableHandler := &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
+	unreliableHandler := &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -4096,11 +4096,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
 
 		// Start dropping all Raft traffic to the first range on store2.
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    aRepl0.RangeID,
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl0.RangeID,
 			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 					return true
 				},
 			},
@@ -4151,11 +4151,11 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Restore Raft traffic to the LHS on store2.
 		log.KvDistribution.Infof(ctx, "restored traffic to store 2")
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    aRepl0.RangeID,
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl0.RangeID,
 			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we
 					// just truncated can make it through. The Raft transport is
 					// asynchronous so this is necessary to make the test pass
@@ -4168,8 +4168,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
 				// Don't drop heartbeats or responses.
-				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 

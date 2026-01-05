@@ -1,5 +1,9 @@
 # LogicTest: local fakedist
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Tests for creating partial table statistics with a WHERE clause.
 
 statement ok

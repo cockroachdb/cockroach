@@ -2,6 +2,10 @@
 
 skip under race
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Disable histogram collection.
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
@@ -385,7 +389,7 @@ NULL             {c}           256        4               0           true
 NULL             {d}           256        4               0           true
 NULL             {e}           256        2               0           true
 
-statement ok
+statement count 10
 DELETE FROM system.table_statistics
 
 # Restore the old stats.
@@ -1242,7 +1246,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
 let $json_stats
 SHOW STATISTICS USING JSON FOR TABLE et
 
-statement ok
+statement count 45
 DELETE FROM system.table_statistics
 
 # Restore the old stats.
@@ -3866,7 +3870,7 @@ INSERT INTO t67050 VALUES ('a'), ('b'), ('c')
 statement ok
 ANALYZE t67050
 
-statement ok
+statement count 1
 DELETE FROM t67050 WHERE x = 'a'
 
 statement ok

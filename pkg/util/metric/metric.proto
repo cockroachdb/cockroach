@@ -44,6 +44,8 @@ enum Unit {
   // TIMESTAMP_SEC expresses that the metric's measurement is a time since the
   // Unix epoch in seconds.
   TIMESTAMP_SEC = 8;
+  // DURATION expresses that the metric's measurement represents some unit of time.
+  DURATION = 9;
 }
 
 // Metadata holds metadata about a metric. It must be embedded in
@@ -128,7 +130,7 @@ message Metadata {
 
   // visibility defines the intended audience and usage level for this metric.
   // See MetricVisibility for details on each visibility level.
-  required MetricVisibility visibility = 10 [(gogoproto.nullable) = false];
+  optional MetricVisibility visibility = 10 [(gogoproto.nullable) = false];
   // category is the dashboard category of this metric. This is
   // required if visibility is ESSENTIAL.
   required Category category = 11 [(gogoproto.nullable) = false];
@@ -152,6 +154,39 @@ message Metadata {
   // in the low-frequency child metrics poller. When true, child metrics with
   // labels will be recorded in the time series database.
   optional bool tsdb_record_labeled = 13;
+  // metrics_visualisation_config describes visualisation of the metric
+  // in multiple charts
+  optional MetricsVisualisationConfig metrics_visualisation_config = 14;
 
-  // Next ID: 14.
+  // Next ID: 15.
+}
+
+message MetricsVisualisationConfig {
+  // title is the title of the metrics in the chart.
+  required string title = 1 [(gogoproto.nullable) = false];
+  // arbitrary platform-specific options for a given metric
+  map<string, string> options = 2;
+  // chart_config describes mapping associated between the chart and the dashboard.
+  // Single chart may belong to multiple dashboards.
+  map<string,Chart> chart_config = 3;
+}
+
+// Chart describes both the properties necessary to display
+// charts, as well as a key to find them (collectionName).
+message Chart {
+  // title is the title of the chart. It should be unique
+  // across all the charts in all dashboards
+  required string title = 1 [(gogoproto.nullable) = false];
+  // type displays the chart's type ex.line.
+  required string type = 2 [(gogoproto.nullable) = false];
+  // units specifies the unit to display the chart with.
+  required Unit units = 3 [(gogoproto.nullable) = false];
+  // axisLabel defines the chart's y-axis label.
+  required string axisLabel = 4 [(gogoproto.nullable) = false];
+  // tooltip defines description of what the metric measures.
+  required string tooltip = 5 [(gogoproto.nullable) = false];
+  // note defines additional details about the metric usability.
+  optional string note = 6 [(gogoproto.nullable) = false];
+  // arbitrary platform-specific options for a given chart
+  map<string, string> options = 7;
 }

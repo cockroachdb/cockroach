@@ -149,7 +149,7 @@ type CatalogReader interface {
 	MayResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
 	// MayResolveTable looks up a table by name.
-	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
+	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName, allowOffline bool) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
 
 	// MayResolveType looks up a type by name.
 	MayResolveType(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor)

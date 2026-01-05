@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -101,6 +102,34 @@ func CreateAvroData(
 	}
 	// Retrieve the AVRO encoded data.
 	return data.String()
+}
+
+func TestImportDistributedMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dirname, cleanup := testutils.TempDir(t)
+	t.Cleanup(cleanup)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dirname,
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dirname, "data.csv"),
+		[]byte("1,jeff,user@email.com"),
+		os.FileMode(0644),
+	))
+
+	sqlDB.Exec(t, `CREATE TABLE customers (id INT PRIMARY KEY, name STRING, email STRING)`)
+	sqlDB.Exec(t, `IMPORT INTO customers (id, name, email) CSV DATA ($1)`, "nodelocal://1/data.csv")
+
+	require.Equal(t, [][]string{{"1", "jeff"}}, sqlDB.QueryStr(t, `SELECT id, name FROM customers`))
 }
 
 func TestImportData(t *testing.T) {
@@ -1399,57 +1428,98 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", jobID))
 	sqlDB.Exec(t, fmt.Sprintf("SHOW JOB WHEN COMPLETE %d", jobID))
 	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM t", [][]string{{"0"}})
+
+	// Verify TablePublished is set after cleanup.
+	job, err := tc.ApplicationLayer(0).JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(jobID))
+	require.NoError(t, err)
+	payload := job.Payload()
+	importDetails := payload.GetImport()
+	require.True(t, importDetails.TablePublished, "expected TablePublished to be true after cleanup")
 }
 
-func TestImportCSVStmt(t *testing.T) {
+func TestImportCancelAfterSuccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// This is a regression test for #159603. If the cancel logic ran after the
+	// descriptor was marked as offline, we could end up deleting live data.
+
+	ctx := context.Background()
+	baseDir := datapathutils.TestDataPath(t, "csv")
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		ExternalIODir: baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	testFiles := makeCSVData(t, 1, 100, 1, 100)
+
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, fmt.Sprintf("WITH j AS (IMPORT INTO t (a, b) CSV DATA (%s)) SELECT job_id FROM j", testFiles.files[0])).Scan(&jobID)
+
+	var countBefore int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&countBefore)
+
+	sqlDB.Exec(t, "UPDATE system.jobs SET status = 'cancel-requested' WHERE id = $1", jobID)
+	jobutils.WaitForJobToCancel(t, sqlDB, jobID)
+
+	var countAfter int
+	sqlDB.QueryRow(t, "SELECT count(*) FROM t").Scan(&countAfter)
+	require.Equal(t, countBefore, countAfter, "data should not be rolled back")
+}
+
+func setupTestImportCSVStmt(
+	t *testing.T,
+) (
+	tc serverutils.TestClusterInterface,
+	sqlDB *sqlutils.SQLRunner,
+	testFiles csvTestFiles,
+	numFiles int,
+	rowsPerFile int,
+) {
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
 
-	numFiles := nodes + 2
-	rowsPerFile := 1000
+	numFiles = nodes + 2
+	rowsPerFile = 1000
 	rowsPerRaceFile := 16
 
-	var forceFailure bool
-
-	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc = serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
 		ExternalIODir: baseDir,
 	}})
-	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
-	for i := 0; i < tc.NumServers(); i++ {
-		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
-					if forceFailure {
-						return errors.New("testing injected failure")
-					}
-					return nil
-				}
-				return r
-			})
-	}
-
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-
+	sqlDB = sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 
-	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+	testFiles = makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
 		// This test takes a while with the race detector, so reduce the number of
 		// files and rows per file in an attempt to speed it up.
 		numFiles = nodes
 		rowsPerFile = rowsPerRaceFile
 	}
+	return tc, sqlDB, testFiles, numFiles, rowsPerFile
+}
+
+func TestImportCSVStmt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, sqlDB, testFiles, numFiles, rowsPerFile := setupTestImportCSVStmt(t)
+	defer tc.Stopper().Stop(ctx)
 
 	empty := []string{"'nodelocal://1/empty.csv'"}
 
@@ -1699,6 +1769,170 @@ func TestImportCSVStmt(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImportCSVStmtCheckpointLeftover(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, testFiles, _, _ := setupTestImportCSVStmt(t)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Verify a failed IMPORT won't prevent a second IMPORT.
+	sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
+	sqlDB.Exec(t, `CREATE TABLE t (a INT8 PRIMARY KEY, b STRING)`)
+
+	// Specify wrong number of columns.
+	sqlDB.ExpectErr(
+		t, "error parsing row 1: expected 1 fields, got 2",
+		fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
+	)
+
+	// Expect it to succeed with correct columns.
+	sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]))
+
+	// A second attempt should fail fast. A "slow fail" is the error message
+	// "restoring table desc and namespace entries: table already exists".
+	sqlDB.ExpectErr(
+		t, `ingested key collides with an existing one`,
+		fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]),
+	)
+}
+
+func TestImportCSVStmtRBACSuperUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, testFiles, _, _ := setupTestImportCSVStmt(t)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Test basic role based access control. Users who have the admin role should
+	// be able to IMPORT.
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `GRANT admin TO testuser`)
+	pgURL, cleanupFunc := tc.ApplicationLayer(0).PGUrl(t, serverutils.User(username.TestUser))
+	defer cleanupFunc()
+	testuser, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer testuser.Close()
+
+	if _, err := testuser.Exec("CREATE TABLE rbac_into_superuser (a INT8 PRIMARY KEY, " +
+		"b STRING)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_superuser (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestImportCSVStmtAllowDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tc, sqlDB, _, _, _ := setupTestImportCSVStmt(t)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `SET DATABASE = d`)
+
+	const (
+		create = `CREATE TABLE t (
+					a SERIAL8,
+					b INT8 DEFAULT unique_rowid(),
+					c STRING DEFAULT 's',
+					d SERIAL8,
+					e INT8 DEFAULT unique_rowid(),
+					f STRING DEFAULT 's',
+					PRIMARY KEY (a, b, c)
+				)`
+		query            = `IMPORT INTO t CSV DATA ($1)`
+		nullif           = ` WITH nullif=''`
+		allowQuotedNulls = `, allow_quoted_null`
+	)
+
+	sqlDB.Exec(t, create)
+
+	data = ",5,e,7,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.ExpectErr(
+			t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+			query, srv.URL,
+		)
+		sqlDB.ExpectErr(
+			t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+			query+nullif, srv.URL,
+		)
+		sqlDB.ExpectErr(
+			t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+			query+nullif+allowQuotedNulls, srv.URL,
+		)
+	})
+	data = "\"\",5,e,7,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.ExpectErr(
+			t, `row 1: parse "a" as INT8: could not parse ""`,
+			query, srv.URL,
+		)
+		sqlDB.ExpectErr(
+			t, `row 1: parse "a" as INT8: could not parse ""`,
+			query+nullif, srv.URL,
+		)
+		sqlDB.ExpectErr(
+			t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
+			query+nullif+allowQuotedNulls, srv.URL,
+		)
+	})
+	data = "2,5,e,,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.ExpectErr(
+			t, `row 1: generate insert row: null value in column "d" violates not-null constraint`,
+			query+nullif, srv.URL,
+		)
+	})
+	data = "2,,e,,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.ExpectErr(
+			t, `"b" violates not-null constraint`,
+			query+nullif, srv.URL,
+		)
+	})
+
+	data = "2,5,,,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.ExpectErr(
+			t, `"c" violates not-null constraint`,
+			query+nullif, srv.URL,
+		)
+	})
+
+	data = "2,5,e,-1,,"
+	t.Run(data, func(t *testing.T) {
+		sqlDB.Exec(t, query+nullif, srv.URL)
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM t`,
+			sqlDB.QueryStr(t, `SELECT 2, 5, 'e', -1, NULL, NULL`),
+		)
+	})
+}
+
+func TestImportCSVStmtMisc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, sqlDB, testFiles, numFiles, rowsPerFile := setupTestImportCSVStmt(t)
+	defer tc.Stopper().Stop(ctx)
 
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("unique_rowid", func(t *testing.T) {
@@ -1716,143 +1950,6 @@ func TestImportCSVStmt(t *testing.T) {
 						)
 				`, numFiles, rowsPerFile),
 		)
-	})
-
-	// Verify a failed IMPORT won't prevent a second IMPORT.
-	t.Run("checkpoint-leftover", func(t *testing.T) {
-		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
-		sqlDB.Exec(t, `CREATE TABLE t (a INT8 PRIMARY KEY, b STRING)`)
-
-		// Specify wrong number of columns.
-		sqlDB.ExpectErr(
-			t, "error parsing row 1: expected 1 fields, got 2",
-			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA (%s)`, testFiles.files[0]),
-		)
-
-		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]))
-
-		// A second attempt should fail fast. A "slow fail" is the error message
-		// "restoring table desc and namespace entries: table already exists".
-		sqlDB.ExpectErr(
-			t, `ingested key collides with an existing one`,
-			fmt.Sprintf(`IMPORT INTO t CSV DATA (%s)`, testFiles.files[0]),
-		)
-	})
-
-	// Test basic role based access control. Users who have the admin role should
-	// be able to IMPORT.
-	t.Run("RBAC-SuperUser", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE USER testuser`)
-		sqlDB.Exec(t, `GRANT admin TO testuser`)
-		pgURL, cleanupFunc := tc.ApplicationLayer(0).PGUrl(t, serverutils.User(username.TestUser))
-		defer cleanupFunc()
-		testuser, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer testuser.Close()
-
-		if _, err := testuser.Exec("CREATE TABLE rbac_into_superuser (a INT8 PRIMARY KEY, " +
-			"b STRING)"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := testuser.Exec(fmt.Sprintf(`IMPORT INTO rbac_into_superuser (a, b) CSV DATA (%s)`, testFiles.files[0])); err != nil {
-			t.Fatal(err)
-		}
-	})
-
-	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
-	t.Run("allow-default", func(t *testing.T) {
-		var data string
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(data))
-			}
-		}))
-		defer srv.Close()
-
-		sqlDB.Exec(t, `CREATE DATABASE d`)
-		sqlDB.Exec(t, `SET DATABASE = d`)
-
-		const (
-			create = `CREATE TABLE t (
-					a SERIAL8,
-					b INT8 DEFAULT unique_rowid(),
-					c STRING DEFAULT 's',
-					d SERIAL8,
-					e INT8 DEFAULT unique_rowid(),
-					f STRING DEFAULT 's',
-					PRIMARY KEY (a, b, c)
-				)`
-			query            = `IMPORT INTO t CSV DATA ($1)`
-			nullif           = ` WITH nullif=''`
-			allowQuotedNulls = `, allow_quoted_null`
-		)
-
-		sqlDB.Exec(t, create)
-
-		data = ",5,e,7,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.ExpectErr(
-				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
-				query, srv.URL,
-			)
-			sqlDB.ExpectErr(
-				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
-				query+nullif, srv.URL,
-			)
-			sqlDB.ExpectErr(
-				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
-				query+nullif+allowQuotedNulls, srv.URL,
-			)
-		})
-		data = "\"\",5,e,7,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.ExpectErr(
-				t, `row 1: parse "a" as INT8: could not parse ""`,
-				query, srv.URL,
-			)
-			sqlDB.ExpectErr(
-				t, `row 1: parse "a" as INT8: could not parse ""`,
-				query+nullif, srv.URL,
-			)
-			sqlDB.ExpectErr(
-				t, `row 1: generate insert row: null value in column "a" violates not-null constraint`,
-				query+nullif+allowQuotedNulls, srv.URL,
-			)
-		})
-		data = "2,5,e,,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.ExpectErr(
-				t, `row 1: generate insert row: null value in column "d" violates not-null constraint`,
-				query+nullif, srv.URL,
-			)
-		})
-		data = "2,,e,,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.ExpectErr(
-				t, `"b" violates not-null constraint`,
-				query+nullif, srv.URL,
-			)
-		})
-
-		data = "2,5,,,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.ExpectErr(
-				t, `"c" violates not-null constraint`,
-				query+nullif, srv.URL,
-			)
-		})
-
-		data = "2,5,e,-1,,"
-		t.Run(data, func(t *testing.T) {
-			sqlDB.Exec(t, query+nullif, srv.URL)
-			sqlDB.CheckQueryResults(t,
-				`SELECT * FROM t`,
-				sqlDB.QueryStr(t, `SELECT 2, 5, 'e', -1, NULL, NULL`),
-			)
-		})
 	})
 
 	// Test userfile import CSV.
@@ -5244,6 +5341,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
+	defer besteffort.TestForbidSkip("import-event")()
 
 	skip.UnderRace(t)
 
@@ -5295,7 +5393,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		RecoveryType: importJobRecoveryEventType,
 		NumRows:      int64(1000),
 	}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -5322,7 +5420,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	// we record the count of inserted rows prior to executing testingKnobs.afterImport
 	// (see `importResumer.Resume()`) so that we can test on resuming the interrupted
 	// import process (such as TestCSVImportCanBeResumed).
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "IMPORT INTO foo.public.simple", "IMPORT", expectedRecoveryEvent)
 }
 
 func TestUDTChangeDuringImport(t *testing.T) {

@@ -8,289 +8,341 @@ package backupresolver
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"sort"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
-func TestDescriptorsMatchingTargets(t *testing.T) {
+// TestResolveTargets tests the ResolveTargets implementation that uses
+// Collection APIs for efficient descriptor resolution.
+func TestResolveTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(ajwerner): There should be a constructor for an immutable
-	// and really all of the leasable descriptor types which includes its initial
-	// DescriptorMeta. This refactoring precedes the actual adoption of
-	// DescriptorMeta.
-	var descriptors []catalog.Descriptor
-	{
-		// Make shorthand type names for syntactic sugar.
-		type scDesc = descpb.SchemaDescriptor
-		type tbDesc = descpb.TableDescriptor
-		type typDesc = descpb.TypeDescriptor
-		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(tableDescProto tbDesc) catalog.Descriptor {
-			pb := tabledesc.NewBuilder(&tableDescProto).BuildCreatedMutable().DescriptorProto()
-			mut, err := descbuilder.BuildMutable(nil /* original */, pb, ts1)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return mut.ImmutableCopy()
-		}
-		mkDB := func(id descpb.ID, name string) catalog.Descriptor {
-			return dbdesc.NewInitial(id, name, username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
-		}
-		mkTyp := func(desc typDesc) catalog.Descriptor {
-			// Set a default parent schema for the type descriptors.
-			if desc.ParentSchemaID == descpb.InvalidID {
-				desc.ParentSchemaID = keys.PublicSchemaIDForBackup
-			}
-			return typedesc.NewBuilder(&desc).BuildImmutable()
-		}
-		mkSchema := func(desc scDesc) catalog.Descriptor {
-			return schemadesc.NewBuilder(&desc).BuildImmutable()
-		}
-		toOid := catid.TypeIDToOID
-		typeExpr := "'hello'::@100015 = 'hello'::@100015"
-		typeArrExpr := "'hello'::@100016 = 'hello'::@100016"
-		descriptors = []catalog.Descriptor{
-			mkDB(0, "system"),
-			mkTable(tbDesc{ID: 1, Name: "foo", ParentID: 0}),
-			mkTable(tbDesc{ID: 2, Name: "bar", ParentID: 0}),
-			mkTable(tbDesc{ID: 4, Name: "baz", ParentID: 3}),
-			mkTable(tbDesc{ID: 6, Name: "offline", ParentID: 0, State: descpb.DescriptorState_OFFLINE}),
-			mkDB(3, "data"),
-			mkDB(5, "empty"),
-			// Create some user defined types and tables that reference them.
-			mkDB(7, "udts"),
-			// Type descriptors represent different kinds of types. ENUM means
-			// that the type descriptor references an enum type. ALIAS means that
-			// the descriptor is a type alias for an existing type. ALIAS is only
-			// used for managing the implicit array type for each user defined type.
-			// Every user defined type also has an ALIAS type that represents an
-			// array of the user defined type, and that is tracked by the ArrayTypeID
-			// field on the type descriptor.
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 8, Name: "enum1", ArrayTypeID: 9, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 9, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(8), toOid(9))}),
-			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 10, Name: "enum_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeEnum(toOid(8), toOid(9))}}}),
-			mkTable(descpb.TableDescriptor{ParentID: 7, ID: 11, Name: "enum_arr_tbl", Columns: []descpb.ColumnDescriptor{{ID: 0, Type: types.MakeArray(types.MakeEnum(toOid(8), toOid(9)))}}}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 12, Name: "enum2", ArrayTypeID: 13, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 7, ID: 13, Name: "_enum2", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(12), toOid(13))}),
-			// Create some user defined types that are used in table expressions.
-			mkDB(14, "udts_expr"),
-			mkTyp(descpb.TypeDescriptor{ParentID: 14, ID: 15, Name: "enum1", ArrayTypeID: 16, Kind: descpb.TypeDescriptor_ENUM}),
-			mkTyp(descpb.TypeDescriptor{ParentID: 14, ID: 16, Name: "_enum1", Kind: descpb.TypeDescriptor_ALIAS, Alias: types.MakeEnum(toOid(15), toOid(16))}),
-			// Create a table with a default expression.
-			mkTable(tbDesc{
-				ID:       17,
-				Name:     "def",
-				ParentID: 14,
-				Columns: []descpb.ColumnDescriptor{
-					{
-						Name:        "a",
-						DefaultExpr: &typeExpr,
-						Type:        types.Bool,
-					},
-				},
-			}),
-			// Create a table with a computed column.
-			mkTable(tbDesc{
-				ID:       18,
-				Name:     "comp",
-				ParentID: 14,
-				Columns: []descpb.ColumnDescriptor{
-					{
-						Name:        "a",
-						DefaultExpr: &typeExpr,
-						Type:        types.Bool,
-					},
-				},
-			}),
-			// Create a table with a partial index.
-			mkTable(tbDesc{
-				ID:       19,
-				Name:     "pi",
-				ParentID: 14,
-				Indexes: []descpb.IndexDescriptor{
-					{
-						Name:      "idx",
-						Predicate: typeExpr,
-					},
-				},
-			}),
-			// Create a table with a check expression.
-			mkTable(tbDesc{
-				ID:       20,
-				Name:     "checks",
-				ParentID: 14,
-				Checks: []*descpb.TableDescriptor_CheckConstraint{
-					{
-						Expr: typeExpr,
-					},
-				},
-			}),
-			mkTable(tbDesc{
-				ID:       21,
-				Name:     "def_arr",
-				ParentID: 14,
-				Columns: []descpb.ColumnDescriptor{
-					{
-						Name:        "a",
-						DefaultExpr: &typeArrExpr,
-						Type:        types.Bool,
-					},
-				},
-			}),
-			mkDB(22, "uds"),
-			mkSchema(scDesc{ParentID: 22, ID: 23, Name: "sc"}),
-			mkTable(tbDesc{ParentID: 22, UnexposedParentSchemaID: 23, ID: 24, Name: "tb1"}),
-		}
-	}
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
 
-	tests := []struct {
-		sessionDatabase string
-		pattern         string
-		expected        []string
-		expectedDBs     []string
-		err             string
+	// Set up test schema with databases, schemas, and tables.
+	db.Exec(t, `CREATE DATABASE test_db`)
+	db.Exec(t, `CREATE SCHEMA test_db.custom_schema`)
+	db.Exec(t, `CREATE TABLE test_db.public.t1 (id INT PRIMARY KEY)`)
+	db.Exec(t, `CREATE TABLE test_db.public.t2 (id INT PRIMARY KEY, val TEXT)`)
+	db.Exec(t, `CREATE TABLE test_db.custom_schema.t3 (id INT PRIMARY KEY)`)
+	db.Exec(t, `CREATE TYPE test_db.custom_schema.unused_enum AS ENUM ('x', 'y')`)
+	db.Exec(t, `CREATE TYPE test_db.public.my_enum AS ENUM ('a', 'b', 'c')`)
+	db.Exec(t, `CREATE TABLE test_db.public.t4 (id INT PRIMARY KEY, status test_db.public.my_enum)`)
+	db.Exec(t, `USE test_db`)
+	db.Exec(t, `CREATE FUNCTION my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
+	db.Exec(t, `CREATE TABLE t5 (id INT PRIMARY KEY, val INT DEFAULT my_func())`)
+
+	// Create another database with tables.
+	db.Exec(t, `CREATE DATABASE other_db`)
+	db.Exec(t, `CREATE TABLE other_db.public.other_table (id INT PRIMARY KEY)`)
+
+	testCases := []struct {
+		name                     string
+		targets                  string
+		expectedTables           []string
+		expectedDBs              []string
+		expectedTypes            []string
+		expectedFuncs            []string
+		expectedExpandedDBNames  []string // Database names that should be in expandedDBs
+		expectedRequestedDBNames []string // Database names that should be in requestedDBs
+		expectedTablePatternCnt  int      // Number of entries in descsByTablePattern
 	}{
-		{"", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
-		{"", "DATABASE system, system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
-		{"", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
-		{"system", "DATABASE system", []string{"system", "foo", "bar", "offline"}, []string{"system"}, ``},
-		{"system", "DATABASE system, noexist", nil, nil, `database "noexist" does not exist`},
-		{"system", "DATABASE data", []string{"data", "baz"}, []string{"data"}, ``},
-		{"system", "DATABASE system, data", []string{"system", "foo", "bar", "offline", "data", "baz"}, []string{"data", "system"}, ``},
-		{"system", "DATABASE system, data, noexist", nil, nil, `database "noexist" does not exist`},
-
-		{"", "TABLE foo", nil, nil, `table "foo" does not exist`},
-		{"system", "TABLE foo", []string{"system", "foo"}, nil, ``},
-		{"system", "TABLE foo, foo", []string{"system", "foo"}, nil, ``},
-		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`},
-
-		{"", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
-		{"", "TABLE *, system.public.foo", nil, nil, `"\*" does not match any valid database or schema`},
-		{"noexist", "TABLE *", nil, nil, `"\*" does not match any valid database or schema`},
-		{"system", "TABLE *", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
-		{"empty", "TABLE *", []string{"empty"}, nil, ``},
-
-		{"", "TABLE foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE foo, baz", nil, nil, `table "foo" does not exist`},
-
-		{"", "TABLE system.foo", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE system.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
-		{"", "TABLE system.public.foo", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE system.public.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
-
-		{"", "TABLE system.public.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
-		{"", "TABLE system.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
-		{"system", "TABLE system.public.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
-		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
-
-		{"", "TABLE noexist.*", nil, nil, `"noexist\.\*" does not match any valid database or schema`},
-		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
-		{"", "TABLE system.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"", "TABLE system.public.*", []string{"system", "foo", "bar", "offline"}, nil, ``},
-		{"", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE system.public.*, foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "offline", "data", "baz"}, nil, ``},
-		{"data", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-
-		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE SyStEm.pUbLic.FoO", []string{"system", "foo"}, nil, ``},
-		{"", `TABLE system."FoO"`, nil, nil, `table "system.FoO" does not exist`},
-		{"system", `TABLE "FoO"`, nil, nil, `table "FoO" does not exist`},
-
-		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
-		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``},
-		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
-
-		{"system", `TABLE offline`, nil, nil, `table "offline" does not exist`},
-		{"", `TABLE system.offline`, []string{"system", "foo"}, nil, `table "system.public.offline" does not exist`},
-		{"system", `TABLE *`, []string{"system", "foo", "bar", "offline"}, nil, ``},
-		// If we backup udts, then all tables and types (even unused) should be present.
-		{"", "DATABASE udts", []string{"udts", "enum1", "_enum1", "enum2", "_enum2", "enum_tbl", "enum_arr_tbl"}, []string{"udts"}, ``},
-		// Backing up enum_tbl should pull in both the enum and its array type.
-		{"", "TABLE udts.enum_tbl", []string{"udts", "enum1", "_enum1", "enum_tbl"}, nil, ``},
-		// Backing up enum_arr_tbl should also pull in both the enum and its array type.
-		{"", "TABLE udts.enum_arr_tbl", []string{"udts", "enum1", "_enum1", "enum_arr_tbl"}, nil, ``},
-		// Test collecting expressions that are present in table expressions.
-		{"", "TABLE udts_expr.def", []string{"udts_expr", "enum1", "_enum1", "def"}, nil, ``},
-		{"", "TABLE udts_expr.def_arr", []string{"udts_expr", "enum1", "_enum1", "def_arr"}, nil, ``},
-		{"", "TABLE udts_expr.comp", []string{"udts_expr", "enum1", "_enum1", "comp"}, nil, ``},
-		{"", "TABLE udts_expr.pi", []string{"udts_expr", "enum1", "_enum1", "pi"}, nil, ``},
-		{"", "TABLE udts_expr.checks", []string{"udts_expr", "enum1", "_enum1", "checks"}, nil, ``},
-		// Test that the user defined schema shows up in the descriptors.
-		{"", "DATABASE uds", []string{"uds", "sc", "tb1"}, []string{"uds"}, ``},
-		{"", "TABLE uds.sc.tb1", []string{"uds", "sc", "tb1"}, nil, ``},
+		// Fully qualified table patterns: db.sch.tb
+		{
+			name:                    "single table fully qualified",
+			targets:                 "TABLE test_db.public.t1",
+			expectedTables:          []string{"t1"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
+		},
+		{
+			name:                    "table in custom schema",
+			targets:                 "TABLE test_db.custom_schema.t3",
+			expectedTables:          []string{"t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
+		},
+		// Partially qualified table pattern: db.tb (assumes public schema)
+		{
+			name:                    "table with db and implicit public schema",
+			targets:                 "TABLE test_db.t1",
+			expectedTables:          []string{"t1"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 1,
+		},
+		// Multiple tables
+		{
+			name:                    "multiple tables",
+			targets:                 "TABLE test_db.public.t1, test_db.public.t2",
+			expectedTables:          []string{"t1", "t2"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 2,
+		},
+		{
+			name:                    "tables from different schemas",
+			targets:                 "TABLE test_db.public.t1, test_db.custom_schema.t3",
+			expectedTables:          []string{"t1", "t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTablePatternCnt: 2,
+		},
+		{
+			name:                    "tables from different databases",
+			targets:                 "TABLE test_db.public.t1, other_db.public.other_table",
+			expectedTables:          []string{"t1", "other_table"},
+			expectedDBs:             []string{"test_db", "other_db"},
+			expectedTablePatternCnt: 2,
+		},
+		// Database wildcard: db.* - adds to expandedDBs but not requestedDBs
+		{
+			name:                    "database wildcard",
+			targets:                 "TABLE test_db.*",
+			expectedTables:          []string{"t1", "t2", "t3", "t4", "t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
+		},
+		// Schema wildcard: db.sch.* - adds to expandedDBs.
+		{
+			name:                    "schema wildcard public",
+			targets:                 "TABLE test_db.public.*",
+			expectedTables:          []string{"t1", "t2", "t4", "t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
+		},
+		{
+			name:                    "schema wildcard custom",
+			targets:                 "TABLE test_db.custom_schema.*",
+			expectedTables:          []string{"t3"},
+			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"unused_enum", "_unused_enum"},
+			expectedExpandedDBNames: []string{"test_db"},
+			expectedTablePatternCnt: 0, // Wildcards don't add to descsByTablePattern
+		},
+		// DATABASE target - adds to both expandedDBs and requestedDBs
+		{
+			name:                     "database target",
+			targets:                  "DATABASE test_db",
+			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5"},
+			expectedDBs:              []string{"test_db"},
+			expectedTypes:            []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames:  []string{"test_db"},
+			expectedRequestedDBNames: []string{"test_db"},
+			expectedTablePatternCnt:  0,
+		},
+		{
+			name:                     "multiple databases",
+			targets:                  "DATABASE test_db, other_db",
+			expectedTables:           []string{"t1", "t2", "t3", "t4", "t5", "other_table"},
+			expectedDBs:              []string{"test_db", "other_db"},
+			expectedTypes:            []string{"my_enum", "_my_enum", "unused_enum", "_unused_enum"},
+			expectedExpandedDBNames:  []string{"test_db", "other_db"},
+			expectedRequestedDBNames: []string{"test_db", "other_db"},
+			expectedTablePatternCnt:  0,
+		},
+		// Table with type dependency
+		{
+			name:                    "table with type dependency",
+			targets:                 "TABLE test_db.public.t4",
+			expectedTables:          []string{"t4"},
+			expectedDBs:             []string{"test_db"},
+			expectedTypes:           []string{"my_enum", "_my_enum"},
+			expectedTablePatternCnt: 1,
+		},
+		// Table with function dependency
+		{
+			name:                    "table with function dependency",
+			targets:                 "TABLE test_db.public.t5",
+			expectedTables:          []string{"t5"},
+			expectedDBs:             []string{"test_db"},
+			expectedFuncs:           []string{"my_func"},
+			expectedTablePatternCnt: 1,
+		},
 	}
-	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
-	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d/%s/%s", i, test.sessionDatabase, test.pattern), func(t *testing.T) {
-			sql := fmt.Sprintf(`BACKUP %s INTO 'ignored'`, test.pattern)
-			stmt, err := parser.ParseOne(sql)
-			if err != nil {
-				t.Fatal(err)
-			}
-			targets := stmt.AST.(*tree.Backup).Targets
 
-			matched, err := DescriptorsMatchingTargets(context.Background(),
-				test.sessionDatabase, searchPath, descriptors, *targets, hlc.Timestamp{})
-			if test.err != "" {
-				if !testutils.IsError(err, test.err) {
-					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse the backup targets.
+			stmt, err := parser.Parse("BACKUP " + tc.targets + " INTO 'nodelocal://1/test'")
+			require.NoError(t, err)
+			backupStmt := stmt[0].AST.(*tree.Backup)
+
+			// Get the plan hook state.
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+			p, cleanup := sql.NewInternalPlanner(
+				"test",
+				nil, /* txn */
+				username.RootUserName(),
+				&sql.MemoryMetrics{},
+				&execCfg,
+				sql.NewInternalSessionData(ctx, execCfg.Settings, "test"),
+			)
+			defer cleanup()
+
+			planHook := p.(sql.PlanHookState)
+
+			// Use the optimized ResolveTargets function.
+			// Use the server's current clock timestamp to read data.
+			descriptors, expandedDBs, requestedDBs, descsByTablePattern, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
+			require.NoError(t, err)
+
+			// Verify we got the expected tables, databases, types, and functions.
+			var foundTables []string
+			var foundDBs []string
+			var foundTypes []string
+			var foundFuncs []string
+			seenDBs := make(map[string]bool)
+
+			for _, desc := range descriptors {
+				switch d := desc.(type) {
+				case catalog.TableDescriptor:
+					foundTables = append(foundTables, d.GetName())
+				case catalog.DatabaseDescriptor:
+					if !seenDBs[d.GetName()] {
+						foundDBs = append(foundDBs, d.GetName())
+						seenDBs[d.GetName()] = true
+					}
+				case catalog.TypeDescriptor:
+					foundTypes = append(foundTypes, d.GetName())
+				case catalog.FunctionDescriptor:
+					foundFuncs = append(foundFuncs, d.GetName())
 				}
-			} else if err != nil {
-				t.Fatal(err)
+			}
+
+			// Check that we found the expected tables.
+			require.ElementsMatch(t, tc.expectedTables, foundTables,
+				"Expected tables %v but got %v", tc.expectedTables, foundTables)
+
+			// Check that we found the expected databases.
+			require.ElementsMatch(t, tc.expectedDBs, foundDBs,
+				"Expected databases %v but got %v", tc.expectedDBs, foundDBs)
+
+			// Check that we found the expected types (if specified).
+			if tc.expectedTypes != nil {
+				require.ElementsMatch(t, tc.expectedTypes, foundTypes,
+					"Expected types %v but got %v", tc.expectedTypes, foundTypes)
+			}
+
+			// Check that we found the expected functions (if specified).
+			if tc.expectedFuncs != nil {
+				require.ElementsMatch(t, tc.expectedFuncs, foundFuncs,
+					"Expected functions %v but got %v", tc.expectedFuncs, foundFuncs)
+			}
+
+			// Verify expandedDBs contains expected database IDs.
+			if tc.expectedExpandedDBNames != nil {
+				var expandedDBNames []string
+				for _, dbID := range expandedDBs {
+					// Find the database descriptor with this ID.
+					for _, desc := range descriptors {
+						if db, ok := desc.(catalog.DatabaseDescriptor); ok && db.GetID() == dbID {
+							expandedDBNames = append(expandedDBNames, db.GetName())
+							break
+						}
+					}
+				}
+				require.ElementsMatch(t, tc.expectedExpandedDBNames, expandedDBNames,
+					"Expected expandedDBs %v but got %v", tc.expectedExpandedDBNames, expandedDBNames)
 			} else {
-				var matchedNames []string
-				for _, m := range matched.Descs {
-					matchedNames = append(matchedNames, m.GetName())
+				require.Empty(t, expandedDBs, "Expected expandedDBs to be empty")
+			}
+
+			// Verify requestedDBs contains expected database descriptors.
+			if tc.expectedRequestedDBNames != nil {
+				var requestedDBNames []string
+				for _, db := range requestedDBs {
+					requestedDBNames = append(requestedDBNames, db.GetName())
 				}
-				var matchedDBNames []string
-				for _, m := range matched.RequestedDBs {
-					matchedDBNames = append(matchedDBNames, m.GetName())
-				}
-				sort.Strings(test.expected)
-				sort.Strings(test.expectedDBs)
-				sort.Strings(matchedNames)
-				sort.Strings(matchedDBNames)
-				if !reflect.DeepEqual(test.expected, matchedNames) {
-					t.Fatalf("expected %q got %q", test.expected, matchedNames)
-				}
-				if !reflect.DeepEqual(test.expectedDBs, matchedDBNames) {
-					t.Fatalf("expected %q got %q", test.expectedDBs, matchedDBNames)
-				}
-				for _, p := range targets.Tables.TablePatterns {
-					_, ok := matched.DescsByTablePattern[p]
-					if !ok {
-						t.Fatalf("no entry in %q for %q", matched.DescsByTablePattern, p)
+				require.ElementsMatch(t, tc.expectedRequestedDBNames, requestedDBNames,
+					"Expected requestedDBs %v but got %v", tc.expectedRequestedDBNames, requestedDBNames)
+			} else {
+				require.Empty(t, requestedDBs, "Expected requestedDBs to be empty")
+			}
+
+			// Verify descsByTablePattern has expected number of entries.
+			require.Equal(t, tc.expectedTablePatternCnt, len(descsByTablePattern),
+				"Expected %d entries in descsByTablePattern but got %d",
+				tc.expectedTablePatternCnt, len(descsByTablePattern))
+
+			// Verify we didn't load unnecessary descriptors (e.g., other_db when not needed).
+			// Skip this check for tests that explicitly include other_db.
+			expectOtherDB := tc.name == "tables from different databases" || tc.name == "multiple databases"
+			if !expectOtherDB {
+				for _, desc := range descriptors {
+					if db, ok := desc.(catalog.DatabaseDescriptor); ok {
+						require.NotEqual(t, "other_db", db.GetName(),
+							"Should not have loaded other_db for target %s", tc.targets)
 					}
 				}
 			}
 		})
+	}
+}
+
+// BenchmarkResolveTargets benchmarks the ResolveTargets implementation.
+func BenchmarkResolveTargets(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create many databases and tables to simulate a large cluster.
+	numDatabases := 10
+	tablesPerDB := 100
+
+	for i := 0; i < numDatabases; i++ {
+		dbName := fmt.Sprintf("db_%d", i)
+		db.Exec(b, fmt.Sprintf("CREATE DATABASE %s", dbName))
+		for j := 0; j < tablesPerDB; j++ {
+			tableName := fmt.Sprintf("t_%d", j)
+			db.Exec(b, fmt.Sprintf("CREATE TABLE %s.%s (id INT PRIMARY KEY)", dbName, tableName))
+		}
+	}
+
+	// Parse a simple backup target that should only need a few descriptors.
+	stmt, err := parser.Parse("BACKUP TABLE db_0.t_0, db_0.t_1, db_0.t_2 INTO 'nodelocal://1/test'")
+	require.NoError(b, err)
+	backupStmt := stmt[0].AST.(*tree.Backup)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		func() {
+			p, cleanup := sql.NewInternalPlanner(
+				"bench",
+				nil,
+				username.RootUserName(),
+				&sql.MemoryMetrics{},
+				&execCfg,
+				sql.NewInternalSessionData(ctx, execCfg.Settings, "bench"),
+			)
+			defer cleanup()
+
+			planHook := p.(sql.PlanHookState)
+
+			_, _, _, _, err := ResolveTargets(ctx, planHook, s.Clock().Now(), backupStmt.Targets)
+			require.NoError(b, err)
+		}()
 	}
 }

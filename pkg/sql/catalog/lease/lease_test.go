@@ -718,6 +718,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	srv, db, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	lm := s.LeaseManager().(*lease.Manager)
 
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 	if err != nil {
@@ -759,6 +760,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
+	ts := s.Clock().Now()
 	_, err = db.Exec(`DROP TABLE test.t`)
 	if err != nil {
 		t.Fatal(err)
@@ -783,6 +785,12 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
+	// Validate we can read the descriptor before the drop.
+	pastLease, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableDesc.GetID())
+	require.NoError(t, err)
+	require.Equalf(t, lease3.Underlying().GetVersion(), pastLease.Underlying().GetVersion(), "prior version does not match ")
+	pastLease.Release(ctx)
+
 }
 
 // TestSubqueryLeases tests that all leases acquired by a subquery are
@@ -3964,4 +3972,49 @@ func BenchmarkLargeDatabaseWarmPgClass(b *testing.B) {
 			}
 		}
 	}
+}
+
+// TestLeaseManagerLockedTimestampRenames confirms that retry errors
+// are generated when objects get renamed and inconsistency exists
+// between leased and KV descriptors.
+func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+
+	ts, conn, _ := serverutils.StartServer(
+		t, base.TestServerArgs{
+			Settings: st,
+		})
+	defer ts.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+	// Populate leased descriptors with the new object.
+	runner.Exec(t, "CREATE TABLE t1(n int)")
+	runner.Exec(t, "SHOW CREATE TABLE t1")
+	txn1 := runner.Begin(t)
+	_, err := txn1.Exec("SET autocommit_before_ddl=false")
+	require.NoError(t, err)
+	_, err = txn1.Exec("ALTER TABLE t1 RENAME TO t2;")
+	require.NoError(t, err)
+	txn2 := runner.Begin(t)
+	_, err = txn2.Exec("SET autocommit_before_ddl=false")
+	require.NoError(t, err)
+	_, err = txn2.Exec("SELECT 't1'::REGCLASS::OID")
+	require.NoError(t, err)
+	// Intentionally pause schema change jobs.
+	runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints='schemachanger.before.exec,newschemachanger.before.exec'")
+	// Expected due to the pause point, since we don't want to wait for one version.
+	require.Regexp(t, `pq: transaction committed but schema change aborted with error: \(XXUUU\): job \d+ was paused before it completed with reason: pause point.*`, txn1.Commit())
+	// Execute the rename, which has looked up the old name via
+	// a leased descriptor.
+	_, err = txn2.Exec("ALTER TABLE t1 RENAME TO t2;")
+	require.NotNilf(t, err, "expected error when renaming table with stale descriptor")
+	require.Regexp(t, `pq: restart transaction: the descriptor t1\(\d+\) has been renamed before timestamp.*`, err)
+	require.NoError(t, txn2.Rollback())
+
 }

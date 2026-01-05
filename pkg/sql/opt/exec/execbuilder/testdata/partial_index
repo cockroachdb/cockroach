@@ -319,10 +319,10 @@ Del /Table/114/2/3/2/0
 # ---------------------------------------------------------
 
 # Clear the tables.
-statement ok
+statement count 0
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM u
 
 # Insert a row that matches no partial index.
@@ -472,10 +472,10 @@ Put /Table/113/4/"foo"/22/0 -> /BYTES/
 # ---------------------------------------------------------
 
 # Clear the tables.
-statement ok
+statement count 4
 DELETE FROM t
 
-statement ok
+statement count 1
 DELETE FROM u
 
 # Insert a row that matches no partial index.
@@ -559,10 +559,10 @@ Scan /Table/114/1/2/0
 # ---------------------------------------------------------
 
 # Clear the tables.
-statement ok
+statement count 3
 DELETE FROM t
 
-statement ok
+statement count 2
 DELETE FROM u
 
 # Insert a non-conflicting row that matches no partial indexes.
@@ -676,10 +676,10 @@ Put /Table/114/2/4/2/0 -> /BYTES/
 # ---------------------------------------------------------
 
 # Clear the tables.
-statement ok
+statement count 2
 DELETE FROM t
 
-statement ok
+statement count 2
 DELETE FROM u
 
 # Insert a non-conflicting row that matches no partial indexes.
@@ -745,10 +745,10 @@ Put /Table/113/3/11/9/0 -> /BYTES/
 # ---------------------------------------------------------
 
 # Clear the tables.
-statement ok
+statement count 1
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM u
 
 # Upsert a non-conflicting row that matches no partial indexes.

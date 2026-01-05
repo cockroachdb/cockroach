@@ -1889,9 +1889,12 @@ func (b *backupResumer) deleteCheckpoint(
 		defer exportStore.Close()
 		// Delete will not delete a nonempty directory, so we have to go through
 		// all files and delete each file one by one.
-		return exportStore.List(ctx, backupinfo.BackupProgressDirectory, "", func(p string) error {
-			return exportStore.Delete(ctx, backupinfo.BackupProgressDirectory+p)
-		})
+		return exportStore.List(
+			ctx, backupinfo.BackupProgressDirectory, cloud.ListOptions{},
+			func(p string) error {
+				return exportStore.Delete(ctx, backupinfo.BackupProgressDirectory+p)
+			},
+		)
 	}(); err != nil {
 		log.Dev.Warningf(ctx, "unable to delete checkpointed backup descriptor file in progress directory: %+v", err)
 	}

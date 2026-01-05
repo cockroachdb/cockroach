@@ -11,7 +11,7 @@ go_library(
         "commands.go",
         "flags.go",
         "handlers.go",
-        "resgistry.go",
+        "registry.go",
         "update.go",
         "util.go",
     ],

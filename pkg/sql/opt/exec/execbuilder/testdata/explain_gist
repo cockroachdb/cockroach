@@ -262,13 +262,13 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 └── • render
     │
     └── • group (hash)
-        │ group by: udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog
+        │ group by: column_name, column_name, column_name, column_name, column_name, column_name, column_name
         │
         └── • sort
             │ order
             │
             └── • hash join (left outer)
-                │ equality: (udt_catalog) = (srs_id)
+                │ equality: (column_name) = (srs_id)
                 │
                 ├── • filter
                 │   │
@@ -285,8 +285,8 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 query T nosort
 SELECT crdb_internal.decode_plan_gist('AgHk+v//3xoEAKAFAgAABQQGBA==');
 ----
-• scan
-  table: ?@?
+• virtual table
+  table: @?
   spans: 1+ spans
 
 # Regression tests for #154300. Gracefully handle invalid gists.

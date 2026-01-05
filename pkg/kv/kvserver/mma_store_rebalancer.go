@@ -157,7 +157,7 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangeAsFailed(change)
+		m.as.MarkChangeAsFailed(ctx, change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
@@ -172,7 +172,7 @@ func (m *mmaStoreRebalancer) applyChange(
 	}
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
-	m.as.PostApply(changeID, err == nil /*success*/)
+	m.as.PostApply(ctx, changeID, err == nil /*success*/)
 	return err
 }
 

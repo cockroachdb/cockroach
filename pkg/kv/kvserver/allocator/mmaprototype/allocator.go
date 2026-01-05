@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
@@ -36,7 +37,16 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	// LoadSummaryForAllStores returns a human-readable string summarizing the
+	// current load state of all known stores in the cluster. This is primarily
+	// used for debugging and observability purposes.
 	LoadSummaryForAllStores(context.Context) string
+
+	// InitMetricsForLocalStore initializes and registers metrics for the
+	// specified local store with the provided metric registry. This should be
+	// called once per store during startup to register metrics for mma.
+	InitMetricsForLocalStore(
+		ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry)
 
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
@@ -63,7 +73,7 @@ type Allocator interface {
 	// Calls to AdjustPendingChangeDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangeDisposition(change ExternalRangeChange, success bool)
+	AdjustPendingChangeDisposition(ctx context.Context, change ExternalRangeChange, success bool)
 
 	// RegisterExternalChange informs this allocator about yet to complete
 	// changes to the cluster (on behalf of localStoreID) which were not
@@ -73,7 +83,9 @@ type Allocator interface {
 	// use in a call to AdjustPendingChangeDisposition when the changes are
 	// completed, either successfully or not. If ok is false, the change was not
 	// registered.
-	RegisterExternalChange(localStoreID roachpb.StoreID, change PendingRangeChange) (_ ExternalRangeChange, ok bool)
+	RegisterExternalChange(
+		ctx context.Context, localStoreID roachpb.StoreID, change PendingRangeChange,
+	) (_ ExternalRangeChange, ok bool)
 
 	// ComputeChanges is called to compute changes. The caller may use a
 	// combination of periodic calls (say every 60s) and calling in a tight

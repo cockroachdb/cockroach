@@ -44,6 +44,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate stringer      # stringer targets (subset of 'dev generate go')
         dev generate testlogic     # logictest generated code (includes 'dev generate schemachanger')
         dev generate ui            # Create UI assets to be consumed by 'go build'
+        dev generate dashboards    # Generate dashboard files from YAML configurations
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -83,6 +84,7 @@ func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 		"stringer":      d.generateStringer,
 		"testlogic":     d.generateLogicTest,
 		"ui":            d.generateUI,
+		"dashboards":    d.generateDashboards,
 	}
 
 	if len(targets) == 0 {
@@ -341,4 +343,38 @@ func (d *dev) generateJs(cmd *cobra.Command) error {
 
 	// Generate crdb-api-client package.
 	return makeUICrdbApiClientCmd(d).RunE(cmd, []string{})
+}
+
+func (d *dev) generateDashboards(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+
+	// Build dashgen binary
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", "build", "//pkg/cmd/generate-dashboard"); err != nil {
+		return fmt.Errorf("building dashgen: %w", err)
+	}
+
+	// Get bazel bin directory
+	bazelBin, err := d.getBazelBin(ctx, []string{})
+	if err != nil {
+		return err
+	}
+
+	// Get workspace path
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Run dashgen to generate dashboard files
+	outputDir := filepath.Join(workspace, "pkg/ui/workspaces/db-console/src/views/cluster/containers/nodeGraphs/dashboards")
+	metricsYAMLPath := filepath.Join(workspace, "docs/generated/metrics/metrics.yaml")
+	dashboardGeneratorPath := filepath.Join(bazelBin, "pkg/cmd/generate-dashboard/generate-dashboard_/generate-dashboard")
+
+	d.log.Printf("Generating dashboards to %s", outputDir)
+	if err := d.exec.CommandContextInheritingStdStreams(ctx, dashboardGeneratorPath, metricsYAMLPath, outputDir); err != nil {
+		return fmt.Errorf("running dashgen: %w", err)
+	}
+
+	d.log.Printf("Dashboard generation complete")
+	return nil
 }

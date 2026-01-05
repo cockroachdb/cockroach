@@ -29,11 +29,11 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] start processing shedding store s1: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r4:[cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B] r3:[cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:250ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
+[mmaid=1] considering lease-transfer r4 from s1: candidates are [2 3]
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
-[mmaid=1] considering lease-transfer r4 from s1: candidates are [1 2 3]
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -53,11 +53,11 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
 [mmaid=1] result(success): shedding r4 lease from s1 to s2 [change:r4=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:770ns/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:353ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.23) (src:2.53,target:0.00))
+[mmaid=1] considering lease-transfer r3 from s1: candidates are [2 3]
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
-[mmaid=1] considering lease-transfer r3 from s1: candidates are [1 2 3]
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=353 meanLoad=400 fractionUsed=35.30% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]

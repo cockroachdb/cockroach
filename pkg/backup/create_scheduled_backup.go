@@ -83,7 +83,6 @@ type scheduledBackupSpec struct {
 	encryptionPassphrase       *string
 	captureRevisionHistory     *bool
 	kmsURIs                    []string
-	incrementalStorage         []string
 	includeAllSecondaryTenants *bool
 	execLoc                    *string
 	updatesMetrics             *bool
@@ -337,14 +336,6 @@ func doCreateBackupSchedules(
 		chainProtectedTimestampRecords = scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV)
 		backupNode.AppendToLatest = true
 
-		var incDests []string
-		if eval.incrementalStorage != nil {
-			p.BufferClientNotice(ctx, pgnotice.Newf(deprecatedIncrementalLocationMessage))
-			incDests = eval.incrementalStorage
-			for _, incDest := range incDests {
-				backupNode.Options.IncrementalStorage = append(backupNode.Options.IncrementalStorage, tree.NewStrVal(incDest))
-			}
-		}
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
 			env, p.User(), scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
 			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
@@ -358,7 +349,7 @@ func doCreateBackupSchedules(
 		if err := scheduledJobs.Create(ctx, inc); err != nil {
 			return err
 		}
-		if err := emitSchedule(inc, backupNode, destinations, kmsURIs, incDests, resultsCh); err != nil {
+		if err := emitSchedule(inc, backupNode, destinations, kmsURIs, resultsCh); err != nil {
 			return err
 		}
 		unpauseOnSuccessID = inc.ScheduleID()
@@ -366,7 +357,6 @@ func doCreateBackupSchedules(
 
 	// Create FULL backup schedule.
 	backupNode.AppendToLatest = false
-	backupNode.Options.IncrementalStorage = nil
 	var fullScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
@@ -409,7 +399,7 @@ func doCreateBackupSchedules(
 	}
 
 	collectScheduledBackupTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, fullRecurrencePicked, ignoreExisting, details, backupEvent)
-	return emitSchedule(full, backupNode, destinations, kmsURIs, nil, resultsCh)
+	return emitSchedule(full, backupNode, destinations, kmsURIs, resultsCh)
 }
 
 func setDependentSchedule(
@@ -517,7 +507,6 @@ func emitSchedule(
 	sj *jobs.ScheduledJob,
 	backupNode *tree.Backup,
 	to, kmsURIs []string,
-	incrementalStorage []string,
 	resultsCh chan<- tree.Datums,
 ) error {
 	var nextRun tree.Datum
@@ -536,8 +525,9 @@ func emitSchedule(
 		nextRun = next
 	}
 
-	redactedBackupNode, err := GetRedactedBackupNode(backupNode, to, kmsURIs, "",
-		incrementalStorage, false /* hasBeenPlanned */)
+	redactedBackupNode, err := GetRedactedBackupNode(
+		backupNode, to, kmsURIs, "", false, /* hasBeenPlanned */
+	)
 	if err != nil {
 		return err
 	}
@@ -663,14 +653,6 @@ func makeScheduledBackupSpec(
 			return nil, errors.Wrapf(err, "failed to evaluate backup kms_uri")
 		}
 	}
-	if schedule.BackupOptions.IncrementalStorage != nil {
-		spec.incrementalStorage, err = exprEval.StringArray(
-			ctx, tree.Exprs(schedule.BackupOptions.IncrementalStorage),
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if schedule.BackupOptions.CaptureRevisionHistory != nil {
 		capture, err := exprEval.Bool(
 			ctx, schedule.BackupOptions.CaptureRevisionHistory,
@@ -786,7 +768,6 @@ func createBackupScheduleTypeCheck(
 	stringArrays := exprutil.StringArrays{
 		tree.Exprs(schedule.To),
 		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
-		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
 	}
 	bools := exprutil.Bools{
 		schedule.BackupOptions.CaptureRevisionHistory,

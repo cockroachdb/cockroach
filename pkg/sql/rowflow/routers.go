@@ -596,9 +596,6 @@ func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for hash router")
 	}
-	if len(hashCols) == 0 {
-		return nil, errors.Errorf("no hash columns for BY_HASH router")
-	}
 	return &hashRouter{hashCols: hashCols, routerBase: rb}, nil
 }
 

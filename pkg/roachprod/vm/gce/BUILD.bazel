@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "gce",
     srcs = [
+        "create_sdk.go",
         "dns.go",
         "dns_sdk.go",
         "fast_dns.go",

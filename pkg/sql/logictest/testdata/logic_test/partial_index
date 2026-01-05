@@ -553,7 +553,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row in both partial indexes.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 1
 
 query IIRTB rowsort
@@ -572,7 +572,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row in one partial index.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 2
 
 query IIRTB rowsort
@@ -590,7 +590,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row not in either partial index.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 200
 
 query IIRTB rowsort
@@ -809,8 +809,10 @@ SELECT * FROM u
 1  -1
 
 # Deleting and re-inserting a conflicting row is successful.
-statement ok
+statement count 1
 DELETE FROM u WHERE a = 2;
+
+statement ok
 INSERT INTO u VALUES (2, 2);
 
 # Updating a row in the unique partial index to conflict with another row fails.
@@ -839,7 +841,7 @@ SELECT * FROM u
 3  3
 2  -2
 
-statement ok
+statement count 3
 DELETE FROM u
 
 # Tests for ON CONFLICT DO NOTHING.
@@ -877,7 +879,7 @@ SELECT * FROM u
 1  -100
 1  -1000
 
-statement ok
+statement count 3
 DELETE FROM u WHERE b IN (-10, -100, -1000)
 
 # Inserting multiple rows that conflict with each other inserts some of the
@@ -968,7 +970,7 @@ SELECT * FROM u
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 8
 DELETE from u
 
 # Tests for ON CONFLICT (a) [WHERE ...] DO NOTHING.
@@ -991,7 +993,7 @@ CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
 statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
 
-statement ok
+statement count 1
 DELETE FROM u;
 
 statement ok
@@ -1055,7 +1057,7 @@ ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) D
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 2
 DELETE FROM u
 
 # Tests for ON CONFLICT DO UPDATE.
@@ -1111,7 +1113,7 @@ SELECT * FROM u
 1  -100
 1  -1000
 
-statement ok
+statement count 3
 DELETE FROM u WHERE b IN (-10, -100, -1000)
 
 # Inserting one row conflicting and one non-conflicting row updates the first
@@ -1153,7 +1155,7 @@ INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 100
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 3
 DELETE from u
 
 # Test partial indexes with lookup joins.
@@ -1252,7 +1254,7 @@ SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
 2  bar
 3  foo
 
-statement ok
+statement count 1
 DELETE FROM enum_table WHERE a = 2
 
 query IT rowsort
@@ -1341,7 +1343,7 @@ SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
 1  {"num": 1, "x": "y"}  foo
 3  {"num": 3, "x": "y"}  bar
 
-statement ok
+statement count 1
 DELETE FROM inv WHERE k = 3
 
 query ITT
@@ -1624,7 +1626,7 @@ SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
 4  [5,6]  bar
 
 # Delete bar row and ensure it is not returned.
-statement ok
+statement count 1
 DELETE FROM vec WHERE k = 4
 
 query ITT
@@ -1760,7 +1762,7 @@ SELECT * FROM virt@idx WHERE c = 10
 1  0  10
 3  0  10
 
-statement ok
+statement count 1
 DELETE FROM virt WHERE a = 1
 
 query III rowsort
@@ -1822,7 +1824,7 @@ SELECT * FROM virt@idx WHERE c = 10
 
 # Tests for unique partial indexes with predicates that reference virtual
 # computed columns.
-statement ok
+statement count 8
 DELETE FROM virt;
 
 statement ok
@@ -1903,7 +1905,7 @@ SELECT * FROM t52318 WHERE b > 5
 ----
 6  7
 
-statement ok
+statement count 2
 DELETE FROM t52318
 
 statement ok
@@ -2194,7 +2196,7 @@ CREATE TABLE t61414_c (
   FAMILY (k, a, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 

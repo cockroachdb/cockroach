@@ -36,6 +36,7 @@ func ReplaceNodeLocalForTesting(root string) func() {
 			LocalFileConfig: cloudpb.ExternalStorage_LocalFileConfig{
 				Path: uri.Path,
 			},
+			URI: uri.String(),
 		}, nil
 	}
 	return cloud.ReplaceProviderForTesting(cloudpb.ExternalStorageProvider_nodelocal, cloud.RegisteredProvider{
@@ -62,5 +63,6 @@ func TestingMakeNodelocalStorage(
 		base:       es.LocalFileConfig.Path,
 		blobClient: c,
 		settings:   settings,
+		uri:        es.URI,
 	}
 }

@@ -179,7 +179,9 @@ func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteClos
 	}), nil
 }
 
-func (h *httpStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+func (h *httpStorage) List(
+	_ context.Context, _ string, _ cloud.ListOptions, _ cloud.ListingFn,
+) error {
 	return errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
 }
 

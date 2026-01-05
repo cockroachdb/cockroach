@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -97,6 +98,21 @@ var LeaseMonitorRangeFeedResetTime = settings.RegisterDurationSetting(
 	time.Minute*25,
 )
 
+// diableLeasedDescriptorsByDefaultThreshold any value above this is considered
+// disabled, making it 10% odds of disabled.
+const diableLeasedDescriptorsByDefaultThreshold = 90
+
+// disableLeasedDescriptorThresholdDefault, by default, leased descriptors
+// are enabled.
+const disableLeasedDescriptorThresholdDefault = 0
+
+// UseLeasedDescriptorsForCatalogDefault determines if leased descrptor are used for catalog
+// views.
+var UseLeasedDescriptorsForCatalogDefault = metamorphic.ConstantWithTestRange("disable-catalog-leased-descriptors-threshold",
+	disableLeasedDescriptorThresholdDefault,
+	0,
+	100) < diableLeasedDescriptorsByDefaultThreshold
+
 var WaitForInitialVersion = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_wait_for_initial_version.enabled",
 	"enables waiting for the initial version of a descriptor",
@@ -106,7 +122,7 @@ var LockedLeaseTimestamp = settings.RegisterBoolSetting(settings.ApplicationLeve
 	"sql.catalog.descriptor_lease.use_locked_timestamps.enabled",
 	"guarantees transactional version consistency for descriptors used by the lease manager,"+
 		"descriptors used can be intentionally older to support this",
-	true)
+	UseLeasedDescriptorsForCatalogDefault)
 
 var RetainOldVersionsForLocked = settings.RegisterBoolSetting(settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease.lock_old_versions.enabled",
@@ -754,6 +770,7 @@ func getDescriptorsFromStoreForInterval(
 	codec keys.SQLCodec,
 	id descpb.ID,
 	lowerBound, upperBound hlc.Timestamp,
+	isOffline bool,
 ) ([]historicalDescriptor, error) {
 	// Ensure lower bound is not an empty timestamp (now).
 	if lowerBound.IsEmpty() {
@@ -837,7 +854,12 @@ func getDescriptorsFromStoreForInterval(
 					if err != nil {
 						return err
 					}
-					if descContent == nil {
+					if len(descContent) == 0 {
+						// Skip any deletions of the descriptor.
+						if isOffline {
+							subsequentModificationTime = k.Timestamp
+							continue
+						}
 						return errors.Wrapf(errors.New("unsafe value error"), "error "+
 							"extracting raw bytes of descriptor with key %s modified between "+
 							"%s, %s", k.String(), k.Timestamp, subsequentModificationTime)
@@ -896,7 +918,7 @@ func getDescriptorsFromStoreForInterval(
 //  2. Figure out a sane policy on when these descriptors should be purged.
 //     They are currently purged in PurgeOldVersions.
 func (m *Manager) readOlderVersionForTimestamp(
-	ctx context.Context, id descpb.ID, timestamp hlc.Timestamp,
+	ctx context.Context, id descpb.ID, timestamp ReadTimestamp,
 ) ([]historicalDescriptor, error) {
 	// Retrieve the endTimestamp for our query, which will be the first
 	// modification timestamp above our query timestamp.
@@ -907,37 +929,60 @@ func (m *Manager) readOlderVersionForTimestamp(
 	if t == nil {
 		return nil, nil
 	}
-	endTimestamp, done := func() (hlc.Timestamp, bool) {
+	endTimestamp, isOffline, done := func() (hlc.Timestamp, bool, bool) {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 
 		// If there are no descriptors, then we won't have a valid end timestamp.
 		if len(t.mu.active.data) == 0 {
-			return hlc.Timestamp{}, true
+			// If the descriptor is offline, then we can return when it was taken
+			// offline, a valid descriptor exists within this interval.
+			// Note: This allows us to populate dropped descriptors, which will
+			// be cleaned up via purgeOldVersions when these descriptors are actually
+			// deleted from the descriptor table (via the range feed).
+			if t.mu.takenOffline {
+				return t.mu.takenOfflineAt, true, false
+			}
+			return hlc.Timestamp{}, false, true
 		}
 		// We permit gaps in historical versions. We want to find the timestamp
 		// that represents the start of the validity interval for the known version
 		// which immediately follows the timestamps we're searching for.
-		i := sort.Search(len(t.mu.active.data), func(i int) bool {
-			return timestamp.Less(t.mu.active.data[i].GetModificationTime())
+		tsForComparison := timestamp.GetTimestamp()
+		indexAfterTS := sort.Search(len(t.mu.active.data), func(i int) bool {
+			return timestamp.GetTimestamp().Less(t.mu.active.data[i].GetModificationTime())
 		})
+
+		// If the read timestamp and base timestamp are different, additionally,
+		// check if we need a slightly later end timestamp. This guarantees we will
+		// populate every possible descriptor needed for this request.
+		if timestamp.GetTimestamp() != timestamp.GetBaseTimestamp() {
+			baseTimeStampIndex := sort.Search(len(t.mu.active.data), func(i int) bool {
+				return timestamp.GetBaseTimestamp().Less(t.mu.active.data[i].GetModificationTime())
+			})
+			if baseTimeStampIndex != len(t.mu.active.data) {
+				indexAfterTS = baseTimeStampIndex
+				tsForComparison = timestamp.GetBaseTimestamp()
+			}
+		}
 
 		// If the timestamp we're searching for is somehow after the last descriptor
 		// we have in play, then either we have the right descriptor, or some other
 		// shenanigans where we've evicted the descriptor has occurred.
-		//
-		// TODO(ajwerner): When we come to modify this code to allow us to find
-		// historical descriptors which have been dropped, we'll need to rework
-		// this case and support providing no upperBound to
-		// getDescriptorFromStoreForInterval.
-		if i == len(t.mu.active.data) ||
+		if indexAfterTS == len(t.mu.active.data) ||
 			// If we found a descriptor that isn't the first descriptor, go and check
 			// whether the descriptor for which we're searching actually exists. This
 			// will deal with cases where a concurrent fetch filled it in for us.
-			i > 0 && timestamp.Less(t.mu.active.data[i-1].getExpiration(ctx)) {
-			return hlc.Timestamp{}, true
+			indexAfterTS > 0 && tsForComparison.Less(t.mu.active.data[indexAfterTS-1].getExpiration(ctx)) {
+			// If the descriptor is offline, then nothing newer can exist.
+			if !t.mu.takenOffline {
+				return hlc.Timestamp{}, false, true
+			}
+			// Otherwise, the table is offline, so there may be newer descriptor
+			// versions before the offline timestamp.
+			return t.mu.takenOfflineAt, true, false
 		}
-		return t.mu.active.data[i].GetModificationTime(), false
+		return t.mu.active.data[indexAfterTS].GetModificationTime(), false, false
 	}()
 	if done {
 		return nil, nil
@@ -946,7 +991,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 	// Retrieve descriptors in range [timestamp, endTimestamp) in decreasing
 	// modification time order.
 	descs, err := getDescriptorsFromStoreForInterval(
-		ctx, m.storage.db.KV(), m.Codec(), id, timestamp, endTimestamp,
+		ctx, m.storage.db.KV(), m.Codec(), id, timestamp.GetTimestamp(), endTimestamp, isOffline,
 	)
 	if err != nil {
 		return nil, err
@@ -965,10 +1010,20 @@ func (m *Manager) readOlderVersionForTimestamp(
 
 	// Unless the timestamp is exactly at the earliest modification time from
 	// ExportRequest, we'll invoke another call to retrieve the descriptor with
-	// modification time prior to the timestamp.
-	if timestamp.Less(earliestModificationTime) {
+	// modification time prior to the timestamp. For offline descriptors, we will
+	// try reading again if nothing was read above as a last resort.
+	if timestamp.GetTimestamp().Less(earliestModificationTime) || (isOffline && len(descs) == 0) {
 		desc, err := m.storage.getForExpiration(ctx, earliestModificationTime, id)
 		if err != nil {
+			// In locked reading timestamp, we will attempt to read with the lease timestamp. If the descriptor
+			// is found to be missing at that time, then it may be readable at our base timestamp.
+			// When we scanned [timestamp, endTimestamp), we implicitly scanned the base timestamp as well,
+			// so check if anything from that timestamp fits.
+			if len(descs) > 0 &&
+				errors.Is(err, catalog.ErrDescriptorNotFound) && timestamp.GetTimestamp() != timestamp.GetBaseTimestamp() &&
+				earliestModificationTime.LessEq(timestamp.GetBaseTimestamp()) {
+				return descs, nil
+			}
 			return nil, err
 		}
 		descs = append(descs, historicalDescriptor{
@@ -999,6 +1054,16 @@ func (m *Manager) insertDescriptorVersions(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	newVersionsToInsert := make([]*descriptorVersionState, 0, len(versions))
+	defer func() {
+		// Release memory for anything not inserted, entries are
+		// cleared after each insert.
+		for _, state := range newVersionsToInsert {
+			if state == nil {
+				continue
+			}
+			t.m.boundAccount.Shrink(ctx, state.getByteSize())
+		}
+	}()
 	for i := range versions {
 		// Since we gave up the lock while reading the versions from
 		// the store we have to ensure that no one else inserted the
@@ -1013,8 +1078,9 @@ func (m *Manager) insertDescriptorVersions(
 		}
 	}
 	// Only insert if all versions were allocated.
-	for _, descState := range newVersionsToInsert {
+	for idx, descState := range newVersionsToInsert {
 		t.mu.active.insert(descState)
+		newVersionsToInsert[idx] = nil
 	}
 
 	return nil
@@ -1073,8 +1139,8 @@ func (m *Manager) upsertDescriptorIntoState(
 		return errors.AssertionFailedf("could not find descriptor state for id %d", id)
 	}
 	t.mu.Lock()
-	t.mu.takenOffline = false
 	defer t.mu.Unlock()
+	t.setTakenOfflineLocked(false)
 	err := t.upsertLeaseLocked(ctx, desc, session, m.storage.getRegionPrefix())
 	if err != nil {
 		return err
@@ -1409,7 +1475,7 @@ func (m *Manager) purgeOldVersions(
 		leases, leaseToExpire := func() (leasesToRemove []*storedLease, leasesToExpire *descriptorVersionState) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			t.mu.takenOffline = dropped
+			t.setTakenOfflineLocked(dropped)
 			return t.removeInactiveVersions(ctx), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {
@@ -2187,7 +2253,7 @@ func (m *Manager) Acquire(
 
 		case errors.Is(err, errReadOlderVersion):
 			// Read old versions from the store. This can block while reading.
-			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp.GetTimestamp())
+			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp)
 			if errRead != nil {
 				return nil, errRead
 			}

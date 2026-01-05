@@ -1059,10 +1059,6 @@ func (m *SessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.Data.OptimizerUseExistsFilterHoistRule = val
 }
 
-func (m *SessionDataMutator) SetEnableInspectCommand(val bool) {
-	m.Data.EnableInspectCommand = val
-}
-
 func (m *SessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.Data.InitialRetryBackoffForReadCommitted = val
 }

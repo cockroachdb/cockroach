@@ -53,6 +53,35 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): {fn: AlterTableResetStorageParams, on: true, checks: isV261Active},
 }
 
+// alterTableSubcommandNames maps ALTER TABLE command types to their subcommand
+// tag names (e.g., "ADD COLUMN"). Every entry in supportedAlterTableStatements
+// must have a corresponding entry here. Note that we need to define this map
+// explicitly rather than relying on TelemetryName() to get the name, since
+// TelemetryName() may depend on the static fields of the command struct.
+var alterTableSubcommandNames = map[reflect.Type]string{
+	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          "ADD COLUMN",
+	reflect.TypeOf((*tree.AlterTableDropColumn)(nil)):         "DROP COLUMN",
+	reflect.TypeOf((*tree.AlterTableAlterPrimaryKey)(nil)):    "ALTER PRIMARY KEY",
+	reflect.TypeOf((*tree.AlterTableSetNotNull)(nil)):         "SET NOT NULL",
+	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)):      "ADD CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     "DROP CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): "VALIDATE CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         "SET DEFAULT",
+	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    "ALTER COLUMN TYPE",
+	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         "SET RLS MODE",
+	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        "DROP NOT NULL",
+	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        "SET ON UPDATE",
+	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       "RENAME COLUMN",
+	reflect.TypeOf((*tree.AlterTableDropStored)(nil)):         "DROP STORED",
+	reflect.TypeOf((*tree.AlterTableRenameConstraint)(nil)):   "RENAME CONSTRAINT",
+	reflect.TypeOf((*tree.AlterTableSetIdentity)(nil)):        "SET IDENTITY",
+	reflect.TypeOf((*tree.AlterTableAddIdentity)(nil)):        "ADD IDENTITY",
+	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         "SET VISIBLE",
+	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           "ALTER IDENTITY",
+	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   "SET STORAGE PARAM",
+	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): "RESET STORAGE PARAM",
+}
+
 func init() {
 	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedAlterTableStatements map.
@@ -87,6 +116,17 @@ func init() {
 					statementType, checks))
 			}
 		}
+		// Validate that every entry in supportedAlterTableStatements has a
+		// corresponding entry in alterTableCommandNames, and populate
+		// supportedAlterTableSubcommandTags with the subcommand tag.
+		subcommandName, ok := alterTableSubcommandNames[statementType]
+		if !ok {
+			panic(errors.AssertionFailedf(
+				"ALTER TABLE command type %v is missing from alterTableSubcommandNames map",
+				statementType))
+		}
+		tag := "ALTER TABLE " + subcommandName
+		supportedAlterTableSubcommandTags[tag] = struct{}{}
 	}
 }
 

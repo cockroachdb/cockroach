@@ -16,10 +16,10 @@ UPDATE foo SET x = 3 ORDER BY x LIMIT 1
 statement error rejected.*: DELETE without WHERE or LIMIT clause
 DELETE FROM foo
 
-statement ok
+statement count 0
 DELETE FROM foo WHERE x = 2
 
-statement ok
+statement count 0
 DELETE FROM foo ORDER BY x LIMIT 1
 
 statement error rejected.*: SELECT FOR UPDATE without WHERE or LIMIT clause

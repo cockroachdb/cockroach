@@ -3,6 +3,164 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+/*
+Package physical implements the consumer side of physical cluster.
+
+Physical cluster replication (PCR) uses a pull-based model where the destination
+cluster (consumer) initiates connections to the source cluster (producer) to
+request change streams. The consumer provides a frontier timestamp indicating
+where to resume from, enabling crash recovery and incremental replication.
+
+# High-Level Architecture (as summarized by Claude Code)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SOURCE CLUSTER (Producer, pkg/crosscluster/producer)                        │
+│                                                                             │
+│  ┌──────────────┐    ┌──────────────────┐    ┌─────────────────────────┐    │
+│  │  Rangefeeds  │───▶│  eventStream     │───▶│  streamCh (pgwire)      │    │
+│  │  (per range) │    │  (batches events)│    │  (sends to consumer)    │    │
+│  └──────────────┘    └──────────────────┘    └─────────────────────────┘    │
+│                                                        │                    │
+│           GC protected by                              │                    │
+│           heartbeat timestamp                          │                    │
+│                                                        ▼                    │
+│  ┌────── ───────┐◀─────────────── heartbeats ──────────────────────────┐    │
+│  │  Rangefeed   │    (consumer reports durably replicated time         │    │
+│  │  GC threshold│     so producer can advance GC)                      │    │
+│  └──────────────┘                                                      │    │
+│                                                                        │    │
+│  Timing metrics:                                                       │    │
+│  - ProduceWait: time waiting to produce (rangefeed → batch)            │    │
+│  - EmitWait: time waiting to emit (batch → consumer reads)             │    │
+└────────────────────────────────────────────────────────────────────────│────┘
+
+	                                                                         │
+		                                                                       │
+		┌──────────────────────────────────────────────────────────────────────┘
+		│ pgwire connection (pkg/crosscluster/streamclient)
+		│ Consumer calls: crdb_internal.stream_partition(streamID, spec)
+		│ Spec includes InitialScanTimestamp and per-span resume timestamps
+		▼
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DESTINATION CLUSTER (Consumer, pkg/crosscluster/physical)                   │
+│                                                                             │
+│  Job Resumer (stream_ingestion_job.go)                                      │
+│    - Reads ReplicatedTime from job progress (or InitialScanTimestamp)       │
+│    - Constructs DistSQL flow with frontier as resume point                  │
+│    - On restart, resumes from persisted checkpoint                          │
+│                       │                                                     │
+│                       ▼                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ DistSQL Flow (one ingestion processor per source partition)         │    │
+│  │                                                                     │    │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      │    │
+│  │  │ streamIngestion │  │ streamIngestion │  │ streamIngestion │      │    │
+│  │  │ Processor (N1)  │  │ Processor (N2)  │  │ Processor (N3)  │      │    │
+│  │  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘      │    │
+│  │           │ ResolvedSpans      │                    │               │    │
+│  │           └────────────────────┼────────────────────┘               │    │
+│  │                                ▼                                    │    │
+│  │                    ┌────────────────────────┐                       │    │
+│  │                    │ streamIngestionFrontier│                       │    │
+│  │                    │ Processor (coordinator)│                       │    │
+│  │                    └───────────┬────────────┘                       │    │
+│  │                                │                                    │    │
+│  └────────────────────────────────│────────────────────────────────────┘    │
+│                                   ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ Frontier Processor responsibilities:                                │    │
+│  │  - Merges ResolvedSpans from all ingestion processors               │    │
+│  │  - Maintains span.Frontier (min resolved timestamp across spans)    │    │
+│  │  - Persists ReplicatedTime to job progress periodically             │    │
+│  │  - Sends heartbeats to producer with durably replicated time        │    │
+│  │  - ReplicatedTime = safe point for cutover or job restart           │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  Timing metrics:                                                            │
+│  - AdmitLatency: MVCC timestamp → event received                            │
+│  - FlushHistNanos: time spent in flush operation                            │
+│  - CommitLatency: oldest MVCC timestamp → flush complete                    │
+│  - ReceiveWaitNanos: time blocked waiting for producer data                 │
+│  - FlushWaitNanos: time blocked waiting for flush pipeline                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+# Checkpoint and Frontier Flow
+
+ 1. Producer sends "resolved span" events indicating all data up to timestamp T
+    for a given span has been sent.
+
+ 2. Each ingestion processor receives resolved spans for its partitions, flushes
+    buffered data, then emits ResolvedSpans to the frontier processor.
+
+ 3. Frontier processor maintains a span.Frontier tracking the minimum resolved
+    timestamp across ALL spans. This is the ReplicatedTime.
+
+4. ReplicatedTime is persisted to job progress and used for:
+  - Cutover: destination can serve reads as of ReplicatedTime
+  - Resumption: on restart, consumer requests changes from ReplicatedTime
+  - GC coordination: heartbeat tells producer it can GC data before this time
+
+# Detailed Data Flow
+
+## Producer Side (pkg/crosscluster/producer/event_stream.go)
+
+1. Rangefeed callbacks (onValue, onValues, onSSTable, onDeleteRange):
+  - Receive events from rangefeed
+  - Add to streamEventBatcher (accumulates events)
+  - Call maybeFlushBatch() which flushes when:
+  - Batch size exceeds BatchByteSize (1 MiB default)
+  - Consumer is ready AND batch > minBatchByteSize (1 MiB)
+
+2. Batching and sending (flushBatch, sendFlush):
+  - Serialize batch to protobuf
+  - Optionally compress with Snappy
+  - BLOCKING: Send on streamCh - blocks until consumer's Next() reads it
+  - This is where producer waits for slow consumer
+
+3. Checkpoint emission (maybeCheckpoint, sendCheckpoint):
+  - Triggered on rangefeed frontier advance
+  - Respects MinCheckpointFrequency setting
+  - Sends resolved spans to consumer
+
+## Transport Layer (pkg/crosscluster/streamclient/)
+
+- partitionedStreamClient.Subscribe() initiates connection to producer
+- Passes InitialScanTimestamp and per-span frontier for resumption
+- Producer starts rangefeeds from the requested timestamps
+- Events flow via pgwire as rows, decoded into StreamEvent channel
+
+## Consumer Side (pkg/crosscluster/physical/stream_ingestion_processor.go)
+
+1. Subscription setup (Start()):
+  - Creates streamclient.Client per partition
+  - Each client calls Subscribe() with frontier timestamps
+  - All subscriptions merged via MergedSubscription
+
+2. Event consumption (consumeEvents()):
+  - BLOCKING select on mergedSubscription.Events()
+  - This is where consumer waits for data from producer
+  - Buffers KVs into streamIngestionBuffer
+  - Flushes on:
+  - Checkpoint event (if minimumFlushInterval elapsed)
+  - Buffer size threshold (maxKVBufferSize 128 MiB)
+  - Periodic timer
+
+3. Flush pipeline (flush() → flushLoop() → flushBuffer()):
+  - Swaps buffer, sends to flushCh (1 in-flight flush allowed)
+  - flushLoop receives buffer, calls flushBuffer()
+  - Sorts KVs, writes via SSTBatcher
+  - BLOCKING: sip.batcher.Flush() does actual I/O
+  - Emits ResolvedSpans to downstream frontier processor
+
+## Frontier Processor (stream_ingestion_frontier_processor.go)
+
+1. Receives ResolvedSpans from all ingestion processors
+2. Updates span.Frontier with each resolved span
+3. Periodically persists frontier to job progress (JobCheckpointFrequency)
+4. Sends heartbeats to producer via HeartbeatSender with replicated time
+5. Producer uses heartbeat time to advance GC threshold
+*/
 package physical
 
 import (

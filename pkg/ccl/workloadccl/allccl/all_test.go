@@ -33,7 +33,7 @@ import (
 
 func bigInitialData(meta workload.Meta) bool {
 	switch meta.Name {
-	case `tpcc`, `tpch`, `tpcds`:
+	case `tpcc`, `tpch`, `tpcds`, `tpccmultidb`:
 		return true
 	default:
 		return false

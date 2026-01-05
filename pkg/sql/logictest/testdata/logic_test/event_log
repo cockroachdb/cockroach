@@ -480,6 +480,8 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%sql.catalog.allow_leased_descriptor%'
+AND info NOT LIKE '%sql.catalog.descriptor_lease.use_locked_timestamps.enabled%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
@@ -500,6 +502,8 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%sql.catalog.allow_leased_descriptor%'
+AND info NOT LIKE '%sql.catalog.descriptor_lease.use_locked_timestamps.enabled%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}

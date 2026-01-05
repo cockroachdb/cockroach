@@ -568,7 +568,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			return errors.Wrap(err, "failed to remove pausepoint for online restore")
 		}
 
-		if err := d.deleteUserTableSST(ctx, t.L(), dbConn, collection); err != nil {
+		if err := d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection); err != nil {
 			return err
 		}
 		if _, err := dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID); err != nil {

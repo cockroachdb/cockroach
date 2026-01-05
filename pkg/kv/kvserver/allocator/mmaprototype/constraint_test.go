@@ -437,7 +437,8 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
 						ltInterner.intern(stores[roachpb.StoreID(storeID)].NodeLocality))
 				}
-				rac.finishInit(nConf, cm, leaseholder)
+				err := rac.finishInit(nConf, cm, leaseholder)
+				require.NoError(t, err)
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
 				// If there is a previous rangeAnalyzedConstraints, release it before

@@ -95,9 +95,6 @@ type TestClusterConfig struct {
 	DisableSchemaLockedByDefault bool
 	// PrepareQueries executes queries and statements with Prepare and Execute.
 	PrepareQueries bool
-	// EnableLeasedDescriptorSupport enables leased descriptors for pg_catalog /
-	// crdb_internal and locked leasing behavior.
-	EnableLeasedDescriptorSupport bool
 	// UseDistributedMergeIndexBackfill enables the use of distributed
 	// merge when index backfills are preformed.
 	UseDistributedMergeIndexBackfill bool
@@ -510,19 +507,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:            clusterversion.V25_4,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
-	},
-	{
-		Name:                "local-leased-descriptors",
-		NumNodes:            1,
-		OverrideDistSQLMode: "off",
-		// local is the configuration where we run all tests which have bad
-		// interactions with the default test tenant.
-		//
-		// TODO(#156124): We should review this choice. Why can't we use "Random"
-		// here? If there are specific tests that are incompatible, we can
-		// flag them to run only in a separate config.
-		UseSecondaryTenant:            Never,
-		EnableLeasedDescriptorSupport: true,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per

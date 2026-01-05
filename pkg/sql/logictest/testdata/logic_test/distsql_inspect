@@ -5,12 +5,6 @@ skip under race
 subtest setup
 
 statement ok
-SET enable_inspect_command = true;
-
-statement ok
-SET enable_inspect_command = true;
-
-statement ok
 CREATE VIEW last_inspect_job AS
 SELECT status, COALESCE(jsonb_array_length(
     crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'

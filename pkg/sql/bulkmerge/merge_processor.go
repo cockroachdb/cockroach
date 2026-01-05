@@ -10,6 +10,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
@@ -157,6 +160,14 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 		return nil, err
 	}
 
+	if knobs, ok := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs); ok {
+		if knobs.RunBeforeMergeTask != nil {
+			if err := knobs.RunBeforeMergeTask(m.Ctx(), m.flowCtx.ID, input.taskID); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	results, err := m.mergeSSTs(m.Ctx(), input.taskID)
 	if err != nil {
 		return nil, err
@@ -209,13 +220,6 @@ func (m *bulkMergeProcessor) mergeSSTs(
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	mergeSpan := m.spec.Spans[taskID]
 	var storeFiles []storageccl.StoreFile
-	destStore, err := m.flowCtx.Cfg.ExternalStorage(ctx, m.spec.OutputStorage)
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	defer destStore.Close()
-	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputStorage.URI,
-		m.flowCtx.Cfg.DB.KV().Clock())
 
 	// Find the ssts that overlap with the given task's key range.
 	for _, sst := range m.spec.SSTs {
@@ -235,7 +239,7 @@ func (m *bulkMergeProcessor) mergeSSTs(
 		return execinfrapb.BulkMergeSpec_Output{}, nil
 	}
 
-	sstMaxSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
+	sstTargetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: mergeSpan.Key,
@@ -247,18 +251,38 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 	defer iter.Close()
 
-	mergedSSTFile, currentFileURI, err := destFileAllocator.AddFile(ctx)
+	if m.spec.Iteration == m.spec.MaxIterations {
+		return m.ingestFinalIteration(ctx, iter, mergeSpan)
+	}
+
+	destStore, err := m.flowCtx.Cfg.ExternalStorage(ctx, m.spec.OutputStorage)
 	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
-	mergedSSTWriter := storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-	defer mergedSSTWriter.Close()
+	defer destStore.Close()
+	destFileAllocator := bulksst.NewExternalFileAllocator(destStore, m.spec.OutputStorage.URI,
+		m.flowCtx.Cfg.DB.KV().Clock())
 
-	var mergedSSTs execinfrapb.BulkMergeSpec_Output
+	writer, err := newExternalStorageWriter(
+		ctx,
+		m.flowCtx.EvalCtx.Settings,
+		destFileAllocator,
+		sstTargetSize,
+	)
+	if err != nil {
+		return execinfrapb.BulkMergeSpec_Output{}, err
+	}
+	defer writer.Close(ctx)
 
-	var firstKey roachpb.Key
-	var sstSize int64
-	// Write all KVs
+	return processMergedData(ctx, iter, mergeSpan, writer)
+}
+
+// processMergedData is a unified function for iterating over merged data and
+// writing it using a mergeWriter implementation.
+func processMergedData(
+	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span, writer mergeWriter,
+) (execinfrapb.BulkMergeSpec_Output, error) {
+	var endKey roachpb.Key
 	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
@@ -273,54 +297,64 @@ func (m *bulkMergeProcessor) mergeSSTs(
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
 
-		if firstKey == nil {
-			firstKey = key.Key.Clone()
-		}
-
-		// Write the key-value pair
-		if err := mergedSSTWriter.PutRawMVCC(key, val); err != nil {
-			return execinfrapb.BulkMergeSpec_Output{}, err
-		}
-		sstSize += int64(len(key.Key) + len(val))
-
-		// Flush large SSTs after writing the key
-		if sstSize >= sstMaxSize {
-			endKey := key.Key.Next()
-			mergedSSTs.SSTs = append(mergedSSTs.SSTs, execinfrapb.BulkMergeSpec_SST{
-				StartKey: firstKey,
-				EndKey:   endKey,
-				URI:      currentFileURI,
-			})
-			if err = mergedSSTWriter.Finish(); err != nil {
+		// If we've selected an endKey and this key is at or beyond that point,
+		// complete the current output unit before adding this key.
+		if endKey != nil && key.Key.Compare(endKey) >= 0 {
+			if _, err := writer.Complete(ctx, endKey); err != nil {
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
+			endKey = nil
+		}
 
-			mergedSSTFile, currentFileURI, err = destFileAllocator.AddFile(ctx)
+		shouldSplit, err := writer.Add(ctx, key, val)
+		if err != nil {
+			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+
+		// If the writer wants to split and we haven't selected an endKey yet,
+		// pick a safe split point after the current key.
+		if shouldSplit && endKey == nil {
+			safeKey, err := keys.EnsureSafeSplitKey(key.Key)
 			if err != nil {
 				return execinfrapb.BulkMergeSpec_Output{}, err
 			}
-			mergedSSTWriter = storage.MakeIngestionSSTWriter(ctx, m.flowCtx.EvalCtx.Settings, mergedSSTFile)
-			// Next SST starts where this one ended to maintain contiguous non-overlapping ranges
-			firstKey = endKey
-			sstSize = 0
+			endKey = safeKey.PrefixEnd()
 		}
 	}
 
-	// Finish writing the SST
-	if err := mergedSSTWriter.Finish(); err != nil {
+	return writer.Finish(ctx, mergeSpan.EndKey)
+}
+
+func (m *bulkMergeProcessor) ingestFinalIteration(
+	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span,
+) (execinfrapb.BulkMergeSpec_Output, error) {
+	writeTS := m.spec.WriteTimestamp
+	if writeTS.IsEmpty() {
+		writeTS = m.flowCtx.Cfg.DB.KV().Clock().Now()
+	}
+
+	// Use SSTBatcher directly instead of BufferingAdder since the data is
+	// already sorted from the merge iterator. This avoids the unnecessary
+	// sorting overhead in BufferingAdder.
+	batcher, err := bulk.MakeSSTBatcher(
+		ctx,
+		"bulk-merge-final",
+		m.flowCtx.Cfg.DB.KV(),
+		m.flowCtx.EvalCtx.Settings,
+		hlc.Timestamp{}, // disallowShadowingBelow
+		false,           // writeAtBatchTs
+		false,           // scatterSplitRanges
+		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
+		m.flowCtx.Cfg.BulkSenderLimiter,
+		nil, // range cache
+	)
+	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
 	}
 
-	if sstSize > 0 {
-		// Iterator finished with some SST data written. The iterator ended at mergeSpan.EndKey, so
-		// use that as the EndKey of the last output file.
-		mergedSSTs.SSTs = append(mergedSSTs.SSTs, execinfrapb.BulkMergeSpec_SST{
-			StartKey: firstKey,
-			EndKey:   mergeSpan.EndKey,
-			URI:      currentFileURI,
-		})
-	}
-	return mergedSSTs, nil
+	writer := newKVStorageWriter(batcher, writeTS)
+	defer writer.Close(ctx)
+	return processMergedData(ctx, iter, mergeSpan, writer)
 }
 
 func init() {

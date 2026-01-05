@@ -737,8 +737,7 @@ message LocalOnlySessionData {
   // HoistJoinProjectLeft normalization rule hoists more kinds of projections
   // above joins.
   bool optimizer_use_improved_hoist_join_project = 186;
-  // EnableInspectCommand controls use of the INSPECT command.
-  bool enable_inspect_command = 187;
+  reserved 187;
   // RowSecurity controls whether row-level security is enabled.
   bool row_security = 188;
   // OptimizerClampLowHistogramSelectivity, when true, causes the optimizer to

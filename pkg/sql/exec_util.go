@@ -1887,6 +1887,9 @@ type ExecutorConfig struct {
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
 
+	// SpanConfigReporter is used to get span conformance reports.
+	SpanConfigReporter spanconfig.Reporter
+
 	// InternalDB is used to create an isql.Executor bound with SessionData and
 	// other ExtraTxnState.
 	InternalDB *InternalDB

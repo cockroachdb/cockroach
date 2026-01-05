@@ -410,6 +410,15 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				mention: []string{"@cockroachdb/unowned"},
 			}},
 		},
+		{
+			fileName: "test-error-142.xml", // #159708 case
+			expPkg:   "pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test",
+			expIssues: []issue{{
+				testName: "pkg",
+				title:    "pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test: pkg failed",
+				message:  `Test binary potentially failed to execute because of bazel test timeout, init() issue, or some other error.`,
+			}},
+		},
 	}
 
 	for _, c := range testCases {

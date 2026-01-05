@@ -164,7 +164,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/matview.out --lab
  -- test schema behavior
  CREATE SCHEMA mvtest_mvschema;
  ALTER MATERIALIZED VIEW mvtest_tvm SET SCHEMA mvtest_mvschema;
-+ERROR:  cannot set schema on relation "mvtest_tvm" because view "mvtest_tvmm" depends on it
++ERROR:  cannot set schema on relation "root.public.mvtest_tvm" because view "mvtest_tvmm" depends on it
 +HINT:  consider dropping "mvtest_tvmm" first.
  \d+ mvtest_tvm
 +ERROR:  at or near ".": syntax error

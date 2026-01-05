@@ -48,7 +48,7 @@ func CreateTestAllocatorWithKnobs(
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
 	mmAllocator := mmaprototype.NewAllocatorState(
-		timeutil.DefaultTimeSource{}, nil, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		timeutil.DefaultTimeSource{}, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	as := mmaintegration.NewAllocatorSync(storePool, mmAllocator, st, allocSyncKnobs)
 	a := MakeAllocator(st, as, deterministic, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true

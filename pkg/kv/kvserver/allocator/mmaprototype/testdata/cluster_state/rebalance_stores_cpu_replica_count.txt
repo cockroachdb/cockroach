@@ -16,7 +16,6 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] attempting to shed replicas next
-[mmaid=2] excluding all stores on n3 due to overload/fd status
 [mmaid=2] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=525 fractionUsed=100.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=2] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -26,6 +25,8 @@ rebalance-stores store-id=1 max-range-move-count=1 fraction-pending-decrease-thr
 [mmaid=2] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=2] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] considering replica-transfer r3 from s3: store load [cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B]
+[mmaid=2] candidates are:
+[mmaid=2]  s4: (store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))
 [mmaid=2] sortTargetCandidateSetAndPick: candidates: s4(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s4
 [mmaid=2] load summary for dim=CPURate (s4): loadLow, reason: load is >10% below mean [load=210 meanLoad=525 fractionUsed=21.00% meanUtil=52.50% capacity=1000]
 [mmaid=2] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]

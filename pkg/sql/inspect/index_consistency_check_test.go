@@ -469,9 +469,6 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				FROM generate_series(1001, 2000) AS gs1;`,
 					)
 
-					_, err = db.Exec(`SET enable_inspect_command=true`)
-					require.NoError(t, err)
-
 					// If not using timestamp before corruption, get current timestamp
 					if !tc.useTimestampBeforeCorruption {
 						// Convert relative timestamp to absolute timestamp using CRDB
@@ -612,10 +609,6 @@ CREATE INDEX secondary ON t.test (v);
 	err = insertSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
 	require.NoError(t, err)
 
-	// Enable INSPECT command.
-	_, err = db.Exec(`SET enable_inspect_command = true`)
-	require.NoError(t, err)
-
 	// Run INSPECT and expect it to find the dangling index entry.
 	// INSPECT should return an error when inconsistencies are found.
 	_, err = db.Query(`INSPECT TABLE t.test AS OF SYSTEM TIME '-1us' WITH OPTIONS INDEX ALL`)
@@ -686,9 +679,7 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 		`CREATE INDEX idx_having ON test.reserved_table ("having", "group")`,
 	)
 
-	_, err := db.Exec(`SET enable_inspect_command=true`)
-	require.NoError(t, err)
-	_, err = db.Query(`INSPECT TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
+	_, err := db.Query(`INSPECT TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 
@@ -736,9 +727,6 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	// Delete the secondary index entry to create corruption.
 	err := deleteSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
 	require.NoError(t, err)
-
-	// Enable INSPECT command.
-	r.Exec(t, `SET enable_inspect_command = true`)
 
 	// Run INSPECT and expect it to find the missing index entry.
 	// INSPECT returns an error when inconsistencies are found.
@@ -796,7 +784,6 @@ func TestInspectWithoutASOFSchemaChange(t *testing.T) {
 
 	r.ExecMultiple(t,
 		`SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms'`,
-		`SET enable_inspect_command = true`,
 		`CREATE DATABASE t`,
 		`CREATE TABLE t.pk_swap (
                        old_pk INT PRIMARY KEY,
@@ -852,7 +839,6 @@ func TestInspectASOFAfterPrimaryKeySwap(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 
 	r.ExecMultiple(t,
-		`SET enable_inspect_command = true`,
 		`CREATE DATABASE t`,
 		`CREATE TABLE t.pk_swap (
 			old_pk INT PRIMARY KEY,

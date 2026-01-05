@@ -44,6 +44,7 @@ debug/hot-ranges.sh
 debug/liveness.json
 debug/nodes.json
 debug/nodes/1/crdb_internal.active_range_feeds.txt
+debug/nodes/1/crdb_internal.cluster_replication_node_processors.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt
@@ -113,8 +114,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -187,6 +190,7 @@ debug/debug_zip_command_flags.txt
 debug/hot-ranges-tenant.sh
 debug/hot-ranges.sh
 debug/nodes/1/crdb_internal.active_range_feeds.txt
+debug/nodes/1/crdb_internal.cluster_replication_node_processors.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt
@@ -246,8 +250,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -342,6 +348,7 @@ debug/hot-ranges.sh
 debug/liveness.json
 debug/nodes.json
 debug/nodes/1/crdb_internal.active_range_feeds.txt
+debug/nodes/1/crdb_internal.cluster_replication_node_processors.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt
@@ -410,8 +417,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -487,6 +496,7 @@ debug/debug_zip_command_flags.txt
 debug/hot-ranges-tenant.sh
 debug/hot-ranges.sh
 debug/nodes/1/crdb_internal.active_range_feeds.txt
+debug/nodes/1/crdb_internal.cluster_replication_node_processors.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt
@@ -549,8 +559,10 @@ debug/system.sql_stats_cardinality.txt
 debug/system.sqlliveness.txt
 debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
+debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
 debug/system.table_statistics.txt
+debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
 debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
@@ -602,6 +614,7 @@ debug/debug_zip_command_flags.txt
 debug/hot-ranges-tenant.sh
 debug/hot-ranges.sh
 debug/nodes/1/crdb_internal.active_range_feeds.txt
+debug/nodes/1/crdb_internal.cluster_replication_node_processors.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_checkpoints.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_stream_spans.txt
 debug/nodes/1/crdb_internal.cluster_replication_node_streams.txt

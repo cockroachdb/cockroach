@@ -885,13 +885,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
-					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
-						switch name {
-						case "none":
+					NewFilterPolicy: func(name string) (pebble.TableFilterPolicy, error) {
+						if name == "none" {
 							return nil, nil
-						case "rocksdb.BuiltinBloomFilter":
-							return bloom.FilterPolicy(10), nil
 						}
+						if p, ok := bloom.PolicyFromName(name); ok {
+							return p, nil
+						}
+						// Ignore unknown policies.
+						log.Dev.Warningf(ctx, "ignoring unknown table filter policy %q", name)
 						return nil, nil
 					},
 				}))

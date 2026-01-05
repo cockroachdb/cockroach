@@ -480,7 +480,14 @@ func registerKVRangefeed(r registry.Registry) {
 			Name:      testName,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(4)),
+			Cluster: r.MakeClusterSpec(
+				4,
+				spec.CPU(8),
+				spec.WorkloadNode(),
+				spec.WorkloadNodeCPU(4),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKVRangefeed(ctx, t, c, opts)
 			},

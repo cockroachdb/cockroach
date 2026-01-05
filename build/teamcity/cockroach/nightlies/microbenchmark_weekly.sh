@@ -200,13 +200,15 @@ if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
     influx_token="${MICROBENCH_INFLUX_TOKEN}"
     influx_host="${MICROBENCH_INFLUX_HOST}"
   fi
-  # Sheet description is in the form: `baseline` to `experiment`
-  sheet_description="${name_arr[1]} -> ${name_arr[0]}"
+  # Version context is in the form: `baseline` to `experiment`
+  version_context="${name_arr[1]} -> ${name_arr[0]}"
   ./bin/roachprod-microbench compare "$output_dir/experiment" "$output_dir/baseline" \
     ${slack_token:+--slack-token="$slack_token"} \
-    --sheet-desc="$sheet_description" \
+    --version-context="$version_context" \
+    --generate-sheet \
     ${influx_token:+--influx-token="$influx_token"} \
     ${influx_host:+--influx-host="$influx_host"} \
+    ${TRIGGERED_BUILD:+--post-issues} \
     2>&1 | tee "$output_dir/sheets.txt"
 else
   echo "No microbenchmarks were run. Skipping comparison."

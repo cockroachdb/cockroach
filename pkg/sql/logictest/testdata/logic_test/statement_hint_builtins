@@ -63,7 +63,7 @@ SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM x
 ----
 1
 
-statement ok
+statement count 3
 DELETE FROM system.statement_hints WHERE true;
 
 query I
@@ -161,7 +161,7 @@ WHERE feature_name = 'sql.session.statement-hints'
 ----
 6
 
-statement ok
+statement count 1
 DELETE FROM system.statement_hints WHERE true
 
 statement ok
@@ -526,7 +526,7 @@ trying planning with injected hints
 # Try removing an injected hint between prepare and execute.
 
 # (Re-use p1.)
-statement ok
+statement count 1
 DELETE FROM system.statement_hints WHERE row_id = $hint_p1
 
 statement ok

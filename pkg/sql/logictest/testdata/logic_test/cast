@@ -46,7 +46,7 @@ EXECUTE insert_c('foo')
 statement error value too long for type CHAR
 EXECUTE insert_c('foo'::STRING)
 
-statement ok
+statement count 4
 DELETE FROM assn_cast
 
 statement ok
@@ -105,7 +105,7 @@ INSERT INTO assn_cast(qc) VALUES (1234)
 statement ok
 PREPARE insert_qc AS INSERT INTO assn_cast(qc) VALUES ($1)
 
-statement ok
+statement count 11
 DELETE FROM assn_cast
 
 statement ok
@@ -349,7 +349,7 @@ SELECT * FROM assn_cast_dec_default
 # Tests for assignment casts in UPDATEs.
 subtest assignment_casts_update
 
-statement ok
+statement count 32
 DELETE FROM assn_cast
 
 statement ok
@@ -634,7 +634,7 @@ SELECT k, concat('"', c, '"') FROM assn_cast_upsert
 2  ""
 3  ""
 
-statement ok
+statement count 3
 DELETE FROM assn_cast_upsert
 
 statement ok
@@ -1227,8 +1227,10 @@ statement error integer out of range for type int2
 SELECT _int4::INT2 FROM t64429
 
 # Also check the negative overflow.
-statement ok
+statement count 1
 DELETE FROM t64429 WHERE true;
+
+statement ok
 INSERT INTO t64429 VALUES (-3000000000, -300000);
 
 statement error integer out of range for type int2

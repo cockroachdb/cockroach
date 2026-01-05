@@ -156,6 +156,53 @@ func writeStartupScript(
 	return tmpfile.Name(), nil
 }
 
+// generateStartupScriptContent generates the startup script as a string.
+// rather than reading from a file as earlier.
+func generateStartupScriptContent(
+	extraMountOpts string,
+	fileSystem vm.Filesystem,
+	useMultiple bool,
+	enableFIPS bool,
+	enableCron bool,
+	bootDiskOnly bool,
+) (string, error) {
+	// tmplParams holds all the template parameters for generating the script.
+	type tmplParams struct {
+		vm.StartupArgs
+		ExtraMountOpts   string
+		UseMultipleDisks bool
+		PublicKey        string
+		BootDiskOnly     bool
+	}
+
+	// Get the SSH public key that will be added to the VM's authorized_keys.
+	publicKey, err := config.SSHPublicKey()
+	if err != nil {
+		return "", err
+	}
+	args := tmplParams{
+		StartupArgs: vm.DefaultStartupArgs(
+			vm.WithSharedUser(config.SharedUser),
+			vm.WithEnableCron(enableCron),
+			vm.WithFilesystem(fileSystem),
+			vm.WithEnableFIPS(enableFIPS),
+			vm.WithChronyServers([]string{"metadata.google.internal"}),
+		),
+		ExtraMountOpts:   extraMountOpts,
+		UseMultipleDisks: useMultiple,
+		PublicKey:        publicKey,
+		BootDiskOnly:     bootDiskOnly,
+	}
+
+	var buf bytes.Buffer
+	err = vm.GenerateStartupScript(&buf, gceDiskStartupScriptTemplate, args)
+	if err != nil {
+		return "", errors.Wrapf(err, "unable to generate startup script")
+	}
+
+	return buf.String(), nil
+}
+
 // SyncDNS implements the InfraProvider interface.
 func (p *Provider) SyncDNS(l *logger.Logger, vms vm.List) error {
 	return p.dnsProvider.SyncDNS(l, vms)

@@ -100,6 +100,7 @@ type ShowBackup struct {
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
+	TimeRange    ShowAfterBefore
 }
 
 // Format implements the NodeFormatter interface.
@@ -107,10 +108,9 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
-		if !node.Options.IsDefault() {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
+		if !node.TimeRange.IsDefault() {
+			ctx.WriteString(" ")
+			ctx.FormatNode(&node.TimeRange)
 		}
 		return
 	}
@@ -140,6 +140,34 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowAfterBefore represents the AFTER <expr> BEFORE <expr> option for
+// SHOW BACKUPS.
+type ShowAfterBefore struct {
+	After  Expr
+	Before Expr
+}
+
+var _ NodeFormatter = &ShowAfterBefore{}
+
+func (s *ShowAfterBefore) Format(ctx *FmtCtx) {
+	if s.After != nil {
+		ctx.WriteString("AFTER ")
+		ctx.FormatNode(s.After)
+	}
+
+	if s.Before != nil {
+		if s.After != nil {
+			ctx.WriteString(" ")
+		}
+		ctx.WriteString("BEFORE ")
+		ctx.FormatNode(s.Before)
+	}
+}
+
+func (s *ShowAfterBefore) IsDefault() bool {
+	return s.After == nil && s.Before == nil
+}
+
 type ShowBackupOptions struct {
 	AsJson               bool
 	CheckFiles           bool
@@ -149,7 +177,6 @@ type ShowBackupOptions struct {
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
-	Index                bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//
@@ -175,10 +202,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(", ")
 		}
 		addSep = true
-	}
-	// Index is only used in SHOW BACKUPS
-	if o.Index {
-		ctx.WriteString("index")
 	}
 
 	if o.AsJson {
@@ -259,8 +282,7 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
-		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
-		o.Index == options.Index
+		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {

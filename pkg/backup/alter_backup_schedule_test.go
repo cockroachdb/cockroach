@@ -282,9 +282,8 @@ func TestAlterBackupScheduleWithSQLSpecialCharacters(t *testing.T) {
 	uri := "nodelocal://1/backup/alter ,s{hedu}e"
 
 	createCmd := fmt.Sprintf(
-		"CREATE SCHEDULE FOR BACKUP INTO '%s' WITH"+
-			" incremental_location = '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
-		uri, uri,
+		"CREATE SCHEDULE FOR BACKUP INTO '%s' RECURRING '@hourly' FULL BACKUP '@daily';",
+		uri,
 	)
 	rows := th.sqlDB.QueryStr(t, createCmd)
 	require.Len(t, rows, 2)
@@ -357,109 +356,4 @@ func scheduleStatusAndRecurrence(
 		QueryRow(t, `SELECT schedule_status, recurrence FROM [SHOW SCHEDULES] WHERE id=$1`, id).
 		Scan(&status, &recurrence)
 	return status, recurrence
-}
-
-func TestAlterBackupScheduleSpecifiedAndUnspecifiedIncLocation(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// This test verifies that SHOW BACKUP and RESTORE work correctly when a
-	// backup schedule was created with incremental_location explicitly set to
-	// the default location, and then later altered to unset incremental_location.
-	// In both cases, SHOW BACKUP and RESTORE should work without specifying
-	// incremental_location.
-	// NB: The purpose of this test is to verify compatibility for CC's transition
-	// from explicitly setting incremental_location to unsetting it. During this
-	// time, the default behavior is to ignore backup indexes, so we disable it
-	// during this test. When backup indexes are enabled by default, this test may
-	// be deleted.
-
-	th, cleanup := newTestHelper(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	th.setOverrideAsOfClauseKnob(t)
-	// Set time to a specific time to avoid flakes from schedule timing.
-	th.env.SetTime(time.Date(2025, 10, 21, 1, 0, 0, 0, time.UTC))
-
-	th.sqlDB.Exec(t, `SET CLUSTER SETTING backup.index.read.enabled = false`)
-
-	th.sqlDB.Exec(t, `CREATE TABLE foo (a int)`)
-	th.sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
-
-	// Create a backup schedule with incremental_location explicitly set to
-	// nodelocal://1/backup/incrementals (which is the default location).
-	schedules, err := th.createBackupSchedule(t,
-		`CREATE SCHEDULE FOR BACKUP TABLE foo
-		INTO 'nodelocal://1/backup'
-		WITH incremental_location = 'nodelocal://1/backup/incrementals'
-		RECURRING '@hourly'
-		FULL BACKUP '@daily'`)
-	require.NoError(t, err)
-	require.Len(t, schedules, 2)
-
-	full, inc := schedules[0], schedules[1]
-	if full.IsPaused() {
-		full, inc = inc, full
-	}
-
-	// Load and execute the full backup schedule.
-	th.env.SetTime(full.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
-
-	// Take some incremental backups
-	th.sqlDB.Exec(t, `INSERT INTO foo VALUES (4), (5), (6)`)
-	inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
-	require.NoError(t, err)
-	th.env.SetTime(inc.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJobCount(t, inc.ScheduleID(), 1)
-
-	th.sqlDB.Exec(t, `INSERT INTO foo VALUES (7), (8), (9)`)
-	inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
-	require.NoError(t, err)
-	th.env.SetTime(inc.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJobCount(t, inc.ScheduleID(), 2)
-
-	// Verify SHOW BACKUP works without specifying incremental_location.
-	// Since we set it to the default location, SHOW BACKUP should work.
-	// We should see 3 backups: 1 full + 2 incremental.
-	var numBackups int
-	th.sqlDB.QueryRow(t,
-		`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']`).
-		Scan(&numBackups)
-	require.Equal(t, 3, numBackups)
-
-	// Verify RESTORE works without specifying incremental_location.
-	th.sqlDB.Exec(t, "CREATE DATABASE restored")
-	th.sqlDB.Exec(t, `RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup' WITH into_db = 'restored'`)
-	th.sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restored.foo`, [][]string{{"9"}})
-
-	// Now ALTER the schedule to unset incremental_location (by setting it to empty string).
-	th.sqlDB.Exec(t, fmt.Sprintf(
-		`ALTER BACKUP SCHEDULE %d SET WITH incremental_location = ''`, full.ScheduleID(),
-	))
-
-	// Take another incremental backup.
-	th.sqlDB.Exec(t, `INSERT INTO foo VALUES (10), (11), (12)`)
-	inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
-	require.NoError(t, err)
-	th.env.SetTime(inc.NextRun().Add(time.Second))
-	require.NoError(t, th.executeSchedules())
-	th.waitForSuccessfulScheduledJobCount(t, inc.ScheduleID(), 3)
-
-	// Verify SHOW BACKUP still works without specifying incremental_location.
-	// We should now see 4 backups: 1 full + 3 incremental.
-	th.sqlDB.QueryRow(t,
-		`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/backup']`).
-		Scan(&numBackups)
-	require.Equal(t, 4, numBackups)
-
-	// Verify RESTORE still works without specifying incremental_location.
-	th.sqlDB.Exec(t, `DROP TABLE restored.foo`)
-	th.sqlDB.Exec(t, `RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/backup' WITH into_db = 'restored'`)
-	th.sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restored.foo`, [][]string{{"12"}})
 }

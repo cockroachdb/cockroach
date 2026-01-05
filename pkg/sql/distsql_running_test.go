@@ -926,13 +926,14 @@ func TestDistSQLPlannerParallelChecks(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	// Set up a child table with two foreign keys into two parent tables.
-	sqlDB.Exec(t, `CREATE TABLE parent1 (id1 INT8 PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE parent2 (id2 INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open')`)
+	sqlDB.Exec(t, `CREATE TABLE parent1 (e1 status, id1 INT8, PRIMARY KEY (e1, id1))`)
+	sqlDB.Exec(t, `CREATE TABLE parent2 (e2 status, id2 INT8, PRIMARY KEY (e2, id2))`)
 	sqlDB.Exec(t, `
 CREATE TABLE child (
-    id INT8 PRIMARY KEY, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
-    FOREIGN KEY (parent_id1) REFERENCES parent1 (id1),
-    FOREIGN KEY (parent_id2) REFERENCES parent2 (id2)
+    e status, id INT8, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
+    FOREIGN KEY (e, parent_id1) REFERENCES parent1 (e1, id1),
+    FOREIGN KEY (e, parent_id2) REFERENCES parent2 (e2, id2)
 );`)
 	// Disable the insert fast path in order for the foreign key checks to be
 	// planned as parallel postqueries.
@@ -945,8 +946,8 @@ CREATE TABLE child (
 
 	const numIDs = 1000
 	for id := 0; id < numIDs; id++ {
-		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ($1)`, id)
-		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ($1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ('open', $1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ('open', $1)`, id)
 		var prefix string
 		if rng.Float64() < 0.5 {
 			// In 50% of the cases, run the INSERT query with FK checks via
@@ -968,12 +969,12 @@ CREATE TABLE child (
 			// error for parent_id1 is always chosen.
 			sqlDB.ExpectErr(
 				t,
-				`insert on table "child" violates foreign key constraint "child_parent_id1_fkey"`,
-				fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, invalidID),
+				`insert on table "child" violates foreign key constraint "child_e_parent_id1_fkey"`,
+				fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, invalidID),
 			)
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, id))
+		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, id))
 	}
 }
 

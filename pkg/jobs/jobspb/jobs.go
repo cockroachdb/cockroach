@@ -191,4 +191,6 @@ func (f *FilterList) Matches(fqTable string) bool {
 		return ok
 	}
 	return true
+func (c CreateStatsDetails) IsAuto() bool {
+	return c.Name == AutoStatsName || c.Name == AutoPartialStatsName
 }

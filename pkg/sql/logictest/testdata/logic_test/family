@@ -76,7 +76,7 @@ SELECT * FROM abcd
 1 2 3    4
 5 9 NULL 10
 
-statement ok
+statement count 1
 DELETE FROM abcd where c = 3
 
 query IIII
@@ -118,7 +118,7 @@ SELECT * FROM abcd WHERE a = 2
 ----
 2 NULL NULL 5
 
-statement ok
+statement count 1
 DELETE FROM abcd WHERE a = 2
 
 query IIII

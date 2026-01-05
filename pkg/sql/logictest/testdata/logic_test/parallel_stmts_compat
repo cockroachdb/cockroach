@@ -37,7 +37,7 @@ UPDATE kv SET v = k WHERE k = 3 RETURNING NOTHING
 statement error duplicate key value violates unique constraint "kv_pkey"\nDETAIL: Key \(k\)=\(1\) already exists\.
 UPDATE kv SET k = 1 WHERE k = 2 RETURNING NOTHING
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 
 statement ok
@@ -46,10 +46,10 @@ INSERT INTO fk VALUES (2)
 statement error delete on table "kv" violates foreign key constraint "fk_f_fkey" on table "fk"\nDETAIL: Key \(k\)=\(2\) is still referenced from table "fk"
 DELETE FROM kv WHERE k = 2 RETURNING NOTHING
 
-statement ok
+statement count 1
 DELETE FROM fk
 
-statement ok
+statement count 1
 DELETE FROM kv
 
 
@@ -214,10 +214,10 @@ SELECT k, v FROM kv ORDER BY k
 statement ok
 BEGIN
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 
-statement ok
+statement count 0
 DELETE FROM kv WHERE k = 5 RETURNING NOTHING
 
 statement ok
@@ -238,7 +238,7 @@ INSERT INTO fk VALUES (2)
 statement ok
 BEGIN
 
-statement ok
+statement count 0
 DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 
 statement error delete on table "kv" violates foreign key constraint "fk_f_fkey" on table "fk"\nDETAIL: Key \(k\)=\(2\) is still referenced from table "fk"
@@ -257,7 +257,7 @@ SELECT k, v FROM kv ORDER BY k
 3  3
 4  8
 
-statement ok
+statement count 1
 DELETE FROM fk
 
 
@@ -297,7 +297,7 @@ SELECT k, v FROM kv ORDER BY k
 5  9
 6  10
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 2 RETURNING NOTHING
 
 statement ok
@@ -350,7 +350,7 @@ ROLLBACK
 
 # RETURNING NOTHING can be prepared and executed.
 
-statement ok
+statement count 5
 DELETE FROM kv
 
 statement ok

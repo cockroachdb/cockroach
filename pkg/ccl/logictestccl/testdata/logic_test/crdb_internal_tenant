@@ -452,10 +452,10 @@ RESET application_name                                                0  0
 SELECT IF(nextval(_) < _, crdb_internal.force_retry(_), _)            2  1
 SELECT IF(nextval(_) < _, crdb_internal.force_retry(_::INTERVAL), _)  0  1
 
-query T
-SELECT crdb_internal.cluster_name()
+query B
+SELECT length(crdb_internal.cluster_name()) > 0
 ----
-testclustername
+true
 
 # Regression for 41834.
 statement ok

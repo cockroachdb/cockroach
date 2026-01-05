@@ -1627,9 +1627,6 @@ func UpdateSSTTimestamps(
 	if concurrency > 0 {
 		defaults := DefaultPebbleOptions()
 		opts := defaults.MakeReaderOptions()
-		if fp := defaults.Levels[0].FilterPolicy; fp != nil && len(opts.Filters) == 0 {
-			opts.Filters = map[string]sstable.FilterPolicy{fp.Name(): fp}
-		}
 		rewriteOpts, minTableFormat := makeSSTRewriteOptions(ctx, st)
 		_, tableFormat, err := sstable.RewriteKeySuffixesAndReturnFormat(sst,
 			opts,

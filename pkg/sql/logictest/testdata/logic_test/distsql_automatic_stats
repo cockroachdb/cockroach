@@ -1,5 +1,9 @@
 # LogicTest: !metamorphic-batch-sizes
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Enable automatic stats for this table.
 statement ok
 CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX d_idx (d)) WITH (sql_stats_automatic_collection_enabled = true)
@@ -101,7 +105,7 @@ __auto__         {c}           1050       10              0
 __auto__         {d}           1050       3               365
 
 # Delete more than 20% of the table.
-statement ok
+statement count 500
 DELETE FROM data WHERE c > 5
 
 query TTIII colnames,retry
@@ -145,7 +149,7 @@ __auto__         {x}           0          0               0
 __auto__         {y}           0          0               0
 
 # Test fast path delete.
-statement ok
+statement count 550
 DELETE FROM copy WHERE true
 
 query TTII colnames,retry

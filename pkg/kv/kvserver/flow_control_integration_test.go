@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -4000,10 +4001,10 @@ func (h *flowControlTestHelper) enableVerboseRaftMsgLoggingForRange(rangeID roac
 		si, err := h.tc.Server(i).GetStores().(*kvserver.Stores).GetStore(h.tc.Server(i).GetFirstStoreID())
 		require.NoError(h.t, err)
 		h.tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
-			&unreliableRaftHandler{
-				rangeID:                    rangeID,
+			&kvtestutils.UnreliableRaftHandler{
+				RangeID:                    rangeID,
 				IncomingRaftMessageHandler: si,
-				unreliableRaftHandlerFuncs: noopRaftHandlerFuncs(),
+				UnreliableRaftHandlerFuncs: kvtestutils.NoopRaftHandlerFuncs(),
 			})
 	}
 }

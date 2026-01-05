@@ -45,11 +45,12 @@ type mmaState interface {
 	// RegisterExternalChange is called by the allocator sync to register
 	// external changes with the mma.
 	RegisterExternalChange(
-		localStoreID roachpb.StoreID, _ mmaprototype.PendingRangeChange,
+		_ context.Context, localStoreID roachpb.StoreID, _ mmaprototype.PendingRangeChange,
 	) (_ mmaprototype.ExternalRangeChange, ok bool)
 	// AdjustPendingChangeDisposition is called by the allocator sync to adjust
 	// the disposition of pending changes to a range.
-	AdjustPendingChangeDisposition(change mmaprototype.ExternalRangeChange, success bool)
+	AdjustPendingChangeDisposition(
+		_ context.Context, change mmaprototype.ExternalRangeChange, success bool)
 	// BuildMMARebalanceAdvisor is called by the allocator sync to build a
 	// MMARebalanceAdvisor for the given existing store and candidates. The
 	// advisor should be later passed to IsInConflictWithMMA to determine if a
@@ -157,7 +158,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	var mmaChange mmaprototype.ExternalRangeChange
 	if kvserverbase.LoadBasedRebalancingModeIsMMA(&as.st.SV) {
 		change := convertLeaseTransferToMMA(desc, usage, transferFrom, transferTo)
-		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(localStoreID, change)
+		mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(ctx, localStoreID, change)
 	}
 	trackedChange := trackedAllocatorChange{
 		isMMARegistered: isMMARegistered,
@@ -192,7 +193,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		if err != nil {
 			log.KvDistribution.Errorf(ctx, "failed to convert replica change to mma: %v", err)
 		} else {
-			mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(localStoreID, change)
+			mmaChange, isMMARegistered = as.mmaAllocator.RegisterExternalChange(ctx, localStoreID, change)
 		}
 	}
 	trackedChange := trackedAllocatorChange{
@@ -246,18 +247,20 @@ func (as *AllocatorSync) MMAPreApply(
 // MarkChangeAsFailed marks the given changes to the range as failed without
 // going through allocator sync. This is used when mma changes fail before
 // even registering with mma via MMAPreApply.
-func (as *AllocatorSync) MarkChangeAsFailed(change mmaprototype.ExternalRangeChange) {
-	as.mmaAllocator.AdjustPendingChangeDisposition(change, false /* success */)
+func (as *AllocatorSync) MarkChangeAsFailed(
+	ctx context.Context, change mmaprototype.ExternalRangeChange,
+) {
+	as.mmaAllocator.AdjustPendingChangeDisposition(ctx, change, false /* success */)
 }
 
 // PostApply is called by the lease/replicate queue to apply a change to the
 // store pool upon success. It is called with the SyncChangeID returned by
 // NonMMAPreTransferLease or NonMMAPreChangeReplicas.
-func (as *AllocatorSync) PostApply(syncChangeID SyncChangeID, success bool) {
+func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeID, success bool) {
 	trackedChange := as.getTrackedChange(syncChangeID)
 	if trackedChange.isMMARegistered {
 		// Call into without checking cluster setting.
-		as.mmaAllocator.AdjustPendingChangeDisposition(trackedChange.mmaChange, success)
+		as.mmaAllocator.AdjustPendingChangeDisposition(ctx, trackedChange.mmaChange, success)
 	}
 	if !success {
 		return

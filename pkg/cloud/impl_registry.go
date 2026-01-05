@@ -112,14 +112,10 @@ type RegisteredProvider struct {
 
 // SchemeSupportsEarlyBoot returns an error if the scheme of the
 // provided URL has a provider that can't be used during early boot.
-func SchemeSupportsEarlyBoot(path string) error {
-	uri, err := url.Parse(path)
-	if err != nil {
-		return err
-	}
-	_, ok := earlyBootConfParsers[uri.Scheme]
+func SchemeSupportsEarlyBoot(scheme string) error {
+	_, ok := earlyBootConfParsers[scheme]
 	if !ok {
-		return errors.Newf("scheme %s is not accessible during node startup", uri.Scheme)
+		return errors.Newf("scheme %s is not accessible during node startup", scheme)
 	}
 	return nil
 }
@@ -418,7 +414,7 @@ func (e *esWrapper) ReadFile(
 	return e.wrapReader(ctx, r), s, nil
 }
 
-func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn ListingFn) error {
+func (e *esWrapper) List(ctx context.Context, prefix string, opts ListOptions, fn ListingFn) error {
 	if e.httpTracer != nil {
 		ctx = httptrace.WithClientTrace(ctx, e.httpTracer)
 	}
@@ -431,7 +427,7 @@ func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn Listi
 			return fn(s)
 		}
 	}
-	return e.ExternalStorage.List(ctx, prefix, delimiter, countingFn)
+	return e.ExternalStorage.List(ctx, prefix, opts, countingFn)
 }
 
 func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {

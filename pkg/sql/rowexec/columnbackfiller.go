@@ -95,10 +95,10 @@ func (cb *columnBackfiller) Run(ctx context.Context, output execinfra.RowReceive
 	ctx = logtags.AddTag(ctx, opName, int(cb.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, cb.flowCtx, opName, cb.processorID)
 	defer span.Finish()
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, cb.flowCtx, output)
 	meta := cb.doRun(ctx)
-	execinfra.SendTraceData(ctx, cb.flowCtx, output)
 	output.Push(nil /* row */, meta)
-	output.ProducerDone()
 }
 
 // Resume is part of the execinfra.Processor interface.

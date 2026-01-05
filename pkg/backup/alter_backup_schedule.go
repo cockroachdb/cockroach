@@ -239,11 +239,7 @@ func emitAlteredSchedule(
 	if err != nil {
 		return err
 	}
-	incDests, err := exprEval.StringArray(ctx, tree.Exprs(stmt.Options.IncrementalStorage))
-	if err != nil {
-		return err
-	}
-	if err := emitSchedule(job, stmt, to, kmsURIs, incDests, resultsCh); err != nil {
+	if err := emitSchedule(job, stmt, to, kmsURIs, resultsCh); err != nil {
 		return err
 	}
 	return nil
@@ -383,13 +379,6 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 			outOpts.EncryptionKMSURI = nil
 		} else {
 			outOpts.EncryptionKMSURI = inOpts.EncryptionKMSURI
-		}
-	}
-	if inOpts.IncrementalStorage != nil {
-		if tree.AsStringWithFlags(&inOpts.IncrementalStorage, tree.FmtBareStrings) == "" {
-			outOpts.IncrementalStorage = nil
-		} else {
-			outOpts.IncrementalStorage = inOpts.IncrementalStorage
 		}
 	}
 	if inOpts.UpdatesClusterMonitoringMetrics != nil {

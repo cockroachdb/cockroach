@@ -341,12 +341,15 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		return fmt.Sprintf("nodelocal://%d/job/%d/merge/iter-0/", instanceID, job.ID())
 	}
 
-	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, outputURI)
+	writeTS := progress.MinimumWriteTimestamp
+
+	// TODO(159374): use single-pass merge by setting iteration < maxIterations
+	merged, err := invokeBulkMerge(ctx, jobExecCtx, ssts, targetSpans, outputURI,
+		1 /* iteration */, 2 /* maxIterations */, &writeTS)
 	if err != nil {
 		return nil, err
 	}
 
-	writeTS := progress.MinimumWriteTimestamp
 	out := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
 	for _, sst := range merged {
 		span := roachpb.Span{

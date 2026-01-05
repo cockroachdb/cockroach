@@ -1110,18 +1110,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  CREATE TYPE jsrec AS (
  	i	int,
  	ia	_int4,
-@@ -1408,9 +1345,18 @@
+@@ -1408,9 +1345,20 @@
  	rec	jpop,
  	reca	jpop[]
  );
-+ERROR:  at or near "[": syntax error
++ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +CREATE TYPE jsrec AS (
 +	i	int,
 +	ia	_int4,
 +	ia1	int[],
-+        ^
-+HINT:  try \h CREATE TYPE
++	ia2	int[][],
++           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/32552/_version_
  CREATE TYPE jsrec_i_not_null AS (
  	i	js_int_not_null
  );
@@ -1129,7 +1131,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  select * from json_populate_record(null::jpop,'{"a":"blurfl","x":43.2}') q;
     a    | b | c 
  --------+---+---
-@@ -1418,9 +1364,9 @@
+@@ -1418,9 +1366,9 @@
  (1 row)
  
  select * from json_populate_record(row('x',3,'2012-12-31 15:30:56')::jpop,'{"a":"blurfl","x":43.2}') q;
@@ -1142,7 +1144,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_populate_record(null::jpop,'{"a":"blurfl","x":43.2}') q;
-@@ -1430,518 +1376,279 @@
+@@ -1430,518 +1378,279 @@
  (1 row)
  
  select * from json_populate_record(row('x',3,'2012-12-31 15:30:56')::jpop,'{"a":"blurfl","x":43.2}') q;
@@ -1792,7 +1794,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  SELECT json_populate_recordset(row(1,2), '[]');
   json_populate_recordset 
  -------------------------
-@@ -1954,39 +1661,26 @@
+@@ -1954,39 +1663,26 @@
  
  SELECT * FROM
    json_populate_recordset(null::record, '[]') AS (x int, y int);
@@ -1841,7 +1843,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- test type info caching in json_populate_record()
  CREATE TEMP TABLE jspoptest (js json);
  INSERT INTO jspoptest
-@@ -1997,19 +1691,39 @@
+@@ -1997,19 +1693,39 @@
  }'::json
  FROM generate_series(1, 3);
  SELECT (json_populate_record(NULL::jsrec, js)).* FROM jspoptest;
@@ -1888,7 +1890,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  DROP TYPE j_unordered_pair;
  --json_typeof() function
  select value, json_typeof(value)
-@@ -2025,26 +1739,26 @@
+@@ -2025,26 +1741,26 @@
                 (json '{}'),
                 (NULL::json))
        as data(value);
@@ -1931,7 +1933,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  SELECT json_build_array('a', NULL); -- ok
-@@ -2054,119 +1768,256 @@
+@@ -2054,119 +1770,256 @@
  (1 row)
  
  SELECT json_build_array(VARIADIC NULL::text[]); -- ok
@@ -2056,9 +2058,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
-+We appreciate your feedback.
 +
++We appreciate your feedback.
+ 
 +SELECT json_build_array(VARIADIC '{{1,4},{2,5},{3,6}}'::int[][]); -- ok
 +ERROR:  at or near "]": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -2254,7 +2256,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- empty objects/arrays
  SELECT json_build_array();
   json_build_array 
-@@ -2184,7 +2035,7 @@
+@@ -2184,7 +2037,7 @@
  SELECT json_build_object(1,2);
   json_build_object 
  -------------------
@@ -2263,7 +2265,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- keys must be scalar and not null
-@@ -2202,15 +2053,12 @@
+@@ -2202,15 +2055,12 @@
  INSERT INTO foo VALUES (847003,'sub-alpha','GESS90');
  SELECT json_build_object('turbines',json_object_agg(serial_num,json_build_object('name',name,'type',type)))
  FROM foo;
@@ -2284,7 +2286,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  INSERT INTO foo VALUES (999999, NULL, 'bar');
-@@ -2233,40 +2081,41 @@
+@@ -2233,40 +2083,41 @@
  
  -- one dimension
  SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}');
@@ -2341,7 +2343,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  -- mismatched dimensions
  select json_object('{a,b,c,"d e f",g}','{1,2,3,"a b c"}');
  ERROR:  mismatched array dimensions
-@@ -2277,9 +2126,9 @@
+@@ -2277,9 +2128,9 @@
  ERROR:  null value not allowed for object key
  -- empty key is allowed
  select json_object('{a,b,"","d e f"}','{1,2,3,"a b c"}');
@@ -2354,7 +2356,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- json_to_record and json_to_recordset
-@@ -2300,26 +2149,29 @@
+@@ -2300,26 +2151,29 @@
  
  select * from json_to_recordset('[{"a":1,"b":{"d":"foo"},"c":true},{"a":2,"c":false,"b":{"d":"bar"}}]')
      as x(a int, b json, c boolean);
@@ -2396,7 +2398,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_to_record('{"ia": null}') as x(ia _int4);
-@@ -2330,7 +2182,6 @@
+@@ -2330,7 +2184,6 @@
  
  select * from json_to_record('{"ia": 123}') as x(ia _int4);
  ERROR:  expected JSON array
@@ -2404,7 +2406,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  select * from json_to_record('{"ia": [1, "2", null, 4]}') as x(ia _int4);
        ia      
  --------------
-@@ -2338,35 +2189,32 @@
+@@ -2338,35 +2191,32 @@
  (1 row)
  
  select * from json_to_record('{"ia": [[1, 2], [3, 4]]}') as x(ia _int4);
@@ -2461,7 +2463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  select * from json_to_record('{"out": {"key": 1}}') as x(out json);
      out     
  ------------
-@@ -2380,9 +2228,9 @@
+@@ -2380,9 +2230,9 @@
  (1 row)
  
  select * from json_to_record('{"out": "{\"key\": 1}"}') as x(out json);
@@ -2474,7 +2476,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  select * from json_to_record('{"out": {"key": 1}}') as x(out jsonb);
-@@ -2398,9 +2246,9 @@
+@@ -2398,9 +2248,9 @@
  (1 row)
  
  select * from json_to_record('{"out": "{\"key\": 1}"}') as x(out jsonb);
@@ -2487,7 +2489,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/json.out --label=
  (1 row)
  
  -- json_strip_nulls
-@@ -2429,239 +2277,172 @@
+@@ -2429,239 +2279,172 @@
  (1 row)
  
  select json_strip_nulls('[1,2,null,3,4]');

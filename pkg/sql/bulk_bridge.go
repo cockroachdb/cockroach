@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -20,6 +21,9 @@ type bulkMergeFunc func(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	outputURI func(base.SQLInstanceID) string,
+	iteration int,
+	maxIterations int,
+	writeTS *hlc.Timestamp,
 ) ([]execinfrapb.BulkMergeSpec_SST, error)
 
 var registeredBulkMerge bulkMergeFunc
@@ -50,11 +54,14 @@ func invokeBulkMerge(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	outputURI func(base.SQLInstanceID) string,
+	iteration int,
+	maxIterations int,
+	writeTS *hlc.Timestamp,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	if registeredBulkMerge == nil {
 		return nil, errors.AssertionFailedf("bulk merge implementation not registered")
 	}
-	return registeredBulkMerge(ctx, execCtx, ssts, spans, outputURI)
+	return registeredBulkMerge(ctx, execCtx, ssts, spans, outputURI, iteration, maxIterations, writeTS)
 }
 
 func invokeBulkIngest(

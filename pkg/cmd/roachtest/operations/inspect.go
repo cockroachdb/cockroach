@@ -23,15 +23,10 @@ func runInspect(
 	conn := c.Conn(ctx, o.L(), 1)
 	defer conn.Close()
 
-	_, err := conn.ExecContext(ctx, "SET enable_inspect_command = true;")
-	if err != nil {
-		o.Fatal(err)
-	}
-
 	dbName := helpers.PickRandomDB(ctx, o, conn, []string{} /* excludeDBs */)
 
 	o.Status(fmt.Sprintf("inspecting database %s", dbName))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("INSPECT DATABASE %s", lexbase.EscapeSQLIdent(dbName)))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("INSPECT DATABASE %s", lexbase.EscapeSQLIdent(dbName)))
 	if err != nil {
 		o.Fatal(err)
 	}

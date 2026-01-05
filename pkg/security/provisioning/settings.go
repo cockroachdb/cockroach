@@ -15,16 +15,29 @@ import (
 
 // All cluster settings necessary for the provisioning feature.
 const (
-	supportedAuthMethodLDAP             = "ldap"
+	supportedAuthMethodLDAP = "ldap"
+	// Although "oidc" is not a valid auth method in the AuthMethod
+	// factory, this is added so provisioning remains consistent with
+	// LDAP/JWT and can be referenced via the PROVISIONSRC role option.
+	//
+	// TODO(souravcrl): ensure proper setting of the role option for
+	// PROVISIONSRC incase both JWT and OIDC provisioning are
+	// enabled. While users can be provisioned post authentication from
+	// both auth methods, since the underlying user identity is the JWT
+	// token, we can end up with divergent user cohorts due to auth
+	// method set for the option value.
+	supportedAuthMethodOIDC             = "oidc"
 	testSupportedAuthMethodCertPassword = "cert-password"
 	supportedAuthMethodJWT              = "jwt_token"
 	baseProvisioningSettingName         = "security.provisioning."
 	ldapProvisioningEnableSettingName   = baseProvisioningSettingName + "ldap.enabled"
 	jwtProvisioningEnableSettingName    = baseProvisioningSettingName + "jwt.enabled"
+	oidcProvisioningEnableSettingName   = baseProvisioningSettingName + "oidc.enabled"
 
 	baseCounterPrefix = "auth.provisioning."
 	ldapCounterPrefix = baseCounterPrefix + "ldap."
 	jwtCounterPrefix  = baseCounterPrefix + "jwt."
+	oidcCounterPrefix = baseCounterPrefix + "oidc."
 
 	beginLDAPProvisionCounterName   = ldapCounterPrefix + "begin"
 	provisionLDAPSuccessCounterName = ldapCounterPrefix + "success"
@@ -33,6 +46,10 @@ const (
 	beginJWTProvisionCounterName   = jwtCounterPrefix + "begin"
 	provisionJWTSuccessCounterName = jwtCounterPrefix + "success"
 	enableJWTProvisionCounterName  = jwtCounterPrefix + "enable"
+
+	beginOIDCProvisionCounterName   = oidcCounterPrefix + "begin"
+	provisionOIDCSuccessCounterName = oidcCounterPrefix + "success"
+	enableOIDCProvisionCounterName  = oidcCounterPrefix + "enable"
 
 	provisionedUserLoginSuccessCounterName = baseCounterPrefix + "login_success"
 )
@@ -45,6 +62,10 @@ var (
 	BeginJWTProvisionUseCounter = telemetry.GetCounterOnce(beginJWTProvisionCounterName)
 	ProvisionJWTSuccessCounter  = telemetry.GetCounterOnce(provisionJWTSuccessCounterName)
 	enableJWTProvisionCounter   = telemetry.GetCounterOnce(enableJWTProvisionCounterName)
+
+	BeginOIDCProvisionUseCounter = telemetry.GetCounterOnce(beginOIDCProvisionCounterName)
+	ProvisionOIDCSuccessCounter  = telemetry.GetCounterOnce(provisionOIDCSuccessCounterName)
+	enableOIDCProvisionCounter   = telemetry.GetCounterOnce(enableOIDCProvisionCounterName)
 
 	ProvisionedUserLoginSuccessCounter = telemetry.GetCounterOnce(provisionedUserLoginSuccessCounterName)
 )
@@ -76,6 +97,15 @@ var jwtProvisioningEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+// OIDCProvisioningEnabled enables automatic user provisioning for DB Console OIDC
+// authentication method.
+var OIDCProvisioningEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	oidcProvisioningEnableSettingName,
+	"enables or disables automatic user provisioning for oidc authentication method",
+	false,
+)
+
 type clusterProvisioningConfig struct {
 	settings *cluster.Settings
 }
@@ -91,6 +121,8 @@ func (c clusterProvisioningConfig) Enabled(authMethod string) bool {
 	switch authMethod {
 	case supportedAuthMethodLDAP:
 		return ldapProvisioningEnabled.Get(&c.settings.SV)
+	case supportedAuthMethodOIDC:
+		return OIDCProvisioningEnabled.Get(&c.settings.SV)
 	case testSupportedAuthMethodCertPassword:
 		return Testing.Supported
 	case supportedAuthMethodJWT:
@@ -112,6 +144,11 @@ func ClusterProvisioningConfig(settings *cluster.Settings) UserProvisioningConfi
 	jwtProvisioningEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
 		if jwtProvisioningEnabled.Get(&settings.SV) {
 			telemetry.Inc(enableJWTProvisionCounter)
+		}
+	})
+	OIDCProvisioningEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
+		if OIDCProvisioningEnabled.Get(&settings.SV) {
+			telemetry.Inc(enableOIDCProvisionCounter)
 		}
 	})
 	return clusterProvisioningConfig{settings: settings}

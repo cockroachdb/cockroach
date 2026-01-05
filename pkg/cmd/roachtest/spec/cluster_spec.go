@@ -33,6 +33,9 @@ const (
 
 	// Extra labels added by roachtest
 	RoachtestBranch = "roachtest-branch"
+
+	MetamorphicVolumeType = "MetamorphicVolumeType"
+	MetamorphicFilesystem = "MetamorphicFilesystem"
 )
 
 // ArchSet represents a set of CPU architectures using bitmasking.
@@ -216,7 +219,9 @@ type ClusterSpec struct {
 	// to be used. The default is ext4.
 	FileSystem fileSystemType
 
-	RandomlyUseZfs bool
+	RandomlyUseZfs      bool
+	RandomlyUseXfs      bool
+	RandomizeVolumeType bool
 
 	GatherCores bool
 
@@ -249,11 +254,19 @@ type ClusterSpec struct {
 		VolumeIOPS  int
 		Zones       string
 	} `cloud:"ibm"`
+
+	// ExposedMetamorphicInfo tracks metamorphic choices made during cluster creation
+	// (e.g., randomly selected storage type, filesystem). This field is excluded
+	// from cluster compatibility comparisons via the `compareIgnore` tag.
+	ExposedMetamorphicInfo map[string]string `compareIgnore:"true"`
 }
 
 // MakeClusterSpec makes a ClusterSpec.
 func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
-	spec := ClusterSpec{NodeCount: nodeCount}
+	spec := ClusterSpec{
+		NodeCount:              nodeCount,
+		ExposedMetamorphicInfo: make(map[string]string),
+	}
 	defaultOpts := []Option{CPU(4), WorkloadNodeCPU(4), nodeLifetime(12 * time.Hour), ReuseAny()}
 	for _, o := range append(defaultOpts, opts...) {
 		o(&spec)
@@ -264,24 +277,38 @@ func MakeClusterSpec(nodeCount int, opts ...Option) ClusterSpec {
 // ClustersCompatible returns true if the clusters are compatible, i.e. the test
 // asking for s2 can reuse s1.
 func ClustersCompatible(s1, s2 ClusterSpec, cloud Cloud) bool {
-	// only consider the specification of the cloud that we are running in
+	// Clear cloud-specific and comparison-irrelevant fields.
 	clearClusterSpecFields(&s1, cloud)
 	clearClusterSpecFields(&s2, cloud)
-	return s1 == s2
+
+	// We use `reflect.DeepEqual` instead of simple direct `==` comparison
+	// because ClusterSpec contains map fields which are not comparable
+	// with direct comparison.
+	return reflect.DeepEqual(s1, s2)
 }
 
 // clearClusterSpecFields clears the cloud specific specification from the cluster spec
 // if the cloud specification does not match the target cloud. This is done to ensure that
 // the specification for other clouds are not considered while comparing the cluster specifications.
+// It also clears fields marked with `compareIgnore:"true"` tag, which should be excluded from
+// cluster compatibility comparisons (e.g., ExposedMetamorphicInfo for tracking metamorphic choices).
 func clearClusterSpecFields(cs *ClusterSpec, targetCloud Cloud) {
 	cs.Lifetime = 0
 	structType := reflect.TypeOf(*cs)
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
+		fieldValue := reflect.ValueOf(cs).Elem().FieldByName(field.Name)
+
+		// Clear fields marked with compareIgnore tag - these should not affect
+		// cluster compatibility (e.g., metamorphic info is just metadata)
+		if _, ok := field.Tag.Lookup("compareIgnore"); ok {
+			fieldValue.Set(reflect.Zero(fieldValue.Type()))
+			continue
+		}
+
+		// Clear cloud-specific fields if they don't match the target cloud
 		if tag, ok := field.Tag.Lookup("cloud"); ok {
-			// Zero out struct if it is not the target cloud.
 			if !strings.EqualFold(tag, targetCloud.String()) {
-				fieldValue := reflect.ValueOf(cs).Elem().FieldByName(field.Name)
 				fieldValue.Set(reflect.Zero(fieldValue.Type()))
 			}
 		}
@@ -303,6 +330,10 @@ func (s ClusterSpec) String() string {
 		str += "-Geo"
 	}
 	return str
+}
+
+func (s ClusterSpec) GetMetamorphicInfo() map[string]string {
+	return s.ExposedMetamorphicInfo
 }
 
 // checks if an AWS machine supports SSD volumes
@@ -501,14 +532,6 @@ func (s *ClusterSpec) RoachprodOpts(
 	useIOBarrier := params.UseIOBarrierOnLocalSSD
 	requestedArch := params.PreferredArch
 
-	preferLocalSSD := params.Defaults.PreferLocalSSD
-	switch s.LocalSSD {
-	case LocalSSDDisable:
-		preferLocalSSD = false
-	case LocalSSDPreferOn:
-		preferLocalSSD = true
-	}
-
 	createVMOpts := vm.DefaultCreateOpts()
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
 	createVMOpts.CustomLabels = map[string]string{vm.TagUsage: "roachtest"}
@@ -574,7 +597,12 @@ func (s *ClusterSpec) RoachprodOpts(
 			var err error
 			switch cloud {
 			case AWS:
-				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, preferLocalSSD && s.VolumeSize == 0, requestedArch)
+				// We always pass true for shouldSupportLocalSSD here because the machine type selection
+				// logic should not depend on the user's preference for local SSDs.
+				// The actual decision to use provisioned local SSDs is handled in the disk configuration logic
+				// at the provider level, and EBS volume have priority over local SSDs.
+				// This means that if both EBS and local SSDs are available, EBS will be used.
+				machineType, selectedArch, err = SelectAWSMachineType(s.CPUs, s.Mem, true, requestedArch)
 			case GCE:
 				machineType, selectedArch = SelectGCEMachineType(s.CPUs, s.Mem, requestedArch)
 			case Azure:
@@ -593,34 +621,26 @@ func (s *ClusterSpec) RoachprodOpts(
 				createVMOpts.Arch = string(selectedArch)
 			}
 		}
-
-		// Local SSD can only be requested
-		// - if configured to prefer doing so,
-		// - if no particular volume size is requested, and,
-		// - on AWS, if the machine type supports it.
-		// - on GCE, if the machine type is not ARM64.
-		if preferLocalSSD && s.VolumeSize == 0 && (cloud != AWS || awsMachineSupportsSSD(machineType)) &&
-			(cloud != GCE || selectedArch != vm.ArchARM64) {
-			// Ensure SSD count is at least 1 if UseLocalSSD is true.
-			if ssdCount == 0 {
-				ssdCount = 1
-			}
-			createVMOpts.SSDOpts.UseLocalSSD = true
-			createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
-		} else {
-			createVMOpts.SSDOpts.UseLocalSSD = false
-		}
 	}
 
 	switch s.FileSystem {
 	case Ext4:
-		// ext4 is the default, do nothing unless we randomly want to use zfs
-		if s.RandomlyUseZfs {
+		// ext4 is the default, but we can randomly select zfs/xfs if requested.
+		// Each alternative filesystem gets a 20% chance of being selected,
+		// leaving the remainder for ext4.
+		if s.RandomlyUseZfs || s.RandomlyUseXfs {
 			rng, _ := randutil.NewPseudoRand()
-			if rng.Float64() <= 0.2 {
+			randFloat := rng.Float64()
+
+			if s.RandomlyUseZfs && randFloat <= 0.2 {
 				createVMOpts.SSDOpts.FileSystem = vm.Zfs
+			} else if s.RandomlyUseXfs && randFloat > 0.2 && randFloat <= 0.4 {
+				createVMOpts.SSDOpts.FileSystem = vm.Xfs
 			}
+
+			s.ExposedMetamorphicInfo[MetamorphicFilesystem] = string(createVMOpts.SSDOpts.FileSystem)
 		}
+
 	case Zfs:
 		createVMOpts.SSDOpts.FileSystem = vm.Zfs
 	case Xfs:
@@ -631,6 +651,98 @@ func (s *ClusterSpec) RoachprodOpts(
 		createVMOpts.SSDOpts.FileSystem = vm.Btrfs
 	default:
 		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unknown file system type: %v", s.FileSystem)
+	}
+
+	// Determine which storage type to use based on the following priority order:
+	// 1. Explicit volume type: If the user explicitly set s.VolumeType, use it.
+	// 2. Forced local SSD: If LocalSSDPreferOn is set, always use local SSD if available.
+	// 3. Randomized storage: If RandomizeVolumeType is enabled, randomly select
+	//    from available storage types (cloud-specific volumes + optionally local SSD).
+	//    Local SSD is excluded from randomization if LocalSSDDisable is set.
+	// 4. Default behavior: If params.Defaults.PreferLocalSSD is true AND the user
+	//    did not explicitly disable local SSD, prefer local SSD.
+	//
+	// The selected storage type is then validated against availability constraints
+	// (e.g., volume size, machine type, architecture) before being applied.
+	selectedVolumeType := ""
+	switch {
+	case s.VolumeType != "":
+		// User explicitly set a volume type, use it directly.
+		selectedVolumeType = s.VolumeType
+
+	case s.LocalSSD == LocalSSDPreferOn:
+		// User forced local SSD preference.
+		selectedVolumeType = "local-ssd"
+
+	case s.RandomizeVolumeType:
+		// If the user selected RandomizeVolumeType, randomly pick a volume type
+		// from the available volume types.
+		availableVolumeTypes := []string{}
+
+		// If the user did not explicitly disable local SSD and local SSD is available
+		// for the selected cloud provider, machine type and architecture,
+		// add it to the list of available volume types.
+		if s.LocalSSD != LocalSSDDisable && s.isLocalSSDAvailable(cloud, machineType, selectedArch) {
+			availableVolumeTypes = append(availableVolumeTypes, "local-ssd")
+		}
+
+		switch cloud {
+		case AWS:
+			availableVolumeTypes = append(availableVolumeTypes, "gp3", "io2")
+		case GCE:
+			availableVolumeTypes = append(availableVolumeTypes, "pd-ssd")
+		case Azure:
+			availableVolumeTypes = append(availableVolumeTypes, "premium-ssd", "premium-ssd-v2", "ultra-disk")
+		case IBM:
+			availableVolumeTypes = append(availableVolumeTypes, "10iops-tier")
+		}
+
+		if len(availableVolumeTypes) > 0 {
+			rng, _ := randutil.NewPseudoRand()
+			selectedVolumeType = availableVolumeTypes[rng.Intn(len(availableVolumeTypes))]
+
+			s.ExposedMetamorphicInfo[MetamorphicVolumeType] = selectedVolumeType
+		}
+
+	case s.LocalSSD != LocalSSDDisable && params.Defaults.PreferLocalSSD:
+		// No forced preference, no randomization, but default is to use local SSD
+		// if available.
+		selectedVolumeType = "local-ssd"
+	}
+
+	// Local SSD will be used if selected (either by preference or randomly), and
+	// - if no particular volume size is requested, and,
+	// - on AWS, if the machine type supports it.
+	// - on GCE, if the machine type is not ARM64.
+	if selectedVolumeType == "local-ssd" {
+		if s.isLocalSSDAvailable(cloud, machineType, selectedArch) {
+			if ssdCount == 0 {
+				ssdCount = 1
+			}
+			createVMOpts.SSDOpts.UseLocalSSD = true
+
+			// Disable ext4 barriers for local SSDs unless explicitly requested.
+			// This is because local SSDs have very low latency and ext4 barriers
+			// can significantly degrade performance.
+			// This setting is only relevant if the selected filesystem is ext4.
+			if !useIOBarrier && createVMOpts.SSDOpts.FileSystem == vm.Ext4 {
+				createVMOpts.SSDOpts.NoExt4Barrier = true
+			}
+		} else {
+			// Local SSD was selected but is not available; fall back to default volume type.
+			fmt.Printf(
+				"WARN: local SSD selected but not available for machine type %s or because volume size %d != 0;"+
+					"falling back to default volume type\n",
+				machineType,
+				s.VolumeSize,
+			)
+			createVMOpts.SSDOpts.UseLocalSSD = false
+		}
+	} else {
+		createVMOpts.SSDOpts.UseLocalSSD = false
+		if selectedVolumeType != "" {
+			s.VolumeType = selectedVolumeType
+		}
 	}
 
 	var workloadMachineType string
@@ -690,6 +802,15 @@ func (s *ClusterSpec) RoachprodOpts(
 	}
 
 	return createVMOpts, providerOpts, workloadProviderOpts, selectedArch, nil
+}
+
+func (s *ClusterSpec) isLocalSSDAvailable(
+	cloud Cloud, machineType string, selectedArch vm.CPUArch,
+) bool {
+	return s.VolumeSize == 0 &&
+		(cloud != AWS || awsMachineSupportsSSD(machineType)) &&
+		(cloud != GCE || selectedArch != vm.ArchARM64) &&
+		(cloud != IBM)
 }
 
 // SetRoachprodOptsZones updates the providerOpts with the VM zones as specified in the params/spec.

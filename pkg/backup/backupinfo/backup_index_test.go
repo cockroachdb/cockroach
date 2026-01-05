@@ -6,12 +6,8 @@
 package backupinfo
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"maps"
 	"math/rand"
 	"os"
 	"path"
@@ -27,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -36,11 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,17 +99,30 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 		clusterversion.Latest.Version(),
 		true,
 	)
-	execCfg := &sql.ExecutorConfig{Settings: st}
-	externalStorage := newFakeExternalStorage()
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
 		return externalStorage, nil
 	}
 
+	execCfg := &sql.ExecutorConfig{Settings: st}
 	start := hlc.Timestamp{WallTime: 0}
 	end := hlc.Timestamp{WallTime: time.Date(2025, 7, 30, 0, 0, 0, 0, time.UTC).UnixNano()}
-	collectionURI := "nodelocal://1/backup"
 	subdir := "/2025/07/18-143826.00"
 
 	details := jobspb.BackupDetails{
@@ -202,34 +208,105 @@ func TestWriteBackupIndexMetadataWithLocalityAwareBackups(t *testing.T) {
 	))
 }
 
-func TestWriteBackupIndexMetadataWithSpecifiedIncrementalLocation(t *testing.T) {
+func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tempDir, tempDirCleanup := testutils.TempDir(t)
-	defer tempDirCleanup()
-	_, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(
-		t, 1, backuptestutils.WithTempDir(tempDir),
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.Latest.Version(),
+		true,
 	)
-	defer cleanup()
-
+	execCfg := &sql.ExecutorConfig{Settings: st}
 	const collectionURI = "nodelocal://1/backup"
-	const incLoc = "nodelocal://1/incremental_backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
 
-	sqlDB.Exec(t, "BACKUP INTO $1", collectionURI)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN $1 WITH incremental_location=$2", collectionURI, incLoc)
-
-	indexDir := path.Join(tempDir, "backup", backupbase.BackupIndexDirectoryPath)
-	fullIndexes, err := os.ReadDir(indexDir)
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
 	require.NoError(t, err)
-	require.Len(t, fullIndexes, 1)
+	makeExternalStorage := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return externalStorage, nil
+	}
 
-	chainIndexes, err := os.ReadDir(path.Join(indexDir, fullIndexes[0].Name()))
-	require.NoError(t, err)
+	subdir := "/2025/07/18-120000.00"
+	// Write 3 valid index files.
+	zeroTime := time.Unix(0, 0).UTC()
+	fullBackupEndTime := time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC)
+	incBackup1EndTime := time.Date(2025, 7, 18, 13, 0, 0, 0, time.UTC)
+	incBackup2EndTime := time.Date(2025, 7, 18, 14, 0, 0, 0, time.UTC)
+	backupTimes := [][2]time.Time{
+		{zeroTime, fullBackupEndTime},
+		{fullBackupEndTime, incBackup1EndTime},
+		{incBackup1EndTime, incBackup2EndTime},
+	}
 
-	// Since we specified an incremental location, we should not see an index
-	// being written for the incremental backup.
-	require.Len(t, chainIndexes, 1)
+	for _, times := range backupTimes {
+		details := jobspb.BackupDetails{
+			Destination: jobspb.BackupDetails_Destination{
+				To:     []string{collectionURI},
+				Subdir: subdir,
+			},
+			StartTime:     hlc.Timestamp{WallTime: times[0].UnixNano()},
+			EndTime:       hlc.Timestamp{WallTime: times[1].UnixNano()},
+			CollectionURI: collectionURI,
+			URI:           collectionURI + subdir,
+		}
+		require.NoError(t, WriteBackupIndexMetadata(
+			ctx, execCfg, username.RootUserName(), makeExternalStorage, details, hlc.Timestamp{},
+		))
+	}
+
+	indexDir := path.Join(
+		backupbase.BackupIndexDirectoryPath,
+		backuputils.EncodeDescendingTS(fullBackupEndTime)+"_"+
+			fullBackupEndTime.Format(backupbase.BackupIndexFilenameTimestampFormat),
+	)
+
+	t.Run("non .pb files should be skipped", func(t *testing.T) {
+		validFilename := getBackupIndexFileName(
+			hlc.Timestamp{WallTime: zeroTime.UnixNano()},
+			hlc.Timestamp{WallTime: fullBackupEndTime.UnixNano()},
+		)
+		tmpFile := path.Join(indexDir, validFilename+"123.tmp")
+		writer1, err := externalStorage.Writer(ctx, tmpFile)
+		require.NoError(t, err)
+		require.NoError(t, writer1.Close())
+		defer func() {
+			err := externalStorage.Delete(ctx, tmpFile)
+			require.NoError(t, err)
+		}()
+
+		indexes, err := ListIndexes(ctx, externalStorage, subdir)
+		require.NoError(t, err)
+		require.Len(t, indexes, 3)
+	})
+
+	t.Run("invalid .pb files should error", func(t *testing.T) {
+		invalidTSFile := path.Join(indexDir, "invalid_badts_notreal_metadata.pb")
+		writer2, err := externalStorage.Writer(ctx, invalidTSFile)
+		require.NoError(t, err)
+		require.NoError(t, writer2.Close())
+		defer func() {
+			err := externalStorage.Delete(ctx, invalidTSFile)
+			require.NoError(t, err)
+		}()
+
+		_, err = ListIndexes(ctx, externalStorage, subdir)
+		require.Error(t, err)
+	})
 }
 
 func TestDontWriteBackupIndexMetadata(t *testing.T) {
@@ -238,6 +315,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 
 	ctx := context.Background()
 	var externalStorage cloud.ExternalStorage
+	var err error
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
@@ -254,13 +332,26 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 	}
 
 	t.Run("pre v25.4 version", func(t *testing.T) {
-		externalStorage = newFakeExternalStorage()
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.V25_3.Version(),
 			clusterversion.V25_3.Version(),
 			true,
 		)
-
+		const collectionURI = "nodelocal://1/backup"
+		dir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+		externalStorage, err = cloud.ExternalStorageFromURI(
+			ctx,
+			collectionURI,
+			base.ExternalIODirConfig{},
+			st,
+			blobs.TestBlobServiceClient(dir),
+			username.RootUserName(),
+			nil, /* db */
+			nil, /* limiters */
+			cloud.NilMetrics,
+		)
+		require.NoError(t, err)
 		execCfg := &sql.ExecutorConfig{Settings: st}
 
 		start := hlc.Timestamp{}
@@ -280,12 +371,26 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 	})
 
 	t.Run("missing full backup index", func(t *testing.T) {
-		externalStorage = newFakeExternalStorage()
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.Latest.Version(),
 			clusterversion.Latest.Version(),
 			true,
 		)
+		const collectionURI = "nodelocal://1/backup"
+		dir, dirCleanupFn := testutils.TempDir(t)
+		defer dirCleanupFn()
+		externalStorage, err = cloud.ExternalStorageFromURI(
+			ctx,
+			collectionURI,
+			base.ExternalIODirConfig{},
+			st,
+			blobs.TestBlobServiceClient(dir),
+			username.RootUserName(),
+			nil, /* db */
+			nil, /* limiters */
+			cloud.NilMetrics,
+		)
+		require.NoError(t, err)
 		execCfg := &sql.ExecutorConfig{Settings: st}
 
 		start := hlc.Timestamp{WallTime: 10}
@@ -429,7 +534,20 @@ func TestIndexExists(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			externalStorage := newFakeExternalStorage()
+			dir, dirCleanupFn := testutils.TempDir(t)
+			defer dirCleanupFn()
+			externalStorage, err := cloud.ExternalStorageFromURI(
+				ctx,
+				collectionURI,
+				base.ExternalIODirConfig{},
+				st,
+				blobs.TestBlobServiceClient(dir),
+				username.RootUserName(),
+				nil, /* db */
+				nil, /* limiters */
+				cloud.NilMetrics,
+			)
+			require.NoError(t, err)
 			makeExternalStorage := func(
 				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 			) (cloud.ExternalStorage, error) {
@@ -684,111 +802,6 @@ func TestConvertIndexSubdirToSubdir(t *testing.T) {
 			require.Equal(t, tc.expectedSubdir, subdir)
 		})
 	}
-}
-
-type fakeExternalStorage struct {
-	cloud.ExternalStorage
-	files map[string]*closableBytesWriter
-}
-
-var _ cloud.ExternalStorage = &fakeExternalStorage{}
-
-func newFakeExternalStorage() *fakeExternalStorage {
-	return &fakeExternalStorage{
-		files: make(map[string]*closableBytesWriter),
-	}
-}
-
-func (f *fakeExternalStorage) Close() error {
-	return nil
-}
-
-func (f *fakeExternalStorage) Conf() cloudpb.ExternalStorage {
-	return cloudpb.ExternalStorage{
-		Provider: cloudpb.ExternalStorageProvider_Unknown,
-	}
-}
-
-type closableBytesWriter struct {
-	bytes.Buffer
-}
-
-func (b *closableBytesWriter) Close() error {
-	// No-op for bytes.Buffer, but satisfies io.WriteCloser interface.
-	return nil
-}
-
-func (f *fakeExternalStorage) Writer(ctx context.Context, filename string) (io.WriteCloser, error) {
-	if _, exists := f.files[filename]; exists {
-		return nil, errors.Errorf("file %s already exists", filename)
-	}
-	buf := closableBytesWriter{}
-	f.files[filename] = &buf
-	return &buf, nil
-}
-
-type bytesReaderCtx struct {
-	*bufio.Reader
-}
-
-func (br *bytesReaderCtx) Read(_ context.Context, p []byte) (n int, err error) {
-	// Use the context to satisfy the ReaderCtx interface, but ignore it.
-	return br.Reader.Read(p)
-}
-
-func (b *bytesReaderCtx) Close(_ context.Context) error {
-	// No-op for bufio.Reader, but satisfies io.ReadCloser interface.
-	return nil
-}
-
-func (f *fakeExternalStorage) ReadFile(
-	ctx context.Context, filename string, _ cloud.ReadOptions,
-) (ioctx.ReadCloserCtx, int64, error) {
-	bytes, exists := f.files[filename]
-	if !exists {
-		return nil, 0, errors.Errorf("file %s does not exist", filename)
-	}
-	reader := bytesReaderCtx{
-		Reader: bufio.NewReader(bytes),
-	}
-	return &reader, int64(bytes.Len()), nil
-}
-
-// List lists files in the fake external storage, optionally filtering by prefix.
-func (f *fakeExternalStorage) List(
-	ctx context.Context, prefix string, delimiter string, cb cloud.ListingFn,
-) error {
-	var matchedFiles []string
-	if prefix == "" {
-		matchedFiles = slices.Collect(maps.Keys(f.files))
-	} else {
-		for file := range f.files {
-			if strings.HasPrefix(file, prefix) {
-				matchedFiles = append(matchedFiles, file)
-			}
-		}
-	}
-
-	delimited := make(map[string]struct{})
-	if delimiter != "" {
-		for _, file := range matchedFiles {
-			cutIdx := strings.Index(file[len(prefix):], delimiter) + len(prefix)
-			cut := file[:cutIdx]
-			if _, ok := delimited[cut]; !ok {
-				delimited[cut] = struct{}{}
-			}
-		}
-		matchedFiles = slices.Collect(maps.Keys(delimited))
-	}
-
-	slices.Sort(matchedFiles)
-
-	for _, file := range matchedFiles {
-		if err := cb(file); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // intToTimeWithNano converts the integer time an easy to read hlc.Timestamp

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -26,10 +27,13 @@ func Merge(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	genOutputURI func(sqlInstance base.SQLInstanceID) string,
+	iteration int,
+	maxIterations int,
+	writeTS *hlc.Timestamp,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	execCfg := execCtx.ExecCfg()
 
-	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURI)
+	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURI, iteration, maxIterations, writeTS)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +65,11 @@ func Merge(
 
 	if err := rowWriter.Err(); err != nil {
 		return nil, err
+	}
+
+	if iteration == maxIterations {
+		// Final iteration writes directly to KV; no SST outputs expected.
+		return nil, nil
 	}
 
 	// Sort the SSTs by their range start key. Ingest requires that SSTs are

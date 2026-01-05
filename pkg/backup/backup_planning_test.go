@@ -33,7 +33,6 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 		EncryptionPassphrase:            tree.NewDString("test expr"),
 		Detached:                        tree.DBoolTrue,
 		EncryptionKMSURI:                []tree.Expr{tree.NewDString("test expr")},
-		IncrementalStorage:              []tree.Expr{tree.NewDString("test expr")},
 		ExecutionLocality:               tree.NewDString("test expr"),
 		UpdatesClusterMonitoringMetrics: tree.NewDString("test expr"),
 		Strict:                          true,
@@ -53,7 +52,7 @@ func TestBackupResolveOptionsForJobDescription(t *testing.T) {
 	}
 
 	ensureAllStructFieldsSet(input, "input")
-	output, err := resolveOptionsForBackupJobDescription(input, []string{"http://example.com"}, []string{"http://example.com"})
+	output, err := resolveOptionsForBackupJobDescription(input, []string{"http://example.com"})
 	require.NoError(t, err)
 	ensureAllStructFieldsSet(output, "output")
 

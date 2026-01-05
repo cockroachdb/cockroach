@@ -723,7 +723,7 @@ Put /Table/117/2/2/1/0 -> /BYTES/0x3306
 CPut /Table/117/3/3/0 -> /BYTES/0x892304
 CPut /Table/117/4/4/0 -> /BYTES/0x89
 
-statement ok
+statement count 1
 DELETE FROM t139160 WHERE k = 1;
 
 statement ok

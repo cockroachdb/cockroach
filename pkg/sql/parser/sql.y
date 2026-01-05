@@ -754,6 +754,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) showAfterBefore() *tree.ShowAfterBefore {
+  return u.val.(*tree.ShowAfterBefore)
+}
 func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
   return u.val.(*tree.CheckExternalConnectionOptions)
 }
@@ -1480,7 +1483,8 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options show_backups_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowAfterBefore> opt_show_after_before_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -3467,7 +3471,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_location: specify a different path to store the incremental backup
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
@@ -3577,10 +3580,6 @@ backup_options:
 | KMS '=' string_or_placeholder_opt_list
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
-  }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-  {
-    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
 | EXECUTION LOCALITY '=' string_or_placeholder
   {
@@ -9013,11 +9012,12 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list opt_with_show_backups_options
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_after_before_clause
  {
+
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
-      Options: *$5.showBackupOptions(),
+      TimeRange: *$5.showAfterBefore(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -9100,38 +9100,6 @@ show_backup_details:
 	$$.val = tree.BackupValidateDetails
 	}
 
-opt_with_show_backups_options:
-  WITH show_backups_options_list
-  {
-    $$.val = $2.showBackupOptions()
-  }
-| WITH OPTIONS '(' show_backups_options_list ')'
-  {
-    $$.val = $4.showBackupOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ShowBackupOptions{}
-  }
-
-show_backups_options_list:
-  show_backups_options
-  {
-    $$.val = $1.showBackupOptions()
-  }
-| show_backups_options_list ',' show_backups_options
-  {
-    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-show_backups_options:
- INDEX
- {
-    $$.val = &tree.ShowBackupOptions{Index: true}
- }
-
 opt_with_show_backup_options:
   WITH show_backup_options_list
   {
@@ -9201,6 +9169,28 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
  }
+
+opt_show_after_before_clause:
+  AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr()}
+  }
+  | BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{Before: $2.expr()}
+  }
+  | AFTER a_expr BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr(), Before: $4.expr()}
+  }
+  | BEFORE a_expr AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $4.expr(), Before: $2.expr()}
+  }
+  | /* EMPTY */
+  {
+    $$.val = &tree.ShowAfterBefore{}
+  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
