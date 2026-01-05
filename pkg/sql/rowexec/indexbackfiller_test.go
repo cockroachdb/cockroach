@@ -54,7 +54,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 
 	t.Run("bulk-adder sink selected", func(t *testing.T) {
 		settings := cluster.MakeTestingClusterSettings()
-		ib := makeTestIndexBackfiller(settings, fakeAdder)
+		ib := makeTestIndexBackfiller(ctx, settings, fakeAdder)
 		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 		defer srv.Stopper().Stop(ctx)
 
@@ -66,7 +66,7 @@ func TestIndexBackfillSinkSelection(t *testing.T) {
 
 		tempDir := t.TempDir()
 		ib.spec.UseDistributedMergeSink = true
-		ib.spec.DistributedMergeFilePrefix = "nodelocal://0/job/123/map"
+		ib.spec.DistributedMergeFilePrefix = "job/123/map"
 		ib.flowCtx.Cfg.DB = srv.SystemLayer().InternalDB().(descs.DB)
 		ib.flowCtx.Cfg.ExternalStorageFromURI = func(
 			ctx context.Context, uri string, _ username.SQLUsername, opts ...cloud.ExternalStorageOption,
@@ -128,12 +128,12 @@ func TestSSTFileNamingConvention(t *testing.T) {
 
 	// Use the same function that production code uses to set the prefix.
 	spec := execinfrapb.BackfillerSpec{}
-	storagePrefix := fmt.Sprintf("nodelocal://%d/", nodeID)
-	backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
+	backfill.EnableDistributedMergeIndexBackfillSink(jobID, &spec)
 
 	writeTS := hlc.Timestamp{WallTime: 1000000000}
 
-	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, spec.DistributedMergeFilePrefix, writeTS, processorID)
+	prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, spec.DistributedMergeFilePrefix)
+	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, prefix, writeTS, processorID)
 	require.NoError(t, err)
 	defer sink.Close(ctx)
 
@@ -388,14 +388,19 @@ func (t *testIndexBackfillBulkAdder) SetOnFlush(f func(summary kvpb.BulkOpSummar
 }
 
 func makeTestIndexBackfiller(
-	settings *cluster.Settings, adder kvserverbase.BulkAdder,
+	ctx context.Context, settings *cluster.Settings, adder kvserverbase.BulkAdder,
 ) *indexBackfiller {
+	// Set up a NodeIDContainer so flowCtx.NodeID.SQLInstanceID() works.
+	var nodeIDContainer base.NodeIDContainer
+	nodeIDContainer.Set(ctx, 1)
+
 	ib := &indexBackfiller{
 		spec: execinfrapb.BackfillerSpec{},
 		flowCtx: &execinfra.FlowCtx{
 			Cfg: &execinfra.ServerConfig{
 				Settings: settings,
 			},
+			NodeID: base.NewSQLIDContainerForNode(&nodeIDContainer),
 		},
 	}
 
