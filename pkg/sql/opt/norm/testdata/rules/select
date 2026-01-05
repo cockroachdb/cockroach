@@ -1780,6 +1780,272 @@ select
  └── filters
       └── a:2 IS NOT DISTINCT FROM d:5 [outer=(2,5)]
 
+
+# --------------------------------------------------
+# EliminateCaseTrailingFalsyBranch
+# --------------------------------------------------
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE false END [outer=(2,3)]
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN NULL ELSE NULL END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN s = 'foo' THEN false ELSE false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null s:4
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan a
+      │    ├── columns: k:1!null s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters
+           └── CASE WHEN s:4 = 'foo' THEN false ELSE false END [outer=(4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE true END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE s = 'bar' END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE s:4 = 'bar' END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false WHEN s = 'bar' THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false WHEN s:4 = 'bar' THEN true ELSE CAST(NULL AS BOOL) END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE s = 'baz' WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE s:4 = 'baz' WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE CAST(NULL AS BOOL) END [outer=(2-4)]
+
+
+# --------------------------------------------------
+# SimplifyCaseSingleTruthyBranch
+# --------------------------------------------------
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE NULL END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true ELSE true END [outer=(2)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE f > 0 END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true ELSE f:3 > 0.0 END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true WHEN f > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true WHEN f:3 > 0.0 THEN true ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE s = 'baz' WHEN i > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,4)
+      └── filters
+           └── CASE s:4 = 'baz' WHEN i:2 > 0 THEN true ELSE CAST(NULL AS BOOL) END [outer=(2,4)]
+
+
 # --------------------------------------------------
 # PushSelectIntoProjectSet
 # --------------------------------------------------

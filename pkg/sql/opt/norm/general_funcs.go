@@ -665,6 +665,12 @@ func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
 //
 // ----------------------------------------------------------------------
 
+// LenGT returns true if the given scalar expression list has length greater
+// than x.
+func (c *CustomFuncs) LenGT(list memo.ScalarListExpr, x int) bool {
+	return len(list) > x
+}
+
 // ScalarExprAt returns the ScalarExpr in the i-th position in the given list.
 // Returns ok=false if i is out of bounds.
 func (c *CustomFuncs) ScalarExprAt(list memo.ScalarListExpr, i int) (_ opt.ScalarExpr, ok bool) {
@@ -672,6 +678,10 @@ func (c *CustomFuncs) ScalarExprAt(list memo.ScalarListExpr, i int) (_ opt.Scala
 		return list[i], true
 	}
 	return nil, false
+}
+
+func (c *CustomFuncs) DropLast(list memo.ScalarListExpr) memo.ScalarListExpr {
+	return list[:len(list)-1]
 }
 
 // ----------------------------------------------------------------------
