@@ -709,15 +709,15 @@ func TestInspectProgressTracker_PTSLifecycle(t *testing.T) {
 		require.Equal(t, testSpan.String(), cleanupCalls[0])
 	})
 
-	t.Run("terminateTracker cleans up remaining spans", func(t *testing.T) {
+	t.Run("terminateTracker cleans up PTS record", func(t *testing.T) {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		tracker := newInspectProgressTracker(job, &s.ClusterSettings().SV, s.InternalDB().(descs.DB), execCfg.Codec, execCfg.ProtectedTimestampManager)
 
-		var cleanupCalls []string
+		var cleanupCalls int
 
 		tracker.testingPTSProtector = func(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) jobsprotectedts.Cleaner {
 			return func(ctx context.Context) error {
-				cleanupCalls = append(cleanupCalls, span.String())
+				cleanupCalls++
 				return nil
 			}
 		}
@@ -727,6 +727,8 @@ func TestInspectProgressTracker_PTSLifecycle(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start two spans but don't complete them.
+		// With the minimum timestamp approach, only the first span (with smaller timestamp)
+		// will create a PTS record. The second span's timestamp is newer so it's already protected.
 		span1 := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
 		span2 := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
 
@@ -740,16 +742,96 @@ func TestInspectProgressTracker_PTSLifecycle(t *testing.T) {
 		err = tracker.handleProgressUpdate(ctx, meta2)
 		require.NoError(t, err)
 
-		// No cleanups yet.
-		require.Empty(t, cleanupCalls)
+		// No cleanups yet - we have one active PTS record protecting the minimum timestamp.
+		require.Equal(t, 0, cleanupCalls)
 
-		// Terminate tracker - should clean up both spans.
+		// Terminate tracker - should clean up the single PTS record.
 		tracker.terminateTracker(ctx)
 
-		// Verify both cleaners were called.
-		require.Len(t, cleanupCalls, 2)
-		require.Contains(t, cleanupCalls, span1.String())
-		require.Contains(t, cleanupCalls, span2.String())
+		// Verify the single cleaner was called (we maintain only one PTS at the minimum timestamp).
+		require.Equal(t, 1, cleanupCalls)
+	})
+
+	t.Run("minimum timestamp PTS is updated when oldest span completes", func(t *testing.T) {
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+		tracker := newInspectProgressTracker(job, &s.ClusterSettings().SV, s.InternalDB().(descs.DB), execCfg.Codec, execCfg.ProtectedTimestampManager)
+		defer tracker.terminateTracker(ctx)
+
+		// Track PTS setup calls with their timestamps.
+		var setupTimestamps []hlc.Timestamp
+		var cleanupCalls int
+
+		tracker.testingPTSProtector = func(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) jobsprotectedts.Cleaner {
+			setupTimestamps = append(setupTimestamps, ts)
+			return func(ctx context.Context) error {
+				cleanupCalls++
+				return nil
+			}
+		}
+
+		err := tracker.initJobProgress(ctx, 10, 0)
+		require.NoError(t, err)
+
+		// Start three spans with different timestamps.
+		// The minimum timestamp (100) should be protected.
+		span1 := roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+		span2 := roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
+		span3 := roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}
+
+		meta1, err := createSpanStartedProgressUpdate(span1, hlc.Timestamp{WallTime: 100})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, meta1)
+		require.NoError(t, err)
+
+		meta2, err := createSpanStartedProgressUpdate(span2, hlc.Timestamp{WallTime: 300})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, meta2)
+		require.NoError(t, err)
+
+		meta3, err := createSpanStartedProgressUpdate(span3, hlc.Timestamp{WallTime: 200})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, meta3)
+		require.NoError(t, err)
+
+		// Only one PTS should be set up (at timestamp 100, the minimum).
+		require.Len(t, setupTimestamps, 1)
+		require.Equal(t, hlc.Timestamp{WallTime: 100}, setupTimestamps[0])
+		require.Equal(t, 0, cleanupCalls)
+
+		// Complete span1 (the one with minimum timestamp 100).
+		// This should trigger PTS update to the new minimum (200 from span3).
+		spanCompletedMeta1, _, err := createProcessorProgressUpdate(1, false, []roachpb.Span{span1})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, spanCompletedMeta1)
+		require.NoError(t, err)
+
+		// Old PTS cleaned up, new one created at timestamp 200.
+		require.Len(t, setupTimestamps, 2)
+		require.Equal(t, hlc.Timestamp{WallTime: 200}, setupTimestamps[1])
+		require.Equal(t, 1, cleanupCalls) // Old PTS was cleaned up.
+
+		// Complete span3 (timestamp 200, the current minimum).
+		// This should trigger PTS update to the new minimum (300 from span2).
+		spanCompletedMeta3, _, err := createProcessorProgressUpdate(1, false, []roachpb.Span{span3})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, spanCompletedMeta3)
+		require.NoError(t, err)
+
+		// Another update: old PTS cleaned up, new one at timestamp 300.
+		require.Len(t, setupTimestamps, 3)
+		require.Equal(t, hlc.Timestamp{WallTime: 300}, setupTimestamps[2])
+		require.Equal(t, 2, cleanupCalls)
+
+		// Complete the last span (span2).
+		// This should clean up PTS entirely (no more active spans).
+		spanCompletedMeta2, _, err := createProcessorProgressUpdate(1, false, []roachpb.Span{span2})
+		require.NoError(t, err)
+		err = tracker.handleProgressUpdate(ctx, spanCompletedMeta2)
+		require.NoError(t, err)
+
+		// Final cleanup - no new PTS created.
+		require.Len(t, setupTimestamps, 3) // No new PTS.
+		require.Equal(t, 3, cleanupCalls)  // Final cleanup.
 	})
 
 	t.Run("no cleaner called if PTS protector returns nil", func(t *testing.T) {
