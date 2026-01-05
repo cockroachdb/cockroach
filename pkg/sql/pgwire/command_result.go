@@ -343,10 +343,12 @@ func (r *commandResult) SendNotice(
 }
 
 // SetColumns is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+func (r *commandResult) SetColumns(
+	ctx context.Context, cols colinfo.ResultColumns, skipRowDescription bool,
+) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
-	if r.descOpt == sql.NeedRowDesc {
+	if r.descOpt == sql.NeedRowDesc && !skipRowDescription {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
 	}
 	r.types = make([]*types.T, len(cols))
