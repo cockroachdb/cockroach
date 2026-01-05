@@ -14,9 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/stretchr/testify/require"
 )
 
 // runTestCaseMultipleFormats runs the provided test case body against a
@@ -692,4 +694,36 @@ func TestQueryRollup(t *testing.T) {
 		query.setDerivative(tspb.TimeSeriesQueryDerivative_DERIVATIVE)
 		query.assertSuccess(13, 2)
 	}
+}
+
+// TestQueryUAStorageMetrics verifies that in UA deployments, querying without
+// a TenantID correctly sums per-tenant children without double-counting.
+func TestQueryUAStorageMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tm := newTestModelRunner(t)
+	tm.Start()
+	defer tm.Stop()
+
+	storeID := "1"
+	require.NoError(t, tm.DB.StoreData(context.Background(), Resolution10s, []tspb.TimeSeriesData{
+		tsd("test.livebytes", tsutil.MakeTenantSource(storeID, "1"), tsdp(10*time.Second, 0)),
+		tsd("test.livebytes", tsutil.MakeTenantSource(storeID, "2"), tsdp(10*time.Second, 100)),
+	}))
+
+	memContext := MakeQueryMemoryContext(tm.workerMemMonitor, tm.resultMemMonitor,
+		QueryMemoryOptions{BudgetBytes: math.MaxInt64, EstimatedSources: 1, Columnar: tm.DB.WriteColumnar()})
+	defer memContext.Close(context.Background())
+
+	datapoints, sources, err := tm.DB.Query(context.Background(),
+		tspb.Query{Name: "test.livebytes", Sources: []string{storeID}},
+		Resolution10s,
+		QueryTimespan{EndNanos: 20 * time.Second.Nanoseconds(), SampleDurationNanos: Resolution10s.SampleDuration(), NowNanos: math.MaxInt64},
+		memContext)
+	require.NoError(t, err)
+
+	require.Len(t, datapoints, 1)
+	require.Equal(t, float64(100), datapoints[0].Value)
+	require.Equal(t, []string{storeID}, sources)
 }

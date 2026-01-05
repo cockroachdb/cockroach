@@ -532,6 +532,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 
 	// Record time series from store-level registries.
 	tIDLabel := multitenant.TenantIDLabel
+	hasTenantRegistries := len(mr.mu.tenantRegistries) > 0
 	for storeID, r := range mr.mu.storeRegistries {
 		storeRecorder := registryRecorder{
 			registry:       r,
@@ -539,7 +540,18 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 			source:         storeID.String(),
 			timestampNanos: now.UnixNano(),
 		}
-		storeRecorder.record(&data)
+		if hasTenantRegistries {
+			// In multi-tenant mode, exclude TenantsStorageMetricsSet from aggregate
+			// recording since we record per-tenant children below. Including both the
+			// aggregate and children would cause double-counting when querying without
+			// a specific tenant, as the aggregate already contains the sum of all
+			// tenant children.
+			storeRecorder.recordExcluding(&data, kvbase.TenantsStorageMetricsSet)
+		} else {
+			// In single-tenant mode, record all metrics including TenantsStorageMetricsSet
+			// since there are no per-tenant children.
+			storeRecorder.record(&data)
+		}
 
 		// Now record secondary tenant store metrics, if any exist in the process.
 		for tenantID := range mr.mu.tenantRegistries {
@@ -875,7 +887,20 @@ func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 }
 
 func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
+	rr.recordExcluding(dest, nil)
+}
+
+// recordExcluding records all metrics from the registry except those in the
+// provided exclusion set. If exclusions is nil, all metrics are recorded.
+func (rr registryRecorder) recordExcluding(
+	dest *[]tspb.TimeSeriesData, exclusions map[string]struct{},
+) {
 	eachRecordableValue(rr.registry, func(name string, val float64) {
+		if exclusions != nil {
+			if _, excluded := exclusions[name]; excluded {
+				return
+			}
+		}
 		*dest = append(*dest, tspb.TimeSeriesData{
 			Name:   fmt.Sprintf(rr.format, name),
 			Source: rr.source,
