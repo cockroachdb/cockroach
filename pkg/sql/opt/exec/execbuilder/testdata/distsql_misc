@@ -1,5 +1,9 @@
 # LogicTest: 5node
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 subtest scrub
 
 # TODO(radu): rework or remove these tests (the inner ORDER BY is ignored by
@@ -246,7 +250,7 @@ statement ok
 ALTER TABLE data ADD COLUMN g gh[] AS (array_cat(ARRAY[(1, 2)], ARRAY[(a, b)])::gh[]) VIRTUAL
 
 # Error if we specify the problematic virtual computed column directly.
-statement error cannot be executed with distsql
+statement error cannot be executed with distsql: funcDistSQLBlocklist
 CREATE STATISTICS s1 ON g FROM data
 
 # We should skip the problematic virtual computed column when using defaults.

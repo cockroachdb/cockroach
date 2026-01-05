@@ -333,14 +333,14 @@ func runPlanInsidePlan(
 		}
 	}
 
-	distributePlan, distSQLProhibitedErr := plannerCopy.getPlanDistribution(ctx, plan.main)
+	distributePlan, blockers := plannerCopy.getPlanDistribution(ctx, plan.main, notPostquery)
 	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distributeType = FullDistribution
 	}
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
-	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	planCtx.distSQLBlockers = blockers
 	planCtx.stmtType = recv.stmtType
 	if sqlStatsBuilder != nil && plannerCopy.instrumentation.ShouldSaveFlows() {
 		planCtx.collectExecStats = true

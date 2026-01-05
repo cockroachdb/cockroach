@@ -23,6 +23,11 @@ import (
 // localPlanNodeMightUseTxn indicates whether the given LocalPlanNode might use
 // the txn somehow.
 func localPlanNodeMightUseTxn(spec *execinfrapb.LocalPlanNodeSpec) bool {
+	if !spec.SingleNodeWrap {
+		// When the LocalPlanNodeSpec handles multiple local planNodes, we lean
+		// on the safe side and think that at least one will use the txn.
+		return true
+	}
 	switch spec.Name {
 	case "scan buffer", "buffer":
 		// scanBufferNode and bufferNode don't interact with txns directly.
