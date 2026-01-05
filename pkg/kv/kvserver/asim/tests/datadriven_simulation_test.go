@@ -634,6 +634,15 @@ func TestDataDriven(t *testing.T) {
 					// the first LBRebalancingMode configuration since this string is only
 					// generated for once at the start.
 					var stateStrForOnce string
+					// TODO(tbg): there's tension between having subtests per
+					// config (for filtering and individual failure reporting),
+					// running them concurrently (for speed), and combining
+					// their output into a single testdata file.  Parallel
+					// subtests don't start until the parent yields, which
+					// deadlocks if we block waiting for results to combine. A
+					// clean-ish fix is to split each config into its own
+					// testdata file, sharing common setup via an `include`
+					// directive (see TestClusterState for an example).
 					for _, mv := range cfgs {
 						t.Run(mv, func(t *testing.T) {
 							ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
