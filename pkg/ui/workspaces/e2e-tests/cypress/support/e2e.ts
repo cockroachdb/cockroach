@@ -20,3 +20,10 @@
 
 // Import commands.js using ES2015 syntax:
 import "./commands";
+
+// Shared helper functions
+export const isTextGreaterThanZero = (ele: JQuery<HTMLElement>) => {
+  const text = ele.get()[0].innerText;
+  const textAsFloat = parseFloat(text);
+  expect(textAsFloat).to.be.greaterThan(0);
+};
