@@ -64,9 +64,14 @@ type inspectProgressTracker struct {
 		receivedSpanCount int
 		// lastCheckpointedSpanCount tracks the span count at the last checkpoint write.
 		lastCheckpointedSpanCount int
-		// spanCleaners stores PTS cleanup functions for active spans (keyed by span.String()).
-		// When a span completes, we call the cleaner to remove the protected timestamp.
-		spanCleaners map[string]jobsprotectedts.Cleaner
+		// activeSpanTimestamps tracks the timestamp for each active span (keyed by span.String()).
+		// Used to determine the minimum timestamp for PTS protection.
+		activeSpanTimestamps map[string]hlc.Timestamp
+		// currentPTSCleaner is the cleaner for the current PTS record (if any).
+		// We maintain at most one PTS record, protecting the minimum timestamp.
+		currentPTSCleaner jobsprotectedts.Cleaner
+		// currentPTSTimestamp is the timestamp currently being protected.
+		currentPTSTimestamp hlc.Timestamp
 		// lastLoggedPercent tracks the last percentage milestone we logged, to avoid
 		// spamming logs with progress updates. We log at every 1% increment.
 		lastLoggedPercent int
@@ -98,7 +103,7 @@ func newInspectProgressTracker(
 		codec:              codec,
 		ptsManager:         ptsManager,
 	}
-	t.mu.spanCleaners = make(map[string]jobsprotectedts.Cleaner)
+	t.mu.activeSpanTimestamps = make(map[string]hlc.Timestamp)
 	return t
 }
 
@@ -200,7 +205,7 @@ func (t *inspectProgressTracker) handleProgressUpdate(
 		return errors.Wrapf(err, "unable to unmarshal inspect progress details")
 	}
 
-	// Handle span started: set up PTS protection (outside lock since it calls external services).
+	// Handle span started: set up PTS protection.
 	if !incomingProcProgress.SpanStarted.Equal(roachpb.Span{}) {
 		t.setupSpanPTS(ctx, incomingProcProgress.SpanStarted, incomingProcProgress.StartedAt)
 		return nil
@@ -212,7 +217,7 @@ func (t *inspectProgressTracker) handleProgressUpdate(
 		return err
 	}
 
-	// Handle span completed: call cleaners (outside lock).
+	// Handle span completed: call cleaner and pick a new PTS if needed.
 	for _, completedSpan := range meta.BulkProcessorProgress.CompletedSpans {
 		t.cleanupSpanPTS(ctx, completedSpan)
 	}
@@ -280,96 +285,210 @@ func (t *inspectProgressTracker) updateProgressCache(
 }
 
 // terminateTracker performs any necessary cleanup when the job completes or fails.
-// This includes cleaning up any remaining span PTS cleaners.
+// This includes cleaning up the PTS record if one exists.
 func (t *inspectProgressTracker) terminateTracker(ctx context.Context) {
 	if t.stopFunc != nil {
 		t.stopFunc()
 		t.stopFunc = nil
 	}
 
-	// Clean up any remaining span cleaners (in case of early termination).
-	var cleaners map[string]jobsprotectedts.Cleaner
+	// Clean up the PTS record if one exists (in case of early termination).
+	var cleaner jobsprotectedts.Cleaner
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		cleaners = t.mu.spanCleaners
-		t.mu.spanCleaners = make(map[string]jobsprotectedts.Cleaner)
+		cleaner = t.mu.currentPTSCleaner
+		t.mu.currentPTSCleaner = nil
+		t.mu.currentPTSTimestamp = hlc.Timestamp{}
+		t.mu.activeSpanTimestamps = make(map[string]hlc.Timestamp)
 	}()
 
-	for spanKey, cleaner := range cleaners {
+	if cleaner != nil {
 		if err := cleaner(ctx); err != nil {
-			log.Dev.Warningf(ctx, "failed to clean up PTS for span %s: %v", spanKey, err)
+			log.Dev.Warningf(ctx, "failed to clean up PTS during termination: %v", err)
 		}
 	}
 }
 
 // setupSpanPTS sets up protected timestamp protection for a span that has started
 // processing. This is called when the coordinator receives a "span started" message
-// from a processor. Uses TryToProtectBeforeGC which waits 80% of GC TTL before
-// actually creating the PTS, avoiding unnecessary PTS creation for quick operations.
+// from a processor.
+//
+// We maintain at most one PTS record, protecting the minimum timestamp across all
+// active spans. Since PROTECT_AFTER mode protects all data at or after the specified
+// timestamp, protecting at the minimum covers all active spans. When a new span
+// starts with an older timestamp than the current PTS, we update the PTS to protect
+// the new minimum.
 func (t *inspectProgressTracker) setupSpanPTS(
 	ctx context.Context, spanStarted roachpb.Span, tsToProtect hlc.Timestamp,
 ) {
-	// Use testing hook if set.
-	if t.testingPTSProtector != nil {
-		cleaner := t.testingPTSProtector(ctx, spanStarted, tsToProtect)
-		if cleaner != nil {
-			func() {
-				t.mu.Lock()
-				defer t.mu.Unlock()
-				t.mu.spanCleaners[spanStarted.String()] = cleaner
-			}()
-		}
-		return
-	}
+	spanKey := spanStarted.String()
 
-	// Extract table ID from the span key prefix.
-	_, tableID, err := t.codec.DecodeTablePrefix(spanStarted.Key)
-	if err != nil {
-		log.Dev.Warningf(ctx, "failed to decode table ID from span %s: %v", spanStarted, err)
-		return
-	}
-
-	cleaner := t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), tsToProtect)
-
-	// Store the cleaner for later cleanup when span completes.
+	// Check if we need to update the PTS (first span or new minimum timestamp).
+	var needsNewPTS bool
+	var oldCleaner jobsprotectedts.Cleaner
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.mu.spanCleaners[spanStarted.String()] = cleaner
+		t.mu.activeSpanTimestamps[spanKey] = tsToProtect
+		if t.mu.currentPTSCleaner == nil || tsToProtect.Less(t.mu.currentPTSTimestamp) {
+			needsNewPTS = true
+			oldCleaner = t.mu.currentPTSCleaner
+		}
 	}()
 
-	log.VEventf(ctx, 2, "INSPECT: set up PTS protection for span %s at %s", spanStarted, tsToProtect)
+	if !needsNewPTS {
+		log.VEventf(ctx, 2, "INSPECT: span %s at %s covered by existing PTS at %s",
+			spanStarted, tsToProtect, t.mu.currentPTSTimestamp)
+		return
+	}
+
+	// Clean up old PTS before setting new one.
+	if oldCleaner != nil {
+		if err := oldCleaner(ctx); err != nil {
+			log.Dev.Warningf(ctx, "failed to clean up old PTS: %v", err)
+		}
+	}
+
+	// Create new PTS at the new minimum timestamp.
+	var cleaner jobsprotectedts.Cleaner
+	if t.testingPTSProtector != nil {
+		cleaner = t.testingPTSProtector(ctx, spanStarted, tsToProtect)
+	} else {
+		// Extract table ID from the span key prefix.
+		_, tableID, err := t.codec.DecodeTablePrefix(spanStarted.Key)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to decode table ID from span %s: %v", spanStarted, err)
+			return
+		}
+		cleaner = t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), tsToProtect)
+	}
+
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.currentPTSCleaner = cleaner
+		t.mu.currentPTSTimestamp = tsToProtect
+	}()
+
+	log.VEventf(ctx, 2, "INSPECT: set up PTS protection at minimum timestamp %s (triggered by span %s)",
+		tsToProtect, spanStarted)
 }
 
-// cleanupSpanPTS cleans up the protected timestamp for a completed span.
+// cleanupSpanPTS handles PTS management when a span completes processing.
 // This is called when the coordinator receives a "span completed" message.
+//
+// When the oldest span (with the minimum timestamp) completes, we update the PTS
+// to protect the new minimum timestamp among remaining active spans. This allows
+// GC of data between the old and new minimum timestamps.
 func (t *inspectProgressTracker) cleanupSpanPTS(ctx context.Context, completedSpan roachpb.Span) {
 	spanKey := completedSpan.String()
 
-	var cleaner jobsprotectedts.Cleaner
-	var ok bool
+	// Determine what action to take based on current state.
+	var action ptsCleanupAction
+	var oldCleaner jobsprotectedts.Cleaner
+	var newMinTimestamp hlc.Timestamp
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		cleaner, ok = t.mu.spanCleaners[spanKey]
-		if ok {
-			delete(t.mu.spanCleaners, spanKey)
+
+		completedTimestamp, ok := t.mu.activeSpanTimestamps[spanKey]
+		if !ok {
+			// Span not tracked - either PTS was never set up (e.g., AsOf was specified),
+			// or it was already cleaned up.
+			action = ptsActionNone
+			return
 		}
+		delete(t.mu.activeSpanTimestamps, spanKey)
+
+		if len(t.mu.activeSpanTimestamps) == 0 {
+			// No more active spans - clean up PTS entirely.
+			action = ptsActionCleanup
+			oldCleaner = t.mu.currentPTSCleaner
+			t.mu.currentPTSCleaner = nil
+			t.mu.currentPTSTimestamp = hlc.Timestamp{}
+			return
+		}
+
+		// Check if the completed span was the one with the minimum timestamp.
+		if completedTimestamp.Equal(t.mu.currentPTSTimestamp) {
+			// Find the new minimum timestamp among remaining spans.
+			var foundMin bool
+			var minSpanKey string
+			for sk, ts := range t.mu.activeSpanTimestamps {
+				if !foundMin || ts.Less(newMinTimestamp) {
+					newMinTimestamp = ts
+					minSpanKey = sk
+					foundMin = true
+				}
+			}
+			if foundMin && newMinTimestamp.Less(t.mu.currentPTSTimestamp) == false {
+				// New minimum is newer than current PTS - need to update.
+				action = ptsActionUpdate
+				oldCleaner = t.mu.currentPTSCleaner
+				t.mu.currentPTSCleaner = nil
+				// We'll extract the table ID from the span key outside the lock.
+				// Store the span key for later processing.
+				_ = minSpanKey // Used for logging if needed.
+			}
+		}
+		// If the completed span wasn't the minimum, no PTS change needed.
 	}()
 
-	if !ok {
-		// No cleaner found - either PTS was never set up (e.g., AsOf was specified),
-		// or it was already cleaned up.
+	switch action {
+	case ptsActionNone:
 		return
-	}
 
-	if err := cleaner(ctx); err != nil {
-		log.Dev.Warningf(ctx, "failed to clean up PTS for span %s: %v", completedSpan, err)
-	} else {
-		log.VEventf(ctx, 2, "INSPECT: cleaned up PTS protection for span %s", completedSpan)
+	case ptsActionCleanup:
+		if oldCleaner != nil {
+			if err := oldCleaner(ctx); err != nil {
+				log.Dev.Warningf(ctx, "failed to clean up PTS: %v", err)
+			} else {
+				log.VEventf(ctx, 2, "INSPECT: cleaned up PTS protection (no more active spans)")
+			}
+		}
+
+	case ptsActionUpdate:
+		// Clean up old PTS.
+		if oldCleaner != nil {
+			if err := oldCleaner(ctx); err != nil {
+				log.Dev.Warningf(ctx, "failed to clean up old PTS: %v", err)
+			}
+		}
+
+		// Create new PTS at the new minimum timestamp.
+		var cleaner jobsprotectedts.Cleaner
+		if t.testingPTSProtector != nil {
+			cleaner = t.testingPTSProtector(ctx, completedSpan, newMinTimestamp)
+		} else {
+			// Extract table ID from the completed span. All spans in an INSPECT job
+			// typically belong to the same table, so this is safe.
+			_, tableID, err := t.codec.DecodeTablePrefix(completedSpan.Key)
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to decode table ID from span %s: %v", completedSpan, err)
+				return
+			}
+			cleaner = t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), newMinTimestamp)
+		}
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			t.mu.currentPTSCleaner = cleaner
+			t.mu.currentPTSTimestamp = newMinTimestamp
+		}()
+
+		log.VEventf(ctx, 2, "INSPECT: updated PTS protection to new minimum timestamp %s", newMinTimestamp)
 	}
 }
+
+// ptsCleanupAction indicates what action to take when a span completes.
+type ptsCleanupAction int
+
+const (
+	ptsActionNone    ptsCleanupAction = iota // No action needed.
+	ptsActionCleanup                         // Clean up PTS entirely (no more active spans).
+	ptsActionUpdate                          // Update PTS to new minimum timestamp.
+)
 
 // startPeriodicUpdates launches background goroutines to periodically flush
 // progress updates at different intervals. Returns a stop function to terminate
