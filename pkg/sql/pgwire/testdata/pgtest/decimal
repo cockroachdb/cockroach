@@ -108,3 +108,20 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"10000.000"},{"text":"100000000.000"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression for #158884.
+# Use a decimal with negative scale (FFF0, which is -16).
+send
+Parse {"Name": "s5", "Query": "SELECT $1::decimal"}
+Bind {"DestinationPortal": "p5", "PreparedStatement": "s5", "ParameterFormatCodes": [1], "Parameters": [{"binary":"000100010000FFF00001"}]}
+Execute {"Portal": "p5"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"22P03"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
