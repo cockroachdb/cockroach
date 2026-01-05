@@ -381,3 +381,50 @@ vectorized: true
 │
 └── • emptyrow
       columns: ()
+
+# Regression test for #160475. IN-subqueries within UDFs should be
+# index-accelerated in the same way that they are outside of UDFs.
+statement ok
+CREATE TABLE t160475 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b) STORING (c),
+  FAMILY (a, b, c)
+)
+
+statement ok
+ALTER TABLE t160475 INJECT STATISTICS '[
+  {
+    "avg_size": 4,
+    "columns": ["a"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2025-01-05 21:51:13"
+  },
+  {
+    "avg_size": 4,
+    "columns": ["b"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2025-01-05 21:51:13"
+  }
+]'
+
+query T kvtrace
+SELECT c FROM t160475 WHERE a = 33 AND b IN (SELECT unnest(ARRAY[44, 55]::INT[]))
+----
+Scan /Table/20/1/12{6-7}
+Scan /Table/126/2/33/4{4-5}, /Table/126/2/33/5{5-6}
+
+statement ok
+CREATE OR REPLACE FUNCTION f160475(x INT, y INT[]) RETURNS INT LANGUAGE SQL AS $$
+  SELECT c FROM t160475 WHERE a = x AND b IN (SELECT UNNEST(y))
+$$
+
+query T kvtrace
+SELECT f160475(33, ARRAY[44, 55]::INT[])
+----
+Scan /Table/126/2/33/4{4-5}, /Table/126/2/33/5{5-6}
