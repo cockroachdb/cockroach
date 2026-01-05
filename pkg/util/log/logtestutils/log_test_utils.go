@@ -17,7 +17,6 @@ import (
 // InstallLogFileSink installs a file sink for logging tests.
 func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channel) func() {
 	// Enable logging channels.
-	log.TestingResetActive()
 	cfg := logconfig.DefaultConfig()
 	// Make a sink for just the session log.
 	cfg.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
@@ -36,7 +35,7 @@ func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channe
 	if err := cfg.Validate(&dir); err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanup, err := log.ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		t.Fatal(err)
 	}

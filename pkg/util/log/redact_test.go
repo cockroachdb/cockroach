@@ -127,12 +127,11 @@ func TestSafeManaged(t *testing.T) {
 				RedactionPolicyManaged = initRedactionPolicyManaged
 			}()
 
-			TestingResetActive()
 			cfg := logconfig.DefaultConfig()
 			if err := cfg.Validate(&s.logDir); err != nil {
 				t.Fatal(err)
 			}
-			cleanupFn, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+			cleanupFn, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 			if err != nil {
 				t.Fatal(err)
 			}

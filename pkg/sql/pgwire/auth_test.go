@@ -184,7 +184,6 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		defer sc.Close(t)
 
 		// Enable logging channels.
-		log.TestingResetActive()
 		cfg := logconfig.DefaultConfig()
 		// Make a sink for just the session log.
 		bt := true
@@ -206,7 +205,7 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
 		}
-		cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		cleanup, err := log.ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 		if err != nil {
 			t.Fatal(err)
 		}
