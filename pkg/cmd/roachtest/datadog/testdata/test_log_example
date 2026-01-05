@@ -1,0 +1,55 @@
+2025/11/12 07:19:40 test_impl.go:197: Runtime assertions enabled
+2025/11/12 07:19:40 cluster.go:729: test status: uploading file
+2025/11/12 07:19:56 cluster.go:729: test status:
+2025/11/12 07:19:56 cluster.go:729: test status: running test
+2025/11/12 07:19:56 cluster.go:729: test status: metamorphically using default leases
+2025/11/12 07:20:03 test_runner.go:1547: === RUN   acceptance/event-log  [metrics: https://go.crdb.dev/roachtest-grafana/teamcity-20723220/acceptance-event-log/1762932003891/1762933803891]
+2025/11/12 07:20:04 cluster.go:729: test status: starting cluster
+2025/11/12 07:20:10 cluster_synced.go:1608: teamcity-20723220-1762931616-18-n4cpu4: checking certs.tar
+teamcity-20723220-1762931616-18-n4cpu4: initializing certs
+teamcity-20723220-1762931616-18-n4cpu4: distributing certs
+2025/11/12 07:20:16 cockroach.go:624: teamcity-20723220-1762931616-18-n4cpu4 (system): starting cockroach processes
+2025/11/12 07:20:16 cockroach.go:946: starting node 1
+2025/11/12 07:20:17 cockroach.go:1406: teamcity-20723220-1762931616-18-n4cpu4: initializing cluster
+2025/11/12 07:20:18 cockroach.go:1415: Cluster successfully initialized
+2025/11/12 07:20:18 cockroach.go:946: starting node 2
+2025/11/12 07:20:19 cockroach.go:946: starting node 3
+2025/11/12 07:20:21 cockroach.go:946: starting node 4
+2025/11/12 07:20:23 cockroach.go:1479: teamcity-20723220-1762931616-18-n4cpu4 (system): setting cluster settings
+2025/11/12 07:20:23 cockroach.go:1513: INFO: (cluster="teamcity-20723220-1762931616-18-n4cpu4") using COCKROACH_DEV_LICENSE: valid_until_unix_sec:1956528000 type:Enterprise organization_name:"Cockroach Labs - Production Testing"
+2025/11/12 07:20:23 cockroach.go:1489: SET CLUSTER SETTING
+NOTICE: "debug.panic_on_failed_assertions" is now an alias for "debug.panic_on_failed_assertions.enabled", the preferred setting name
+SET CLUSTER SETTING
+SET CLUSTER SETTING
+teamcity-20723220-1762931616-18-n4cpu4: executing sql
+2025/11/12 07:20:24 cockroach.go:1473: log into DB console with user=roachprod password=cockroachdb
+2025/11/12 07:20:24 cockroach.go:1791: teamcity-20723220-1762931616-18-n4cpu4 (system): creating backup schedule
+2025/11/12 07:20:25 cockroach.go:1826: schedule_id	label	status	first_run	schedule	backup_stmt
+1123488975688073217	test_only_backup	PAUSED: Waiting for initial backup to complete	NULL	*/15 * * * *	BACKUP INTO LATEST IN 'gs://cockroachdb-backup-testing/roachprod-scheduled-backups/teamcity-20723220-1762931616-18-n4cpu4/system/1762932024823035475?AUTH=implicit' WITH OPTIONS (detached)
+1123488975695249409	test_only_backup	ACTIVE	2025-11-12 07:20:25.585997+00	@hourly	BACKUP INTO 'gs://cockroachdb-backup-testing/roachprod-scheduled-backups/teamcity-20723220-1762931616-18-n4cpu4/system/1762932024823035475?AUTH=implicit' WITH OPTIONS (detached)
+2025/11/12 07:20:25 client.go:145: invoking PUT for URL: https://grafana.testeng.crdb.io/promhelpers/v1/instance-configs/teamcity-20723220-1762931616-18-n4cpu4
+2025/11/12 07:20:26 cluster_synced.go:2109: teamcity-20723220-1762931616-18-n4cpu4: getting (scp) ./certs /tmp/roachtest-certs3400748027/certs on nodes [1]
+2025/11/12 07:20:27 spinner.go:330:    1: done
+2025/11/12 07:20:28 node_stability.go:117: waiting for initial up-replication...
+2025/11/12 07:20:28 node_stability.go:142: up-replication complete
+2025/11/12 07:20:28 cluster.go:729: test status: stopping nodes :3
+teamcity-20723220-1762931616-18-n4cpu4: stopping
+2025/11/12 07:20:29 cluster.go:729: test status: starting nodes :3
+2025/11/12 07:20:30 cockroach.go:624: teamcity-20723220-1762931616-18-n4cpu4 (system): starting cockroach processes
+2025/11/12 07:20:30 cockroach.go:946: starting node 3
+2025/11/12 07:20:32 cockroach.go:1479: teamcity-20723220-1762931616-18-n4cpu4 (system): setting cluster settings
+2025/11/12 07:20:32 cockroach.go:1513: INFO: (cluster="teamcity-20723220-1762931616-18-n4cpu4") using COCKROACH_DEV_LICENSE: valid_until_unix_sec:1956528000 type:Enterprise organization_name:"Cockroach Labs - Production Testing"
+teamcity-20723220-1762931616-18-n4cpu4: executing sql
+2025/11/12 07:20:33 cockroach.go:1473: log into DB console with user=roachprod password=cockroachdb
+2025/11/12 07:20:33 cockroach.go:1791: teamcity-20723220-1762931616-18-n4cpu4 (system): creating backup schedule
+2025/11/12 07:20:34 cockroach.go:1826: SCHEDULED BACKUP 0
+NOTICE: schedule "test_only_backup" already exists, skipping
+2025/11/12 07:20:34 client.go:145: invoking PUT for URL: https://grafana.testeng.crdb.io/promhelpers/v1/instance-configs/teamcity-20723220-1762931616-18-n4cpu4
+2025/11/12 07:20:34 test_runner.go:2635: terminating stray tasks
+2025/11/12 07:20:34 test_runner.go:1558: test completed successfully
+2025/11/12 07:20:35 test_runner.go:1590: running post test assertions (test-post-assertions.log)
+2025/11/12 07:20:36 test_runner.go:1607: running test teardown (test-teardown.log)
+2025/11/12 07:20:45 test_runner.go:1326: metrics: https://go.crdb.dev/roachtest-grafana/teamcity-20723220/acceptance-event-log/1762932003891/1762932157626
+2025/11/12 07:20:45 test_runner.go:1354: ##teamcity[testStarted name='acceptance/event-log' flowId='acceptance/event-log']
+2025/11/12 07:20:45 test_runner.go:1418: --- PASS: acceptance/event-log (33.73s)
+2025/11/12 07:20:45 test_runner.go:1422: ##teamcity[testFinished name='acceptance/event-log' flowId='acceptance/event-log' duration='33734']
