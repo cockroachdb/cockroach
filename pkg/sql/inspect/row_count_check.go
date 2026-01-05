@@ -129,12 +129,16 @@ func (c *rowCountCheck) RegisterChecksForSpan(checks inspectChecks) error {
 func (c *rowCountCheck) CheckSpan(
 	ctx context.Context, logger *inspectLoggerBundle, msg *jobspb.InspectProcessorProgress,
 ) error {
-	// TODO: handle none of the checks return a row count
+	var found bool
 	for _, check := range c.checks {
-		// TODO: Handle inconsistency btwn checks on the same span
+
 		if check, ok := check.(inspectCheckRowCount); ok {
+			if found && check.Rows() != msg.SpanRowCount {
+				return errors.Newf("conflicting row counts for table %d: %d and %d",
+					c.tableID, msg.SpanRowCount, check.Rows())
+			}
+			found = true
 			msg.SpanRowCount = check.Rows()
-			return nil
 		}
 	}
 

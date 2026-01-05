@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -21,6 +22,146 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+// mockRowCountCheck is a test implementation of inspectCheckRowCount that
+// always returns a fixed row count value.
+type mockRowCountCheck struct {
+	mockInspectCheck
+	rowCount uint64
+}
+
+var _ inspectCheck = &mockRowCountCheck{}
+var _ inspectCheckRowCount = &mockRowCountCheck{}
+
+// Rows implements the inspectCheckRowCount interface.
+func (m *mockRowCountCheck) Rows() uint64 {
+	return m.rowCount
+}
+
+func TestRowCountCheckSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		desc          string
+		checks        []inspectCheck
+		expectedCount uint64
+		expectError   bool
+		errorPattern  string
+	}{
+		{
+			desc: "single check returns row count",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 100},
+			},
+			expectedCount: 100,
+			expectError:   false,
+		},
+		{
+			desc: "multiple checks with same row count - returns first",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 200},
+				&mockRowCountCheck{rowCount: 200},
+			},
+			expectedCount: 200,
+			expectError:   false,
+		},
+		{
+			desc: "conflicting row counts - should error",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 100},
+				&mockRowCountCheck{rowCount: 200},
+			},
+			expectError:  true,
+			errorPattern: "conflicting row counts",
+		},
+		{
+			desc: "no inspectCheckRowCount implementation",
+			checks: []inspectCheck{
+				&mockInspectCheck{},
+			},
+			expectError:  true,
+			errorPattern: "requires an inspectCheckRowCount",
+		},
+		{
+			desc: "mixed checks - non-row-count check first, then row count",
+			checks: []inspectCheck{
+				&mockInspectCheck{},
+				&mockRowCountCheck{rowCount: 300},
+			},
+			expectedCount: 300,
+			expectError:   false,
+		},
+		{
+			desc: "mixed checks - row count check first",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 300},
+				&mockInspectCheck{},
+			},
+			expectedCount: 300,
+			expectError:   false,
+		},
+		{
+			desc: "three checks with same count",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 150},
+				&mockRowCountCheck{rowCount: 150},
+				&mockRowCountCheck{rowCount: 150},
+			},
+			expectedCount: 150,
+			expectError:   false,
+		},
+		{
+			desc: "zero row count",
+			checks: []inspectCheck{
+				&mockRowCountCheck{rowCount: 0},
+			},
+			expectedCount: 0,
+			expectError:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Create a rowCountCheck
+			check := &rowCountCheck{
+				rowCountCheckApplicability: rowCountCheckApplicability{
+					tableID: 1,
+				},
+			}
+
+			// Register the checks
+			err := check.RegisterChecksForSpan(tc.checks)
+			if tc.errorPattern != "" && err != nil {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errorPattern)
+				return
+			}
+			require.NoError(t, err)
+
+			// Create progress message
+			msg := &jobspb.InspectProcessorProgress{
+				SpanRowCount: 0,
+			}
+
+			// Call CheckSpan
+			err = check.CheckSpan(ctx, nil /* logger */, msg)
+
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.errorPattern != "" {
+					require.Contains(t, err.Error(), tc.errorPattern)
+				}
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedCount, msg.SpanRowCount,
+					"SpanRowCount should be set to the expected value")
+			}
+		})
+	}
+}
 
 func TestRowCountCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
