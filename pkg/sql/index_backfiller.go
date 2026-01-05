@@ -302,18 +302,25 @@ func (ib *IndexBackfillPlanner) plan(
 			indexesToBackfill, sourceIndexID,
 		)
 		if useDistributedMerge {
-			// Record the storage prefix before any SSTs are written.
-			storagePrefix := fmt.Sprintf("nodelocal://%d/", ib.execCfg.NodeInfo.NodeID.SQLInstanceID())
-			backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
-			if err := addStoragePrefix(ctx, storagePrefix); err != nil {
-				return err
-			}
+			backfill.EnableDistributedMergeIndexBackfillSink(jobID, &spec)
 		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
 	}); err != nil {
 		return nil, err
+	}
+
+	// Pre-register storage prefixes for all nodes that will run processors.
+	// This must happen before any SSTs are written to ensure cleanup can find
+	// orphaned files if the job fails mid-write.
+	if useDistributedMerge {
+		for i := range p.Processors {
+			prefix := fmt.Sprintf("nodelocal://%d/", p.Processors[i].SQLInstanceID)
+			if err := addStoragePrefix(ctx, prefix); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return func(ctx context.Context) error {
