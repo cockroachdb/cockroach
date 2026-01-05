@@ -1,7 +1,7 @@
 name: GitHub Actions Extended CI
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, ready_for_review, reopened, synchronize]
     branches:
       - "master"
       - "release-*"
@@ -46,6 +46,33 @@ jobs:
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/maybe-stress.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+      - name: upload build results
+        run: ./build/github/summarize-build.sh bes.bin
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
+  maybe_stressrace:
+    if: github.event.pull_request.draft == false
+    runs-on: [self-hosted, ubuntu_2004]
+    timeout-minutes: 180
+    steps:
+      - name: calculate commit depth
+        run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: ${{ env.COMMIT_DEPTH }}
+      - name: Fetch the base commit
+        run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
+      - name: compute metadata
+        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+      - run: ./build/github/get-engflow-keys.sh
+      - run: ./build/github/prepare-summarize-build.sh
+      - name: run tests
+        run: ./build/github/maybe-stressrace.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
       - name: upload build results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
