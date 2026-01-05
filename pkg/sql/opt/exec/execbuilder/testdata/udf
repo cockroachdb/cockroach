@@ -421,7 +421,7 @@ Scan /Table/126/2/33/4{4-5}, /Table/126/2/33/5{5-6}
 
 statement ok
 CREATE OR REPLACE FUNCTION f160475(x INT, y INT[]) RETURNS INT LANGUAGE SQL AS $$
-  SELECT c FROM t160475 WHERE a = x AND b IN (SELECT UNNEST(y))
+  SELECT c FROM t160475 WHERE a = x AND b IN (SELECT unnest(y))
 $$
 
 query T kvtrace
