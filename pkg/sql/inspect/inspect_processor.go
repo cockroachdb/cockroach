@@ -287,9 +287,17 @@ func (p *inspectProcessor) processSpan(
 		}
 	}
 
+	// Get the executor config if available. In unit tests, this may be nil.
+	var inspectTestingKnobs *sql.InspectTestingKnobs
+	if p.flowCtx.Cfg.ExecutorConfig != nil {
+		execCfg := p.flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+		inspectTestingKnobs = execCfg.InspectTestingKnobs
+	}
+	
 	runner := inspectRunner{
-		checks: checks,
-		logger: p.loggerBundle,
+		checks:              checks,
+		logger:              p.loggerBundle,
+		inspectTestingKnobs: inspectTestingKnobs,
 	}
 	defer func() {
 		if closeErr := runner.Close(ctx); closeErr != nil {

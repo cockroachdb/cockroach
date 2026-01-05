@@ -84,6 +84,7 @@ type testIssueCollector struct {
 		syncutil.Mutex
 
 		issuesFound []inspectIssue
+		rowCounts   map[string]uint64 // Maps check identifier to row count
 	}
 }
 
@@ -121,6 +122,25 @@ func (m *testIssueCollector) reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.issuesFound = nil
+	m.mu.rowCounts = make(map[string]uint64)
+}
+
+// recordRowCount stores the row count for a check.
+func (m *testIssueCollector) recordRowCount(checkID string, rowCount uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.mu.rowCounts == nil {
+		m.mu.rowCounts = make(map[string]uint64)
+	}
+	m.mu.rowCounts[checkID] = rowCount
+}
+
+// getRowCount retrieves the row count for a given check.
+func (m *testIssueCollector) getRowCount(checkID string) (uint64, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count, ok := m.mu.rowCounts[checkID]
+	return count, ok
 }
 
 // findIssue searches for a given issue type on the given primary key string.

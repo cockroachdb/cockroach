@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/errors"
@@ -87,6 +88,9 @@ type inspectRunner struct {
 
 	// foundIssue indicates whether any issues were found.
 	foundIssue bool
+
+	// inspectTestingKnobs provides access to testing knobs for callbacks.
+	inspectTestingKnobs *sql.InspectTestingKnobs
 }
 
 // Step advances execution by processing one result from the current inspectCheck.
@@ -126,6 +130,13 @@ func (c *inspectRunner) Step(
 		if err := check.Close(ctx); err != nil {
 			return false, err
 		}
+
+		if c.inspectTestingKnobs != nil && c.inspectTestingKnobs.OnCheckComplete != nil {
+			if err := c.inspectTestingKnobs.OnCheckComplete(check); err != nil {
+				return false, err
+			}
+		}
+
 		c.checks = c.checks[1:]
 	}
 	return false, nil
