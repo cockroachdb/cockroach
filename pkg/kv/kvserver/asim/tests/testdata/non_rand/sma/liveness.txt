@@ -1,6 +1,10 @@
 # This test verifies node liveness handling in a 7-node cluster with 700 ranges (RF=3).
 # Node 7 is dead initially, node 6 becomes decommissioning after 3 minutes.
 # Expected: Dead/decommissioning nodes lose all replicas and leases.
+#
+# TODO(tbg): this test doesn't need that many ranges, I think. Lower range count, make the
+# delays for changing liveness status significantly smaller, and shorten test duration. Then
+# this test should simulate pretty quickly and doesn't need to be skipped under CI.
 skip_under_ci
 ----
 
