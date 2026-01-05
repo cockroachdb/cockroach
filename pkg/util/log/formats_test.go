@@ -60,8 +60,7 @@ func TestFormatRedaction(t *testing.T) {
 							config.CaptureFd2.Enable = false
 							// Validate and apply the config.
 							require.NoError(t, config.Validate(&sc.logDir))
-							TestingResetActive()
-							cleanupFn, err := ApplyConfig(config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+							cleanupFn, err := ApplyConfigForReconfig(config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 							require.NoError(t, err)
 							defer cleanupFn()
 
