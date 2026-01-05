@@ -1280,7 +1280,8 @@ func runMVCCConditionalPut(
 		expected = value.TagAndDataBytes()
 	}
 
-	for i := 0; b.Loop(); i++ {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		batch := eng.NewBatch()
@@ -1999,7 +2000,8 @@ func runMVCCAcquireLockCommon(
 	}
 	ms := &enginepb.MVCCStats{}
 
-	for i := 0; b.Loop(); i++ {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
 		key := makeKey(i)
 		txn := &txn1
 		var err error
