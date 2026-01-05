@@ -11,14 +11,14 @@ set -euxo pipefail
 
 if [ -z "$1" ]
 then
-    echo 'Usage: maybe-stress.sh BASESHA HEADSHA'
+    echo 'Usage: maybe-stressrace.sh BASESHA HEADSHA'
     exit 1
 fi
 
 if [ -z "$2" ]
 then
-    echo 'Usage: maybe-stress.sh BASESHA HEADSHA'
+    echo 'Usage: maybe-stressrace.sh BASESHA HEADSHA'
     exit 1
 fi
 
-./build/github/maybe-stress-impl.sh $1 $2 stress
+./build/github/maybe-stress-impl.sh $1 $2 race
