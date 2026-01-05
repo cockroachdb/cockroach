@@ -182,6 +182,7 @@ go_library(
         "//pkg/server/apiinternal",
         "//pkg/server/apiutil",
         "//pkg/server/authserver",
+        "//pkg/server/dbconsole",
         "//pkg/server/debug",
         "//pkg/server/debug/pprofui",
         "//pkg/server/decommissioning",

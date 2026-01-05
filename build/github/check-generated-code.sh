@@ -73,6 +73,36 @@ check_workspace_clean "Run \`./dev generate\` to fix this error."
 bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
 check_workspace_clean "Run \`go mod tidy\` to fix this error."
 
+# Run http-schema generation and ensure nothing changes. This ensures
+# the swagger.json, openapi.json, and api-types.ts files are up to date.
+OUTPUT_DIR="$(pwd)/pkg/ui/workspaces/db-console/src/api"
+
+# Step 1: Generate swagger.json via swag
+# swag with --parseDependency needs `go list`, so we add the Bazel Go SDK to PATH.
+GO_BIN_DIR="$(bazel info output_base)/external/go_sdk/bin"
+bazel run @com_github_swaggo_swag//cmd/swag $ENGFLOW_ARGS "--run_under=cd $(pwd) && PATH=$GO_BIN_DIR:\$PATH " -- \
+    init \
+    --dir pkg/server/dbconsole \
+    --generalInfo dbconsole.go \
+    --output "$OUTPUT_DIR" \
+    --parseDependency \
+    --parseInternal \
+    --outputTypes json \
+    &> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+# Step 2: Convert Swagger 2.0 -> OpenAPI 3.0
+bazel run //pkg/ui/workspaces/db-console:swagger2openapi $ENGFLOW_ARGS -- \
+    "$OUTPUT_DIR/swagger.json" -o "$OUTPUT_DIR/openapi.json" \
+    &>> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+# Step 3: Generate TypeScript types
+bazel run //pkg/ui/workspaces/db-console:openapi-typescript $ENGFLOW_ARGS -- \
+    "$OUTPUT_DIR/openapi.json" -o "$OUTPUT_DIR/api-types.ts" \
+    &>> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+rm artifacts/http-schema.log
+check_workspace_clean "Run \`./dev generate http-schema\` to fix this error."
+
 # NB: If this step fails, then some checksum in the code is probably not
 # matching up to the "real" checksum for that artifact.
 bazel fetch @distdir//:archives

@@ -319,6 +319,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^pkg/raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
+			// Generated TypeScript types from OpenAPI schema.
+			stream.GrepNot(`db-console/src/api/api-types\.ts$`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(crdbDir, filename))
 			if err != nil {

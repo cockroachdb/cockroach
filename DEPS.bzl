@@ -5765,6 +5765,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_kylebanks_depth",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/KyleBanks/depth",
+        sha256 = "8f3e9af2e038f561d9c34b631fddc7db39e39992a121fd087f0bf980026464d9",
+        strip_prefix = "github.com/KyleBanks/depth@v1.2.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/KyleBanks/depth/com_github_kylebanks_depth-v1.2.1.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_kylelemons_godebug",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/kylelemons/godebug",
@@ -8314,6 +8324,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_swaggo_swag",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/swaggo/swag",
+        sha256 = "0e0e48e9fb9b90caa181f9faa427d81c67fd5a71ca310dd1ee283217ed7cf44d",
+        strip_prefix = "github.com/swaggo/swag@v1.16.6",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/swaggo/swag/com_github_swaggo_swag-v1.16.6.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_syndtr_gocapability",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/syndtr/gocapability",
@@ -10817,10 +10837,10 @@ def go_deps():
         name = "io_k8s_sigs_yaml",
         build_file_proto_mode = "disable_global",
         importpath = "sigs.k8s.io/yaml",
-        sha256 = "55ed08c5df448a033bf7e2c2912d4daa85b856a05c854b0c87ccc85c7f3fbfc7",
-        strip_prefix = "sigs.k8s.io/yaml@v1.2.0",
+        sha256 = "aac88da551c2a512b642cb35658bf3dc862595a3566bd840ebf18e4802f1fcc9",
+        strip_prefix = "sigs.k8s.io/yaml@v1.3.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/sigs.k8s.io/yaml/io_k8s_sigs_yaml-v1.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/sigs.k8s.io/yaml/io_k8s_sigs_yaml-v1.3.0.zip",
         ],
     )
     go_repository(
