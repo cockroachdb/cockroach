@@ -26,6 +26,7 @@ go_library(
         "//pkg/workload/rand",
         "//pkg/workload/schemachange",
         "//pkg/workload/sqlsmith",
+        "//pkg/workload/sqlstats",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpccchecks",
         "//pkg/workload/tpcds",
