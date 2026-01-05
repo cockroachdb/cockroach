@@ -2077,34 +2077,6 @@ func loadBalancerResourceName(clusterName string, port int, resourceType string)
 	return name
 }
 
-// loadBalancerNameParts parses a load balancer resource name and returns its components.
-// The name format is {cluster}-{port}-{resource-type}-roachprod, but may be truncated
-// to 32 characters due to AWS naming limits.
-func loadBalancerNameParts(name string) (cluster string, port int, resourceType string, ok bool) {
-	// Try full format first: cluster-port-type-roachprod
-	regex := regexp.MustCompile(`^([a-z0-9\-]+)-(\d+)-([a-z0-9\-]+)-roachprod$`)
-	match := regex.FindStringSubmatch(name)
-	if match != nil {
-		cluster = match[1]
-		port, _ = strconv.Atoi(match[2])
-		resourceType = match[3]
-		return cluster, port, resourceType, true
-	}
-
-	// Try truncated format: cluster-port-type (may be partially truncated)
-	// This handles cases where the name was truncated to 32 chars
-	regex = regexp.MustCompile(`^([a-z0-9\-]+)-(\d+)-(nlb|tg)`)
-	match = regex.FindStringSubmatch(name)
-	if match != nil {
-		cluster = match[1]
-		port, _ = strconv.Atoi(match[2])
-		resourceType = match[3]
-		return cluster, port, resourceType, true
-	}
-
-	return "", 0, "", false
-}
-
 // elbv2TargetGroup represents an AWS ELBv2 target group.
 type elbv2TargetGroup struct {
 	TargetGroupArn  string `json:"TargetGroupArn"`
@@ -2148,6 +2120,45 @@ type describeLoadBalancersOutput struct {
 // describeListenersOutput represents the output of describe-listeners.
 type describeListenersOutput struct {
 	Listeners []elbv2Listener `json:"Listeners"`
+}
+
+// elbv2TagDescription represents the tags for a single ELBv2 resource.
+type elbv2TagDescription struct {
+	ResourceArn string `json:"ResourceArn"`
+	Tags        Tags   `json:"Tags"`
+}
+
+// describeTagsOutput represents the output of describe-tags.
+type describeTagsOutput struct {
+	TagDescriptions []elbv2TagDescription `json:"TagDescriptions"`
+}
+
+// getLoadBalancerTags fetches tags for the given load balancer ARNs and returns
+// a map from ARN to tag map.
+func (p *Provider) getLoadBalancerTags(
+	l *logger.Logger, region string, arns []string,
+) (map[string]map[string]string, error) {
+	if len(arns) == 0 {
+		return nil, nil
+	}
+
+	args := []string{
+		"elbv2", "describe-tags",
+		"--resource-arns",
+	}
+	args = append(args, arns...)
+	args = append(args, "--region", region)
+
+	var output describeTagsOutput
+	if err := p.runJSONCommand(l, args, &output); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[string]string)
+	for _, td := range output.TagDescriptions {
+		result[td.ResourceArn] = td.Tags.MakeMap()
+	}
+	return result, nil
 }
 
 // CreateLoadBalancer creates a Network Load Balancer (NLB) for the given cluster and port.
@@ -2262,10 +2273,6 @@ func (p *Provider) createRegionalLoadBalancer(
 
 	// Step 3: Create Network Load Balancer
 	nlbName := loadBalancerResourceName(clusterName, port, "nlb")
-	// AWS NLB names have a 32-character limit
-	if len(nlbName) > 32 {
-		nlbName = nlbName[:32]
-	}
 
 	l.Printf("Creating Network Load Balancer %s in region %s", nlbName, region)
 	args = []string{
@@ -2322,7 +2329,7 @@ func (p *Provider) createRegionalLoadBalancer(
 
 	if _, err := p.runCommand(l, args); err != nil {
 		// Clean up on failure
-		_ = p.deleteLoadBalancerResources(l, clusterName, region, port)
+		_ = p.deleteLoadBalancerResources(l, clusterName, region)
 		return errors.Wrapf(err, "failed to create listener")
 	}
 
@@ -2330,8 +2337,8 @@ func (p *Provider) createRegionalLoadBalancer(
 	return nil
 }
 
-// DeleteLoadBalancer deletes the NLB and associated resources for the given cluster and port.
-func (p *Provider) DeleteLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
+// DeleteLoadBalancer deletes all NLBs and associated resources for the given cluster.
+func (p *Provider) DeleteLoadBalancer(l *logger.Logger, vms vm.List, _ int) error {
 	if len(vms) == 0 {
 		return nil
 	}
@@ -2349,20 +2356,16 @@ func (p *Provider) DeleteLoadBalancer(l *logger.Logger, vms vm.List, port int) e
 	var g errgroup.Group
 	for region := range byRegion {
 		g.Go(func() error {
-			return p.deleteLoadBalancerResources(l, clusterName, region, port)
+			return p.deleteLoadBalancerResources(l, clusterName, region)
 		})
 	}
 
 	return g.Wait()
 }
 
-// deleteLoadBalancerResources deletes LB resources for a cluster in a region.
-// If port is 0, all load balancers for the cluster are deleted.
-// If port is non-zero, only the load balancer for that specific port is deleted.
-func (p *Provider) deleteLoadBalancerResources(
-	l *logger.Logger, clusterName, region string, port int,
-) error {
-	// List all load balancers in the region to find those belonging to this cluster
+// deleteLoadBalancerResources deletes all LB resources for a cluster in a region.
+func (p *Provider) deleteLoadBalancerResources(l *logger.Logger, clusterName, region string) error {
+	// List all load balancers in the region
 	args := []string{
 		"elbv2", "describe-load-balancers",
 		"--region", region,
@@ -2373,16 +2376,32 @@ func (p *Provider) deleteLoadBalancerResources(
 		return errors.Wrapf(err, "failed to list load balancers in region %s", region)
 	}
 
-	// Find and delete load balancers belonging to this cluster
-	for _, lb := range nlbOutput.LoadBalancers {
-		lbCluster, lbPort, resourceType, ok := loadBalancerNameParts(lb.LoadBalancerName)
-		if !ok || lbCluster != clusterName || resourceType != "nlb" {
+	if len(nlbOutput.LoadBalancers) == 0 {
+		return nil
+	}
+
+	// Collect all LB ARNs to fetch their tags
+	arns := make([]string, len(nlbOutput.LoadBalancers))
+	arnToLB := make(map[string]elbv2LoadBalancer)
+	for i, lb := range nlbOutput.LoadBalancers {
+		arns[i] = lb.LoadBalancerArn
+		arnToLB[lb.LoadBalancerArn] = lb
+	}
+
+	// Fetch tags for all load balancers
+	tagsByArn, err := p.getLoadBalancerTags(l, region, arns)
+	if err != nil {
+		return errors.Wrap(err, "failed to get load balancer tags")
+	}
+
+	// Find and delete load balancers belonging to this cluster based on tags
+	for arn, tags := range tagsByArn {
+		// Check if this LB belongs to our cluster using tags
+		if tags[vm.TagCluster] != clusterName || tags[vm.TagRoachprod] != "true" {
 			continue
 		}
-		// If port filter is specified (non-zero), skip non-matching ports
-		if port != 0 && lbPort != port {
-			continue
-		}
+
+		lb := arnToLB[arn]
 
 		// Delete listeners first
 		listenerArgs := []string{
@@ -2426,27 +2445,51 @@ func (p *Provider) deleteLoadBalancerResources(
 		if _, err := p.runCommand(l, waitArgs); err != nil {
 			l.Printf("Warning: wait for load balancer deletion may have timed out: %v", err)
 		}
+	}
 
-		// Delete the corresponding target group
-		tgName := loadBalancerResourceName(clusterName, lbPort, "tg")
-		tgArgs := []string{
-			"elbv2", "describe-target-groups",
-			"--names", tgName,
-			"--region", region,
-		}
+	// Delete all target groups for this cluster
+	if err := p.deleteClusterTargetGroups(l, clusterName, region); err != nil {
+		l.Printf("Warning: failed to delete target groups: %v", err)
+	}
 
-		var tgOutput describeTargetGroupsOutput
-		if err := p.runJSONCommand(l, tgArgs, &tgOutput); err != nil {
-			if !strings.Contains(err.Error(), "TargetGroupNotFound") {
-				l.Printf("Warning: could not describe target group: %v", err)
-			}
+	return nil
+}
+
+// deleteClusterTargetGroups deletes all target groups for a cluster in a region.
+func (p *Provider) deleteClusterTargetGroups(l *logger.Logger, clusterName, region string) error {
+	tgArgs := []string{
+		"elbv2", "describe-target-groups",
+		"--region", region,
+	}
+
+	var tgOutput describeTargetGroupsOutput
+	if err := p.runJSONCommand(l, tgArgs, &tgOutput); err != nil {
+		return errors.Wrap(err, "could not list target groups")
+	}
+
+	if len(tgOutput.TargetGroups) == 0 {
+		return nil
+	}
+
+	// Collect target group ARNs to fetch tags
+	tgArns := make([]string, len(tgOutput.TargetGroups))
+	for i, tg := range tgOutput.TargetGroups {
+		tgArns[i] = tg.TargetGroupArn
+	}
+
+	tgTagsByArn, err := p.getLoadBalancerTags(l, region, tgArns)
+	if err != nil {
+		return errors.Wrap(err, "could not get target group tags")
+	}
+
+	for tgArn, tgTags := range tgTagsByArn {
+		// Match by cluster name and roachprod tag
+		if tgTags[vm.TagCluster] != clusterName || tgTags[vm.TagRoachprod] != "true" {
 			continue
 		}
 
-		for _, tg := range tgOutput.TargetGroups {
-			if err := p.deleteTargetGroup(l, tg.TargetGroupArn, region); err != nil {
-				l.Printf("Warning: failed to delete target group: %v", err)
-			}
+		if err := p.deleteTargetGroup(l, tgArn, region); err != nil {
+			l.Printf("Warning: failed to delete target group: %v", err)
 		}
 	}
 
@@ -2487,7 +2530,7 @@ func (p *Provider) ListLoadBalancers(l *logger.Logger, vms vm.List) ([]vm.Servic
 	var g errgroup.Group
 	for region := range byRegion {
 		g.Go(func() error {
-			// List load balancers with roachprod tag
+			// List all load balancers in the region
 			args := []string{
 				"elbv2", "describe-load-balancers",
 				"--region", region,
@@ -2498,11 +2541,37 @@ func (p *Provider) ListLoadBalancers(l *logger.Logger, vms vm.List) ([]vm.Servic
 				return err
 			}
 
-			for _, lb := range output.LoadBalancers {
-				// Check if this LB belongs to our cluster by parsing the name
-				cluster, port, resourceType, ok := loadBalancerNameParts(lb.LoadBalancerName)
-				if !ok || cluster != clusterName || resourceType != "nlb" {
+			if len(output.LoadBalancers) == 0 {
+				return nil
+			}
+
+			// Collect all LB ARNs to fetch their tags
+			arns := make([]string, len(output.LoadBalancers))
+			arnToLB := make(map[string]elbv2LoadBalancer)
+			for i, lb := range output.LoadBalancers {
+				arns[i] = lb.LoadBalancerArn
+				arnToLB[lb.LoadBalancerArn] = lb
+			}
+
+			// Fetch tags for all load balancers
+			tagsByArn, err := p.getLoadBalancerTags(l, region, arns)
+			if err != nil {
+				return errors.Wrap(err, "failed to get load balancer tags")
+			}
+
+			// Find load balancers belonging to this cluster based on tags
+			for arn, tags := range tagsByArn {
+				// Check if this LB belongs to our cluster using tags
+				if tags[vm.TagCluster] != clusterName || tags[vm.TagRoachprod] != "true" {
 					continue
+				}
+
+				lb := arnToLB[arn]
+
+				// Get port from the Port tag
+				port := 0
+				if portStr, ok := tags["Port"]; ok {
+					port, _ = strconv.Atoi(portStr)
 				}
 
 				mu.Lock()
