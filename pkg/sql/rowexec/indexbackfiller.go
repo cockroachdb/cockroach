@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -314,10 +315,14 @@ func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
 // execinfrapb.BackfillerSpec.
 func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (indexBackfillSink, error) {
 	if ib.spec.UseDistributedMergeSink {
-		// TODO(158378): We need to fully implement all stages of the distributed
-		// merge flow for index backfill.
+		// Construct the full nodelocal URI using this processors's node ID. The spec
+		// stores just the path portion so that each processor writes to its own
+		// node's local storage.
+		nodeID := ib.flowCtx.NodeID.SQLInstanceID()
+		prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, ib.spec.DistributedMergeFilePrefix)
+
 		return newSSTIndexBackfillSink(
-			ctx, ib.flowCtx, ib.spec.DistributedMergeFilePrefix, ib.spec.WriteAsOf, ib.processorID)
+			ctx, ib.flowCtx, prefix, ib.spec.WriteAsOf, ib.processorID)
 	}
 
 	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
