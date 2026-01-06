@@ -13,12 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -497,4 +499,55 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	}
 	b.Close()
 	require.Equal(t, []bool{false, true}, rejs)
+}
+
+// TestSplitPreApplyWithSeparatedEngines ensures that splitPreApply writes
+// Raft state to the correct engine when running with separated engines.
+func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stateEng := storage.NewDefaultInMemForTesting()
+	defer stateEng.Close()
+	raftEng := storage.NewDefaultInMemForTesting()
+	defer raftEng.Close()
+
+	rhsRangeID := roachpb.RangeID(123)
+	rhsDesc := roachpb.RangeDescriptor{
+		RangeID:  rhsRangeID,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+	}
+	rhsDesc.AddReplica(1, 1, roachpb.VOTER_FULL)
+
+	in := splitPreApplyInput{
+		destroyed:           false,
+		rhsDesc:             rhsDesc,
+		initClosedTimestamp: hlc.Timestamp{WallTime: 100},
+	}
+
+	stateBatch := stateEng.NewBatch()
+	defer stateBatch.Close()
+	raftBatch := raftEng.NewBatch()
+	defer raftBatch.Close()
+
+	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+
+	require.NoError(t, stateBatch.Commit(false))
+	require.NoError(t, raftBatch.Commit(false))
+
+	rsl := kvstorage.MakeStateLoader(rhsRangeID)
+
+	// Check that the RaftTruncatedState is written to the raft engine.
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, raftEng)
+	require.NoError(t, err)
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
+
+	// Sanity check that the RaftTruncatedState is not written to the state
+	// engine.
+	truncStateFromState, err := rsl.LoadRaftTruncatedState(ctx, stateEng)
+	require.NoError(t, err)
+	require.Equal(t, kvserverpb.RaftTruncatedState{}, truncStateFromState)
 }
