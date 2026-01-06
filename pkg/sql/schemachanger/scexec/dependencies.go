@@ -285,6 +285,11 @@ type BackfillProgress struct {
 	// distributed-merge SSTs for this backfill. These prefixes are used to clean
 	// up job-scoped files on completion or cancellation.
 	SSTStoragePrefixes []string
+
+	// DistributedMergePhase tracks which phase of the distributed merge
+	// pipeline we are in. 0 = map phase, 1+ = merge phase.
+	// See jobspb.BackfillProgress.DistributedMergePhase for full semantics.
+	DistributedMergePhase int32
 }
 
 // Backfill corresponds to a definition of a backfill from a source
