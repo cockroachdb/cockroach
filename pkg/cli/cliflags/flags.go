@@ -982,6 +982,28 @@ debuguser should only be enabled when necessary and disabled when not in use.
 `,
 	}
 
+	RootCertSAN = FlagInfo{
+		Name: "root-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the root
+user. This strictly needs to match the SAN in the client certificate
+provided for root user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
+`,
+	}
+
+	NodeCertSAN = FlagInfo{
+		Name: "node-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the node
+user. This strictly needs to match the SAN in the client certificate
+provided for node user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
+`,
+	}
+
 	TLSCipherSuites = FlagInfo{
 		Name: "tls-cipher-suites",
 		Description: `
