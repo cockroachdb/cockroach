@@ -637,6 +637,14 @@ func (ts *testServer) startDefaultTestTenant(
 ) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
+		// Use the same version constraints as the parent settings so that
+		// external process tenants can start when the cluster is running at
+		// a version older than Latest.
+		tenantSettings = cluster.MakeTestingClusterSettingsWithVersions(
+			st.Version.LatestVersion(),
+			st.Version.MinSupportedVersion(),
+			false, /* initializeVersion */
+		)
 		// Copy overrides and other test-specific configuration,
 		// as a convenience for test writers that do the following:
 		// - create a new Settings
