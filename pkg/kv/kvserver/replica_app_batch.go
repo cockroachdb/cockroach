@@ -44,6 +44,12 @@ type replicaAppBatch struct {
 
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch storage.Batch
+	// raftBatch accumulates writes to the raft log engine. It is lazily
+	// initialized when RaftBatch() is called.
+	//
+	// NB: This is currently only non-nil in tests, as that's the only scenario
+	// where we run with separated engines.
+	raftBatch storage.Batch
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -331,7 +337,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
 
-		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.TODORaft(b.batch), in)
+		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.WrapRaft(b.RaftBatch()), in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -612,6 +618,16 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		}
 	}
 
+	// Commit the Raft batch to Pebble, if it exists. Note that unlike batches
+	// to the State engine, we always sync writes to the Raft engine.
+	if b.raftBatch != nil {
+		if err := b.raftBatch.Commit(true /* sync */); err != nil {
+			return errors.Wrapf(err, "unable to commit Raft entry batch to raft engine")
+		}
+		b.raftBatch.Close()
+		b.raftBatch = nil
+	}
+
 	// Apply the write batch to Pebble. Entry application is done without syncing
 	// to disk. The atomicity guarantees of the batch, and the fact that the
 	// applied state is stored in this batch, ensure that if the batch ends up not
@@ -815,7 +831,23 @@ func (b *replicaAppBatch) Close() {
 	if b.batch != nil {
 		b.batch.Close()
 	}
+	if b.raftBatch != nil {
+		b.raftBatch.Close()
+	}
 	*b = replicaAppBatch{}
+}
+
+// RaftBatch returns a batch from the Raft engine.
+func (b *replicaAppBatch) RaftBatch() storage.Batch {
+	if !b.r.store.internalEngines.Separated() {
+		// We're not running with separated engines; simply return the batch
+		// that was created for the one and only engine.
+		return b.batch
+	}
+	if b.raftBatch == nil {
+		b.raftBatch = b.r.store.LogEngine().NewBatch()
+	}
+	return b.raftBatch
 }
 
 // Assert that the current command is not writing under the closed timestamp.
