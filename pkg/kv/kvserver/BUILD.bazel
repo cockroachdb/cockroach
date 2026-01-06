@@ -391,6 +391,7 @@ go_test(
         "store_test.go",
         "stores_test.go",
         "testutils_test.go",
+        "trace_collection_test.go",
         "ts_maintenance_queue_test.go",
         "txn_recovery_integration_test.go",
         "txn_wait_queue_test.go",
