@@ -109,6 +109,7 @@ func BenchmarkMaterializer(b *testing.B) {
 		{"int", []*types.T{types.Int}},
 		{"float", []*types.T{types.Float}},
 		{"bytes", []*types.T{types.Bytes}},
+		{"json", []*types.T{types.Json}},
 		{"int6", []*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int}},
 		{"string4", []*types.T{types.String, types.String, types.String, types.String}},
 		{"multi80", []*types.T{

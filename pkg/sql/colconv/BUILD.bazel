@@ -29,12 +29,18 @@ go_library(
 
 go_test(
     name = "colconv_test",
-    srcs = ["batch_test.go"],
+    srcs = [
+        "batch_test.go",
+        "vec_to_datum_test.go",
+    ],
     embed = [":colconv"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/coldatatestutils",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
+        "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],
 )
