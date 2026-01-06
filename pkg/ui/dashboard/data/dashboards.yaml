@@ -2,13 +2,70 @@
 # This file defines multiple dashboards and their associated charts.
 # Each dashboard contains a name, description, and a list of charts.
 # Chart metadata (axis, tooltip, options, metrics) is derived from metrics.yaml.
+#
+# Optional 'imports' field can be used to customize TypeScript imports for each dashboard.
+# Semicolons will be added automatically during generation.
+# If not specified, no additional imports will be added.
+#
+# Example:
+#   imports:
+#     - 'import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips"'
+#     - 'import { AnotherComponent } from "src/another/path"'
 
 dashboards:
   - name: "Overview"
-    description: "High-level cluster overview metrics"
+    description: "High-level cluster overview skimetrics"
+    imports:
+      - 'import { CapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips"'
     charts:
       - "SQL Queries Per Second"
       - "Service Latency: SQL Statements, 99th percentile"
       - "SQL Statement Contention"
       - "Replicas per Node"
       - "Capacity"
+  - name: "Hardware"
+    description: "Cluster hardware related metrics"
+    imports:
+      - 'import { AvailableDiscCapacityGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips"'
+    charts:
+      - "CPU Percent"
+      - "Host CPU Percent"
+      - "Memory Usage"
+      - "Disk Read Bytes/s"
+      - "Disk Write Bytes/s"
+      - "Disk Read IOPS"
+      - "Disk Write IOPS"
+      - "Disk Ops In Progress"
+      - "Available Disk Capacity"
+  - name: "Runtime"
+    description: "Go runtime metrics (GC, goroutines, memory)"
+    charts:
+      - "Live Node Count"
+      - "Memory Usage"
+      - "Goroutine Count"
+      - "Goroutine Scheduling Latency: 99th percentile"
+      - "Runnable Goroutines per CPU"
+      - "GC Runs"
+      - "GC Pause Time"
+      - "GC Stopping Time"
+      - "GC Assist Time"
+      - "Non-GC Pause Time"
+      - "Non-GC Stopping Time"
+      - "CPU Time"
+      - "Clock Offset"
+  - name: Networking
+    description: Network traffic and connectivity metrics
+    charts:
+      - "Network Bytes Sent"
+      - "Network Bytes Received"
+      - "RPC Heartbeat Latency: 50th percentile"
+      - "RPC Heartbeat Latency: 99th percentile"
+      - "Unhealthy RPC Connections"
+      - "Network Packet Errors and Drops"
+      - "TCP Retransmits"
+      - "Proxy requests"
+      - "Proxy request errors"
+      - "Proxy forwards"
+      - "Proxy forward errors"
+
+

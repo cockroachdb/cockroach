@@ -40,6 +40,21 @@ func (DistSQLMetrics) MetricStruct() {}
 var _ metric.Struct = DistSQLMetrics{}
 
 var (
+	chartSQLStatementContention = metric.Chart{
+		Title:     "SQL Statement Contention",
+		Type:      "sql",
+		AxisLabel: "Average number of queries per second",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "A moving average of the number of SQL statements executed per second that experienced contention {tooltipSelection}.",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+			"precalc_graph_size":      "true",
+		},
+	}
+)
+
+var (
 	metaQueriesActive = metric.Metadata{
 		Name:        "sql.distsql.queries.active",
 		Help:        "Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)",
@@ -66,6 +81,19 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Contention",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLStatementContention,
+					},
+				},
+			},
+		},
 	}
 	metaCumulativeContentionNanos = metric.Metadata{
 		Name:        "sql.distsql.cumulative_contention_nanos",

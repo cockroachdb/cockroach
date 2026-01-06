@@ -5,7 +5,10 @@
 
 package dashboard
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+)
 
 // Helper functions for extracting DB Console-specific options from the generic Chart and Metric structs.
 
@@ -89,4 +92,24 @@ func GetMetricAggregation(metric Metric) string {
 		}
 	}
 	return ""
+}
+
+// GetKey returns the DB Console key for a metric. If the metric has a "key_suffix"
+// option, it appends it to the "{node}" template; otherwise returns "{node}".
+func GetKey(metric Metric) string {
+	const base = "{nid}"
+	if val, ok := metric.Options["key_suffix"].(string); ok {
+		return fmt.Sprintf("{`$%s-%s`}", base, val)
+	}
+	return base
+}
+
+// GetTitle returns the DB Console title for a metric. If the metric has a "title_suffix"
+// option, it appends it to the node display name template; otherwise returns the base template.
+func GetTitle(metric Metric) string {
+	const base = "{nodeDisplayName(nodeDisplayNameByID, nid)}"
+	if val, ok := metric.Options["title_suffix"].(string); ok {
+		return fmt.Sprintf("{`$%s-%s`}", base, val)
+	}
+	return base
 }

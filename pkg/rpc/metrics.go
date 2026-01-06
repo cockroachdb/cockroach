@@ -44,6 +44,18 @@ var (
 	// Together these metrics should provide a picture of the state of current
 	// connections.
 
+	chartUnhealthyRPCConnections = metric.Chart{
+		Title:     "Unhealthy RPC Connections",
+		Type:      "line",
+		AxisLabel: "connections",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "Number of connections in an unhealthy state",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+
 	metaConnectionHealthy = metric.Metadata{
 		Name:        "rpc.connection.healthy",
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
@@ -62,6 +74,19 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartUnhealthyRPCConnections,
+					},
+				},
+			},
+		},
 	}
 
 	metaConnectionInactive = metric.Metadata{

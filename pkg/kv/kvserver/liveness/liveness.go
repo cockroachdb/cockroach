@@ -153,6 +153,17 @@ func isErrRetryLiveness(ctx context.Context, err error) bool {
 
 // Node liveness metrics counter names.
 var (
+	chartLiveNodeCount = metric.Chart{
+		Title:     "Live Node Count",
+		Type:      "line",
+		AxisLabel: "nodes",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "The number of live nodes in the cluster.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+
 	metaLiveNodes = metric.Metadata{
 		Name:        "liveness.livenodes",
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
@@ -161,6 +172,19 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Live Nodes",
+						Options: map[string]string{
+							"aggregation": "downsampleMax",
+						},
+						Chart: &chartLiveNodeCount,
+					},
+				},
+			},
+		},
 	}
 	metaHeartbeatsInFlight = metric.Metadata{
 		Name:        "liveness.heartbeatsinflight",

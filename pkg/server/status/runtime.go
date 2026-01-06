@@ -35,6 +35,266 @@ import (
 )
 
 var (
+	chartCPUPercent = metric.Chart{
+		Title:     "CPU Percent",
+		Type:      "line",
+		AxisLabel: "CPU",
+		Units:     metric.Unit_PERCENT,
+		Tooltip:   "CPU usage for the CRDB nodes {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartHostCPUPercent = metric.Chart{
+		Title:     "Host CPU Percent",
+		Type:      "line",
+		AxisLabel: "CPU",
+		Units:     metric.Unit_PERCENT,
+		Tooltip:   "Machine-wide CPU usage {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartMemoryUsage = metric.Chart{
+		Title:     "Memory Usage",
+		Type:      "line",
+		AxisLabel: "memory usage",
+		Units:     metric.Unit_BYTES,
+		Tooltip:   "Memory in use {tooltipSelection}",
+		Note: `<dl>
+            <dt>RSS</dt>
+            <dd>Total memory in use by CockroachDB</dd>
+            <dt>Go Allocated</dt>
+            <dd>Memory allocated by the Go layer</dd>
+            <dt>Go Total</dt>
+            <dd>Total memory managed by the Go layer</dd>
+            <dt>Go Limit</dt>
+            <dd>Go soft memory limit</dd>
+            <dt>C Allocated</dt>
+            <dd>Memory allocated by the C layer</dd>
+            <dt>C Total</dt>
+            <dd>Total memory managed by the C layer</dd>
+          </dl>`,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartDiskReadBytes = metric.Chart{
+		Title:     "Disk Read Bytes/s",
+		Type:      "line",
+		AxisLabel: "bytes",
+		Units:     metric.Unit_BYTES,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartDiskWriteBytes = metric.Chart{
+		Title:     "Disk Write Bytes/s",
+		Type:      "line",
+		AxisLabel: "bytes",
+		Units:     metric.Unit_BYTES,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartDiskReadIOPS = metric.Chart{
+		Title:     "Disk Read IOPS",
+		Type:      "line",
+		AxisLabel: "IOPS",
+		Units:     metric.Unit_COUNT,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartDiskWriteIOPS = metric.Chart{
+		Title:     "Disk Write IOPS",
+		Type:      "line",
+		AxisLabel: "IOPS",
+		Units:     metric.Unit_COUNT,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartDiskOpsInProgress = metric.Chart{
+		Title:     "Disk Ops In Progress",
+		Type:      "line",
+		AxisLabel: "Ops",
+		Units:     metric.Unit_COUNT,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartGoroutineCount = metric.Chart{
+		Title:     "Goroutine Count",
+		Type:      "line",
+		AxisLabel: "goroutines",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "The number of Goroutines {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartRunnableGoroutinesPerCPU = metric.Chart{
+		Title:     "Runnable Goroutines per CPU",
+		Type:      "line",
+		AxisLabel: "goroutines",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "The number of Goroutines waiting for CPU {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartGCRuns = metric.Chart{
+		Title:     "GC Runs",
+		Type:      "line",
+		AxisLabel: "runs",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "The number of times that Go's garbage collector was invoked per second {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartGCPauseTime = metric.Chart{
+		Title:     "GC Pause Time",
+		Type:      "line",
+		AxisLabel: "pause time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip: "The amount of processor time used by Go's garbage collector per second {tooltipSelection} " +
+			"During garbage collection, application code execution is paused.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartGCStoppingTime = metric.Chart{
+		Title:     "GC Stopping Time",
+		Type:      "line",
+		AxisLabel: "pause time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "The time it takes from deciding to stop-the-world (gc related) until all Ps are stopped {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartGCAssistTime = metric.Chart{
+		Title:     "GC Assist Time",
+		Type:      "line",
+		AxisLabel: "gc assist time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "Estimated total CPU time user goroutines spent performing GC tasks on processors {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartNonGCPauseTime = metric.Chart{
+		Title:     "Non-GC Pause Time",
+		Type:      "line",
+		AxisLabel: "pause time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "The stop-the-world pause time during non-gc process {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartNonGCStoppingTime = metric.Chart{
+		Title:     "Non-GC Stopping Time",
+		Type:      "line",
+		AxisLabel: "pause time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "The time it takes from deciding to stop-the-world (non-gc-related) until all Ps are stopped {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartCPUTime = metric.Chart{
+		Title:     "CPU Time",
+		Type:      "line",
+		AxisLabel: "cpu time",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "The amount of CPU time used by CockroachDB (User) and system-level operations (Sys) {tooltipSelection}",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartNetworkBytesSent = metric.Chart{
+		Title:     "Network Bytes Sent",
+		Type:      "line",
+		AxisLabel: "bytes",
+		Units:     metric.Unit_BYTES,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartNetworkBytesReceived = metric.Chart{
+		Title:     "Network Bytes Received",
+		Type:      "line",
+		AxisLabel: "bytes",
+		Units:     metric.Unit_BYTES,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartNetworkPacketErrorsAndDrops = metric.Chart{
+		Title:     "Network Packet Errors and Drops",
+		Type:      "line",
+		AxisLabel: "packets",
+		Units:     metric.Unit_COUNT,
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartTCPRetransmits = metric.Chart{
+		Title:     "TCP Retransmits",
+		Type:      "line",
+		AxisLabel: "segments",
+		Tooltip:   "The number of TCP segments retransmitted. Some retransmissions are benign, but phase changes can be indicative of network congestion or overloaded peers.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+)
+
+var (
 	metaCgoCalls = metric.Metadata{
 		Name:        "sys.cgocalls",
 		Help:        "Total number of cgo calls",
@@ -47,6 +307,19 @@ var (
 		Measurement: "goroutines",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartGoroutineCount,
+					},
+				},
+			},
+		},
 	}
 	metaRunnableGoroutinesPerCPU = metric.Metadata{
 		Name:        "sys.runnable.goroutines.per.cpu",
@@ -56,13 +329,37 @@ var (
 
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
-		HowToUse:   `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`}
+		HowToUse:   `If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartRunnableGoroutinesPerCPU,
+					},
+				},
+			},
+		},
+	}
 	metaGoAllocBytes = metric.Metadata{
 		Name:        "sys.go.allocbytes",
 		Help:        "Current bytes of memory allocated by go",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Go Allocated",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaGoTotalBytes = metric.Metadata{
 		Name:        "sys.go.totalbytes",
@@ -70,12 +367,32 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Go Total",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaGoLimitBytes = metric.Metadata{
 		Name:        "sys.go.limitbytes",
 		Help:        "Go soft memory limit",
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Go Limit",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaGoMemStackSysBytes = metric.Metadata{
 		Name:        "sys.go.stack.systembytes",
@@ -115,6 +432,16 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "CGo Allocated",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaCgoTotalBytes = metric.Metadata{
 		Name:        "sys.cgo.totalbytes",
@@ -122,6 +449,16 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "CGo Total",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaGCCount = metric.Metadata{
 		Name:        "sys.gc.count",
@@ -129,6 +466,19 @@ var (
 		Measurement: "GC Runs",
 		Unit:        metric.Unit_COUNT,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "GC Runs",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartGCRuns,
+					},
+				},
+			},
+		},
 	}
 	metaGCPauseNS = metric.Metadata{
 		Name:        "sys.gc.pause.ns",
@@ -136,12 +486,38 @@ var (
 		Measurement: "GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "GC Pause Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartGCPauseTime,
+					},
+				},
+			},
+		},
 	}
 	metaGCStopNS = metric.Metadata{
 		Name:        "sys.gc.stop.ns",
 		Help:        "Estimated GC stop-the-world stopping latencies",
 		Measurement: "GC Stopping",
 		Unit:        metric.Unit_NANOSECONDS,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "GC Stopping Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartGCStoppingTime,
+					},
+				},
+			},
+		},
 	}
 	metaGCPausePercent = metric.Metadata{
 		Name:        "sys.gc.pause.percent",
@@ -155,18 +531,57 @@ var (
 		Help:        "Estimated total CPU time user goroutines spent to assist the GC process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "GC Assist Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartGCAssistTime,
+					},
+				},
+			},
+		},
 	}
 	metaNonGCPauseNS = metric.Metadata{
 		Name:        "sys.go.pause.other.ns",
 		Help:        "Estimated non-GC-related total pause time",
 		Measurement: "Non-GC Pause",
 		Unit:        metric.Unit_NANOSECONDS,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Non-GC Pause Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartNonGCPauseTime,
+					},
+				},
+			},
+		},
 	}
 	metaNonGCStopNS = metric.Metadata{
 		Name:        "sys.go.stop.other.ns",
 		Help:        "Estimated non-GC-related stop-the-world stopping latencies",
 		Measurement: "Non-GC Stopping",
 		Unit:        metric.Unit_NANOSECONDS,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Non-GC Stopping Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartNonGCStoppingTime,
+					},
+				},
+			},
+		},
 	}
 
 	metaCPUUserNS = metric.Metadata{
@@ -175,6 +590,19 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "User CPU Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartCPUTime,
+					},
+				},
+			},
+		},
 	}
 	metaCPUUserPercent = metric.Metadata{
 		Name:        "sys.cpu.user.percent",
@@ -195,6 +623,19 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Sys CPU Time",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartCPUTime,
+					},
+				},
+			},
+		},
 	}
 	metaCPUSysPercent = metric.Metadata{
 		Name:        "sys.cpu.sys.percent",
@@ -216,10 +657,23 @@ var (
 		Unit:        metric.Unit_PERCENT,
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_HARDWARE,
-		HowToUse: `This metric gives the CPU utilization percentage by the CockroachDB process. 
-		If it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should 
-		not be running with over 80% utilization for extended periods of time (hours). This metric 
+		HowToUse: `This metric gives the CPU utilization percentage by the CockroachDB process.
+		If it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should
+		not be running with over 80% utilization for extended periods of time (hours). This metric
 		is used in the DB Console CPU Percent graph.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartCPUPercent,
+					},
+				},
+			},
+		},
 	}
 	metaCPUNowNS = metric.Metadata{
 		Name:        "sys.cpu.now.ns",
@@ -247,6 +701,19 @@ var (
     running the CockroachDB process in an environment where the CPU
     remains overloaded for extended periods (e.g. multiple hours). This
     metric appears in the DB Console on the Host CPU Percent graph.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartHostCPUPercent,
+					},
+				},
+			},
+		},
 	}
 
 	metaRSSBytes = metric.Metadata{
@@ -263,6 +730,27 @@ var (
 		or both. Conversely, a high utilization, even if a temporary spike,
 		indicates an increased risk of Out-of-memory (OOM) crash
 		(particularly since the swap is generally disabled).`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Total memory (RSS)",
+						Chart: &chartMemoryUsage,
+					},
+				},
+			},
+		},
 	}
 	metaTotalMemBytes = metric.Metadata{
 		Name:        "sys.totalmem",
@@ -307,6 +795,20 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartDiskReadIOPS,
+					},
+				},
+			},
+		},
 	}
 	metaHostDiskReadBytes = metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
@@ -317,6 +819,20 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartDiskReadBytes,
+					},
+				},
+			},
+		},
 	}
 	metaHostDiskReadTime = metric.Metadata{
 		Name:        "sys.host.disk.read.time",
@@ -333,6 +849,20 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartDiskWriteIOPS,
+					},
+				},
+			},
+		},
 	}
 	metaHostDiskWriteBytes = metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
@@ -343,6 +873,20 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartDiskWriteBytes,
+					},
+				},
+			},
+		},
 	}
 	metaHostDiskWriteTime = metric.Metadata{
 		Name:        "sys.host.disk.write.time",
@@ -371,6 +915,19 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartDiskOpsInProgress,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetRecvBytes = metric.Metadata{
 		Name:        "sys.host.net.recv.bytes",
@@ -381,6 +938,20 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartNetworkBytesReceived,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetRecvPackets = metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
@@ -393,12 +964,44 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Error receiving packets on all network interfaces since this process started (as reported by the OS)",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Recv Errors",
+						Options: map[string]string{
+							"key_suffix":   "recv-err",
+							"title_suffix": "Recv Errors",
+							"rate":         "true",
+							"per_node":     "true",
+						},
+						Chart: &chartNetworkPacketErrorsAndDrops,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetRecvDrop = metric.Metadata{
 		Name:        "sys.host.net.recv.drop",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Receiving packets that got dropped on all network interfaces since this process started (as reported by the OS)",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Recv Drops",
+						Options: map[string]string{
+							"key_suffix":   "recv-drop",
+							"title_suffix": "Recv Drops",
+							"rate":         "true",
+							"per_node":     "true",
+						},
+						Chart: &chartNetworkPacketErrorsAndDrops,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetSendBytes = metric.Metadata{
 		Name:        "sys.host.net.send.bytes",
@@ -409,6 +1012,19 @@ var (
 		Visibility: metric.Metadata_ESSENTIAL,
 		Category:   metric.Metadata_HARDWARE,
 		HowToUse:   `This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartNetworkBytesSent,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetSendPackets = metric.Metadata{
 		Name:        "sys.host.net.send.packets",
@@ -421,12 +1037,44 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Error on sending packets on all network interfaces since this process started (as reported by the OS)",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Send Errors",
+						Options: map[string]string{
+							"key_suffix":   "send-err",
+							"title_suffix": "Send Errors",
+							"rate":         "true",
+							"per_node":     "true",
+						},
+						Chart: &chartNetworkPacketErrorsAndDrops,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetSendDrop = metric.Metadata{
 		Name:        "sys.host.net.send.drop",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Send Drops",
+						Options: map[string]string{
+							"key_suffix":   "send-drop",
+							"title_suffix": "Send Drops",
+							"rate":         "true",
+							"per_node":     "true",
+						},
+						Chart: &chartNetworkPacketErrorsAndDrops,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetSendTCPRetransSegs = metric.Metadata{
 		Name:        "sys.host.net.send.tcp.retrans_segs",
@@ -455,6 +1103,20 @@ The linux tool 'ss -i' can show the Linux kernel's smoothed view of round-trip
 latency and variance on a per-connection basis.  Additionally, 'netstat -s'
 shows all TCP counters maintained by the kernel.
 `,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartTCPRetransmits,
+					},
+				},
+			},
+		},
 	}
 	metaHostNetSendTCPFastRetrans = metric.Metadata{
 		Name:        "sys.host.net.send.tcp.fast_retrans_segs",

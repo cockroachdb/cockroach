@@ -241,29 +241,142 @@ var (
 			'roachpb.InternalErrType'.
 		`),
 	}
+	chartProxyRequests = metric.Chart{
+		Title:     "Proxy requests",
+		Type:      "line",
+		AxisLabel: "requests",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "Number of proxy request attempts",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+	chartProxyRequestErrors = metric.Chart{
+		Title:     "Proxy request errors",
+		Type:      "line",
+		AxisLabel: "errors",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "Number of proxy request failures",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+	chartProxyForwards = metric.Chart{
+		Title:     "Proxy forwards",
+		Type:      "line",
+		AxisLabel: "forwards",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "Number of proxy forward attempts",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+	chartProxyForwardErrors = metric.Chart{
+		Title:     "Proxy forward errors",
+		Type:      "line",
+		AxisLabel: "errors",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "Number of proxy forward failures",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+
 	metaDistSenderProxySentCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.sent",
 		Help:        "Number of attempts by a gateway to proxy a request to an unreachable leaseholder via a follower replica.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric tracks proxy request attempts which can indicate network partitions or connectivity issues.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartProxyRequests,
+					},
+				},
+			},
+		},
 	}
 	metaDistSenderProxyErrCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.err",
 		Help:        "Number of attempts by a gateway to proxy a request which resulted in a failure.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric tracks proxy request failures which can indicate network connectivity or routing issues.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartProxyRequestErrors,
+					},
+				},
+			},
+		},
 	}
 	metaDistSenderProxyForwardSentCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.forward.sent",
 		Help:        "Number of attempts on a follower replica to proxy a request to an unreachable leaseholder.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric tracks proxy forward attempts from followers which can indicate leaseholder availability issues.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartProxyForwards,
+					},
+				},
+			},
+		},
 	}
 	metaDistSenderProxyForwardErrCount = metric.Metadata{
 		Name:        "distsender.rpc.proxy.forward.err",
 		Help:        "Number of attempts on a follower replica to proxy a request which resulted in a failure.",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    `This metric tracks proxy forward failures which can indicate persistent leaseholder connectivity issues.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+							"rate":     "true",
+						},
+						Chart: &chartProxyForwardErrors,
+					},
+				},
+			},
+		},
 	}
 	metaDistSenderRangefeedTotalRanges = metric.Metadata{
 		Name: "distsender.rangefeed.total_ranges",

@@ -37,24 +37,24 @@ import (
 )
 
 type MetricInfo struct {
-	Name                       string                      `yaml:"name"`
-	ExportedName               string                      `yaml:"exported_name"`
-	LabeledName                string                      `yaml:"labeled_name,omitempty"`
-	Description                string                      `yaml:"description"`
-	YAxisLabel                 string                      `yaml:"y_axis_label"`
-	Type                       string                      `yaml:"type"`
-	Unit                       string                      `yaml:"unit"`
-	Aggregation                string                      `yaml:"aggregation"`
-	Derivative                 string                      `yaml:"derivative"`
-	HowToUse                   string                      `yaml:"how_to_use,omitempty"`
-	Visibility                 string                      `yaml:"visibility,omitempty"`
-	MetricsVisualisationConfig *MetricsVisualisationConfig `yaml:"metrics_visualisation_config,omitempty"`
+	Name         string                     `yaml:"name"`
+	ExportedName string                     `yaml:"exported_name"`
+	LabeledName  string                     `yaml:"labeled_name,omitempty"`
+	Description  string                     `yaml:"description"`
+	YAxisLabel   string                     `yaml:"y_axis_label"`
+	Type         string                     `yaml:"type"`
+	Unit         string                     `yaml:"unit"`
+	Aggregation  string                     `yaml:"aggregation"`
+	Derivative   string                     `yaml:"derivative"`
+	HowToUse     string                     `yaml:"how_to_use,omitempty"`
+	Visibility   string                     `yaml:"visibility,omitempty"`
+	ChartConfig  map[string][]*MetricConfig `yaml:"chart_config,omitempty"`
 }
 
-type MetricsVisualisationConfig struct {
-	Title       string               `yaml:"title"`
-	Options     map[string]string    `yaml:"options,omitempty"`
-	ChartConfig map[string]ChartInfo `yaml:"chart_config,omitempty"`
+type MetricConfig struct {
+	Title   string            `yaml:"title,omitempty"`
+	Options map[string]string `yaml:"options,omitempty"`
+	Chart   ChartInfo         `yaml:"chart,omitempty"`
 }
 
 type ChartInfo struct {
@@ -542,18 +542,18 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 		}
 
 		metricInfo := MetricInfo{
-			Name:                       name,
-			ExportedName:               metric.ExportedName(name),
-			LabeledName:                formatLabeledName(meta),
-			Description:                strings.TrimSpace(meta.Help),
-			YAxisLabel:                 meta.Measurement,
-			Type:                       meta.MetricType.String(),
-			Unit:                       meta.Unit.String(),
-			Aggregation:                "AVG", // Default aggregation
-			Derivative:                 deriveDerivative(meta),
-			HowToUse:                   strings.TrimSpace(meta.HowToUse),
-			Visibility:                 visibility,
-			MetricsVisualisationConfig: convertMetricsVisualisationConfig(meta.MetricsVisualisationConfig, name, recordedNamesMap),
+			Name:         name,
+			ExportedName: metric.ExportedName(name),
+			LabeledName:  formatLabeledName(meta),
+			Description:  strings.TrimSpace(meta.Help),
+			YAxisLabel:   meta.Measurement,
+			Type:         meta.MetricType.String(),
+			Unit:         meta.Unit.String(),
+			Aggregation:  "AVG", // Default aggregation
+			Derivative:   deriveDerivative(meta),
+			HowToUse:     strings.TrimSpace(meta.HowToUse),
+			Visibility:   visibility,
+			ChartConfig:  convertChartConfig(meta.ChartConfig, name, recordedNamesMap),
 		}
 		category.Metrics = append(category.Metrics, metricInfo)
 	}
@@ -600,50 +600,61 @@ func deriveDerivative(meta metric.Metadata) string {
 	return "NONE"
 }
 
-// convertMetricsVisualisationConfig converts the protobuf MetricsVisualisationConfig
+// convertChartConfig converts the protobuf ChartConfig
 // to the YAML-compatible structure.
-func convertMetricsVisualisationConfig(
-	config *metric.MetricsVisualisationConfig, metricName string, recordedNames map[string]string,
-) *MetricsVisualisationConfig {
+func convertChartConfig(
+	config map[string]*metric.MetricConfigList, metricName string, recordedNames map[string]string,
+) map[string][]*MetricConfig {
 	if config == nil {
 		return nil
 	}
 
-	chartConfig := make(map[string]ChartInfo)
-	for key, chart := range config.ChartConfig {
-		// Use recorded name from map if available, otherwise fallback to metric name
-		recordedName := metricName
-		if recordedNames != nil {
-			if rn, ok := recordedNames[metricName]; ok {
-				recordedName = rn
-			}
+	chartConfig := make(map[string][]*MetricConfig)
+	for key, metricConfigList := range config {
+		// Process all configs in the list
+		if metricConfigList == nil || len(metricConfigList.Configs) == 0 {
+			continue
 		}
 
-		// Build tooltip: if both tooltip and note exist, create a map, otherwise just use the string
-		var tooltip interface{}
-		if chart.Tooltip != "" && chart.Note != "" {
-			tooltip = map[string]string{
-				"text": chart.Tooltip,
-				"note": chart.Note,
+		var configsForKey []*MetricConfig
+		for _, metricConfig := range metricConfigList.Configs {
+			// Use recorded name from map if available, otherwise fallback to metric name
+			recordedName := metricName
+			if recordedNames != nil {
+				if rn, ok := recordedNames[metricName]; ok {
+					recordedName = rn
+				}
 			}
-		} else {
-			tooltip = chart.Tooltip
+
+			// Build tooltip: if both tooltip and note exist, create a map, otherwise just use the string
+			chart := metricConfig.Chart
+			var tooltip interface{}
+			if chart.Tooltip != "" && chart.Note != "" {
+				tooltip = map[string]string{
+					"text": chart.Tooltip,
+					"note": chart.Note,
+				}
+			} else {
+				tooltip = chart.Tooltip
+			}
+
+			configsForKey = append(configsForKey, &MetricConfig{
+				Title:   metricConfig.Title,
+				Options: metricConfig.Options,
+				Chart: ChartInfo{
+					Title:        chart.Title,
+					Type:         chart.Type,
+					Units:        chart.Units.String(),
+					AxisLabel:    chart.AxisLabel,
+					Tooltip:      tooltip,
+					Options:      chart.Options,
+					RecordedName: recordedName,
+				},
+			})
 		}
 
-		chartConfig[key] = ChartInfo{
-			Title:        chart.Title,
-			Type:         chart.Type,
-			Units:        chart.Units.String(),
-			AxisLabel:    chart.AxisLabel,
-			Tooltip:      tooltip,
-			Options:      chart.Options,
-			RecordedName: recordedName,
-		}
+		chartConfig[key] = configsForKey
 	}
 
-	return &MetricsVisualisationConfig{
-		Title:       config.Title,
-		Options:     config.Options,
-		ChartConfig: chartConfig,
-	}
+	return chartConfig
 }

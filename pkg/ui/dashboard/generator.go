@@ -29,7 +29,6 @@ const TypeScriptTemplate = `// Copyright 2018 The Cockroach Authors.
 // To regenerate: ./dev generate dashboards
 
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
-import map from "lodash/map";
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
@@ -91,19 +90,19 @@ type MetricsYAMLStructure struct {
 
 // MetricMetadata contains enriched metadata about a metric from metrics.yaml
 type MetricMetadata struct {
-	Name                       string
-	Description                string
-	YAxisLabel                 string
-	Unit                       string
-	Type                       string
-	MetricsVisualisationConfig *MetricsVisualisationConfigData
+	Name        string
+	Description string
+	YAxisLabel  string
+	Unit        string
+	Type        string
+	ChartConfig map[string]MetricChartConfigData
 }
 
-// MetricsVisualisationConfigData holds visualization configuration from metrics.yaml
-type MetricsVisualisationConfigData struct {
-	Title       string                     `yaml:"title"`
-	Options     map[string]interface{}     `yaml:"options"`
-	ChartConfig map[string]ChartConfigData `yaml:"chart_config"`
+// MetricChartConfigData represents the top-level config for a metric in a specific dashboard
+type MetricChartConfigData struct {
+	Title   string                 `yaml:"title"`   // Metric's title/legend in the chart
+	Options map[string]interface{} `yaml:"options"` // Metric-level options (e.g., rate)
+	Chart   ChartConfigData        `yaml:"chart"`   // Chart-level configuration
 }
 
 // ChartConfigData represents chart configuration for a specific dashboard
@@ -167,37 +166,50 @@ func (g *Generator) LoadMetricsYAML(metricsYAMLPath string) error {
 					metadata.Type = metricType
 				}
 
-				// Parse metrics_visualisation_config if present
-				if visConfig, ok := metricData["metrics_visualisation_config"].(map[string]interface{}); ok {
-					vizData := &MetricsVisualisationConfigData{
-						ChartConfig: make(map[string]ChartConfigData),
-					}
+				// Parse chart_config if present
+				if chartConfigs, ok := metricData["chart_config"].(map[string]interface{}); ok {
+					metadata.ChartConfig = make(map[string]MetricChartConfigData)
 
-					// title is required
-					vizData.Title, _ = visConfig["title"].(string)
+					for dashboardKey, metricChartConfigListRaw := range chartConfigs {
+						// Handle new MetricConfigList structure with configs array
+						var configMaps []map[string]interface{}
 
-					// options is optional (map)
-					if options, ok := visConfig["options"].(map[string]interface{}); ok {
-						vizData.Options = options
-					}
+						// The new structure is a list of configs
+						if configsArray, ok := metricChartConfigListRaw.([]interface{}); ok {
+							// New structure: array of MetricConfig
+							for _, configRaw := range configsArray {
+								if configMap, ok := configRaw.(map[string]interface{}); ok {
+									configMaps = append(configMaps, configMap)
+								}
+							}
+						} else if metricChartConfigMap, ok := metricChartConfigListRaw.(map[string]interface{}); ok {
+							// Old structure: single MetricConfig map (for backward compatibility)
+							configMaps = append(configMaps, metricChartConfigMap)
+						}
 
-					// chart_config is optional (map of dashboard name to Chart)
-					if chartConfigs, ok := visConfig["chart_config"].(map[string]interface{}); ok {
-						for dashboardKey, chartConfigRaw := range chartConfigs {
-							dashboardName := dashboardKey
-							if chartConfigMap, ok := chartConfigRaw.(map[string]interface{}); ok {
+						// Process each config
+						for _, metricChartConfigMap := range configMaps {
+							metricChartConfig := MetricChartConfigData{}
+
+							// Metric title and options
+							metricChartConfig.Title, _ = metricChartConfigMap["title"].(string)
+							if options, ok := metricChartConfigMap["options"].(map[string]interface{}); ok {
+								metricChartConfig.Options = options
+							}
+
+							// Parse nested chart configuration
+							if chartMap, ok := metricChartConfigMap["chart"].(map[string]interface{}); ok {
 								chartData := ChartConfigData{}
 
-								// All Chart fields are required except options
-								chartData.Title, _ = chartConfigMap["title"].(string)
-								chartData.Type, _ = chartConfigMap["type"].(string)
-								chartData.Units, _ = chartConfigMap["units"].(string)
-								chartData.AxisLabel, _ = chartConfigMap["axis_label"].(string)
+								chartData.Title, _ = chartMap["title"].(string)
+								chartData.Type, _ = chartMap["type"].(string)
+								chartData.Units, _ = chartMap["units"].(string)
+								chartData.AxisLabel, _ = chartMap["axis_label"].(string)
 
 								// Tooltip can be either a string or a map with "text" and "note" fields
-								if tooltipStr, ok := chartConfigMap["tooltip"].(string); ok {
+								if tooltipStr, ok := chartMap["tooltip"].(string); ok {
 									chartData.Tooltip = tooltipStr
-								} else if tooltipMap, ok := chartConfigMap["tooltip"].(map[string]interface{}); ok {
+								} else if tooltipMap, ok := chartMap["tooltip"].(map[string]interface{}); ok {
 									// Convert map[string]interface{} to map[string]string
 									tooltip := make(map[string]string)
 									if text, ok := tooltipMap["text"].(string); ok {
@@ -209,19 +221,22 @@ func (g *Generator) LoadMetricsYAML(metricsYAMLPath string) error {
 									chartData.Tooltip = tooltip
 								}
 
-								chartData.RecordedName, _ = chartConfigMap["recorded_name"].(string)
+								chartData.RecordedName, _ = chartMap["recorded_name"].(string)
 
-								// options is optional
-								if options, ok := chartConfigMap["options"].(map[string]interface{}); ok {
-									chartData.Options = options
+								// Chart-level options
+								if chartOptions, ok := chartMap["options"].(map[string]interface{}); ok {
+									chartData.Options = chartOptions
 								}
 
-								vizData.ChartConfig[dashboardName] = chartData
+								metricChartConfig.Chart = chartData
 							}
+
+							// Store each config with a unique key: dashboardKey:chartTitle
+							// This allows a metric to appear in multiple charts within the same dashboard
+							storeKey := dashboardKey + ":" + metricChartConfig.Chart.Title
+							metadata.ChartConfig[storeKey] = metricChartConfig
 						}
 					}
-
-					metadata.MetricsVisualisationConfig = vizData
 				}
 
 				// Store metric metadata for lookup
@@ -240,17 +255,32 @@ func (g *Generator) buildChartFromMetrics(dashboardKey, chartTitle string) (Char
 	var chartConfig *ChartConfigData
 	seenMetrics := make(map[string]bool) // Track metrics we've already added to avoid duplicates
 
-	for _, metadata := range g.metricsLookup {
-		if metadata.MetricsVisualisationConfig == nil {
+	// First collect all matching metric names, then sort them for deterministic ordering
+	var metricNames []string
+	for name := range g.metricsLookup {
+		metricNames = append(metricNames, name)
+	}
+
+	// Sort metric names alphabetically for deterministic ordering
+	for i := 0; i < len(metricNames); i++ {
+		for j := i + 1; j < len(metricNames); j++ {
+			if metricNames[i] > metricNames[j] {
+				metricNames[i], metricNames[j] = metricNames[j], metricNames[i]
+			}
+		}
+	}
+
+	// Build the lookup key using dashboardKey:chartTitle
+	lookupKey := dashboardKey + ":" + chartTitle
+
+	for _, name := range metricNames {
+		metadata := g.metricsLookup[name]
+		if metadata.ChartConfig == nil {
 			continue
 		}
 
-		config, hasConfig := metadata.MetricsVisualisationConfig.ChartConfig[dashboardKey]
+		metricChartConfig, hasConfig := metadata.ChartConfig[lookupKey]
 		if !hasConfig {
-			continue
-		}
-
-		if config.Title != chartTitle {
 			continue
 		}
 
@@ -262,11 +292,11 @@ func (g *Generator) buildChartFromMetrics(dashboardKey, chartTitle string) (Char
 
 		// Save chart config (all metrics in the same chart should have the same chart config)
 		if chartConfig == nil {
-			chartConfig = &config
+			chartConfig = &metricChartConfig.Chart
 		}
 
 		// Check if percentile option exists
-		percentileStr, hasPercentile := config.Options["percentile"].(string)
+		percentileStr, hasPercentile := metricChartConfig.Chart.Options["percentile"].(string)
 		if hasPercentile && percentileStr != "" {
 			// Split percentiles by comma (handles both single and comma-separated values)
 			percentiles := strings.Split(percentileStr, ",")
@@ -278,41 +308,33 @@ func (g *Generator) buildChartFromMetrics(dashboardKey, chartTitle string) (Char
 
 				// Create a copy of options for this specific percentile
 				metricOptions := make(map[string]interface{})
-				// First copy MetricsVisualisationConfig.Options
-				for k, v := range metadata.MetricsVisualisationConfig.Options {
-					metricOptions[k] = v
-				}
-				// Then copy Chart.Options (per_node, sources_type, etc.)
-				for k, v := range config.Options {
+				// First copy metric-level options
+				for k, v := range metricChartConfig.Options {
 					metricOptions[k] = v
 				}
 				metricOptions["percentile"] = p
 
 				// Build metric with percentile suffix in the name
 				metric := Metric{
-					Name:    config.RecordedName + "-" + p,
-					Title:   metadata.MetricsVisualisationConfig.Title,
+					Name:    metricChartConfig.Chart.RecordedName + "-" + p,
+					Title:   metricChartConfig.Title,
 					Options: metricOptions,
 				}
 
 				chartMetrics = append(chartMetrics, metric)
 			}
 		} else {
-			// Create metric options by merging MetricsVisualisationConfig.Options and Chart.Options
+			// Create metric options by merging metric-level and chart-level options
 			metricOptions := make(map[string]interface{})
-			// First copy MetricsVisualisationConfig.Options
-			for k, v := range metadata.MetricsVisualisationConfig.Options {
-				metricOptions[k] = v
-			}
-			// Then copy Chart.Options (per_node, sources_type, etc.) - these override if duplicated
-			for k, v := range config.Options {
+			// First copy metric-level options
+			for k, v := range metricChartConfig.Options {
 				metricOptions[k] = v
 			}
 
-			// Build metric with recorded name and title from metrics_visualisation_config
+			// Build metric with recorded name and title
 			metric := Metric{
-				Name:    config.RecordedName, // Use recorded name from metrics.yaml
-				Title:   metadata.MetricsVisualisationConfig.Title,
+				Name:    metricChartConfig.Chart.RecordedName, // Use recorded name from metrics.yaml
+				Title:   metricChartConfig.Title,
 				Options: metricOptions,
 			}
 
@@ -357,17 +379,20 @@ func (g *Generator) buildChartFromMetrics(dashboardKey, chartTitle string) (Char
 func (g *Generator) getAllChartTitlesForDashboard(dashboardKey string) []string {
 	chartTitleSet := make(map[string]bool)
 
+	// Iterate through all metrics and their chart configs
 	for _, metadata := range g.metricsLookup {
-		if metadata.MetricsVisualisationConfig == nil {
+		if metadata.ChartConfig == nil {
 			continue
 		}
 
-		config, hasConfig := metadata.MetricsVisualisationConfig.ChartConfig[dashboardKey]
-		if !hasConfig {
-			continue
+		// Look for all configs that match this dashboard
+		// Since keys are stored as "dashboardKey:chartTitle", we need to check all keys
+		for configKey, metricChartConfig := range metadata.ChartConfig {
+			// Check if this config key starts with the dashboard key
+			if strings.HasPrefix(configKey, dashboardKey+":") {
+				chartTitleSet[metricChartConfig.Chart.Title] = true
+			}
 		}
-
-		chartTitleSet[config.Title] = true
 	}
 
 	// Convert map to slice
@@ -521,7 +546,7 @@ func (g *Generator) generateTypeScriptFile(
 	}
 
 	// Generate output filename
-	outputFile := fmt.Sprintf("%s_generated.tsx", dashboardName)
+	outputFile := fmt.Sprintf("%s.tsx", dashboardName)
 	outputPath := filepath.Join(outputDir, outputFile)
 
 	// Create output file
@@ -584,11 +609,12 @@ func renderTooltip(tooltip any) string {
 			return "{<AvailableDiscCapacityGraphTooltip />}"
 		}
 		escaped := strings.ReplaceAll(v, "{tooltipSelection}", "${tooltipSelection}")
-		return fmt.Sprintf("{<div>`%s`</div>}", escaped)
+		return fmt.Sprintf("{<div>%s</div>}", escaped)
 	case map[string]string:
 		text, hasText := v["text"]
 		note, hasNote := v["note"]
 		if hasText && hasNote {
+			text = strings.ReplaceAll(text, "{tooltipSelection}", "${tooltipSelection}")
 			return fmt.Sprintf(`{
         <div>
           %s&nbsp;
@@ -604,7 +630,7 @@ func renderTooltip(tooltip any) string {
 	if tooltip == nil {
 		return ""
 	}
-	return fmt.Sprintf("{`%v`}", tooltip)
+	return fmt.Sprintf("{%v}", tooltip)
 }
 
 func getShowMetricsInTooltip(chart Chart) string {
@@ -624,10 +650,9 @@ func getPreCalcGraphSize(chart Chart) string {
 }
 
 func getAxisProps(axis Axis) string {
-	props := fmt.Sprintf(` label="%s"`, axis.Label)
-	if axis.Units != "count" {
-		props += fmt.Sprintf(` units={%s}`, getAxisUnits(axis.Units))
-	}
+	props := fmt.Sprintf(` units={%s}`, getAxisUnits(axis.Units))
+	props += fmt.Sprintf(` label="%s"`, axis.Label)
+
 	return props
 }
 
@@ -641,17 +666,17 @@ func renderMetrics(metrics []Metric) string {
 
 		perNode := GetMetricPerNode(metric)
 		if perNode != nil && *perNode {
-			result.WriteString("        {map(nodeIDs, node => (\n")
+			result.WriteString("        {nodeIDs.map(nid => (\n")
 			result.WriteString("          <Metric\n")
-			result.WriteString("            key={node}\n")
+			result.WriteString(fmt.Sprintf("            key=%s\n", GetKey(metric)))
 			result.WriteString(fmt.Sprintf("            name=\"%s\"\n", metric.Name))
-			result.WriteString("            title={nodeDisplayName(nodeDisplayNameByID, node)}\n")
+			result.WriteString(fmt.Sprintf("            title=%s\n", GetTitle(metric)))
 
 			sourcesType := GetMetricSourcesType(metric)
 			if sourcesType == "stores_for_node" {
-				result.WriteString("            sources={storeIDsForNode(storeIDsByNodeID, node)}\n")
+				result.WriteString("            sources={storeIDsForNode(storeIDsByNodeID, nid)}\n")
 			} else {
-				result.WriteString("            sources={[node]}\n")
+				result.WriteString("            sources={[nid]}\n")
 			}
 
 			rate := GetMetricRate(metric)
@@ -659,10 +684,9 @@ func renderMetrics(metrics []Metric) string {
 				result.WriteString("            nonNegativeRate\n")
 			}
 			aggregation := GetMetricAggregation(metric)
-			if aggregation == "max" {
-				result.WriteString("            downsampleMax\n")
+			if aggregation != "" {
+				result.WriteString(fmt.Sprintf("            %s\n", aggregation))
 			}
-
 			result.WriteString("          />\n")
 			result.WriteString("        ))}")
 		} else {

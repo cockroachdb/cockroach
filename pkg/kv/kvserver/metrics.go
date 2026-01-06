@@ -45,6 +45,48 @@ func init() {
 }
 
 var (
+	chartReplicasPerNode = metric.Chart{
+		Title:     "Replicas per Node",
+		Type:      "replication",
+		AxisLabel: "replicas",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "The number of replicas on each node {tooltipSelection}.",
+		Note:      "Ranges are subsets of your data, which are replicated to ensure survivability.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"precalc_graph_size":      "true",
+			"graph_type":              "kv",
+		},
+	}
+
+	chartCapacity = metric.Chart{
+		Title:     "Capacity",
+		Type:      "storage",
+		AxisLabel: "Capacity",
+		Units:     metric.Unit_BYTES,
+		Tooltip:   "capacity_graph_tooltip",
+		Options: map[string]string{
+			"sources":                 "stores",
+			"show_metrics_in_tooltip": "true",
+			"precalc_graph_size":      "true",
+			"graph_type":              "kv",
+		},
+	}
+
+	chartAvailableDiskCapacity = metric.Chart{
+		Title:     "Available Disk Capacity",
+		Type:      "line",
+		AxisLabel: "capacity",
+		Tooltip:   "available_disc_capacity_graph_tooltip",
+		Units:     metric.Unit_BYTES,
+		Options: map[string]string{
+			"sources":                 "stores",
+			"show_metrics_in_tooltip": "true",
+		},
+	}
+)
+
+var (
 	// Replica metrics.
 	metaReplicaCount = metric.Metadata{
 		Name:        "replicas",
@@ -54,6 +96,20 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data distribution across cluster nodes.`,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node":     "true",
+							"sources_type": "stores_for_node",
+						},
+						Chart: &chartReplicasPerNode,
+					},
+				},
+			},
+		},
 	}
 	metaReservedReplicaCount = metric.Metadata{
 		Name:        "replicas.reserved",
@@ -484,6 +540,16 @@ var (
 			the following rule: CockroachDB storage volumes should not be utilized
 			more than 60% (40% free space).
 		`),
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Max",
+						Chart: &chartCapacity,
+					},
+				},
+			},
+		},
 	}
 	metaAvailable = metric.Metadata{
 		Name:        "capacity.available",
@@ -497,6 +563,28 @@ var (
 			with the following rule: CockroachDB storage volumes should not be
 			utilized more than 60% (40% free space).
 		`),
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Available",
+						Chart: &chartCapacity,
+					},
+				},
+			},
+			metric.Metadata_HARDWARE.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node":     "true",
+							"sources_type": "stores_for_node",
+						},
+						Chart: &chartAvailableDiskCapacity,
+					},
+				},
+			},
+		},
 	}
 	metaUsed = metric.Metadata{
 		Name:        "capacity.used",
@@ -510,6 +598,16 @@ var (
 			the following rule: CockroachDB storage volumes should not be utilized
 			more than 60% (40% free space).
 		`),
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Used",
+						Chart: &chartCapacity,
+					},
+				},
+			},
+		},
 	}
 
 	metaReserved = metric.Metadata{

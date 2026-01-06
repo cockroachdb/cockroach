@@ -44,13 +44,39 @@ var sampleDuration = settings.RegisterDurationSetting(
 	settings.DurationWithMinimum(100*time.Millisecond),
 )
 
+var chartSchedulerLatencyP99 = metric.Chart{
+	Title:     "Goroutine Scheduling Latency: 99th percentile",
+	Type:      "line",
+	AxisLabel: "latency",
+	Units:     metric.Unit_DURATION,
+	Tooltip:   "P99 scheduling latency for goroutines",
+	Options: map[string]string{
+		"sources":                 "nodes",
+		"show_metrics_in_tooltip": "true",
+		"percentile":              "p99",
+	},
+}
+
 var schedulerLatency = metric.Metadata{
 	Name:        "go.scheduler_latency",
 	Help:        "Go scheduling latency",
 	Measurement: "Nanoseconds",
 	Unit:        metric.Unit_NANOSECONDS,
 	Visibility:  metric.Metadata_SUPPORT,
-}
+	ChartConfig: map[string]*metric.MetricConfigList{
+		metric.Metadata_RUNTIME.String(): {
+			Configs: []*metric.MetricConfig{
+				{
+					Title: "Go Scheduler Latency",
+					Options: map[string]string{
+						"per_node":    "true",
+						"aggregation": "downsampleMax",
+					},
+					Chart: &chartSchedulerLatencyP99,
+				},
+			},
+		},
+	}}
 
 // StartSampler spawn a goroutine to periodically sample the scheduler latencies
 // and invoke all registered callbacks.

@@ -877,6 +877,125 @@ layers:
       derivative: NONE
       how_to_use: This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.
       visibility: ESSENTIAL
+      chart_config:
+        RUNTIME:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Clock Offset
+            type: line
+            units: NANOSECONDS
+            axis_label: offset
+            tooltip: Mean clock offset of each node against the rest of the cluster.
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.clock-offset.meannanos
+    - name: distsender.rpc.proxy.err
+      exported_name: distsender_rpc_proxy_err
+      description: Number of attempts by a gateway to proxy a request which resulted in a failure.
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks proxy request failures which can indicate network connectivity or routing issues.
+      visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Proxy request errors
+            type: line
+            units: COUNT
+            axis_label: errors
+            tooltip: Number of proxy request failures
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.distsender.rpc.proxy.err
+    - name: distsender.rpc.proxy.forward.err
+      exported_name: distsender_rpc_proxy_forward_err
+      description: Number of attempts on a follower replica to proxy a request which resulted in a failure.
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks proxy forward failures which can indicate persistent leaseholder connectivity issues.
+      visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Proxy forward errors
+            type: line
+            units: COUNT
+            axis_label: errors
+            tooltip: Number of proxy forward failures
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.distsender.rpc.proxy.forward.err
+    - name: distsender.rpc.proxy.forward.sent
+      exported_name: distsender_rpc_proxy_forward_sent
+      description: Number of attempts on a follower replica to proxy a request to an unreachable leaseholder.
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks proxy forward attempts from followers which can indicate leaseholder availability issues.
+      visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Proxy forwards
+            type: line
+            units: COUNT
+            axis_label: forwards
+            tooltip: Number of proxy forward attempts
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.distsender.rpc.proxy.forward.sent
+    - name: distsender.rpc.proxy.sent
+      exported_name: distsender_rpc_proxy_sent
+      description: Number of attempts by a gateway to proxy a request to an unreachable leaseholder via a follower replica.
+      y_axis_label: RPCs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks proxy request attempts which can indicate network partitions or connectivity issues.
+      visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Proxy requests
+            type: line
+            units: COUNT
+            axis_label: requests
+            tooltip: Number of proxy request attempts
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.distsender.rpc.proxy.sent
     - name: rpc.connection.avg_round_trip_latency
       exported_name: rpc_connection_avg_round_trip_latency
       description: |-
@@ -997,6 +1116,21 @@ layers:
       derivative: NONE
       how_to_use: If the value of this metric is greater than 0, this could indicate a network partition.
       visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Unhealthy RPC Connections
+            type: line
+            units: COUNT
+            axis_label: connections
+            tooltip: Number of connections in an unhealthy state
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.rpc.connection.unhealthy
     - name: rpc.connection.unhealthy_nanos
       exported_name: rpc_connection_unhealthy_nanos
       description: |-
@@ -1268,6 +1402,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Deletes
+          options:
+            rate: "true"
+          chart:
+            title: SQL Queries Per Second
+            type: sql
+            units: COUNT
+            axis_label: queries per second
+            tooltip: A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.delete.count
     - name: sql.delete.count.internal
       exported_name: sql_delete_count_internal
       labeled_name: 'sql.count{query_type: delete, query_internal: true}'
@@ -1306,6 +1456,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric is incremented whenever there is a non-trivial amount of contention experienced by a statement whether read-write or write-write conflicts. Monitor this metric to correlate possible workload performance issues to contention conflicts.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Contention
+          options:
+            rate: "true"
+          chart:
+            title: SQL Statement Contention
+            type: sql
+            units: COUNT
+            axis_label: Average number of queries per second
+            tooltip: A moving average of the number of SQL statements executed per second that experienced contention {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.distsql.contended_queries.count
     - name: sql.failure.count
       exported_name: sql_failure_count
       description: Number of statements resulting in a planning or runtime error
@@ -1353,6 +1519,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Inserts
+          options:
+            rate: "true"
+          chart:
+            title: SQL Queries Per Second
+            type: sql
+            units: COUNT
+            axis_label: queries per second
+            tooltip: A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.insert.count
     - name: sql.insert.count.internal
       exported_name: sql_insert_count_internal
       labeled_name: 'sql.count{query_type: insert, query_internal: true}'
@@ -1568,6 +1750,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Selects
+          options:
+            rate: "true"
+          chart:
+            title: SQL Queries Per Second
+            type: sql
+            units: COUNT
+            axis_label: queries per second
+            tooltip: A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.select.count
     - name: sql.select.count.internal
       exported_name: sql_select_count_internal
       labeled_name: 'sql.count{query_type: select, query_internal: true}'
@@ -1606,6 +1804,25 @@ layers:
       derivative: NONE
       how_to_use: These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: '{node_name}'
+          options:
+            aggregation: downsampleMax
+            per_node: "true"
+          chart:
+            title: 'Service Latency: SQL Statements, 99th percentile'
+            type: sql
+            units: DURATION
+            axis_label: latency
+            tooltip:
+              note: This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client.
+              text: Over the last minute, this node executed 99% of SQL statements within this time.
+            options:
+              percentile: p99
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+            recorded_name: cr.node.sql.service.latency
     - name: sql.service.latency.internal
       exported_name: sql_service_latency_internal
       description: Latency of SQL request execution (internal queries)
@@ -1757,6 +1974,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Updates
+          options:
+            rate: "true"
+          chart:
+            title: SQL Queries Per Second
+            type: sql
+            units: COUNT
+            axis_label: queries per second
+            tooltip: A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.update.count
     - name: sql.update.count.internal
       exported_name: sql_update_count_internal
       labeled_name: 'sql.count{query_type: update, query_internal: true}'
@@ -3111,38 +3344,6 @@ layers:
         Number of Probe requests processed.
 
         This counts the requests in batches handed to DistSender, not the RPCs sent to individual Ranges as a result.
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: distsender.rpc.proxy.err
-      exported_name: distsender_rpc_proxy_err
-      description: Number of attempts by a gateway to proxy a request which resulted in a failure.
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: distsender.rpc.proxy.forward.err
-      exported_name: distsender_rpc_proxy_forward_err
-      description: Number of attempts on a follower replica to proxy a request which resulted in a failure.
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: distsender.rpc.proxy.forward.sent
-      exported_name: distsender_rpc_proxy_forward_sent
-      description: Number of attempts on a follower replica to proxy a request to an unreachable leaseholder.
-      y_axis_label: RPCs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: distsender.rpc.proxy.sent
-      exported_name: distsender_rpc_proxy_sent
-      description: Number of attempts by a gateway to proxy a request to an unreachable leaseholder via a follower replica.
       y_axis_label: RPCs
       type: COUNTER
       unit: COUNT
@@ -7008,6 +7209,38 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            aggregation: downsampleMax
+            per_node: "true"
+          chart:
+            title: 'RPC Heartbeat Latency: 50th percentile'
+            type: line
+            units: NANOSECONDS
+            axis_label: latency
+            tooltip: Round-trip latency for recent successful outgoing heartbeats.
+            options:
+              percentile: p50
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.round-trip-latency
+        - title: '{node_name}'
+          options:
+            aggregation: downsampleMax
+            per_node: "true"
+          chart:
+            title: 'RPC Heartbeat Latency: 99th percentile'
+            type: line
+            units: NANOSECONDS
+            axis_label: latency
+            tooltip: Round-trip latency for recent successful outgoing heartbeats.
+            options:
+              percentile: p99
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.round-trip-latency
     - name: round-trip-raft-class-latency
       exported_name: round_trip_raft_class_latency
       description: |-
@@ -7453,6 +7686,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        OVERVIEW:
+        - title: Total Queries
+          options:
+            rate: "true"
+          chart:
+            title: SQL Queries Per Second
+            type: sql
+            units: COUNT
+            axis_label: queries per second
+            tooltip: A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.
+            options:
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sql.crud_query.count
     - name: sql.crud_query.count.internal
       exported_name: sql_crud_query_count_internal
       description: Number of SQL SELECT, INSERT, UPDATE, DELETE statements successfully executed (internal queries)
@@ -9612,8 +9861,23 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
-      how_to_use: "This metric gives the CPU utilization percentage by the CockroachDB process. \n\t\tIf it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should \n\t\tnot be running with over 80% utilization for extended periods of time (hours). This metric \n\t\tis used in the DB Console CPU Percent graph."
+      how_to_use: "This metric gives the CPU utilization percentage by the CockroachDB process.\n\t\tIf it is equal to 1 (or 100%), then the CPU is overloaded. The CockroachDB process should\n\t\tnot be running with over 80% utilization for extended periods of time (hours). This metric\n\t\tis used in the DB Console CPU Percent graph."
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: CPU Percent
+            type: line
+            units: PERCENT
+            axis_label: CPU
+            tooltip: CPU usage for the CRDB nodes {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cpu.combined.percent-normalized
     - name: sys.cpu.host.combined.percent-normalized
       exported_name: sys_cpu_host_combined_percent_normalized
       description: Current user+system cpu percentage across the whole machine, normalized 0-1 by number of cores
@@ -9624,6 +9888,21 @@ layers:
       derivative: NONE
       how_to_use: "This metric gives the CPU utilization percentage of the\n\t\tunderlying server, virtual machine, or container hosting the\n\t\tCockroachDB process. It includes CPU usage from both CockroachDB\n\t\tand non-CockroachDB processes. It also accounts for time spent\n\t\tprocessing hardware (irq) and software (softirq) interrupts, as\n\t\twell as nice time, which represents low-priority user-mode\n\t\tactivity.\n\n    A value of 1 (or 100%) indicates that the CPU is overloaded. Avoid\n    running the CockroachDB process in an environment where the CPU\n    remains overloaded for extended periods (e.g. multiple hours). This\n    metric appears in the DB Console on the Host CPU Percent graph."
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Host CPU Percent
+            type: line
+            units: PERCENT
+            axis_label: CPU
+            tooltip: Machine-wide CPU usage {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cpu.host.combined.percent-normalized
     - name: sys.cpu.sys.percent
       exported_name: sys_cpu_sys_percent
       description: Current system cpu percentage consumed by the CRDB process
@@ -9654,6 +9933,21 @@ layers:
       derivative: NONE
       how_to_use: This metric gives the average queue length of the storage device. It characterizes the storage device's performance capability. All I/O performance metrics are Linux counters and correspond to the avgqu-sz in the Linux iostat command output. You need to view the device queue graph in the context of the actual read/write IOPS and MBPS metrics that show the actual device utilization. If the device is not keeping up, the queue will grow. Values over 10 are bad. Values around 5 mean the device is working hard trying to keep up. For internal (on chassis) NVMe devices, the queue values are typically 0. For network connected devices, such as AWS EBS volumes, the normal operating range of values is 1 to 2. Spikes in values are OK. They indicate an I/O spike where the device fell behind and then caught up. End users may experience inconsistent response times, but there should be no cluster stability issues. If the queue is greater than 5 for an extended period of time and IOPS or MBPS are low, then the storage is most likely not provisioned per Cockroach Labs guidance. In AWS EBS, it is commonly an EBS type, such as gp2, not suitable as database primary storage. If I/O is low and the queue is low, the most likely scenario is that the CPU is lacking and not driving I/O. One such case is a cluster with nodes with only 2 vcpus which is not supported sizing for production deployments. There are quite a few background processes in the database that take CPU away from the workload, so the workload is just not getting the CPU. Review storage and disk I/O.
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Disk Ops In Progress
+            type: line
+            units: COUNT
+            axis_label: Ops
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.disk.iopsinprogress
     - name: sys.host.disk.read.bytes
       exported_name: sys_host_disk_read_bytes
       description: Bytes read from all disks since this process started (as reported by the OS)
@@ -9664,6 +9958,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device read throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Disk Read Bytes/s
+            type: line
+            units: BYTES
+            axis_label: bytes
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.disk.read.bytes
     - name: sys.host.disk.read.count
       exported_name: sys_host_disk_read_count
       description: Disk read operations across all disks since this process started (as reported by the OS)
@@ -9674,6 +9984,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device read IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Disk Read IOPS
+            type: line
+            units: COUNT
+            axis_label: IOPS
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.disk.read.count
     - name: sys.host.disk.write.bytes
       exported_name: sys_host_disk_write_bytes
       description: Bytes written to all disks since this process started (as reported by the OS)
@@ -9684,6 +10010,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device write throughput (MB/s) rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Disk Write Bytes/s
+            type: line
+            units: BYTES
+            axis_label: bytes
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.disk.write.bytes
     - name: sys.host.disk.write.count
       exported_name: sys_host_disk_write_count
       description: Disk write operations across all disks since this process started (as reported by the OS)
@@ -9694,6 +10036,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the effective storage device write IOPS rate. To confirm that storage is sufficiently provisioned, assess the I/O performance rates (IOPS and MBPS) in the context of the sys.host.disk.iopsinprogress metric.
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Disk Write IOPS
+            type: line
+            units: COUNT
+            axis_label: IOPS
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.disk.write.count
     - name: sys.host.net.recv.bytes
       exported_name: sys_host_net_recv_bytes
       description: Bytes received on all network interfaces since this process started (as reported by the OS)
@@ -9704,6 +10062,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.
       visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Network Bytes Received
+            type: line
+            units: BYTES
+            axis_label: bytes
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.recv.bytes
     - name: sys.host.net.send.bytes
       exported_name: sys_host_net_send_bytes
       description: Bytes sent on all network interfaces since this process started (as reported by the OS)
@@ -9714,6 +10088,21 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric gives the node's ingress/egress network transfer rates for flat sections which may indicate insufficiently provisioned networking or high error rates. CockroachDB is using a reliable TCP/IP protocol, so errors result in delivery retries that create a "slow network" effect.
       visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: Network Bytes Sent
+            type: line
+            units: BYTES
+            axis_label: bytes
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.send.bytes
     - name: sys.rss
       exported_name: sys_rss
       description: Current process RSS
@@ -9724,6 +10113,65 @@ layers:
       derivative: NONE
       how_to_use: "This metric gives the amount of RAM used by the\n\t\tCockroachDB process. Persistently low values over an extended\n\t\tperiod of time suggest there is underutilized memory that can be\n\t\tput to work with adjusted settings for --cache or --max_sql_memory\n\t\tor both. Conversely, a high utilization, even if a temporary spike,\n\t\tindicates an increased risk of Out-of-memory (OOM) crash\n\t\t(particularly since the swap is generally disabled)."
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.rss
+        RUNTIME:
+        - title: Total memory (RSS)
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.rss
     - name: sys.runnable.goroutines.per.cpu
       exported_name: sys_runnable_goroutines_per_cpu
       description: Average number of goroutines that are waiting to run, normalized by number of cores
@@ -9734,6 +10182,21 @@ layers:
       derivative: NONE
       how_to_use: If this metric has a value over 30, it indicates a CPU overload. If the condition lasts a short period of time (a few seconds), the database users are likely to experience inconsistent response times. If the condition persists for an extended period of time (tens of seconds, or minutes) the cluster may start developing stability issues. Review CPU planning.
       visibility: ESSENTIAL
+      chart_config:
+        RUNTIME:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Runnable Goroutines per CPU
+            type: line
+            units: COUNT
+            axis_label: goroutines
+            tooltip: The number of Goroutines waiting for CPU {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.runnable.goroutines.per.cpu
     - name: sys.uptime
       exported_name: sys_uptime
       description: Process uptime
@@ -9795,6 +10258,22 @@ layers:
         Additionally, the 'sys.host.net.send.tcp.*' may provide more insight into the
         specific type of retransmission.
       visibility: ESSENTIAL
+      chart_config:
+        NETWORKING:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            rate: "true"
+          chart:
+            title: TCP Retransmits
+            type: line
+            units: UNSET
+            axis_label: segments
+            tooltip: The number of TCP segments retransmitted. Some retransmissions are benign, but phase changes can be indicative of network congestion or overloaded peers.
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.send.tcp.retrans_segs
     - name: sys.host.net.send.tcp.slow_start_retrans
       exported_name: sys_host_net_send_tcp_slow_start_retrans
       description: |-
@@ -9838,6 +10317,23 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: Go Scheduler Latency
+          options:
+            aggregation: downsampleMax
+            per_node: "true"
+          chart:
+            title: 'Goroutine Scheduling Latency: 99th percentile'
+            type: line
+            units: DURATION
+            axis_label: latency
+            tooltip: P99 scheduling latency for goroutines
+            options:
+              percentile: p99
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.go.scheduler_latency
     - name: log.buffered.messages.dropped
       exported_name: log_buffered_messages_dropped
       description: Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message
@@ -9919,6 +10415,35 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: CGo Allocated
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cgo.allocbytes
     - name: sys.cgo.totalbytes
       exported_name: sys_cgo_totalbytes
       description: Total bytes of memory allocated by cgo, but not released
@@ -9928,6 +10453,35 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: CGo Total
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cgo.totalbytes
     - name: sys.cgocalls
       exported_name: sys_cgocalls
       description: Total number of cgo calls
@@ -9953,6 +10507,21 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: Sys CPU Time
+          options:
+            rate: "true"
+          chart:
+            title: CPU Time
+            type: line
+            units: NANOSECONDS
+            axis_label: cpu time
+            tooltip: The amount of CPU time used by CockroachDB (User) and system-level operations (Sys) {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cpu.sys.ns
     - name: sys.cpu.user.ns
       exported_name: sys_cpu_user_ns
       description: Total user cpu time consumed by the CRDB process
@@ -9962,6 +10531,21 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: User CPU Time
+          options:
+            rate: "true"
+          chart:
+            title: CPU Time
+            type: line
+            units: NANOSECONDS
+            axis_label: cpu time
+            tooltip: The amount of CPU time used by CockroachDB (User) and system-level operations (Sys) {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.cpu.user.ns
     - name: sys.fd.open
       exported_name: sys_fd_open
       description: Process open file descriptors
@@ -9986,6 +10570,21 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        RUNTIME:
+        - title: GC Assist Time
+          options:
+            rate: "true"
+          chart:
+            title: GC Assist Time
+            type: line
+            units: NANOSECONDS
+            axis_label: gc assist time
+            tooltip: Estimated total CPU time user goroutines spent performing GC tasks on processors {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.gc.assist.ns
     - name: sys.gc.count
       exported_name: sys_gc_count
       description: Total number of GC runs
@@ -9995,6 +10594,21 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: GC Runs
+          options:
+            rate: "true"
+          chart:
+            title: GC Runs
+            type: line
+            units: COUNT
+            axis_label: runs
+            tooltip: The number of times that Go's garbage collector was invoked per second {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.gc.count
     - name: sys.gc.pause.ns
       exported_name: sys_gc_pause_ns
       description: Total GC pause
@@ -10004,6 +10618,21 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: GC Pause Time
+          options:
+            rate: "true"
+          chart:
+            title: GC Pause Time
+            type: line
+            units: NANOSECONDS
+            axis_label: pause time
+            tooltip: The amount of processor time used by Go's garbage collector per second {tooltipSelection} During garbage collection, application code execution is paused.
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.gc.pause.ns
     - name: sys.gc.pause.percent
       exported_name: sys_gc_pause_percent
       description: Current GC pause percentage
@@ -10021,6 +10650,21 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      chart_config:
+        RUNTIME:
+        - title: GC Stopping Time
+          options:
+            rate: "true"
+          chart:
+            title: GC Stopping Time
+            type: line
+            units: NANOSECONDS
+            axis_label: pause time
+            tooltip: The time it takes from deciding to stop-the-world (gc related) until all Ps are stopped {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.gc.stop.ns
     - name: sys.go.allocbytes
       exported_name: sys_go_allocbytes
       description: Current bytes of memory allocated by go
@@ -10030,6 +10674,35 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: Go Allocated
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.go.allocbytes
     - name: sys.go.heap.allocbytes
       exported_name: sys_go_heap_allocbytes
       description: Cumulative bytes allocated for heap objects.
@@ -10072,6 +10745,35 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+      chart_config:
+        RUNTIME:
+        - title: Go Limit
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.go.limitbytes
     - name: sys.go.pause.other.ns
       exported_name: sys_go_pause_other_ns
       description: Estimated non-GC-related total pause time
@@ -10080,6 +10782,21 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      chart_config:
+        RUNTIME:
+        - title: Non-GC Pause Time
+          options:
+            rate: "true"
+          chart:
+            title: Non-GC Pause Time
+            type: line
+            units: NANOSECONDS
+            axis_label: pause time
+            tooltip: The stop-the-world pause time during non-gc process {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.go.pause.other.ns
     - name: sys.go.stack.systembytes
       exported_name: sys_go_stack_systembytes
       description: Stack memory obtained from the OS.
@@ -10096,6 +10813,21 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      chart_config:
+        RUNTIME:
+        - title: Non-GC Stopping Time
+          options:
+            rate: "true"
+          chart:
+            title: Non-GC Stopping Time
+            type: line
+            units: NANOSECONDS
+            axis_label: pause time
+            tooltip: The time it takes from deciding to stop-the-world (non-gc-related) until all Ps are stopped {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.go.stop.other.ns
     - name: sys.go.totalbytes
       exported_name: sys_go_totalbytes
       description: Total bytes of memory allocated by go, but not released
@@ -10105,6 +10837,35 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: Go Total
+          chart:
+            title: Memory Usage
+            type: line
+            units: BYTES
+            axis_label: memory usage
+            tooltip:
+              note: |-
+                <dl>
+                            <dt>RSS</dt>
+                            <dd>Total memory in use by CockroachDB</dd>
+                            <dt>Go Allocated</dt>
+                            <dd>Memory allocated by the Go layer</dd>
+                            <dt>Go Total</dt>
+                            <dd>Total memory managed by the Go layer</dd>
+                            <dt>Go Limit</dt>
+                            <dd>Go soft memory limit</dd>
+                            <dt>C Allocated</dt>
+                            <dd>Memory allocated by the C layer</dd>
+                            <dt>C Total</dt>
+                            <dd>Total memory managed by the C layer</dd>
+                          </dl>
+              text: Memory in use {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.go.totalbytes
     - name: sys.goroutines
       exported_name: sys_goroutines
       description: Current number of goroutines
@@ -10114,6 +10875,21 @@ layers:
       aggregation: AVG
       derivative: NONE
       visibility: SUPPORT
+      chart_config:
+        RUNTIME:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+          chart:
+            title: Goroutine Count
+            type: line
+            units: COUNT
+            axis_label: goroutines
+            tooltip: The number of Goroutines {tooltipSelection}
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.goroutines
     - name: sys.host.disk.io.time
       exported_name: sys_host_disk_io_time
       description: Time spent reading from or writing to all disks since this process started (as reported by the OS)
@@ -10154,6 +10930,24 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        NETWORKING:
+        - title: Recv Drops
+          options:
+            key_suffix: recv-drop
+            per_node: "true"
+            rate: "true"
+            title_suffix: Recv Drops
+          chart:
+            title: Network Packet Errors and Drops
+            type: line
+            units: COUNT
+            axis_label: packets
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.recv.drop
     - name: sys.host.net.recv.err
       exported_name: sys_host_net_recv_err
       description: Error receiving packets on all network interfaces since this process started (as reported by the OS)
@@ -10162,6 +10956,24 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        NETWORKING:
+        - title: Recv Errors
+          options:
+            key_suffix: recv-err
+            per_node: "true"
+            rate: "true"
+            title_suffix: Recv Errors
+          chart:
+            title: Network Packet Errors and Drops
+            type: line
+            units: COUNT
+            axis_label: packets
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.recv.err
     - name: sys.host.net.recv.packets
       exported_name: sys_host_net_recv_packets
       description: Packets received on all network interfaces since this process started (as reported by the OS)
@@ -10178,6 +10990,24 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        NETWORKING:
+        - title: Send Drops
+          options:
+            key_suffix: send-drop
+            per_node: "true"
+            rate: "true"
+            title_suffix: Send Drops
+          chart:
+            title: Network Packet Errors and Drops
+            type: line
+            units: COUNT
+            axis_label: packets
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.send.drop
     - name: sys.host.net.send.err
       exported_name: sys_host_net_send_err
       description: Error on sending packets on all network interfaces since this process started (as reported by the OS)
@@ -10186,6 +11016,24 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      chart_config:
+        NETWORKING:
+        - title: Send Errors
+          options:
+            key_suffix: send-err
+            per_node: "true"
+            rate: "true"
+            title_suffix: Send Errors
+          chart:
+            title: Network Packet Errors and Drops
+            type: line
+            units: COUNT
+            axis_label: packets
+            tooltip: ""
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: nodes
+            recorded_name: cr.node.sys.host.net.send.err
     - name: sys.host.net.send.packets
       exported_name: sys_host_net_send_packets
       description: Packets sent on all network interfaces since this process started (as reported by the OS)
@@ -10259,6 +11107,20 @@ layers:
       derivative: NONE
       how_to_use: This is a critical metric that tracks the live nodes in the cluster.
       visibility: ESSENTIAL
+      chart_config:
+        RUNTIME:
+        - title: Live Nodes
+          options:
+            aggregation: downsampleMax
+          chart:
+            title: Live Node Count
+            type: line
+            units: COUNT
+            axis_label: nodes
+            tooltip: The number of live nodes in the cluster.
+            options:
+              show_metrics_in_tooltip: "true"
+            recorded_name: cr.node.liveness.livenodes
     - name: queue.replicate.replacedecommissioningreplica.error
       exported_name: queue_replicate_replacedecommissioningreplica_error
       description: Number of failed decommissioning replica replacements processed by the replicate queue
@@ -10389,6 +11251,25 @@ layers:
       derivative: NONE
       how_to_use: This metric provides an essential characterization of the data distribution across cluster nodes.
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            sources_type: stores_for_node
+          chart:
+            title: Replicas per Node
+            type: replication
+            units: COUNT
+            axis_label: replicas
+            tooltip:
+              note: Ranges are subsets of your data, which are replicated to ensure survivability.
+              text: The number of replicas on each node {tooltipSelection}.
+            options:
+              graph_type: kv
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+            recorded_name: cr.store.replicas
     - name: replicas.leaseholders
       exported_name: replicas_leaseholders
       description: Number of lease holders
@@ -10433,6 +11314,21 @@ layers:
       derivative: NONE
       how_to_use: 'This metric gives total storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Max
+          chart:
+            title: Capacity
+            type: storage
+            units: BYTES
+            axis_label: Capacity
+            tooltip: capacity_graph_tooltip
+            options:
+              graph_type: kv
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: stores
+            recorded_name: cr.store.capacity
     - name: capacity.available
       exported_name: capacity_available
       description: Available storage capacity
@@ -10443,6 +11339,36 @@ layers:
       derivative: NONE
       how_to_use: 'This metric gives available storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
       visibility: ESSENTIAL
+      chart_config:
+        HARDWARE:
+        - title: '{node_name}'
+          options:
+            per_node: "true"
+            sources_type: stores_for_node
+          chart:
+            title: Available Disk Capacity
+            type: line
+            units: BYTES
+            axis_label: capacity
+            tooltip: available_disc_capacity_graph_tooltip
+            options:
+              show_metrics_in_tooltip: "true"
+              sources: stores
+            recorded_name: cr.store.capacity.available
+        OVERVIEW:
+        - title: Available
+          chart:
+            title: Capacity
+            type: storage
+            units: BYTES
+            axis_label: Capacity
+            tooltip: capacity_graph_tooltip
+            options:
+              graph_type: kv
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: stores
+            recorded_name: cr.store.capacity.available
     - name: capacity.used
       exported_name: capacity_used
       description: Used storage capacity
@@ -10453,6 +11379,21 @@ layers:
       derivative: NONE
       how_to_use: 'This metric gives used storage capacity. Measurements should comply with the following rule: CockroachDB storage volumes should not be utilized more than 60% (40% free space).'
       visibility: ESSENTIAL
+      chart_config:
+        OVERVIEW:
+        - title: Used
+          chart:
+            title: Capacity
+            type: storage
+            units: BYTES
+            axis_label: Capacity
+            tooltip: capacity_graph_tooltip
+            options:
+              graph_type: kv
+              precalc_graph_size: "true"
+              show_metrics_in_tooltip: "true"
+              sources: stores
+            recorded_name: cr.store.capacity.used
     - name: rocksdb.block.cache.hits
       exported_name: rocksdb_block_cache_hits
       description: Count of block cache hits

@@ -3,8 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+// THIS FILE IS GENERATED. DO NOT EDIT.
+// To regenerate: ./dev generate dashboards
+
 import { AxisUnits } from "@cockroachlabs/cluster-ui";
-import map from "lodash/map";
 import React from "react";
 
 import LineGraph from "src/views/cluster/components/linegraph";
@@ -34,12 +36,26 @@ export default function (props: GraphDashboardProps) {
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SELECT, INSERT, UPDATE, and DELETE
-          statements, and the sum of all four, successfully executed per second ${tooltipSelection}.`}
+      tooltip={<div>A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second ${tooltipSelection}.</div>}
       showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
-      <Axis label="queries per second">
+      <Axis units={AxisUnits.Count} label="queries per second">
+        <Metric
+          name="cr.node.sql.crud_query.count"
+          title="Total Queries"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.delete.count"
+          title="Deletes"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.insert.count"
+          title="Inserts"
+          nonNegativeRate
+        />
         <Metric
           name="cr.node.sql.select.count"
           title="Selects"
@@ -50,35 +66,19 @@ export default function (props: GraphDashboardProps) {
           title="Updates"
           nonNegativeRate
         />
-        <Metric
-          name="cr.node.sql.insert.count"
-          title="Inserts"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.sql.delete.count"
-          title="Deletes"
-          nonNegativeRate
-        />
-        <Metric
-          name="cr.node.sql.crud_query.count"
-          title="Total Queries"
-          nonNegativeRate
-        />
       </Axis>
     </LineGraph>,
 
     <LineGraph
       title="Service Latency: SQL Statements, 99th percentile"
       isKvGraph={false}
+      
       tenantSource={tenantSource}
       tooltip={
         <div>
-          Over the last minute, this node executed 99% of SQL statements within
-          this time.&nbsp;
+          Over the last minute, this node executed 99% of SQL statements within this time.&nbsp;
           <em>
-            This time only includes SELECT, INSERT, UPDATE and DELETE statements
-            and does not include network latency between the node and client.
+            This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client.
           </em>
         </div>
       }
@@ -86,28 +86,28 @@ export default function (props: GraphDashboardProps) {
       preCalcGraphSize={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
-        {map(nodeIDs, node => (
+        {nodeIDs.map(nid => (
           <Metric
-            key={node}
+            key={nid}
             name="cr.node.sql.service.latency-p99"
-            title={nodeDisplayName(nodeDisplayNameByID, node)}
-            sources={[node]}
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
             downsampleMax
           />
         ))}
       </Axis>
     </LineGraph>,
+
     <LineGraph
       title="SQL Statement Contention"
       isKvGraph={false}
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`A moving average of the number of SQL statements executed per second
-          that experienced contention ${tooltipSelection}.`}
+      tooltip={<div>A moving average of the number of SQL statements executed per second that experienced contention ${tooltipSelection}.</div>}
       showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
-      <Axis label="Average number of queries per second">
+      <Axis units={AxisUnits.Count} label="Average number of queries per second">
         <Metric
           name="cr.node.sql.distsql.contended_queries.count"
           title="Contention"
@@ -118,22 +118,22 @@ export default function (props: GraphDashboardProps) {
 
     <LineGraph
       title="Replicas per Node"
-      tenantSource={tenantSource}
       isKvGraph={true}
+      
+      tenantSource={tenantSource}
       tooltip={
         <div>
-          The number of range replicas stored on this node.{" "}
+          The number of replicas on each node ${tooltipSelection}.&nbsp;
           <em>
-            Ranges are subsets of your data, which are replicated to ensure
-            survivability.
+            Ranges are subsets of your data, which are replicated to ensure survivability.
           </em>
         </div>
       }
       showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
-      <Axis label="replicas">
-        {map(nodeIDs, nid => (
+      <Axis units={AxisUnits.Count} label="replicas">
+        {nodeIDs.map(nid => (
           <Metric
             key={nid}
             name="cr.store.replicas"
@@ -153,11 +153,20 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
       preCalcGraphSize={true}
     >
-      <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="Max" />
-        <Metric name="cr.store.capacity.available" title="Available" />
-        <Metric name="cr.store.capacity.used" title="Used" />
+      <Axis units={AxisUnits.Bytes} label="Capacity">
+        <Metric
+          name="cr.store.capacity"
+          title="Max"
+        />
+        <Metric
+          name="cr.store.capacity.available"
+          title="Available"
+        />
+        <Metric
+          name="cr.store.capacity.used"
+          title="Used"
+        />
       </Axis>
-    </LineGraph>,
+    </LineGraph>
   ];
 }

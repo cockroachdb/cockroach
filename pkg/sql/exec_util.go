@@ -822,6 +822,36 @@ var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there i
 const sqlTxnName string = "sql txn"
 const metricsSampleInterval = 10 * time.Second
 
+// Chart definitions for dashboards.
+var (
+	chartSQLQueriesPerSecond = metric.Chart{
+		Title:     "SQL Queries Per Second",
+		Type:      "sql",
+		AxisLabel: "queries per second",
+		Units:     metric.Unit_COUNT,
+		Tooltip:   "A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second {tooltipSelection}.",
+		Options: map[string]string{
+			"sources":                 "nodes",
+			"show_metrics_in_tooltip": "true",
+			"precalc_graph_size":      "true",
+		},
+	}
+
+	chartServiceLatencySQL99 = metric.Chart{
+		Title:     "Service Latency: SQL Statements, 99th percentile",
+		Type:      "sql",
+		AxisLabel: "latency",
+		Units:     metric.Unit_DURATION,
+		Tooltip:   "Over the last minute, this node executed 99% of SQL statements within this time.",
+		Note:      "This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"precalc_graph_size":      "true",
+			"percentile":              "p99",
+		},
+	}
+)
+
 // Fully-qualified names for metrics.
 var (
 	MetaSQLExecLatency = metric.Metadata{
@@ -858,6 +888,20 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse:    "These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"aggregation": "downsampleMax",
+							"per_node":    "true",
+						},
+						Chart: &chartServiceLatencySQL99,
+					},
+				},
+			},
+		},
 	}
 	MetaSQLServiceLatencyConsistent = metric.Metadata{
 		Name:        "sql.service.latency.consistent",
@@ -1285,6 +1329,19 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Selects",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLQueriesPerSecond,
+					},
+				},
+			},
+		},
 	}
 	MetaUpdateExecuted = metric.Metadata{
 		Name:         "sql.update.count",
@@ -1296,6 +1353,19 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Updates",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLQueriesPerSecond,
+					},
+				},
+			},
+		},
 	}
 	MetaInsertExecuted = metric.Metadata{
 		Name:         "sql.insert.count",
@@ -1307,6 +1377,19 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Inserts",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLQueriesPerSecond,
+					},
+				},
+			},
+		},
 	}
 	MetaDeleteExecuted = metric.Metadata{
 		Name:         "sql.delete.count",
@@ -1318,12 +1401,38 @@ var (
 		Visibility:   metric.Metadata_ESSENTIAL,
 		Category:     metric.Metadata_SQL,
 		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Deletes",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLQueriesPerSecond,
+					},
+				},
+			},
+		},
 	}
 	MetaCRUDExecuted = metric.Metadata{
 		Name:        "sql.crud_query.count",
 		Help:        "Number of SQL SELECT, INSERT, UPDATE, DELETE statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_OVERVIEW.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "Total Queries",
+						Options: map[string]string{
+							"rate": "true",
+						},
+						Chart: &chartSQLQueriesPerSecond,
+					},
+				},
+			},
+		},
 	}
 	MetaSavepointExecuted = metric.Metadata{
 		Name:         "sql.savepoint.count",
@@ -1624,6 +1733,7 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 		if meta.LabeledName != "" {
 			meta.StaticLabels = append(meta.StaticLabels, metric.MakeLabelPairs(metric.LabelQueryInternal, "true")...)
 		}
+		meta.ChartConfig = nil
 	}
 	return meta
 }

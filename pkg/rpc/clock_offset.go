@@ -44,6 +44,44 @@ type RemoteClockMetrics struct {
 const avgLatencyMeasurementAge = 20.0
 
 var (
+	chartClockOffset = metric.Chart{
+		Title:     "Clock Offset",
+		Type:      "line",
+		AxisLabel: "offset",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "Mean clock offset of each node against the rest of the cluster.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+		},
+	}
+
+	chartRPCHeartbeatLatencyP50 = metric.Chart{
+		Title:     "RPC Heartbeat Latency: 50th percentile",
+		Type:      "line",
+		AxisLabel: "latency",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "Round-trip latency for recent successful outgoing heartbeats.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+			"percentile":              "p50",
+		},
+	}
+
+	chartRPCHeartbeatLatencyP99 = metric.Chart{
+		Title:     "RPC Heartbeat Latency: 99th percentile",
+		Type:      "line",
+		AxisLabel: "latency",
+		Units:     metric.Unit_NANOSECONDS,
+		Tooltip:   "Round-trip latency for recent successful outgoing heartbeats.",
+		Options: map[string]string{
+			"show_metrics_in_tooltip": "true",
+			"sources":                 "nodes",
+			"percentile":              "p99",
+		},
+	}
+
 	metaClockOffsetMeanNanos = metric.Metadata{
 		Name:        "clock-offset.meannanos",
 		Help:        "Mean clock offset with other nodes",
@@ -52,6 +90,19 @@ var (
 		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    "This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.",
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_RUNTIME.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node": "true",
+						},
+						Chart: &chartClockOffset,
+					},
+				},
+			},
+		},
 	}
 	metaClockOffsetStdDevNanos = metric.Metadata{
 		Name:        "clock-offset.stddevnanos",
@@ -94,6 +145,28 @@ rare or short-lived degradations.
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Visibility:  metric.Metadata_SUPPORT,
+		ChartConfig: map[string]*metric.MetricConfigList{
+			metric.Metadata_NETWORKING.String(): {
+				Configs: []*metric.MetricConfig{
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node":    "true",
+							"aggregation": "downsampleMax",
+						},
+						Chart: &chartRPCHeartbeatLatencyP50,
+					},
+					{
+						Title: "{node_name}",
+						Options: map[string]string{
+							"per_node":    "true",
+							"aggregation": "downsampleMax",
+						},
+						Chart: &chartRPCHeartbeatLatencyP99,
+					},
+				},
+			},
+		},
 	}
 
 	metaDefaultConnectionRoundTripLatency = metric.Metadata{
