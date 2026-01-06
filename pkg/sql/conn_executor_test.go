@@ -1749,9 +1749,7 @@ func TestAbortedTxnLocks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
