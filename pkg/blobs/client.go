@@ -63,11 +63,16 @@ func (c *remoteClient) ReadFile(
 	if err != nil {
 		return nil, 0, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.blobClient.GetStream(ctx, &blobspb.GetRequest{
 		Filename: file,
 		Offset:   offset,
 	})
-	return newGetStreamReader(stream), st.Filesize, errors.Wrap(err, "fetching file")
+	if err != nil {
+		cancel()
+		return nil, 0, errors.Wrap(err, "fetching file")
+	}
+	return newGetStreamReader(stream, cancel), st.Filesize, nil
 }
 
 type streamWriter struct {
