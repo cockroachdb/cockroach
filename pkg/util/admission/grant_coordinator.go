@@ -191,6 +191,12 @@ func NewGrantCoordinators(
 	}
 }
 
+func NewElasticCPUGrantCoordinator(
+	ambientCtx log.AmbientContext, st *cluster.Settings, registry *metric.Registry,
+) *ElasticCPUGrantCoordinator {
+	return makeElasticCPUGrantCoordinator(ambientCtx, st, registry)
+}
+
 func makeRegularGrantCoordinator(
 	ambientCtx log.AmbientContext,
 	opts Options,

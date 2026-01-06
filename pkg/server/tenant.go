@@ -218,9 +218,12 @@ func NewSeparateProcessTenantServer(
 			return spanconfiglimiter.New(ie, st, knobs)
 		},
 	}
-	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
-	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal, noopElasticCPUGrantCoord)
+	// NB: There is no MetricsRecorder to add this Registry to, so metrics won't
+	// be collected.
+	nodeRegistry := metric.NewRegistry()
+	elasticCPUGrantCoord :=
+		admission.NewElasticCPUGrantCoordinator(baseCfg.AmbientCtx, baseCfg.Settings, nodeRegistry)
+	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal, elasticCPUGrantCoord)
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only
