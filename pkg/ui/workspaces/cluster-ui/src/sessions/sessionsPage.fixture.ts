@@ -13,9 +13,12 @@ import {
   CancelSessionRequestMessage,
 } from "src/api/terminateQueryApi";
 
-import { defaultFilters, Filters } from "../queryFilter";
+import { Filters } from "../queryFilter";
 
-import { SessionsPageProps } from "./sessionsPage";
+import {
+  SessionsPageProps,
+  defaultFiltersForSessionsPage,
+} from "./sessionsPage";
 import { SessionInfo } from "./sessionsTable";
 
 const Status = cockroach.server.serverpb.Session.Status;
@@ -200,7 +203,7 @@ export const filters: Filters = {
 };
 
 export const sessionsPagePropsFixture: SessionsPageProps = {
-  filters: defaultFilters,
+  filters: defaultFiltersForSessionsPage,
   history,
   location: {
     pathname: "/sessions",
@@ -229,7 +232,7 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
 };
 
 export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
-  filters: defaultFilters,
+  filters: defaultFiltersForSessionsPage,
   history,
   location: {
     pathname: "/sessions",
