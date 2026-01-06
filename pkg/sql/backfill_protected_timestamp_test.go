@@ -241,7 +241,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	var db *gosql.DB
 	var tableID uint32
 	s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156127),
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
@@ -423,10 +422,29 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh PTS cache")
 						}
-						if _, err := db.ExecContext(ctx, fmt.Sprintf(`
-SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
-FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc.tableName)); err != nil {
-							return errors.Wrap(err, "failed to enqueue replica for GC")
+						// Get range IDs from the tenant connection since the table is in the tenant.
+						rows, err := db.QueryContext(ctx, fmt.Sprintf(
+							`SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key`, tc.tableName))
+						if err != nil {
+							return errors.Wrap(err, "failed to query ranges")
+						}
+						var rangeIDs []int64
+						for rows.Next() {
+							var rangeID int64
+							if err := rows.Scan(&rangeID); err != nil {
+								return errors.Wrap(err, "failed to scan range ID")
+							}
+							rangeIDs = append(rangeIDs, rangeID)
+						}
+						if err := rows.Close(); err != nil {
+							return errors.Wrap(err, "failed to close rows")
+						}
+						// Execute kv_enqueue_replica through the system layer since it's
+						// not supported in virtual clusters.
+						for _, rangeID := range rangeIDs {
+							if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID); err != nil {
+								return errors.Wrap(err, "failed to enqueue replica for GC")
+							}
 						}
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
 						var count int

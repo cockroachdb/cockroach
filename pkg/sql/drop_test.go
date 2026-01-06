@@ -265,7 +265,6 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var params base.TestServerArgs
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127)
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
@@ -285,12 +284,16 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	var fullReconcilierStarted, zoneCfgRangeFeedStarted sync.WaitGroup
 	fullReconcilierStarted.Add(1)
 	zoneCfgRangeFeedStarted.Add(1)
+	// Use sync.Once to ensure Done() is only called once, since
+	// OnWatchForZoneConfigUpdatesEstablished may be called multiple times when
+	// running with external test tenants.
+	var zoneCfgRangeFeedStartedOnce sync.Once
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 		OnFullReconcilerStart: func() {
 			fullReconcilierStarted.Wait()
 		},
 		OnWatchForZoneConfigUpdatesEstablished: func() {
-			zoneCfgRangeFeedStarted.Done()
+			zoneCfgRangeFeedStartedOnce.Do(zoneCfgRangeFeedStarted.Done)
 		},
 	}
 
