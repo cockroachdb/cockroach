@@ -2218,7 +2218,7 @@ func (tc *TestCluster) SplitTable(
 
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
-		pik, err := randgen.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		pik, err := randgen.TestingMakePrimaryIndexKeyForTenant(desc, tc.Server(0).Codec(), sp.Vals...)
 		if err != nil {
 			t.Fatal(err)
 		}
