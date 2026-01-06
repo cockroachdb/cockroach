@@ -1217,13 +1217,14 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
-// transformSteps recursively walks through all steps in the given slice,
+// walkSteps recursively walks through all steps in the given slice,
 // calling the function `f` for every `singleStep` encountered. The
 // function returns the transformed list of steps.
 //
-// This function may mutate RNG state when generating delays for newly
-// inserted concurrent steps. For read-only iteration, use forEachStep.
-func (plan *TestPlan) transformSteps(
+// This is a pure function that does not mutate the RNG state. When new
+// steps are inserted into concurrent groups, they must be wrapped in
+// delayedStep by the caller (see applyMutations).
+func (plan *TestPlan) walkSteps(
 	steps []testStep, f func(*singleStep, bool) []testStep,
 ) []testStep {
 	var mapStep func(testStep, bool) []testStep
@@ -1241,15 +1242,15 @@ func (plan *TestPlan) transformSteps(
 			for _, concurrentStep := range s.delayedSteps {
 				ds := concurrentStep.(delayedStep)
 				for _, ss := range mapStep(ds.step, true) {
-					// If the function returned the original step, don't
-					// generate a new delay for it.
+					// If the function returned the original step, preserve its delay.
 					if ss == ds.step {
 						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
+					} else if delayedSs, ok := ss.(delayedStep); ok {
+						// If the caller already wrapped it in a delayedStep, use that.
+						newSteps = append(newSteps, delayedSs)
 					} else {
-						// New step inserted during mutation - generate a new delay.
-						newSteps = append(newSteps, delayedStep{
-							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
-						)
+						// New step without delay wrapper - preserve original delay.
+						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
 					}
 				}
 			}
@@ -1278,47 +1279,18 @@ func (plan *TestPlan) transformSteps(
 	return newSteps
 }
 
-// forEachStep is a pure function that iterates over
-// all steps in the given slice, calling the function `f` for every
-// `singleStep` encountered. Unlike transformSteps, this function does
-// not mutate the plan or RNG state.
-func forEachStep(steps []testStep, f func(*singleStep, bool)) {
-	var visit func(testStep, bool)
-	visit = func(step testStep, isConcurrent bool) {
-		switch s := step.(type) {
-		case sequentialRunStep:
-			for _, seqStep := range s.steps {
-				visit(seqStep, false)
-			}
-		case concurrentRunStep:
-			for _, concurrentStep := range s.delayedSteps {
-				ds := concurrentStep.(delayedStep)
-				visit(ds.step, true)
-			}
-		default:
-			ss := s.(*singleStep)
-			f(ss, isConcurrent)
-		}
-	}
-	for _, s := range steps {
-		visit(s, false)
-	}
-}
-
 // mapSingleSteps iterates over every step in the test plan and calls
 // the given function `f` for every `singleStep` (i.e., every step
 // that actually performs an action). The function should return a
 // list of testSteps that replace the given step in the plan.
-// This function may mutate RNG state when generating delays for newly
-// inserted concurrent steps.
 func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.setup.systemSetup = plan.transformServiceSetup(plan.setup.systemSetup, f)
-	plan.setup.tenantSetup = plan.transformServiceSetup(plan.setup.tenantSetup, f)
-	plan.initSteps = plan.transformSteps(plan.initSteps, f)
-	plan.upgrades = plan.transformUpgrades(plan.upgrades, f)
+	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f)
+	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f)
+	plan.initSteps = plan.walkSteps(plan.initSteps, f)
+	plan.upgrades = plan.mapUpgrades(plan.upgrades, f)
 }
 
-func (plan *TestPlan) transformServiceSetup(
+func (plan *TestPlan) mapServiceSetup(
 	s *serviceSetup, f func(*singleStep, bool) []testStep,
 ) *serviceSetup {
 	if s == nil {
@@ -1326,12 +1298,12 @@ func (plan *TestPlan) transformServiceSetup(
 	}
 
 	return &serviceSetup{
-		steps:    plan.transformSteps(s.steps, f),
-		upgrades: plan.transformUpgrades(s.upgrades, f),
+		steps:    plan.walkSteps(s.steps, f),
+		upgrades: plan.mapUpgrades(s.upgrades, f),
 	}
 }
 
-func (plan *TestPlan) transformUpgrades(
+func (plan *TestPlan) mapUpgrades(
 	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep,
 ) []*upgradePlan {
 	var newUpgrades []*upgradePlan
@@ -1341,7 +1313,7 @@ func (plan *TestPlan) transformUpgrades(
 			to:   upgrade.to,
 			sequentialStep: sequentialRunStep{
 				label: upgrade.sequentialStep.label,
-				steps: plan.transformSteps(upgrade.sequentialStep.steps, f),
+				steps: plan.walkSteps(upgrade.sequentialStep.steps, f),
 			},
 		})
 	}
@@ -1350,10 +1322,12 @@ func (plan *TestPlan) transformUpgrades(
 }
 
 // iterateSingleSteps is a pure (side-effect free) function that calls
-// `f` for every `singleStep` in the test plan. Unlike mapSingleSteps,
-// this function does not mutate the plan or RNG state.
+// `f` for every `singleStep` in the test plan.
 func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool)) {
-	forEachStep(plan.Steps(), f)
+	plan.walkSteps(plan.Steps(), func(ss *singleStep, isConcurrent bool) []testStep {
+		f(ss, isConcurrent)
+		return []testStep{ss}
+	})
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
@@ -1619,24 +1593,38 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 
 			switch mut.op {
 			case mutationInsertBefore:
+				if isConcurrent {
+					return []testStep{
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+						ss,
+					}
+				}
 				return []testStep{newSingleStep, ss}
 			case mutationInsertAfter:
+				if isConcurrent {
+					return []testStep{
+						ss,
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+					}
+				}
 				return []testStep{ss, newSingleStep}
 			case mutationInsertConcurrent:
-				steps := []testStep{ss, newSingleStep}
-
 				// If the reference step is already part of a
 				// `concurrentRunStep`, return the existing and new steps in
 				// sequence; they will already be running concurrently in this
 				// case, and nothing else is needed.
 				if index.IsConcurrent(ss) {
-					return steps
+					// Wrap the new step in a delayedStep with a generated delay.
+					return []testStep{
+						ss,
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+					}
 				}
 
 				// Otherwise, create a new `concurrentRunStep` for the two
 				// steps.
 				return []testStep{
-					newConcurrentRunStep(genericLabel, steps, rng, plan.isLocal),
+					newConcurrentRunStep(genericLabel, []testStep{ss, newSingleStep}, rng, plan.isLocal),
 				}
 			case mutationRemove:
 				return nil

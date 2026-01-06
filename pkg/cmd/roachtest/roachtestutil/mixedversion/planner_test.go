@@ -318,6 +318,15 @@ func TestIterateSingleStepsIsPure(t *testing.T) {
 func TestMapSingleStepsGeneratesDelays(t *testing.T) {
 	defer resetMutators()()
 
+	// Override possibleDelays with a continuous range of 0-10 minutes.
+	originalPossibleDelays := possibleDelays
+	continuousDelays := make([]time.Duration, 600000)
+	for i := range continuousDelays {
+		continuousDelays[i] = time.Duration(i) * time.Millisecond
+	}
+	possibleDelays = continuousDelays
+	defer func() { possibleDelays = originalPossibleDelays }()
+
 	// Create a test with concurrent hooks.
 	mvt := newTest(NumUpgrades(1), EnabledDeploymentModes(SystemOnlyDeployment))
 	mvt.InMixedVersion("hook 1", dummyHook)
@@ -376,9 +385,8 @@ func TestMapSingleStepsGeneratesDelays(t *testing.T) {
 
 	// Verify that each newly inserted step has a delay assigned.
 	for _, insertedStep := range insertedSteps {
-		delay, exists := delaysAfter[insertedStep]
+		_, exists := delaysAfter[insertedStep]
 		require.True(t, exists, "inserted step should have a delay assigned")
-		_ = delay
 	}
 
 	// Verify that original steps still have their original delays.
