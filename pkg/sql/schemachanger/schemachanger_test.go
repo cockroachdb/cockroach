@@ -1054,11 +1054,7 @@ CREATE TABLE t2(n int);
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// This would work with secondary tenants as well, but the span config
-				// limited logic can hit transaction retries on the span_count table.
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
-			})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
@@ -1078,42 +1074,70 @@ CREATE TABLE t2(n int);
 				require.NoError(t, secondConn.Close())
 			}()
 
-			firstConnReady := make(chan struct{})
-			secondConnReady := make(chan struct{})
+			// Under multitenancy, we are likely to encounter retry errors while
+			// the schema changer updates the span_counts table, so we keep running
+			// the test until it succeeds.
+			within := 1 * time.Second
+			if s.StartedDefaultTestTenant() {
+				within = 10 * time.Second
+			}
+			testutils.SucceedsWithin(t, func() error {
+				_, err = sqlDB.ExecContext(ctx, "DROP DATABASE IF EXISTS testdb CASCADE")
+				if err != nil {
+					return err
+				}
+				_, err = sqlDB.ExecContext(ctx, "CREATE DATABASE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = secondConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, test.setupStmt)
+				if err != nil {
+					return err
+				}
 
-			runner.Exec(t, test.setupStmt)
+				firstConnReady := make(chan struct{})
+				secondConnReady := make(chan struct{})
 
-			grp := ctxgroup.WithContext(ctx)
+				grp := ctxgroup.WithContext(ctx)
 
-			grp.Go(func() error {
-				defer close(firstConnReady)
-				tx, err := firstConn.BeginTx(ctx, nil)
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(test.firstStmt)
-				if err != nil {
-					return err
-				}
-				firstConnReady <- struct{}{}
-				<-secondConnReady
-				return tx.Commit()
-			})
-			grp.Go(func() error {
-				defer close(secondConnReady)
-				tx, err := secondConn.BeginTx(ctx, nil)
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(test.secondStmt)
-				if err != nil {
-					return err
-				}
-				<-firstConnReady
-				secondConnReady <- struct{}{}
-				return tx.Commit()
-			})
-			require.NoError(t, grp.Wait())
+				grp.Go(func() error {
+					defer close(firstConnReady)
+					tx, err := firstConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.firstStmt)
+					if err != nil {
+						return err
+					}
+					firstConnReady <- struct{}{}
+					<-secondConnReady
+					return tx.Commit()
+				})
+				grp.Go(func() error {
+					defer close(secondConnReady)
+					tx, err := secondConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.secondStmt)
+					if err != nil {
+						return err
+					}
+					<-firstConnReady
+					secondConnReady <- struct{}{}
+					return tx.Commit()
+				})
+				return grp.Wait()
+			}, within)
 		})
 	}
 }
