@@ -57,7 +57,8 @@ export interface OwnProps {
   nodeNames: { [nodeId: string]: string };
   session: SessionInfo;
   sessionError: Error | null;
-  refreshSessions: () => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  refreshSessions: (...args: any[]) => any;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;

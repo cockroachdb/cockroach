@@ -8,6 +8,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 import { createSelector } from "reselect";
 
+import { SessionsRequest } from "src/api/sessionsApi";
 import { analyticsActions, AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { SessionsState, actions as sessionsActions } from "src/store/sessions";
@@ -79,7 +80,8 @@ export const SessionsPageConnected = withRouter(
       filters: selectFilters(state),
     }),
     (dispatch: Dispatch) => ({
-      refreshSessions: () => dispatch(sessionsActions.refresh()),
+      refreshSessions: (req?: SessionsRequest) =>
+        dispatch(sessionsActions.refresh(req)),
       cancelSession: (payload: ICancelSessionRequest) =>
         dispatch(terminateQueryActions.terminateSession(payload)),
       cancelQuery: (payload: ICancelQueryRequest) =>

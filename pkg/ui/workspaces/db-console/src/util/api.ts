@@ -657,15 +657,18 @@ export function getSettings(
 
 // getSessions gets all cluster sessions.
 export function getSessions(
-  _req: SessionsRequestMessage,
+  req: SessionsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<SessionsResponseMessage> {
-  return timeoutFetch(
-    serverpb.ListSessionsResponse,
-    `${STATUS_PREFIX}/sessions`,
-    null,
-    timeout,
-  );
+  const params = new URLSearchParams();
+  if (req?.exclude_closed_sessions) {
+    params.set("exclude_closed_sessions", "true");
+  }
+  const queryString = params.toString();
+  const path = queryString
+    ? `${STATUS_PREFIX}/sessions?${queryString}`
+    : `${STATUS_PREFIX}/sessions`;
+  return timeoutFetch(serverpb.ListSessionsResponse, path, null, timeout);
 }
 
 // cancelSession cancels the session with the given id on the given node.
