@@ -2060,6 +2060,34 @@ type storeAndLeasePreference struct {
 // https://github.com/sumeerbhola/cockroach/blob/c4c1dcdeda2c0f38c38270e28535f2139a077ec7/pkg/kv/kvserver/allocator/allocatorimpl/allocator.go#L2980-L2980
 // This may be unnecessarily strict and not essential, since it seems many
 // users only set one lease preference.
+//
+// TODO(wenyihu6): There's a gap in MMA's filtering order compared to SMA. MMA
+// filters by lease preference first (LPI <= current via candidatesToMoveLease),
+// then by health (retainReadyLeaseTargetStoresOnly), and finally filters out
+// candidates matching no preference (notMatchedLeasePreferenceIndex check in
+// sortTargetCandidateSetAndPick). SMA filters by health first
+// (ValidLeaseTargets calls LiveAndDeadReplicas) then finds the best LPI among
+// healthy survivors (PreferredLeaseholders). If no healthy store satisfies any
+// configured lease preference, then SMA falls back to considering all healthy
+// stores as candidates.
+//
+// This means MMA can fail to find candidates when SMA would succeed. Example:
+//   - Current leaseholder: s1 with LPI=0 (best), unhealthy
+//   - Voters: s1(LPI=0, unhealthy), s2(LPI=0, unhealthy), s3(LPI=1, healthy)
+//   - MMA: candidatesToMoveLease returns [s2] (LPI <= 0), health filter removes
+//     s2, result: NO candidates.
+//   - SMA: health filter leaves [s3], PreferredLeaseholders finds s3 (best
+//     among healthy), result: s3 is candidate.
+//
+// To fix this, consider filtering by health first, then:
+// - If current leaseholder is healthy: apply LPI <= current among healthy
+// stores - If current leaseholder is unhealthy: find best LPI among healthy
+// survivors (like SMA)
+// - (Up for discussion) Fallback to all healthy stores if no preference
+// matches.
+//
+// This would require restructuring to pass a health-filtered store set into
+// this function.
 func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
 	cands []storeAndLeasePreference,
 	curLeasePreferenceIndex int32,
