@@ -78,7 +78,6 @@ go_test(
     name = "lease_test",
     size = "large",
     srcs = [
-        "count_test.go",
         "helpers_test.go",
         "ie_writer_test.go",
         "kv_writer_test.go",
