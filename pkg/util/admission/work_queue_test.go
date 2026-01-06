@@ -103,9 +103,10 @@ func (tg *testGranter) storeReplicatedWorkAdmittedLocked(
 }
 
 type testWork struct {
-	tenantID roachpb.TenantID
 	cancel   context.CancelFunc
 	admitted bool
+	// For plain WorkQueue testing.
+	resp AdmitResponse
 	// For StoreWorkQueue testing.
 	handle StoreWorkHandle
 }
@@ -133,11 +134,14 @@ func (m *workMap) delete(id int) {
 	delete(m.workMap, id)
 }
 
+// resp can be empty when not testing plain WorkQueue (e.g.
+// TestSnapshotQueue).
 // handle can be empty when not testing StoreWorkQueue.
-func (m *workMap) setAdmitted(id int, handle StoreWorkHandle) {
+func (m *workMap) setAdmitted(id int, resp AdmitResponse, handle StoreWorkHandle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workMap[id].admitted = true
+	m.workMap[id].resp = resp
 	m.workMap[id].handle = handle
 }
 
@@ -213,7 +217,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := WorkInfo{
 					TenantID:        tenant,
 					Priority:        admissionpb.WorkPriority(priority),
@@ -221,14 +225,17 @@ func TestWorkQueueBasic(t *testing.T) {
 					BypassAdmission: bypass,
 				}
 				go func(ctx context.Context, info WorkInfo, id int) {
-					enabled, err := q.Admit(ctx, info)
-					require.True(t, enabled)
-					if err != nil {
+					require.Equal(t, int64(0), info.RequestedCount)
+					resp := q.Admit(ctx, info)
+					require.True(t, resp.Enabled)
+					// Since slots, one concurrent slot always requested.
+					require.Equal(t, int64(1), resp.requestedCount)
+					if resp.Err != nil {
 						buf.printf("id %d: admit failed", id)
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded", id)
-						wrkMap.setAdmitted(id, StoreWorkHandle{})
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -284,7 +291,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				if d.HasArg("cpu-time") {
 					d.ScanArgs(t, "cpu-time", &cpuTime)
 				}
-				q.AdmittedWorkDone(work.tenantID, time.Duration(cpuTime))
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
@@ -390,22 +397,22 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 			select {
 			case <-ticker.C:
 				ctx, cancel := context.WithCancel(context.Background())
-				work2 := &testWork{tenantID: roachpb.MustMakeTenantID(tenantID), cancel: cancel}
+				work2 := &testWork{cancel: cancel}
 				tenantID++
-				go func(ctx context.Context, w *testWork, createTime int64) {
-					enabled, err := q.Admit(ctx, WorkInfo{
-						TenantID:   w.tenantID,
+				go func(ctx context.Context, tenantID uint64, createTime int64) {
+					resp := q.Admit(ctx, WorkInfo{
+						TenantID:   roachpb.MustMakeTenantID(tenantID),
 						CreateTime: createTime,
 					})
 					buf.printf("admit")
-					require.Equal(t, true, enabled)
+					require.Equal(t, true, resp.Enabled)
 					mu.Lock()
 					defer mu.Unlock()
 					totalCount++
-					if err != nil {
+					if resp.Err != nil {
 						errCount++
 					}
-				}(ctx, work2, createTime)
+				}(ctx, tenantID, createTime)
 				createTime++
 				if work != nil {
 					rv := tg.r.granted(1)
@@ -564,7 +571,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
 				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
-				opts.usesTokens = true
+				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				opts.disableGCTenantsAndResetUsed = true
@@ -594,7 +601,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := StoreWriteWorkInfo{
 					WorkInfo: WorkInfo{
 						TenantID:        tenant,
@@ -610,7 +617,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded with handle %+v", id, handle)
-						wrkMap.setAdmitted(id, handle)
+						wrkMap.setAdmitted(id, AdmitResponse{}, handle)
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine

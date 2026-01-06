@@ -73,7 +73,7 @@ func TestSnapshotQueue(t *testing.T) {
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded", id)
-						wrkMap.setAdmitted(id, StoreWorkHandle{})
+						wrkMap.setAdmitted(id, AdmitResponse{}, StoreWorkHandle{})
 					}
 				}(ctx, id, count)
 				// Need deterministic output, and this is racing with the goroutine

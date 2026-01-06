@@ -776,8 +776,8 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
 			CreateTime: f.requestAdmissionHeader.CreateTime,
 		}
-		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
+		if resp := f.responseAdmissionQ.Admit(ctx, responseAdmission); resp.Err != nil {
+			return resp.Err
 		}
 	}
 

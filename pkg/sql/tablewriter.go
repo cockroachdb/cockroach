@@ -212,8 +212,8 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
 			CreateTime: requestAdmissionHeader.CreateTime,
 		}
-		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
+		if resp := responseAdmissionQ.Admit(ctx, responseAdmission); resp.Err != nil {
+			return resp.Err
 		}
 	}
 	return nil

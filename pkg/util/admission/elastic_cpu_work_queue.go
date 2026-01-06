@@ -46,7 +46,7 @@ type ElasticCPUWorkQueue struct {
 // elasticCPUInternalWorkQueue abstracts *WorkQueue for testing.
 type elasticCPUInternalWorkQueue interface {
 	requester
-	Admit(ctx context.Context, info WorkInfo) (enabled bool, err error)
+	Admit(ctx context.Context, info WorkInfo) AdmitResponse
 	SetTenantWeights(tenantWeights map[uint64]uint32)
 	adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64)
 }
@@ -80,11 +80,11 @@ func (e *ElasticCPUWorkQueue) Admit(
 		duration = MaxElasticCPUDuration
 	}
 	info.RequestedCount = duration.Nanoseconds()
-	enabled, err := e.workQueue.Admit(ctx, info)
-	if err != nil {
-		return nil, err
+	resp := e.workQueue.Admit(ctx, info)
+	if resp.Err != nil {
+		return nil, resp.Err
 	}
-	if !enabled {
+	if !resp.Enabled {
 		return nil, nil
 	}
 	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())

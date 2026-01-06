@@ -262,7 +262,7 @@ type WorkQueue struct {
 	workKind       WorkKind
 	queueKind      QueueKind
 	granter        granter
-	usesTokens     bool
+	mode           workQueueMode
 	tiedToRange    bool
 	usesAsyncAdmit bool
 	settings       *cluster.Settings
@@ -305,7 +305,7 @@ type WorkQueue struct {
 var _ requester = &WorkQueue{}
 
 type workQueueOptions struct {
-	usesTokens     bool
+	mode           workQueueMode
 	tiedToRange    bool
 	usesAsyncAdmit bool
 
@@ -322,12 +322,12 @@ type workQueueOptions struct {
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
 	switch workKind {
 	case KVWork:
-		// CPU bound KV work uses tokens. We also use KVWork for the per-store
-		// queues, which use tokens -- the caller overrides the usesTokens value
+		// CPU bound KV work uses slots. We also use KVWork for the per-store
+		// queues, which use tokens -- the caller overrides the mode value
 		// in that case.
-		return workQueueOptions{usesTokens: false, tiedToRange: true}
+		return workQueueOptions{mode: usesSlots, tiedToRange: true}
 	case SQLKVResponseWork, SQLSQLResponseWork:
-		return workQueueOptions{usesTokens: true, tiedToRange: false}
+		return workQueueOptions{mode: usesTokens, tiedToRange: false}
 	default:
 		panic(errors.AssertionFailedf("unexpected workKind %d", workKind))
 	}
@@ -379,7 +379,7 @@ func initWorkQueue(
 	q.workKind = workKind
 	q.queueKind = queueKind
 	q.granter = granter
-	q.usesTokens = opts.usesTokens
+	q.mode = opts.mode
 	q.tiedToRange = opts.tiedToRange
 	q.usesAsyncAdmit = opts.usesAsyncAdmit
 	q.settings = settings
@@ -414,6 +414,34 @@ func initWorkQueue(
 		q.startClosingEpochs()
 	}
 }
+
+// WorkQueue is mostly agnostic of what kind of resource is being managed.
+// With that said, there are a few different kind of resource types. If the
+// resource type is a slot, what the WorkQueue is really doing is enforcing
+// a concurrency limit. On the other hand, if the resource type is a token,
+// the WorkQueue is enforcing a rate limit -- there is some maximum number
+// of tokens that can be used per second. These are different things. In
+// particular, a slot must be returned, after it is acquired, so that
+// additional work can execute. Tokens are not returned in this way at all.
+// This difference is an important thing controlled by the workQueueMode
+// option. See AdmittedWorkDone for more. Note that we plan to deprecate
+// slots soon, in favor of tokens, even in case of foreground CPU AC.
+//
+// It is somewhat unfortunate that we need both usesTokens and
+// usesCPUTimeTokens. If these were one option instead of two, then when
+// slots goes away, we could delete this entire option, which would be
+// good for simplicity. The basic difference is that with CPU time token
+// AC, AdmittedWorkDone is supported -- and needed to incorporate
+// grunning-based measurements of CPU time post execution of a request.
+// With other token-based WorkQueues, AdmittedWorkDone is not supported.
+type workQueueMode uint8
+
+const (
+	usesSlots workQueueMode = iota
+	usesTokens
+	// TODO(josh): In next commit, implement.
+	usesCPUTimeTokens
+)
 
 func isInTenantHeap(tenant *tenantInfo) bool {
 	// If there is some waiting work, this tenant is in tenantHeap.
@@ -559,17 +587,36 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 	}
 }
 
-// Admit is called when requesting admission for some work. If err!=nil, the
-// request was not admitted, potentially due to the deadline being exceeded.
-// The enabled return value is relevant when err=nil, and represents whether
-// admission control is enabled. AdmittedWorkDone must be called iff
-// enabled=true && err!=nil, and the WorkKind for this queue uses slots.
-func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err error) {
+// AdmitResponse is the return value of Admit. We use a struct to enable
+// passing certain internal information such as requestedCount from Admit
+// to AdmittedWorkDone, without having to change code that calls the
+// WorkQueue.
+type AdmitResponse struct {
+	// If true (and if Err == nil), admission control is enabled.
+	Enabled bool
+	Err     error
+
+	tenantID roachpb.TenantID
+	// requestedCount is the number of slots or tokens taken at Admit time.
+	// It is useful to return, so that in AdmittedWorkDone, we can adjust
+	// the deduction, in cases where we have more information, such as in
+	// CPU time token AC, where a grunning-based measurement of CPU time
+	// is available by the time AdmittedWorkDone is called.
+	requestedCount int64
+}
+
+// Admit is called when requesting admission for some work. If
+// AdmitResponse.Err!=nil, the request was not admitted, potentially
+// due to the deadline being exceeded. The enabled return value is
+// relevant when Err=nil, and represents whether admission control is
+// enabled. AdmittedWorkDone must be called iff Enabled=true && Err!=nil,
+// and the WorkKind for this queue is KVWork.
+func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) AdmitResponse {
 	if !info.ReplicatedWorkInfo.Enabled {
 		enabledSetting := admissionControlEnabledSettings[q.workKind]
 		if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
 			q.metrics.recordBypassedAdmission(info.Priority)
-			return false, nil
+			return AdmitResponse{Enabled: false, Err: nil}
 		}
 	}
 
@@ -582,11 +629,15 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
 	}
-	if !q.usesTokens && info.RequestedCount != 1 {
-		panic(errors.AssertionFailedf("unexpected RequestedCount: %d", info.RequestedCount))
+	if q.mode == usesSlots && info.RequestedCount != 1 {
+		panic(errors.AssertionFailedf("unexpected RequestedCount for slot-based queue: %d", info.RequestedCount))
 	}
 	q.metrics.incRequested(info.Priority)
 	tenantID := info.TenantID.ToUint64()
+	admitResponse := AdmitResponse{
+		tenantID:       info.TenantID,
+		requestedCount: info.RequestedCount,
+	}
 
 	// The code in this method does not use defer to unlock the mutex because it
 	// needs the flexibility of selectively unlocking on a certain code path.
@@ -609,8 +660,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			// information about it being bypassed above-raft.
 			panic("unexpected BypassAdmission bit set for below raft admission")
 		}
-		if !q.usesTokens {
-			panic("unexpected ReplicatedWrite.Enabled on slot-based queue")
+		if q.mode != usesTokens {
+			panic(errors.AssertionFailedf("unexpected ReplicatedWrite.Enabled in mode %v", q.mode))
 		}
 	}
 	if info.BypassAdmission && q.workKind == KVWork {
@@ -622,7 +673,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		q.metrics.recordBypassedAdmission(info.Priority)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse
 	}
 	// Work is subject to admission control.
 
@@ -671,7 +723,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				)
 			}
 			q.metrics.recordFastPathAdmission(info.Priority)
-			return true, nil
+			admitResponse.Enabled = true
+			return admitResponse
 		}
 		// Did not get token/slot.
 		//
@@ -720,9 +773,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 			deadlineSubstring = fmt.Sprintf("deadline: %v, ", deadline)
 		}
-		return true,
+		admitResponse.Enabled = true
+		admitResponse.Err =
 			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: %snow: %v",
 				q.workKind, deadlineSubstring, startTime)
+		return admitResponse
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -760,8 +815,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				info.ReplicatedWorkInfo.Ingested,
 			)
 		}
-
-		return false, nil // return without waiting (admission is asynchronous)
+		admitResponse.Enabled = false
+		return admitResponse
 	}
 
 	// Start waiting for admission.
@@ -810,15 +865,17 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
 		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 			log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-			return true,
-				errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
-					q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+			admitResponse.Enabled = true
+			admitResponse.Err = errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+			return admitResponse
 		}
 		// This is a pure context cancellation.
 		log.Eventf(ctx, "context canceled, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-		return true,
-			errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
-				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
+		admitResponse.Enabled = true
+		admitResponse.Err = errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
+			q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
+		return admitResponse
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -831,7 +888,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, false)
 		q.granter.continueGrantChain(chainID)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse
 	}
 }
 
@@ -861,7 +919,7 @@ func recordAdmissionWorkQueueStats(
 // finished. It must be called iff the WorkKind of this WorkQueue uses slots
 // (not tokens), i.e., KVWork.
 func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Duration) {
-	if q.usesTokens {
+	if q.mode == usesTokens {
 		panic(errors.AssertionFailedf("tokens should not be returned"))
 	}
 	// Single slot is allocated for the work in the granter, and tenant.used was
@@ -1997,16 +2055,16 @@ func (q *StoreWorkQueue) Admit(
 		info.CreateTime = q.sequenceReplicatedWork(info.CreateTime, info.ReplicatedWorkInfo)
 	}
 
-	enabled, err := q.q[wc].Admit(ctx, info.WorkInfo)
-	if err != nil {
-		return StoreWorkHandle{}, err
+	resp := q.q[wc].Admit(ctx, info.WorkInfo)
+	if resp.Err != nil {
+		return StoreWorkHandle{}, resp.Err
 	}
 
 	h := StoreWorkHandle{
 		tenantID:            info.TenantID,
 		workClass:           wc,
 		writeTokens:         info.RequestedCount,
-		useAdmittedWorkDone: enabled,
+		useAdmittedWorkDone: resp.Enabled,
 	}
 	if !info.ReplicatedWorkInfo.Enabled {
 		return h, nil
