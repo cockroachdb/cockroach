@@ -489,6 +489,8 @@ var startCtx struct {
 	serverTLSCipherSuites  []string
 	disallowRootLogin      bool
 	allowDebugUser         bool
+	serverRootCertSAN      string
+	serverNodeCertSAN      string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -546,6 +548,8 @@ func setStartContextDefaults() {
 	startCtx.serverNodeCertDN = ""
 	startCtx.disallowRootLogin = false
 	startCtx.allowDebugUser = false
+	startCtx.serverRootCertSAN = ""
+	startCtx.serverNodeCertSAN = ""
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""

@@ -196,6 +196,133 @@ func CheckCertDNMatchesRootDNorNodeDN(
 	return rootOrNodeDNSet, certDNMatchesRootOrNodeDN
 }
 
+type userCertSANMu struct {
+	syncutil.RWMutex
+	sans []string
+}
+
+func (c *userCertSANMu) setSANs(sans []string) {
+	c.Lock()
+	defer c.Unlock()
+	c.sans = sans
+}
+
+func (c *userCertSANMu) unsetSANs() {
+	c.Lock()
+	defer c.Unlock()
+	c.sans = nil
+}
+
+func (c *userCertSANMu) getSANs() []string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.sans
+}
+
+type SANAttributeType string
+
+const (
+	SANAttributeTypeDNS SANAttributeType = "DNS"
+	SANAttributeTypeURI SANAttributeType = "URI"
+	SANAttributeTypeIP  SANAttributeType = "IP"
+)
+
+func (s SANAttributeType) String() string {
+	return string(s)
+}
+
+// setSANsWithString sets the SANs from a comma-separated string of entries in
+// the format attribute-type=attribute-value. For example:
+// "DNS=example.com,URI=spiffe://example.org/service"
+// is converted to a list SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+// Only DNS, URI, and IP attribute types are allowed.
+func (c *userCertSANMu) setSANsWithString(sanString string) error {
+	if len(sanString) == 0 {
+		c.unsetSANs()
+		return nil
+	}
+
+	// Split comma-separated SAN attributes
+	sanEntries := strings.Split(sanString, ",")
+
+	// Parse each entry from attribute-type=attribute-value format
+	// and convert to SAN:attribute-type:attribute-value format
+	validSANs := make([]string, 0, len(sanEntries))
+	for _, entry := range sanEntries {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+
+		// Split on '=' to get attribute-type and attribute-value
+		idx := strings.IndexByte(trimmed, '=')
+		if idx == -1 {
+			return errors.Errorf("invalid SAN entry format: %q (expected format: attribute-type=attribute-value)", trimmed)
+		}
+
+		attrType := strings.TrimSpace(trimmed[:idx])
+		attrValue := strings.TrimSpace(trimmed[idx+1:])
+
+		if attrType == "" {
+			return errors.Errorf("invalid SAN entry format: %q (attribute type cannot be empty)", trimmed)
+		}
+
+		if attrValue == "" {
+			return errors.Errorf("invalid SAN entry format: %q (attribute value cannot be empty)", trimmed)
+		}
+
+		// Normalize attribute type to uppercase
+		attrTypeUpper := strings.ToUpper(attrType)
+
+		// Validate that attribute type is one of the allowed types
+		if attrTypeUpper != SANAttributeTypeDNS.String() && attrTypeUpper != SANAttributeTypeURI.String() && attrTypeUpper != SANAttributeTypeIP.String() {
+			return errors.Errorf("invalid SAN attribute type: %q (only DNS, URI, and IP are allowed)", attrType)
+		}
+
+		// Convert to SAN:TYPE:value format and store
+		validSANs = append(validSANs, fmt.Sprintf("SAN:%s:%s", attrTypeUpper, attrValue))
+	}
+
+	if len(validSANs) == 0 {
+		return errors.Errorf("invalid SAN string: %q (no valid entries found)", sanString)
+	}
+
+	c.setSANs(validSANs)
+	return nil
+}
+
+var rootSANMu, nodeSANMu userCertSANMu
+
+// SetRootSAN sets the global root SANs from a comma-separated string
+// and stores them as a list similar to
+// SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+func SetRootSAN(rootSANString string) error {
+	return rootSANMu.setSANsWithString(rootSANString)
+}
+
+func UnsetRootSAN() {
+	rootSANMu.unsetSANs()
+}
+
+func GetRootSANs() []string {
+	return rootSANMu.getSANs()
+}
+
+// SetNodeSAN sets the global node SANs from a comma-separated string
+// and stores them as a list similar to
+// SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+func SetNodeSAN(nodeSANString string) error {
+	return nodeSANMu.setSANsWithString(nodeSANString)
+}
+
+func UnsetNodeSAN() {
+	nodeSANMu.unsetSANs()
+}
+
+func GetNodeSANs() []string {
+	return nodeSANMu.getSANs()
+}
+
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
 // map is used to transform principal names found in the Subject.CommonName or
