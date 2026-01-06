@@ -132,24 +132,6 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		}
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
-	var spansToDo []roachpb.Span
-	{
-		sourceIndexSpan := descriptor.IndexSpan(ib.execCfg.Codec, progress.SourceIndexID)
-		var g roachpb.SpanGroup
-		g.Add(sourceIndexSpan)
-		g.Sub(progress.CompletedSpans...)
-		spansToDo = g.Slice()
-	}
-	if len(spansToDo) == 0 { // already done
-		return nil
-	}
-
-	now := ib.execCfg.DB.Clock().Now()
-	// Pick now as the read timestamp for the backfill. It's safe to use this
-	// timestamp to read even if we've partially backfilled at an earlier
-	// timestamp because other writing transactions have been writing at the
-	// appropriate timestamps in-between.
-	readAsOf := now
 	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
 	// addStoragePrefix records a storage prefix before any SST is written to that
@@ -165,30 +147,89 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 
-	run, retErr := ib.plan(
-		ctx,
-		job.ID(),
-		descriptor,
-		now,
-		progress.MinimumWriteTimestamp,
-		readAsOf,
-		spansToDo,
-		progress.DestIndexIDs,
-		progress.SourceIndexID,
-		useDistributedMerge,
-		updateFunc,
-		addStoragePrefix,
-	)
-	if retErr != nil {
-		return retErr
+	// Compute remaining spans for map phase.
+	var spansToDo []roachpb.Span
+	{
+		sourceIndexSpan := descriptor.IndexSpan(ib.execCfg.Codec, progress.SourceIndexID)
+		var g roachpb.SpanGroup
+		g.Add(sourceIndexSpan)
+		g.Sub(progress.CompletedSpans...)
+		spansToDo = g.Slice()
 	}
-	if err := run(ctx); err != nil {
-		return err
+
+	// Process any remaining spans to do. If this is the distributed merge
+	// pipeline, this is the map phase.
+	if len(spansToDo) > 0 {
+		now := ib.execCfg.DB.Clock().Now()
+		// Pick now as the read timestamp for the backfill. It's safe to use this
+		// timestamp to read even if we've partially backfilled at an earlier
+		// timestamp because other writing transactions have been writing at the
+		// appropriate timestamps in-between.
+		readAsOf := now
+		run, err := ib.plan(
+			ctx,
+			job.ID(),
+			descriptor,
+			now,
+			progress.MinimumWriteTimestamp,
+			readAsOf,
+			spansToDo,
+			progress.DestIndexIDs,
+			progress.SourceIndexID,
+			useDistributedMerge,
+			updateFunc,
+			addStoragePrefix,
+		)
+		if err != nil {
+			return err
+		}
+		if err := run(ctx); err != nil {
+			return err
+		}
 	}
+
 	if !useDistributedMerge {
 		return nil
 	}
-	return ib.runDistributedMerge(ctx, job, descriptor, &progress, tracker, sstManifestBuf.Snapshot(), addStoragePrefix)
+
+	// Check if there are manifests to merge. On resume, sstManifestBuf is
+	// initialized from progress.SSTManifests (see NewSSTManifestBuffer call
+	// above), so this correctly returns checkpointed manifests even when the
+	// map phase was already complete in a previous run.
+	manifests := sstManifestBuf.Snapshot()
+	if len(manifests) == 0 {
+		return nil
+	}
+
+	// Call testing hook after map phase completes, before merge iterations begin.
+	if knobs := &ib.execCfg.DistSQLSrv.TestingKnobs; knobs.AfterDistributedMergeMapPhase != nil {
+		knobs.AfterDistributedMergeMapPhase(ctx, manifests)
+	}
+
+	// Determine merge iteration parameters.
+	//
+	// Phase semantics:
+	//   - phase = 0: Map phase complete, no merge iterations completed yet.
+	//   - phase = N (N >= 1): Merge iteration N completed.
+	//
+	// On resume after a completed iteration, for simplicity in tracking we do a
+	// single final iteration to KV rather than continuing with the original
+	// iteration count.
+	maxIterations := int(backfill.DistributedMergeIterations.Get(&ib.execCfg.Settings.SV))
+	startIteration := 1
+
+	if progress.DistributedMergePhase >= 1 {
+		// Resume case: we've completed at least one merge iteration.
+		// Complete the merge in a single final iteration directly to KV.
+		startIteration = int(progress.DistributedMergePhase) + 1
+		maxIterations = startIteration
+	}
+	// If phase = 0, this is either a fresh merge or resume before any iteration
+	// completed. In both cases, run the full merge iterations from the start.
+
+	return ib.runDistributedMerge(
+		ctx, job, descriptor, &progress, tracker, manifests, startIteration, maxIterations, addStoragePrefix,
+	)
 }
 
 // Index backfilling ingests SSTs that don't play nicely with running txns
@@ -320,6 +361,8 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	progress *scexec.BackfillProgress,
 	tracker scexec.BackfillerProgressWriter,
 	manifests []jobspb.IndexBackfillSSTManifest,
+	startIteration int,
+	maxIterations int,
 	addStoragePrefix func(ctx context.Context, prefix string) error,
 ) error {
 	if len(manifests) == 0 {
@@ -349,12 +392,17 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-distributed-merge", username.NodeUserName(), mem, ib.execCfg)
 	defer cleanup()
 
-	maxIterations := int(backfill.DistributedMergeIterations.Get(&ib.execCfg.Settings.SV))
-
 	// Iterate through merge passes, with all but the final iteration writing to
 	// intermediate storage, and the final iteration ingesting directly into KV.
 	currentSSTs := ssts
-	for iteration := 1; iteration <= maxIterations; iteration++ {
+	for iteration := startIteration; iteration <= maxIterations; iteration++ {
+		// Check if the job has been paused or cancelled before starting work.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		genOutputURIAndRecordPrefix := func(instanceID base.SQLInstanceID) (string, error) {
 			// Use nodelocal for temporary storage of merged SSTs. These SSTs are
 			// only needed during the lifetime of the job. Record the storage prefix
@@ -389,10 +437,18 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			return err
 		}
 
-		// If this is the final iteration, we're done (merged will be nil as the
-		// final iteration writes to KV, not external storage). Keep the manifests
-		// from the previous iteration so they can be used for cleanup or debugging.
+		// Final iteration: data is ingested into KV, we're done.
 		if iteration == maxIterations {
+			// Clear manifests to indicate completion.
+			progress.SSTManifests = nil
+			if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
+				return err
+			}
+
+			// Call testing knob for final iteration (manifests will be nil/empty).
+			if fn := ib.execCfg.DistSQLSrv.TestingKnobs.AfterDistributedMergeIteration; fn != nil {
+				fn(ctx, iteration, progress.SSTManifests)
+			}
 			return nil
 		}
 
@@ -400,9 +456,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			return errors.AssertionFailedf("expected merged sst output: iteration %d", iteration)
 		}
 
-		// Convert merged SSTs to manifests and append them to the existing manifests.
-		// This accumulates SSTs from all iterations, allowing for potential resume
-		// and cleanup operations.
+		// Convert merged SSTs to manifests for checkpointing. On resume, these
+		// manifests will be used as input to complete the merge in a single
+		// iteration directly to KV.
 		newManifests := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
 		for _, sst := range merged {
 			span := roachpb.Span{
@@ -415,6 +471,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			})
 		}
 		progress.SSTManifests = newManifests
+		// Update the merge phase to track which iteration we completed.
+		// This allows resume logic to know we're in the middle of merge iterations.
+		progress.DistributedMergePhase = int32(iteration)
 		if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
 			return err
 		}
