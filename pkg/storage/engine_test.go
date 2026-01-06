@@ -203,8 +203,8 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		if valRes, err := MVCCGet(context.Background(), batch, key,
 			hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 			t.Fatal(err)
-		} else if valRes.Value != nil {
-			t.Fatalf("expected no value, got %+v", valRes.Value)
+		} else if valRes.Value.Exists() {
+			t.Fatalf("expected no value, got %+v", valRes.Value.Value)
 		}
 	}
 }

@@ -98,7 +98,7 @@ func Get(
 		intents = append(intents, *getRes.Intent)
 	}
 
-	reply.Value = getRes.Value
+	reply.Value = getRes.Value.ToPointer()
 	if h.ReadConsistency == kvpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
 		// NOTE: MVCCGet uses a Prefix iterator, so we want to use one in
@@ -117,7 +117,7 @@ func Get(
 		}
 	}
 
-	shouldLockKey := getRes.Value != nil || args.LockNonExisting
+	shouldLockKey := getRes.Value.Exists() || args.LockNonExisting
 	var res result.Result
 	if args.KeyLockingStrength != lock.None && shouldLockKey {
 		// ExpectExclusionSince is used by callers (namely, txnWriteBuffers) that
