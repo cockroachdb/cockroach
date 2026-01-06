@@ -499,7 +499,7 @@ func registerJepsen(r registry.Registry) {
 				// if they detect that the machines have already been properly
 				// initialized.
 				Cluster:          r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				CompatibleClouds: registry.AllExceptAWS,
+				CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
