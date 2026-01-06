@@ -1054,11 +1054,7 @@ CREATE TABLE t2(n int);
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// This would work with secondary tenants as well, but the span config
-				// limited logic can hit transaction retries on the span_count table.
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
-			})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
