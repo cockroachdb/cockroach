@@ -183,7 +183,7 @@ func assertRangeStats(
 	require.Equal(t, expMS, ms, "%s: stats differ", name)
 }
 
-func assertRecomputedStats(
+func assertRecomputedStatsExceptSys(
 	t *testing.T,
 	name string,
 	r storage.Reader,
@@ -202,6 +202,11 @@ func assertRecomputedStats(
 	// Recomputing stats always has ContainsEstimates = 0, while on-disk stats may
 	// have a non-zero value. ContainsEstimates should be asserted separately.
 	ms.ContainsEstimates = expMS.ContainsEstimates
+	// Ignore SysBytes/SysCount/AbortSpanBytes: these can race with lease updates
+	// since RequestLease doesn't acquire latches. See:
+	// https://github.com/cockroachdb/cockroach/issues/93896.
+	expMS.SysBytes, expMS.SysCount, expMS.AbortSpanBytes = 0, 0, 0
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	require.Equal(t, expMS, ms, "%s: recomputed stats diverge", name)
 }
 
