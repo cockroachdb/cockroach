@@ -216,14 +216,14 @@ type JSON interface {
 	// JEntry.
 	encode(appendTo []byte) (jEntry jEntry, b []byte, err error)
 
-	// MaybeDecode returns an equivalent JSON which is not a jsonEncoded.
+	// MaybeDecode returns an equivalent JSON which is not a JSONEncoded.
 	MaybeDecode() JSON
 
 	// toGoRepr returns the Go-style representation of this JSON value
 	// (map[string]interface{} for objects, etc.).
 	toGoRepr() (interface{}, error)
 
-	// tryDecode returns an equivalent JSON which is not a jsonEncoded, returning
+	// tryDecode returns an equivalent JSON which is not a JSONEncoded, returning
 	// an error if the encoded data was corrupt.
 	tryDecode() (JSON, error)
 
@@ -668,7 +668,7 @@ func (j jsonTrue) Compare(other JSON) (int, error) {
 }
 
 func decodeIfNeeded(j JSON) (JSON, error) {
-	if enc, ok := j.(*jsonEncoded); ok {
+	if enc, ok := j.(*JSONEncoded); ok {
 		var err error
 		j, err = enc.decode()
 		if err != nil {
@@ -1524,7 +1524,7 @@ func isEnd(json JSON) bool {
 			end = false
 		}
 
-	case *jsonEncoded:
+	case *JSONEncoded:
 		switch t.typ {
 		case ArrayJSONType, ObjectJSONType:
 			if t.containerLen != 0 {
@@ -1546,7 +1546,7 @@ func emptyJSONForType(json JSON) JSON {
 	case jsonObject:
 		return emptyJSONObject
 
-	case *jsonEncoded:
+	case *JSONEncoded:
 		switch t.typ {
 		case ArrayJSONType:
 			return emptyJSONArray
@@ -2161,7 +2161,7 @@ var errCannotSetPathInScalar = pgerror.WithCandidateCode(errors.New("cannot set 
 // * if the provided index points to after the end of the array, `to` is appended to the array.
 func setValKeyOrIdx(j JSON, key string, to JSON, createMissing bool) (JSON, error) {
 	switch v := j.(type) {
-	case *jsonEncoded:
+	case *JSONEncoded:
 		n, err := v.shallowDecode()
 		if err != nil {
 			return nil, err
@@ -2217,7 +2217,7 @@ func deepSet(j JSON, path []string, to JSON, createMissing bool) (JSON, error) {
 		return setValKeyOrIdx(j, path[0], to, createMissing)
 	default:
 		switch v := j.(type) {
-		case *jsonEncoded:
+		case *JSONEncoded:
 			n, err := v.shallowDecode()
 			if err != nil {
 				return nil, err
@@ -2244,7 +2244,7 @@ var errCannotReplaceExistingKey = pgerror.WithCandidateCode(errors.New("cannot r
 
 func insertValKeyOrIdx(j JSON, key string, newVal JSON, insertAfter bool) (JSON, error) {
 	switch v := j.(type) {
-	case *jsonEncoded:
+	case *JSONEncoded:
 		n, err := v.shallowDecode()
 		if err != nil {
 			return nil, err
@@ -2305,7 +2305,7 @@ func deepInsert(j JSON, path []string, to JSON, insertAfter bool) (JSON, error) 
 		return insertValKeyOrIdx(j, path[0], to, insertAfter)
 	default:
 		switch v := j.(type) {
-		case *jsonEncoded:
+		case *JSONEncoded:
 			n, err := v.shallowDecode()
 			if err != nil {
 				return nil, err
@@ -2591,7 +2591,7 @@ func (j jsonArray) Exists(s string) (bool, error) {
 			if string(elem) == s {
 				return true, nil
 			}
-		case *jsonEncoded:
+		case *JSONEncoded:
 			if elem.typ == StringJSONType && string(elem.value) == s {
 				return true, nil
 			}
