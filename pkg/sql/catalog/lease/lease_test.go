@@ -589,6 +589,28 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		}
 	}
 
+	{
+		// Test context cancellation while waiting.
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		// Cancel the context after a short delay to simulate cancellation during execution.
+		grp := ctxgroup.WithContext(context.Background())
+		grp.GoCtx(func(ctx context.Context) error {
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+			return nil
+		})
+
+		_, err := leaseMgr.WaitForNewVersion(cancelCtx, descID, nil, retry.Options{})
+
+		// We expect the error to indicate context cancellation.
+		if !(sqltestutils.IsClientSideQueryCanceledErr(err) ||
+			errors.Is(err, context.Canceled)) {
+			t.Fatalf("The client or the context should have timed out. Unexpected error: %v", err)
+		}
+		require.NoError(testingT, grp.Wait())
+	}
+
 	t.mustAcquire(3, descID)
 	t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/3")
 
