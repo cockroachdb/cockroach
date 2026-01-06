@@ -12,6 +12,7 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
+import { SessionsRequest } from "src/api/sessionsApi";
 import { commonStyles } from "src/common";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
@@ -57,7 +58,7 @@ export interface OwnProps {
   nodeNames: { [nodeId: string]: string };
   session: SessionInfo;
   sessionError: Error | null;
-  refreshSessions: () => void;
+  refreshSessions: (req?: SessionsRequest) => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
