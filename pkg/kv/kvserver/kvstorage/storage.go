@@ -74,6 +74,11 @@ func WrapState(rw StateRW) State {
 	return State{RO: rw, WO: rw}
 }
 
+// WrapRaft interprets the provided storage accessor as the Raft engine.
+func WrapRaft(rw RaftRW) Raft {
+	return Raft{RO: rw, WO: rw}
+}
+
 // TODORaft interprets the provided storage accessor as the Raft engine.
 //
 // TODO(pav-kv): remove when all callers have clarified their access patterns.
