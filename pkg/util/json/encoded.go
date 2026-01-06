@@ -56,21 +56,26 @@ func (j *JSONEncoded) Type() Type {
 
 // newEncodedFromRoot returns a JSONEncoded from a fully-encoded JSON document.
 func newEncodedFromRoot(v []byte) (*JSONEncoded, error) {
+	var jsonEncoded JSONEncoded
+	return &jsonEncoded, jsonEncoded.fromRoot(v)
+}
+
+func (j *JSONEncoded) fromRoot(v []byte) error {
 	v, typ, err := jsonTypeFromRootBuffer(v)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	containerLen := -1
 	if typ == ArrayJSONType || typ == ObjectJSONType {
 		containerHeader, err := getUint32At(v, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		containerLen = int(containerHeader & containerHeaderLenMask)
 	}
 
-	return &JSONEncoded{
+	*j = JSONEncoded{
 		typ:          typ,
 		containerLen: containerLen,
 		// Manually set the capacity of the new slice to its length, so we properly
@@ -78,7 +83,8 @@ func newEncodedFromRoot(v []byte) (*JSONEncoded, error) {
 		// capacity is very large, since it probably points to the backing byte
 		// slice of a kv batch.
 		value: v[:len(v):len(v)],
-	}, nil
+	}
+	return nil
 }
 
 func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {

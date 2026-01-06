@@ -18,6 +18,9 @@ import (
 // a new JSONEncoded object from scratch on demand.
 type JSONs struct {
 	Bytes
+	// jsonScratch batches allocations of JSONEncoded objects (under the
+	// assumption that the vector doesn't have NULLs).
+	jsonScratch []json.JSONEncoded
 	// scratch is a scratch space for encoding a JSON object on demand.
 	scratch []byte
 }
@@ -25,7 +28,8 @@ type JSONs struct {
 // NewJSONs returns a new JSONs presized to n elements.
 func NewJSONs(n int) *JSONs {
 	return &JSONs{
-		Bytes: *NewBytes(n),
+		Bytes:       *NewBytes(n),
+		jsonScratch: make([]json.JSONEncoded, n),
 	}
 }
 
@@ -38,11 +42,12 @@ func (js *JSONs) Get(i int) json.JSON {
 	if len(bytes) == 0 {
 		return json.NullJSONValue
 	}
-	ret, err := json.FromEncoding(bytes)
+	j := &js.jsonScratch[i]
+	err := json.FromEncodingInto(bytes, j)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	return ret
+	return j
 }
 
 // Set sets the ith JSON in JSONs.
@@ -62,6 +67,13 @@ func (js *JSONs) Set(i int, j json.JSON) {
 func (js *JSONs) Window(start, end int) *JSONs {
 	return &JSONs{
 		Bytes: *js.Bytes.Window(start, end),
+		// TODO(yuzefovich): in the general case, if we simply reused
+		// js.jsonScratch here, it could lead to problems down the line (because
+		// Get calls on js and on the window into js would be reusing the same
+		// JSONEncoded object). However, in practice the windowed batch should
+		// be consumed soon after it's created, without the overlap with Gets on
+		// the original batch. Think through this.
+		jsonScratch: make([]json.JSONEncoded, end-start),
 	}
 }
 
@@ -81,12 +93,14 @@ func (js *JSONs) CopySlice(src *JSONs, destIdx, srcStartIdx, srcEndIdx int) {
 // values from src into the receiver starting at destIdx.
 func (js *JSONs) AppendSlice(src *JSONs, destIdx, srcStartIdx, srcEndIdx int) {
 	js.Bytes.AppendSlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
+	js.ensureJSONScratch()
 }
 
 // appendSliceWithSel appends all values specified in sel from the source into
 // the receiver starting at position destIdx.
 func (js *JSONs) appendSliceWithSel(src *JSONs, destIdx int, sel []int) {
 	js.Bytes.appendSliceWithSel(&src.Bytes, destIdx, sel)
+	js.ensureJSONScratch()
 }
 
 // String is used for debugging purposes.
@@ -98,4 +112,19 @@ func (js *JSONs) String() string {
 		)
 	}
 	return builder.String()
+}
+
+// Deserialize updates b according to the "arrow-like" format that was produced
+// by Serialize.
+func (js *JSONs) Deserialize(data []byte, offsets []int32) {
+	js.Bytes.Deserialize(data, offsets)
+	js.ensureJSONScratch()
+}
+
+func (js *JSONs) ensureJSONScratch() {
+	if cap(js.jsonScratch) < js.Bytes.Len() {
+		js.jsonScratch = make([]json.JSONEncoded, js.Bytes.Len())
+	} else {
+		js.jsonScratch = js.jsonScratch[:js.Bytes.Len()]
+	}
 }
