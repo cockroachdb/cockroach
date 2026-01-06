@@ -674,6 +674,15 @@ func (c *CustomFuncs) ScalarExprAt(list memo.ScalarListExpr, i int) (_ opt.Scala
 	return nil, false
 }
 
+// ScalarPair returns the two expressions in the given list. Returns ok=false if
+// the length of the list is not two.
+func (c *CustomFuncs) ScalarPair(list memo.ScalarListExpr) (_, _ opt.ScalarExpr, ok bool) {
+	if len(list) != 2 {
+		return nil, nil, false
+	}
+	return list[0], list[1], true
+}
+
 // ----------------------------------------------------------------------
 //
 // Ordering functions

@@ -1196,3 +1196,71 @@ project
  │    └── columns: s:4
  └── projections
       └── s:4 LIKE s:4 [as="?column?":12, outer=(4)]
+
+# --------------------------------------------------
+# ConvertLevenshteinToLevenshteinLessEqual
+# --------------------------------------------------
+
+norm expect=ConvertLevenshteinToLevenshteinLessEqualLeft
+SELECT
+  levenshtein(s, j::STRING) = 5,
+  levenshtein(s, j::STRING) < 5,
+  levenshtein(s, j::STRING) > 5,
+  levenshtein(s, j::STRING) <= 5,
+  levenshtein(s, j::STRING) >= 5
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14 "?column?":15 "?column?":16
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4 j:5
+ └── projections
+      ├── levenshtein_less_equal(s:4, j:5::STRING, 5) = 5 [as="?column?":12, outer=(4,5), immutable]
+      ├── levenshtein_less_equal(s:4, j:5::STRING, 5) < 5 [as="?column?":13, outer=(4,5), immutable]
+      ├── levenshtein_less_equal(s:4, j:5::STRING, 5) > 5 [as="?column?":14, outer=(4,5), immutable]
+      ├── levenshtein_less_equal(s:4, j:5::STRING, 5) <= 5 [as="?column?":15, outer=(4,5), immutable]
+      └── levenshtein_less_equal(s:4, j:5::STRING, 5) >= 5 [as="?column?":16, outer=(4,5), immutable]
+
+norm expect=ConvertLevenshteinToLevenshteinLessEqualRight
+SELECT
+  levenshtein(s, j::STRING) = i,
+  levenshtein(s, j::STRING) < i,
+  levenshtein(s, j::STRING) > i,
+  levenshtein(s, j::STRING) <= i,
+  levenshtein(s, j::STRING) >= i
+FROM a
+----
+project
+ ├── columns: "?column?":12 "?column?":13 "?column?":14 "?column?":15 "?column?":16
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2 s:4 j:5
+ └── projections
+      ├── i:2 = levenshtein_less_equal(s:4, j:5::STRING, i:2) [as="?column?":12, outer=(2,4,5), immutable]
+      ├── i:2 > levenshtein_less_equal(s:4, j:5::STRING, i:2) [as="?column?":13, outer=(2,4,5), immutable]
+      ├── i:2 < levenshtein_less_equal(s:4, j:5::STRING, i:2) [as="?column?":14, outer=(2,4,5), immutable]
+      ├── i:2 >= levenshtein_less_equal(s:4, j:5::STRING, i:2) [as="?column?":15, outer=(2,4,5), immutable]
+      └── i:2 <= levenshtein_less_equal(s:4, j:5::STRING, i:2) [as="?column?":16, outer=(2,4,5), immutable]
+
+norm expect-not=(ConvertLevenshteinToLevenshteinLessEqualLeft,ConvertLevenshteinToLevenshteinLessEqualRight)
+SELECT levenshtein(s, j::STRING) < 5.1 FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4 j:5
+ └── projections
+      └── levenshtein(s:4, j:5::STRING) < 5.1 [as="?column?":12, outer=(4,5), immutable]
+
+norm expect-not=(ConvertLevenshteinToLevenshteinLessEqualLeft,ConvertLevenshteinToLevenshteinLessEqualRight)
+SELECT levenshtein(s, j::STRING, 1, 2, 3) < 5 FROM a
+----
+project
+ ├── columns: "?column?":12
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4 j:5
+ └── projections
+      └── levenshtein(s:4, j:5::STRING, 1, 2, 3) < 5 [as="?column?":12, outer=(4,5), immutable]
