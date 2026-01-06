@@ -543,3 +543,40 @@ func TestBlobClientStat(t *testing.T) {
 		})
 	}
 }
+
+// TestBlobClientReadFileClose tests that closing a reader before consuming all
+// data closes the underlying stream.
+func TestBlobClientReadFileClose(t *testing.T) {
+	localNodeID := roachpb.NodeID(1)
+	remoteNodeID := roachpb.NodeID(2)
+	localExternalDir, remoteExternalDir, stopper, cleanUpFn := createTestResources(t)
+	defer cleanUpFn()
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
+
+	blobClientFactory := setUpService(t, rpcContext, localNodeID, remoteNodeID, localExternalDir, remoteExternalDir)
+
+	largeContent := bytes.Repeat([]byte("x"), 1<<20) // 1MB
+	writeTestFile(t, filepath.Join(remoteExternalDir, "test/large.csv"), largeContent)
+
+	blobClient, err := blobClientFactory(ctx, remoteNodeID)
+	require.NoError(t, err)
+
+	reader, _, err := blobClient.ReadFile(ctx, "test/large.csv", 0)
+	require.NoError(t, err)
+
+	// Read a small amount then close without reading everything.
+	buf := make([]byte, 1024)
+	_, err = reader.Read(ctx, buf)
+	require.NoError(t, err)
+
+	err = reader.Close(ctx)
+	require.NoError(t, err)
+
+	// This should return an error.
+	_, err = ioctx.ReadAll(ctx, reader)
+	require.Error(t, err)
+}
