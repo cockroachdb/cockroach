@@ -1748,7 +1748,7 @@ func NewStore(
 		s.splitQueue = newSplitQueue(s, s.db)
 		s.replicateQueue = newReplicateQueue(s, s.allocator)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
-		s.mmaStoreRebalancer = newMMAStoreRebalancer(s, s.cfg.MMAllocator, s.cfg.Settings, s.cfg.StorePool)
+		s.mmaStoreRebalancer = newMMAStoreRebalancer(s, s.cfg.MMAllocator, s.cfg.Settings)
 		s.raftLogQueue = newRaftLogQueue(s, s.db)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
 		s.consistencyQueue = newConsistencyQueue(s)
