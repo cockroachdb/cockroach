@@ -94,7 +94,7 @@ func (j jsonObject) slowContains(other JSON) bool {
 	return false
 }
 
-func (j *jsonEncoded) slowContains(other JSON) bool {
+func (j *JSONEncoded) slowContains(other JSON) bool {
 	return j.mustDecode().(containsTester).slowContains(other)
 }
 
@@ -144,6 +144,6 @@ func (j jsonObject) subdocument(_ bool, rng *rand.Rand) JSON {
 	return result
 }
 
-func (j *jsonEncoded) subdocument(isRoot bool, rng *rand.Rand) JSON {
+func (j *JSONEncoded) subdocument(isRoot bool, rng *rand.Rand) JSON {
 	return j.mustDecode().(containsTester).subdocument(isRoot, rng)
 }

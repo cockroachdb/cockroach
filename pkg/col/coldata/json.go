@@ -15,7 +15,7 @@ import (
 
 // JSONs is a representation of columnar JSON data. It's simply a wrapper around
 // the flat Bytes structure. To pull a JSON out of the structure, we construct
-// a new "encodedJSON" object from scratch on demand.
+// a new JSONEncoded object from scratch on demand.
 type JSONs struct {
 	Bytes
 	// scratch is a scratch space for encoding a JSON object on demand.
