@@ -3,6 +3,8 @@
 MISC_SRCS = [
     "//pkg/ccl/backupccl:data_driven_generated_test.go",
     "//pkg/ccl/kvccl/kvtenantccl/upgradeinterlockccl:generated_test.go",
+    "//pkg/ccl/schemachangerccl/scbackuptestccl:backup_base_generated_test.go",
+    "//pkg/ccl/schemachangerccl/sctestbackupmrccl:backup_multiregion_generated_test.go",
     "//pkg/internal/team:TEAMS.yaml",
     "//pkg/kv/kvpb:batch_generated.go",
     "//pkg/kv/kvserver/concurrency:keylocks_interval_btree.go",
