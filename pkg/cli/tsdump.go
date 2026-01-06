@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -64,8 +65,9 @@ var debugTimeSeriesDumpOpts = struct {
 	ddMetricInterval       int64  // interval for datadoginit format only
 	metricsListFile        string // file containing explicit list of metrics to dump
 	nonVerbose             bool   // dump only essential and support metrics
+	destination            string // destination file path; empty means stdout
 }{
-	format:                 tsDumpText,
+	format:                 tsDumpRaw,
 	from:                   timestampValue{},
 	to:                     timestampValue(timeutil.Now().Add(24 * time.Hour)),
 	clusterLabel:           "",
@@ -114,6 +116,24 @@ will then convert it to the --format requested in the current invocation.
 			convertFile = args[0]
 		}
 
+		var outputDest io.Writer = os.Stdout
+		if debugTimeSeriesDumpOpts.destination != "" {
+			// Validate file extension matches the format
+			ext := filepath.Ext(debugTimeSeriesDumpOpts.destination)
+			expectedExt := getExpectedFileExtension(debugTimeSeriesDumpOpts.format)
+			if expectedExt != "" && ext != "" && ext != expectedExt {
+				return errors.Newf("file extension %q does not match expected format %q",
+					ext, expectedExt)
+			}
+
+			f, err := os.Create(debugTimeSeriesDumpOpts.destination)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create file %q", debugTimeSeriesDumpOpts.destination)
+			}
+			defer f.Close()
+			outputDest = f
+		}
+
 		var w tsWriter
 		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
 		case tsDumpRaw:
@@ -123,13 +143,13 @@ will then convert it to the --format requested in the current invocation.
 
 			// Special case, we don't go through the text output code.
 		case tsDumpCSV:
-			w = csvTSWriter{w: csv.NewWriter(os.Stdout)}
+			w = csvTSWriter{w: csv.NewWriter(outputDest)}
 		case tsDumpTSV:
-			cw := csvTSWriter{w: csv.NewWriter(os.Stdout)}
+			cw := csvTSWriter{w: csv.NewWriter(outputDest)}
 			cw.w.Comma = '\t'
 			w = cw
 		case tsDumpText:
-			w = defaultTSWriter{w: os.Stdout}
+			w = defaultTSWriter{w: outputDest}
 		case tsDumpJSON:
 			w = makeJSONWriter(
 				debugTimeSeriesDumpOpts.targetURL,
@@ -185,7 +205,7 @@ will then convert it to the --format requested in the current invocation.
 				write := beginHttpRequestWithWritePipe(debugTimeSeriesDumpOpts.targetURL)
 				w = makeOpenMetricsWriter(write)
 			} else {
-				w = makeOpenMetricsWriter(os.Stdout)
+				w = makeOpenMetricsWriter(outputDest)
 			}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
@@ -285,9 +305,9 @@ will then convert it to the --format requested in the current invocation.
 					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
-				// Buffer the writes to os.Stdout since we're going to
-				// be writing potentially a lot of data to it.
-				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
+				// Buffer the writes since we're going to
+				// be writing potentially a lot of data.
+				w := bufio.NewWriterSize(outputDest, 1024*1024)
 
 				// Write embedded metadata first
 				if err := tsdumpmeta.Write(w, metadata); err != nil {
@@ -298,10 +318,15 @@ will then convert it to the --format requested in the current invocation.
 					return err
 				}
 
+				if err := w.Flush(); err != nil {
+					return err
+				}
+
 				if err = createYAML(ctx); err != nil {
 					return err
 				}
-				return w.Flush()
+
+				return nil
 			}
 			stream, err := tsClient.Dump(context.Background(), req)
 			if err != nil {
@@ -875,4 +900,24 @@ func (m *tsDumpFormat) Set(s string) error {
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}
 	return nil
+}
+
+// getExpectedFileExtension returns the expected file extension for a given format.
+// Returns empty string for formats where extension validation is not applicable.
+func getExpectedFileExtension(format tsDumpFormat) string {
+	switch format {
+	case tsDumpRaw:
+		return ".gob"
+	case tsDumpCSV:
+		return ".csv"
+	case tsDumpTSV:
+		return ".tsv"
+	case tsDumpText:
+		return ".txt"
+	case tsDumpJSON:
+		return ".json"
+	default:
+		// For openmetrics, datadog, datadoginit - no specific extension expected
+		return ""
+	}
 }
