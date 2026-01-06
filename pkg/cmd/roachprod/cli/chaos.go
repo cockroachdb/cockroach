@@ -127,6 +127,7 @@ Default: all`)
 	chaosCmd.AddCommand(cr.buildChaosNetworkLatencyCmd())
 	chaosCmd.AddCommand(cr.buildChaosDiskStallCmd())
 	chaosCmd.AddCommand(cr.buildChaosProcessKillCmd())
+	chaosCmd.AddCommand(cr.buildChaosResetVMCmd())
 
 	return chaosCmd
 }
@@ -157,10 +158,12 @@ func getGlobalChaosOpts() (GlobalChaosOpts, error) {
 	}, nil
 }
 
-// getClusterOptions returns cluster options for creating a failer
-func getClusterOptions() []failures.ClusterOptionFunc {
+// getClusterOptions returns cluster options for creating a failer.
+// The secure parameter should be the computed Secure value from the cluster,
+// which accounts for ephemeral project defaults.
+func getClusterOptions(secure bool) []failures.ClusterOptionFunc {
 	opts := []failures.ClusterOptionFunc{
-		failures.Secure(!insecure),
+		failures.Secure(secure),
 		failures.LocalCertsPath(chaosCertsDir),
 	}
 	if chaosReplicationFactor > 0 {
@@ -399,35 +402,44 @@ func waitForInterrupt() <-chan os.Signal {
 	return sigCh
 }
 
+// getCluster retrieves the cluster from the cache using the global isSecure option.
+// This ensures ephemeral clusters in cockroach-ephemeral project default to insecure mode.
+func getCluster(clusterName string) (*install.SyncedCluster, error) {
+	return roachprod.GetClusterFromCache(
+		config.Logger,
+		clusterName,
+		isSecure,
+	)
+}
+
 // validateNodesInCluster validates that the cluster exists and all provided nodes
 // are within the cluster's valid range. The name parameter is used in error messages
 // to describe which node list failed validation (e.g., "source", "destination", "target").
-func validateNodesInCluster(clusterName string, nodes install.Nodes, name string) error {
+// Returns the cluster so callers can access the computed Secure value.
+func validateNodesInCluster(
+	clusterName string, nodes install.Nodes, name string,
+) (*install.SyncedCluster, error) {
 	if len(nodes) == 0 {
-		return errors.Newf("%s nodes cannot be empty", name)
+		return nil, errors.Newf("%s nodes cannot be empty", name)
 	}
 
-	c, err := roachprod.GetClusterFromCache(
-		config.Logger,
-		clusterName,
-		install.SimpleSecureOption(!insecure),
-	)
+	c, err := getCluster(clusterName)
 	if err != nil {
-		return errors.Wrapf(err, "cluster %q not found", clusterName)
+		return nil, errors.Wrapf(err, "cluster %q not found", clusterName)
 	}
 
 	if len(c.Nodes) == 0 {
-		return errors.Newf("cluster has no nodes")
+		return nil, errors.Newf("cluster has no nodes")
 	}
 
 	maxNode := c.Nodes[len(c.Nodes)-1]
 	for _, n := range nodes {
 		if n < 1 || n > maxNode {
-			return errors.Newf("%s node %d is out of range (cluster has nodes 1-%d)",
+			return nil, errors.Newf("%s node %d is out of range (cluster has nodes 1-%d)",
 				name, n, maxNode)
 		}
 	}
-	return nil
+	return c, nil
 }
 
 // formatNodeList formats a node list for display

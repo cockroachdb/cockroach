@@ -40,14 +40,17 @@ Shutdown modes:
   custom signal: Use --signal to specify any signal number
 
 Examples:
-  # Kill cockroach process on nodes 1,2,3 immediately for insecure cluster
-  roachprod chaos process-kill mycluster --nodes 1,2,3 --insecure
+  # Kill cockroach process on nodes 1,2,3 immediately
+  roachprod chaos process-kill mycluster --nodes 1,2,3
 
   # Gracefully shutdown node 1 (SIGTERM with drain)
   roachprod chaos process-kill mycluster --nodes 1 --graceful
 
   # Kill with custom signal (e.g., SIGQUIT=3)
   roachprod chaos process-kill mycluster --nodes 1 --signal 3
+
+  # For a secure cluster, specify the local path to certificates
+  roachprod chaos process-kill mycluster --nodes 1 --certs-dir /path/to/certs --secure
 `,
 		Args: cobra.ExactArgs(1),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
@@ -60,7 +63,8 @@ Examples:
 			nodeList := parseInt32SliceToNodes(nodes)
 
 			// Validate cluster and nodes
-			if err := validateNodesInCluster(clusterName, nodeList, "target"); err != nil {
+			c, err := validateNodesInCluster(clusterName, nodeList, "target")
+			if err != nil {
 				return err
 			}
 
@@ -93,12 +97,12 @@ Examples:
 				return err
 			}
 
-			// Create failer from registry
+			// Create failer from registry using computed Secure value from cluster
 			failer, err := createFailer(
 				clusterName,
 				failures.ProcessKillFailureName,
 				opts,
-				getClusterOptions()...,
+				getClusterOptions(c.Secure)...,
 			)
 			if err != nil {
 				return err
