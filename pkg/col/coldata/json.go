@@ -18,6 +18,9 @@ import (
 // a new JSONEncoded object from scratch on demand.
 type JSONs struct {
 	Bytes
+	// jsonScratch batches allocations of JSONEncoded objects (under the
+	// assumption that the vector doesn't have NULLs).
+	jsonScratch []json.JSONEncoded
 	// scratch is a scratch space for encoding a JSON object on demand.
 	scratch []byte
 }
@@ -25,7 +28,8 @@ type JSONs struct {
 // NewJSONs returns a new JSONs presized to n elements.
 func NewJSONs(n int) *JSONs {
 	return &JSONs{
-		Bytes: *NewBytes(n),
+		Bytes:       *NewBytes(n),
+		jsonScratch: make([]json.JSONEncoded, n),
 	}
 }
 
@@ -38,11 +42,12 @@ func (js *JSONs) Get(i int) json.JSON {
 	if len(bytes) == 0 {
 		return json.NullJSONValue
 	}
-	ret, err := json.FromEncoding(bytes)
+	j := &js.jsonScratch[i]
+	err := json.FromEncodingInto(bytes, j)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	return ret
+	return j
 }
 
 // Set sets the ith JSON in JSONs.
