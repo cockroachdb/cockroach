@@ -581,6 +581,12 @@ func init() {
 		// TLS Cipher Suites configured
 		cliflagcfg.StringSliceFlag(f, &startCtx.serverTLSCipherSuites, cliflags.TLSCipherSuites)
 
+		// Root cert subject alternate name (SAN)
+		cliflagcfg.StringFlag(f, &startCtx.serverRootCertSAN, cliflags.RootCertSAN)
+
+		// Node cert subject alternate name (SAN)
+		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertSAN, cliflags.NodeCertSAN)
+
 		// Cluster name verification.
 		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
 		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
@@ -666,6 +672,12 @@ func init() {
 
 		// Node cert distinguished name
 		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertDN, cliflags.NodeCertDistinguishedName)
+
+		// Root cert subject alternate name (SAN)
+		cliflagcfg.StringFlag(f, &startCtx.serverRootCertSAN, cliflags.RootCertSAN)
+
+		// Node cert subject alternate name (SAN)
+		cliflagcfg.StringFlag(f, &startCtx.serverNodeCertSAN, cliflags.NodeCertSAN)
 
 		if cmd == listCertsCmd {
 			// The 'list' subcommand does not write to files and thus does
@@ -1169,6 +1181,12 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	security.SetDisallowRootLogin(startCtx.disallowRootLogin)
 	security.SetAllowDebugUser(startCtx.allowDebugUser)
+	if err := security.SetRootSAN(startCtx.serverRootCertSAN); err != nil {
+		return err
+	}
+	if err := security.SetNodeSAN(startCtx.serverNodeCertSAN); err != nil {
+		return err
+	}
 	// Currently we don't handle the case where we are setting the --insecure flag
 	// as well as providing the --tls-cipher-suites, we should probably error out
 	// if both are set, issue: #144935.
