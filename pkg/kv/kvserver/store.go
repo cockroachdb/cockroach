@@ -2380,6 +2380,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// node transitioning from non-live to live.
 	if s.cfg.NodeLiveness != nil {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
+		// Register callbacks on settings changes for when the
+		// nodeIsLiveCallback needs to be invoked out of band.
+		s.registerNodeIsLiveCallbackSettingsChange(ctx)
 	}
 
 	// SystemConfigProvider can be nil during some tests.
