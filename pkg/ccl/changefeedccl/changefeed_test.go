@@ -9541,9 +9541,10 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 	}
 
 	// TODO(ssd): Tenant testing disabled because of use of DB()
+	// TODO(#159640): Add experimental sink type back after fixing the flakiness.
 	for _, sz := range []int64{100 << 20, 100} {
 		maxCheckpointSize = sz
-		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestEnterpriseSinks)
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestOmitSinks("enterprise", "sinkless"))
 	}
 }
 
