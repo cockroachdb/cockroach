@@ -202,6 +202,10 @@ func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
+func (ep *DummyEvalPlanner) UnsafeWaitForOneVersion(ctx context.Context, descID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // ForceDeleteTableData is part of the Planner interface.
 func (ep *DummyEvalPlanner) ForceDeleteTableData(ctx context.Context, descID int64) error {
 	return errors.WithStack(errEvalPlanner)

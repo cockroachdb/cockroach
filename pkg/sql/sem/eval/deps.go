@@ -258,6 +258,13 @@ type Planner interface {
 	// circumstances. See the comment on the planner implementation.
 	UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error
 
+	// UnsafeWaitForOneVersion is used to wait for one version on
+	// a descriptor ID. This is mainly there for tests that may need
+	// to issue a schema change on privilege descriptors with explicit
+	// txns in tests that can't do transaction retries or probe the
+	// lease table easily.
+	UnsafeWaitForOneVersion(ctx context.Context, descID int64) error
+
 	// ForceDeleteTableData cleans up underlying data for a table
 	// descriptor ID. See the comment on the planner implementation.
 	ForceDeleteTableData(ctx context.Context, descID int64) error

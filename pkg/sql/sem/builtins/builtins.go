@@ -7139,6 +7139,23 @@ SELECT
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.unsafe_wait_for_one_version": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "desc_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				err := evalCtx.Planner.UnsafeWaitForOneVersion(ctx, int64(*args[0].(*tree.DInt)))
+				return tree.DVoidDatum, err
+			},
+		},
+	),
 	"crdb_internal.unsafe_delete_namespace_entry": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,

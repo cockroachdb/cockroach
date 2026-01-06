@@ -687,6 +687,31 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 	return p.logEvent(ctx, id, &ev)
 }
 
+// UnsafeWaitForOneVersion does a wait for one version on a given descriptor ID.
+// This should only be needed for tests to avoid transaction retry errors.
+// Note: This method does not confirm if the caller itself is holding
+// the old version of the descriptor. This should only be used in scenarios,
+// where we know WaitForNewVersion was issued earlier. so we know that a fresh
+// transaction will get a new version.
+func (p *planner) UnsafeWaitForOneVersion(ctx context.Context, descID int64) error {
+	// Fetch the current regions that are avaialble, if this is multi-region.
+	cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, p.Txn().DB(), p.LeaseMgr())
+	if err != nil {
+		return err
+	}
+	// Go through a wait for one version explicitly.
+	retryOpts := retry.Options{
+		InitialBackoff: time.Millisecond,
+		MaxBackoff:     time.Second,
+		Multiplier:     1.5,
+	}
+	_, err = p.LeaseMgr().WaitForOneVersion(ctx, descpb.ID(descID), cachedRegions, retryOpts)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // unsafeReadDescriptor reads a descriptor by id. It first tries to go through
 // the descs.Collection, but this can fail if the descriptor exists but has been
 // corrupted and fails validation. In this case, if the force flag is set, we

@@ -117,6 +117,22 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CREATE ROLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Explicitly wait for one version, since we don't handle transaction
+# retries in this test.
+# Note: Normally in logictest we could run a query with retry, but that is not an
+# option here.
+send
+Query {"String": "SELECT crdb_internal.unsafe_wait_for_one_version('system.users'::REGCLASS::OID::INT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"crdb_internal.unsafe_wait_for_one_version","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":2278,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 send
 Query {"String": "BEGIN"}
 Query {"String": "SET LOCAL autocommit_before_ddl=off"}
