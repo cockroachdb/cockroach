@@ -721,7 +721,7 @@ func resolveBackupDirs(
 		return nil, nil, "", err
 	}
 	resolvedIncDirs, err := backupdest.ResolveIncrementalsBackupLocation(
-		ctx, user, execCfg, nil, collectionURIs, resolvedSubdir,
+		collectionURIs, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, "", err
@@ -790,7 +790,7 @@ func getBackupChain(
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, execCfg, &mem, defaultCollectionURI, dest.To, mkStore, resolvedSubdir,
 		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false /*includeSkipped */, true /*includeCompacted */, false, /* isCustomIncLocation */
+		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err

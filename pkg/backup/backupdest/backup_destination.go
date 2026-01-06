@@ -158,13 +158,7 @@ func ResolveDest(
 		}, nil
 	}
 	// The defaultStore contains a full backup; consequently, we're conducting an incremental backup.
-	fullyResolvedIncrementalsLocation, err := ResolveIncrementalsBackupLocation(
-		ctx,
-		user,
-		execCfg,
-		nil,
-		dest.To,
-		chosenSuffix)
+	fullyResolvedIncrementalsLocation, err := ResolveIncrementalsBackupLocation(dest.To, chosenSuffix)
 	if err != nil {
 		return ResolvedDestination{}, err
 	}
@@ -184,10 +178,7 @@ func ResolveDest(
 		return ResolvedDestination{}, err
 	}
 	defer rootStore.Close()
-	priors, err := FindAllIncrementalPaths(
-		ctx, execCfg, incrementalStore, rootStore,
-		chosenSuffix, false, /* customIncLocation */
-	)
+	priors, err := FindAllIncrementalPaths(ctx, execCfg, incrementalStore, rootStore, chosenSuffix)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -527,7 +518,6 @@ func ResolveBackupManifests(
 	user username.SQLUsername,
 	includeSkipped bool,
 	includeCompacted bool,
-	isCustomIncLocation bool,
 ) (
 	defaultURIs []string,
 	mainBackupManifests []backuppb.BackupManifest,
@@ -541,7 +531,7 @@ func ResolveBackupManifests(
 	}
 	defer rootStore.Close()
 
-	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || isCustomIncLocation {
+	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
 		return legacyResolveBackupManifests(
 			ctx, execCfg, mem, defaultCollectionURI, mkStore,
 			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,

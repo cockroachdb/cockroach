@@ -152,7 +152,6 @@ func showBackupTypeCheck(
 		},
 		exprutil.StringArrays{
 			tree.Exprs(backup.InCollection),
-			tree.Exprs(backup.Options.IncrementalStorage),
 			tree.Exprs(backup.Options.DecryptionKMSURI),
 		},
 	); err != nil {
@@ -300,34 +299,15 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				KMSInfo: defaultKMSInfo,
 			}
 		}
-		var explicitIncPaths []string
-		if showStmt.Options.IncrementalStorage != nil {
-			explicitIncPaths, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.Options.IncrementalStorage))
-			if err != nil {
-				return err
-			}
-		}
 		collections, computedSubdir, err := backupdest.CollectionsAndSubdir(dest, subdir)
 		if err != nil {
 			return err
 		}
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
-			ctx,
-			p.User(),
-			p.ExecCfg(),
-			explicitIncPaths,
-			collections,
-			computedSubdir,
+			collections, computedSubdir,
 		)
 		if err != nil {
-			if errors.Is(err, cloud.ErrListingUnsupported) {
-				// We can proceed with base backups here just fine, so log a warning and move on.
-				// Note that actually _writing_ an incremental backup to this location would fail loudly.
-				log.Dev.Warningf(
-					ctx, "storage sink %v does not support listing, only showing the base backup", explicitIncPaths)
-			} else {
-				return err
-			}
+			return err
 		}
 		mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 		defer mem.Close(ctx)
@@ -352,7 +332,6 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			ctx, p.ExecCfg(), &mem, defaultCollectionURI, dest, mkStore, subdir,
 			fullyResolvedDest, fullyResolvedIncrementalsDirectory, hlc.Timestamp{},
 			encryption, &kmsEnv, p.User(), true /* includeSkipped */, true, /* includeCompacted */
-			len(explicitIncPaths) > 0,
 		)
 		defer func() {
 			mem.Shrink(ctx, memReserved)

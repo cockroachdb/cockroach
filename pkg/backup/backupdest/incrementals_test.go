@@ -240,10 +240,7 @@ func TestFindAllIncrementalPaths(t *testing.T) {
 				}
 			}
 
-			incs, err := backupdest.FindAllIncrementalPaths(
-				ctx, &execCfg, incStore, store,
-				targetSubdir, false, /* customIncLocation */
-			)
+			incs, err := backupdest.FindAllIncrementalPaths(ctx, &execCfg, incStore, store, targetSubdir)
 			require.NoError(t, err)
 			require.Len(t, incs, len(targetChain)-1)
 
@@ -324,10 +321,7 @@ func TestFindAllIncrementalPathsFallbackLogic(t *testing.T) {
 			end = end.Add(time.Hour)
 		}
 
-		incs, err := backupdest.FindAllIncrementalPaths(
-			ctx, &execCfg, stores.inc, stores.root,
-			subdir, false, /* customIncLocation */
-		)
+		incs, err := backupdest.FindAllIncrementalPaths(ctx, &execCfg, stores.inc, stores.root, subdir)
 		require.NoError(t, err)
 		require.Len(t, incs, numBackups-1)
 	})
