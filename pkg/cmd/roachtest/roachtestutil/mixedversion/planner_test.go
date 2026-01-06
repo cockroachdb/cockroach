@@ -284,39 +284,46 @@ func TestIterateSingleStepsIsPure(t *testing.T) {
 	planBefore := plan.PrettyPrint()
 
 	// First call to iterateSingleSteps.
-	var stepCount1 int
+	var expectedNumSteps int
 	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) {
-		stepCount1++
+		expectedNumSteps++
 	})
-	require.Greater(t, stepCount1, 0, "should have iterated over at least one step")
+	require.Greater(t, expectedNumSteps, 0, "should have iterated over at least one step")
 
 	// Capture plan representation after first iteration.
 	planAfterFirst := plan.PrettyPrint()
 
 	// Second call to iterateSingleSteps.
-	var stepCount2 int
+	var actualNumSteps int
 	plan.iterateSingleSteps(func(ss *singleStep, isConcurrent bool) {
-		stepCount2++
+		actualNumSteps++
 	})
 
-	// Capture plan representation after second iteration.
-	planAfterSecond := plan.PrettyPrint()
+	// Property 1: Idempotent - same step count each time (cheap check first).
+	require.Equal(t, expectedNumSteps, actualNumSteps,
+		"iterateSingleSteps should return same step count on each call")
 
-	// Property 1: Delays don't change - plan representation should be identical.
+	// Property 2: Delays don't change - plan representation should be identical.
 	require.Equal(t, planBefore, planAfterFirst,
 		"plan should not change after first iterateSingleSteps call")
+	planAfterSecond := plan.PrettyPrint()
 	require.Equal(t, planBefore, planAfterSecond,
 		"plan should not change after second iterateSingleSteps call")
-
-	// Property 2: Idempotent - same step count each time.
-	require.Equal(t, stepCount1, stepCount2,
-		"iterateSingleSteps should return same step count on each call")
 }
 
 // TestMapSingleStepsGeneratesDelays verifies that mapSingleSteps generates
 // new delays when inserting steps into concurrent groups.
 func TestMapSingleStepsGeneratesDelays(t *testing.T) {
 	defer resetMutators()()
+
+	// Override possibleDelays with a continuous range of 0-10 minutes.
+	originalPossibleDelays := possibleDelays
+	continuousDelays := make([]time.Duration, 600000)
+	for i := range continuousDelays {
+		continuousDelays[i] = time.Duration(i) * time.Millisecond
+	}
+	possibleDelays = continuousDelays
+	defer func() { possibleDelays = originalPossibleDelays }()
 
 	// Create a test with concurrent hooks.
 	mvt := newTest(NumUpgrades(1), EnabledDeploymentModes(SystemOnlyDeployment))
@@ -376,9 +383,8 @@ func TestMapSingleStepsGeneratesDelays(t *testing.T) {
 
 	// Verify that each newly inserted step has a delay assigned.
 	for _, insertedStep := range insertedSteps {
-		delay, exists := delaysAfter[insertedStep]
+		_, exists := delaysAfter[insertedStep]
 		require.True(t, exists, "inserted step should have a delay assigned")
-		_ = delay
 	}
 
 	// Verify that original steps still have their original delays.
