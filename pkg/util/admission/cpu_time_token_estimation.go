@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -51,25 +50,6 @@ func initWorkQueueWithCPUTimeTokenEstimators(
 	q.mu.globalEstimator = &cpuTimeTokenEstimator{}
 	q.mu.perTenantEstimators = make(map[uint64]*cpuTimeTokenEstimator)
 	return q
-}
-
-// AdmitResponse is the return value of Admit. We use a struct to enable
-// passing certain internal information such as requestedCount from Admit
-// to AdmittedWorkDone, without having to change code that calls the
-// WorkQueue.
-// TODO(josh): Move to work_queue.go in next commit.
-type AdmitResponse struct {
-	// If true (and if Err == nil), admission control is enabled.
-	Enabled bool
-	Err     error
-
-	tenantID roachpb.TenantID
-	// requestedCount is the number of slots or tokens taken at Admit time.
-	// It is useful to return, so that in AdmittedWorkDone, we can adjust
-	// the deduction, in cases where we have more information, such as in
-	// CPU time token AC, where a grunning-based measurement of CPU time
-	// is available by the time AdmittedWorkDone is called.
-	requestedCount int64
 }
 
 // workQueueI abstracts WorkQueue for testing.

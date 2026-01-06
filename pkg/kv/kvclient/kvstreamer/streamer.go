@@ -1554,7 +1554,8 @@ func (w *workerCoordinator) performRequestAsync(
 				Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
 				CreateTime: w.requestAdmissionHeader.CreateTime,
 			}
-			if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			_, err = w.responseAdmissionQ.Admit(ctx, responseAdmission)
+			if err != nil {
 				log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
 				w.s.results.setError(err)
 				return

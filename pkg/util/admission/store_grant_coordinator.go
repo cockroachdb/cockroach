@@ -226,8 +226,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	kvg.mu.diskTokensAvailable.writeByteTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
-	// This is IO work, so override the usesTokens value.
-	opts.usesTokens = true
+	// This is IO work, so override the mode value.
+	opts.mode = usesTokens
 	storeGranters := [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted{
 		&kvStoreTokenChildGranter{
 			workType: admissionpb.RegularStoreWorkType,
