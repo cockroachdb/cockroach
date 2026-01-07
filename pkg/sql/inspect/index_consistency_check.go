@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -57,20 +58,9 @@ func (c *indexConsistencyCheckApplicability) AppliesTo(
 	return spanContainsTable(c.tableID, codec, span)
 }
 
-// checkState represents the state of an index consistency check.
-type checkState int
-
-const (
-	// checkNotStarted indicates Start() has not been called yet.
-	checkNotStarted checkState = iota
-	// checkHashMatched indicates the hash precheck passed - no corruption detected,
-	// so the full check can be skipped.
-	checkHashMatched
-	// checkRunning indicates the full check is actively running and may produce more results.
-	checkRunning
-	// checkDone indicates the check has finished (iterator exhausted or error occurred).
-	checkDone
-)
+func (c *indexConsistencyCheckApplicability) IsSpanLevel() bool {
+	return false
+}
 
 // indexConsistencyCheck verifies consistency between a table's primary index
 // and a specified secondary index by streaming rows from both sides of a
@@ -79,7 +69,7 @@ const (
 type indexConsistencyCheck struct {
 	indexConsistencyCheckApplicability
 
-	flowCtx *execinfra.FlowCtx
+	execCfg *sql.ExecutorConfig
 	indexID descpb.IndexID
 	// tableVersion is the descriptor version recorded when the check was planned.
 	// It is used to detect concurrent schema changes for non-AS OF inspections.
@@ -103,10 +93,14 @@ type indexConsistencyCheck struct {
 
 	// lastQueryPlaceholders stores the placeholder values used in lastQuery.
 	lastQueryPlaceholders []interface{}
+
+	// rowCount stores the number of rows processed by the check.
+	rowCount uint64
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
 var _ inspectCheckApplicability = (*indexConsistencyCheck)(nil)
+var _ inspectCheckRowCount = (*indexConsistencyCheck)(nil)
 
 // Started implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Started() bool {
@@ -251,14 +245,15 @@ func (c *indexConsistencyCheck) Start(
 		}
 	}
 
-	if indexConsistencyHashEnabled.Get(&c.flowCtx.Cfg.Settings.SV) && len(allColNames) > 0 {
+	if indexConsistencyHashEnabled.Get(&c.execCfg.Settings.SV) && len(allColNames) > 0 {
 		// The hash precheck uses crdb_internal.datums_to_bytes, which depends on
 		// keyside.Encode. Skip if any column type isn’t encodable (i.e. TSQUERY, etc.).
 		if !allColumnsDatumsToBytesCompatible(c.columns) {
 			log.Dev.Infof(ctx, "skipping hash precheck for index %s: column type not compatible with datums_to_bytes",
 				c.secIndex.GetName())
 		} else {
-			match, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
+			match, rowCount, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
+			c.rowCount = uint64(rowCount)
 			if hashErr != nil {
 				if isQueryConstructionError(hashErr) {
 					// If hashing fails and the error stems from query construction,
@@ -293,8 +288,8 @@ func (c *indexConsistencyCheck) Start(
 	c.lastQueryPlaceholders = queryArgs
 
 	// Execute the query with AS OF SYSTEM TIME embedded in the SQL
-	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
-	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
+	qos := getInspectQoS(&c.execCfg.Settings.SV)
+	it, err := c.execCfg.DistSQLSrv.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),
@@ -431,6 +426,7 @@ func (c *indexConsistencyCheck) Done(context.Context) bool {
 // Close implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Close(context.Context) error {
 	if c.rowIter != nil {
+		c.rowCount = uint64(c.rowIter.RowsAffected())
 		// Clear the iter ahead of close to ensure we only attempt the close once.
 		it := c.rowIter
 		c.rowIter = nil
@@ -441,12 +437,17 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 	return nil
 }
 
+// Rows implements the inspectCheckRowCount interface.
+func (c *indexConsistencyCheck) Rows() uint64 {
+	return c.rowCount
+}
+
 // loadCatalogInfo loads the table descriptor and validates the specified
 // secondary index. It verifies that the index exists on the table and is
 // eligible for consistency checking. If the index is valid, it stores the
 // descriptor and index metadata in the indexConsistencyCheck struct.
 func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
-	return c.flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+	return c.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		if !c.asOf.IsEmpty() {
 			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
 				return err
@@ -773,20 +774,21 @@ type hashResult struct {
 
 // hashesMatch performs a fast comparison of primary and secondary indexes by
 // computing row counts and hash values. Returns true if both indexes have
-// identical row counts and hash values, indicating no corruption.
+// identical row counts and hash values, indicating no corruption. Returns the
+// row count from the primary index.
 func (c *indexConsistencyCheck) hashesMatch(
 	ctx context.Context, columnNames []string, predicate string, queryArgs []interface{},
-) (bool, error) {
+) (match bool, rowCount int64, err error) {
 	primary, err := c.computeHashAndRowCount(ctx, c.priIndex, columnNames, predicate, queryArgs)
 	if err != nil {
-		return false, errors.Wrapf(err, "computing hash for primary index %s", c.priIndex.GetName())
+		return false, 0, errors.Wrapf(err, "computing hash for primary index %s", c.priIndex.GetName())
 	}
 	secondary, err := c.computeHashAndRowCount(ctx, c.secIndex, columnNames, predicate, queryArgs)
 	if err != nil {
-		return false, errors.Wrapf(err, "computing hash for secondary index %s", c.secIndex.GetName())
+		return false, primary.rowCount, errors.Wrapf(err, "computing hash for secondary index %s", c.secIndex.GetName())
 	}
 	// Hashes match only if both row count and hash value are identical.
-	return primary.rowCount == secondary.rowCount && primary.hash == secondary.hash, nil
+	return primary.rowCount == secondary.rowCount && primary.hash == secondary.hash, primary.rowCount, nil
 }
 
 // computeHashAndRowCount executes a hash query for the specified index and
@@ -801,8 +803,8 @@ func (c *indexConsistencyCheck) computeHashAndRowCount(
 	query := buildIndexHashQuery(c.tableDesc.GetID(), index, columnNames, predicate)
 	queryWithAsOf := fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, c.asOf.AsOfSystemTime())
 
-	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
-	row, err := c.flowCtx.Cfg.DB.Executor().QueryRowEx(
+	qos := getInspectQoS(&c.execCfg.Settings.SV)
+	row, err := c.execCfg.DistSQLSrv.DB.Executor().QueryRowEx(
 		ctx, "inspect-index-consistency-hash", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),
