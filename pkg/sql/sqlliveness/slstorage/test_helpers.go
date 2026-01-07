@@ -23,6 +23,7 @@ type FakeStorage struct {
 
 		// Used to inject errors into the storage layer.
 		insertError func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error
+		updateError func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error
 	}
 }
 
@@ -41,6 +42,16 @@ func (s *FakeStorage) SetInjectedFailure(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.insertError = insertError
+}
+
+// SetUpdateInjectedFailure adds support for injecting failures during Update
+// operations.
+func (s *FakeStorage) SetUpdateInjectedFailure(
+	updateError func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.updateError = updateError
 }
 
 // IsAlive implements the sqlliveness.Reader interface.
@@ -78,6 +89,12 @@ func (s *FakeStorage) Update(
 ) (bool, hlc.Timestamp, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Support injecting errors during update.
+	if s.mu.updateError != nil {
+		if err := s.mu.updateError(sid, expiration); err != nil {
+			return false, hlc.Timestamp{}, err
+		}
+	}
 	if _, ok := s.mu.sessions[sid]; !ok {
 		return false, hlc.Timestamp{}, nil
 	}
