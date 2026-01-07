@@ -2212,7 +2212,9 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 
 // updateStoreStatuses updates each known store's health and disposition from storeStatuses.
 // Stores unknown in mma yet but are known to store pool are ignored with logging.
-func (cs *clusterState) updateStoreStatuses(ctx context.Context, storeStatuses map[roachpb.StoreID]Status) {
+func (cs *clusterState) updateStoreStatuses(
+	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
+) {
 	for storeID, storeStatus := range storeStatuses {
 		if _, ok := cs.stores[storeID]; !ok {
 			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
