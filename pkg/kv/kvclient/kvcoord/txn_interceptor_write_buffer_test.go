@@ -2873,9 +2873,7 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
-								b.StopTimer()
 								twb := makeBuffer(kvSize, &txn, readsFromPrevBatch)
-								b.StartTimer()
 								_, pErr := twb.SendLocked(ctx, ba)
 								if pErr != nil {
 									b.Fatal(pErr)
