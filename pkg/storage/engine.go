@@ -1046,6 +1046,16 @@ type Engine interface {
 		external []pebble.ExternalFile,
 		exciseSpan roachpb.Span,
 	) (pebble.IngestOperationStats, error)
+	// IngestAndExciseWithBlobs ingests local SST files along with their
+	// associated blob files. If exciseSpan is valid, existing keys in
+	// exciseSpan are deleted.
+	IngestAndExciseWithBlobs(
+		ctx context.Context,
+		localSSTs pebble.LocalSSTables,
+		shared []pebble.SharedSSTMeta,
+		external []pebble.ExternalFile,
+		exciseSpan roachpb.Span,
+	) (pebble.IngestOperationStats, error)
 	// IngestExternalFiles is a variant of IngestLocalFiles that takes external
 	// files. These files can be referred to by multiple stores, but are not
 	// modified or deleted by the Engine doing the ingestion.
@@ -1143,6 +1153,11 @@ type Engine interface {
 	// this intermediate case. Currently, this mainly feeds into allocation
 	// decisions by the caller (such as shedding leases).
 	GetDiskUnhealthy() bool
+
+	// SupportsBlobFiles returns true if the engine's format version supports
+	// value separation (blob files). This should be checked before writing
+	// SSTs with blob file references.
+	SupportsBlobFiles() bool
 }
 
 // Batch is the interface for batch specific operations.
