@@ -1942,6 +1942,7 @@ func NewLeaseManager(
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
 	lm.storage.writer = newKVWriter(codec, db.KV(), keys.LeaseTableID, settingsWatcher)
+	lm.storage.isDraining = lm.IsDraining
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.stopper.AddCloser(stop.CloserFn(lm.AssertAllLeasesAreReleasedAfterDrain))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)

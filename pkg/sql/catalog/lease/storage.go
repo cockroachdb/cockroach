@@ -59,6 +59,11 @@ type storage struct {
 	// concurrent lease acquisitions from the store.
 	group *singleflight.Group
 
+	// isDraining returns true if the lease manager is draining. This is used
+	// to exit the retry loop in acquireBatch during node shutdown, preventing
+	// infinite retries on "node unavailable" errors.
+	isDraining func() bool
+
 	leasingMetrics
 	testingKnobs StorageTestingKnobs
 	writer       writer
@@ -258,6 +263,11 @@ func (s storage) acquireBatch(
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
 	// are propagated up to the caller.
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
+		// Check if the lease manager is draining. This prevents infinite retries
+		// during node shutdown when we keep getting "node unavailable" errors.
+		if s.isDraining != nil && s.isDraining() {
+			return acquireBatchResult{}, nil, errLeaseManagerIsDraining
+		}
 		err := s.db.KV().Txn(ctx, acquireInTxn)
 		switch {
 		case startup.IsRetryableReplicaError(err):
