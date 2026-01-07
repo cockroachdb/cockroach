@@ -195,13 +195,24 @@ targets:
           max-rate: 2100
           ramp: 20m
           wait: 0
+  - target_name: tpcc_bench_run
+    notify_progress: true
+    dependent_targets:
+      - $CLUSTER cluster initialisation
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc
+          - false
+        flags:
           # Parameters used for TPC-C benchmarking configured as a closed
           # workload.
-          #db: cct_tpcc
-          #warehouses:  $WAREHOUSES
-          #active-warehouses: 266666
-          #workers: 266666
-          #conns: 960
-          #active-workers: 960
-          #ramp: 20m
-          #wait: 0
+          db: cct_tpcc
+          warehouses:  $WAREHOUSES
+          active-warehouses: 100000
+          workers: 100000
+          conns: 960
+          active-workers: 960
+          ramp: 5m
+          wait: 0
