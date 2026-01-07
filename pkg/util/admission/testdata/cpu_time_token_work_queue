@@ -1,0 +1,55 @@
+init
+----
+
+# See comment above TestCPUTimeTokenWorkQueue for background. This is
+# mostly a test of AdmittedWorkDone (work-done). So AC admits requests,
+# one to tenant ID 53 and another to tenant ID 54. The test granter
+# has been set up to allow granting of all requests. This is just test
+# setup.
+admit id=1 tenant=53 requested-count=3
+----
+tryGet: returning true
+id 1: admit succeeded
+
+admit id=2 tenant=54 requested-count=8
+----
+tryGet: returning true
+id 2: admit succeeded
+
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 3, w: 1, fifo: -128
+ tenant-id: 54 used: 8, w: 1, fifo: -128
+
+# requested-count at admit time was 3. cpu-time below is 1. This
+# simulates a situation where at admit time, the predicted CPU usage
+# was 3 ns of CPU time (see cpu_time_token_estimation.go), and then
+# measured CPU usage was 1 ns of CPU time. In this case, we should
+# return 3-1=2 tokens to the granter, which stores the CPU time token
+# buckets (see cpu_time_token_granter.go).
+work-done id=1 cpu-time=1
+----
+returnGrant 2
+
+# Also, used should be adjusted, to reflect actual usage in CPU time,
+# again measured in ns. You can see below that used is now 1 for the
+# tenant with tenant ID 53.
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, w: 1, fifo: -128
+ tenant-id: 54 used: 8, w: 1, fifo: -128
+
+# In this case, measured CPU usage was more than predicted CPU usage.
+# So, we should take additional tokens from the granter this time.
+work-done id=2 cpu-time=15
+----
+tookWithoutPermission 7
+
+# Same here. Used is adjusted, to reflect actual usage.
+print
+----
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, w: 1, fifo: -128
+ tenant-id: 54 used: 15, w: 1, fifo: -128

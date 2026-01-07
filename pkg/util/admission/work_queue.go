@@ -913,19 +913,64 @@ func recordAdmissionWorkQueueStats(
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
-// finished. It must be called iff the WorkKind of this WorkQueue uses slots
-// (not tokens), i.e., KVWork.
+// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork.
+// Note that cpuTime is an argument to AdmittedWorkDone. So, even though
+// WorkQueue supports various resources other than CPU, AdmittedWorkDone is
+// special-cased for CPU time admission control.
 func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) {
-	if q.mode == usesTokens {
-		panic(errors.AssertionFailedf("tokens should not be returned"))
+	if q.workKind != KVWork {
+		panic(errors.AssertionFailedf("AdmittedWorkDone only supports KVWork but got %v", q.workKind))
 	}
-	// Single slot is allocated for the work in the granter, and tenant.used was
-	// incremented by 1.
-	additionalUsed := cpuTime - 1
+	if q.mode != usesSlots && q.mode != usesCPUTimeTokens {
+		panic(
+			errors.AssertionFailedf("AdmittedWorkDone only supports usesSlots & usesCPUTimeTokens but got %v", q.mode))
+	}
+
+	// adjustTenantUsed adjusts `tenant.used`. This tracks usage of resources
+	// over a time interval. `tenant.used` is how the WorkQueue implements
+	// fair-sharing of resources.
+	//
+	// At admission time (as part of the call to Admit),
+	// q.adjustTenantUsed(tenantID, resp.requestedCount) is called. Now that the
+	// request is done executing, we have a measurement of CPU usage incurred by
+	// the request from grunning. So we adjust tenant.used again, correcting our
+	// earlier estimate. (In the case of slot-based AC, resp.requestedCount
+	// equals 1 nanosecond, so the change to tenant.used made here is the only
+	// significant one. With CPU time token AC, a more plausible estimate of CPU
+	// time incurred by a request is available at admission time (see
+	// cpu_time_token_estimation.go for more).
+	//
+	// NB: additionalUsed can be negative here (in case the initial estimate was
+	// too pessimistic).
+	additionalUsed := cpuTime.Nanoseconds() - resp.requestedCount
 	if additionalUsed != 0 {
-		q.adjustTenantUsed(resp.tenantID, additionalUsed.Nanoseconds())
+		q.adjustTenantUsed(resp.tenantID, additionalUsed)
 	}
-	q.granter.returnGrant(1)
+
+	// Slot-based AC sets a concurrency limit on requests. A single slot is
+	// taken at admission time. That slot must be returned here, for the
+	// concurrency limit to be a concurrency limit.
+	//
+	// CPU time token AC represents CPU usage via nanosecond tokens. Tokens
+	// are refilled at some rate (see cpu_time_token_filler.go for more).
+	// Since this is rate limit instead of a concurrency limit, used tokens
+	// should not be returned. But the initial deduction of tokens is based
+	// on an estimate of CPU usage (see cpu_time_token_estimation.go for more).
+	// In AdmittedWorkDone, we have a measurement of usage. So the below calls
+	// to tookWithoutPermission / returnGrant correct the estimate.
+	//
+	// Even though a call to returnGrant is made in both of these cases, they
+	// are quite different. Note that in the long term we will deprecate
+	// slot-based AC.
+	if q.mode == usesCPUTimeTokens {
+		if additionalUsed > 0 {
+			q.granter.tookWithoutPermission(additionalUsed)
+		} else if additionalUsed < 0 {
+			q.granter.returnGrant(-additionalUsed)
+		}
+	} else { // q.mode == usesSlots
+		q.granter.returnGrant(1)
+	}
 }
 
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
