@@ -49,9 +49,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// FilterTracingSpans exposes filterTracingSpans for testing.
+func FilterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) tracingpb.Recording {
+	return filterTracingSpans(rec, opNamesToFilter...)
+}
 
 func (s *Store) Transport() *RaftTransport {
 	return s.cfg.Transport
