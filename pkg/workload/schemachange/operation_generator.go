@@ -1713,7 +1713,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
+	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2675,7 +2675,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
+	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
