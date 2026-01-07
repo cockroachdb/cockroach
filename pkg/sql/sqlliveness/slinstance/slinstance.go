@@ -256,15 +256,17 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 // extendSession keeps retrying on error until ctx is canceled. Thus, an error
 // is only ever returned when the ctx is canceled.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-
-	// If extensions are disallowed we are only going to heartbeat the same
-	// timestamp, so that we can detect if the sqlliveness row was removed.
-	l.mu.Lock()
-	extensionsBlocked := l.mu.blockedExtensions
-	l.mu.Unlock()
-	if extensionsBlocked > 0 {
-		exp = s.Expiration()
+	// calculateExp computes the new expiration timestamp for the session. If
+	// extensions are disallowed, we heartbeat the same timestamp so we can
+	// detect if the sqlliveness row was removed by someone else.
+	calculateExp := func() hlc.Timestamp {
+		l.mu.Lock()
+		extensionsBlocked := l.mu.blockedExtensions
+		l.mu.Unlock()
+		if extensionsBlocked > 0 {
+			return s.Expiration()
+		}
+		return l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 	}
 
 	opts := retry.Options{
@@ -274,8 +276,11 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	var err error
 	var found bool
+	var exp hlc.Timestamp
 	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		exp = calculateExp() // recalculate expiration on each iteration
+
 		if found, exp, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break
