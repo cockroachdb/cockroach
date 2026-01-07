@@ -204,8 +204,8 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
-// UpdateStoreStatus implements the Allocator interface.
-func (a *allocatorState) UpdateStoreStatus(
+// UpdateStoresStatus implements the Allocator interface.
+func (a *allocatorState) UpdateStoresStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
 	a.mu.Lock()
