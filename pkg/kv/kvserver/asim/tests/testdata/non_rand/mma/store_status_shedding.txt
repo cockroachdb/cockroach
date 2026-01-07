@@ -42,21 +42,12 @@ assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(4)
 eval duration=6m seed=42 metrics=(replicas,leases,write_bytes_per_second) cfgs=(mma-only)
 ----
 leases#1: first: [s1=40, s2=0, s3=0, s4=0] (stddev=17.32, mean=10.00, sum=40)
-leases#1: last:  [s1=35, s2=0, s3=0, s4=5] (stddev=14.58, mean=10.00, sum=40)
+leases#1: last:  [s1=40, s2=0, s3=0, s4=0] (stddev=17.32, mean=10.00, sum=40)
 leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%]  (sum=0%)
 replicas#1: first: [s1=40, s2=40, s3=40, s4=0] (stddev=17.32, mean=30.00, sum=120)
-replicas#1: last:  [s1=35, s2=40, s3=40, s4=5] (stddev=14.58, mean=30.00, sum=120)
+replicas#1: last:  [s1=40, s2=40, s3=40, s4=0] (stddev=17.32, mean=30.00, sum=120)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%]  (sum=0%)
-write_bytes_per_second#1: last:  [s1=17489677, s2=19989215, s3=19989215, s4=2499537] (stddev=7284303.98, mean=14991911.00, sum=59967644)
-write_bytes_per_second#1: thrash_pct: [s1=1%, s2=27%, s3=27%, s4=2%]  (sum=57%)
-artifacts[mma-only]: 50eedac335e03fb8
-failed assertion sample 1
-  stat=replicas value=(=0.00) ticks=6
-	store=4 stat=5.00
-	store=4 stat=5.00
-	store=4 stat=5.00
-	store=4 stat=5.00
-	store=4 stat=5.00
-	store=4 stat=5.00
-	store=4 stat=5.00
+write_bytes_per_second#1: last:  [s1=19999999, s2=19999999, s3=19999999, s4=0] (stddev=8660253.60, mean=14999999.25, sum=59999997)
+write_bytes_per_second#1: thrash_pct: [s1=27020%, s2=27020%, s3=27020%, s4=0%]  (sum=81060%)
+artifacts[mma-only]: 9bd6f2a583adcd74
 ==========================
