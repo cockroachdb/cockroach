@@ -24,7 +24,6 @@ go_library(
     srcs = [
         "combine_file_info.go",
         "sst_file_allocator.go",
-        "sst_files.go",
         "sst_writer.go",
     ],
     embed = [":bulksst_go_proto"],
@@ -56,7 +55,6 @@ go_test(
         "combine_file_info_test.go",
         "main_test.go",
         "sst_file_allocator_test.go",
-        "sst_files_test.go",
         "sst_writer_test.go",
     ],
     embed = [":bulksst"],

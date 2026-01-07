@@ -2320,18 +2320,21 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
-	var reason strings.Builder
+	var failureReason strings.Builder
+	populateFailureReason := log.ExpensiveLogEnabled(ctx, 2)
 	defer func() {
 		if canAddLoad {
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+		} else if populateFailureReason {
+			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, failureReason.String())
 			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
 	if targetSLS.highDiskSpaceUtilization {
-		reason.WriteString("targetSLS.highDiskSpaceUtilization")
+		if populateFailureReason {
+			failureReason.WriteString("targetSLS.highDiskSpaceUtilization")
+		}
 		return false
 	}
 
@@ -2349,7 +2352,9 @@ func (cs *clusterState) canShedAndAddLoad(
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		reason.WriteString("overloadUrgent")
+		if populateFailureReason {
+			failureReason.WriteString("overloadUrgent")
+		}
 		return false
 	}
 
@@ -2456,43 +2461,45 @@ func (cs *clusterState) canShedAndAddLoad(
 	if canAddLoad {
 		return true
 	}
-	if !overloadedDimPermitsChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+	if populateFailureReason {
+		if !overloadedDimPermitsChange {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString("!overloadedDimPermitsChange")
 		}
-		reason.WriteString("!overloadedDimPermitsChange")
-	}
-	if otherDimensionsBecameWorseInTarget {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if otherDimensionsBecameWorseInTarget {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString("otherDimensionsBecameWorseInTarget")
 		}
-		reason.WriteString("otherDimensionsBecameWorseInTarget")
-	}
-	if targetSummary >= loadNoChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSummary >= loadNoChange {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
 		}
-		reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
-	}
-	if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
 		}
-		reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
-			targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
-	}
-	if targetSLS.sls > srcSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.sls > srcSLS.sls {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
 		}
-		reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
-	}
-	if targetSLS.nls > targetSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.nls > targetSLS.sls {
+			if failureReason.Len() != 0 {
+				failureReason.WriteRune(',')
+			}
+			failureReason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
+				targetSLS.nls, targetSLS.sls))
 		}
-		reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
-			targetSLS.nls, targetSLS.sls))
 	}
 	return false
 }
