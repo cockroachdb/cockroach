@@ -176,6 +176,13 @@ func TestExecBuild_distsql_ordinality(
 	runExecBuildLogicTest(t, "distsql_ordinality")
 }
 
+func TestExecBuild_distsql_scan(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_scan")
+}
+
 func TestExecBuild_distsql_single_flow(
 	t *testing.T,
 ) {
