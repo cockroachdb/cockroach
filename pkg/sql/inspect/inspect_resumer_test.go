@@ -62,6 +62,7 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 					return nil
 				},
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
@@ -316,7 +317,13 @@ func TestInspectProgressWithMultiRangeTable(t *testing.T) {
 
 	ctx := context.Background()
 	const numNodes = 3
-	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
