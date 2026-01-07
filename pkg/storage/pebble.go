@@ -491,14 +491,28 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 )
 
 var (
-	valueSeparationEnabled = settings.RegisterBoolSetting(
+	// ValueSeparationEnabled controls whether value separation (blob files) is
+	// enabled for the storage engine.
+	ValueSeparationEnabled = settings.RegisterBoolSetting(
 		settings.SystemVisible,
 		"storage.value_separation.enabled",
 		"whether or not values may be separated into blob files",
 		metamorphic.ConstantWithTestBool(
 			"storage.value_separation.enabled", true /* defaultValue */),
 	)
-	valueSeparationMinimumSize = settings.RegisterIntSetting(
+	// ValueSeparationSnapshotSSTEnabled controls whether values may be separated
+	// into blob files when writing snapshot SSTs. This is only effective when
+	// value separation is enabled overall.
+	ValueSeparationSnapshotSSTEnabled = settings.RegisterBoolSetting(
+		settings.SystemVisible,
+		"storage.value_separation_snapshots.enabled",
+		"whether or not values may be separated into blob files for snapshot SSTs (when value separation is enabled)",
+		metamorphic.ConstantWithTestBool(
+			"storage.value_separation.snapshot_sst_enabled", true /* defaultValue */),
+	)
+	// ValueSeparationMinimumSize is the minimum size of a value that will be
+	// separated into a blob file.
+	ValueSeparationMinimumSize = settings.RegisterIntSetting(
 		settings.SystemVisible,
 		"storage.value_separation.minimum_size",
 		"the minimum size of a value that will be separated into a blob file",
@@ -1157,7 +1171,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
 	}
 	cfg.opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
+		if !ValueSeparationEnabled.Get(&cfg.settings.SV) {
 			return pebble.ValueSeparationPolicy{}
 		}
 		lowPri := float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0
@@ -1167,7 +1181,7 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		// setting.
 		return pebble.ValueSeparationPolicy{
 			Enabled:                  true,
-			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MinimumSize:              int(ValueSeparationMinimumSize.Get(&cfg.settings.SV)),
 			MinimumMVCCGarbageSize:   int(valueSeparationMVCCGarbageMinimumSize.Get(&cfg.settings.SV)),
 			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
 			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
@@ -1632,6 +1646,11 @@ func (p *Pebble) aggregateBatchCommitStats(stats BatchCommitStats) {
 // Closed implements the Engine interface.
 func (p *Pebble) Closed() bool {
 	return p.closed.Load()
+}
+
+// SupportsBlobFiles implements the Engine interface.
+func (p *Pebble) SupportsBlobFiles() bool {
+	return p.db.FormatMajorVersion() >= pebble.FormatIngestBlobFiles
 }
 
 // MVCCIterate implements the Engine interface.
@@ -2381,6 +2400,24 @@ func (p *Pebble) IngestAndExciseFiles(
 	return p.db.IngestAndExcise(ctx, paths, shared, external, rawSpan)
 }
 
+// IngestAndExciseWithBlobs implements the Engine interface.
+func (p *Pebble) IngestAndExciseWithBlobs(
+	ctx context.Context,
+	localSSTs pebble.LocalSSTables,
+	shared []pebble.SharedSSTMeta,
+	external []pebble.ExternalFile,
+	exciseSpan roachpb.Span,
+) (pebble.IngestOperationStats, error) {
+	var rawSpan pebble.KeyRange
+	if exciseSpan.Valid() {
+		rawSpan = pebble.KeyRange{
+			Start: EngineKey{Key: exciseSpan.Key}.Encode(),
+			End:   EngineKey{Key: exciseSpan.EndKey}.Encode(),
+		}
+	}
+	return p.db.IngestAndExciseWithBlobs(ctx, localSSTs, shared, external, rawSpan)
+}
+
 // IngestExternalFiles implements the Engine interface.
 func (p *Pebble) IngestExternalFiles(
 	ctx context.Context, external []pebble.ExternalFile,
@@ -2569,6 +2606,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V26_2: pebble.FormatIngestBlobFiles,
 	clusterversion.V26_1: pebble.FormatMarkForCompactionInVersionEdit,
 	clusterversion.V25_4: pebble.FormatV2BlobFiles,
 }

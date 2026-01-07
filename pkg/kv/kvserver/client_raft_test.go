@@ -836,6 +836,112 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 	}
 }
 
+// TestSnapshotAfterTruncationWithBlobFiles verifies that the end-to-end
+// snapshot flow works when value separation (blob files) is enabled on the
+// receiver. It forces a Raft snapshot by truncating the log, and uses a testing
+// knob to verify that blob files were actually created during snapshot
+// application.
+func TestSnapshotAfterTruncationWithBlobFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	storage.ValueSeparationEnabled.Override(ctx, &st.SV, true)
+	storage.ValueSeparationSnapshotSSTEnabled.Override(ctx, &st.SV, true)
+	storage.ValueSeparationMinimumSize.Override(ctx, &st.SV, 1) // separate all values
+
+	var sawBlobFiles atomic.Bool
+	const numServers = 3
+	stickyVFSRegistry := fs.NewStickyRegistry()
+	serverArgsPerNode := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		serverArgsPerNode[i] = base.TestServerArgs{
+			Settings: st,
+			StoreSpecs: []base.StoreSpec{{
+				InMemory:    true,
+				StickyVFSID: strconv.FormatInt(int64(i), 10),
+			}},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					BeforeSnapshotSSTIngestion: func(
+						snap kvserver.IncomingSnapshot, _ []string,
+					) error {
+						if snap.SSTStorageScratch.HasBlobFiles() {
+							sawBlobFiles.Store(true)
+						}
+						return nil
+					},
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: serverArgsPerNode,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	// Write a value large enough to be unambiguously separated.
+	largeVal := make([]byte, 512)
+	for i := range largeVal {
+		largeVal[i] = byte(i)
+	}
+	// Write the initial value, then replicate. AddVotersOrFatal waits for the
+	// voters to be caught up so the data will be on all replicas after this.
+	_, err := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), putArgs(key, largeVal))
+	require.NoError(t, err.GoError())
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	// Stop one node, write more data, and truncate the log to force a snapshot.
+	tc.StopServer(1)
+
+	for i := 0; i < 5; i++ {
+		k := append(key[:len(key):len(key)], byte(i))
+		_, pErr := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), putArgs(k, largeVal))
+		require.NoError(t, pErr.GoError())
+	}
+
+	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
+	index := repl.GetLastIndex()
+	truncArgs := truncateLogArgs(index+1, repl.GetRangeID())
+	_, pErr := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), truncArgs)
+	require.NoError(t, pErr.GoError())
+
+	// Restart the stopped node; it must receive a snapshot to catch up.
+	require.NoError(t, tc.RestartServer(1))
+
+	// Wait for the restarted node to catch up on the test range via snapshot.
+	// Read directly from the engine to avoid NotLeaseHolderError.
+	testutils.SucceedsSoon(t, func() error {
+		store := tc.GetFirstStoreFromServer(t, 1)
+		valRes, err := storage.MVCCGet(ctx, store.TODOEngine(), key,
+			tc.Servers[1].SystemLayer().Clock().Now(), storage.MVCCGetOptions{})
+		if err != nil {
+			return err
+		}
+		if !valRes.Value.Exists() {
+			return errors.Errorf("key not found on node 1")
+		}
+		gotVal, err := valRes.Value.Value.GetBytes()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(largeVal, gotVal) {
+			return errors.Errorf("value mismatch")
+		}
+		return nil
+	})
+
+	// Verify blob files were created during snapshot ingestion.
+	require.True(t, sawBlobFiles.Load(),
+		"expected blob files to be created during snapshot application")
+}
+
 func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, compacted kvpb.RaftIndex) {
 	testutils.SucceedsSoon(t, func() error {
 		// Flush the engine to advance durability, which triggers truncation.

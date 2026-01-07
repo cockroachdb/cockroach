@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
@@ -29,10 +30,11 @@ import (
 // directory of scratches created. A scratch manages the SSTs created during a
 // specific snapshot.
 type SSTSnapshotStorage struct {
-	env     *fs.Env
-	limiter *rate.Limiter
-	dir     string
-	mu      struct {
+	env               *fs.Env
+	limiter           *rate.Limiter
+	dir               string
+	supportsBlobFiles bool
+	mu                struct {
 		syncutil.Mutex
 		rangeRefCount map[roachpb.RangeID]int
 	}
@@ -41,9 +43,10 @@ type SSTSnapshotStorage struct {
 // NewSSTSnapshotStorage creates a new SST snapshot storage.
 func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnapshotStorage {
 	return SSTSnapshotStorage{
-		env:     engine.Env(),
-		limiter: limiter,
-		dir:     filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
+		env:               engine.Env(),
+		limiter:           limiter,
+		dir:               filepath.Join(engine.GetAuxiliaryDir(), "sstsnapshot"),
+		supportsBlobFiles: engine.SupportsBlobFiles(),
 		mu: struct {
 			syncutil.Mutex
 			rangeRefCount map[roachpb.RangeID]int
@@ -99,17 +102,30 @@ func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
 // when receiving a snapshot. Each scratch is associated with a specific
 // snapshot.
 type SSTSnapshotStorageScratch struct {
-	storage    *SSTSnapshotStorage
-	st         *cluster.Settings
-	rangeID    roachpb.RangeID
-	ssts       []string
+	storage *SSTSnapshotStorage
+	st      *cluster.Settings
+	rangeID roachpb.RangeID
+	// ssts tracks SST files along with their associated blob files. Each SST's
+	// blob files are written by the SSTBlobWriter when value separation is enabled.
+	ssts       pebble.LocalSSTables
 	snapDir    string
 	dirCreated bool
 	closed     bool
+	blobFileID int // counter for generating unique blob file names
+}
+
+// SupportsBlobFiles returns true if the engine's format version supports
+// value separation (blob files).
+func (s *SSTSnapshotStorageScratch) SupportsBlobFiles() bool {
+	return s.storage.supportsBlobFiles
 }
 
 func (s *SSTSnapshotStorageScratch) filename(id int) string {
 	return filepath.Join(s.snapDir, fmt.Sprintf("%d.sst", id))
+}
+
+func (s *SSTSnapshotStorageScratch) blobFilename(id int) string {
+	return filepath.Join(s.snapDir, fmt.Sprintf("%d.blob", id))
 }
 
 func (s *SSTSnapshotStorageScratch) createDir() error {
@@ -131,12 +147,40 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 	}
 	id := len(s.ssts)
 	filename := s.filename(id)
-	s.ssts = append(s.ssts, filename)
+	s.ssts = append(s.ssts, pebble.LocalSST{Path: filename})
 	f := &SSTSnapshotStorageFile{
 		scratch:      s,
 		filename:     filename,
 		ctx:          ctx,
 		bytesPerSync: bytesPerSync,
+	}
+	return f, nil
+}
+
+// NewBlobFile creates a new blob file for value separation. Returns a writable
+// that can be used to write blob file data.
+//
+// The blob file is associated with the most recently created SST file. This
+// relies on the SSTBlobWriter calling NewBlobFile only while writing the SST
+// that was created by the preceding NewFile call. The MultiSSTWriter ensures
+// this invariant by creating one SST at a time via initSST.
+func (s *SSTSnapshotStorageScratch) NewBlobFile(ctx context.Context) (objstorage.Writable, error) {
+	if s.closed {
+		return nil, errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
+	}
+	if len(s.ssts) == 0 {
+		return nil, errors.AssertionFailedf("NewBlobFile called before NewFile")
+	}
+	id := s.blobFileID
+	s.blobFileID++
+	filename := s.blobFilename(id)
+	// Associate this blob file with the current (most recent) SST.
+	s.ssts[len(s.ssts)-1].BlobPaths = append(s.ssts[len(s.ssts)-1].BlobPaths, filename)
+	f := &SSTSnapshotStorageFile{
+		scratch:      s,
+		filename:     filename,
+		ctx:          ctx,
+		bytesPerSync: 0, // blob files don't need periodic syncing
 	}
 	return f, nil
 }
@@ -175,9 +219,28 @@ func (s *SSTSnapshotStorageScratch) WriteSST(
 	return f.Finish()
 }
 
-// SSTs returns the names of the files created.
-func (s *SSTSnapshotStorageScratch) SSTs() []string {
+// SSTs returns the SST files along with their associated blob files.
+func (s *SSTSnapshotStorageScratch) SSTs() pebble.LocalSSTables {
 	return s.ssts
+}
+
+// SSTPaths returns the SST file paths.
+func (s *SSTSnapshotStorageScratch) SSTPaths() []string {
+	paths := make([]string, len(s.ssts))
+	for i, sst := range s.ssts {
+		paths[i] = sst.Path
+	}
+	return paths
+}
+
+// HasBlobFiles returns true if any of the SST files have associated blob files.
+func (s *SSTSnapshotStorageScratch) HasBlobFiles() bool {
+	for _, sst := range s.ssts {
+		if len(sst.BlobPaths) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Close removes the directory and SSTs created for a particular snapshot.
