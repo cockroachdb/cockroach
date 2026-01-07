@@ -156,7 +156,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			// This uses the real production RefreshStoreStatus, which queries
 			// StorePool (backed by StatusTracker via NodeLivenessFn) and
 			// translates to MMA's status model.
-			msr.allocator.UpdateStoreStatus(ctx, msr.as.GetMMAStoreStatuses())
+			msr.allocator.UpdateStoresStatuses(ctx, msr.as.GetMMAStoreStatuses())
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
