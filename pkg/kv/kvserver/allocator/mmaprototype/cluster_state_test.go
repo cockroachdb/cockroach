@@ -413,7 +413,14 @@ func TestClusterState(t *testing.T) {
 
 			// Recursively invoked in `include` directive.
 			var invokeFn func(t *testing.T, d *datadriven.TestData) string
-			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
+			invokeFn = func(t *testing.T, d *datadriven.TestData) (output string) {
+				// Catch panics and return them as output instead of failing the test.
+				// This allows us to write regression tests for panics.
+				defer func() {
+					if r := recover(); r != nil {
+						output = fmt.Sprintf("panic: %v", r)
+					}
+				}()
 				// Start a recording span for each command. Commands that want to
 				// include the trace in their output can call finishAndGet().
 				ctx, finishAndGet := tracing.ContextWithRecordingSpan(

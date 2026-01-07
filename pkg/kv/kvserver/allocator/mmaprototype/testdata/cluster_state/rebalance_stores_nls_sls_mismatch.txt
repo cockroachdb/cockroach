@@ -1,0 +1,68 @@
+# Regression test for issue #160569: panic in sortTargetCandidateSetAndPick
+# when sls <= loadNoChange but nls > loadNoChange.
+#
+# Setup: Node n1 has two stores:
+# - s1: low CPU, moderate writes
+# - s2: very high CPU, replica disposition set to "refusing" (excluded from candidate set)
+# Node n2 has s3.
+#
+# When we try to shed from s1:
+# - Store mean over {s1, s3} (excluding s2 due to disposition)
+# - s1's store-level load relative to this mean is <= loadNoChange
+# - But n1's node CPU (s1+s2) is high, making nls > loadNoChange
+#
+# Before fix: computeCandidatesForReplicaTransfer doesn't bail out when
+# sls <= loadNoChange && nls > loadNoChange, then passes sls as loadThreshold
+# to sortTargetCandidateSetAndPick which requires loadThreshold > loadNoChange.
+
+set-store
+  store-id=1 node-id=1
+  store-id=2 node-id=1
+  store-id=3 node-id=2
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs=
+  store-id=2 attrs=
+node-id=2 locality-tiers=node=2
+  store-id=3 attrs=
+
+# s2 refuses replicas, so it will be filtered out of the candidate set
+# but its CPU still contributes to n1's node load.
+set-store-status store-id=2 replicas=refusing
+----
+ok refusing=replicas
+
+# 8-vCPU machines: capacity = 8e9 ns/s
+# s1: 1 vCPU (1B ns/s), 50% write bandwidth - at cluster level, WriteBandwidth is overloaded
+#     (because cluster mean includes s2's low writes, bringing mean down)
+# s2: 6 vCPU (6B ns/s), 10% writes - makes n1's total CPU = 7 vCPU
+# s3: 1 vCPU (1B ns/s), 50% write bandwidth
+#
+# Cluster store write mean = (50M + 10M + 50M) / 3 = 36.7M
+# s1's 50M is ~36% above mean => overloadSlow for WriteBandwidth
+#
+# Candidate set {s1, s3} store write mean = (50M + 50M) / 2 = 50M
+# s1's 50M equals mean => loadNoChange for WriteBandwidth
+#
+# Node CPU: n1 = 7B (s1+s2), n2 = 1B
+# Node mean = (7B + 1B) / 2 = 4B
+# n1's 7B is 75% above mean => overloadSlow for node CPU
+store-load-msg
+  store-id=1 node-id=1 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
+  store-id=2 node-id=1 load=[6000000000,10000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
+  store-id=3 node-id=2 load=[1000000000,50000000,0] capacity=[8000000000,100000000,1000000000] secondary-load=0 load-time=0s
+----
+
+# Single-replica range on s1.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[100000000,10000000,0] raft-cpu=50000000
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    config=num_replicas=1 constraints={} voter_constraints={}
+----
+
+# Before fix: panics in sortTargetCandidateSetAndPick
+# After fix: s1 should not try to shed since sls <= loadNoChange
+rebalance-stores store-id=1
+----
+panic: loadThreshold must be > loadNoChange
