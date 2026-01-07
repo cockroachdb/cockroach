@@ -34,7 +34,7 @@ var (
 	weeks  = flag.Int("weeks", 4, "Number of weeks to look back (ignored if --after is set)")
 	after  = flag.String("after", "", "Start date (YYYY-MM-DD)")
 	before = flag.String("before", "", "End date (YYYY-MM-DD), defaults to today")
-	limit  = flag.Int("limit", 200, "Maximum number of PRs to fetch")
+	limit  = flag.Int("limit", 200, "Maximum number of PRs to fetch from Github (before date range filtering, to avoid API limits)")
 )
 
 type PRInfo struct {
@@ -296,14 +296,15 @@ func fetchPRs(repo, author string, after, before time.Time, limit int) ([]PRInfo
 	// Build search query.
 	query := fmt.Sprintf("repo:%s author:%s is:pr", repo, author)
 
-	var allPRs []PRInfo
+	var allPRs []PRInfo // PRs that matched the query and are within the date range
+	var seenPRCount int // counts all PRs pulled from Github, including those that don't match the date range
 	page := 1
 	perPage := 100
 	if limit < perPage {
 		perPage = limit
 	}
 
-	for len(allPRs) < limit {
+	for seenPRCount < limit {
 		fmt.Fprintf(os.Stderr, "Fetching page %d...\n", page)
 
 		cmd := exec.Command("gh", "api", "-X", "GET", "search/issues",
@@ -315,7 +316,7 @@ func fetchPRs(repo, author string, after, before time.Time, limit int) ([]PRInfo
 		)
 		out, err := cmd.Output()
 		if err != nil {
-			return nil, fmt.Errorf("gh api failed: %w", err)
+			return nil, fmt.Errorf("gh api for %q failed: %w\noutput:\n%s", query, err, out)
 		}
 
 		var response struct {
@@ -338,6 +339,7 @@ func fetchPRs(repo, author string, after, before time.Time, limit int) ([]PRInfo
 		}
 
 		for _, item := range response.Items {
+			seenPRCount++
 			// Determine the relevant date (merged date or created date).
 			var prDate time.Time
 			if item.PullRequest != nil && item.PullRequest.MergedAt != "" {
@@ -360,10 +362,6 @@ func fetchPRs(repo, author string, after, before time.Time, limit int) ([]PRInfo
 				MergedAt: prDate,
 				State:    item.State,
 			})
-
-			if len(allPRs) >= limit {
-				break
-			}
 		}
 
 		if len(response.Items) < perPage || len(allPRs) >= limit {
