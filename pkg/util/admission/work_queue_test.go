@@ -367,6 +367,116 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 	}
 }
 
+// TestCPUTimeTokenWorkQueue is a very minimal test of WorkQueue, when
+// WorkQueue.mode = usesCPUTimeTokens. In this case, the WorkQueue is
+// like the slot-based WorkQueue tested extensively in TestWorkQueueBasic.
+// The only difference is different logic in AdmittedWorkDone.
+// TestCPUTimeTokenWorkQueue therefore does a very simple series of calls
+// to Admit and AdmittedWorkDone, in order to assert that AdmittedWorkDone
+// makes the right granter calls and the right changes to used. For
+// extensive testing of the WorkQueue, e.g. of fair-sharing, of queuing,
+// we rely on TestWorkQueueBasic.
+func TestCPUTimeTokenWorkQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var wrkMap workMap
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_work_queue"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				closeFn()
+				tg = &testGranter{buf: &buf}
+				// We want all calls to tryGet to return true. Thus all calls
+				// to Admit allow admission immediately. This is all that is
+				// needed to test AdmittedWorkDone, and that is all that is
+				// desired here, as per the comment above
+				// TestCPUTimeTokenWorkQueue.
+				tg.returnValueFromTryGet = true
+				opts := makeWorkQueueOptions(KVWork)
+				opts.mode = usesCPUTimeTokens
+				timeSource = timeutil.NewManualTime(initialTime)
+				opts.timeSource = timeSource
+				opts.disableEpochClosingGoroutine = true
+				opts.disableGCTenantsAndResetUsed = true
+				st = cluster.MakeTestingClusterSettings()
+				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+					KVWork, tg, st, metrics, opts).(*WorkQueue)
+				tg.r = q
+				wrkMap.resetMap()
+				return ""
+
+			case "admit":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				if _, ok := wrkMap.get(id); ok {
+					panic(fmt.Sprintf("id %d is already used", id))
+				}
+				tenant := scanTenantID(t, d)
+				var requestedCount int64
+				d.ScanArgs(t, "requested-count", &requestedCount)
+				ctx, cancel := context.WithCancel(context.Background())
+				wrkMap.set(id, &testWork{cancel: cancel})
+				workInfo := WorkInfo{
+					RequestedCount: requestedCount,
+					TenantID:       tenant,
+					Priority:       admissionpb.WorkPriority(0),
+					CreateTime:     int64(time.Millisecond),
+				}
+				// Won't block, since returnValueFromTryGet is true.
+				resp, err := q.Admit(ctx, workInfo)
+				require.True(t, resp.Enabled)
+				if err != nil {
+					buf.printf("id %d: admit failed", id)
+					wrkMap.delete(id)
+				} else {
+					buf.printf("id %d: admit succeeded", id)
+					wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+				}
+				return buf.stringAndReset()
+
+			case "work-done":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d\n", id)
+				}
+				if !work.admitted {
+					return fmt.Sprintf("id not admitted: %d\n", id)
+				}
+				cpuTime := int64(1)
+				if d.HasArg("cpu-time") {
+					d.ScanArgs(t, "cpu-time", &cpuTime)
+				}
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
+				wrkMap.delete(id)
+				return buf.stringAndReset()
+
+			case "print":
+				return q.String()
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
 // decrements and tenantInfo.used resets that used to fail until we eliminated
 // the code that decrements tenantInfo.used for tokens. It would also trigger
