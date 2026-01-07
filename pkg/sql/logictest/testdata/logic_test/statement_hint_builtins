@@ -1,6 +1,20 @@
 # LogicTest: !local-prepared
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
+# Speed up the rangefeed.
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms';
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms';
+
+user root
+
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
 
