@@ -8,6 +8,7 @@ package sslocal
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
@@ -162,7 +164,7 @@ func TestSQLIngester(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -196,7 +198,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	defer stopper.Stop(ingesterCtx)
 	settings := cluster.MakeTestingClusterSettings()
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -240,7 +242,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -283,7 +285,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -341,7 +343,7 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			},
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics())
+		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), nil /* parentMon */)
 		ingester.Start(ctx, stopper)
 		ingester.BufferStatement(statementA)
 		ingester.BufferStatement(statementB)
@@ -398,7 +400,7 @@ func TestStatsCollectorIngester(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	fakeSink := &capturingSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), fakeSink)
+	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), nil /* parentMon */, fakeSink)
 	ingester.Start(ctx, stopper, WithFlushInterval(10))
 
 	// Set up a StatsCollector with the ingester.
@@ -447,4 +449,497 @@ func TestStatsCollectorIngester(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+type stmtToRecord struct {
+	stmt           sqlstats.RecordedStmtStats
+	expectRecorded bool
+}
+
+// TestSQLStatsIngesterMemoryAccounting verifies memory tracking behavior
+// including buffering, flushing, limits, and multi-session scenarios.
+func TestSQLStatsIngesterMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sessionA := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaa"))
+	sessionB := clusterunique.IDFromBytes([]byte("bbbbbbbbbbbbbbbb"))
+	sessionC := clusterunique.IDFromBytes([]byte("cccccccccccccccc"))
+	sessionD := clusterunique.IDFromBytes([]byte("dddddddddddddddd"))
+	sessionE := clusterunique.IDFromBytes([]byte("eeeeeeeeeeeeeeee"))
+
+	largeQuery := strings.Repeat("SELECT * FROM table_with_very_long_name_to_increase_size ", 50)
+	largeIndexRec := strings.Repeat("CREATE INDEX idx ON table(column) ", 20)
+
+	testCases := []struct {
+		name                  string
+		memoryLimit           int64
+		statements            []stmtToRecord
+		expectedRecordedCount int // number of statements expected to be successfully recorded
+	}{
+		{
+			name:                  "records statements in a single session successfully",
+			memoryLimit:           10 * 1024, // 10KB
+			expectedRecordedCount: 2,
+			statements: []stmtToRecord{
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM foo WHERE bar = 1 AND baz = 2",
+						SessionID:     sessionA,
+						FingerprintID: appstatspb.StmtFingerprintID(1),
+						App:           "testapp",
+						Database:      "testdb",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "UPDATE foo SET baz = 3 WHERE id = 4",
+						SessionID:     sessionA,
+						FingerprintID: appstatspb.StmtFingerprintID(2),
+						App:           "testapp",
+					},
+					expectRecorded: true,
+				},
+			},
+		},
+		{
+			name:                  "respects memory limits and drops statements when exhausted in a single session",
+			memoryLimit:           30 * 1024, // 30KB
+			expectedRecordedCount: 7,         // approximately 7 large statements should fit in 30KB
+			statements: []stmtToRecord{
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(1),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(2),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(3),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(4),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(5),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(6),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(7),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(8),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false, // This and subsequent should fail due to memory limit
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(9),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(10),
+						App:                  "testapp",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false,
+				},
+			},
+		},
+		{
+			name:                  "records statements across multiple sessions successfully",
+			memoryLimit:           100 * 1024, // 100KB
+			expectedRecordedCount: 10,
+			statements: []stmtToRecord{
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_0_0",
+						SessionID:     sessionA,
+						FingerprintID: appstatspb.StmtFingerprintID(1),
+						App:           "app0",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_0_1",
+						SessionID:     sessionA,
+						FingerprintID: appstatspb.StmtFingerprintID(2),
+						App:           "app0",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_1_0",
+						SessionID:     sessionB,
+						FingerprintID: appstatspb.StmtFingerprintID(11),
+						App:           "app1",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_1_1",
+						SessionID:     sessionB,
+						FingerprintID: appstatspb.StmtFingerprintID(12),
+						App:           "app1",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_2_0",
+						SessionID:     sessionC,
+						FingerprintID: appstatspb.StmtFingerprintID(21),
+						App:           "app2",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_2_1",
+						SessionID:     sessionC,
+						FingerprintID: appstatspb.StmtFingerprintID(22),
+						App:           "app2",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_3_0",
+						SessionID:     sessionD,
+						FingerprintID: appstatspb.StmtFingerprintID(31),
+						App:           "app3",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_3_1",
+						SessionID:     sessionD,
+						FingerprintID: appstatspb.StmtFingerprintID(32),
+						App:           "app3",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_4_0",
+						SessionID:     sessionE,
+						FingerprintID: appstatspb.StmtFingerprintID(41),
+						App:           "app4",
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:         "SELECT * FROM table_4_1",
+						SessionID:     sessionE,
+						FingerprintID: appstatspb.StmtFingerprintID(42),
+						App:           "app4",
+					},
+					expectRecorded: true,
+				},
+			},
+		},
+		{
+			name:                  "recording of statements should drop across multiple sessions when memory limit is reached",
+			memoryLimit:           50 * 1024, // 50KB
+			expectedRecordedCount: 12,        // approximately 12 large statements should fit in 50KB
+			statements: []stmtToRecord{
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(1),
+						App:                  "app0",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionB,
+						FingerprintID:        appstatspb.StmtFingerprintID(11),
+						App:                  "app1",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionC,
+						FingerprintID:        appstatspb.StmtFingerprintID(21),
+						App:                  "app2",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(2),
+						App:                  "app0",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionB,
+						FingerprintID:        appstatspb.StmtFingerprintID(12),
+						App:                  "app1",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionC,
+						FingerprintID:        appstatspb.StmtFingerprintID(22),
+						App:                  "app2",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(3),
+						App:                  "app0",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionB,
+						FingerprintID:        appstatspb.StmtFingerprintID(13),
+						App:                  "app1",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionC,
+						FingerprintID:        appstatspb.StmtFingerprintID(23),
+						App:                  "app2",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(4),
+						App:                  "app0",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionB,
+						FingerprintID:        appstatspb.StmtFingerprintID(14),
+						App:                  "app1",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionC,
+						FingerprintID:        appstatspb.StmtFingerprintID(24),
+						App:                  "app2",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: true,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionA,
+						FingerprintID:        appstatspb.StmtFingerprintID(5),
+						App:                  "app0",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false, // This and subsequent should fail due to memory limit
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionB,
+						FingerprintID:        appstatspb.StmtFingerprintID(15),
+						App:                  "app1",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false,
+				},
+				{
+					stmt: sqlstats.RecordedStmtStats{
+						Query:                largeQuery,
+						SessionID:            sessionC,
+						FingerprintID:        appstatspb.StmtFingerprintID(25),
+						App:                  "app2",
+						IndexRecommendations: []string{largeIndexRec},
+					},
+					expectRecorded: false,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			settings := cluster.MakeTestingClusterSettings()
+
+			parentMon := mon.NewMonitor(mon.Options{
+				Name:     mon.MakeName("test-sql-stats-mon"),
+				Settings: settings,
+			})
+			parentMon.Start(ctx, nil, mon.NewStandaloneBudget(tc.memoryLimit))
+			defer parentMon.Stop(ctx)
+
+			testSink := &sqlStatsTestSink{}
+			knobs := &sqlstats.TestingKnobs{
+				SynchronousSQLStats: true,
+			}
+			ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics(), parentMon, testSink)
+			ingester.Start(ctx, stopper, WithoutTimedFlush())
+
+			// Record all statements and track which sessions had successful recordings.
+			sessionsWithRecordings := make(map[clusterunique.ID]bool)
+			var recordedCount int
+			for _, sr := range tc.statements {
+				memBefore := ingester.acc.Used()
+				ingester.RecordStatement(&sr.stmt)
+				memAfter := ingester.acc.Used()
+
+				if sr.expectRecorded {
+					require.Greater(t, memAfter, memBefore,
+						"expected memory to be tracked after recording statements")
+
+					sessionsWithRecordings[sr.stmt.SessionID] = true
+					recordedCount++
+				} else {
+					require.Equal(t, memAfter, memBefore,
+						"expected memory to stay the same when statement recording is dropped")
+				}
+			}
+
+			require.Equal(t, tc.expectedRecordedCount, recordedCount,
+				"expected %d statements to be recorded, got %d", tc.expectedRecordedCount, recordedCount)
+
+			// Flush each session and verify memory is released.
+			memBeforeFlush := ingester.acc.Used()
+			for sessionID := range sessionsWithRecordings {
+				ingester.FlushBuffer(sessionID)
+				ingester.guard.ForceSync()
+				<-ingester.syncStatsTestingCh
+
+				memAfterFlush := ingester.acc.Used()
+				require.Less(t, memAfterFlush, memBeforeFlush,
+					"expected memory to be released or stay the same after flushing session")
+				memBeforeFlush = memAfterFlush
+			}
+
+			require.Equal(t, int64(0), ingester.acc.Used(),
+				"expected all memory to be released after flushing all sessions")
+
+			// Verify sink received expected number of statements after flushing.
+			// The tests above verify the memory accounting - here we verify the
+			// ingester indeed only processed the expected number of statements
+			// and the number processed is in-sync with the memory accounting.
+			testSink.mu.RLock()
+			sinkStmtCount := len(testSink.mu.stmts)
+			testSink.mu.RUnlock()
+			require.Equal(t, tc.expectedRecordedCount, sinkStmtCount,
+				"expected %d statements to be sent to sink, got %d", tc.expectedRecordedCount, sinkStmtCount)
+
+			if ingester.acc != nil {
+				ingester.acc.Close(ctx)
+			}
+		})
+	}
 }
