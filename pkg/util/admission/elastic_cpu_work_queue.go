@@ -94,7 +94,13 @@ func (e *ElasticCPUWorkQueue) Admit(
 	if info.BypassAdmission {
 		e.metrics.bypassedAdmissionCumNanos.Add(duration.Nanoseconds())
 	}
-	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission), nil
+	// Pass the granter for yield delay metric recording. If the granter doesn't
+	// implement the interface (shouldn't happen in practice), pass nil.
+	var granterForHandle elasticCPUGranterForHandle
+	if g, ok := e.granter.(elasticCPUGranterForHandle); ok {
+		granterForHandle = g
+	}
+	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission, granterForHandle), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has

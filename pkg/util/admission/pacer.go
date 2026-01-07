@@ -43,7 +43,7 @@ func (p *Pacer) Pace(ctx context.Context) (readmitted bool, err error) {
 		return false, nil
 	}
 
-	if overLimit, _ := p.cur.IsOverLimitAndPossiblyYield(); overLimit {
+	if overLimit, _, _ := p.cur.IsOverLimitAndPossiblyYield(); overLimit {
 		p.wq.AdmittedWorkDone(p.cur)
 		p.cur = nil
 	}
