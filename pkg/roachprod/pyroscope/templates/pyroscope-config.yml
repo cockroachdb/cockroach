@@ -5,6 +5,8 @@ pyroscopedb:
   data_path: /var/lib/pyroscope/data
 
 limits:
+  retention_period: 0
+  max_query_lookback: 0
   max_query_length: 2h
   max_query_parallelism: 4
   max_profile_stacktrace_samples: 500000
