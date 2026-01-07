@@ -7,6 +7,7 @@ package slinstance_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,6 +146,83 @@ func TestSQLInstance(t *testing.T) {
 	stopper.Stop(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
+}
+
+// TestExtendSessionErrorDoesNotClobberExpiration tests that that errors during
+// session extension do not clobber the expiration time upon subsequent retries.
+// Clearing a session's expiration time would regress the session's expiration
+// and immediately cause it to be expired.
+//
+// Regression test for the bug described in:
+// https://github.com/cockroachdb/cockroach/issues/160304#issuecomment-3720880758.
+func TestExtendSessionErrorDoesNotClobberExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var ambientCtx log.AmbientContext
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 42)))
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
+		true /* initializeVersion */)
+	slbase.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
+	slbase.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
+
+	// Track expirations passed to Update calls.
+	var updateMu struct {
+		syncutil.Mutex
+		updateCount  int
+		expirations  []hlc.Timestamp
+		sessionReady chan struct{}
+	}
+	updateMu.sessionReady = make(chan struct{})
+	var closeOnce sync.Once
+
+	fakeStorage.SetUpdateInjectedFailure(func(sid sqlliveness.SessionID, expiration hlc.Timestamp) error {
+		updateMu.Lock()
+		defer updateMu.Unlock()
+		updateMu.updateCount++
+		updateMu.expirations = append(updateMu.expirations, expiration)
+		if updateMu.updateCount == 1 {
+			// Fail the first update attempt.
+			return errors.Newf("injected update error")
+		}
+		// Signal that we've received the second update (which should succeed).
+		closeOnce.Do(func() { close(updateMu.sessionReady) })
+		return nil
+	})
+
+	sqlInstance.Start(ctx, nil)
+
+	// Wait for the session to be created.
+	_, err := sqlInstance.Session(ctx)
+	require.NoError(t, err)
+
+	// Wait for the second update to be attempted after the first one fails.
+	select {
+	case <-updateMu.sessionReady:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("timed out waiting for session update retries")
+	}
+
+	// Check that the expiration on the second update attempt is not empty.
+	updateMu.Lock()
+	defer updateMu.Unlock()
+	require.GreaterOrEqual(t, len(updateMu.expirations), 2,
+		"expected at least 2 update attempts")
+	// No update should try and update the expiration timestamp to an empty
+	// value.
+	for i, exp := range updateMu.expirations {
+		require.Falsef(t, exp.IsEmpty(),
+			"update attempt %d should not have an empty expiration; got: %s",
+			i, exp)
+	}
 }
 
 func TestSQLInstanceRelease(t *testing.T) {
