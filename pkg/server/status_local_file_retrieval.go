@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/google/pprof/profile"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -91,12 +93,83 @@ func profileLocal(
 		if p == nil {
 			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
 		}
+
+		// If seconds is specified, collect a delta profile by taking two snapshots
+		// and computing the difference. This matches the behavior of Go's standard
+		// net/http/pprof handler.
+		if req.Seconds > 0 {
+			return collectDeltaProfile(ctx, p, time.Duration(req.Seconds)*time.Second)
+		}
+
 		var buf bytes.Buffer
 		if err := p.WriteTo(&buf, 0); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
+}
+
+// collectDeltaProfile collects a delta profile by taking two snapshots of the
+// given profile separated by the specified duration, then computing the
+// difference. This matches the behavior of Go's standard net/http/pprof handler
+// when the "seconds" parameter is specified.
+func collectDeltaProfile(
+	ctx context.Context, p *pprof.Profile, duration time.Duration,
+) (*serverpb.JSONResponse, error) {
+	// Collect the first profile snapshot.
+	p0, err := collectProfileSnapshot(p)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to collect initial profile: %s", err)
+	}
+
+	// Wait for the specified duration.
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(duration):
+	}
+
+	// Collect the second profile snapshot.
+	p1, err := collectProfileSnapshot(p)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to collect final profile: %s", err)
+	}
+
+	// Compute the delta by scaling p0 by -1 and merging with p1.
+	ts := p1.TimeNanos
+	dur := p1.TimeNanos - p0.TimeNanos
+
+	p0.Scale(-1)
+
+	delta, err := profile.Merge([]*profile.Profile{p0, p1})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to compute delta profile: %s", err)
+	}
+
+	delta.TimeNanos = ts
+	delta.DurationNanos = dur
+
+	var buf bytes.Buffer
+	if err := delta.Write(&buf); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write delta profile: %s", err)
+	}
+	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
+}
+
+// collectProfileSnapshot collects a single snapshot of the given profile and
+// parses it into a *profile.Profile.
+func collectProfileSnapshot(p *pprof.Profile) (*profile.Profile, error) {
+	var buf bytes.Buffer
+	if err := p.WriteTo(&buf, 0); err != nil {
+		return nil, err
+	}
+	ts := timeutil.Now().UnixNano()
+	prof, err := profile.Parse(&buf)
+	if err != nil {
+		return nil, err
+	}
+	prof.TimeNanos = ts
+	return prof, nil
 }
 
 // stacksLocal retrieves goroutine stack files on the local node. This method
