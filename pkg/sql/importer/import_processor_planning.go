@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -80,6 +82,28 @@ func distImport(
 	// start and end keys.
 	details := job.Details().(jobspb.ImportDetails)
 	useDistributedMerge := details.UseDistributedMerge
+
+	// addStoragePrefix records a storage prefix before any SST is written to that
+	// location, ensuring cleanup can occur even if the job fails mid-import.
+	addStoragePrefix := func(ctx context.Context, prefix string) error {
+		return job.NoTxn().Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
+			prog := md.Progress.GetImport()
+			if prog == nil {
+				return errors.New("import progress not found")
+			}
+			// Check for duplicates
+			for _, existing := range prog.SSTStoragePrefixes {
+				if existing == prefix {
+					return nil // Already recorded
+				}
+			}
+			prog.SSTStoragePrefixes = append(prog.SSTStoragePrefixes, prefix)
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+	}
 
 	dsp := execCtx.DistSQLPlanner()
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -200,7 +224,7 @@ func distImport(
 		)
 	}
 
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
 			for i, v := range meta.BulkProcessorProgress.ResumePos {
 				atomic.StoreInt64(&rowProgress[i], v)
@@ -212,6 +236,14 @@ func distImport(
 			accumulatedBulkSummary.Lock()
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
 			accumulatedBulkSummary.Unlock()
+
+			// For distributed merge, record storage prefix for nodes that report progress
+			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
+				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
+				if err := addStoragePrefix(ctx, prefix); err != nil {
+					return err
+				}
+			}
 
 			if testingKnobs.alwaysFlushJobProgress {
 				return updateJobProgress()
@@ -323,7 +355,12 @@ func distImport(
 
 		writeTS := &hlc.Timestamp{WallTime: walltime}
 		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
-			return fmt.Sprintf("nodelocal://%d/job/%d/merge/", instanceID, job.ID()), nil
+			// Record the storage prefix before any SSTs are written
+			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
+			if err := addStoragePrefix(ctx, prefix); err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("%sjob/%d/merge/", prefix, job.ID()), nil
 		}, 1 /* iteration */, 1 /* maxIterations */, writeTS)
 
 		return err

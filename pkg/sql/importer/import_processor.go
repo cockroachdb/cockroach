@@ -388,6 +388,9 @@ func ingestKvs(
 		offset++
 	}
 
+	// For distributed merge, track if we've sent our storage prefix to coordinator
+	var sentStoragePrefix atomic.Bool
+
 	pushProgress := func(ctx context.Context) {
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
@@ -398,11 +401,25 @@ func ingestKvs(
 		}
 		// Write down the summary of how much we've ingested since the last update.
 		prog.BulkSummary = importAdder.GetProgress()
+
+		// For distributed merge, include node ID so coordinator can track storage prefixes
+		if spec.UseDistributedMerge && !sentStoragePrefix.Load() {
+			prog.NodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
+			sentStoragePrefix.Store(true)
+		}
+
 		select {
 		case progCh <- prog:
 		case <-ctx.Done():
 		}
 
+	}
+
+	// For distributed merge, send an initial progress update to ensure the
+	// coordinator knows this node is participating, even if the job completes
+	// before the first ticker fires.
+	if spec.UseDistributedMerge {
+		pushProgress(ctx)
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -532,10 +549,18 @@ func makeIngestHelper(
 	if spec.UseDistributedMerge {
 		uri := fmt.Sprintf("nodelocal://%d/job/%d/map/%s_rows/", flowCtx.Cfg.NodeID.SQLInstanceID(),
 			spec.JobID, table.Desc.Name)
+
 		rowStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, uri, spec.User())
 		if err != nil {
 			return nil, err
 		}
+		// Ensure rowStorage is closed if we encounter an error after this point
+		defer func() {
+			if err != nil {
+				rowStorage.Close()
+			}
+		}()
+
 		fileAllocator := bulksst.NewExternalFileAllocator(rowStorage, uri, flowCtx.Cfg.DB.KV().Clock())
 		batcher := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
 		batcher.SetWriteTS(writeTS)
