@@ -834,6 +834,13 @@ type lockTableGuard interface {
 	// that conflict.
 	CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool)
 
+	// PushedTransactionUpdated informs the lock table guard that a transaction
+	// has been pushed _by this request_ and is either finalized or has been moved
+	// to a higher timestamp. This is is used to virtually resolved the intents.
+	//
+	// TODO: Make that comment not a lie.
+	PushedTransactionUpdated(*roachpb.Transaction)
+
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
 	// a conflicting transaction in the lockTableGuard's snapshot of the lock
 	// table, given the caller's own desired locking strength. If so, true is
