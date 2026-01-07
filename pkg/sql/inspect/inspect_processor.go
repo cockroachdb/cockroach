@@ -274,6 +274,14 @@ func (p *inspectProcessor) processSpan(
 
 	asOfToUse := p.getTimestampForSpan()
 
+	// If using "now" AOST, notify the coordinator so it can set up protected
+	// timestamp protection for this span.
+	if p.spec.InspectDetails.AsOf.IsEmpty() {
+		if err := p.sendSpanStartedProgress(ctx, output, span, asOfToUse); err != nil {
+			return err
+		}
+	}
+
 	// Only create checks that apply to this span.
 	var checks []inspectCheck
 	for _, factory := range p.checkFactories {
@@ -352,6 +360,37 @@ func (p *inspectProcessor) sendInspectProgress(
 			FlowID:          p.flowCtx.ID,
 			ProcessorID:     p.processorID,
 			Drained:         finished,
+		},
+	}
+
+	p.pushProgressMeta(output, meta)
+	return nil
+}
+
+// sendSpanStartedProgress sends a progress message indicating a span has started
+// processing with a specific timestamp. The coordinator uses this to set up
+// protected timestamp protection for the span.
+func (p *inspectProcessor) sendSpanStartedProgress(
+	ctx context.Context, output execinfra.RowReceiver, span roachpb.Span, asOf hlc.Timestamp,
+) error {
+	log.VEventf(ctx, 2, "INSPECT: processor sending span started for %s at timestamp %s", span, asOf)
+
+	progressMsg := &jobspb.InspectProcessorProgress{
+		SpanStarted: span,
+		StartedAt:   asOf,
+	}
+
+	progressAny, err := pbtypes.MarshalAny(progressMsg)
+	if err != nil {
+		return errors.Wrapf(err, "unable to marshal inspect processor progress")
+	}
+
+	meta := &execinfrapb.ProducerMetadata{
+		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+			ProgressDetails: *progressAny,
+			NodeID:          p.flowCtx.NodeID.SQLInstanceID(),
+			FlowID:          p.flowCtx.ID,
+			ProcessorID:     p.processorID,
 		},
 	}
 

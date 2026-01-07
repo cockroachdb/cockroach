@@ -482,7 +482,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 						return
 					}
 					ptsCleaners = append(ptsCleaners,
-						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl, ts))
+						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl.GetID(), ts))
 				}
 			})
 			if err != nil {
