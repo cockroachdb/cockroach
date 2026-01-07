@@ -293,8 +293,11 @@ func stripPrefix(title string) string {
 }
 
 func fetchPRs(repo, author string, after, before time.Time, limit int) ([]PRInfo, error) {
-	// Build search query.
-	query := fmt.Sprintf("repo:%s author:%s is:pr", repo, author)
+	// Build search query with date range to limit results at the API level.
+	// GitHub search uses 'updated' qualifier to filter by last activity date.
+	afterStr := after.Format("2006-01-02")
+	beforeStr := before.Format("2006-01-02")
+	query := fmt.Sprintf("repo:%s author:%s is:pr updated:%s..%s", repo, author, afterStr, beforeStr)
 
 	var allPRs []PRInfo // PRs that matched the query and are within the date range
 	var seenPRCount int // counts all PRs pulled from Github, including those that don't match the date range
