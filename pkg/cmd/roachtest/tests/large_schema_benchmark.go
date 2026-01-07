@@ -6,19 +6,27 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 // registerLargeSchemaBenchmarks registers all permutations of
@@ -298,6 +306,226 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			mon.Wait()
 		},
 	})
+}
+
+// registerLargeSchemaIntrospectionBenchmark registers a test that creates
+// 1 million empty tables and benchmarks introspection queries without any
+// data import or TPCC workload. This is a smoke test to determine how
+// introspection with 1 million tables performs.
+func registerLargeSchemaIntrospectionBenchmark(r registry.Registry) {
+	const numTables = 1_000_000
+	clusterSpec := []spec.Option{
+		spec.CPU(16),
+		spec.WorkloadNode(),
+		spec.WorkloadNodeCPU(8),
+		spec.VolumeSize(500),
+		spec.VolumeType("pd-ssd"),
+		spec.GCEMachineType("n2-standard-16"),
+	}
+
+	r.Add(registry.TestSpec{
+		Name:             fmt.Sprintf("large-schema-benchmark/multiregion=false/tables=%d", numTables),
+		Owner:            registry.OwnerSQLFoundations,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(10, clusterSpec...),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Weekly),
+		Timeout:          48 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runLargeSchemaIntrospectionBenchmark(ctx, t, c, numTables)
+		},
+	})
+}
+
+func runLargeSchemaIntrospectionBenchmark(
+	ctx context.Context, t test.Test, c cluster.Cluster, numTables int,
+) {
+	// Number of tables per-database from the TPCC template.
+	const numTablesForTPCC = 9
+	const maxSchemasForDatabase = 72
+
+	// Build the list of databases and schemas needed to create numTables.
+	var dbList []string
+	numTablesRemaining := numTables
+	databaseIdx := 0
+	numSchemasForDatabase := 1
+	for numTablesRemaining > 0 {
+		databaseName := fmt.Sprintf("warehouse_%d", databaseIdx)
+		for schemaIdx := 0; schemaIdx < numSchemasForDatabase && numTablesRemaining > 0; schemaIdx++ {
+			schemaName := fmt.Sprintf("schema_%d", schemaIdx)
+			if schemaIdx == 0 {
+				schemaName = "public"
+			}
+			dbList = append(dbList, fmt.Sprintf("%s.%s", databaseName, schemaName))
+			numTablesRemaining -= numTablesForTPCC
+		}
+		numSchemasForDatabase++
+		numSchemasForDatabase = min(numSchemasForDatabase, maxSchemasForDatabase)
+		databaseIdx++
+	}
+
+	t.L().Printf("Creating %d tables across %d database.schema entries", numTables, len(dbList))
+
+	// Start the cluster and configure settings for large schema.
+	settings := install.MakeClusterSettings()
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ScheduleBackups = false
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// Configure cluster settings for large schema operations.
+	clusterSettings := []string{
+		"SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'",
+		"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'",
+		"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'",
+		"SET CLUSTER SETTING jobs.retention_time='1h'",
+		"SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=1000",
+		"SET CLUSTER SETTING sql.schema.approx_max_object_count = 0",
+	}
+	for _, stmt := range clusterSettings {
+		_, err := conn.Exec(stmt)
+		require.NoError(t, err)
+	}
+
+	// Create a user for REST API authentication.
+	_, err := conn.Exec("CREATE USER roachadmin PASSWORD 'roacher'")
+	require.NoError(t, err)
+	_, err = conn.Exec("GRANT ADMIN TO roachadmin")
+	require.NoError(t, err)
+
+	// Upload the database list file to the workload node.
+	const populateFileName = "populate_introspection"
+	err = c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
+	require.NoError(t, err)
+
+	// Create the schema using tpccmultidb with minimal warehouses (1 warehouse
+	// to minimize data import while still creating the schema structure).
+	t.L().Printf("Starting schema creation with tpccmultidb (warehouses=1)")
+	options := tpccOptions{
+		WorkloadCmd: "tpccmultidb",
+		DB:          strings.Split(dbList[0], ".")[0],
+		SetupType:   usingInit,
+		Warehouses:  1, // Minimal warehouses to minimize data import
+		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --import-concurrency-limit=32",
+			populateFileName,
+		),
+		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// Cluster is already started, this is a no-op.
+		},
+	}
+	setupTPCC(ctx, t, t.L(), c, options)
+
+	t.L().Printf("Schema creation complete, starting introspection benchmark")
+
+	// Set up histogram for benchmarking.
+	const benchmarkDuration = 20 * time.Minute
+	metricNames := []string{"orm_queries", "api_calls"}
+	exp := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	reg := histogram.NewRegistryWithExporter(benchmarkDuration*2, histogram.MockWorkloadName, exp)
+	for _, name := range metricNames {
+		reg.GetHandle().Get(name)
+	}
+	bytesBuf := bytes.NewBuffer([]byte{})
+	writer := io.Writer(bytesBuf)
+	exp.Init(&writer)
+	defer roachtestutil.CloseExporter(ctx, exp, t, c, bytesBuf, c.Node(1), "")
+
+	// Upload ORM queries file.
+	require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
+
+	// Get admin UI URLs for API calls.
+	webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.CRDBNodes())
+	require.NoError(t, err)
+	for urlIdx := range webConsoleURLs {
+		webConsoleURLs[urlIdx] = "https://" + webConsoleURLs[urlIdx]
+	}
+
+	// Run introspection benchmark with multiple workers.
+	numWorkers := (len(c.All()) - 1) * 10
+	t.L().Printf("Running introspection benchmark for %v with %d workers", benchmarkDuration, numWorkers)
+
+	var queryCount atomic.Int64
+	startTime := timeutil.Now()
+	endTime := startTime.Add(benchmarkDuration)
+
+	g, gCtx := errgroup.WithContext(ctx)
+	for i := 0; i < numWorkers; i++ {
+		workerIdx := i
+		g.Go(func() error {
+			// Each worker connects to a different node for load distribution.
+			nodeIdx := (workerIdx % len(c.CRDBNodes())) + 1
+			workerConn := c.Conn(gCtx, t.L(), nodeIdx)
+			defer workerConn.Close()
+
+			// Pick a random database from the list for this worker.
+			dbSchema := dbList[workerIdx%len(dbList)]
+			dbName := strings.Split(dbSchema, ".")[0]
+			_, err := workerConn.ExecContext(gCtx, fmt.Sprintf("USE %s", dbName))
+			if err != nil {
+				return err
+			}
+
+			for timeutil.Now().Before(endTime) {
+				select {
+				case <-gCtx.Done():
+					return gCtx.Err()
+				default:
+				}
+
+				// Execute ORM introspection query.
+				start := timeutil.Now()
+				_, err := workerConn.QueryContext(gCtx, LargeSchemaOrmQueries)
+				if err != nil {
+					t.L().Printf("Worker %d query error: %v", workerIdx, err)
+					continue
+				}
+				elapsed := timeutil.Since(start)
+				reg.GetHandle().Get("orm_queries").Record(elapsed)
+				queryCount.Add(1)
+			}
+			return nil
+		})
+	}
+
+	// Periodically tick the histogram and log progress.
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	g.Go(func() error {
+		lastCount := int64(0)
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				currentCount := queryCount.Load()
+				elapsed := timeutil.Since(startTime)
+				qps := float64(currentCount-lastCount) / 10.0
+				t.L().Printf("Progress: %v elapsed, %d total queries, %.1f qps",
+					elapsed.Round(time.Second), currentCount, qps)
+				lastCount = currentCount
+				reg.Tick(func(tick histogram.Tick) {
+					_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
+				})
+			}
+		}
+	})
+
+	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+
+	// Final tick to capture remaining data.
+	reg.Tick(func(tick histogram.Tick) {
+		_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
+	})
+
+	totalQueries := queryCount.Load()
+	totalDuration := timeutil.Since(startTime)
+	avgQPS := float64(totalQueries) / totalDuration.Seconds()
+	t.L().Printf("Benchmark complete: %d queries in %v (avg %.1f qps)",
+		totalQueries, totalDuration.Round(time.Second), avgQPS)
 }
 
 // LargeSchemaOrmQueries is extracted from the round trip analysis tests for
