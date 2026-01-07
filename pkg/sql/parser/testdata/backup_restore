@@ -115,24 +115,6 @@ SHOW BACKUP 'latest' IN '*****' WITH OPTIONS (check_files, encryption_passphrase
 SHOW BACKUP 'latest' IN 'bar' WITH OPTIONS (check_files, encryption_passphrase = 'secret') -- passwords exposed
 
 parse
-SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
-----
-SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- normalized!
-SHOW BACKUP FROM ('latest') IN ('*****') WITH OPTIONS (incremental_location = ('*****'), skip size) -- fully parenthesized
-SHOW BACKUP FROM '_' IN '_' WITH OPTIONS (incremental_location = '_', skip size) -- literals removed
-SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- identifiers removed
-SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- passwords exposed
-
-parse
-SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
-----
-SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- normalized!
-SHOW BACKUP FROM ('latest') IN (('*****'), ('*****')) WITH OPTIONS (incremental_location = (('*****'), ('*****')), kms = (('*****'), ('*****'))) -- fully parenthesized
-SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
-SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- identifiers removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
-
-parse
 SHOW BACKUPS IN 'bar'
 ----
 SHOW BACKUPS IN '*****' -- normalized!
@@ -427,24 +409,6 @@ RESTORE TABLE foo FROM $1 IN $1 -- literals removed
 RESTORE TABLE _ FROM $2 IN $1 -- identifiers removed
 
 parse
-RESTORE TABLE foo FROM $1 IN $2 WITH incremental_location = 'bar'
-----
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE TABLE (foo) FROM ($1) IN ($2) WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE TABLE foo FROM $1 IN $1 WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE TABLE _ FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = 'bar') -- passwords exposed
-
-parse
-RESTORE foo FROM $1 IN $2 WITH incremental_location = 'bar'
-----
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE TABLE (foo) FROM ($1) IN ($2) WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE TABLE foo FROM $1 IN $1 WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE TABLE _ FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = 'bar') -- passwords exposed
-
-parse
 RESTORE TABLE foo FROM 'abc' IN ($1, $2, 'bar')
 ----
 RESTORE TABLE foo FROM 'abc' IN ($1, $2, '*****') -- normalized!
@@ -571,15 +535,6 @@ RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (experimental cop
 RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (experimental copy) -- literals removed
 RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (experimental copy) -- identifiers removed
 RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (experimental copy) -- passwords exposed
-
-parse
-RESTORE DATABASE foo FROM LATEST IN 'bar' WITH incremental_location = 'baz'
-----
-RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
 
 parse
 RESTORE DATABASE foo, baz FROM LATEST IN 'bar' AS OF SYSTEM TIME '1'
