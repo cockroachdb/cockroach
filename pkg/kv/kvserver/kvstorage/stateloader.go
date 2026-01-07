@@ -320,22 +320,22 @@ func (s StateLoader) SetForceFlushIndex(
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
-// LoadRaftReplicaID loads the RaftReplicaID. Returns an empty RaftReplicaID if
-// the key is not found, which can only happen if the replica does not exist.
-// The caller must assert if they don't expect a missing replica.
-func (s StateLoader) LoadRaftReplicaID(
-	ctx context.Context, stateRO StateRO,
-) (kvserverpb.RaftReplicaID, error) {
-	var replicaID kvserverpb.RaftReplicaID
-	if ok, err := storage.MVCCGetProto(
-		ctx, stateRO, s.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
-		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
-	); err != nil || !ok {
-		// NB: when err == nil && !ok, there is no RaftReplicaID. This can happen
-		// only if the replica does not exist.
-		return kvserverpb.RaftReplicaID{}, err
+// LoadReplicaMark loads the ReplicaMark of the range. Returns an error if the
+// mark could not be loaded, or its invariant does not hold.
+func (s StateLoader) LoadReplicaMark(ctx context.Context, stateRO StateRO) (ReplicaMark, error) {
+	var mark ReplicaMark
+	if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RangeTombstoneKey(), hlc.Timestamp{},
+		&mark.RangeTombstone, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
+	} else if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RaftReplicaIDKey(), hlc.Timestamp{},
+		&mark.RaftReplicaID, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
 	}
-	return replicaID, nil
+	return mark, mark.check()
 }
 
 // SetRaftReplicaID overwrites the RaftReplicaID.
@@ -357,22 +357,6 @@ func (s StateLoader) SetRaftReplicaID(
 // ClearRaftReplicaID clears the RaftReplicaID key.
 func (s StateLoader) ClearRaftReplicaID(stateWO StateWO) error {
 	return stateWO.ClearUnversioned(s.RaftReplicaIDKey(), storage.ClearOptions{})
-}
-
-// LoadRangeTombstone loads the RangeTombstone of the range.
-func (s StateLoader) LoadRangeTombstone(
-	ctx context.Context, stateRO StateRO,
-) (kvserverpb.RangeTombstone, error) {
-	var ts kvserverpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, stateRO, s.RangeTombstoneKey(), hlc.Timestamp{}, &ts, storage.MVCCGetOptions{},
-	); err != nil || !ok {
-		// NB: when err == nil && !ok, there is no RangeTombstone. It is valid to
-		// return RangeTombstone{} with a zero NextReplicaID, signifying that there
-		// hasn't been a single replica removed for the RangeID.
-		return kvserverpb.RangeTombstone{}, err
-	}
-	return ts, nil
 }
 
 // SetRangeTombstone writes the RangeTombstone.

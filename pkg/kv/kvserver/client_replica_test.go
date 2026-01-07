@@ -4155,7 +4155,7 @@ func TestReplicaTombstone(t *testing.T) {
 					return nil
 				})
 				require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, key))
-				var tombstone kvserverpb.RangeTombstone
+				var mark kvstorage.ReplicaMark
 				testutils.SucceedsSoon(t, func() (err error) {
 					// One of the two other stores better be the raft leader eventually.
 					// We keep trying to send snapshots until one takes.
@@ -4169,17 +4169,17 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					ts, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadRangeTombstone(
+					rm, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadReplicaMark(
 						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
-					if ts.NextReplicaID == 0 {
-						return errors.New("no tombstone found")
+					if rm.Exists() {
+						return errors.New("replica still exists")
 					}
-					tombstone = ts
+					mark = rm
 					return nil
 				})
-				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), tombstone.NextReplicaID)
+				require.Equal(t, roachpb.ReplicaID(math.MaxInt32), mark.NextReplicaID)
 			})
 		})
 }
