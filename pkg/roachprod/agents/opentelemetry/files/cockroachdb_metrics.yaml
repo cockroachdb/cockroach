@@ -1924,6 +1924,7 @@ sql_distsql_exec_latency_internal_sum: sql.distsql.exec.latency.internal.sum
 sql_distsql_exec_latency_sum: sql.distsql.exec.latency.sum
 sql_distsql_flows_active: sql.distsql.flows.active
 sql_distsql_flows_total: sql.distsql.flows.total
+sql_distsql_parallel_runner_count: sql.distsql.parallel_runner.count
 sql_distsql_queries_active: sql.distsql.queries.active
 sql_distsql_queries_spilled: sql.distsql.queries.spilled
 sql_distsql_queries_total: sql.distsql.queries.total
@@ -1931,6 +1932,7 @@ sql_distsql_select_count: sql.distsql.select.count
 sql_distsql_select_count_internal: sql.distsql.select.internal
 sql_distsql_select_distributed_exec_count: sql.distsql.select.distributed_exec.count
 sql_distsql_select_distributed_exec_count_internal: sql.distsql.select.distributed_exec.count.internal
+sql_distsql_sequential_runner_count: sql.distsql.sequential_runner.count
 sql_distsql_service_latency: sql.distsql.service.latency
 sql_distsql_service_latency_bucket: sql.distsql.service.latency.bucket
 sql_distsql_service_latency_count: sql.distsql.service.latency.count
