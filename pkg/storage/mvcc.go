@@ -8337,6 +8337,7 @@ func mvccExportToWriter(
 		return maxSize
 	}
 
+	var yieldDelays time.Duration
 	var valueScratch []byte
 	iter.SeekGE(opts.StartKey)
 	for {
@@ -8369,7 +8370,23 @@ func mvccExportToWriter(
 			// accounted for in admission control by penalizing the subsequent
 			// request, so doing it slightly is fine.
 			stopAllowed := isNewKey || opts.StopMidKey
-			if overLimit, _, _ := elasticCPUHandle.IsOverLimitAndPossiblyYield(); overLimit && stopAllowed {
+			overLimit, _, yieldDelay := elasticCPUHandle.IsOverLimitAndPossiblyYield()
+
+			// Inject a tracing span to reflect yield delays if the cumulative delay,
+			// including the most recent delay, exceeds the threshold. This should
+			// indicate large delays, that individually exceed the threshold, as they
+			// happen while still broadly reflecting any significant number of smaller
+			// delays that in aggregate become notable.
+			if yieldDelay != 0 {
+				yieldDelays += yieldDelay
+				if yieldDelays >= 2*time.Millisecond {
+					now := timeutil.Now()
+					tracing.InjectCompletedSpan(ctx, "admission.yield", now.Add(-yieldDelays), yieldDelays)
+					yieldDelays = 0
+				}
+			}
+
+			if overLimit && stopAllowed {
 				resumeKey = unsafeKey.Clone()
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
