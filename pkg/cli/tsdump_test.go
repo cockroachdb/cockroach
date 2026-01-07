@@ -314,6 +314,40 @@ sql.query.count
 		// Verify that the error message about mutual exclusivity is returned
 		require.Contains(t, out, "--non-verbose and --metrics-list-file cannot be used together")
 	})
+
+	t.Run("debug tsdump --output writes to file", func(t *testing.T) {
+		destPath := "tsdump_test_output.txt"
+		defer func() {
+			_ = os.Remove(destPath)
+			// Reset flags to prevent pollution of subsequent tests
+			debugTimeSeriesDumpOpts.output = ""
+			debugTimeSeriesDumpOpts.format = tsDumpRaw
+		}()
+
+		_, err := c.RunWithCapture(fmt.Sprintf(
+			"debug tsdump --format=text --output=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+			destPath,
+		))
+		require.NoError(t, err)
+
+		// Verify file was created
+		_, err = os.Stat(destPath)
+		require.NoError(t, err, "expected output file to be created")
+	})
+
+	t.Run("debug tsdump --output with non-existent directory returns error", func(t *testing.T) {
+		defer func() {
+			// Reset flags to prevent pollution of subsequent tests
+			debugTimeSeriesDumpOpts.output = ""
+			debugTimeSeriesDumpOpts.format = tsDumpRaw
+		}()
+
+		out, _ := c.RunWithCapture(
+			"debug tsdump --format=text --output=./non-existent/directory/dump.txt --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		)
+		require.Contains(t, out, "no such file or directory")
+	})
+
 }
 
 func TestMakeOpenMetricsWriter(t *testing.T) {
