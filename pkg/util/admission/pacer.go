@@ -8,6 +8,9 @@ package admission
 import (
 	"context"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // Pacer is used in tight loops (CPU-bound) for non-premptible elastic work.
@@ -43,7 +46,15 @@ func (p *Pacer) Pace(ctx context.Context) (readmitted bool, err error) {
 		return false, nil
 	}
 
-	if overLimit, _, _ := p.cur.IsOverLimitAndPossiblyYield(); overLimit {
+	overLimit, _, yieldDelay := p.cur.IsOverLimitAndPossiblyYield()
+
+	// Inject a completed span for notable yield delays (>= 10ms).
+	if yieldDelay >= 10*time.Millisecond {
+		now := timeutil.Now()
+		tracing.InjectCompletedSpan(ctx, "admission.yield", now.Add(-yieldDelay), yieldDelay)
+	}
+
+	if overLimit {
 		p.wq.AdmittedWorkDone(p.cur)
 		p.cur = nil
 	}

@@ -8364,7 +8364,15 @@ func mvccExportToWriter(
 			// accounted for in admission control by penalizing the subsequent
 			// request, so doing it slightly is fine.
 			stopAllowed := isNewKey || opts.StopMidKey
-			if overLimit, _, _ := elasticCPUHandle.IsOverLimitAndPossiblyYield(); overLimit && stopAllowed {
+			overLimit, _, yieldDelay := elasticCPUHandle.IsOverLimitAndPossiblyYield()
+
+			// Inject a completed span for notable yield delays (>= 10ms).
+			if yieldDelay >= 10*time.Millisecond {
+				now := timeutil.Now()
+				tracing.InjectCompletedSpan(ctx, "admission.yield", now.Add(-yieldDelay), yieldDelay)
+			}
+
+			if overLimit && stopAllowed {
 				resumeKey = unsafeKey.Clone()
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
