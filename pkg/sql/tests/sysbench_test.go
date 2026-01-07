@@ -800,6 +800,16 @@ func sysbenchOltpWriteOnly(s sysbenchClient, rng *rand.Rand) error {
 	return s.Commit()
 }
 
+func sysbenchOltpDeleteInsertOnly(s sysbenchClient, rng *rand.Rand) error {
+	if err := s.Begin(); err != nil {
+		return err
+	}
+	if err := sysbenchExecuteDeleteInserts(s, rng); err != nil {
+		return err
+	}
+	return s.Commit()
+}
+
 // https://github.com/akopytov/sysbench/blob/de18a036cc65196b1a4966d305f33db3d8fa6f8e/src/lua/oltp_read_write.lua#L44
 func sysbenchOltpReadWrite(s sysbenchClient, rng *rand.Rand) error {
 	if err := s.Begin(); err != nil {
@@ -874,6 +884,7 @@ func benchmarkSysbenchImpl(b *testing.B, parallel bool) {
 	}{
 		{"oltp_read_only", sysbenchOltpReadOnly},
 		{"oltp_write_only", sysbenchOltpWriteOnly},
+		{"oltp_delete_insert_only", sysbenchOltpDeleteInsertOnly},
 		{"oltp_read_write", sysbenchOltpReadWrite},
 		{"oltp_point_select", sysbenchOltpPointSelect},
 		{"oltp_begin_commit", sysbenchOltpBeginCommit},
