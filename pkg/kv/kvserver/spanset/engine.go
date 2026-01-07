@@ -224,6 +224,22 @@ func (s *spanSetEngine) IngestAndExciseFiles(
 	return s.e.IngestAndExciseFiles(ctx, paths, shared, external, exciseSpan)
 }
 
+// IngestAndExciseWithBlobs implements the storage.EngineWithoutRW interface.
+func (s *spanSetEngine) IngestAndExciseWithBlobs(
+	ctx context.Context,
+	localSSTs pebble.LocalSSTables,
+	shared []pebble.SharedSSTMeta,
+	external []pebble.ExternalFile,
+	exciseSpan roachpb.Span,
+) (pebble.IngestOperationStats, error) {
+	if exciseSpan.Valid() {
+		if err := s.spans.CheckAllowed(SpanReadWrite, TrickySpan{Key: exciseSpan.Key, EndKey: exciseSpan.EndKey}); err != nil {
+			return pebble.IngestOperationStats{}, err
+		}
+	}
+	return s.e.IngestAndExciseWithBlobs(ctx, localSSTs, shared, external, exciseSpan)
+}
+
 // IngestExternalFiles implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) IngestExternalFiles(
 	ctx context.Context, external []pebble.ExternalFile,
@@ -296,4 +312,9 @@ func (s *spanSetEngine) GetPebbleOptions() *pebble.Options {
 // GetDiskUnhealthy implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) GetDiskUnhealthy() bool {
 	return s.e.GetDiskUnhealthy()
+}
+
+// SupportsBlobFiles implements the storage.Engine interface.
+func (s *spanSetEngine) SupportsBlobFiles() bool {
+	return s.e.SupportsBlobFiles()
 }
