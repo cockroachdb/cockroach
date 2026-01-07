@@ -117,12 +117,12 @@ func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
 	)
 	defer cleanupJob()
 
+	tsa := newTestServerAllocator(t, ctx, execCfg)
+	fileAllocator := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, srv.Clock())
+	batcher := bulksst.NewUnsortedSSTBatcher(srv.ClusterSettings(), fileAllocator)
+	writeSSTs(t, ctx, batcher, 3)
+	ssts := importToMerge(fileAllocator.GetFileList())
 	spans := []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
-	ssts := []execinfrapb.BulkMergeSpec_SST{{
-		URI:      "nodelocal://1/unused",
-		StartKey: []byte("a"),
-		EndKey:   []byte("b"),
-	}}
 
 	writeTS := hlc.Timestamp{WallTime: 1}
 	_, err := Merge(ctx, jobExecCtx, ssts, spans, func(instanceID base.SQLInstanceID) (string, error) {
