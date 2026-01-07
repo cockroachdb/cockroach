@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,37 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
 	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
-		pacer = admission.NewSnapshotPacer(snapshotQ)
+		minRate := int64(0)
+		if admission.DiskBandwidthForSnapshotIngestMinRateEnabled.Get(&s.cfg.Settings.SV) {
+			minFractionOfTimeoutForApplyingSnapshot := 1 - snapshotReservationQueueTimeoutFraction.Get(&s.cfg.Settings.SV)
+			// Use a slowdown factor of half the permittedRangeScanSlowdown
+			// factor, which means we allow snapshots to ingest atleast as fast
+			// as would be necessary to complete within half of a snapshots
+			// timeout duration.
+			snapshotApplySlowdownFactor := (permittedRangeScanSlowdown / 2) * minFractionOfTimeoutForApplyingSnapshot
+			if snapshotApplySlowdownFactor < 1 {
+				// Avoid division by 0. A snapshotApplySlowdownFactor between 0
+				// and 1 would cause the minRate to be greater than
+				// rebalanceSnapshotRate, which is the max speed snapshots can
+				// be sent at, so we don't need to ingest snapshots at a faster
+				// rate than that.
+				snapshotApplySlowdownFactor = 1
+			}
+
+			minRate = int64(float64(rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)) / snapshotApplySlowdownFactor)
+			storeBW := s.cfg.KVAdmissionController.GetProvisionedBandwidth(s.StoreID())
+			if storeBW > 0 {
+				if minRate > int64(float64(storeBW)*0.25) {
+					log.KvDistribution.Warningf(ctx,
+						"snapshot ingest minRate is greater than 25%% of the store's provisioned bandwidth, minrate: %d, storeBW: %d",
+						minRate, storeBW,
+					)
+				}
+			}
+		}
+
+		timer := &timeutil.Timer{}
+		pacer = admission.NewSnapshotPacer(snapshotQ, minRate, timer.AsTimerI())
 	}
 
 	for {
