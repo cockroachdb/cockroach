@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -94,12 +93,14 @@ func shouldEnableDistributedMergeIndexBackfill(
 }
 
 // EnableDistributedMergeIndexBackfillSink updates the backfiller spec to use the
-// distributed merge sink and file prefix for the provided SQL instance.
+// distributed merge sink and file prefix for the provided storage prefix and job.
+// The storagePrefix should be in the form "nodelocal://<nodeID>/" and is used as
+// the base path for temporary SST files.
 func EnableDistributedMergeIndexBackfillSink(
-	nodeID base.SQLInstanceID, jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec,
+	storagePrefix string, jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec,
 ) {
 	spec.UseDistributedMergeSink = true
-	spec.DistributedMergeFilePrefix = fmt.Sprintf("nodelocal://%d/job/%d/map", nodeID, jobID)
+	spec.DistributedMergeFilePrefix = fmt.Sprintf("%sjob/%d/map", storagePrefix, jobID)
 }
 
 // DetermineDistributedMergeMode evaluates the cluster setting to decide
