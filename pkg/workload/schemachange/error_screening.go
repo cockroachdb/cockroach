@@ -150,7 +150,7 @@ func (og *operationGenerator) tableHasDependencies(
 }
 
 func (og *operationGenerator) columnIsDependedOn(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name, includeFKs bool,
 ) (bool, error) {
 	// To see if a column is depended on, the ordinal_position of the column is looked up in
 	// information_schema.columns. Then, this position is used to see if that column has view dependencies
@@ -187,6 +187,7 @@ func (og *operationGenerator) columnIsDependedOn(
 			            WHERE fd.descriptor_id
 			                  = $1::REGCLASS
                     AND fd.dependedonby_type != 'sequence'
+										AND ($5::BOOL || fd.dependedonby_type != 'fk')
 			          )
 			   UNION  (
 			           SELECT unnest(confkey) AS column_id
@@ -208,7 +209,7 @@ func (og *operationGenerator) columnIsDependedOn(
 			      AND column_name = $4
 			  ) AS source ON source.column_id = cons.column_id
 )
-`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
+`, tableName.String(), tableName.Schema(), tableName.Object(), columnName, includeFKs)
 }
 
 // colIsRefByComputed determines if a column is referenced by a computed column.
