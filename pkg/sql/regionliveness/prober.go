@@ -149,9 +149,12 @@ func NewLivenessProber(
 
 // ProbeLiveness implements Prober.
 func (l *livenessProber) ProbeLiveness(ctx context.Context, region string) error {
-	// If region liveness is disabled then nothing to do.
+	// If region liveness is disabled or the database is not
+	// multi-region then nothing to do.
 	regionLivenessEnabled, _ := l.GetProbeTimeout()
-	if !regionLivenessEnabled {
+	if !regionLivenessEnabled ||
+		l.cachedDBRegions == nil ||
+		!l.cachedDBRegions.IsMultiRegion() {
 		return nil
 	}
 	// Resolve the physical value for this region.

@@ -239,7 +239,8 @@ func getCountLeaseColumns() string {
 func handleRegionLivenessErrors(
 	ctx context.Context, prober regionliveness.Prober, region string, err error,
 ) (bool, error) {
-	if err != nil {
+	// If regionliveness is not enabled, then return the error directly.
+	if hasRegionLiveness, _ := prober.GetProbeTimeout(); hasRegionLiveness && err != nil {
 		if regionliveness.IsQueryTimeoutErr(err) {
 			// Probe and mark the region potentially.
 			probeErr := prober.ProbeLiveness(ctx, region)
