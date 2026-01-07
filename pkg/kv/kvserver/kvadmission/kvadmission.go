@@ -396,7 +396,7 @@ func (n *controllerImpl) AdmitKVWork(
 			// reads, so in some sense, the integration is incomplete. This is
 			// probably harmless.
 			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
-				ctx, admitDuration, admissionInfo,
+				ctx, admitDuration, admissionInfo, false,
 			)
 			if err != nil {
 				return Handle{}, err

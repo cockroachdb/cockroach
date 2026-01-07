@@ -60,7 +60,8 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					d.ScanArgs(t, "disabled", &elasticCPUInternalWorkQueue.disabled)
 				}
 
-				handle, err := elasticWorkQ.Admit(ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID})
+				handle, err := elasticWorkQ.Admit(
+					ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID}, false)
 				require.NoError(t, err)
 
 				var buf strings.Builder
