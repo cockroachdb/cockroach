@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -5718,4 +5719,67 @@ CREATE TABLE t (
 			{"check_crdb_internal_x_shard_16", "true"}, {"t_pkey", "true"},
 		})
 	})
+}
+
+func TestImportDistributedMergeStoragePrefixTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Enable distributed merge mode for imports.
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true`)
+
+	// Create a CSV file with enough data to trigger distributed merge.
+	csvPath := filepath.Join(tempDir, "data.csv")
+	var csvData bytes.Buffer
+	for i := 1; i <= 100; i++ {
+		csvData.WriteString(fmt.Sprintf("%d,%d\n", i, i*10))
+	}
+	require.NoError(t, os.WriteFile(csvPath, csvData.Bytes(), 0644))
+
+	// Create table and perform import.
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	tdb.Exec(t, `IMPORT INTO t (k, v) CSV DATA ('nodelocal://1/data.csv')`)
+
+	// Find the import job that was created.
+	var jobID int64
+	err := tdb.DB.QueryRowContext(ctx, `
+		SELECT job_id FROM crdb_internal.jobs
+		WHERE job_type = 'IMPORT'
+		ORDER BY created DESC
+		LIMIT 1
+	`).Scan(&jobID)
+	require.NoError(t, err, "expected to find import job")
+	require.NotZero(t, jobID, "expected to find import job")
+
+	// Read the job progress to check for storage prefixes.
+	var progressBytes []byte
+	tdb.QueryRow(t, `SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&progressBytes)
+
+	progress := &jobspb.Progress{}
+	require.NoError(t, protoutil.Unmarshal(progressBytes, progress))
+	importProgress := progress.Details.(*jobspb.Progress_Import).Import
+	require.NotNil(t, importProgress)
+	require.NotEmpty(t, importProgress.SSTStoragePrefixes)
+
+	// Verify the prefix format matches nodelocal://<nodeID>/.
+	for _, prefix := range importProgress.SSTStoragePrefixes {
+		t.Logf("found storage prefix: %s", prefix)
+		require.Regexp(t, `^nodelocal://\d+/$`, prefix,
+			"storage prefix should match nodelocal://<nodeID>/ format")
+	}
 }

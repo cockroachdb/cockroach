@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -398,11 +399,27 @@ func ingestKvs(
 		}
 		// Write down the summary of how much we've ingested since the last update.
 		prog.BulkSummary = importAdder.GetProgress()
+
+		// For distributed merge, include node ID so coordinator can track storage
+		// prefixes. The coordinator's addStoragePrefix handles deduplication, so we
+		// send this on every progress update to ensure it's recorded even if the
+		// job is paused and resumed.
+		if spec.UseDistributedMerge {
+			prog.NodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
+		}
+
 		select {
 		case progCh <- prog:
 		case <-ctx.Done():
 		}
 
+	}
+
+	// For distributed merge, send an initial progress update to ensure the
+	// coordinator knows this node is participating, even if the job completes
+	// before the first ticker fires.
+	if spec.UseDistributedMerge {
+		pushProgress(ctx)
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -532,10 +549,18 @@ func makeIngestHelper(
 	if spec.UseDistributedMerge {
 		uri := fmt.Sprintf("nodelocal://%d/job/%d/map/%s_rows/", flowCtx.Cfg.NodeID.SQLInstanceID(),
 			spec.JobID, table.Desc.Name)
+
 		rowStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, uri, spec.User())
 		if err != nil {
 			return nil, err
 		}
+		// Ensure rowStorage is closed if we encounter an error after this point
+		defer func() {
+			if err != nil {
+				rowStorage.Close()
+			}
+		}()
+
 		fileAllocator := bulksst.NewExternalFileAllocator(rowStorage, uri, flowCtx.Cfg.DB.KV().Clock())
 		batcher := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
 		batcher.SetWriteTS(writeTS)
@@ -780,6 +805,15 @@ func (miba *mergeImportBulkAdder) GetResumePos(offset int) int64 {
 // ErrTarget() implements the importHelper interface.
 func (miba *mergeImportBulkAdder) ErrTarget() string {
 	return "index"
+}
+
+// Close closes the merge import bulk adder, ensuring both the SST writer and
+// the external storage are properly closed to prevent resource leaks.
+func (miba *mergeImportBulkAdder) Close(ctx context.Context) {
+	miba.Writer.Close(ctx)
+	if err := miba.rowStorage.Close(); err != nil {
+		log.Dev.Warningf(ctx, "closing merge import row storage: %v", err)
+	}
 }
 
 func init() {
