@@ -93,6 +93,21 @@ func TestStoreRangeLease(t *testing.T) {
 		tc.SplitRangeOrFatal(t, splitKey)
 	}
 
+	// Wait until everyone has a raft leader. We've seen test failures that result
+	// from the RHS of the final split not yet having a leader when we request a
+	// lease and getting an expiration based lease.
+	for _, key := range splitKeys {
+		repl := store.LookupReplica(roachpb.RKey(key))
+		testutils.SucceedsSoon(t, func() error {
+			status := repl.RaftStatus()
+			if status == nil || status.Lead == 0 {
+				return errors.Errorf("waiting for raft leadership on key %s (range %d): state=%v",
+					key, repl.RangeID, status.RaftState)
+			}
+			return nil
+		})
+	}
+
 	// Expire all leases and send a write request to trigger a lease acquisitions.
 	// At this point, we have a leader, so the lease acquisition should be for a
 	// leader lease.
