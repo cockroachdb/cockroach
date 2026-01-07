@@ -2438,14 +2438,11 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		ignoreMisplannedRanges bool
 		err                    error
 	)
+	sd := planCtx.ExtendedEvalCtx.SessionData()
 	if planCtx.isLocal {
 		spanPartitions, parallelizeLocal = dsp.maybeParallelizeLocalScans(ctx, planCtx, info)
-	} else if info.post.Limit == 0 {
-		// No hard limit - plan all table readers where their data live. Note
-		// that we're ignoring soft limits for now since the TableReader will
-		// still read too eagerly in the soft limit case. To prevent this we'll
-		// need a new mechanism on the execution side to modulate table reads.
-		// TODO(yuzefovich): add that mechanism.
+	} else if info.post.Limit == 0 && (info.spec.LimitHint == 0 || !sd.DistSQLPreventPartitioningSoftLimitedScans) {
+		// No limits - plan all table readers where their data live.
 		bound := PartitionSpansBoundDefault
 		if info.desc.NumFamilies() > 1 {
 			bound = PartitionSpansBoundCFWithinRow
@@ -2455,7 +2452,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 			return err
 		}
 	} else {
-		// If the scan has a hard limit, use a single TableReader to avoid
+		// If the scan has a hard or soft limit, use a single TableReader to avoid
 		// reading more rows than necessary.
 		sqlInstanceID, err := dsp.getInstanceIDForScan(ctx, planCtx, info.spans, info.reverse)
 		if err != nil {
