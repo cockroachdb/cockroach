@@ -587,6 +587,10 @@ func DecodeDatum(
 				}
 			}
 
+			if alloc.pgNum.Dscale < 0 {
+				return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid decimal scale: %d", alloc.pgNum.Dscale)
+			}
+
 			if alloc.pgNum.Ndigits > 0 {
 				decDigits := make([]byte, 0, int(alloc.pgNum.Ndigits)*PGDecDigits)
 				for i := int16(0); i < alloc.pgNum.Ndigits; i++ {
