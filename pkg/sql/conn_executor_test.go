@@ -1744,6 +1744,21 @@ func TestInjectRetryOnCommitErrors(t *testing.T) {
 	})
 }
 
+// TestAbortedTxnLocks verifies the lock behavior when a transaction enters the
+// aborted state due to an error. The expected behavior depends on whether any
+// savepoints are active:
+//
+//   - Without savepoints (or with released savepoints): locks are released
+//     immediately when the transaction aborts, allowing other transactions to
+//     proceed without waiting for an explicit ROLLBACK.
+//
+//   - With unreleased savepoints (including after ROLLBACK TO SAVEPOINT): locks
+//     are held until the transaction is explicitly rolled back, because the
+//     client could potentially recover via ROLLBACK TO SAVEPOINT.
+//
+// This distinction exists because savepoints allow error recovery within a
+// transaction, so the database cannot safely release locks until it knows the
+// transaction will not continue.
 func TestAbortedTxnLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1912,6 +1927,9 @@ func TestAbortedTxnLocks(t *testing.T) {
 	})
 
 	t.Run("with cockroach_restart savepoint and advanced retry", func(t *testing.T) {
+		if !s.Codec().IsSystem() {
+			skip.IgnoreLintf(t, "test is flaky on secondary tenants")
+		}
 		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (5,5), (6,6)`)
 		require.NoError(t, err)
 
