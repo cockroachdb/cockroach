@@ -116,7 +116,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -148,7 +147,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -178,7 +176,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -210,7 +207,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -239,7 +235,6 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ estimated row count: 33
@@ -266,7 +261,6 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: metric_values_desc@metric_values_desc_pkey
@@ -293,7 +287,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -325,7 +318,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -355,7 +347,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -387,7 +378,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -417,7 +407,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 11
@@ -449,7 +438,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -479,7 +467,6 @@ AND name='cpu'
 ORDER BY value, id
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 11
@@ -505,7 +492,6 @@ WHERE EXISTS (SELECT * FROM metric_values mv WHERE mv.metric_id = m.id AND time 
 ORDER BY m.id
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (semi)
 │ estimated row count: 10
@@ -531,7 +517,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -570,7 +555,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -609,7 +593,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -648,7 +631,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -688,7 +670,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -727,7 +708,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -767,7 +747,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -808,7 +787,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1
@@ -849,7 +827,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -888,7 +865,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -927,7 +903,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -967,7 +942,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -1006,7 +980,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33

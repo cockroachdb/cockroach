@@ -18400,7 +18400,6 @@ query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
@@ -18423,7 +18422,6 @@ LIMIT
   100
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 100
@@ -18450,7 +18448,6 @@ query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 179,489,803 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
@@ -18473,7 +18470,6 @@ LIMIT
   100
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 100

@@ -362,6 +362,11 @@ func backupSuccess(t *testing.T, args backupSuccessTestArgs, cs CumulativeTestCa
 	}
 
 	// Upgrade the cluster if applicable.
+	if args.server.Server.StartedDefaultTestTenant() {
+		sysDB := args.server.Server.SystemLayer().SQLConn(t)
+		_, err := sysDB.Exec("SET CLUSTER SETTING VERSION = $1", clusterversion.Latest.String())
+		require.NoError(t, err)
+	}
 	tdb.Exec(t, "SET CLUSTER SETTING VERSION = $1", clusterversion.Latest.String())
 
 	// Restore the backup of the database taken mid-successful-schema-change

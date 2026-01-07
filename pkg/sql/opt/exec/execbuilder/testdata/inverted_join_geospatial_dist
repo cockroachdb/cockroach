@@ -49,7 +49,6 @@ EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) ORDER BY (lk, rk)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk
@@ -76,7 +75,6 @@ EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk
@@ -103,7 +101,6 @@ EXPLAIN (DISTSQL) SELECT lk, rk FROM ltable JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_DWithin(rtable.geom, ltable.geom1, 2) ORDER BY (lk, rk)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk
@@ -132,7 +129,6 @@ ON ST_Intersects(ltable.geom1, rtable.geom) AND ST_Covers(ltable.geom2, rtable.g
 AND (ST_DFullyWithin(rtable.geom, ltable.geom1, 100) OR ST_Intersects('POINT(1.0 1.0)', rtable.geom))
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -157,7 +153,6 @@ EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (semi)
 │ table: rtable@rtable_pkey
@@ -181,7 +176,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable LEFT JOIN rtable ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (left outer)
 │ table: rtable@rtable_pkey
@@ -205,7 +199,6 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(rtable.geom, ltable.geom1) OR ST_DWithin(ltable.geom1, rtable.geom, 2) ORDER BY (lk, rk)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk
@@ -233,7 +226,6 @@ SELECT lk, rk FROM ltable LEFT JOIN rtable@geom_index
 ON ST_Intersects(ltable.geom1, rtable.geom) OR ST_DWithin(rtable.geom, ltable.geom2, 2) ORDER BY (lk, rk)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk
@@ -267,7 +259,6 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
 ) GROUP BY lk
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -319,7 +310,6 @@ EXPLAIN (DISTSQL)
 SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable WHERE ST_Intersects(ltable.geom2, rtable.geom))
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (anti)
 │ table: rtable@rtable_pkey
@@ -345,7 +335,6 @@ WHERE NOT EXISTS (
 ) ORDER BY lk
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (anti)
 │ table: rtable@rtable_pkey
@@ -373,7 +362,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -396,7 +384,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom ~ ltable.geom1
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -419,7 +406,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON rtable.geom && ltable.geom1
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -463,7 +449,6 @@ SELECT lk, rk1, rk2 FROM ltable JOIN rtable2@geom_index
 ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk1,+rk2
@@ -491,7 +476,6 @@ SELECT lk, rk1, rk2 FROM ltable LEFT JOIN rtable2@geom_index
 ON ST_Intersects(ltable.geom1, rtable2.geom) ORDER BY (lk, rk1, rk2)
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +lk,+rk1,+rk2
@@ -519,7 +503,6 @@ SELECT lk FROM ltable WHERE EXISTS (SELECT * FROM rtable2@geom_index
 WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (semi)
 │ table: rtable2@rtable2_pkey
@@ -543,7 +526,6 @@ SELECT lk FROM ltable WHERE NOT EXISTS (SELECT * FROM rtable2@geom_index
 WHERE ST_Intersects(ltable.geom1, rtable2.geom)) ORDER BY lk
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (anti)
 │ table: rtable2@rtable2_pkey

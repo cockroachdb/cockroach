@@ -165,7 +165,6 @@ AND kind = 1
 FOR UPDATE OF table_statistics_locks
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │

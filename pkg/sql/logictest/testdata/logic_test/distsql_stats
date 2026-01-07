@@ -1998,7 +1998,7 @@ ANALYZE system.locations
 
 # EXPLAIN output should indicate stats collected on system.locations.
 query T retry
-SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 1
 ----
 ·
 • scan
@@ -2969,7 +2969,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE e IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -2986,7 +2985,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE f IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -3003,7 +3001,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE c->'foo'->'bar' > '{"baz": 0}'
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

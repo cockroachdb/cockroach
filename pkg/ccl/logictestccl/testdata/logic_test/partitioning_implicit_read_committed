@@ -50,7 +50,7 @@ CREATE TABLE t (
   j JSON,
   UNIQUE INDEX (c),
   FAMILY (pk, a, b, c, d, j)
-) PARTITION ALL BY LIST(a) ( 
+) PARTITION ALL BY LIST(a) (
   PARTITION one VALUES IN ('one'),
   PARTITION two VALUES IN ('two'),
   PARTITION three VALUES IN ('three'),
@@ -194,7 +194,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 'two', 3, 4, 5)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: t(pk, a, b, c, d, j)
@@ -229,7 +228,6 @@ query T
 EXPLAIN UPDATE t SET c = 4 WHERE pk = 2
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: t
@@ -269,7 +267,6 @@ query T
 EXPLAIN UPSERT INTO t VALUES (1, 'five', 3, 4, 15)
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: t(pk, a, b, c, d, j)
@@ -313,7 +310,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 'three', 3, 4, 15) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
 ·
 • insert
 │ into: t(pk, a, b, c, d, j)
@@ -347,7 +343,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 'one', 3, 4, 5) ON CONFLICT (pk) DO UPDATE SET d = t.d + 10
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: t(pk, a, b, c, d, j)

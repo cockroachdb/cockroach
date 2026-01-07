@@ -45,22 +45,16 @@ SELECT ARRAY(SELECT cte.x FROM cte INNER LOOKUP JOIN uv ON cte.x = uv.u);
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • root
 │
 ├── • values
 │     sql nodes: <hidden>
 │     regions: <hidden>
-│     actual row count: 1
 │     execution time: 0µs
+│     actual row count: 1
 │     size: 1 column, 1 row
 │
 ├── • subquery
@@ -71,20 +65,17 @@ quality of service: regular
 │   └── • buffer
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ label: buffer 1 (cte)
 │       │
 │       └── • scan
 │             sql nodes: <hidden>
 │             kv nodes: <hidden>
 │             regions: <hidden>
-│             actual row count: 0
 │             KV time: 0µs
 │             KV rows decoded: 0
-│             KV bytes read: 0 B
-│             KV gRPC calls: 0
-│             estimated max memory allocated: 0 B
+│             actual row count: 0
 │             missing stats
 │             table: xyz@xyz_pkey
 │             spans: FULL SCAN
@@ -97,19 +88,16 @@ quality of service: regular
     └── • lookup join (streamer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 0
         │ KV time: 0µs
         │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
         │ execution time: 0µs
-        │ estimated max memory allocated: 0 B
+        │ actual row count: 0
         │ table: uv@uv_pkey
         │ equality: (x) = (u)
         │
         └── • scan buffer
               sql nodes: <hidden>
               regions: <hidden>
-              actual row count: 0
               execution time: 0µs
+              actual row count: 0
               label: buffer 1 (cte)

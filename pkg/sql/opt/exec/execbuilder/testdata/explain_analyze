@@ -9,25 +9,16 @@ EXPLAIN ANALYZE (PLAN) SELECT k FROM kv WHERE k >= 2
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   KV time: 0µs
   KV rows decoded: 0
-  KV bytes read: 0 B
-  KV gRPC calls: 0
-  estimated max memory allocated: 0 B
+  actual row count: 0
   missing stats
   table: kv@kv_pkey
   spans: [/2 - ]
@@ -41,27 +32,17 @@ EXPLAIN ANALYZE (PLAN) SELECT * FROM kv WHERE k >= 2
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 3
   KV time: 0µs
   KV rows decoded: 3
-  KV pairs read: 6
-  KV bytes read: 24 B
-  KV gRPC calls: 3
-  estimated max memory allocated: 0 B
+  actual row count: 3
   missing stats
   table: kv@kv_pkey
   spans: [/2 - ]
@@ -90,20 +71,13 @@ EXPLAIN ANALYZE SHOW TABLES
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • sort
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ execution time: 0µs
-│ estimated max memory allocated: 0 B
 │ order: +nspname,+relname
 │
 └── • render
@@ -112,7 +86,6 @@ quality of service: regular
         │ sql nodes: <hidden>
         │ regions: <hidden>
         │ execution time: 0µs
-        │ estimated max memory allocated: 0 B
         │ equality: (column80) = (table_id)
         │
         ├── • render
@@ -121,7 +94,6 @@ quality of service: regular
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
         │       │ execution time: 0µs
-        │       │ estimated max memory allocated: 0 B
         │       │ equality: (column62) = (table_id)
         │       │ right cols are key
         │       │
@@ -131,7 +103,6 @@ quality of service: regular
         │       │       │ sql nodes: <hidden>
         │       │       │ regions: <hidden>
         │       │       │ execution time: 0µs
-        │       │       │ estimated max memory allocated: 0 B
         │       │       │ equality: (oid) = (relowner)
         │       │       │
         │       │       ├── • virtual table
@@ -144,7 +115,6 @@ quality of service: regular
         │       │           │ sql nodes: <hidden>
         │       │           │ regions: <hidden>
         │       │           │ execution time: 0µs
-        │       │           │ estimated max memory allocated: 0 B
         │       │           │ equality: (oid) = (relnamespace)
         │       │           │
         │       │           ├── • filter
@@ -175,7 +145,6 @@ quality of service: regular
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
         │           │ execution time: 0µs
-        │           │ estimated max memory allocated: 0 B
         │           │ distinct on: table_id
         │           │
         │           └── • virtual table
@@ -199,21 +168,15 @@ EXPLAIN ANALYZE DELETE FROM kv WHERE true RETURNING *;
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • delete
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 4
 │ execution time: 0µs
+│ actual row count: 4
 │ from: kv
 │ auto commit
 │
@@ -221,13 +184,9 @@ quality of service: regular
       sql nodes: <hidden>
       kv nodes: <hidden>
       regions: <hidden>
-      actual row count: 4
       KV time: 0µs
       KV rows decoded: 4
-      KV pairs read: 8
-      KV bytes read: 32 B
-      KV gRPC calls: 4
-      estimated max memory allocated: 0 B
+      actual row count: 4
       missing stats
       table: kv@kv_pkey
       spans: FULL SCAN
@@ -239,30 +198,24 @@ EXPLAIN ANALYZE INSERT INTO kv VALUES (1, 10) RETURNING k + v;
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • render
 │
 └── • insert
     │ sql nodes: <hidden>
     │ regions: <hidden>
-    │ actual row count: 1
     │ execution time: 0µs
+    │ actual row count: 1
     │ estimated row count: 1
     │ into: kv(k, v)
     │
     └── • values
           sql nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
           execution time: 0µs
+          actual row count: 1
           size: 2 columns, 1 row
 
 # Verify that the number of applied statement hints is displayed.
@@ -281,26 +234,17 @@ EXPLAIN ANALYZE SELECT k FROM kv WHERE k >= 100
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 statement hints count: 1
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   KV time: 0µs
   KV rows decoded: 0
-  KV bytes read: 0 B
-  KV gRPC calls: 0
-  estimated max memory allocated: 0 B
+  actual row count: 0
   missing stats
   table: kv@kv_pkey
   spans: [/100 - ]

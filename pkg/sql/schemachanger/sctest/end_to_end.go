@@ -105,6 +105,11 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 				// for end-to-end side-effect testing, so we ignore them.
 				break
 			case "test":
+				var skipUnderSecondaryTenant bool
+				d.MaybeScanArgs(t, "skip-under-secondary-tenant", &skipUnderSecondaryTenant)
+				if skipUnderSecondaryTenant && !s.Codec().ForSystemTenant() {
+					skip.IgnoreLint(t, "test is skipped under secondary tenant")
+				}
 				stmts, _ := parseStmts()
 				require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
 				numTestStatementsObserved++
@@ -154,6 +159,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithIDGenerator(s.ApplicationLayer()),
 					sctestdeps.WithReferenceProviderFactory(refFactory),
 					sctestdeps.WithClusterSettings(s.ClusterSettings()),
+					sctestdeps.WithCodec(s.Codec()),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
 				var fileNameSuffix string

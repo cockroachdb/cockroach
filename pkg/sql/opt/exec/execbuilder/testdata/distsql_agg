@@ -69,7 +69,6 @@ EXPLAIN (DISTSQL) SELECT
 FROM data GROUP BY b
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: b
@@ -99,7 +98,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -114,7 +112,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000 + (b-1)*100 + (c::INT-1)*10 + (d-1)) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -131,7 +128,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), count(a), max(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -146,7 +142,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), count(a+b), max(a+b) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -163,7 +158,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000) + sum((b-1)*100) + sum((c::INT-1)*10) + sum(d-1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -182,7 +176,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -199,7 +192,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -218,7 +210,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(stddev(b), 1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -235,7 +226,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(variance(b), 1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -252,7 +242,6 @@ query T
 EXPLAIN (DISTSQL) SELECT stddev(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -269,7 +258,6 @@ query T
 EXPLAIN (DISTSQL) SELECT variance(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -288,7 +276,6 @@ query T
 EXPLAIN (DISTSQL) SELECT covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -306,7 +293,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(c), avg(d), stddev(a), stddev_samp(a), stddev_pop(a), variance(b), var_samp(b), var_pop(b), sum(a+b+c::INT+d), covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a)  FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -324,7 +310,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d), covar_pop(b, d), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(b, c), regr_intercept(a, b), regr_r2(b, c), regr_slope(a, c), sqrdiff(a), regr_count(a, b), covar_samp(b, c), corr(a, c) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -343,7 +328,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), stddev(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -360,7 +344,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(DISTINCT a), variance(a) FILTER (WHERE a > 0) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -377,7 +360,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(a), count(a), stddev(a), variance(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -392,7 +374,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(a), sum(a), avg(b) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -407,7 +388,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(c), sum(c), avg(d), sum(d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -422,7 +402,6 @@ query T
 EXPLAIN (DISTSQL) SELECT max(a), min(b) FROM data HAVING min(b) > 2
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -463,7 +442,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT (a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: a
@@ -480,7 +458,6 @@ query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -499,7 +476,6 @@ query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A), SUM (DISTINCT B) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -514,7 +490,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY a,b
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: a, b
@@ -534,7 +509,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY b,a
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +b,+a
@@ -557,7 +531,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -577,7 +550,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d ORDER BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -602,7 +574,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data WHERE a > 9 GROUP BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -622,7 +593,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), sum(b), sum(c) FROM data GROUP BY d HAVING sum(a+b) > 10
 ----
 distribution: full
-vectorized: true
 ·
 • filter
 │ filter: sum > 10
@@ -643,7 +613,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(a+b), c FROM data GROUP BY c, d HAVING c = d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -664,7 +633,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data GROUP BY d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -683,7 +651,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -702,7 +669,6 @@ query T
 EXPLAIN (DISTSQL) SELECT xor_agg(to_hex(a)::bytes) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -720,7 +686,6 @@ query T
 EXPLAIN (DISTSQL) SELECT xor_agg(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -735,7 +700,6 @@ query T
 EXPLAIN (DISTSQL) SELECT max(t.a), min(t.b), avg(t.c)  FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │ estimated row count: 1
@@ -753,7 +717,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ estimated row count: 2
@@ -774,7 +737,6 @@ query T
 EXPLAIN (DISTSQL) SELECT array_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -792,7 +754,6 @@ query T
 EXPLAIN (DISTSQL) SELECT json_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -840,7 +801,6 @@ query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: a
@@ -856,7 +816,6 @@ query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -873,7 +832,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -890,7 +848,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -907,7 +864,6 @@ query T
 EXPLAIN (DISTSQL) SELECT b, max(c) FROM sorted_data@foo GROUP BY b
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: b
@@ -927,7 +883,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b
 ----
 distribution: full
-vectorized: true
 ·
 • merge join
 │ equality: (a) = (b)
@@ -962,7 +917,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -981,7 +935,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) WHERE a > x GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -1081,7 +1034,6 @@ query T
 EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b;
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: b
@@ -1103,7 +1055,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: u
@@ -1126,7 +1077,6 @@ query T
 EXPLAIN (DISTSQL) SELECT array_agg((a, a)) FROM data
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │

@@ -272,7 +272,6 @@ query T
 EXPLAIN (PLAN) select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -5405,7 +5404,7 @@ statement ok
 CREATE ROLE can_bypassrls_global;
 
 statement ok
-GRANT SYSTEM BYPASSRLS TO can_bypassrls_global; 
+GRANT SYSTEM BYPASSRLS TO can_bypassrls_global;
 
 query B
 SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
@@ -5449,7 +5448,7 @@ statement ok
 CREATE ROLE can_createrole_global;
 
 statement ok
-GRANT SYSTEM CREATEROLE TO can_createrole_global; 
+GRANT SYSTEM CREATEROLE TO can_createrole_global;
 
 query B
 SELECT rolcreaterole FROM pg_authid WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
@@ -5480,7 +5479,7 @@ statement ok
 DROP ROLE cannot_createrole;
 
 statement ok
-REVOKE SYSTEM CREATEROLE FROM can_createrole_global; 
+REVOKE SYSTEM CREATEROLE FROM can_createrole_global;
 
 statement ok
 DROP ROLE can_createrole_global;
@@ -5497,7 +5496,7 @@ statement ok
 CREATE ROLE can_createdb_global;
 
 statement ok
-GRANT SYSTEM CREATEDB TO can_createdb_global; 
+GRANT SYSTEM CREATEDB TO can_createdb_global;
 
 query B
 SELECT rolcreatedb FROM pg_authid WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
@@ -5528,7 +5527,7 @@ statement ok
 DROP ROLE cannot_createdb;
 
 statement ok
-REVOKE SYSTEM CREATEDB FROM can_createdb_global; 
+REVOKE SYSTEM CREATEDB FROM can_createdb_global;
 
 statement ok
 DROP ROLE can_createdb_global;
