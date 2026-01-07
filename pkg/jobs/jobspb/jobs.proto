@@ -779,6 +779,11 @@ message ImportProgress {
   repeated SequenceDetails sequence_details = 6;
 
   roachpb.BulkOpSummary summary = 7 [(gogoproto.nullable) = false];
+
+  // SSTStoragePrefixes identifies the external storage prefixes used to write
+  // distributed-merge SSTs for this import. These prefixes are used to clean
+  // up job-scoped files on completion or cancellation.
+  repeated string sst_storage_prefixes = 8 [(gogoproto.customname) = "SSTStoragePrefixes"];
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.

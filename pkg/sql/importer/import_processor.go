@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -510,6 +513,38 @@ type ingestHelper interface {
 	ErrTarget() string
 }
 
+// recordMapStagePrefix records the storage prefix for the map stage SSTs in the
+// import job progress. This must be called before any SSTs are written.
+func recordMapStagePrefix(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, jobID int64, prefix string,
+) error {
+	if flowCtx.Cfg.JobRegistry == nil {
+		return nil
+	}
+	job, err := flowCtx.Cfg.JobRegistry.LoadClaimedJob(ctx, jobspb.JobID(jobID))
+	if err != nil {
+		return err
+	}
+
+	return job.NoTxn().Update(ctx, func(
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		prog := md.Progress.GetImport()
+		if prog == nil {
+			return errors.New("import progress not found")
+		}
+		// Check for duplicates
+		for _, existing := range prog.SSTStoragePrefixes {
+			if existing == prefix {
+				return nil // Already recorded
+			}
+		}
+		prog.SSTStoragePrefixes = append(prog.SSTStoragePrefixes, prefix)
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
+}
+
 // makeIngestHelper() creates a struct that abstracts the differences between
 // import with and without distributed merge. The majority of this is making
 // the dual BulkAdders of the non-distributed case look like a single
@@ -532,6 +567,13 @@ func makeIngestHelper(
 	if spec.UseDistributedMerge {
 		uri := fmt.Sprintf("nodelocal://%d/job/%d/map/%s_rows/", flowCtx.Cfg.NodeID.SQLInstanceID(),
 			spec.JobID, table.Desc.Name)
+
+		// Record the prefix for this map stage storage before writing any SSTs
+		prefix := fmt.Sprintf("nodelocal://%d/", flowCtx.Cfg.NodeID.SQLInstanceID())
+		if err := recordMapStagePrefix(ctx, flowCtx, spec.JobID, prefix); err != nil {
+			return nil, err
+		}
+
 		rowStorage, err := flowCtx.Cfg.ExternalStorageFromURI(ctx, uri, spec.User())
 		if err != nil {
 			return nil, err
