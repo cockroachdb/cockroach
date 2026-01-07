@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -526,8 +527,9 @@ func (ds *ServerImpl) newFlowContext(
 			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
 		)
 		flowCtx.IsDescriptorsCleanupRequired = true
-		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
-		evalCtx.CatalogBuiltins = &flowCtx.EvalCatalogBuiltins
+		var evalCatalogBuiltins evalcatalog.Builtins
+		evalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
+		evalCtx.CatalogBuiltins = &evalCatalogBuiltins
 	}
 	return flowCtx
 }

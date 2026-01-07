@@ -55,7 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -1957,7 +1957,7 @@ func NewTableDesc(
 				}
 				// Disable vector indexes by default in 25.2.
 				// TODO(andyk): Remove this check after 25.2.
-				if err := vecindex.CheckEnabled(&st.SV); err != nil {
+				if err := vecsettings.CheckEnabled(&st.SV); err != nil {
 					return nil, err
 				}
 				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
@@ -1965,7 +1965,7 @@ func NewTableDesc(
 					return nil, err
 				}
 				opClass := columns[len(columns)-1].OpClass
-				idx.VecConfig, err = vecindex.MakeVecConfig(ctx, evalCtx, column.GetType(), opClass)
+				idx.VecConfig, err = vecsettings.MakeVecConfig(ctx, evalCtx, column.GetType(), opClass)
 				if err != nil {
 					return nil, err
 				}
