@@ -1601,3 +1601,60 @@ func TestWithEventListenersAndVerboseParent(t *testing.T) {
          === operation:child _unfinished:‹1› _verbose:‹1›
          event:‹foo›`)
 }
+
+// TestWithStartTimeAndFinishAt tests that WithStartTime sets the span's start
+// time, and FinishAt sets the span's end time (and thus duration).
+func TestWithStartTimeAndFinishAt(t *testing.T) {
+	tr := NewTracer()
+	startTime := timeutil.Now().Add(-100 * time.Millisecond)
+	duration := 50 * time.Millisecond
+	endTime := startTime.Add(duration)
+
+	// Create a parent span to hold the child's recording.
+	parent := tr.StartSpan("parent", WithRecording(tracingpb.RecordingVerbose))
+	child := tr.StartSpan("child", WithParent(parent), WithStartTime(startTime))
+	child.FinishAt(endTime)
+
+	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
+	require.Len(t, rec, 2)
+	// The child is the second span in the recording.
+	childRec := rec[1]
+	require.Equal(t, "child", childRec.Operation)
+	require.Equal(t, startTime, childRec.StartTime)
+	require.Equal(t, duration, childRec.Duration)
+}
+
+// TestInjectCompletedSpan tests that InjectCompletedSpan creates a child span
+// with the specified start time and duration.
+func TestInjectCompletedSpan(t *testing.T) {
+	tr := NewTracer()
+	parent := tr.StartSpan("parent", WithRecording(tracingpb.RecordingVerbose))
+
+	ctx := ContextWithSpan(context.Background(), parent)
+	startTime := timeutil.Now().Add(-100 * time.Millisecond)
+	duration := 50 * time.Millisecond
+
+	InjectCompletedSpan(ctx, "injected", startTime, duration)
+
+	rec := parent.FinishAndGetRecording(tracingpb.RecordingVerbose)
+	require.Len(t, rec, 2) // parent + child
+	// The child is sorted after the parent in the recording.
+	child := rec[1]
+	require.Equal(t, "injected", child.Operation)
+	require.Equal(t, startTime, child.StartTime)
+	require.Equal(t, duration, child.Duration)
+}
+
+// TestInjectCompletedSpanNoOp tests that InjectCompletedSpan is a no-op when
+// there's no recording span in the context.
+func TestInjectCompletedSpanNoOp(t *testing.T) {
+	// No span in context - should not panic.
+	InjectCompletedSpan(context.Background(), "injected", timeutil.Now(), time.Millisecond)
+
+	// Non-recording span in context - should not panic.
+	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
+	sp := tr.StartSpan("test")
+	defer sp.Finish()
+	ctx := ContextWithSpan(context.Background(), sp)
+	InjectCompletedSpan(ctx, "injected", timeutil.Now(), time.Millisecond)
+}
