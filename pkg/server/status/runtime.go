@@ -168,6 +168,12 @@ var (
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaGCTotalNS = metric.Metadata{
+		Name:        "sys.gc.total.ns",
+		Help:        "Estimated total CPU time spent performing GC tasks",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaNonGCPauseNS = metric.Metadata{
 		Name:        "sys.go.pause.other.ns",
 		Help:        "Estimated non-GC-related total pause time",
@@ -561,6 +567,9 @@ const runtimeMetricGCStopTotal = "/sched/pauses/stopping/gc:seconds"
 // Compare only with other /cpu/classes metrics.
 const runtimeMetricGCAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
 
+// Estimated total CPU time spent performing GC tasks.
+const runtimeMetricGCTotal = "/cpu/classes/gc/total:cpu-seconds"
+
 // Distribution of individual non-GC-related stop-the-world
 // pause latencies. This is the time from deciding to stop the
 // world until the world is started again. Some of this time
@@ -638,6 +647,7 @@ const runtimeMetricHeapLiveBytes = "/gc/heap/live:bytes"
 
 var runtimeMetrics = []string{
 	runtimeMetricGCAssist,
+	runtimeMetricGCTotal,
 	runtimeMetricGoTotal,
 	runtimeMetricHeapAlloc,
 	runtimeMetricGoLimit,
@@ -836,6 +846,7 @@ type RuntimeStatSampler struct {
 	NonGcStopNS              *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
 	GcAssistNS               *metric.Counter
+	GcTotalNS                *metric.Counter
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Counter
 	CPUUserPercent         *metric.GaugeFloat64
@@ -938,6 +949,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcStopNS:                 metric.NewGauge(metaGCStopNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
 		GcAssistNS:               metric.NewCounter(metaGCAssistNS),
+		GcTotalNS:                metric.NewCounter(metaGCTotalNS),
 		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
 		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
 
@@ -1243,6 +1255,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.GcStopNS.Update(gcStopTotalNs)
 	rsr.GcPausePercent.Update(gcPauseRatio)
 	rsr.GcAssistNS.Update(gcAssistNS)
+	rsr.GcTotalNS.Update(int64(rsr.goRuntimeSampler.float64(runtimeMetricGCTotal) * 1e9))
 	rsr.NonGcPauseNS.Update(nonGcPauseTotalNs)
 	rsr.NonGcStopNS.Update(nonGcStopTotalNs)
 
