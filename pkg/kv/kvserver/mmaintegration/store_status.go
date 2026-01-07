@@ -59,17 +59,17 @@ func translateStorePoolStatusToMMA(spStatus storepool.StoreStatus) mmaprototype.
 			mmaprototype.LeaseDispositionShedding,
 			mmaprototype.ReplicaDispositionShedding,
 		)
-	case storepool.StoreStatusUnknown:
-		return mmaprototype.MakeStatus(
-			mmaprototype.HealthUnknown,
-			mmaprototype.LeaseDispositionRefusing,
-			mmaprototype.ReplicaDispositionRefusing,
-		)
 	case storepool.StoreStatusDecommissioning:
 		return mmaprototype.MakeStatus(
 			mmaprototype.HealthOK,
 			mmaprototype.LeaseDispositionShedding,
 			mmaprototype.ReplicaDispositionShedding,
+		)
+	case storepool.StoreStatusUnknown:
+		return mmaprototype.MakeStatus(
+			mmaprototype.HealthUnknown,
+			mmaprototype.LeaseDispositionRefusing,
+			mmaprototype.ReplicaDispositionRefusing,
 		)
 	case storepool.StoreStatusDraining:
 		return mmaprototype.MakeStatus(
