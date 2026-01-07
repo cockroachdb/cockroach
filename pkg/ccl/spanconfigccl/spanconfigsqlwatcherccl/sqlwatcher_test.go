@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -42,6 +43,7 @@ import (
 // increasing.
 func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	var idBase descpb.ID
 	id := func(n int) descpb.ID {
@@ -283,6 +285,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 // processes, both sequentially and concurrently.
 func TestSQLWatcherMultiple(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "slow test")
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
@@ -306,8 +309,8 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
 		ts.ApplicationLayer().Codec(),
-		ts.ClusterSettings(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
+		ts.ApplicationLayer().ClusterSettings(),
+		ts.ApplicationLayer().RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		noopCheckpointDuration,
@@ -415,10 +418,10 @@ func TestSQLWatcherMultiple(t *testing.T) {
 // the caller.
 func TestSQLWatcherOnEventError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106821),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -431,13 +434,14 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	sqlWatcher := spanconfigsqlwatcher.New(
-		ts.Codec(),
-		ts.ClusterSettings(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
+		ts.ApplicationLayer().Codec(),
+		ts.ApplicationLayer().ClusterSettings(),
+		ts.ApplicationLayer().RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		time.Second, // doesn't matter
@@ -465,10 +469,10 @@ func TestSQLWatcherOnEventError(t *testing.T) {
 // handler after it returns an error.
 func TestSQLWatcherHandlerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106821),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -481,14 +485,15 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
-		ts.Codec(),
-		ts.ClusterSettings(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
+		ts.ApplicationLayer().Codec(),
+		ts.ApplicationLayer().ClusterSettings(),
+		ts.ApplicationLayer().RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		noopCheckpointDuration,
@@ -542,10 +547,10 @@ func TestSQLWatcherHandlerError(t *testing.T) {
 
 func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(106821),
 			Knobs: base.TestingKnobs{
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // disable the automatic job creation.
@@ -558,14 +563,15 @@ func TestWatcherReceivesNoopCheckpoints(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 25 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
-		ts.Codec(),
-		ts.ClusterSettings(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
+		ts.ApplicationLayer().Codec(),
+		ts.ApplicationLayer().ClusterSettings(),
+		ts.ApplicationLayer().RangeFeedFactory().(*rangefeed.Factory),
 		1<<20, /* 1 MB, bufferMemLimit */
 		ts.Stopper(),
 		noopCheckpointDuration,
