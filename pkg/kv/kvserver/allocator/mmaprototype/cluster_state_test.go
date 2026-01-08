@@ -514,6 +514,26 @@ func TestClusterState(t *testing.T) {
 					parseStatusFromArgs(t, d, &ss.status)
 					return ss.status.String()
 
+				case "update-store-statuses":
+					// Calls updateStoreStatuses for the specified stores (or all stores
+					// if none specified). This triggers the disk utilization check which
+					// augments the replica disposition based on current adjusted load.
+					storeIDs, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, d, "store-ids")
+					if len(storeIDs) == 0 {
+						// Default to all stores.
+						for storeID := range cs.stores {
+							storeIDs = append(storeIDs, storeID)
+						}
+					}
+					storeStatuses := make(map[roachpb.StoreID]Status)
+					for _, storeID := range storeIDs {
+						if ss, ok := cs.stores[storeID]; ok {
+							storeStatuses[storeID] = ss.status
+						}
+					}
+					cs.updateStoreStatuses(ctx, storeStatuses)
+					return ""
+
 				case "store-load-msg":
 					// TODO(sumeer): the load-time is passed as an argument, and is
 					// independent of ts. This is by necessity, since the load-time can
