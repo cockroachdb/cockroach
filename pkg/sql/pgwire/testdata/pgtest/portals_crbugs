@@ -117,6 +117,29 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CREATE ROLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Explicitly wait for one version, since we don't handle transaction
+# retries in this test.
+# Note: Normally in logictest we could run a query with retry, but that is not an
+# option here.
+send
+Query {"String": "CREATE PROCEDURE wait_for_one_version() AS $$ DECLARE result INT; attempt INT := 0; BEGIN LOOP SELECT count(*) INTO result FROM system.lease WHERE desc_id = (select id from system.namespace where name='users') GROUP BY desc_id, version; EXIT WHEN result = 1; EXIT WHEN attempt > 100; SELECT pg_sleep(0.1); attempt := attempt + 1; COMMIT; END LOOP; END; $$ LANGUAGE PLpgSQL;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CALL wait_for_one_version()"}
+----
+
+receive
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 send
 Query {"String": "BEGIN"}
 Query {"String": "SET LOCAL autocommit_before_ddl=off"}
