@@ -20,24 +20,23 @@ http_archive(
 # Like the above, but for JS.
 http_archive(
     name = "aspect_rules_js",
-    sha256 = "2cfb3875e1231cefd3fada6774f2c0c5a99db0070e0e48ea398acbff7c6c765b",
-    strip_prefix = "rules_js-1.42.3",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.42.3.tar.gz",
+    sha256 = "83e5af4d17385d1c3268c31ae217dbfc8525aa7bcf52508dc6864baffc8b9501",
+    strip_prefix = "rules_js-2.3.7",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v2.3.7.tar.gz",
 )
 
 http_archive(
     name = "aspect_rules_ts",
-    sha256 = "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
-    strip_prefix = "rules_ts-1.4.0",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz",
+    sha256 = "013a10b2b457add73b081780e604778eb50a141709f9194298f97761acdcc169",
+    strip_prefix = "rules_ts-3.4.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v3.4.0.tar.gz",
 )
 
-# NOTE: aspect_rules_webpack exists for webpack, but it's incompatible with webpack v4.
 http_archive(
     name = "aspect_rules_jest",
-    sha256 = "d3bb833f74b8ad054e6bff5e41606ff10a62880cc99e4d480f4bdfa70add1ba7",
-    strip_prefix = "rules_jest-0.18.4",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_jest-v0.18.4.tar.gz",
+    sha256 = "7fc6798dc566f8ec83867f636739716d81097bd3cead9c0fedb098c58fae6567",
+    strip_prefix = "rules_jest-0.22.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_jest-v0.22.0.tar.gz",
 )
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
@@ -122,10 +121,16 @@ http_archive(
 
 http_archive(
     name = "bazel_features",
-    sha256 = "1aabce613b3ed83847b47efa69eb5dc9aa3ae02539309792a60e705ca4ab92a5",
-    strip_prefix = "bazel_features-0.2.0",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v0.2.0.tar.gz",
+    sha256 = "8b1c9b7558498000f5adebbc584b7bf15b6b2bf181448a66f6b2fc5b4c84231c",
+    strip_prefix = "bazel_features-1.23.0",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel_features-v1.23.0.tar.gz",
 )
+
+load("@bazel_features//:deps.bzl", "bazel_features_deps")
+
+# bazel_skylib handled above.
+
+bazel_features_deps()
 
 # com_github_golang_protobuf handled in DEPS.bzl.
 # com_github_mwitkow_go_proto_validators handled in DEPS.bzl.
@@ -231,8 +236,9 @@ go_register_nogo(nogo = "@com_github_cockroachdb_cockroach//:crdb_nogo")
 # The rules_nodejs "core" module.
 http_archive(
     name = "rules_nodejs",
-    sha256 = "764a3b3757bb8c3c6a02ba3344731a3d71e558220adcb0cf7e43c9bba2c37ba8",
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-core-5.8.2.tar.gz"],
+    sha256 = "158619723f1d8bd535dd6b93521f4e03cf24a5e107126d05685fbd9540ccad10",
+    strip_prefix = "rules_nodejs-6.3.2",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/js/rules_nodejs-v6.3.2.tar.gz"],
 )
 
 # NOTE: After upgrading this library, run `build/scripts/build-bazel-lib-helpers.sh`.
@@ -243,9 +249,9 @@ http_archive(
 # Do this AFTER, not BEFORE, upgrading the library.
 http_archive(
     name = "aspect_bazel_lib",
-    sha256 = "d0529773764ac61184eb3ad3c687fb835df5bee01afedf07f0cf1a45515c96bc",
-    strip_prefix = "bazel-lib-1.42.3",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.42.3.tar.gz",
+    sha256 = "349aabd3c2b96caeda6181eb0ae1f14f2a1d9f3cd3c8b05d57f709ceb12e9fb3",
+    strip_prefix = "bazel-lib-2.9.4",
+    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v2.9.4.tar.gz",
 )
 
 # Load custom toolchains.
@@ -254,9 +260,12 @@ load("//build/toolchains:REPOSITORIES.bzl", "toolchain_dependencies")
 toolchain_dependencies()
 
 # Configure nodeJS.
-load("//build:nodejs.bzl", "declare_nodejs_repos")
+load("//build:nodejs.bzl", "declare_nodejs_repos", "register_coreutils_toolchains", "register_tar_toolchains", "register_yq_toolchains")
 
 declare_nodejs_repos()
+register_coreutils_toolchains()
+register_tar_toolchains()
+register_yq_toolchains()
 
 # NOTE: The version is expected to match up to what version of typescript we
 # use for all packages in pkg/ui.
@@ -266,7 +275,6 @@ load("@aspect_rules_ts//ts/private:npm_repositories.bzl", ts_http_archive = "htt
 ts_http_archive(
     name = "npm_typescript",
     build_file = "@aspect_rules_ts//ts:BUILD.typescript",
-    # v5.1.6 isn't known to rules_ts 1.4.0 (nor to any published rules_ts version as-of 7 Aug 2023).
     integrity = "sha512-zaWCozRZ6DLEWAWFrVDz1H6FVXzUSfTy5FUMWsQlU8Ym5JP9eO4xkTIROFCQvhQf61z6O/G6ugw3SgAnvvm+HA==",
     urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
     version = "5.1.6",
@@ -289,10 +297,6 @@ npm_import(
     url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
     version = "8.5.1",
 )
-
-load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
-
-rules_js_dependencies()
 
 npm_translate_lock(
     name = "npm",
@@ -536,39 +540,6 @@ rules_pkg_dependencies()
 # end rules_pkg dependencies #
 ##############################
 
-################################
-# begin rules_oci dependencies #
-################################
-
-http_archive(
-    name = "rules_oci",
-    sha256 = "21a7d14f6ddfcb8ca7c5fc9ffa667c937ce4622c7d2b3e17aea1ffbc90c96bed",
-    strip_prefix = "rules_oci-1.4.0",
-    url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_oci-v1.4.0.tar.gz",
-)
-
-# bazel_skylib handled above.
-# aspect_bazel_lib handled above.
-
-load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
-
-rules_oci_dependencies()
-
-# TODO: This will pull from an upstream location: specifically it will download
-# `crane` from https://github.com/google/go-containerregistry/... Before this is
-# used in CI or anything production-ready, this should be mirrored. rules_oci
-# doesn't support this mirroring yet so we'd have to submit a patch.
-load("@rules_oci//oci:repositories.bzl", "LATEST_CRANE_VERSION", "oci_register_toolchains")
-
-oci_register_toolchains(
-    name = "oci",
-    crane_version = LATEST_CRANE_VERSION,
-)
-
-##############################
-# end rules_oci dependencies #
-##############################
-
 register_toolchains(
     "//build/toolchains:cross_x86_64_linux_toolchain",
     "//build/toolchains:cross_x86_64_linux_arm_toolchain",
@@ -582,6 +553,14 @@ register_toolchains(
     "//build/toolchains:cross_arm64_windows_toolchain",
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
+    "@bsd_tar_toolchains//:darwin_arm64_toolchain",
+    "@bsd_tar_toolchains//:linux_amd64_toolchain",
+    "@bsd_tar_toolchains//:linux_arm64_toolchain",
+    "@bsd_tar_toolchains//:windows_amd64_toolchain",
+    "@coreutils_toolchains//:darwin_arm64_toolchain",
+    "@coreutils_toolchains//:linux_amd64_toolchain",
+    "@coreutils_toolchains//:linux_arm64_toolchain",
+    "@coreutils_toolchains//:windows_amd64_toolchain",
     "@copy_directory_toolchains//:darwin_arm64_toolchain",
     "@copy_directory_toolchains//:linux_amd64_toolchain",
     "@copy_directory_toolchains//:linux_arm64_toolchain",
@@ -594,6 +573,10 @@ register_toolchains(
     "@nodejs_toolchains//:linux_amd64_toolchain",
     "@nodejs_toolchains//:linux_arm64_toolchain",
     "@nodejs_toolchains//:windows_amd64_toolchain",
+    "@yq_toolchains//:darwin_arm64_toolchain",
+    "@yq_toolchains//:linux_amd64_toolchain",
+    "@yq_toolchains//:linux_arm64_toolchain",
+    "@yq_toolchains//:windows_amd64_toolchain",
 )
 
 http_archive(

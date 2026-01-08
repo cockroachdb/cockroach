@@ -2,7 +2,10 @@ load("@aspect_bazel_lib//lib/private:copy_directory_toolchain.bzl", "copy_direct
 load("@aspect_bazel_lib//lib/private:copy_to_directory_toolchain.bzl", "copy_to_directory_toolchains_repo")
 load("@rules_nodejs//nodejs:repositories.bzl", "node_repositories")
 load("@rules_nodejs//nodejs/private:nodejs_repo_host_os_alias.bzl", "nodejs_repo_host_os_alias")
-load("@rules_nodejs//nodejs/private:toolchains_repo.bzl", "toolchains_repo")
+load("@rules_nodejs//nodejs/private:nodejs_toolchains_repo.bzl", "nodejs_toolchains_repo")
+load(":coreutils.bzl", "COREUTILS_PLATFORMS", "coreutils_platform_repo", "coreutils_toolchains_repo", _DEFAULT_COREUTILS_VERSION = "DEFAULT_COREUTILS_VERSION")
+load(":tar.bzl", "BSDTAR_PLATFORMS", "bsdtar_binary_repo", "tar_toolchains_repo")
+load(":yq.bzl", "YQ_PLATFORMS", "yq_host_alias_repo", "yq_platform_repo", "yq_toolchains_repo", _DEFAULT_YQ_VERSION = "DEFAULT_YQ_VERSION")
 
 _NODE_VERSION = "16.14.2"
 _NODE_VERSIONS = {
@@ -113,7 +116,7 @@ def declare_nodejs_repos():
         )
     nodejs_repo_host_os_alias(name = "nodejs", user_node_repository_name = "nodejs")
     nodejs_repo_host_os_alias(name = "nodejs_host", user_node_repository_name = "nodejs")
-    toolchains_repo(name = "nodejs_toolchains", user_node_repository_name = "nodejs")
+    nodejs_toolchains_repo(name = "nodejs_toolchains", user_node_repository_name = "nodejs")
     # NB: npm_import has weird behavior where it transparently makes these
     # copy_directory/copy_to_directory repos for you if you do not set up the
     # repositories beforehand. This is weird behavior that will hopefully be
@@ -137,4 +140,61 @@ def declare_nodejs_repos():
     copy_to_directory_toolchains_repo(
         name = "copy_to_directory_toolchains",
         user_repository_name = "copy_to_directory",
+    )
+
+
+DEFAULT_TAR_REPOSITORY = "bsd_tar"
+
+def register_tar_toolchains(name = DEFAULT_TAR_REPOSITORY):
+    for [platform, _] in BSDTAR_PLATFORMS.items():
+        bsdtar_binary_repo(
+            name = "%s_%s" % (name, platform),
+            platform = platform,
+        )
+
+    tar_toolchains_repo(
+        name = "%s_toolchains" % name,
+        user_repository_name = name,
+    )
+
+DEFAULT_YQ_REPOSITORY = "yq"
+DEFAULT_YQ_VERSION = _DEFAULT_YQ_VERSION
+
+def register_yq_toolchains(name = DEFAULT_YQ_REPOSITORY, version = DEFAULT_YQ_VERSION):
+    for [platform, _] in YQ_PLATFORMS.items():
+        yq_platform_repo(
+            name = "%s_%s" % (name, platform),
+            platform = platform,
+            version = version,
+        )
+
+    yq_host_alias_repo(name = name)
+
+    yq_toolchains_repo(
+        name = "%s_toolchains" % name,
+        user_repository_name = name,
+    )
+
+DEFAULT_COREUTILS_REPOSITORY = "coreutils"
+DEFAULT_COREUTILS_VERSION = _DEFAULT_COREUTILS_VERSION
+
+def register_coreutils_toolchains(name = DEFAULT_COREUTILS_REPOSITORY, version = DEFAULT_COREUTILS_VERSION):
+    """Registers coreutils toolchain and repositories
+
+    Args:
+        name: override the prefix for the generated toolchain repositories
+        version: the version of coreutils to execute (see https://github.com/uutils/coreutils/releases)
+        register: whether to call through to native.register_toolchains.
+            Should be True for WORKSPACE users, but false when used under bzlmod extension
+    """
+    for [platform, _] in COREUTILS_PLATFORMS.items():
+        coreutils_platform_repo(
+            name = "%s_%s" % (name, platform),
+            platform = platform,
+            version = version,
+        )
+
+    coreutils_toolchains_repo(
+        name = "%s_toolchains" % name,
+        user_repository_name = name,
     )
