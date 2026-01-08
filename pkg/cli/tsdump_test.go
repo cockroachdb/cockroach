@@ -298,6 +298,10 @@ sql.query.count
 		metricsListFile, err := os.CreateTemp("", "metrics_list_mutual_exclusion_*.txt")
 		require.NoError(t, err)
 		defer func() {
+			// Reset flags to prevent pollution of subsequent tests
+			debugTimeSeriesDumpOpts.nonVerbose = false
+			debugTimeSeriesDumpOpts.metricsListFile = ""
+			debugTimeSeriesDumpOpts.format = tsDumpRaw
 			require.NoError(t, os.Remove(metricsListFile.Name()))
 		}()
 
