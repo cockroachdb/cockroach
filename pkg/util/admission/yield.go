@@ -8,9 +8,15 @@
 
 package admission
 
-import "runtime"
+import (
+	"runtime"
+	"time"
+)
 
+// runtimeYield calls runtime.Yield and returns the duration the goroutine was
+// delayed.
+//
 //gcassert:inline
-func runtimeYield() {
-	runtime.Yield()
+func runtimeYield() time.Duration {
+	return time.Duration(runtime.Yield())
 }
