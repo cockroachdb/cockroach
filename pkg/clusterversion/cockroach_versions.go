@@ -213,6 +213,14 @@ const (
 
 	V26_2_Start
 
+	// V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine
+	// stops writing the `LastReplicaGCTimestamp` to the state machine. Before
+	// this version, the key is written (knowingly, but incorrectly) to the
+	// state machine at eval time. After this version, the key is written to the
+	// log engine at apply time, which is where such an unreplicated key should
+	// be written to.
+	V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -264,6 +272,12 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v26.2 versions. Internal versions must be even.
 	V26_2_Start: {Major: 26, Minor: 1, Internal: 2},
+
+	V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine: {
+		Major:    26,
+		Minor:    1,
+		Internal: 4,
+	},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
