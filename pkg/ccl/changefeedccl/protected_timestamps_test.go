@@ -631,7 +631,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
-	ptr := createCombinedProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
+	ptr := createCombinedProtectedTimestampRecord(ctx, jobID, targets, ts)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))

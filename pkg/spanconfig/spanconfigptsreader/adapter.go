@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -37,7 +36,6 @@ import (
 //
 //	subsystem, and we'd be able to get rid of this interface.
 type adapter struct {
-	cache        protectedts.Cache
 	kvSubscriber spanconfig.KVSubscriber
 	s            *cluster.Settings
 }
@@ -46,10 +44,9 @@ var _ spanconfig.ProtectedTSReader = &adapter{}
 
 // NewAdapter returns an adapter that implements spanconfig.ProtectedTSReader.
 func NewAdapter(
-	cache protectedts.Cache, kvSubscriber spanconfig.KVSubscriber, s *cluster.Settings,
+	kvSubscriber spanconfig.KVSubscriber, s *cluster.Settings,
 ) spanconfig.ProtectedTSReader {
 	return &adapter{
-		cache:        cache,
 		kvSubscriber: kvSubscriber,
 		s:            s,
 	}
@@ -77,12 +74,8 @@ func TestingRefreshPTSState(
 	if !ok {
 		return errors.AssertionFailedf("could not convert protectedTSReader to adapter")
 	}
-	// First refresh the cache past asOf.
-	if err := a.cache.Refresh(ctx, asOf); err != nil {
-		return err
-	}
 
-	// Now ensure the KVSubscriber is fresh enough.
+	// Ensure the KVSubscriber is fresh enough.
 	return retry.ForDuration(200*time.Second, func() error {
 		_, fresh, err := a.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 		if err != nil {

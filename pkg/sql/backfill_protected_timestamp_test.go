@@ -101,11 +101,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		)
 		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		require.NoError(t, ptp.Refresh(ctx, asOf))
-	}
 
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
@@ -190,7 +185,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			break
 		}
 		refreshTo(t, tableKey, ts.Clock().Now())
-		refreshPTSCacheTo(t, ts.Clock().Now())
 		for _, id := range ranges {
 			if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id); err != nil {
 				return err
@@ -317,11 +311,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		}
 		return repl.TestingReadProtectedTimestamps(ctx)
 	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(ctx context.Context, asOf hlc.Timestamp) error {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		return ptp.Refresh(ctx, asOf)
-	}
 
 	for _, sql := range []string{
 		"SET create_table_with_schema_locked=false",
@@ -418,9 +407,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 						}
 						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh in-memory PTS")
-						}
-						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
-							return errors.Wrap(err, "failed to refresh PTS cache")
 						}
 						// Get range IDs from the tenant connection since the table is in the tenant.
 						rows, err := db.QueryContext(ctx, fmt.Sprintf(

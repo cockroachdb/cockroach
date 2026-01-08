@@ -188,7 +188,7 @@ func (p *Manager) Protect(
 			md.Payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(md.Payload)
 			rec := MakeRecord(*protectedtsID,
-				int64(job.ID()), readAsOf, nil, Jobs, target)
+				int64(job.ID()), readAsOf, Jobs, target)
 			return pts.Protect(ctx, rec)
 		}
 		// Refresh the existing timestamp, otherwise.
