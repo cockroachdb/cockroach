@@ -1824,6 +1824,25 @@ func (mvb *mixedVersionBackup) waitForDBs(
 		if err != nil {
 			return fmt.Errorf("failed to wait for DB %s (last error: %w)", dbName, err)
 		}
+
+		// For bank and tpcc databases, also ensure at least one table exists.
+		if dbName == "bank" || dbName == "tpcc" {
+			r := retry.StartWithCtx(ctx, retryOptions)
+			for r.Next() {
+				q := fmt.Sprintf("SELECT count(*) FROM [SHOW TABLES FROM %s]", dbName)
+				var tableCount int
+				if err = h.QueryRow(rng, q).Scan(&tableCount); err == nil && tableCount > 0 {
+					l.Printf("DB %s has %d table(s)", dbName, tableCount)
+					break
+				}
+
+				l.Printf("waiting for tables in DB %s (count: %d, err: %v)", dbName, tableCount, err)
+			}
+
+			if err != nil {
+				return fmt.Errorf("failed to wait for tables in DB %s (last error: %w)", dbName, err)
+			}
+		}
 	}
 
 	// After every database exists, wait for a small amount of time to
