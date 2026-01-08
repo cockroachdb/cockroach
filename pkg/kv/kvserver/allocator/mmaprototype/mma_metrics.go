@@ -491,7 +491,6 @@ const (
 	notOverloaded
 	noCandidate
 	noHealthyCandidate
-	noCandidateDiskSpaceUtil
 	noCandidateDueToLoad
 	noCandidateDueToUnmatchedLeasePreference
 	noCandidateToAcceptLoad
@@ -513,8 +512,6 @@ func (sr shedResult) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("no-cand")
 	case noHealthyCandidate:
 		w.SafeString("no-healthy-cand")
-	case noCandidateDiskSpaceUtil:
-		w.SafeString("no-cand-diskspace")
 	case noCandidateDueToLoad:
 		w.SafeString("no-cand-load")
 	case noCandidateDueToUnmatchedLeasePreference:
