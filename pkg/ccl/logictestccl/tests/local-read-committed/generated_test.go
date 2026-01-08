@@ -363,13 +363,6 @@ func TestReadCommittedLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestReadCommittedLogic_canary_stats(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
-}
-
 func TestReadCommittedLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
