@@ -302,6 +302,17 @@ func (re *rebalanceEnv) rebalanceStores(
 // positions are preserved, and we wouldn't accept a transfer that leaves the
 // target worse off than the source.
 //
+// Note on thrashing: This pre-means exclusion of ill-disposed stores differs
+// from the approach used in the replicate queue integration (see
+// pkg/kv/kvserver/mmaintegration/thrashing.go). There, MMA-rejected stores
+// (those with load above threshold) are *included* in the mean calculation to
+// keep the mean stable and avoid thrashing caused by fluctuating load signals.
+// The difference is that health-based disposition signals (Dead, Suspect,
+// Draining, Decommissioning, etc.) are more permanent and less transient than
+// load-based signals. A store marked as draining or dead is unlikely to
+// suddenly become viable again, so excluding it from the mean doesn't cause
+// the instability that excluding transiently-overloaded stores would.
+//
 // **Post-means filtering** prevents some of the remaining candidates from being
 // chosen as targets for tactical reasons:
 //   - Stores that would be worse off than the source (relative to the mean
