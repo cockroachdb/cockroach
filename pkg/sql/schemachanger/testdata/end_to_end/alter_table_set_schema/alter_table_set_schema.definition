@@ -1,0 +1,8 @@
+setup
+CREATE TABLE t (i int, j int);
+CREATE SCHEMA sc;
+----
+
+test
+ALTER TABLE t SET SCHEMA sc;
+----

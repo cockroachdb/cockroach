@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -47,6 +49,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeKey(codec keys.SQLCodec, key string) roachpb.Key {
+	return append(append(roachpb.Key(nil), codec.TenantPrefix()...), roachpb.Key(key)...)
+}
+
 // Test that we don't attempt to create flows in an aborted transaction.
 // Instead, a retryable error is created on the gateway. The point is to
 // simulate a race where the heartbeat loop finds out that the txn is aborted
@@ -63,21 +69,22 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := sqlDB.ExecContext(
 		ctx, "create database test; create table test.t(a int)"); err != nil {
 		t.Fatal(err)
 	}
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	// Plan a statement.
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		kv.NewTxn(ctx, db, s.NodeID()),
+		kv.NewTxn(ctx, db, srv.NodeID()),
 		username.NodeUserName(),
 		&MemoryMetrics{},
 		&execCfg,
@@ -118,11 +125,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -167,8 +174,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 
 		// We need to re-plan every time, since the plan is closed automatically
 		// by PlanAndRun() below making it unusable across retries.
-		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
+		p.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{},
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -215,7 +225,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		abortTxn func(uuid uuid.UUID)
 	}{}
 
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				RunBeforeCascadesAndChecks: func(txnID uuid.UUID) {
@@ -228,7 +238,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Set up schemas for the test. We want a construction that results in 2 FK
@@ -240,7 +251,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		t,
 		"create table test.child(a INT, b INT, FOREIGN KEY (a) REFERENCES test.parent1(a), FOREIGN KEY (b) REFERENCES test.parent2(b))",
 	)
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	setupQueries := []string{
 		"insert into test.parent1 VALUES(1)",
@@ -285,8 +296,11 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			p.ExtendedEvalContext().Tracing,
 		)
 
-		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)))
+		p.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{},
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)),
+			nil, /* statementHintsCache */
+		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -335,11 +349,11 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -604,13 +618,15 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(160517),
 		}})
 	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
 
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
-	db := tc.ServerConn(0 /* idx */)
+	db := s.SQLConn(t, serverutils.DBName("test"))
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlutils.CreateTable(
 		t, db, "foo",
@@ -629,7 +645,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).AdvSQLAddr(), username.RootUser)
+	p, err := pgtest.NewPGTest(ctx, s.AdvSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// We disable multiple active portals here as it only supports local-only plan.
@@ -833,6 +849,11 @@ func TestSetupFlowRPCError(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
 	db := tc.ServerConn(0)
@@ -905,13 +926,14 @@ func TestDistSQLPlannerParallelChecks(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	// Set up a child table with two foreign keys into two parent tables.
-	sqlDB.Exec(t, `CREATE TABLE parent1 (id1 INT8 PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE parent2 (id2 INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open')`)
+	sqlDB.Exec(t, `CREATE TABLE parent1 (e1 status, id1 INT8, PRIMARY KEY (e1, id1))`)
+	sqlDB.Exec(t, `CREATE TABLE parent2 (e2 status, id2 INT8, PRIMARY KEY (e2, id2))`)
 	sqlDB.Exec(t, `
 CREATE TABLE child (
-    id INT8 PRIMARY KEY, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
-    FOREIGN KEY (parent_id1) REFERENCES parent1 (id1),
-    FOREIGN KEY (parent_id2) REFERENCES parent2 (id2)
+    e status, id INT8, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
+    FOREIGN KEY (e, parent_id1) REFERENCES parent1 (e1, id1),
+    FOREIGN KEY (e, parent_id2) REFERENCES parent2 (e2, id2)
 );`)
 	// Disable the insert fast path in order for the foreign key checks to be
 	// planned as parallel postqueries.
@@ -924,8 +946,8 @@ CREATE TABLE child (
 
 	const numIDs = 1000
 	for id := 0; id < numIDs; id++ {
-		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ($1)`, id)
-		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ($1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ('open', $1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ('open', $1)`, id)
 		var prefix string
 		if rng.Float64() < 0.5 {
 			// In 50% of the cases, run the INSERT query with FK checks via
@@ -947,12 +969,12 @@ CREATE TABLE child (
 			// error for parent_id1 is always chosen.
 			sqlDB.ExpectErr(
 				t,
-				`insert on table "child" violates foreign key constraint "child_parent_id1_fkey"`,
-				fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, invalidID),
+				`insert on table "child" violates foreign key constraint "child_e_parent_id1_fkey"`,
+				fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, invalidID),
 			)
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, id))
+		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, id))
 	}
 }
 
@@ -1006,7 +1028,8 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -1151,6 +1174,11 @@ SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	db := tc.ServerConn(0 /* idx */)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "CREATE TABLE job_info(job_id INT, info_key INT, details INT, PRIMARY KEY (job_id, info_key));")
@@ -1224,9 +1252,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 	ctx := context.Background()
 	// testQuery will be updated throughout the test to the current target.
 	var testQuery atomic.Value
-	// The callback will send number of rows read and rows written (for each
-	// ProducerMetadata.Metrics object) on these channels, respectively.
-	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh := make(chan int64), make(chan int64), make(chan int64)
+	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh, kvCPUTimeCh := make(chan int64), make(chan int64), make(chan int64), make(chan int64)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
@@ -1239,6 +1265,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 							rowsReadCh <- meta.Metrics.RowsRead
 							rowsWrittenCh <- meta.Metrics.RowsWritten
 							indexRowsWrittenCh <- meta.Metrics.IndexRowsWritten
+							kvCPUTimeCh <- meta.Metrics.KVCPUTime
 						}
 						return row, batch, meta
 					}
@@ -1354,7 +1381,7 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			}()
 			// In the main goroutine, loop until the query is completed while
 			// accumulating the top-level query stats.
-			var rowsRead, rowsWritten, indexRowsWritten int64
+			var rowsRead, rowsWritten, indexRowsWritten, kvCPUTime int64
 		LOOP:
 			for {
 				select {
@@ -1364,6 +1391,8 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 					rowsWritten += written
 				case written := <-indexRowsWrittenCh:
 					indexRowsWritten += written
+				case cpuTime := <-kvCPUTimeCh:
+					kvCPUTime += cpuTime
 				case err := <-errCh:
 					require.NoError(t, err)
 					break LOOP
@@ -1372,6 +1401,9 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			require.Equal(t, tc.expRowsRead, rowsRead)
 			require.Equal(t, tc.expRowsWritten, rowsWritten)
 			require.Equal(t, tc.expIndexRowsWritten, indexRowsWritten)
+			if rowsWritten > 0 || rowsRead > 0 {
+				require.Positive(t, kvCPUTime, "KVCPUTime should be positive")
+			}
 		})
 	}
 }

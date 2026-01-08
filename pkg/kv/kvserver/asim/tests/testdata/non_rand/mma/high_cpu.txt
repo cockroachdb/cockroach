@@ -7,7 +7,7 @@
 #
 # Expected outcome: The allocator should rebalance both replicas and leases to
 # distribute the high-cpu workload more evenly across all 10 nodes.
-gen_cluster nodes=10 node_cpu_rate_capacity=8000000000
+gen_cluster nodes=10 node_cpu_cores=8
 ----
 
 # TODO(wenyihu6): why didn't we balance more replicas/leases - is it because of a very high cpu per range 

@@ -32,7 +32,7 @@ func TestGCJobGetsMarkedIdle(t *testing.T) {
 	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	sqltestutils.SetShortRangeFeedIntervals(t, mainDB)
+	sqltestutils.SetShortRangeFeedIntervals(t, s)
 	defer s.Stopper().Stop(ctx)
 	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),

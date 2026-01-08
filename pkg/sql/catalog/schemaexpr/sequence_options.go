@@ -274,3 +274,21 @@ func AssignSequenceOptions(
 	}
 	return nil
 }
+
+// DefaultSequenceOptions is a helper that returns the default sequence options.
+// It panics on error.
+func DefaultSequenceOptions() descpb.TableDescriptor_SequenceOpts {
+	defaultOpts := descpb.TableDescriptor_SequenceOpts{
+		Increment: 1,
+	}
+	if err := AssignSequenceOptions(&defaultOpts,
+		nil, /* optsNode */
+		64,
+		true, /* setDefaults */
+		nil,  /* existingTypes */
+	); err != nil {
+		panic(err)
+	}
+
+	return defaultOpts
+}

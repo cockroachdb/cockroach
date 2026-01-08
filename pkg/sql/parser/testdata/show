@@ -1404,6 +1404,46 @@ SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMEST
 SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
 
 parse
+SHOW FINGERPRINTS FROM TABLE d.t
+----
+SHOW FINGERPRINTS FROM TABLE d.t
+SHOW FINGERPRINTS FROM TABLE d.t -- fully parenthesized
+SHOW FINGERPRINTS FROM TABLE d.t -- literals removed
+SHOW FINGERPRINTS FROM TABLE _._ -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM TABLE d.t WITH START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')
+----
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- normalized!
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = ('132412341234.000000'), EXCLUDE COLUMNS = (('crdb_original_replication_timestamp'), ('other_column'))) -- fully parenthesized
+SHOW FINGERPRINTS FROM TABLE d.t WITH OPTIONS (START TIMESTAMP = '_', EXCLUDE COLUMNS = ('_', '_')) -- literals removed
+SHOW FINGERPRINTS FROM TABLE _._ WITH OPTIONS (START TIMESTAMP = '132412341234.000000', EXCLUDE COLUMNS = ('crdb_original_replication_timestamp', 'other_column')) -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW FINGERPRINTS FROM TENANT t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
 SHOW ZONE CONFIGURATIONS
 ----
 SHOW ZONE CONFIGURATIONS
@@ -2187,15 +2227,6 @@ SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAP
 SHOW VIRTUAL CLUSTER (foo) WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- fully parenthesized
 SHOW VIRTUAL CLUSTER foo WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- literals removed
 SHOW VIRTUAL CLUSTER _ WITH REPLICATION STATUS, PRIOR REPLICATION DETAILS, CAPABILITIES -- identifiers removed
-
-parse
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges
-----
-SHOW BACKUP 'family' IN ('*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****') WITH OPTIONS (incremental_location = '*****', privileges) -- normalized!
-SHOW BACKUP ('family') IN (('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****'), ('*****')) WITH OPTIONS (incremental_location = ('*****'), privileges) -- fully parenthesized
-SHOW BACKUP '_' IN ('_', '_', '_', '_', '_', '_', '_', '_') WITH OPTIONS (incremental_location = '_', privileges) -- literals removed
-SHOW BACKUP 'family' IN ('*****', '*****', '*****', '*****', '*****', '*****', '*****', '*****') WITH OPTIONS (incremental_location = '*****', privileges) -- identifiers removed
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges) -- passwords exposed
 
 parse
 SHOW BACKUP 'abc' IN 'def' WITH SKIP SIZE

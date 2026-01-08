@@ -119,6 +119,7 @@ type s3Storage struct {
 	prefix         string
 	metrics        *cloud.Metrics
 	storageOptions cloud.ExternalStorageOptions
+	uri            string // original URI used to construct this storage
 
 	opts   s3ClientConfig
 	cached *s3Client
@@ -332,6 +333,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_s3
+	conf.URI = uri.String()
 
 	// TODO(rui): currently the value of AssumeRoleParam is written into both of
 	// the RoleARN fields and the RoleProvider fields in order to support a mixed
@@ -519,6 +521,7 @@ func MakeS3Storage(
 		settings:       args.Settings,
 		opts:           clientConfig(conf),
 		storageOptions: args.ExternalStorageOptions(),
+		uri:            dest.URI,
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -747,6 +750,7 @@ func (s *s3Storage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider: cloudpb.ExternalStorageProvider_s3,
 		S3Config: s.conf,
+		URI:      s.uri,
 	}
 }
 
@@ -938,12 +942,15 @@ func (s *s3Storage) ReadFile(
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), fileSize, nil
 }
 
-func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *s3Storage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
 	client, err := s.getClient(ctx)
 	if err != nil {
@@ -956,9 +963,18 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	// s3 clones which return s3://<prefix>/ as the first result of listing
 	// s3://<prefix> to exclude that result.
 	if envutil.EnvOrDefaultBool("COCKROACH_S3_LIST_WITH_PREFIX_SLASH_MARKER", false) {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim), StartAfter: aws.String(dest + "/")}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:     s.bucket,
+			Prefix:     aws.String(dest),
+			Delimiter:  nilIfEmpty(opts.Delimiter),
+			StartAfter: aws.String(dest + "/"),
+		}
 	} else {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:    s.bucket,
+			Prefix:    aws.String(dest),
+			Delimiter: nilIfEmpty(opts.Delimiter),
+		}
 	}
 
 	paginator := s3.NewListObjectsV2Paginator(client, s3Input)
@@ -976,12 +992,18 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 		}
 
 		for _, x := range page.CommonPrefixes {
+			if *x.Prefix <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*x.Prefix, dest)); err != nil {
 				return err
 			}
 		}
 
 		for _, fileObject := range page.Contents {
+			if *fileObject.Key <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*fileObject.Key, dest)); err != nil {
 				return err
 			}

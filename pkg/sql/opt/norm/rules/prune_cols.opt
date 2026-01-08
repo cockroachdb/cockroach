@@ -451,8 +451,10 @@
 )
 
 # PruneMutationInputCols discards input columns that are never used by the
-# mutation operator.
-[PruneMutationInputCols, Normalize]
+# mutation operator. This is high priority so that it runs before
+# UseSwapMutation, UseSwapMutationWithProjection, and
+# UseSwapMutationWithProjectionProjection.
+[PruneMutationInputCols, Normalize, HighPriority]
 (Update | Upsert | Delete
     $input:*
     $uniqueChecks:*

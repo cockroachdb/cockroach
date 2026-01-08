@@ -14,14 +14,13 @@ gen_cluster nodes=5
 gen_ranges ranges=100 repl_factor=5 min_key=1 max_key=10000
 ----
 
-# Mark n4 and n5 as NodeLivenessStatus_UNAVAILABLE, which is the status
-# stores have when down but not down for long enough to be marked as dead.
-# The range doesn't lose quorum as a result of this, since three replicas
-# are still around.
-set_liveness node=4 liveness=unavailable
+# Mark n4 and n5 as unavailable, which is the status stores have when down
+# but not down for long enough to be marked as dead. The range doesn't lose
+# quorum as a result of this, since three replicas are still around.
+set_status node=4 liveness=unavailable
 ----
 
-set_liveness node=5 liveness=unavailable
+set_status node=5 liveness=unavailable
 ----
 
 # Trigger down-replication to three replicas.

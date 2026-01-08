@@ -70,7 +70,7 @@ func TestMeansMemo(t *testing.T) {
 			case "store":
 				for _, line := range strings.Split(d.Input, "\n") {
 					sal := parseStoreAttributedAndLocality(t, strings.TrimSpace(line))
-					cm.setStore(sal)
+					cm.setStore(sal.withNodeTier())
 					storeMap[sal.StoreID] = sal
 				}
 				return ""

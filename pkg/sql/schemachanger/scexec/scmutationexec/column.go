@@ -78,16 +78,6 @@ func (i *immediateVisitor) addNewColumnType(
 	col.Type = op.ColumnType.Type
 	col.Nullable = true
 	col.Virtual = op.ColumnType.IsVirtual
-	// ComputeExpr is deprecated in favor of a separate element
-	// (ColumnComputeExpression). Any changes in this if block
-	// should also be made in the AddColumnComputeExpression function.
-	if !op.ColumnType.ElementCreationMetadata.In_24_3OrLater {
-		if ce := op.ColumnType.ComputeExpr; ce != nil {
-			expr := string(ce.Expr)
-			col.ComputeExpr = &expr
-			col.UsesSequenceIds = ce.UsesSequenceIDs
-		}
-	}
 	if !col.Virtual {
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
@@ -160,6 +150,52 @@ func (i *immediateVisitor) updateColumnComputeExpression(
 		return err
 	}
 	return updateColumnExprFunctionsUsage(col)
+}
+
+// AddColumnGeneratedAsIdentity will set generated as identity for a column.
+func (i *immediateVisitor) AddColumnGeneratedAsIdentity(
+	ctx context.Context, op scop.AddColumnGeneratedAsIdentity,
+) error {
+	return i.updateColumnGeneratedAsIdentity(
+		ctx, op.GeneratedAsIdentity.TableID, op.GeneratedAsIdentity.ColumnID,
+		op.GeneratedAsIdentity.Type, &op.GeneratedAsIdentity.SequenceOption)
+}
+
+// RemoveColumnGeneratedAsIdentity will drop generated as identity from a column.
+func (i *immediateVisitor) RemoveColumnGeneratedAsIdentity(
+	ctx context.Context, op scop.RemoveColumnGeneratedAsIdentity,
+) error {
+	return i.updateColumnGeneratedAsIdentity(
+		ctx, op.TableID, op.ColumnID, catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN, nil)
+}
+
+// updateColumnGeneratedAsIdentity will handle add or removal of generated as identity
+func (i *immediateVisitor) updateColumnGeneratedAsIdentity(
+	ctx context.Context,
+	tableID descpb.ID,
+	columnID descpb.ColumnID,
+	genType catpb.GeneratedAsIdentityType,
+	sequenceOption *string,
+) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+
+	col := catCol.ColumnDesc()
+	col.GeneratedAsIdentityType = genType
+	if sequenceOption != nil && *sequenceOption != "" {
+		so := *sequenceOption
+		col.GeneratedAsIdentitySequenceOption = &so
+	} else {
+		col.GeneratedAsIdentitySequenceOption = nil
+	}
+	return nil
 }
 
 func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(
@@ -467,4 +503,38 @@ func clearComputedExpr(col *descpb.ColumnDescriptor) {
 	} else {
 		col.ComputeExpr = nil
 	}
+}
+
+func (i *immediateVisitor) MakeColumnHidden(ctx context.Context, op scop.MakeColumnHidden) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, true); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) MakeColumnVisible(ctx context.Context, op scop.MakeColumnVisible) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) setColumnHidden(
+	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID, hidden bool,
+) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+	col := catCol.ColumnDesc()
+
+	col.Hidden = hidden
+	return nil
 }

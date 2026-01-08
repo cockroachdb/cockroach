@@ -25,13 +25,18 @@ var cpuPacerRequestDuration = settings.RegisterDurationSetting(
 	50*time.Millisecond,
 )
 
-// NewCPUPacer creates a new AC pacer for SST batcher. It may return an empty
-// Pacer which noops if pacing is disabled or its arguments are nil.
+// NewCPUPacer creates a new AC pacer for SST batcher. It will return an empty
+// Pacer which noops if db or db.AdmissionPacerFactory is nil.
+//
+// The setting specifies where waiting in the elastic admission control queue
+// is enabled. If disabled, the CPU consumed will be accounted for in
+// admission control, but pacing will not wait in admission control.
 func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) *admission.Pacer {
-	if db == nil || db.AdmissionPacerFactory == nil || !setting.Get(db.SettingsValues()) {
-		log.Dev.Infof(ctx, "admission control is not configured to pace bulk ingestion")
+	if db == nil || db.AdmissionPacerFactory == nil {
+		log.Dev.Infof(ctx, "admission control is not configured to pace this bulk work")
 		return nil
 	}
+	bypassACQueue := !setting.Get(db.SettingsValues())
 	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		tenantID = roachpb.SystemTenantID
@@ -42,6 +47,6 @@ func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) 
 			TenantID:        tenantID,
 			Priority:        admissionpb.BulkNormalPri,
 			CreateTime:      timeutil.Now().UnixNano(),
-			BypassAdmission: false,
+			BypassAdmission: bypassACQueue,
 		})
 }

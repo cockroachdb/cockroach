@@ -7,11 +7,13 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -23,6 +25,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
@@ -45,7 +49,7 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -55,7 +59,7 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
@@ -79,7 +83,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
@@ -93,7 +97,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
@@ -103,7 +107,7 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -120,7 +124,7 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -144,7 +148,7 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
 	}
@@ -161,7 +165,7 @@ this reflects pure network latency and is less affected by CPU overload effects.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
@@ -178,7 +182,7 @@ connection latency.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency Variance",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
@@ -207,7 +211,7 @@ over this connection.
 	}
 	metaRequestDuration = metric.Metadata{
 		Name:        "rpc.server.request.duration.nanos",
-		Help:        "Duration of an grpc request in nanoseconds.",
+		Help:        "Duration of an RPC request in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
@@ -449,6 +453,7 @@ func NewRequestMetrics() *RequestMetrics {
 }
 
 type RequestMetricsInterceptor grpc.UnaryServerInterceptor
+type DRPCRequestMetricsInterceptor drpcmux.UnaryServerInterceptor
 
 // NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
 // the duration of each RPC. The metric is labeled by the method name and the
@@ -479,6 +484,41 @@ func NewRequestMetricsInterceptor(
 
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
+			RpcStatusCodeLabel: code.String(),
+		}, float64(duration.Nanoseconds()))
+		return resp, err
+	}
+}
+
+// NewDRPCRequestMetricsInterceptor creates a new DRPC server interceptor that records
+// the duration of each RPC. The metric is labeled by the method name and the
+// status code of the RPC. The interceptor will only record durations if
+// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
+func NewDRPCRequestMetricsInterceptor(
+	requestMetrics *RequestMetrics, shouldRecord func(rpc string) bool,
+) DRPCRequestMetricsInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		rpc string,
+		handler drpcmux.UnaryHandler,
+	) (any, error) {
+		if !shouldRecord(rpc) {
+			return handler(ctx, req)
+		}
+		startTime := timeutil.Now()
+		resp, err := handler(ctx, req)
+		duration := timeutil.Since(startTime)
+		var code codes.Code
+		if err != nil {
+			// TODO(server): use drpc status code
+			code = status.Code(err)
+		} else {
+			code = codes.OK
+		}
+
+		requestMetrics.Duration.Observe(map[string]string{
+			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
 		}, float64(duration.Nanoseconds()))
 		return resp, err
@@ -521,10 +561,10 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 	return drpcmetadata.Add(ctx, gwRequestKey, "true")
 }
 
-// DRPCGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
+// drpcGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
 // that are invoked due to DB console requests. For these requests, we do not
 // want an uncaught panic to crash the node.
-func DRPCGatewayRequestRecoveryInterceptor(
+func drpcGatewayRequestRecoveryInterceptor(
 	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
 ) (resp interface{}, err error) {
 	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
@@ -537,4 +577,30 @@ func DRPCGatewayRequestRecoveryInterceptor(
 	}
 	resp, err = handler(ctx, req)
 	return resp, err
+}
+
+// drpcGatewayRequestCounterInterceptor is a client-side interceptor that
+// increments telemetry counters for DRPC requests originating from the HTTP
+// gateway. It checks for the gateway request marker and increments
+// a counter named after the RPC method.
+func drpcGatewayRequestCounterInterceptor(
+	ctx context.Context,
+	rpc string,
+	enc drpc.Encoding,
+	in, out drpc.Message,
+	cc *drpcclient.ClientConn,
+	invoker drpcclient.UnaryInvoker,
+) error {
+	// Check if this request originated from the DRPC HTTP gateway
+	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
+		telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+	}
+	return invoker(ctx, rpc, enc, in, out, cc)
+}
+
+// getDRPCGatewayEndpointCounter returns a telemetry Counter corresponding to
+// the given DRPC method.
+func getDRPCGatewayEndpointCounter(method string) telemetry.Counter {
+	const counterPrefix = "http.drpc-gateway"
+	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
 }

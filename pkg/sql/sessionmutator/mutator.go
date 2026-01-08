@@ -1059,10 +1059,6 @@ func (m *SessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.Data.OptimizerUseExistsFilterHoistRule = val
 }
 
-func (m *SessionDataMutator) SetEnableInspectCommand(val bool) {
-	m.Data.EnableInspectCommand = val
-}
-
 func (m *SessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.Data.InitialRetryBackoffForReadCommitted = val
 }
@@ -1101,4 +1097,28 @@ func (m *SessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 
 func (m *SessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
 	m.Data.OptimizerUseMaxFrequencySelectivity = val
+}
+
+func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
+	m.Data.DisableWaitForJobsNotice = val
+}
+
+func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMode) {
+	m.Data.CanaryStatsMode = val
+}
+
+func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
+	m.Data.UseSwapMutations = val
+}
+
+func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
+	m.Data.PreventUpdateSetColumnDrop = val
+}
+
+func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
+	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
+}
+
+func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val bool) {
+	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
 }

@@ -66,7 +66,7 @@ interrupt_and_wait
 # Verify the temp directory is removed.
 glob_not_exists "$tempdir/$tempprefix*"
 # Verify temp directory path is removed from record file.
-if {[file size "$storedir/$recordfile"] > 0} {
+if {[file exists "$storedir/$recordfile"] && [file size "$storedir/$recordfile"] > 0} {
   report "RECORD FILE NOT EMPTY"
   exit 1
 }
@@ -120,7 +120,7 @@ send "$argv start-single-node --insecure --store=$storedir --background\r"
 eexpect ":/# "
 # Try to start up a second cockroach instance with the same store path.
 send "$argv start-single-node --insecure --store=$storedir\r"
-eexpect "ERROR: could not cleanup temporary directories from record file: could not lock temporary directory $cwd/$storedir/$tempprefix*"
+eexpect "ERROR: could not lock temporary directory $cwd/$storedir/$tempprefix*"
 # Verify the temp directory still exists.
 glob_exists "$storedir/$tempprefix*"
 send "pkill -9 cockroach\r"

@@ -66,7 +66,11 @@ const (
 	REPLICATIONDEST          Kind = 39
 	REPLICATIONSOURCE        Kind = 40
 	INSPECT                  Kind = 41
-	largestKind                   = INSPECT
+	// BUILTIN_UNSAFE_ALLOWED is a special pseudo-privilege that marks a dependency
+	// as coming from a SQL-bodied builtin function. This allows the dependency to
+	// bypass unsafe internal checks during memo staleness checking.
+	BUILTIN_UNSAFE_ALLOWED Kind = 42
+	largestKind                 = BUILTIN_UNSAFE_ALLOWED
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -162,6 +166,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "REPLICATIONSOURCE"
 	case INSPECT:
 		return "INSPECT"
+	case BUILTIN_UNSAFE_ALLOWED:
+		return "BUILTIN_UNSAFE_ALLOWED"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}

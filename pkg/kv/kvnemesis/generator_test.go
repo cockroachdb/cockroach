@@ -80,6 +80,7 @@ func TestRandStep(t *testing.T) {
 	n := nodes{
 		running: map[int]struct{}{1: {}, 2: {}, 3: {}},
 		stopped: make(map[int]struct{}),
+		crashed: make(map[int]struct{}),
 	}
 	g, err := MakeGenerator(config, getReplicasFn, 0, &n)
 	require.NoError(t, err)
@@ -138,6 +139,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.GetExistingForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.GetExistingFollowerRead++
 					} else {
 						client.GetExisting++
 					}
@@ -168,6 +171,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.GetMissingForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.GetMissingFollowerRead++
 					} else {
 						client.GetMissing++
 					}
@@ -226,6 +231,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.ReverseScanForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.ReverseScanFollowerRead++
 					} else {
 						client.ReverseScan++
 					}
@@ -257,6 +264,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.ScanForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.ScanFollowerRead++
 					} else {
 						client.Scan++
 					}
@@ -435,6 +444,11 @@ func TestRandStep(t *testing.T) {
 			counts.Fault.RestartNode++
 			n.mu.Lock()
 			n.running[int(o.NodeId)] = struct{}{}
+			n.mu.Unlock()
+		case *CrashNodeOperation:
+			counts.Fault.CrashNode++
+			n.mu.Lock()
+			n.crashed[int(o.NodeId)] = struct{}{}
 			n.mu.Unlock()
 		default:
 			t.Fatalf("%T", o)

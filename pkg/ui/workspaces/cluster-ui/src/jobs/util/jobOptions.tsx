@@ -45,11 +45,11 @@ export function jobToVisual(job: Job): JobStatusVisual {
       return JobStatusVisual.BadgeWithMessage;
     case JOB_STATUS_CANCELED:
     case JOB_STATUS_CANCEL_REQUESTED:
+    case JOB_STATUS_PAUSE_REQUESTED:
     case JOB_STATUS_PAUSED:
-      return job.error === ""
+      return !job.error && !job.running_status
         ? JobStatusVisual.BadgeOnly
         : JobStatusVisual.BadgeWithErrorMessage;
-    case JOB_STATUS_PAUSE_REQUESTED:
     case JOB_STATUS_REVERTING:
     default:
       return JobStatusVisual.BadgeOnly;
@@ -68,7 +68,7 @@ export const JOB_STATUS_FAILED = "failed";
 export const JOB_STATUS_CANCELED = "canceled";
 export const JOB_STATUS_CANCEL_REQUESTED = "cancel-requested";
 export const JOB_STATUS_PAUSED = "paused";
-export const JOB_STATUS_PAUSE_REQUESTED = "paused-requested";
+export const JOB_STATUS_PAUSE_REQUESTED = "pause-requested";
 export const JOB_STATUS_RUNNING = "running";
 export const JOB_STATUS_PENDING = "pending";
 export const JOB_STATUS_REVERTING = "reverting";
@@ -111,7 +111,10 @@ export function jobHasOneOfStatuses(job: Job, ...statuses: string[]): boolean {
   return statuses.indexOf(job.status) !== -1;
 }
 
-export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
+export const jobStatusToBadgeStatus = (
+  status: string,
+  advisory?: string,
+): BadgeStatus => {
   switch (status) {
     case JOB_STATUS_SUCCEEDED:
       return "success";
@@ -123,10 +126,14 @@ export const jobStatusToBadgeStatus = (status: string): BadgeStatus => {
       return "info";
     case JOB_STATUS_PENDING:
       return "warning";
+    case JOB_STATUS_PAUSE_REQUESTED:
+    case JOB_STATUS_PAUSED:
+      if (advisory) {
+        return "warning";
+      }
+      return "default";
     case JOB_STATUS_CANCELED:
     case JOB_STATUS_CANCEL_REQUESTED:
-    case JOB_STATUS_PAUSED:
-    case JOB_STATUS_PAUSE_REQUESTED:
     case JOB_STATUS_REVERTING:
     default:
       return "default";

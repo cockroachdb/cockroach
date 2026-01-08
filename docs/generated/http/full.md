@@ -349,7 +349,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponse-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -501,7 +502,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.status.statuspb.NodeStatus-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -656,6 +658,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponseExternal-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -914,6 +917,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodeResponse-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -7550,6 +7554,10 @@ Support status: [reserved](#support-status)
 MetricMetadataRequest requests metadata for all metrics.
 
 
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| include_layers | [bool](#cockroach.server.serverpb.MetricMetadataRequest-bool) |  | include_layers, if true, populates the metricLayers field in the response with the layer assignment for each metric (STORAGE, APPLICATION, or SERVER). | [reserved](#support-status) |
+
 
 
 
@@ -7568,6 +7576,7 @@ MetricMetadataResponse contains the metadata for all metrics.
 | ----- | ---- | ----- | ----------- | -------------- |
 | metadata | [MetricMetadataResponse.MetadataEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetadataEntry) | repeated |  | [reserved](#support-status) |
 | recordedNames | [MetricMetadataResponse.RecordedNamesEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry) | repeated | Maps of metric metadata names to the tsdb recorded metric names | [reserved](#support-status) |
+| metricLayers | [MetricMetadataResponse.MetricLayersEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetricLayersEntry) | repeated | Maps metric name to its layer (STORAGE, APPLICATION, or SERVER) | [reserved](#support-status) |
 
 
 
@@ -7590,6 +7599,20 @@ MetricMetadataResponse contains the metadata for all metrics.
 
 <a name="cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry"></a>
 #### MetricMetadataResponse.RecordedNamesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetricLayersEntry"></a>
+#### MetricMetadataResponse.MetricLayersEntry
 
 
 

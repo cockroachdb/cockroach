@@ -221,6 +221,12 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 
 	var errC chan error
 
+	// Variables to log an oversized message warning after releasing the lock.
+	// We can't call Ops.Warningf() while holding bs.mu because that would
+	// cause a deadlock (the warning message would try to log through this same sink).
+	var logOversizedWarning bool
+	var maxSize uint64
+
 	err := func() error {
 		bs.mu.Lock()
 		defer bs.mu.Unlock()
@@ -229,6 +235,17 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 		if err != nil {
 			// Release the msg buffer, since our append failed.
 			putBuffer(msg)
+			// If the message is too large to fit in the buffer, we log a warning
+			// but don't return an error. This prevents the server from crashing
+			// due to exit-on-error when a single log message exceeds max-buffer-size.
+			// Instead, we gracefully drop the oversized message.
+			// NOTE: The message content will not be logged.
+			if errors.Is(err, errMsgTooLarge) {
+				// Set flag to log warning after releasing the lock (to avoid recursion/deadlock)
+				logOversizedWarning = true
+				maxSize = bs.mu.buf.maxSizeBytes
+				return nil // Don't propagate the error - handle gracefully
+			}
 			return err
 		}
 
@@ -281,6 +298,14 @@ func (bs *bufferedSink) output(b []byte, opts sinkOutputOptions) error {
 		}
 		return nil
 	}()
+
+	// Log the oversized message warning after releasing the lock to avoid deadlock.
+	// We use Ops.Warningf() which routes the warning through the OPS channel,
+	// ensuring it appears in log files rather than only on stderr.
+	if logOversizedWarning {
+		Ops.Warningf(context.Background(), "dropped log message because it exceeds max-buffer-size (%d bytes) for sink %T", maxSize, bs.child)
+	}
+
 	if err != nil {
 		return err
 	}

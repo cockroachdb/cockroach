@@ -316,7 +316,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 		Payload: anyPayload,
 	}
 
-	numStructuredRecordings := maxStructuredBytesPerSpan / structuredRecord.MemorySize()
+	numStructuredRecordings := defaultMaxStructuredBytesPerSpan / structuredRecord.MemorySize()
 	const extra = 10
 	for i := 1; i <= numStructuredRecordings+extra; i++ {
 		sp.RecordStructured(payload(i))
@@ -430,7 +430,7 @@ func TestRecordingMaxSpans(t *testing.T) {
 	}
 	require.Equal(t, numChildren, numStructuredEvents)
 	// Same when requesting a Structured recording. Except the exact number of
-	// events is limited by maxStructuredBytesPerSpan.
+	// events is limited by defaultMaxStructuredBytesPerSpan.
 	require.NotEmpty(t, sp.GetRecording(tracingpb.RecordingStructured)[0].StructuredRecords)
 }
 
@@ -760,9 +760,9 @@ func TestRecordingStructuredLogLimit(t *testing.T) {
 	tr := NewTracer()
 
 	// Create one big message. Only one of these fits in a span according to the
-	// maxStructuredBytesPerSpan limit.
+	// defaultMaxStructuredBytesPerSpan limit.
 	var sb strings.Builder
-	for i := 0; i < maxStructuredBytesPerSpan*7/8; i++ {
+	for i := 0; i < defaultMaxStructuredBytesPerSpan*7/8; i++ {
 		sb.WriteRune('c')
 	}
 	s := sb.String()
@@ -778,7 +778,7 @@ func TestRecordingStructuredLogLimit(t *testing.T) {
 			// maxStructuredBytesPerTrace allows.
 			// We'll check that some these messages are dropped when collecting the
 			// recording.
-			numMessages := 2 * maxStructuredBytesPerTrace / msgSize
+			numMessages := 2 * defaultMaxStructuredBytesPerTrace / msgSize
 			for i := 0; i < int(numMessages); i++ {
 				c := tr.StartSpan(fmt.Sprintf("child %d", i), WithParent(sp))
 				c.RecordStructured(msg)
@@ -792,7 +792,7 @@ func TestRecordingStructuredLogLimit(t *testing.T) {
 			trace := sp.i.crdb.GetRecording(tracingpb.RecordingVerbose, false /* finishing */)
 			// Check that we have two events in the trace (one per span).
 			require.Less(t, len(trace.appendStructuredEventsRecursively(nil /* buffer */)), int(numMessages))
-			require.LessOrEqual(t, trace.StructuredRecordsSizeBytes, int64(maxStructuredBytesPerTrace))
+			require.LessOrEqual(t, trace.StructuredRecordsSizeBytes, int64(defaultMaxStructuredBytesPerTrace))
 		})
 	}
 }
@@ -1180,8 +1180,8 @@ func TestStructuredRecordingSizeLimit(t *testing.T) {
 	require.NoError(t, err)
 	record := &tracingpb.StructuredRecord{Payload: p}
 	eventSize := record.MemorySize()
-	maxEventsPerSpan := maxStructuredBytesPerSpan / eventSize
-	maxEventPerTrace := maxStructuredBytesPerTrace / eventSize
+	maxEventsPerSpan := defaultMaxStructuredBytesPerSpan / eventSize
+	maxEventPerTrace := defaultMaxStructuredBytesPerTrace / eventSize
 	// Try to record more events than the per-span limit allows, and check that
 	// some get dropped.
 	for i := 0; i < maxEventsPerSpan+10; i++ {

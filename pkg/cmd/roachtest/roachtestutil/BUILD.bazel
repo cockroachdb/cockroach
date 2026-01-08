@@ -39,6 +39,7 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/protoutil",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/workload/histogram/exporter",

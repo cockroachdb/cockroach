@@ -45,8 +45,11 @@ func (r *Replica) setCorruptRaftMuLocked(
 	cErr.Processed = true
 	r.shMu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
-	auxDir := r.store.TODOEngine().GetAuxiliaryDir()
-	_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)
+	// TODO(sep-raft-log): same as in replica_consistency.go, make sure storing
+	// files into the LogEngine is canonical.
+	eng := r.store.LogEngine()
+	auxDir := eng.GetAuxiliaryDir()
+	_ = eng.Env().MkdirAll(auxDir, os.ModePerm)
 	path := base.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
@@ -59,7 +62,7 @@ A file preventing this node from restarting was placed at:
 %s
 `, r, path)
 
-	if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
+	if err := fs.WriteFile(eng.Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
 		log.KvExec.Warningf(ctx, "%v", err)
 	}
 

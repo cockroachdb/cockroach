@@ -63,11 +63,7 @@ const (
 
 	// BackupIndexDirectoryName is the path from the root of the backup collection
 	// to the directory containing the index files for the backup collection.
-	BackupIndexDirectoryPath = "index/"
-
-	// BackupIndexFlattenedSubdir is the format used for the top-level
-	// subdirectories within the index directory.
-	BackupIndexFlattenedSubdir = "2006-01-02-150405.00"
+	BackupIndexDirectoryPath = backupMetadataDirectory + "/index/"
 
 	// BackupIndexFilenameTimestampFormat is the format used for the human
 	// readable start and end times in the index file names.

@@ -71,7 +71,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -361,6 +361,13 @@ func TestReadCommittedLogic_bytes(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bytes")
+}
+
+func TestReadCommittedLogic_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats")
 }
 
 func TestReadCommittedLogic_cascade(
@@ -2293,13 +2300,6 @@ func TestReadCommittedLogic_truncate(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
-}
-
-func TestReadCommittedLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestReadCommittedLogic_tsvector(

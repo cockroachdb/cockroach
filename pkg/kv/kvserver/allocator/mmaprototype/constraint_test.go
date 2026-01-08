@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -124,33 +126,59 @@ func printSpanConfig(b *strings.Builder, conf roachpb.SpanConfig) {
 	}
 }
 
+// TestNormalizedSpanConfig exercises the full constraint normalization pipeline
+// including both normalizeVoterConstraints and normalizeEmptyConstraints.
+// It tests relationship types: conjEqualSet, conjStrictSubset, conjStrictSuperset,
+// conjNonIntersecting, and conjPossiblyIntersecting, as well as empty constraint
+// handling across both normalization phases.
 func TestNormalizedSpanConfig(t *testing.T) {
 	interner := newStringInterner()
-	datadriven.RunTest(t, "testdata/normalize_config",
-		func(t *testing.T, d *datadriven.TestData) string {
-			switch d.Cmd {
-			case "normalize":
-				conf := parseSpanConfig(t, d)
-				var b strings.Builder
-				fmt.Fprintf(&b, "input:\n")
-				printSpanConfig(&b, conf)
-				nConf, err := makeNormalizedSpanConfig(&conf, interner)
-				if err != nil {
-					fmt.Fprintf(&b, "err=%s\n", err.Error())
-				}
-				if nConf != nil {
-					fmt.Fprintf(&b, "output:\n")
-					printSpanConfig(&b, nConf.uninternedConfig())
-				}
-				return b.String()
 
-			default:
-				return fmt.Sprintf("unknown command: %s", d.Cmd)
+	// Handler uses observer to show intermediate states after each normalization
+	// phase, printing "(unchanged)" when a phase doesn't modify the config.
+	handler := func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "normalize":
+			conf := parseSpanConfig(t, d)
+			var b strings.Builder
+
+			// Track previous state to detect changes.
+			var prev strings.Builder
+
+			// Observer compares current state with previous to avoid redundant output.
+			observer := func(phaseName string, nConf *normalizedSpanConfig) {
+				fmt.Fprintf(&b, "%s:\n", phaseName)
+				var cur strings.Builder
+				printSpanConfig(&cur, nConf.uninternedConfig())
+				if cur.String() == prev.String() {
+					fmt.Fprintf(&b, " (unchanged)\n")
+				} else {
+					b.WriteString(cur.String())
+				}
+				prev = cur
 			}
-		})
+
+			// Run normalization with observer.
+			_, err := makeNormalizedSpanConfigWithObserver(&conf, interner, observer)
+			if err != nil {
+				fmt.Fprintf(&b, "err=%s\n", err.Error())
+			}
+			return b.String()
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	}
+
+	t.Run("Basic", func(t *testing.T) {
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
+	})
+
+	t.Run("EdgeCases", func(t *testing.T) {
+		datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()), handler)
+	})
 }
 
-func printPostingList(b *strings.Builder, pl storeIDPostingList) {
+func printPostingList(b *strings.Builder, pl storeSet) {
 	for i := range pl {
 		prefix := ""
 		if i > 0 {
@@ -161,7 +189,7 @@ func printPostingList(b *strings.Builder, pl storeIDPostingList) {
 }
 
 func TestStoreIDPostingList(t *testing.T) {
-	pls := map[string]storeIDPostingList{}
+	pls := map[string]storeSet{}
 	forceAllocation := rand.Intn(2) == 1
 
 	datadriven.RunTest(t, "testdata/posting_list",
@@ -178,7 +206,7 @@ func TestStoreIDPostingList(t *testing.T) {
 						storeIDs = append(storeIDs, roachpb.StoreID(storeID))
 					}
 				}
-				pl := makeStoreIDPostingList(storeIDs)
+				pl := makeStoreSet(storeIDs)
 				if forceAllocation {
 					pl = pl[:len(pl):len(pl)]
 				}
@@ -264,7 +292,7 @@ func printRangeAnalyzedConstraints(
 	printStoreAndLocality := func(prefix string, sAndL []storeAndLocality) {
 		fmt.Fprintf(b, "%s", prefix)
 		for _, elem := range sAndL {
-			fmt.Fprintf(b, " %s(%s)", elem.StoreID.String(), lti.unintern(elem.localityTiers).String())
+			fmt.Fprintf(b, " %s(%v)", elem.StoreID.String(), lti.unintern(elem.localityTiers))
 		}
 		fmt.Fprintf(b, "\n")
 	}
@@ -353,7 +381,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 	cm := newConstraintMatcher(interner)
 	ltInterner := newLocalityTierInterner(interner)
 	configs := map[string]*normalizedSpanConfig{}
-	stores := map[roachpb.StoreID]StoreAttributesAndLocality{}
+	stores := map[roachpb.StoreID]storeAttributesAndLocalityWithNodeTier{}
 	var lastRangeAnalyzedConstraints *rangeAnalyzedConstraints
 
 	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
@@ -362,8 +390,8 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			case "store":
 				for _, line := range strings.Split(d.Input, "\n") {
 					sal := parseStoreAttributedAndLocality(t, strings.TrimSpace(line))
-					cm.setStore(sal)
-					stores[sal.StoreID] = sal
+					cm.setStore(sal.withNodeTier())
+					stores[sal.StoreID] = sal.withNodeTier()
 				}
 				return ""
 
@@ -407,9 +435,10 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 						}
 					}
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
-						ltInterner.intern(stores[roachpb.StoreID(storeID)].locality()))
+						ltInterner.intern(stores[roachpb.StoreID(storeID)].NodeLocality))
 				}
-				rac.finishInit(nConf, cm, leaseholder)
+				err := rac.finishInit(nConf, cm, leaseholder)
+				require.NoError(t, err)
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
 				// If there is a previous rangeAnalyzedConstraints, release it before
@@ -504,6 +533,458 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				fmt.Fprintf(&buf, "\n")
 				return buf.String()
 
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+func makeStoreAndLocality(
+	t *testing.T, storeID roachpb.StoreID, localityStr string, lti *localityTierInterner,
+) storeAndLocality {
+	locality := parseLocalityTiers(t, localityStr)
+	return storeAndLocality{
+		StoreID:       storeID,
+		localityTiers: lti.intern(locality),
+	}
+}
+
+func TestDiversityOfTwoStoreSets(t *testing.T) {
+	interner := newStringInterner()
+	lti := newLocalityTierInterner(interner)
+
+	tests := []struct {
+		name               string
+		this               []storeAndLocality
+		other              []storeAndLocality
+		sameStores         bool
+		expectedSumScore   float64
+		expectedNumSamples int
+	}{
+		{
+			name:               "empty sets",
+			this:               []storeAndLocality{},
+			other:              []storeAndLocality{},
+			sameStores:         false,
+			expectedNumSamples: 0,
+			expectedSumScore:   0,
+		},
+		{
+			name: "one empty set",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other:              []storeAndLocality{},
+			sameStores:         false,
+			expectedNumSamples: 0,
+			expectedSumScore:   0,
+		},
+		{
+			name: "single store each, sameStores=false",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west,zone=b", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 0 (region), so score = (2-0)/2 = 1.0
+			expectedSumScore: 1.0,
+		},
+		{
+			name: "single store each, sameStores=true",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 0, // s2.StoreID (1) <= s1.StoreID (1), so skipped
+			expectedSumScore:   0,
+		},
+		{
+			name: "two stores, sameStores=false, all pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+				makeStoreAndLocality(t, 4, "region=us-west,zone=d", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 4, // (1,3), (1,4), (2,3), (2,4)
+			// All pairs differ at tier 0 (region), so each score = (2-0)/2 = 1.0
+			expectedSumScore: 4.0,
+		},
+		{
+			name: "two stores, sameStores=true, de-duplicated pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 1, // Only (1,2)
+			// Same region, different zone, so score = (2-1)/2 = 0.5
+			expectedSumScore: 0.5,
+		},
+		{
+			name: "three stores, sameStores=true, de-duplicated pairs",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			sameStores:         true,
+			expectedNumSamples: 3, // (1,2), (1,3), (2,3)
+			// (1,2): same region, different zone = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			expectedSumScore: 2.5,
+		},
+		{
+			name: "identical localities, sameStores=false",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0, // Identical localities
+		},
+		{
+			name: "different localities with common prefix, three tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a,building=x", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a,building=y", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   1.0 / 3.0,
+		},
+		{
+			name: "different length localities with common prefix, this has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0,
+		},
+		{
+			name: "different length localities with common prefix, other has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a,building=x", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			expectedSumScore:   0,
+		},
+		{
+			name: "different length localities with different prefix, this has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 0 (region), so score = (1-0)/1 = 1.0
+			expectedSumScore: 1.0,
+		},
+		{
+			name: "different length localities with different prefix, other has more tiers",
+			this: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-west,zone=b", lti),
+			},
+			other: []storeAndLocality{
+				makeStoreAndLocality(t, 2, "region=us-west,zone=a,building=x", lti),
+			},
+			sameStores:         false,
+			expectedNumSamples: 1,
+			// Different at tier 1 (zone), so score = (2-1)/2 = 0.5
+			expectedSumScore: 0.5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sumScore, numSamples := diversityOfTwoStoreSets(tt.this, tt.other, tt.sameStores)
+			require.InDelta(t, tt.expectedSumScore, sumScore, 0.0001,
+				"expected sum score %.4f, got %.4f", tt.expectedSumScore, sumScore)
+			require.Equal(t, tt.expectedNumSamples, numSamples,
+				"expected %d samples, got %d", tt.expectedNumSamples, numSamples)
+			sumScore2, numSamples2 := diversityOfTwoStoreSets(tt.other, tt.this, tt.sameStores)
+			require.Equal(t, sumScore, sumScore2)
+			require.Equal(t, numSamples, numSamples2)
+		})
+	}
+}
+
+func TestDiversityScore(t *testing.T) {
+	interner := newStringInterner()
+	lti := newLocalityTierInterner(interner)
+
+	tests := []struct {
+		name                 string
+		voters               []storeAndLocality
+		nonVoters            []storeAndLocality
+		expectedVoterScore   float64
+		expectedReplicaScore float64
+	}{
+		{
+			name:                 "empty replicas - no voters, no non-voters",
+			voters:               []storeAndLocality{},
+			nonVoters:            []storeAndLocality{},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name: "single voter, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			nonVoters:            []storeAndLocality{},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name: "two voters, no non-voters - same region, different zones",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pair: (1,2) - same region, different zone = (2-1)/2 = 0.5
+			expectedVoterScore:   0.5,
+			expectedReplicaScore: 0.5,
+		},
+		{
+			name: "three voters, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pairs: (1,2), (1,3), (2,3)
+			// (1,2): same region, different zone = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			// Average: (0.5 + 1.0 + 1.0) / 3 = 2.5 / 3 ≈ 0.8333
+			expectedVoterScore:   2.5 / 3.0,
+			expectedReplicaScore: 2.5 / 3.0,
+		},
+		{
+			name: "three voters, no non-voters - all different regions",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-west,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=eu-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// All pairs: different regions = 1.0 each
+			// Average: (1.0 + 1.0 + 1.0) / 3 = 1.0
+			expectedVoterScore:   1.0,
+			expectedReplicaScore: 1.0,
+		},
+		{
+			name: "five voters, no non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+				makeStoreAndLocality(t, 4, "region=us-west,zone=d", lti),
+				makeStoreAndLocality(t, 5, "region=eu-west,zone=e", lti),
+			},
+			nonVoters: []storeAndLocality{},
+			// Voter-voter pairs: 5 choose 2 = 10 pairs
+			// (1,2): same region = 0.5
+			// (3,4): same region = 0.5
+			// All other pairs: different regions = 1.0
+			// Sum: 0.5 + 0.5 + 8*1.0 = 9.0
+			// Average: 9.0 / 10 = 0.9
+			expectedVoterScore:   0.9,
+			expectedReplicaScore: 0.9,
+		},
+		{
+			name:   "no voters, single non-voter",
+			voters: []storeAndLocality{},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+			},
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: roachpb.MaxDiversityScore,
+		},
+		{
+			name:   "no voters, two non-voters",
+			voters: []storeAndLocality{},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+			},
+			// Non-voter-non-voter pair: (1,2) - same region, different zone = 0.5
+			expectedVoterScore:   roachpb.MaxDiversityScore,
+			expectedReplicaScore: 0.5,
+		},
+		{
+			name: "three voters with two non-voters",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=b", lti),
+				makeStoreAndLocality(t, 3, "region=us-west,zone=c", lti),
+			},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 4, "region=eu-west,zone=d", lti),
+				makeStoreAndLocality(t, 5, "region=eu-west,zone=e", lti),
+			},
+			// Voter-voter pairs: (1,2), (1,3), (2,3)
+			// (1,2): same region = 0.5
+			// (1,3): different region = 1.0
+			// (2,3): different region = 1.0
+			// Voter voter score: 2.5 / 3 ≈ 0.8333
+			// Non-voter-non-voter pairs: (4,5) - same region = 0.5
+			// Voter-non-voter pairs: (1,4), (1,5), (2,4), (2,5), (3,4), (3,5) = 6 pairs
+			// All different regions = 1.0 each
+			// Total sum: 2.5 (voter-voter) + 0.5 (non-voter-non-voter) + 6.0 (voter-non-voter) = 9.0
+			// Total samples: 3 + 1 + 6 = 10
+			// Replica score: 9.0 / 10 = 0.9
+			expectedVoterScore:   2.5 / 3.0,
+			expectedReplicaScore: 0.9,
+		},
+		{
+			name: "three voters with two non-voters and identical localities",
+			voters: []storeAndLocality{
+				makeStoreAndLocality(t, 1, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 2, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 3, "region=us-east,zone=a", lti),
+			},
+			nonVoters: []storeAndLocality{
+				makeStoreAndLocality(t, 4, "region=us-east,zone=a", lti),
+				makeStoreAndLocality(t, 5, "region=us-east,zone=a", lti),
+			},
+			expectedVoterScore:   0.0,
+			expectedReplicaScore: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var replicas [numReplicaKinds][]storeAndLocality
+			replicas[voterIndex] = tt.voters
+			replicas[nonVoterIndex] = tt.nonVoters
+
+			voterScore, replicaScore := diversityScore(replicas)
+
+			require.InDelta(t, tt.expectedVoterScore, voterScore, 0.0001,
+				"test: %s\nvoter diversity score: expected %.6f, got %.6f",
+				tt.name, tt.expectedVoterScore, voterScore)
+
+			require.InDelta(t, tt.expectedReplicaScore, replicaScore, 0.0001,
+				"test: %s\nreplica diversity score: expected %.6f, got %.6f",
+				tt.name, tt.expectedReplicaScore, replicaScore)
+		})
+	}
+}
+
+// TestNormalizedVoterAllRelationships verifies both normalization and the
+// building of relationships between voter and all replica constraints.
+func TestNormalizedVoterAllRelationships(t *testing.T) {
+	interner := newStringInterner()
+	datadriven.RunTest(t, filepath.Join(datapathutils.TestDataPath(t), t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "normalized-voter-all-rels":
+				conf := parseSpanConfig(t, d)
+				var b strings.Builder
+				fmt.Fprintf(&b, "input:\n")
+				printSpanConfig(&b, conf)
+
+				nConf, err := makeBasicNormalizedSpanConfig(&conf, interner)
+				if err != nil {
+					fmt.Fprintf(&b, "normalization error: %s\n", err.Error())
+					return b.String()
+				}
+				fmt.Fprintf(&b, "normalized:\n")
+				printSpanConfig(&b, nConf.uninternedConfig())
+
+				rels, emptyConstraintIndex, emptyVoterConstraintIndex, err := nConf.buildVoterAndAllRelationships()
+				fmt.Fprintf(&b, "table:\n")
+				fmt.Fprintf(&b, "\temptyConstraintIndex: %d\n", emptyConstraintIndex)
+				fmt.Fprintf(&b, "\temptyVoterConstraintIndex: %d\n", emptyVoterConstraintIndex)
+				fmt.Fprintf(&b, "\trelationships:\n")
+				if err != nil {
+					fmt.Fprintf(&b, "\terr: %s\n", err.Error())
+					return b.String()
+				}
+				for i, rel := range rels {
+					fmt.Fprintf(&b, "\t[idx=%d][voter=%s] [all=%s] rel=%s\n",
+						i, nConf.voterConstraints[rel.voterIndex].unintern(interner), nConf.constraints[rel.allIndex].unintern(interner), rel.voterAndAllRel)
+				}
+				return b.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+// TestDedupAndFilterConstraints tests the dedupAndFilterConstraints function
+// which deduplicates constraints by summing their numReplicas.
+func TestDedupAndFilterConstraints(t *testing.T) {
+	interner := newStringInterner()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, t.Name()),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "dedup":
+				// Parse input lines directly as internedConstraintsConjunction.
+				// Each line format: num-replicas=N [+key=val|-key=val]...
+				var constraints []internedConstraintsConjunction
+				for _, line := range strings.Split(d.Input, "\n") {
+					parts := strings.Fields(line)
+					if len(parts) == 0 {
+						continue
+					}
+					cc := parseConstraintsConj(t, parts)
+					constraints = append(constraints, internedConstraintsConjunction{
+						numReplicas: cc.NumReplicas,
+						constraints: interner.internConstraintsConj(cc.Constraints),
+					})
+				}
+				constraints = dedupAndFilterConstraints(constraints)
+
+				// Format output.
+				var b strings.Builder
+				for _, icc := range constraints {
+					cc := icc.unintern(interner)
+					fmt.Fprintf(&b, "%s\n", cc.String())
+				}
+				if len(constraints) == 0 {
+					b.WriteString("(empty)\n")
+				}
+				return b.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

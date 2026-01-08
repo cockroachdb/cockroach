@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -65,6 +67,11 @@ type TableStatisticsCache struct {
 	db       descs.DB
 	settings *cluster.Settings
 	stopper  *stop.Stopper
+
+	// tableStatisticsLocksTableID is the table ID of
+	// system.table_statistics_locks table, and it's populated right before the
+	// rangefeed is started.
+	tableStatisticsLocksTableID atomic.Uint32
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -147,8 +154,23 @@ func (sc *TableStatisticsCache) GetGeneration() int64 {
 
 // Start begins watching for updates in the stats table.
 func (sc *TableStatisticsCache) Start(
-	ctx context.Context, codec keys.SQLCodec, rangeFeedFactory *rangefeed.Factory,
+	ctx context.Context,
+	codec keys.SQLCodec,
+	rangeFeedFactory *rangefeed.Factory,
+	systemTableIDResolver catalog.SystemTableIDResolver,
 ) error {
+	// We need to retry unavailable replicas here. This is only meant to be called
+	// at server startup.
+	tableStatisticsLocksTableID, err := startup.RunIdempotentWithRetryEx(
+		ctx, sc.stopper.ShouldQuiesce(), "get-table-statistics-locks-table-ID",
+		func(ctx context.Context) (descpb.ID, error) {
+			return systemTableIDResolver.LookupSystemTableID(ctx, systemschema.TableStatisticsLocksTable.GetName())
+		})
+	if err != nil {
+		return err
+	}
+	sc.tableStatisticsLocksTableID.Store(uint32(tableStatisticsLocksTableID))
+
 	// Set up a range feed to watch for updates to system.table_statistics.
 
 	statsTablePrefix := codec.TablePrefix(keys.TableStatisticsTableID)
@@ -183,7 +205,7 @@ func (sc *TableStatisticsCache) Start(
 	//    call Close() ourselves.
 	//  - an error here only happens if the server is already shutting down; we
 	//    can safely ignore it.
-	_, err := rangeFeedFactory.RangeFeed(
+	_, err = rangeFeedFactory.RangeFeed(
 		ctx,
 		"table-stats-cache",
 		[]roachpb.Span{statsTableSpan},
@@ -234,7 +256,7 @@ func decodeTableStatisticsKV(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, table catalog.TableDescriptor, typeResolver *descs.DistSQLTypeResolver,
 ) (stats []*TableStatistic, err error) {
-	if !statsUsageAllowed(table, sc.settings) {
+	if !sc.statsUsageAllowed(table) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
@@ -262,7 +284,7 @@ func GetTableStatsProtosFromDB(
 
 // DisallowedOnSystemTable returns true if this tableID belongs to a special
 // system table on which we want to disallow stats collection and stats usage.
-func DisallowedOnSystemTable(tableID descpb.ID) bool {
+func (sc *TableStatisticsCache) DisallowedOnSystemTable(tableID descpb.ID) bool {
 	switch tableID {
 	// Disable stats on system.table_statistics because it can lead to deadlocks
 	// around the stats cache (which issues an internal query in
@@ -278,10 +300,15 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 	// benefit is not worth the potential performance hit.
 	// TODO(yuzefovich): re-evaluate this assumption. Perhaps we could at
 	// least enable manual collection on this table.
+	//
 	// Disable stats on system.span_configurations since we've seen excessively
 	// many collections on it in some cases, and the stats are unlikely to
 	// provide any benefit on this table.
-	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID, keys.SpanConfigurationsTableID:
+	//
+	// Disable stats on system.table_statistics_locks since the table is
+	// extremely simple and won't benefit from statistics on it.
+	case keys.TableStatisticsTableID, keys.LeaseTableID, keys.ScheduledJobsTableID,
+		keys.SpanConfigurationsTableID, descpb.ID(sc.tableStatisticsLocksTableID.Load()):
 		return true
 	}
 	return false
@@ -289,29 +316,27 @@ func DisallowedOnSystemTable(tableID descpb.ID) bool {
 
 // statsUsageAllowed returns true if statistics on `table` are allowed to be
 // used by the query optimizer.
-func statsUsageAllowed(table catalog.TableDescriptor, clusterSettings *cluster.Settings) bool {
+func (sc *TableStatisticsCache) statsUsageAllowed(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
-		if DisallowedOnSystemTable(table.GetID()) {
+		if sc.DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether the optimizer is allowed to use stats on system tables.
-		return UseStatisticsOnSystemTables.Get(&clusterSettings.SV)
+		return UseStatisticsOnSystemTables.Get(&sc.settings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }
 
 // autostatsCollectionAllowed returns true if statistics are allowed to be
 // automatically collected on the table.
-func autostatsCollectionAllowed(
-	table catalog.TableDescriptor, clusterSettings *cluster.Settings,
-) bool {
+func (sc *TableStatisticsCache) autostatsCollectionAllowed(table catalog.TableDescriptor) bool {
 	if catalog.IsSystemDescriptor(table) {
-		if DisallowedOnSystemTable(table.GetID()) {
+		if sc.DisallowedOnSystemTable(table.GetID()) {
 			return false
 		}
 		// Return whether autostats collection is allowed on system tables,
 		// according to the cluster settings.
-		return AutomaticStatisticsOnSystemTables.Get(&clusterSettings.SV)
+		return AutomaticStatisticsOnSystemTables.Get(&sc.settings.SV)
 	}
 	return tableTypeCanHaveStats(table)
 }
@@ -588,11 +613,9 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		return nil, nil
 	}
 
-	hgIndex := histogramIndex
-	numStats := statsLen
 	// Validate the input length.
-	if datums.Len() != numStats {
-		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), numStats)
+	if datums.Len() != statsLen {
+		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), statsLen)
 	}
 
 	// Validate the input types.
@@ -612,7 +635,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"nullCount", nullCountIndex, types.Int, false},
 		{"avgSize", avgSizeIndex, types.Int, false},
 		{"partialPredicate", partialPredicateIndex, types.String, true},
-		{"histogram", hgIndex, types.Bytes, true},
+		{"histogram", histogramIndex, types.Bytes, true},
 		{"fullStatisticID", fullStatisticsIdIndex, types.Int, true},
 	}
 
@@ -645,17 +668,17 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	if datums[partialPredicateIndex] != tree.DNull {
 		res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
 	}
-	if datums[fullStatisticsIdIndex] != tree.DNull {
-		res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
-	}
-	if datums[hgIndex] != tree.DNull {
+	if datums[histogramIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
 		if err := protoutil.Unmarshal(
-			[]byte(*datums[hgIndex].(*tree.DBytes)),
+			[]byte(*datums[histogramIndex].(*tree.DBytes)),
 			res.HistogramData,
 		); err != nil {
 			return nil, err
 		}
+	}
+	if datums[fullStatisticsIdIndex] != tree.DNull {
+		res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
 	}
 	return res, nil
 }
@@ -664,25 +687,10 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
 	ctx context.Context, datums tree.Datums, typeResolver *descs.DistSQLTypeResolver,
-) (_ *TableStatistic, _ *types.T, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+) (_ *TableStatistic, _ *types.T, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
-	var tsp *TableStatisticProto
-	tsp, err = NewTableStatisticProto(datums)
+	tsp, err := NewTableStatisticProto(datums)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -703,9 +711,7 @@ func (sc *TableStatisticsCache) parseStats(
 				// used when collecting the stats. Changes to types are
 				// backwards compatible across versions, so using a newer
 				// version of the type metadata here is safe.
-				if err = sc.db.DescsTxn(ctx, func(
-					ctx context.Context, txn descs.Txn,
-				) error {
+				if err = sc.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 					resolver := descs.NewDistSQLTypeResolver(txn.Descriptors(), txn.KV())
 					udt, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
 					res.HistogramData.ColumnType = udt
@@ -759,7 +765,7 @@ func DecodeHistogramBuckets(ctx context.Context, tabStat *TableStatistic) error 
 // be non-zero.
 func (h *HistogramData) DecodeBuckets(
 	ctx context.Context,
-) (buckets []cat.HistogramBucket, distinctAdjustment float64, err error) {
+) (buckets []cat.HistogramBucket, distinctAdjustment float64, _ error) {
 	if h.Buckets == nil {
 		return nil, 0, nil
 	}
@@ -992,38 +998,24 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 	forecast bool,
 	st *cluster.Settings,
 	typeResolver *descs.DistSQLTypeResolver,
-) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, err error) {
-	it, err := sc.db.Executor().QueryIteratorEx(
+) (_ []*TableStatistic, _ map[descpb.ColumnID]*types.T, retErr error) {
+	it, queryErr := sc.db.Executor().QueryIteratorEx(
 		ctx, "get-table-statistics", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
-	if err != nil {
-		return nil, nil, err
+	if queryErr != nil {
+		return nil, nil, queryErr
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	var statsList []*TableStatistic
 	var udts map[descpb.ColumnID]*types.T
 	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		stats, udt, err := sc.parseStats(ctx, it.Cur(), typeResolver)
-		if err != nil {
-			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
+		stats, udt, decodingErr := sc.parseStats(ctx, it.Cur(), typeResolver)
+		if decodingErr != nil {
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, decodingErr)
 			continue
 		}
 		statsList = append(statsList, stats)
@@ -1043,8 +1035,8 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 			}
 		}
 	}
-	if err != nil {
-		return nil, nil, err
+	if queryErr != nil {
+		return nil, nil, queryErr
 	}
 
 	merged := MergedStatistics(ctx, statsList, st)
@@ -1070,40 +1062,28 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 // user-defined type that doesn't exist) and returns the rest (with no error).
 func getTableStatsProtosFromDB(
 	ctx context.Context, tableID descpb.ID, executor isql.Executor,
-) (statsProtos []*TableStatisticProto, err error) {
-	it, err := executor.QueryIteratorEx(
+) (statsProtos []*TableStatisticProto, retErr error) {
+	it, queryErr := executor.QueryIteratorEx(
 		ctx, "get-table-statistics-protos", nil /* txn */, sessiondata.NodeUserSessionDataOverride, getTableStatisticsStmt, tableID,
 	)
-	if err != nil {
-		return nil, err
+	if queryErr != nil {
+		return nil, queryErr
 	}
 
 	// Guard against crashes in the code below.
-	defer func() {
-		if r := recover(); r != nil {
-			// In the event of a "safe" panic, we only want to log the error and
-			// continue executing the query without stats for this table. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		var tsp *TableStatisticProto
-		tsp, err = NewTableStatisticProto(it.Cur())
-		if err != nil {
-			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+	for ok, queryErr = it.Next(ctx); ok; ok, queryErr = it.Next(ctx) {
+		tsp, decodingErr := NewTableStatisticProto(it.Cur())
+		if decodingErr != nil {
+			log.Dev.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, decodingErr)
 			continue
 		}
 		statsProtos = append(statsProtos, tsp)
+	}
+	if queryErr != nil {
+		return nil, queryErr
 	}
 	return statsProtos, nil
 }

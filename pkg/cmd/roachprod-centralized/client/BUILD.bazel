@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "client",
+    srcs = [
+        "client.go",
+        "config.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/controllers/clusters/types",
+        "//pkg/cmd/roachprod-centralized/controllers/public-dns/types",
+        "//pkg/cmd/roachprod-centralized/controllers/tasks/types",
+        "//pkg/cmd/roachprod-centralized/services/clusters/types",
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/promhelperclient",
+        "//pkg/roachprod/roachprodutil",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "client_test",
+    srcs = ["client_test.go"],
+    embed = [":client"],
+    deps = [
+        "//pkg/roachprod/cloud/types",
+        "//pkg/roachprod/logger",
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_x_oauth2//:oauth2",
+    ],
+)

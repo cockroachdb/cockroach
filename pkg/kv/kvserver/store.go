@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -57,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
-	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -105,6 +105,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -381,6 +382,9 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		KVFlowWaitForEvalConfig:      rac2.NewWaitForEvalConfig(st),
 		KVFlowEvalWaitMetrics:        rac2.NewEvalWaitMetrics(),
 		KVFlowRangeControllerMetrics: rac2.NewRangeControllerMetrics(),
+
+		MMAllocator: mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+			rand.New(rand.NewSource(timeutil.Now().UnixNano()))),
 	}
 	sc.TestingKnobs.TenantRateKnobs.Authorizer = tenantcapabilitiesauthorizer.NewAllowEverythingAuthorizer()
 
@@ -588,23 +592,6 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 		return rs.store.ReplicaCount()
 	}
 	return len(rs.repls) - rs.visited
-}
-
-// internalEngines contains the engines that support the operations of
-// this Store. At the time of writing, all three fields will be populated
-// with the same Engine. As work on CRDB-220 (separate raft log) proceeds,
-// we will be able to experimentally run with a separate log engine, and
-// ultimately allow doing so in production deployments.
-type internalEngines struct {
-	// stateEngine is the engine that materializes the raft logs on the system.
-	stateEngine storage.Engine
-	// todoEngine is a placeholder while we work on CRDB-220, used in cases where
-	// - the code does not yet cleanly separate between state and log engine
-	// - it is still unclear which of the two engines is the better choice for a
-	//   particular write, or there is a candidate, but it needs to be verified.
-	todoEngine storage.Engine
-	// logEngine is the engine holding the raft state.
-	logEngine storage.Engine
 }
 
 /*
@@ -885,7 +872,7 @@ NOTE: to the best of our knowledge, we don't rely on this invariant.
 type Store struct {
 	Ident                *roachpb.StoreIdent // pointer to catch access before Start() is called
 	cfg                  StoreConfig
-	internalEngines      internalEngines
+	internalEngines      kvstorage.Engines
 	db                   *kv.DB
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions
@@ -1486,15 +1473,7 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		// NB: do not access these fields directly. Instead, use
-		// the StateEngine, TODOEngine, LogEngine methods.
-		// This simplifies going through references to these
-		// engines.
-		internalEngines: internalEngines{
-			stateEngine: eng,
-			todoEngine:  eng,
-			logEngine:   eng,
-		},
+		internalEngines:                   kvstorage.MakeEngines(eng),
 		cfg:                               cfg,
 		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
 		nodeDesc:                          nodeDesc,
@@ -1673,12 +1652,9 @@ func NewStore(
 	// it can clean it up. If this fails it's not a correctness issue since the
 	// storage is also cleared before receiving a snapshot.
 	//
-	// TODO(sep-raft-log): need a snapshot storage per engine since we'll need to split
-	// the SSTs. Or probably we don't need snapshots on the raft SST at all - the reason
-	// we use them now is because we want snapshot apply to be completely atomic but that
-	// is out the window with two engines, so we may as well break the atomicity in the
-	// common case and do something more effective.
-	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.TODOEngine(), s.limiters.BulkIOWriteRate)
+	// NB: we don't need the snapshot storage in the raft engine. With separated
+	// storage, the log engine part of snapshot ingestion is written as a batch.
+	s.sstSnapshotStorage = snaprecv.NewSSTSnapshotStorage(s.StateEngine(), s.limiters.BulkIOWriteRate)
 	if err := s.sstSnapshotStorage.Clear(); err != nil {
 		log.KvDistribution.Warningf(ctx, "failed to clear snapshot storage: %v", err)
 	}
@@ -1772,7 +1748,7 @@ func NewStore(
 		s.splitQueue = newSplitQueue(s, s.db)
 		s.replicateQueue = newReplicateQueue(s, s.allocator)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
-		s.mmaStoreRebalancer = newMMAStoreRebalancer(s, s.cfg.MMAllocator, s.cfg.Settings, s.cfg.StorePool)
+		s.mmaStoreRebalancer = newMMAStoreRebalancer(s, s.cfg.MMAllocator, s.cfg.Settings)
 		s.raftLogQueue = newRaftLogQueue(s, s.db)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
 		s.consistencyQueue = newConsistencyQueue(s)
@@ -2147,8 +2123,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Populate the store ident. If not bootstrapped, ReadStoreIntent will
 	// return an error.
-	// TODO(sep-raft-log): which engine holds the ident?
-	ident, err := kvstorage.ReadStoreIdent(ctx, s.TODOEngine())
+	ident, err := kvstorage.ReadStoreIdent(ctx, s.LogEngine())
 	if err != nil {
 		return err
 	}
@@ -2240,7 +2215,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	{
 		truncator := s.raftTruncator
 		// When state machine has persisted new RaftAppliedIndex, fire callback.
-		s.TODOEngine().RegisterFlushCompletedCallback(func() {
+		s.StateEngine().RegisterFlushCompletedCallback(func() {
 			truncator.durabilityAdvancedCallback()
 		})
 	}
@@ -2251,12 +2226,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	)
 	s.metrics.registry.AddMetricStruct(s.recoveryMgr.Metrics())
 
-	// Create the Store Liveness SupportManager.
-	sm := storeliveness.NewSupportManager(
-		slpb.StoreIdent{NodeID: s.nodeDesc.NodeID, StoreID: s.StoreID()}, s.StateEngine(),
-		s.cfg.StoreLiveness.Options, s.cfg.Settings, s.stopper, s.cfg.Clock,
-		s.cfg.StoreLiveness.HeartbeatTicker, s.cfg.StoreLiveness.Transport,
-		s.cfg.StoreLiveness.SupportManagerKnobs(),
+	sm := s.cfg.StoreLiveness.NewSupportManager(
+		s.StoreID(), s.LogEngine(), s.cfg.Settings, s.cfg.Clock,
 	)
 	s.cfg.StoreLiveness.Transport.ListenMessages(s.StoreID(), sm)
 	s.storeLiveness = sm
@@ -2392,6 +2363,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// node transitioning from non-live to live.
 	if s.cfg.NodeLiveness != nil {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
+		// Register callbacks on settings changes for when the
+		// nodeIsLiveCallback needs to be invoked out of band.
+		s.registerNodeIsLiveCallbackSettingsChange(ctx)
 	}
 
 	// SystemConfigProvider can be nil during some tests.
@@ -2464,6 +2438,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
+	s.cfg.MMAllocator.InitMetricsForLocalStore(ctx, s.StoreID(), s.Registry())
 	s.mmaStoreRebalancer.start(ctx, s.stopper)
 
 	// Set the started flag (for unittests).
@@ -2552,12 +2527,12 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		errInterrupted := errors.New("waiting interrupted")
-		wait := func(ctx context.Context, until time.Time, interrupt <-chan struct{}) error {
-			now := timeutil.Now()
-			if !now.Before(until) {
+		wait := func(ctx context.Context, until crtime.Mono, interrupt <-chan struct{}) error {
+			wait := until.Sub(crtime.NowMono())
+			if wait <= 0 {
 				return nil
 			}
-			timer.Reset(until.Sub(now))
+			timer.Reset(wait)
 			select {
 			case <-timer.C:
 				return nil
@@ -2601,7 +2576,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 				return // context canceled
 			}
 			// Aim to complete this run in exactly refresh interval.
-			now := timeutil.Now()
+			now := crtime.NowMono()
 			pacer.StartTask(now)
 
 			// We're about to perform one work cycle, where we go through all replicas
@@ -2619,7 +2594,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 					break
 				}
 
-				todo, by := pacer.Pace(timeutil.Now(), len(work))
+				todo, by := pacer.Pace(crtime.NowMono(), len(work))
 				for _, id := range work[:todo] {
 					if r := s.GetReplicaIfExists(id); r != nil {
 						cts := r.GetCurrentClosedTimestamp(ctx)
@@ -2933,7 +2908,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 	ctx = s.AnnotateCtx(ctx)
 	return storage.MVCCPutProto(
 		ctx,
-		s.TODOEngine(), // TODO(sep-raft-log): probably state engine
+		s.LogEngine(),
 		keys.StoreLastUpKey(),
 		hlc.Timestamp{},
 		&time,
@@ -2948,7 +2923,7 @@ func (s *Store) WriteLastUpTimestamp(ctx context.Context, time hlc.Timestamp) er
 // timestamp is returned instead.
 func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	var timestamp hlc.Timestamp
-	ok, err := storage.MVCCGetProto(ctx, s.TODOEngine(), keys.StoreLastUpKey(), hlc.Timestamp{},
+	ok, err := storage.MVCCGetProto(ctx, s.LogEngine(), keys.StoreLastUpKey(), hlc.Timestamp{},
 		&timestamp, storage.MVCCGetOptions{})
 	if err != nil {
 		return hlc.Timestamp{}, err
@@ -2962,8 +2937,8 @@ func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) 
 func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	ctx = s.AnnotateCtx(ctx)
 	ts := hlc.Timestamp{WallTime: time}
-	batch := s.TODOEngine().NewBatch() // TODO(sep-raft-log): state engine might be useful here due to need to sync
-	// Write has to sync to disk to ensure HLC monotonicity across restarts
+	// Write has to sync to disk to ensure HLC monotonicity across restarts.
+	batch := s.LogEngine().NewBatch()
 	defer batch.Close()
 	if err := storage.MVCCPutProto(
 		ctx,
@@ -2975,11 +2950,7 @@ func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
 	); err != nil {
 		return err
 	}
-
-	if err := batch.Commit(true /* sync */); err != nil {
-		return err
-	}
-	return nil
+	return batch.Commit(true /* sync */)
 }
 
 // ReadHLCUpperBound returns the upper bound to the wall time of the HLC
@@ -3093,22 +3064,20 @@ func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
-// StateEngine returns the statemachine engine.
+// StateEngine returns the state machine engine.
 func (s *Store) StateEngine() storage.Engine {
-	return s.internalEngines.stateEngine
+	return s.internalEngines.StateEngine()
 }
 
-// TODOEngine is a placeholder for cases in which
-// the caller needs to be updated in order to use
-// only one engine, or a closer check is still
-// pending.
+// TODOEngine is a placeholder for cases in which the caller needs to be updated
+// in order to use only one engine, or a closer check is still pending.
 func (s *Store) TODOEngine() storage.Engine {
-	return s.internalEngines.todoEngine
+	return s.internalEngines.TODOEngine()
 }
 
-// LogEngine returns the log engine.
+// LogEngine returns the raft/log engine.
 func (s *Store) LogEngine() storage.Engine {
-	return s.internalEngines.logEngine
+	return s.internalEngines.LogEngine()
 }
 
 // DB accessor.
@@ -3813,8 +3782,14 @@ func (s *Store) ComputeMetricsPeriodically(
 		wt.Subtract(prevMetrics.FlushWriteThroughput)
 
 		if err := updateWindowedHistogram(
-			prevMetrics.WALFsyncLatency, m.LogWriter.FsyncLatency, s.metrics.FsyncLatency); err != nil {
+			prevMetrics.WALFsyncLatency, m.Metrics.WALMetrics.PrimaryFileOpLatency, s.metrics.FsyncLatency); err != nil {
 			return m, err
+		}
+		if m.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+			if err := updateWindowedHistogram(
+				prevMetrics.WALSecondaryFileOpLatency, m.Metrics.WALMetrics.SecondaryFileOpLatency, s.metrics.WALSecondaryFileOpLatency); err != nil {
+				return m, err
+			}
 		}
 		if m.WAL.Failover.FailoverWriteAndSyncLatency != nil {
 			if err := updateWindowedHistogram(prevMetrics.WALFailoverWriteAndSyncLatency,

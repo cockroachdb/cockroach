@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ttlinit",
+    srcs = ["ttlschedule_creation.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/scheduledjobs",
+        "//pkg/security/username",
+        "//pkg/server/telemetry",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/sql/ttl/ttlbase",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+    ],
+)

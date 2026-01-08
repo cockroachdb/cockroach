@@ -118,7 +118,13 @@ type Catalog interface {
 	Reset(ctx context.Context) error
 
 	// InitializeSequence initializes the initial value for a sequence.
-	InitializeSequence(id descpb.ID, startVal int64)
+	InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error
+
+	// SetSequence sets a sequence to the given value.
+	SetSequence(ctx context.Context, seq *SequenceToSet) error
+
+	// MaybeUpdateSequenceValue updates a sequence value if certain conditions are met.
+	MaybeUpdateSequenceValue(ctx context.Context, seq *SequenceToMaybeUpdate) error
 
 	// CheckMaxSchemaObjects checks if the number of schema objects in the
 	// cluster plus the new objects being created would exceed the configured
@@ -270,6 +276,15 @@ type BackfillProgress struct {
 	// backfilled into the destination indexes. The spans are expected to
 	// contain any tenant prefix.
 	CompletedSpans []roachpb.Span
+
+	// SSTManifests captures SST metadata emitted by the distributed merge
+	// backfill pipeline.
+	SSTManifests []jobspb.IndexBackfillSSTManifest
+
+	// SSTStoragePrefixes identifies the external storage prefixes used to write
+	// distributed-merge SSTs for this backfill. These prefixes are used to clean
+	// up job-scoped files on completion or cancellation.
+	SSTStoragePrefixes []string
 }
 
 // Backfill corresponds to a definition of a backfill from a source
@@ -376,6 +391,12 @@ type DescriptorMetadataUpdater interface {
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
 	UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error
+
+	// UpdateTTLScheduleCron updates the cron schedule for a TTL job.
+	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
+
+	// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+	CreateRowLevelTTLSchedule(ctx context.Context, tbl catalog.TableDescriptor) error
 }
 
 type TemporarySchemaCreator interface {
@@ -396,7 +417,7 @@ type StatsRefreshQueue interface {
 type StatsRefresher interface {
 	// NotifyMutation notifies the stats refresher that a table needs its
 	// statistics updated.
-	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
+	NotifyMutation(ctx context.Context, table catalog.TableDescriptor, rowsAffected int)
 }
 
 // ProtectedTimestampManager used to install a protected timestamp before
@@ -409,7 +430,7 @@ type ProtectedTimestampManager interface {
 	// function assumes the in-memory job is up to date with the persisted job
 	// record.
 	TryToProtectBeforeGC(
-		ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+		ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
 
 	// Protect adds a protected timestamp record for a historical transaction for

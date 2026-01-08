@@ -28,8 +28,8 @@ import (
 func TestNoOpGrant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -149,8 +149,8 @@ func TestNoOpGrant(t *testing.T) {
 func TestNoOpRevoke(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 

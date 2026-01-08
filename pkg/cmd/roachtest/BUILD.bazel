@@ -31,6 +31,7 @@ go_library(
         "//pkg/cmd/bazci/githubpost/issues",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/datadog",
         "//pkg/cmd/roachtest/operation",
         "//pkg/cmd/roachtest/operations",
         "//pkg/cmd/roachtest/option",
@@ -46,6 +47,7 @@ go_library(
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/failureinjection/failures",
@@ -85,6 +87,7 @@ go_binary(
     name = "roachtest",
     testonly = 1,
     embed = [":roachtest_lib"],
+    exec_properties = {"Pool": "large"},
     visibility = ["//visibility:public"],
 )
 

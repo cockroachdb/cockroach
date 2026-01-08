@@ -62,7 +62,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 		// cluster-replicated destinations.
 		eventCount, err := loqrecovery.RegisterOfflineRecoveryEvents(
 			ctx,
-			s.TODOEngine(),
+			s.LogEngine(),
 			func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 				event := record.AsStructuredLog()
 				log.StructuredEvent(ctx, severity.INFO, &event)
@@ -94,7 +94,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		if err := stores.VisitStores(func(s *kvserver.Store) error {
 			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
 				ctx,
-				s.TODOEngine(),
+				s.LogEngine(),
 				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
 						return ie.ExecEx(ctx, "", nil,

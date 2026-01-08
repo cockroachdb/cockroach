@@ -160,7 +160,7 @@ func (f *GenericFailure) Conn(
 		if !c.Secure {
 			authMode = install.AuthRootCert
 		}
-		nodeURL := c.NodeURL(ip, desc.Port, "" /* virtualClusterName */, desc.ServiceMode, authMode, "" /* database */)
+		nodeURL := c.NodeURL(ip, desc.Port, "" /* virtualClusterName */, desc.ServiceMode, authMode, "" /* database */, false /* disallowUnsafeInternals */)
 		nodeURL = strings.Trim(nodeURL, "'")
 		pgurl, err := url.Parse(nodeURL)
 		if err != nil {

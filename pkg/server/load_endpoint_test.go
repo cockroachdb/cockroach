@@ -127,7 +127,7 @@ func Test_loadEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	clock := timeutil.NewTestTimeSource()
+	clock := timeutil.NewManualTime(timeutil.Now())
 	rss := status.NewRuntimeStatSampler(ctx, clock)
 	metricSource := newTestMetricSource(clock)
 	le, err := newLoadEndpoint(rss, metricSource)

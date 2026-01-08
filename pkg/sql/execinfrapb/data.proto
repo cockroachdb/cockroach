@@ -162,7 +162,7 @@ message OutputRouterSpec {
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
 
   // Only used for the BY_HASH type; these are the indexes of the columns we are
-  // hashing.
+  // hashing. Can be empty in which case the routing can be done arbitrarily.
   repeated uint32 hash_columns = 3;
 
   message RangeRouterSpec {
@@ -355,7 +355,11 @@ message RemoteProducerMetadata {
     // we enumerate physical plan stages starting at 1, so the default value of
     // 0 isn't conflated with any actual plan stage.
     optional int32 stage_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StageID"];
-    // NEXT ID: 7
+    // KVCPUTime is the total cpu time reported by KV BatchResponses. This is
+    // representative of the "synchronous" portion of work performed by KV.
+    // See the CPUTime field in the kvpb.BatchResponse_Header.
+    optional int64 kv_cpu_time = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTime"];
+    // NEXT ID: 8
   }
   oneof value {
     RangeInfos range_info = 1;

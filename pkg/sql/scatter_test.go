@@ -49,10 +49,6 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	// Even though we disabled merges via the store testing knob, we must also
-	// disable the setting in order for manual splits to be allowed.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
-
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
@@ -253,15 +249,39 @@ func TestScatterWithOneVoter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("before scatter: replica distribution across stores: %v (total: %d)",
+		oldReplicaCounts, oldTotalReplicas)
 
 	// Expect that the number of replicas on store 1 to have changed. We can't
 	// assert that the distribution will be even across all three stores, but s1
 	// (the initial leaseholder and replica) should have a different number of
 	// replicas than before. Rebalancing is otherwise disabled in this test, so
 	// the only replica movements are from the scatter.
+
+	// Enable tracing to capture detailed scatter execution information.
+	r.Exec(t, "SET tracing = on")
 	r.Exec(t, "ALTER TABLE test.t SCATTER")
+	r.Exec(t, "SET tracing = off")
+
+	// If the test fails, print the trace of the scatter statement to help
+	// us investigate failures.
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+
+		traceRows := r.QueryStr(t, "SELECT age, message FROM [SHOW TRACE FOR SESSION]")
+		if len(traceRows) > 0 {
+			t.Logf("SCATTER trace (%d relevant messages):", len(traceRows))
+			for _, row := range traceRows {
+				t.Logf("[%s] %s", row[0], row[1])
+			}
+		}
+	}()
+
 	newReplicaCounts, newTotalReplicas, err := getReplicaCounts()
 	require.NoError(t, err)
+	t.Logf("after scatter: replica distribution across stores: %v (total: %d)", newReplicaCounts, newTotalReplicas)
 
 	require.Equal(t, oldTotalReplicas, newTotalReplicas,
 		"expected total replica count to remain the same post-scatter, "+

@@ -641,13 +641,18 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	// ensures we prefer plans that push limits as far down the tree as
 	// possible, all else being equal.
 	//
-	// Also add a cost flag for unbounded cardinality, and a penalty if the
-	// corresponding session setting is enabled.
+	// Also add a penalty if the corresponding session setting is enabled and
+	// increment the unbounded read count for expressions that read from an
+	// index.
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
-		cost.SetUnboundedCardinality()
 		if c.evalCtx.SessionData().OptimizerPreferBoundedCardinality {
 			cost.Penalties |= memo.UnboundedCardinalityPenalty
+		}
+		switch candidate.Op() {
+		case opt.ScanOp, opt.PlaceholderScanOp, opt.LookupJoinOp, opt.IndexJoinOp,
+			opt.InvertedJoinOp, opt.ZigzagJoinOp, opt.VectorSearchOp:
+			cost.IncrUnboundedReadCount()
 		}
 	}
 

@@ -737,8 +737,7 @@ message LocalOnlySessionData {
   // HoistJoinProjectLeft normalization rule hoists more kinds of projections
   // above joins.
   bool optimizer_use_improved_hoist_join_project = 186;
-  // EnableInspectCommand controls use of the INSPECT command.
-  bool enable_inspect_command = 187;
+  reserved 187;
   // RowSecurity controls whether row-level security is enabled.
   bool row_security = 188;
   // OptimizerClampLowHistogramSelectivity, when true, causes the optimizer to
@@ -752,6 +751,29 @@ message LocalOnlySessionData {
   // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
   // optimizer should use max frequency for selectivity estimation.
   bool optimizer_use_max_frequency_selectivity = 191;
+  // DisableWaitForJobsNotice, if set, disables the notice that is sent whenever
+  // some jobs were created in the txn.
+  bool disable_wait_for_jobs_notice = 192;
+  // CanaryStatsMode controls whether queries in the session use
+  // canary statistics (mode == on), stable statistics (mode == off), or
+  // let the system decide based on random selection (mode == auto).
+  int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 194;
+  // PreventUpdateSetColumnDrop, when true, enables a fix to ensure that columns
+  // referenced only as target columns in an UPDATE statement within a routine
+  // are correctly tracked, preventing a drop that breaks the routine.
+  bool prevent_update_set_column_drop = 195;
+  // UseImprovedRoutineDepsTriggersAndComputedCols, when true, enables improved
+  // dependency tracking for routines that perform mutations involving BEFORE
+  // triggers or computed columns. The fix applies at routine creation time and
+  // prevents unnecessary column dependencies from being recorded.
+  bool use_improved_routine_deps_triggers_and_computed_cols = 196;
+  // DistSQLPreventPartitioningSoftLimitedScans, when true, prevents the distsql
+  // physical planner from partitioning scans with soft limits into multiple
+  // TableReaders. When true, this matches the behavior for hard limits.
+  bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

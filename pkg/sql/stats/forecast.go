@@ -292,7 +292,7 @@ func forecastColumnStatistics(
 	forecast = &TableStatistic{
 		TableStatisticProto: TableStatisticProto{
 			TableID:       tableID,
-			StatisticID:   0, // TODO(michae2): Add support for SHOW HISTOGRAM.
+			StatisticID:   0, // TODO(#86358): add support for SHOW HISTOGRAM.
 			Name:          jobspb.ForecastStatsName,
 			ColumnIDs:     columnIDs,
 			CreatedAt:     at,

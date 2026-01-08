@@ -175,10 +175,10 @@ type Processor interface {
 	// events that are consumed concurrently with this call. The channel will be
 	// provided an error when the registration closes.
 	//
-	// The optionally provided "catch-up" iterator is used to read changes from the
+	// The optionally provided "catch-up" snapshot is used to read changes from the
 	// engine which occurred after the provided start timestamp (exclusive). If
-	// this method succeeds, registration must take ownership of iterator and
-	// subsequently close it. If method fails, iterator must be kept intact and
+	// this method succeeds, registration must take ownership of snapshot and
+	// subsequently close it. If method fails, snapshot must be kept intact and
 	// would be closed by caller.
 	//
 	// If the method returns false, the processor will have been stopped, so calling
@@ -191,7 +191,7 @@ type Processor interface {
 		streamCtx context.Context,
 		span roachpb.RSpan,
 		startTS hlc.Timestamp, // exclusive
-		catchUpIter *CatchUpIterator,
+		catchUpSnap *CatchUpSnapshot,
 		withDiff bool,
 		withFiltering bool,
 		withOmitRemote bool,

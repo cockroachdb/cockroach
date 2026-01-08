@@ -112,6 +112,7 @@ understanding the health of the KV layer.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
@@ -1158,29 +1159,23 @@ func (n *Node) startPeriodicLivenessCompaction(
 				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 					store.VisitReplicas(func(repl *kvserver.Replica) bool {
 						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
-						if keys.NodeLivenessSpan.Overlaps(span) {
-
-							// The CompactRange() method expects the start and end keys to be
-							// encoded.
-							startEngineKey :=
-								storage.EngineKey{
-									Key: span.Key,
-								}.Encode()
-
-							endEngineKey :=
-								storage.EngineKey{
-									Key: span.EndKey,
-								}.Encode()
-
-							timeBeforeCompaction := timeutil.Now()
-							if err := store.StateEngine().CompactRange(
-								context.Background(), startEngineKey, endEngineKey); err != nil {
-								log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
-							}
-
-							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
-								repl, timeutil.Since(timeBeforeCompaction))
+						if !keys.NodeLivenessSpan.Overlaps(span) {
+							return true
 						}
+
+						// CompactRange() expects the start and end keys to be encoded.
+						startEngineKey := storage.EngineKey{Key: span.Key}.Encode()
+						endEngineKey := storage.EngineKey{Key: span.EndKey}.Encode()
+
+						timeBeforeCompaction := timeutil.Now()
+						if err := store.StateEngine().CompactRange(
+							context.Background(), startEngineKey, endEngineKey,
+						); err != nil {
+							log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+						}
+
+						log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+							repl, timeutil.Since(timeBeforeCompaction))
 						return true
 					})
 					return nil
@@ -1225,7 +1220,7 @@ func (n *Node) computeMetricsPeriodically(
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
 			}
-			if err := newMetrics.LogWriter.FsyncLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
+			if err := newMetrics.Metrics.WALMetrics.PrimaryFileOpLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
 				return err
 			}
 			if newMetrics.WAL.Failover.FailoverWriteAndSyncLatency != nil {
@@ -1234,11 +1229,18 @@ func (n *Node) computeMetricsPeriodically(
 					return err
 				}
 			}
+			if newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+				if err := newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency.Write(
+					&storeToMetrics[store].WALSecondaryFileOpLatency); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
 	n.updateNodeRangeCount()
 	n.storeCfg.KVFlowStreamTokenProvider.UpdateMetricGauges()
+	n.stores.TryLogFlowControlSendQueues(ctx)
 	return err
 }
 

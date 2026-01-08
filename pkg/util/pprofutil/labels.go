@@ -26,6 +26,18 @@ func SetProfilerLabels(ctx context.Context, labels ...string) (_ context.Context
 	}
 }
 
+// Do executes f with the provided pprof labels attached to the context.
+// This is a convenience wrapper that has a similar signature to pprof.Do
+// but uses our internal label application mechanism to avoid pprof.Do
+// appearing in stack traces.
+//
+// This method allocates and isn't suitable for hot code paths.
+func Do(ctx context.Context, f func(context.Context), labels ...string) {
+	ctx, reset := SetProfilerLabels(ctx, labels...)
+	defer reset()
+	f(ctx)
+}
+
 // SetProfilerLabelsFromCtxTags is like SetProfilerLabels, but sources the labels from
 // the logtags.Buffer in the context, if any. If there is no buffer or it has no tags,
 // the goroutine labels are not updated.

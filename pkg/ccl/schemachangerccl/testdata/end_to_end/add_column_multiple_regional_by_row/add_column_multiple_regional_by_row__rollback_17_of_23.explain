@@ -78,7 +78,6 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── SetColumnName {"ColumnID":2,"Name":"v","TableID":108}
       │         ├── SetColumnName {"ColumnID":3,"Name":"m","TableID":108}
       │         ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":1,"TableID":108}}
-      │         ├── SetIndexName {"IndexID":1,"Name":"table_regional_b...","TableID":108}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":6,"TableID":108}
       │         ├── SetIndexName {"IndexID":6,"Name":"crdb_internal_in...","TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":7,"TableID":108}
@@ -116,7 +115,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RefreshStats {"TableID":108}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":108}
       │         ├── RefreshStats {"TableID":108}
-      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":108}
+      │         ├── SetIndexName {"IndexID":1,"Name":"table_regional_b...","TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":108}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":8,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":8,"TableID":108}
@@ -128,6 +127,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── RemoveColumnFromIndex {"ColumnID":6,"IndexID":8,"Kind":2,"Ordinal":1,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":108}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 4 in PostCommitNonRevertiblePhase

@@ -191,6 +191,14 @@ GRANT role_bar TO role_foo WITH ADMIN OPTION;
 statement ok
 GRANT role_foo TO testuser WITH ADMIN OPTION;
 
+# GRANTS only wait for the new version to be visible, but future schema changes
+# can retry errors if the old version is in use, due to the two version invariant.
+retry
+query I
+SELECT count(*) FROM system.lease WHERE desc_id = 'system.role_members'::REGCLASS::OID GROUP BY desc_id, version;
+----
+1
+
 # switch to testuser
 
 user testuser

@@ -484,6 +484,9 @@ func removeEmergencyBallasts() {
 }
 
 func processTestXmls(testXmls []string) error {
+	// If any tests failed, we'll have to make sure that all generated code
+	// exists in the workspace (see #107885).
+	var generateCode sync.Once
 	if doPost() {
 		var postErrors []string
 		for _, testXml := range testXmls {
@@ -497,6 +500,17 @@ func processTestXmls(testXmls []string) error {
 			if err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to parse test.xml file with the following error: %+v", err))
 				continue
+			}
+			if bazelutil.AnyFailures(testSuites) {
+				generateCode.Do(func() {
+					genCmd := exec.Command("bazel", "run", "//pkg/gen:code")
+					genCmd.Stdout = os.Stdout
+					genCmd.Stderr = os.Stderr
+					err := genCmd.Run()
+					if err != nil {
+						fmt.Printf("got error %+v from bazel run //pkg/gen:code; continuing", err)
+					}
+				})
 			}
 			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites, extraLabels); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))

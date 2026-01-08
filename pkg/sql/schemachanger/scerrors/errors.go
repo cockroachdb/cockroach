@@ -77,7 +77,7 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 			log.Dev.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
 	case HasNotImplemented(*err):
-		log.VEventfDepth(ctx, depth, 1, "declarative schema changer does not support %s: %v", el.msg, *err)
+		log.Dev.InfofDepth(ctx, depth, "declarative schema changer does not support %s: %v", el.msg, *err)
 	case errors.HasAssertionFailure(*err):
 		*err = errors.Wrapf(*err, "%s", el.msg)
 		fallthrough

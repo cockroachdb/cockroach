@@ -135,9 +135,7 @@ func (sr *SampleReservoir) MaybeResize(ctx context.Context, k int) bool {
 	heap.Init(sr)
 	for len(sr.samples) > k {
 		samp := heap.Pop(sr).(SampledRow)
-		if sr.memAcc != nil {
-			sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
-		}
+		sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
 	}
 	// Copy to a new array to allow garbage collection.
 	samples := make([]SampledRow, len(sr.samples), k)
@@ -175,10 +173,8 @@ func (sr *SampleReservoir) SampleRow(
 
 			// Perform memory accounting for the allocated EncDatumRow. We will
 			// account for the additional memory used after copying inside copyRow.
-			if sr.memAcc != nil {
-				if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
-					return err
-				}
+			if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
+				return err
 			}
 			if err := sr.copyRow(ctx, evalCtx, rowCopy, row); err != nil {
 				return err
@@ -216,10 +212,8 @@ func (sr *SampleReservoir) GetNonNullDatums(
 ) (values tree.Datums, err error) {
 	err = sr.retryMaybeResize(ctx, func() error {
 		// Account for the memory we'll use copying the samples into values.
-		if memAcc != nil {
-			if err := memAcc.Grow(ctx, memsize.DatumOverhead*int64(len(sr.samples))); err != nil {
-				return err
-			}
+		if err := memAcc.Grow(ctx, memsize.DatumOverhead*int64(len(sr.samples))); err != nil {
+			return err
 		}
 		values = make(tree.Datums, 0, len(sr.samples))
 		for _, sample := range sr.samples {
@@ -250,6 +244,16 @@ func (sr *SampleReservoir) copyRow(
 			sr.scratch[i].Datum = tree.DNull
 			continue
 		}
+		// If we've already decoded this EncDatum, unset the decoded datum. We
+		// do so in order to not accumulate a bounded memory leak by keeping the
+		// datum that came from the DatumAlloc elsewhere (which would share the
+		// underlying slice with 15 another datums).
+		//
+		// (This should only happen for datums needed for evaluating the virtual
+		// computed column expressions in the tableReader which should be rare.)
+		if src[i].EncodedBytes() != nil {
+			src[i].Datum = nil
+		}
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
 		// of ~10000 rows, so we must delete the reference to allow the garbage
@@ -274,10 +278,8 @@ func (sr *SampleReservoir) copyRow(
 	}
 	// Now that we know the exact row sizes we're dealing with, we perform the
 	// memory accounting.
-	if sr.memAcc != nil {
-		if err := sr.memAcc.Resize(ctx, beforeRowSize, afterRowSize); err != nil {
-			return err
-		}
+	if err := sr.memAcc.Resize(ctx, beforeRowSize, afterRowSize); err != nil {
+		return err
 	}
 	// The memory reservation, if needed, was approved, so we're ok to keep the
 	// row.

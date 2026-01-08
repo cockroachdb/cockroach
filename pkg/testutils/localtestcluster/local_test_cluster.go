@@ -219,13 +219,13 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
 			cfg.AmbientCtx, ltc.stopper, ltc.Clock,
-			nil /* dialer */, nil /* grpcServer */, nil /* drpcServer */, nil, /* knobs */
+			nil /* dialer */, nil /* grpcServer */, nil /* drpcServer */, cfg.Settings, nil, /* knobs */
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
-		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, options, transport, knobs)
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, nc, options, transport, knobs)
 	}
 	nodeCountFn := func() int {
 		var count int

@@ -54,9 +54,6 @@ const (
 	userManagedIdentityResourceGroup = "rp-roachtest"
 )
 
-// providerInstance is the instance to be registered into vm.Providers by Init.
-var providerInstance = &Provider{}
-
 // Init registers the Azure provider with vm.Providers.
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
@@ -65,9 +62,14 @@ func Init() error {
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
 	const authErr = "unable to authenticate; please use `az login` or double check environment variables"
 
-	providerInstance = New()
-	providerInstance.OperationTimeout = 10 * time.Minute
-	providerInstance.SyncDelete = false
+	providerInstance, err := NewProvider(WithOperationTimeout(10*time.Minute), WithSyncDelete(false))
+	if err != nil {
+		vm.Providers[ProviderName] = flagstub.New(
+			&Provider{},
+			fmt.Sprintf("unable to init azure provider: %s", err),
+		)
+		return err
+	}
 
 	// If the appropriate environment variables are not set for api access,
 	// then the authenticated CLI must be installed.
@@ -96,6 +98,8 @@ type Provider struct {
 	// If left empty then falls back to env var then default subscription.
 	SubscriptionNames []string
 
+	dnsProvider vm.DNSProvider
+
 	mu struct {
 		syncutil.Mutex
 
@@ -107,8 +111,29 @@ type Provider struct {
 	}
 }
 
+// NewProvider returns a new Azure provider with the given options applied.
+func NewProvider(options ...Option) (*Provider, error) {
+
+	// Create a new provider with the default options.
+	p := &Provider{}
+	p.mu.resourceGroups = make(map[string]resources.Group)
+	p.mu.securityGroups = make(map[string]network.SecurityGroup)
+	p.mu.subnets = make(map[string]network.Subnet)
+
+	for _, option := range options {
+		option.apply(p)
+	}
+
+	return p, nil
+}
+
 func (p *Provider) SupportsSpotVMs() bool {
 	return false
+}
+
+// IsCentralizedProvider returns true because Azure is a remote provider.
+func (p *Provider) IsCentralizedProvider() bool {
+	return true
 }
 
 func (p *Provider) GetPreemptedSpotVMs(
@@ -210,10 +235,49 @@ func (p *Provider) GetLiveMigrationVMs(
 	return liveMigrationVMs, nil
 }
 
+// GetVMSpecs implements the vm.GetVMSpecs interface method which returns a
+// map from VM.Name to a map of VM attributes
 func (p *Provider) GetVMSpecs(
 	l *logger.Logger, vms vm.List,
 ) (map[string]map[string]interface{}, error) {
-	return nil, nil
+	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	defer cancel()
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return nil, err
+	}
+	client := compute.NewVirtualMachinesClient(sub)
+	if client.Authorizer, err = p.getAuthorizer(); err != nil {
+		return nil, err
+	}
+
+	// Extract the spec of all VMs and create a map from VM name to spec.
+	vmSpecs := make(map[string]map[string]interface{})
+	for _, vmInstance := range vms {
+		if vmInstance.ProviderID == "" {
+			return nil, errors.Errorf("provider id not found for vm: %s", vmInstance.Name)
+		}
+		azureVmId, err := parseAzureID(vmInstance.ProviderID)
+		if err != nil {
+			return nil, err
+		}
+		l.Printf("Getting VM Specs for VM: %s", vmInstance.Name)
+		azureVm, err := client.Get(ctx, azureVmId.resourceGroup, azureVmId.resourceName, "")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get vm information for vm %s", vmInstance.Name)
+		}
+		// Marshaling & unmarshalling struct to match interface method return type
+		rawJSON, err := azureVm.MarshalJSON()
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal vm information for vm %s", vmInstance.Name)
+		}
+		var vmSpec map[string]interface{}
+		if err := json.Unmarshal(rawJSON, &vmSpec); err != nil {
+			return nil, errors.Wrapf(err, "failed to parse raw json")
+		}
+		vmSpecs[vmInstance.Name] = vmSpec
+	}
+	return vmSpecs, nil
 }
 
 func (p *Provider) CreateVolumeSnapshot(
@@ -268,15 +332,6 @@ func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
 func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
 	// This Provider has no concept of load balancers yet, return an empty list.
 	return nil, nil
-}
-
-// New constructs a new Provider instance.
-func New() *Provider {
-	p := &Provider{}
-	p.mu.resourceGroups = make(map[string]resources.Group)
-	p.mu.securityGroups = make(map[string]network.SecurityGroup)
-	p.mu.subnets = make(map[string]network.Subnet)
-	return p
 }
 
 // Active implements vm.Provider and always returns true.
@@ -546,8 +601,14 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 		azureSubscription = strings.Split(strings.TrimPrefix(*cvm.ID, "/subscriptions/"), "/")[0]
 	}
 
+	// Get public DNS info from the DNS provider if it is configured.
+	publicDns, publicDnsZone, dnsProviderName := vm.GetVMDNSInfo(context.Background(), *cvm.Name, p.dnsProvider)
+
 	m := &vm.VM{
 		Name:              *cvm.Name,
+		PublicDNS:         publicDns,
+		PublicDNSZone:     publicDnsZone,
+		DNSProvider:       dnsProviderName,
 		Labels:            tags,
 		Provider:          ProviderName,
 		ProviderID:        *cvm.ID,
@@ -565,19 +626,19 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 	}
 
 	if createdPtr := cvm.Tags[vm.TagCreated]; createdPtr == nil {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	} else if parsed, err := time.Parse(time.RFC3339, *createdPtr); err == nil {
 		m.CreatedAt = parsed
 	} else {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	if lifetimePtr := cvm.Tags[vm.TagLifetime]; lifetimePtr == nil {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	} else if parsed, err := time.ParseDuration(*lifetimePtr); err == nil {
 		m.Lifetime = parsed
 	} else {
-		m.Errors = append(m.Errors, vm.ErrNoExpiration)
+		m.Errors = append(m.Errors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	// The network info needs a separate request.
@@ -586,7 +647,7 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 		return nil, err
 	}
 	if err := p.fillNetworkDetails(context.Background(), m, nicID); errors.Is(err, vm.ErrBadNetwork) {
-		m.Errors = append(m.Errors, err)
+		m.Errors = append(m.Errors, vm.NewVMError(err))
 	} else if err != nil {
 		return nil, err
 	}
@@ -769,10 +830,11 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	return username, nil
 }
 
-// List implements the vm.Provider interface. This will query all
-// Azure VMs in the subscription and select those with a roachprod tag.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+// List implements the vm.Provider interface.
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
@@ -917,22 +979,12 @@ func (p *Provider) createVM(
 		StartupArgs: vm.DefaultStartupArgs(
 			vm.WithVMName(name),
 			vm.WithSharedUser(remoteUser),
+			vm.WithFilesystem(opts.SSDOpts.FileSystem),
+			vm.WithUseMultipleDisks(providerOpts.UseMultipleDisks),
+			vm.WithBootDiskOnly(providerOpts.BootDiskOnly),
 		),
-		DiskControllerNVMe: false,
-		AttachedDiskLun:    nil,
 	}
 	useNVMe := MachineSupportsNVMe(providerOpts.MachineType)
-	if useNVMe {
-		startupArgs.DiskControllerNVMe = true
-	}
-	if !opts.SSDOpts.UseLocalSSD && !useNVMe {
-		// We define lun42 explicitly in the data disk request below.
-		lun := 42
-		startupArgs.AttachedDiskLun = &lun
-	}
-
-	// Check if we only require a boot disk (workload only machines).
-	startupArgs.BootDiskOnly = providerOpts.BootDiskOnly
 
 	startupScript, err := evalStartupTemplate(startupArgs)
 	if err != nil {
@@ -1062,8 +1114,8 @@ func (p *Provider) createVM(
 	}
 
 	if !opts.SSDOpts.UseLocalSSD && !providerOpts.BootDiskOnly {
-		caching := compute.CachingTypesNone
 
+		caching := compute.CachingTypesNone
 		switch providerOpts.DiskCaching {
 		case "read-only":
 			caching = compute.CachingTypesReadOnly
@@ -1075,46 +1127,66 @@ func (p *Provider) createVM(
 			err = errors.Newf("unsupported caching behavior: %s", providerOpts.DiskCaching)
 			return compute.VirtualMachine{}, err
 		}
-		dataDisks := []compute.DataDisk{
-			{
-				DiskSizeGB: to.Int32Ptr(providerOpts.NetworkDiskSize),
-				Caching:    caching,
-				Lun:        to.Int32Ptr(42),
-			},
-		}
+		// Create multiple data disks with sequential LUNs starting after any
+		// reserved LUNs (e.g. the resource disk on 'd' sizes).
+		dataDisks := make([]compute.DataDisk, providerOpts.NetworkDiskCount)
+		for i := range providerOpts.NetworkDiskCount {
+			disk := compute.DataDisk{
+				CreateOption: compute.DiskCreateOptionTypesEmpty,
+				DiskSizeGB:   to.Int32Ptr(providerOpts.NetworkDiskSize),
+				Caching:      caching,
+				// LUNs start at 0, but we reserve LUN 0 for the potential resource disk
+				// that is automatically created on machine types with 'd' flag.
+				Lun: to.Int32Ptr(int32(i) + 1),
+			}
 
-		switch providerOpts.NetworkDiskType {
-		case "ultra-disk":
-			var ultraDisk compute.Disk
-			ultraDisk, err = p.createUltraDisk(l, ctx, group, name+"-ultra-disk", zone, providerOpts)
-			if err != nil {
+			switch providerOpts.NetworkDiskType {
+			case "ultra-disk":
+				// Create multiple ultra disks
+				var ultraDisk compute.Disk
+				ultraDisk, err = p.createUltraDisk(l, ctx, group, fmt.Sprintf("%s-ultra-disk-%d", name, i), zone, providerOpts)
+				if err != nil {
+					return compute.VirtualMachine{}, err
+				}
+
+				// UltraSSD specific disk configurations.
+				disk.CreateOption = compute.DiskCreateOptionTypesAttach
+				disk.Name = ultraDisk.Name
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesUltraSSDLRS,
+					ID:                 ultraDisk.ID,
+				}
+
+				// UltraSSDs must be enabled separately.
+				machine.AdditionalCapabilities = &compute.AdditionalCapabilities{
+					UltraSSDEnabled: to.BoolPtr(true),
+				}
+			case "standard-ssd":
+				// standard-ssd specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesStandardLRS,
+				}
+			case "premium-disk", "premium-ssd":
+				// premium-ssd-lrs specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesPremiumLRS,
+				}
+			case "premium-ssd-v2":
+				// premium-ssd-v2-lrs specific disk configurations.
+				disk.ManagedDisk = &compute.ManagedDiskParameters{
+					StorageAccountType: compute.StorageAccountTypesPremiumV2LRS,
+				}
+			default:
+				err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
 				return compute.VirtualMachine{}, err
 			}
-			// UltraSSD specific disk configurations.
-			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesAttach
-			dataDisks[0].Name = ultraDisk.Name
-			dataDisks[0].ManagedDisk = &compute.ManagedDiskParameters{
-				StorageAccountType: compute.StorageAccountTypesUltraSSDLRS,
-				ID:                 ultraDisk.ID,
-			}
 
-			// UltraSSDs must be enabled separately.
-			machine.AdditionalCapabilities = &compute.AdditionalCapabilities{
-				UltraSSDEnabled: to.BoolPtr(true),
-			}
-		case "premium-disk":
-			// premium-disk specific disk configurations.
-			dataDisks[0].CreateOption = compute.DiskCreateOptionTypesEmpty
-			dataDisks[0].ManagedDisk = &compute.ManagedDiskParameters{
-				StorageAccountType: compute.StorageAccountTypesPremiumV2LRS,
-			}
-		default:
-			err = errors.Newf("unsupported network disk type: %s", providerOpts.NetworkDiskType)
-			return compute.VirtualMachine{}, err
+			dataDisks[i] = disk
+
 		}
-
 		machine.StorageProfile.DataDisks = &dataDisks
 	}
+
 	future, err := client.CreateOrUpdate(ctx, *group.Name, name, machine)
 	if err != nil {
 		return
@@ -1813,10 +1885,23 @@ func (p *Provider) getSubscription(ctx context.Context) (string, error) {
 		return subscriptionId, nil
 	}
 
-	subscriptionId = os.Getenv(SubscriptionIDEnvVar)
-
-	// Fallback to retrieving the defaultSubscription.
-	if subscriptionId == "" {
+	// If no subscription ID has been set yet, we will try to determine it.
+	// The order of precedence is:
+	// 1. If there is one (and only one) subscription name configured in the provider, use it.
+	// 2. If the AZURE_SUBSCRIPTION_ID env var is set, use it.
+	// 3. Use the default subscription name configured in the provider.
+	switch {
+	case len(p.SubscriptionNames) == 1:
+		// If there is only one subscription name, use that.
+		var err error
+		subscriptionId, err = p.findSubscriptionID(ctx, p.SubscriptionNames[0])
+		if err != nil {
+			return "", errors.Wrapf(err, "Error finding Azure subscription. Check that you have permission to view the subscription or use a different subscription by specifying the %s env var", SubscriptionIDEnvVar)
+		}
+	case os.Getenv(SubscriptionIDEnvVar) != "":
+		// Next, check for the env var.
+		subscriptionId = os.Getenv(SubscriptionIDEnvVar)
+	default:
 		var err error
 		subscriptionId, err = p.findSubscriptionID(ctx, defaultSubscription)
 		if err != nil {
@@ -1906,4 +1991,9 @@ func MachineSupportsNVMe(machineType string) bool {
 		}
 	}
 	return false
+}
+
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	return fmt.Sprintf("%s-%s", ProviderName, strings.Join(p.SubscriptionNames, "_"))
 }

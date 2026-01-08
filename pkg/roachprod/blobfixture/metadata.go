@@ -43,6 +43,11 @@ type FixtureMetadata struct {
 
 	// FingerprintTime is the aost used by the fingerprint command.
 	FingerprintTime string `json:"fingerprint_time,omitempty"`
+
+	// LastFailureAt indicates that some test using this fixture has failed and we
+	// want to prevent GC of this fixture for investigation purposes. If this
+	// field is set, the fixture will not be GC'd until a week after this time.
+	LastFailureAt *time.Time `json:"last_failure_at,omitempty"`
 }
 
 func (f *FixtureMetadata) MarshalJson() ([]byte, error) {
@@ -113,6 +118,10 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 	// made ready more than 24 hours ago.
 	obsoleteThreshold := gcAt.Add(-24 * time.Hour)
 
+	// A fixture that has had a test failure within the past week is not eligible
+	// for GC.
+	failureGCThreshold := gcAt.Add(-7 * 24 * time.Hour)
+
 	toDelete := []fixtureToDelete{}
 
 	byKind := make(map[string][]FixtureMetadata)
@@ -144,10 +153,15 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 		// NOTE: starting at 1 because index 0 is the most recent fixture and is
 		// not eligible for garbage collection.
 		for i := 1; i < len(fixtures); i++ {
+			fixture := fixtures[i]
 			successor := fixtures[i-1]
 			if successor.ReadyAt.Before(obsoleteThreshold) {
+				if fixture.LastFailureAt != nil && !fixture.LastFailureAt.Before(failureGCThreshold) {
+					// Fixture has had a test failure within the past week, skip gc.
+					continue
+				}
 				toDelete = append(toDelete, fixtureToDelete{
-					metadata: fixtures[i],
+					metadata: fixture,
 					reason:   fmt.Sprintf("fixture '%s' is was mode obsolete by '%s' at '%s'", fixtures[i].DataPath, successor.DataPath, successor.ReadyAt),
 				})
 			}

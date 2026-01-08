@@ -35,6 +35,9 @@ type CatalogReader interface {
 	// is known to be in the cache.
 	IsIDInCache(id descpb.ID) bool
 
+	// IsCommentInCache return true when the comment is cached for this descriptor.
+	IsCommentInCache(id descpb.ID) bool
+
 	// IsNameInCache return true when all the by-name catalog data for this name
 	// key is known to be in the cache.
 	IsNameInCache(key descpb.NameInfo) bool
@@ -85,13 +88,15 @@ type CatalogReader interface {
 
 	// GetByIDs reads the system.descriptor, system.comments and system.zone
 	// entries for the desired IDs, but looks in the system database cache
-	// first if there is one.
+	// first if there is one. opts can be used to control which information should
+	// be read, where the default is to WithDescriptor(true) and WithMetaData(true).
 	GetByIDs(
 		ctx context.Context,
 		txn *kv.Txn,
 		ids []descpb.ID,
 		isDescriptorRequired bool,
 		expectedType catalog.DescriptorType,
+		opts ...GetByIDOption,
 	) (nstree.Catalog, error)
 
 	// GetByNames reads the system.namespace entries for the given keys, but
@@ -107,6 +112,51 @@ func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 	return &catalogReader{
 		codec: codec,
 	}
+}
+
+// getByIDOptions options supported by GetByID.
+type getByIDOptions struct {
+	withDescriptor bool
+	withZoneConfig bool
+	withComments   bool
+}
+
+// defaultGetByIDOptions are the default options for GetByID.
+var defaultGetByIDOptions = []GetByIDOption{WithDescriptor(true), WithMetaData(true)}
+
+// withDefaultOptions are the default options for GetByID.
+func withDefaultOptions() []GetByIDOption {
+	return defaultGetByIDOptions
+}
+
+// GetByIDOption are options that GetByID supports.
+type GetByIDOption interface {
+	apply(*getByIDOptions)
+}
+
+func WithMetaData(b bool) GetByIDOption {
+	return getByIDWithMetaData(b)
+}
+
+func WithDescriptor(b bool) GetByIDOption {
+	return getByIDWithDescriptor(b)
+}
+
+// getByIDWithMetaData determines if metadata should be fetched.
+type getByIDWithMetaData bool
+
+// apply implements GetByIDOption.
+func (g getByIDWithMetaData) apply(o *getByIDOptions) {
+	o.withComments = bool(g)
+	o.withZoneConfig = bool(g)
+}
+
+// getByIDWithDescriptor determines if the descriptor should be fetched.
+type getByIDWithDescriptor bool
+
+// apply implements GetByIDOption.
+func (g getByIDWithDescriptor) apply(o *getByIDOptions) {
+	o.withDescriptor = bool(g)
 }
 
 // catalogReader implements the CatalogReader interface by building catalogQuery
@@ -132,6 +182,11 @@ func (cr catalogReader) Cache() nstree.Catalog {
 
 // IsIDInCache is part of the CatalogReader interface.
 func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
+	return false
+}
+
+// IsCommentInCache is part of the CatalogReader interface.
+func (cr catalogReader) IsCommentInCache(_ descpb.ID) bool {
 	return false
 }
 
@@ -342,10 +397,18 @@ func (cr catalogReader) GetByIDs(
 	ids []descpb.ID,
 	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
+	opts ...GetByIDOption,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	if len(ids) == 0 {
 		return nstree.Catalog{}, nil
+	}
+	var options getByIDOptions
+	if len(opts) == 0 {
+		opts = withDefaultOptions()
+	}
+	for _, opt := range opts {
+		opt.apply(&options)
 	}
 	cq := catalogQuery{
 		codec:                cr.codec,
@@ -359,22 +422,34 @@ func (cr catalogReader) GetByIDs(
 		forEachDescriptorIDSpan(ids, func(startID descpb.ID, endID descpb.ID) {
 			// Only a single descriptor run, so generate a Get request.
 			if startID == endID {
-				get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+				if options.withDescriptor {
+					get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
 				}
-				get(ctx, b, config.MakeZoneKey(codec, startID))
+				if options.withComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+					}
+				}
+				if options.withZoneConfig {
+					get(ctx, b, config.MakeZoneKey(codec, startID))
+				}
 			} else {
 				// Otherwise, generate a Scan request instead. The end key is exclusive,
 				// so we will need to increment the endID.
-				scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
-					catalogkeys.MakeDescMetadataKey(codec, endID+1))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
-						catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+				if options.withDescriptor {
+					scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
+						catalogkeys.MakeDescMetadataKey(codec, endID+1))
 				}
-				scanRange(ctx, b, config.MakeZoneKey(codec, startID),
-					config.MakeZoneKey(codec, endID+1))
+				if options.withComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
+							catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+					}
+				}
+				if options.withZoneConfig {
+					scanRange(ctx, b, config.MakeZoneKey(codec, startID),
+						config.MakeZoneKey(codec, endID+1))
+				}
 			}
 		})
 	})

@@ -35,7 +35,10 @@ func TestUserLoginAfterGC(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// ForceTableGC is only available for the system tenant.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -50,7 +53,7 @@ func TestUserLoginAfterGC(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Force a table GC with a threshold of 500ms in the past.
-	err = s.ForceTableGC(ctx, "system", "role_members", s.Clock().Now().Add(-int64(500*time.Millisecond), 0))
+	err = srv.ForceTableGC(ctx, "system", "role_members", s.Clock().Now().Add(-int64(500*time.Millisecond), 0))
 	require.NoError(t, err)
 
 	// Verify that newuser can still log in.

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -412,6 +413,7 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	m.flowCtxCancel = flowCtxCancel
 	wg.Add(1)
 	go func() {
+		growstack.Grow()
 		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))
 	}()

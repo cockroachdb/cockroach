@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -461,13 +460,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
-	v := execversion.V25_2
-	if dsp.st.Version.IsActive(ctx, clusterversion.V25_4) {
-		v = execversion.V25_4
-	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
-		Version:           v,
+		Version:           execversion.V25_4,
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
@@ -573,10 +568,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var runnerSpan *tracing.Span
 	// This span is necessary because it can outlive its parent.
 	runnerCtx, runnerSpan = tracing.ChildSpan(runnerCtx, "setup-flow-async" /* opName */)
+	// runnerDone will be closed whenever all concurrent SetupFlowRequest RPCs
+	// are complete.
+	runnerDone := make(chan struct{})
 	// runnerCleanup can only be executed _after_ all issued RPCs are complete.
 	runnerCleanup := func() {
 		cancelRunnerCtx()
 		runnerSpan.Finish()
+		close(runnerDone)
 	}
 	// Make sure that we call runnerCleanup unless a new goroutine takes that
 	// responsibility.
@@ -647,24 +646,20 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// setup of a remote flow fails, we want to eagerly cancel all the flows,
 	// and we do so in a separate goroutine.
 	//
-	// We need to synchronize the new goroutine with flow.Cleanup() being called
-	// since flow.Cleanup() is the last thing before DistSQLPlanner.Run returns
-	// at which point the rowResultWriter is no longer protected by the mutex of
-	// the DistSQLReceiver.
-	// TODO(yuzefovich): think through this comment - we no longer have mutex
-	// protection in place, so perhaps this can be simplified.
-	cleanupCalledMu := struct {
-		syncutil.Mutex
-		called bool
-	}{}
+	// We need to ensure that the local flow Cleanup() is blocked until all RPCs
+	// are performed. This is needed since we release the PhysicalInfrastructure
+	// back into the sync.Pool, and FlowSpecs for concurrent RPCs might
+	// reference that infra.
+	var cleanupCalled atomic.Bool
 	flow.AddOnCleanupStart(func() {
-		cleanupCalledMu.Lock()
-		defer cleanupCalledMu.Unlock()
-		cleanupCalledMu.called = true
-		// Cancel any outstanding RPCs while holding the lock to protect from
-		// the context canceled error (the result of the RPC) being set on the
-		// DistSQLReceiver by the listener goroutine below.
+		// Indicate that the local flow Cleanup has started - at this point we
+		// can ignore any errors communicated by the listener goroutine below.
+		cleanupCalled.Store(true)
+		// Cancel any outstanding RPCs.
 		cancelRunnerCtx()
+		// Now block the cleanup of the local flow until all concurrent RPCs are
+		// complete.
+		<-runnerDone
 	})
 	err = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
 		// Note that in the loop below we always receive from the result channel
@@ -678,21 +673,17 @@ func (dsp *DistSQLPlanner) setupFlows(
 			if res.err != nil && !seenError {
 				// The setup of at least one remote flow failed.
 				seenError = true
-				func() {
-					cleanupCalledMu.Lock()
-					defer cleanupCalledMu.Unlock()
-					if cleanupCalledMu.called {
-						// Cleanup of the local flow has already been performed,
-						// so there is nothing to do.
-						return
-					}
-					// First, we send the error to the DistSQL receiver to be
-					// returned to the client eventually (which will happen on
-					// the next Push or PushBatch call).
-					recv.concurrentErrorCh <- res.err
-					// Now explicitly cancel the local flow.
-					flow.Cancel()
-				}()
+				if cleanupCalled.Load() {
+					// Cleanup of the local flow has already started, so there
+					// is nothing to communicate to the local flow.
+					continue
+				}
+				// First, we send the error to the DistSQL receiver to be
+				// returned to the client eventually (which will happen on the
+				// next Push or PushBatch call).
+				recv.concurrentErrorCh <- res.err
+				// Now explicitly cancel the local flow.
+				flow.Cancel()
 			}
 		}
 	})
@@ -755,6 +746,7 @@ func (dsp *DistSQLPlanner) Run(
 	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
 	localState.AddConcurrency(planCtx.flowConcurrency)
+	localState.ParallelCheckMainGoroutine = planCtx.parallelCheckMainGoroutine
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
@@ -874,16 +866,30 @@ func (dsp *DistSQLPlanner) Run(
 				}
 				return false
 			}()
-			// We disable the usage of the Streamer API whenever usage of
-			// DistSQL was prohibited with an error. The thinking behind it is
-			// that we might have a plan where some expression (e.g. a cast to
-			// an Oid type) uses the planner's txn (which is the RootTxn), so
-			// it'd be illegal to use LeafTxns for a part of such plan.
-			// TODO(yuzefovich): this check could be excessive. For example, it
-			// disables the usage of the Streamer when a subquery has an Oid
-			// type (due to a serialization issue), but that would have no
-			// impact on usage of the Streamer in the main query.
-			if !containsLocking && !mustUseRootTxn && planCtx.distSQLProhibitedErr == nil {
+			// We audit all reasons for why DistSQL was disabled to decide
+			// whether the usage of the Streamer API is safe. We disable the
+			// Streamer for:
+			// - funcDistSQLBlocklist (in case the builtin uses the txn)
+			// - oidProhibited and castToOidProhibited (Oids might use the txn)
+			// - rowLevelLockingProhibited (also done via containsLocking above,
+			//   see #94290)
+			// - vectorSearchProhibited (we currently don't collect
+			//   LeafTxnFinalInfo metadata)
+			// - systemColumnsAndBufferedWritesProhibited (also done via
+			//   mustUseRootTxn() check above)
+			// - valuesNodeProhibited (it probably would be fine, but it's an
+			//   edge case for newContainerValuesNode, so not worth it).
+			const safeForStreamerBits = routineProhibited |
+				arrayOfUntypedTuplesProhibited |
+				untypedTupleProhibited |
+				jsonpathProhibited |
+				unsupportedPlanNode | // here we only will allow 'scan buffer' and 'buffer' nodes via mustUseRootTxn() check
+				aggDistSQLBlocklist |
+				invertedFilterProhibited |
+				localityOptimizedOpProhibited |
+				ordinalityProhibited
+			safeForStreamer := planCtx.distSQLBlockers&distSQLBlockers(^safeForStreamerBits) == 0
+			if !containsLocking && !mustUseRootTxn && safeForStreamer {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {
@@ -1625,6 +1631,7 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 	meta.Metrics.RowsWritten = stats.rowsWritten
 	meta.Metrics.IndexRowsWritten = stats.indexRowsWritten
 	meta.Metrics.IndexBytesWritten = stats.indexBytesWritten
+	meta.Metrics.KVCPUTime = int64(stats.kvCPUTimeNanos)
 	// stats.networkEgressEstimate and stats.clientTime are ignored since they
 	// only matter at the "true" top-level query (and actually should be zero
 	// here anyway).
@@ -1675,6 +1682,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.rowsWritten += meta.Metrics.RowsWritten
 		r.stats.indexRowsWritten += meta.Metrics.IndexRowsWritten
 		r.stats.indexBytesWritten += meta.Metrics.IndexBytesWritten
+		r.stats.kvCPUTimeNanos += time.Duration(meta.Metrics.KVCPUTime)
 
 		if sm, ok := r.scanStageEstimateMap[meta.Metrics.StageID]; ok {
 			sm.rowsRead += uint64(meta.Metrics.RowsRead)
@@ -2129,13 +2137,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	innerPlansMustUseLeafTxn bool,
 ) error {
-	subqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, subqueryPlan.plan)
+	subqueryDistribution, blockers := planner.getPlanDistribution(ctx, subqueryPlan.plan, notPostquery)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-	subqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	subqueryPlanCtx.distSQLBlockers = blockers
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	subqueryPlanCtx.subOrPostQuery = true
@@ -2549,7 +2557,7 @@ func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 						planner,
 						evalCtxFactory(false /* usedConcurrently */),
 						recv,
-						false, /* parallelCheck */
+						sequentialPostquery,
 						defaultGetSaveFlowsFunc,
 						planner.instrumentation.getAssociateNodeWithComponentsFn(),
 						recv.stats.add,
@@ -2657,7 +2665,7 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 		planner,
 		evalCtx,
 		recv,
-		false, /* parallelCheck */
+		sequentialPostquery,
 		defaultGetSaveFlowsFunc,
 		planner.instrumentation.getAssociateNodeWithComponentsFn(),
 		recv.stats.add,
@@ -2723,13 +2731,22 @@ var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+type postqueryInfo byte
+
+const (
+	notPostquery postqueryInfo = iota
+	sequentialPostquery
+	parallelCheckMainGoroutine
+	parallelCheckWorkerGoroutine
+)
+
 // planAndRunPostquery runs a cascade or check query. Can be safe for concurrent
 // use if parallelCheck is true.
 //
-// - parallelCheck indicates whether this is a check query that runs in parallel
-// with other check queries. If parallelCheck is true, then getSaveFlowsFunc,
-// associateNodeWithComponents, and addTopLevelQueryStats must be
-// concurrency-safe (if non-nil).
+// - postqueryInfo indicates whether this is a check query that runs in parallel
+// with other check queries. If postqueryInfo is not sequentialPostquery, then
+// getSaveFlowsFunc, associateNodeWithComponents, and addTopLevelQueryStats must
+// be concurrency-safe (if non-nil).
 // - getSaveFlowsFunc will only be called if
 // planner.instrumentation.ShouldSaveFlows() returns true.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
@@ -2738,18 +2755,18 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
-	parallelCheck bool,
+	postqueryInfo postqueryInfo,
 	getSaveFlowsFunc func() SaveFlowsFunc,
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	postqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, postqueryPlan)
+	postqueryDistribution, blockers := planner.getPlanDistribution(ctx, postqueryPlan, postqueryInfo)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-	postqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	postqueryPlanCtx.distSQLBlockers = blockers
 	postqueryPlanCtx.stmtType = tree.Rows
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.
@@ -2760,8 +2777,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	}
 	postqueryPlanCtx.associateNodeWithComponents = associateNodeWithComponents
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
-	if parallelCheck {
+	if postqueryInfo != sequentialPostquery {
 		postqueryPlanCtx.flowConcurrency = distsql.ConcurrencyParallelChecks
+		postqueryPlanCtx.parallelCheckMainGoroutine = postqueryInfo == parallelCheckMainGoroutine
 	}
 
 	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
@@ -2867,14 +2885,14 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	// needed in order to return the error for the "earliest" plan (which makes
 	// the tests deterministic when multiple checks fail).
 	errs := make([]error, len(checkPlans))
-	runCheck := func(ctx context.Context, checkPlanIdx int) {
+	runCheck := func(ctx context.Context, checkPlanIdx int, postqueryInfo postqueryInfo) {
 		log.VEventf(ctx, 3, "begin check %d", checkPlanIdx)
 		errs[checkPlanIdx] = dsp.planAndRunPostquery(
 			ctx, checkPlans[checkPlanIdx].plan,
 			planner,
 			evalCtxFactory(true /* usedConcurrently */),
 			recv,
-			true, /* parallelCheck */
+			postqueryInfo,
 			getSaveFlowsFunc,
 			associateNodeWithComponents,
 			addTopLevelQueryStats,
@@ -2924,7 +2942,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 			},
 			func(ctx context.Context) {
 				defer wg.Done()
-				runCheck(ctx, checkPlanIdx)
+				runCheck(ctx, checkPlanIdx, parallelCheckWorkerGoroutine)
 			}); err != nil {
 			// The server is quiescing, so we just make sure to wait for all
 			// already started checks to complete after canceling them.
@@ -2938,7 +2956,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	}
 	// Execute all other checks serially in the current goroutine.
 	for checkPlanIdx := numParallelChecks; checkPlanIdx < len(checkPlans); checkPlanIdx++ {
-		runCheck(ctx, checkPlanIdx)
+		runCheck(ctx, checkPlanIdx, parallelCheckMainGoroutine)
 	}
 	// Wait for all concurrent checks to complete and return the error from the
 	// earliest check (if there were any errors).

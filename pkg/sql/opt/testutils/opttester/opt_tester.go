@@ -300,6 +300,7 @@ func New(catalog cat.Catalog, sqlStr string) *OptTester {
 	// Set non-default session settings.
 	ot.evalCtx.SessionData().UserProto = username.MakeSQLUsernameFromPreNormalizedString("opttester").EncodeProto()
 	ot.evalCtx.SessionData().Database = "defaultdb"
+	ot.evalCtx.SessionData().AllowUnsafeInternals = true
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
 
 	return ot

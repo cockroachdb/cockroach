@@ -6,6 +6,8 @@
 package ibm
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -195,6 +198,8 @@ type Provider struct {
 	resourceManagerService    *resourcemanagerv2.ResourceManagerV2
 	transitgatewayService     *transitgatewayapisv1.TransitGatewayApisV1
 
+	dnsProvider vm.DNSProvider
+
 	// GCAccounts is a list of accounts to use during garbage collection.
 	// These are identifiers, expected to match API keys in the environment
 	// with the format: IBM_<account>_APIKEY.
@@ -216,12 +221,28 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 
 	// If an authenticator is not provided, create one from the environment.
 	if p.authenticator == nil {
+		// GetAuthenticatorFromEnvironment returns nil if IBM_APIKEY isn't set
+		// 1) First tries to find a credential file
+		//		a) using IBM_CREDENTIALS_FILE which is not set
+		//		b) <user-home-dir>/ibm-credentials.env which is not currently used
+		//		c) <current-working-directory>/ibm-credentials.env which is not currently used
+		// 2) Then uses the passed in string argument as a prefix and matches to
+		//	  any env var with a matching prefix. If IBM_APIKEY isn't set then
+		//	  this function continues.
+		// 3) Finally, will try to load VCAP_SERVICES which is not currently used
+		//
+		// If all these fail to match, GetAuthenticatorFromEnvironment returns nil
+		// without an error. We need to fail in that case, otherwise we will
+		// continue on with a nil p.authenticator which will cause failures later
 		p.authenticator, err = core.GetAuthenticatorFromEnvironment(defaultAPIKeyEnvVarPrefix)
 		if err != nil {
 			return nil, errors.Wrapf(
 				err,
 				"failed to create default IBM authenticator from environment variables",
 			)
+		}
+		if p.authenticator == nil {
+			return nil, errors.Newf("failed to create IBM authenticator. Is %s set?", expectedEnvVarIBMAPIKey)
 		}
 	}
 
@@ -315,21 +336,37 @@ func (p *Provider) Name() string {
 	return ProviderName
 }
 
+// String returns a human-readable string representation of the Provider.
+func (p *Provider) String() string {
+	_, accountID, err := p.getIdentityFromAuthenticator()
+	if err != nil {
+		return fmt.Sprintf("%s-unknown-account", ProviderName)
+	}
+	return fmt.Sprintf("%s-%s", ProviderName, accountID)
+}
+
 // Active is part of the vm.Provider interface.
 func (p *Provider) Active() bool {
 	return true
 }
 
+// IsCentralizedProvider returns true because IBM is a remote provider.
+func (p *Provider) IsCentralizedProvider() bool {
+	return true
+}
+
 // List queries the IBM Cloud API to return all Roachprod VMs across all regions.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g := ctxgroup.WithContext(ctx)
 
 	for r := range p.vpcServices {
-		g.Go(func() error {
-			vms, err := p.listRegion(l, r, opts)
+		g.GoCtx(func(ctx context.Context) error {
+			vms, err := p.listRegion(ctx, l, r, opts)
 			if err != nil {
 				// Failing to list VMs in a region is not fatal.
 				l.Printf("failed to list IBM VMs in region: %s\n%v\n", r, err)
@@ -493,7 +530,7 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	// If we want to delete floating IPs, we need to set the flag to true.
 	deleteFloatingIPs := false
 
-	var g errgroup.Group
+	g := ctxgroup.WithContext(context.TODO())
 	for _, vm := range vms {
 
 		g.Go(func() error {
@@ -864,6 +901,70 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	return username, nil
 }
 
+// GetVMSpecs implements the vm.GetVMSpecs interface method which returns a
+// map from VM.Name to a map of VM attributes
+func (p *Provider) GetVMSpecs(
+	l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
+	// TODO replace background context with passed in context after *WithContext
+	// interface methods are implemented for vm.Provider
+	return p.GetVMSpecsWithContext(context.Background(), l, vms)
+}
+
+func (p *Provider) GetVMSpecsWithContext(
+	ctx context.Context, l *logger.Logger, vms vm.List,
+) (map[string]map[string]interface{}, error) {
+
+	// Extract the spec of all VMs and create a map from VM name to spec.
+	vmSpecs := make(map[string]map[string]interface{})
+	var mu syncutil.Mutex
+	g := ctxgroup.WithContext(ctx)
+	g.SetLimit(5)
+
+	for _, vmInstance := range vms {
+		g.GoCtx(func(ctx context.Context) error {
+			perCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+
+			region, err := p.zoneToRegion(vmInstance.Zone)
+			if err != nil {
+				return err
+			}
+			vpcService, err := p.getVpcService(region)
+			if err != nil {
+				return err
+			}
+			parsedCrn, err := p.parseCRN(vmInstance.ProviderID)
+			if err != nil {
+				return err
+			}
+			l.Printf("Fetching specs for instance %s", vmInstance.Name)
+			result, _, err := vpcService.GetInstanceWithContext(perCtx, vpcService.NewGetInstanceOptions(parsedCrn.id))
+			if err != nil {
+				return err
+			}
+			// Marshaling & unmarshalling struct to match interface method return type
+			jsonBytes, err := json.Marshal(result)
+			if err != nil {
+				return err
+			}
+			var vmSpec map[string]interface{}
+			err = json.Unmarshal(jsonBytes, &vmSpec)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			vmSpecs[vmInstance.Name] = vmSpec
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return vmSpecs, nil
+}
+
 //
 // Unimplemented methods, no plans to implement as of now.
 //
@@ -882,13 +983,6 @@ func (p *Provider) GetHostErrorVMs(_ *logger.Logger, _ vm.List, _ time.Time) ([]
 func (p *Provider) GetLiveMigrationVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]string, error) {
-	return nil, nil
-}
-
-// GetVMSpecs is part of the vm.Provider interface.
-func (p *Provider) GetVMSpecs(
-	_ *logger.Logger, _ vm.List,
-) (map[string]map[string]interface{}, error) {
 	return nil, nil
 }
 

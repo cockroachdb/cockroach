@@ -1,0 +1,148 @@
+# Test retainReadyLeaseTargetStoresOnly which filters stores based on:
+# 1. Store-level lease disposition (must be LeaseDispositionOK)
+# 2. Per-replica lease disposition (must be LeaseDispositionOK)
+#
+# Note: Health is handled indirectly via disposition. Unhealthy stores always
+# have non-OK disposition, so we don't need a separate health check.
+
+set-store
+  store-id=1 node-id=1 locality-tiers=region=us
+  store-id=2 node-id=2 locality-tiers=region=us
+  store-id=3 node-id=3 locality-tiers=region=us
+----
+node-id=1 locality-tiers=region=us,node=1
+  store-id=1 attrs=
+node-id=2 locality-tiers=region=us,node=2
+  store-id=2 attrs=
+node-id=3 locality-tiers=region=us,node=3
+  store-id=3 attrs=
+
+# Set up some stores. The specifics don't matter since we're only testing
+# the lease health checks.
+store-load-msg
+  store-id=1 node-id=1 load=[100,0,0] capacity=[200,100,100] load-time=0s
+  store-id=2 node-id=2 load=[50,0,0] capacity=[200,100,100] load-time=0s
+  store-id=3 node-id=3 load=[50,0,0] capacity=[200,100,100] load-time=0s
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[10,0,0]
+  config=(num_replicas=3)
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=false
+    store-id=3 replica-id=3 type=VOTER_FULL leaseholder=false
+----
+
+# All stores healthy and accepting leases - all retained.
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+[1 2 3]
+
+# Only input stores matter.
+retain-ready-lease-target-stores-only in=(1,3) range-id=1
+----
+[1 3]
+
+# Mark s2 as shedding replicas, which should have no effect
+# since we're looking at leases.
+set-store-status store-id=2 replicas=shedding
+----
+ok shedding=replicas
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+[1 2 3]
+
+# Make store 2 unhealthy - it should be filtered out via disposition.
+# Unhealthy stores must have non-OK disposition (invariant).
+set-store-status store-id=2 health=unhealthy leases=shedding replicas=shedding
+----
+unhealthy shedding=leases,replicas
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+skipping s2 for lease transfer: lease disposition shedding (health unhealthy)
+[1 3]
+
+# Different kind of unhealthy. Same result.
+set-store-status store-id=2 health=unknown leases=shedding replicas=shedding
+----
+unknown shedding=leases,replicas
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+skipping s2 for lease transfer: lease disposition shedding (health unknown)
+[1 3]
+
+# Restore store 2, make store 3 refuse leases at store level.
+set-store-status store-id=2 health=ok leases=ok replicas=ok
+----
+ok accepting all
+
+set-store-status store-id=3 leases=refusing
+----
+ok refusing=leases
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+skipping s3 for lease transfer: lease disposition refusing (health ok)
+[1 2]
+
+# Shedding and refusing are treated the same.
+set-store-status store-id=3 health=ok leases=shedding
+----
+ok shedding=leases
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+skipping s3 for lease transfer: lease disposition shedding (health ok)
+[1 2]
+
+# Restore store 3.
+set-store-status store-id=3 leases=ok
+----
+ok accepting all
+
+# All stores ready again.
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+[1 2 3]
+
+# Mark r1 as not accepting leases targeting s2 via per-replica disposition.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[10,0,0]
+  config=(num_replicas=3)
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=false lease-disposition=refusing
+    store-id=3 replica-id=3 type=VOTER_FULL leaseholder=false
+----
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+skipping s2 for lease transfer: replica lease disposition refusing (health ok)
+[1 3]
+
+# The leaseholder is exempt from the disposition check.
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1 leaseholder=2
+----
+[1 2 3]
+
+# Restore s2's replica disposition.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[10,0,0]
+  config=(num_replicas=3)
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=false lease-disposition=ok
+    store-id=3 replica-id=3 type=VOTER_FULL leaseholder=false
+----
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
+----
+[1 2 3]
+
+retain-ready-lease-target-stores-only in=(1,2,3) range-id=1 leaseholder=2
+----
+[1 2 3]

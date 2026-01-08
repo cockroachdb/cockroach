@@ -241,7 +241,7 @@ CREATE TABLE data2.foo (a int);
 			store := tcRestore.GetFirstStoreFromServer(t, 0)
 			startKey := keys.SystemSQLCodec.TablePrefix(uint32(id))
 			endKey := startKey.PrefixEnd()
-			it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			it, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 				UpperBound: endKey,
 			})
 			require.NoError(t, err)
@@ -393,9 +393,8 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Disabled only because backupRestoreTestSetupEmpty, another DR test
 			// helper function, is not yet enabled to set up tenants within
-			// clusters by default. Tracking issue
-			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// clusters by default.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -429,7 +428,6 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
-	const incrementalBackupLocation = "nodelocal://1/inc-full-backup"
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
@@ -438,8 +436,8 @@ func TestIncrementalFullClusterBackup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 	sqlDB.Exec(t, "CREATE USER maxroach1")
 
-	sqlDB.Exec(t, `BACKUP INTO $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
-	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1 WITH incremental_location = $2`, localFoo, incrementalBackupLocation)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, localFoo)
+	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
 	checkQuery := "SELECT * FROM system.users"
 	sqlDBRestore.CheckQueryResults(t, checkQuery, sqlDB.QueryStr(t, checkQuery))
@@ -1014,9 +1012,8 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	params.ServerArgs.Knobs = knobs
 	// Disabled only because backupRestoreTestSetupEmpty, another DR test
 	// helper function, is not yet enabled to set up tenants within
-	// clusters by default. Tracking issue
-	// https://github.com/cockroachdb/cockroach/issues/76378
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	// clusters by default.
+	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 
 	const numAccounts = 1000
 	ctx := context.Background()
@@ -1121,8 +1118,10 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
-		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
+		// investigation is required.
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
+		}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1146,8 +1145,10 @@ func TestRestoreWithDroppedDefaultDB(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, singleNode)
 	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication,
 		// Disabling the default test tenant due to test failures. More
-		// investigation is required. Tracked with #76378.
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled}})
+		// investigation is required.
+		base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
+		}})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
@@ -1171,9 +1172,8 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Disabled only because backupRestoreTestSetupEmpty, another DR test
 			// helper function, that is not yet enabled to set up tenants within
-			// clusters by default. Tracking issue
-			// https://github.com/cockroachdb/cockroach/issues/76378
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// clusters by default.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

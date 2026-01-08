@@ -485,7 +485,7 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 	}
 
 	// Sort both sets and condense the lock spans.
-	et.LockSpans, _ = roachpb.MergeSpans(&et.LockSpans)
+	et.LockSpans, _ = roachpb.MergeSpans(et.LockSpans)
 	sort.Sort(roachpb.SequencedWriteBySeq(et.InFlightWrites))
 
 	if log.V(3) {

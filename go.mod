@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.25.3
+go 1.25.5
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
@@ -10,17 +10,17 @@ go 1.25.3
 // merge of any upgrades we should communicate to all teams to be on the lookout
 // for behavior changes, just like we would after a go upgrade.
 require (
-	golang.org/x/crypto v0.43.0
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b
+	golang.org/x/crypto v0.44.0
+	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
-	golang.org/x/mod v0.29.0 // indirect
-	golang.org/x/net v0.46.0
-	golang.org/x/oauth2 v0.32.0
-	golang.org/x/sync v0.17.0
-	golang.org/x/sys v0.37.0
-	golang.org/x/text v0.30.0
+	golang.org/x/mod v0.30.0 // indirect
+	golang.org/x/net v0.47.0
+	golang.org/x/oauth2 v0.33.0
+	golang.org/x/sync v0.18.0
+	golang.org/x/sys v0.38.0
+	golang.org/x/text v0.31.0
 	golang.org/x/time v0.14.0
-	golang.org/x/tools v0.38.0
+	golang.org/x/tools v0.39.0
 )
 
 // The following dependencies are key infrastructure dependencies and
@@ -36,7 +36,7 @@ require (
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
 	github.com/google/btree v1.1.3
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 	google.golang.org/api v0.126.0
 	google.golang.org/genproto v0.0.0-20230530153820-e85fd2cbaebc
 	google.golang.org/grpc v1.57.2
@@ -88,6 +88,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/compute v1.19.3
 	cloud.google.com/go/profiler v0.3.1
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
@@ -132,12 +133,12 @@ require (
 	github.com/cockroachdb/changefeedpb v0.0.0-20250818184245-aab9e65dff20
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
-	github.com/cockroachdb/crlib v0.0.0-20251001180057-2a49e1873587
-	github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd
+	github.com/cockroachdb/crlib v0.0.0-20251122031428-fe658a2dbda1
+	github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112
 	github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20251029205532-e8d7ecb38559
+	github.com/cockroachdb/pebble v0.0.0-20251218181515-92a8576e35e5
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
@@ -161,8 +162,10 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
+	github.com/gin-gonic/gin v1.9.1
 	github.com/go-ldap/ldap/v3 v3.4.6
 	github.com/go-openapi/strfmt v0.23.0
+	github.com/go-playground/validator/v10 v10.24.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/status v1.1.0
 	github.com/google/flatbuffers v23.1.21+incompatible
@@ -174,9 +177,11 @@ require (
 	github.com/googleapis/gax-go/v2 v2.11.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/schema v1.4.1
+	github.com/grafana/alloy/syntax v0.1.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240215164046-eb0e60d27cb7
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/guptarohit/asciigraph v0.7.3
+	github.com/iancoleman/strcase v0.2.0
 	github.com/influxdata/influxdb-client-go/v2 v2.3.1-0.20210518120617-5d1fff431040
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
 	github.com/jackc/pgx/v5 v5.7.2
@@ -208,6 +213,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
+	github.com/penglongli/gin-metrics v0.1.12
 	github.com/petermattis/goid v0.0.0-20250721140440-ea1c0173183e
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pierrre/geohash v1.0.0
@@ -229,6 +235,7 @@ require (
 	github.com/spf13/afero v1.9.2
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
+	github.com/spf13/viper v1.8.1
 	github.com/stretchr/testify v1.10.0
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
@@ -244,8 +251,9 @@ require (
 	go.opentelemetry.io/otel/sdk v1.17.0
 	go.opentelemetry.io/otel/trace v1.17.0
 	go.opentelemetry.io/proto/otlp v0.11.0
-	golang.org/x/perf v0.0.0-20251008221758-42ba72fec400
-	golang.org/x/term v0.36.0
+	go.yaml.in/yaml/v4 v4.0.0-rc.3
+	golang.org/x/perf v0.0.0-20251112180420-cfbd823f7301
+	golang.org/x/term v0.37.0
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/genproto/googleapis/api v0.0.0-20230530153820-e85fd2cbaebc
 	gopkg.in/yaml.v2 v2.4.0
@@ -301,11 +309,13 @@ require (
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
 	github.com/buchgr/bazel-remote v1.3.3 // indirect
 	github.com/bufbuild/buf v0.56.0 // indirect
+	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
+	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 // indirect
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 // indirect
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b // indirect
@@ -324,6 +334,7 @@ require (
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
+	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
 	github.com/go-fonts/liberation v0.3.2 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
@@ -345,7 +356,6 @@ require (
 	github.com/go-pdf/fpdf v0.9.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.24.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
@@ -367,6 +377,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
+	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
@@ -386,7 +397,7 @@ require (
 	github.com/kamstrup/intmap v0.5.1 // indirect
 	github.com/kevinburke/go-bindata v3.13.0+incompatible // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
@@ -394,6 +405,7 @@ require (
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -418,10 +430,13 @@ require (
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect
 	github.com/mwitkow/go-proto-validators v0.0.0-20180403085117-0950a7990007 // indirect
+	github.com/ohler55/ojg v1.20.1 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/openzipkin/zipkin-go v0.2.5 // indirect
+	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
 	github.com/pkg/profile v1.6.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
@@ -438,11 +453,17 @@ require (
 	github.com/sirupsen/logrus v1.9.1 // indirect
 	github.com/slok/go-http-metrics v0.10.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/spf13/cast v1.3.1 // indirect
+	github.com/spf13/jwalterweatherman v1.1.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
+	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
+	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
@@ -459,8 +480,9 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/image v0.32.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251008203120-078029d740a8 // indirect
+	golang.org/x/arch v0.3.0 // indirect
+	golang.org/x/image v0.33.0 // indirect
+	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/plot v0.14.0 // indirect
@@ -526,7 +548,7 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20250924114114-78d4e121902a
+replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20251210103241-07114ac1c731
 
 // Note: This forked dependency adds a commit that opens up some
 // private APIs to enable us to make some perf improvements to

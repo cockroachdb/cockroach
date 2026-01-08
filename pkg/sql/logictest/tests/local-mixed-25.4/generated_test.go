@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 22
+const configIdx = 20
 
 var logicTestDir string
 
@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -316,6 +316,13 @@ func TestLogic_bytes(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "bytes")
+}
+
+func TestLogic_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats")
 }
 
 func TestLogic_cascade(
@@ -1270,6 +1277,13 @@ func TestLogic_merge_join(
 	runLogicTest(t, "merge_join")
 }
 
+func TestLogic_mixed_version_distributed_merge(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_distributed_merge")
+}
+
 func TestLogic_multi_statement(
 	t *testing.T,
 ) {
@@ -1667,6 +1681,13 @@ func TestLogic_returning(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "returning")
+}
+
+func TestLogic_role(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "role")
 }
 
 func TestLogic_routine_schema_change(
@@ -2276,13 +2297,6 @@ func TestLogic_truncate(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
-}
-
-func TestLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestLogic_tsvector(

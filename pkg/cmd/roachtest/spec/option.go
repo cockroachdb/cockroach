@@ -76,6 +76,20 @@ func VolumeSize(n int) Option {
 	}
 }
 
+// VolumeType sets the volume type.
+func VolumeType(volumeType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeType = volumeType
+	}
+}
+
+// VolumeCount sets the volume count.
+func VolumeCount(volumeCount int) Option {
+	return func(spec *ClusterSpec) {
+		spec.VolumeCount = volumeCount
+	}
+}
+
 // SSD is a node option which requests nodes with the specified number of SSDs.
 func SSD(n int) Option {
 	return func(spec *ClusterSpec) {
@@ -195,6 +209,21 @@ func DisableLocalSSD() Option {
 	}
 }
 
+// RandomizeVolumeType is an Option which randomly picks the volume type
+// to be used. Unless SSD is forced, the volume type is picked randomly
+// between the available types for a provider:
+// - GCE: pd-ssd, local-ssd
+// - AWS: gp3, io2, local-ssd
+// - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
+// - IBM: 10iops-tier
+// Note: this option has no effect if VolumeType is explicitly set
+// or PreferLocalSSD/DisableLocalSSD is used.
+func RandomizeVolumeType() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomizeVolumeType = true
+	}
+}
+
 // TerminateOnMigration ensures VM is terminated in case GCE triggers a live migration.
 func TerminateOnMigration() Option {
 	return func(spec *ClusterSpec) {
@@ -226,10 +255,18 @@ func SetFileSystem(fs fileSystemType) Option {
 // RandomlyUseZfs is an Option which randomly picks
 // the file system to be used, and sets it to zfs,
 // about 20% of the time.
-// Zfs is only picked if the cloud is gce.
 func RandomlyUseZfs() Option {
 	return func(spec *ClusterSpec) {
 		spec.RandomlyUseZfs = true
+	}
+}
+
+// RandomlyUseXfs is an Option which randomly picks
+// the file system to be used, and sets it to xfs,
+// about 20% of the time.
+func RandomlyUseXfs() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomlyUseXfs = true
 	}
 }
 
@@ -244,20 +281,6 @@ func GCEMachineType(machineType string) Option {
 func GCEMinCPUPlatform(platform string) Option {
 	return func(spec *ClusterSpec) {
 		spec.GCE.MinCPUPlatform = platform
-	}
-}
-
-// GCEVolumeType sets the volume type when the cluster is on GCE.
-func GCEVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeType = volumeType
-	}
-}
-
-// GCEVolumeCount sets the volume count when the cluster is on GCE.
-func GCEVolumeCount(volumeCount int) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeCount = volumeCount
 	}
 }
 
@@ -321,6 +344,14 @@ func AzureZones(zones string) Option {
 	}
 }
 
+// AzureVolumeIOPS sets the provisioned IOPS for ultra-disk volumes
+// when the cluster is on Azure.
+func AzureVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.VolumeIOPS = iops
+	}
+}
+
 // IBMMachineType sets the machine (instance) type when the cluster is on IBM.
 func IBMMachineType(machineType string) Option {
 	return func(spec *ClusterSpec) {
@@ -328,24 +359,10 @@ func IBMMachineType(machineType string) Option {
 	}
 }
 
-// IBMVolumeType sets the volume type when the cluster is on IBM.
-func IBMVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeType = volumeType
-	}
-}
-
 // IBMVolumeIOPS sets the IOPS when the cluster is on IBM.
 func IBMVolumeIOPS(iops int) Option {
 	return func(spec *ClusterSpec) {
 		spec.IBM.VolumeIOPS = iops
-	}
-}
-
-// IBMVolumeCount sets the volume count when the cluster is on IBM.
-func IBMVolumeCount(count int) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeCount = count
 	}
 }
 

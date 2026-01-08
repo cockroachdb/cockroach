@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -200,9 +201,28 @@ func marshalDeps(t *testing.T, plan *scplan.Plan) string {
 	return stages.String()
 }
 
+// normalizeScheduleID maps non-deterministic schedule IDs to deterministic
+// sequential values for test output stability. Each unique non-zero schedule
+// ID gets mapped to the next available placeholder value (1, 2, 3, ...).
+func normalizeScheduleID(
+	scheduleIDMap map[jobspb.ScheduleID]jobspb.ScheduleID, id jobspb.ScheduleID,
+) jobspb.ScheduleID {
+	if id == 0 {
+		return 0
+	}
+	if mapped, ok := scheduleIDMap[id]; ok {
+		return mapped
+	}
+	nextID := jobspb.ScheduleID(len(scheduleIDMap) + 1)
+	scheduleIDMap[id] = nextID
+	return nextID
+}
+
 // marshalOps marshals operations in scplan.Plan to a string.
 func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) string {
 	var sb strings.Builder
+	// Map non-deterministic schedule IDs to deterministic sequential values.
+	scheduleIDMap := make(map[jobspb.ScheduleID]jobspb.ScheduleID)
 	for _, stage := range stages {
 		sb.WriteString(stage.String())
 		sb.WriteString("\n  transitions:\n")
@@ -233,6 +253,18 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 			if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
 				clone := *setJobStateOp
 				clone.State = scpb.DescriptorState{}
+				op = &clone
+			}
+			if upsertTTLOp, ok := op.(*scop.UpsertRowLevelTTL); ok {
+				// Normalize the ScheduleID since it is non-deterministic.
+				clone := *upsertTTLOp
+				clone.RowLevelTTL.ScheduleID = normalizeScheduleID(scheduleIDMap, clone.RowLevelTTL.ScheduleID)
+				op = &clone
+			}
+			if updateCronOp, ok := op.(*scop.UpdateTTLScheduleCron); ok {
+				// Normalize the ScheduleID since it is non-deterministic.
+				clone := *updateCronOp
+				clone.ScheduleID = normalizeScheduleID(scheduleIDMap, clone.ScheduleID)
 				op = &clone
 			}
 			opMap, err := scgraphviz.ToMap(op)

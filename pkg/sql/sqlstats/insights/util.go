@@ -22,8 +22,8 @@ func makeTxnInsight(value *sqlstats.RecordedTxnStats) *insightspb.Transaction {
 	}
 
 	var cpuSQLNanos int64
-	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+	if value.ExecStats.SQLCPUTime.Nanoseconds() >= 0 {
+		cpuSQLNanos = value.ExecStats.SQLCPUTime.Nanoseconds()
 	}
 
 	var errorCode string
@@ -71,7 +71,7 @@ func makeStmtInsight(value *sqlstats.RecordedStmtStats) *insightspb.Statement {
 	var cpuSQLNanos int64
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
-		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+		cpuSQLNanos = value.ExecStats.SQLCPUTime.Nanoseconds()
 	}
 
 	var errorCode string

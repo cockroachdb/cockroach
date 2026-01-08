@@ -4,7 +4,7 @@
 # will be able to shed its own leases because it is the leaseholer. There should
 # be a period of lease-rebalancing activity before replica-rebalancing.
 
-gen_cluster nodes=5 node_cpu_rate_capacity=9000000000
+gen_cluster nodes=5 node_cpu_cores=9
 ----
 
 setting split_queue_enabled=false

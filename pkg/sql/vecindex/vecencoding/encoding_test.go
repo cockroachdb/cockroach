@@ -90,9 +90,7 @@ func testEncodeDecodeRoundTripImpl(t *testing.T, rnd *rand.Rand, set vector.Set)
 		for i := range set.Count {
 			switch quantizedSet := quantizedSet.(type) {
 			case *quantize.UnQuantizedVectorSet:
-				var err error
-				buf, err = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
-				require.NoError(t, err)
+				buf = vecencoding.EncodeUnquantizerVector(buf, set.At(i))
 			case *quantize.RaBitQuantizedVectorSet:
 				buf = vecencoding.EncodeRaBitQVectorFromSet(buf, quantizedSet, i)
 			}

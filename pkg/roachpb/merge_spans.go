@@ -5,28 +5,10 @@
 
 package roachpb
 
-import "sort"
-
-type sortedSpans []Span
-
-func (s *sortedSpans) Less(i, j int) bool {
-	// Sort first on the start key and second on the end key. Note that we're
-	// relying on EndKey = nil (and len(EndKey) == 0) sorting before other
-	// EndKeys.
-	c := (*s)[i].Key.Compare((*s)[j].Key)
-	if c != 0 {
-		return c < 0
-	}
-	return (*s)[i].EndKey.Compare((*s)[j].EndKey) < 0
-}
-
-func (s *sortedSpans) Swap(i, j int) {
-	(*s)[i], (*s)[j] = (*s)[j], (*s)[i]
-}
-
-func (s *sortedSpans) Len() int {
-	return len(*s)
-}
+import (
+	"slices"
+	"sort"
+)
 
 // MergeSpans sorts the incoming spans and merges overlapping spans. Returns
 // true iff all of the spans are distinct. Note that even if it returns true,
@@ -34,64 +16,49 @@ func (s *sortedSpans) Len() int {
 // but the two are still merged.
 //
 // The input spans are not safe for re-use.
-func MergeSpans(spans *[]Span) ([]Span, bool) {
-	if len(*spans) == 0 {
-		return *spans, true
+func MergeSpans(spans []Span) ([]Span, bool) {
+	if len(spans) == 0 {
+		return spans, true
 	}
 
-	sort.Sort((*sortedSpans)(spans))
+	// Sort first on the start key and second on the end key. Note that we're
+	// relying on empty EndKey sorting before other EndKeys.
+	slices.SortFunc(spans, func(s1, s2 Span) int {
+		if c := s1.Key.Compare(s2.Key); c != 0 {
+			return c
+		}
+		return s1.EndKey.Compare(s2.EndKey)
+	})
 
 	// We build up the resulting slice of merged spans in place. This is safe
 	// because "r" grows by at most 1 element on each iteration, staying abreast
 	// or behind the iteration over "spans".
-	r := (*spans)[:1]
+	r := spans[:1]
 	distinct := true
 
-	for _, cur := range (*spans)[1:] {
+	for _, cur := range spans[1:] {
 		prev := &r[len(r)-1]
-		if len(cur.EndKey) == 0 && len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) != 0 {
-				// [a, nil] merge [b, nil]
-				r = append(r, cur)
+		if len(prev.EndKey) == 0 { // prev is a point key
+			if !cur.Key.Equal(prev.Key) { // cur.Key > prev.Key
+				r = append(r, cur) // [a] + [b,any) = [a], [b,any)
 			} else {
-				// [a, nil] merge [a, nil]
-				distinct = false
+				distinct = false         // [a] + [a,any) = [a,any)
+				prev.EndKey = cur.EndKey // cur.EndKey >= prev.EndKey
 			}
-			continue
-		}
-		if len(prev.EndKey) == 0 {
-			if cur.Key.Compare(prev.Key) == 0 {
-				// [a, nil] merge [a, b]
-				prev.EndKey = cur.EndKey
-				distinct = false
-			} else {
-				// [a, nil] merge [b, c]
-				r = append(r, cur)
+		} else if c := cur.Key.Compare(prev.EndKey); c > 0 {
+			r = append(r, cur) // // [a,b) + [c,any) = [a,b), [c,any)
+		} else if c == 0 {
+			if len(cur.EndKey) == 0 { // cur is a point key
+				prev.EndKey = cur.Key.Next() // [a,b) + [b] = [a,b.Next())
+			} else if cur.EndKey.Compare(prev.EndKey) > 0 {
+				prev.EndKey = cur.EndKey // [a,b) + [b,c) = [a,c)
 			}
-			continue
-		}
-		if c := prev.EndKey.Compare(cur.Key); c >= 0 {
-			if cur.EndKey != nil {
-				if prev.EndKey.Compare(cur.EndKey) < 0 {
-					// [a, c] merge [b, d]
-					prev.EndKey = cur.EndKey
-					if c > 0 {
-						distinct = false
-					}
-				} else {
-					// [a, c] merge [b, c]
-					distinct = false
-				}
-			} else if c == 0 {
-				// [a, b] merge [b, nil]
-				prev.EndKey = cur.Key.Next()
-			} else {
-				// [a, c] merge [b, nil]
-				distinct = false
+		} else {
+			distinct = false // cur.Key is contained in prev
+			if len(cur.EndKey) != 0 && cur.EndKey.Compare(prev.EndKey) > 0 {
+				prev.EndKey = cur.EndKey // [a,c) + [b,d) = [a,d)
 			}
-			continue
 		}
-		r = append(r, cur)
 	}
 	return r, distinct
 }

@@ -75,6 +75,13 @@ type mutationBuilder struct {
 	// targetColSet contains the same column IDs as targetColList, but as a set.
 	targetColSet opt.ColSet
 
+	// explicitTargetColOrds contains the ordinals of the columns in targetColSet
+	// that were explicitly specified by the user, e.g. in the target column list
+	// of an INSERT or the SET clause of an UPDATE. This is used to determine
+	// which columns to add to the list of dependencies if b.trackSchemaDeps is
+	// true.
+	explicitTargetColOrds intsets.Fast
+
 	// insertColIDs lists the input column IDs providing values to insert. Its
 	// length is always equal to the number of columns in the target table,
 	// including mutation columns. Table columns which will not have values
@@ -86,6 +93,8 @@ type mutationBuilder struct {
 	// explicit values in the insert statement, if b.trackSchemaDeps is true.
 	// It does not include columns that were explicitly given the value of
 	// DEFAULT, e.g., INSERT INTO t VALUES (1, DEFAULT).
+	// TODO(drewk): Remove this once we make the improved dependency tracking
+	// unconditional and use_improved_routine_dependency_tracking becomes a no-op.
 	implicitInsertCols opt.ColSet
 
 	// fetchColIDs lists the input column IDs storing values which are fetched
@@ -603,8 +612,18 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
 	mb.targetColSet.Add(colID)
-
 	mb.targetColList = append(mb.targetColList, colID)
+	mb.explicitTargetColOrds.Add(ord)
+}
+
+// trackTargetColDeps adds column dependencies for the target columns that were
+// explicitly specified by the user.
+func (mb *mutationBuilder) trackTargetColDeps() {
+	if mb.b.trackSchemaDeps && mb.b.evalCtx.SessionData().PreventUpdateSetColumnDrop {
+		dep := opt.SchemaDep{DataSource: mb.tab}
+		dep.ColumnOrdinals.CopyFrom(mb.explicitTargetColOrds)
+		mb.b.schemaDeps = append(mb.b.schemaDeps, dep)
+	}
 }
 
 // extractValuesInput tests whether the given input is a VALUES clause with no
@@ -810,6 +829,14 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 func (mb *mutationBuilder) addSynthesizedComputedCols(
 	colIDs opt.OptionalColList, targetColList *opt.ColList, targetColSet *opt.ColSet, restrict bool,
 ) {
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// Avoid adding unnecessary dependencies on columns that are referenced by
+		// computed column expressions. We only need to track columns that were
+		// explicitly specified by the user, e.g. those in SET, WHERE or RETURNING
+		// clause, or the target columns of an INSERT.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
+
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
 	pb := makeProjectionBuilder(mb.b, mb.outScope)
@@ -928,6 +955,13 @@ func (mb *mutationBuilder) maybeAddRegionColLookup(op opt.Operator) {
 			return
 		}
 	}
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// It is not necessary to add transitive dependencies on the objects
+		// resolved below, since the schema changer already ensures that they are
+		// not dropped if "infer_rbr_region_col_using_constraint" is set.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
+
 	// Resolve the referenced table.
 	refTabDescID := int64(lookupFK.ReferencedTableID())
 	refTab := mb.b.resolveTableRef(&tree.TableRef{TableID: refTabDescID}, privilege.SELECT)
@@ -1063,6 +1097,13 @@ func (mb *mutationBuilder) maybeAddRegionColLookup(op opt.Operator) {
 func (mb *mutationBuilder) addCheckConstraintCols(
 	isUpdate bool, policyCmdScope cat.PolicyCommandScope, includeSelectPolicies bool,
 ) {
+	if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+		// Avoid adding unnecessary dependencies on columns that are referenced by
+		// check expressions. We only need to track columns that were explicitly
+		// specified by the user, e.g. those in SET, WHERE or RETURNING clause, or
+		// the target columns of an INSERT.
+		defer mb.b.DisableSchemaDepTracking()()
+	}
 	if mb.tab.CheckCount() != 0 {
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
@@ -1474,6 +1515,11 @@ func (mb *mutationBuilder) projectPartialIndexPutAndDelCols() {
 // projectPartialIndexDelCols, or projectPartialIndexPutAndDelCols.
 func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope) {
 	if partialIndexCount(mb.tab) > 0 {
+		if mb.b.evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols {
+			// Avoid unnecessary dependencies on columns and UDTs referenced by the
+			// partial index expression.
+			defer mb.b.DisableSchemaDepTracking()()
+		}
 		projectionScope := mb.outScope.replace()
 		projectionScope.appendColumnsFromScope(mb.outScope)
 

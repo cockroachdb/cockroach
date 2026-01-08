@@ -188,11 +188,10 @@ ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
 pq: cannot rename relation "db1_new.sc1.tbl1" because procedure "p1" depends on it
 HINT: consider dropping "p1" first.
 
-# TODO(mgartner): The error message should say "procedure".
 exec-sql
 ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
 ----
-pq: cannot set schema on relation "tbl1" because function "p1" depends on it
+pq: cannot set schema on relation "db1_new.sc1.tbl1" because procedure "p1" depends on it
 HINT: consider dropping "p1" first.
 
 exec-sql
@@ -389,7 +388,7 @@ HINT: consider dropping "p1" first.
 exec-sql
 ALTER TABLE sc1.tbl1 SET SCHEMA sc2;
 ----
-pq: cannot set schema on relation "tbl1" because function "p1" depends on it
+pq: cannot set schema on relation "db1.sc1.tbl1" because procedure "p1" depends on it
 HINT: consider dropping "p1" first.
 
 exec-sql

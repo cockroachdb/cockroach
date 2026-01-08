@@ -1,0 +1,7 @@
+setup
+CREATE TABLE t (x INT PRIMARY KEY, y INT, CONSTRAINT cc CHECK (x > 10));
+----
+
+test
+ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
+----

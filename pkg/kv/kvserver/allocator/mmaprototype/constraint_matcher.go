@@ -39,11 +39,11 @@ type constraintMatcher struct {
 
 type matchedConstraints struct {
 	matched map[internedConstraint]struct{}
-	sal     StoreAttributesAndLocality
+	sal     storeAttributesAndLocalityWithNodeTier
 }
 
 type matchedSet struct {
-	storeIDPostingList
+	storeSet
 }
 
 func newConstraintMatcher(interner *stringInterner) *constraintMatcher {
@@ -56,7 +56,7 @@ func newConstraintMatcher(interner *stringInterner) *constraintMatcher {
 }
 
 // setStore is called for a new store, or when the attributes and locality changes.
-func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
+func (cm *constraintMatcher) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	mc := cm.stores[sal.StoreID]
 	if mc == nil {
 		mc = &matchedConstraints{
@@ -93,31 +93,9 @@ func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
 	}
 }
 
-// removeStore is called for a store that is removed from the cluster.
-func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
-	mc := cm.stores[storeID]
-	if mc == nil {
-		return
-	}
-	cm.allStores.remove(storeID)
-	delete(cm.stores, storeID)
-	for c := range mc.matched {
-		matchedSet := cm.constraints[c]
-		if matchedSet == nil {
-			panic(errors.AssertionFailedf(
-				"inconsistent state: store %d not found", storeID))
-		}
-		found := matchedSet.remove(storeID)
-		if !found {
-			panic(errors.AssertionFailedf(
-				"inconsistent state: store %d not found", storeID))
-		}
-	}
-}
-
 // storeMatchesConstraint is an internal helper method.
 func (cm *constraintMatcher) storeMatchesConstraint(
-	sal StoreAttributesAndLocality, c internedConstraint,
+	sal storeAttributesAndLocalityWithNodeTier, c internedConstraint,
 ) bool {
 	matches := false
 	if c.key == emptyStringCode {
@@ -166,21 +144,21 @@ func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *m
 // constrainStoresForConjunction populates storeSet with the stores matching
 // the given conjunction of constraints.
 //
-// TODO(sumeer): make storeIDPostingList a struct and use a sync.Pool.
+// TODO(sumeer): make storeSet a struct and use a sync.Pool.
 func (cm *constraintMatcher) constrainStoresForConjunction(
-	constraints []internedConstraint, storeSet *storeIDPostingList,
+	constraints []internedConstraint, storeSet *storeSet,
 ) {
 	*storeSet = (*storeSet)[:0]
 	if len(constraints) == 0 {
-		*storeSet = append(*storeSet, cm.allStores.storeIDPostingList...)
+		*storeSet = append(*storeSet, cm.allStores.storeSet...)
 		return
 	}
 	for i := range constraints {
 		matchedSet := cm.getMatchedSetForConstraint(constraints[i])
 		if i == 0 {
-			*storeSet = append(*storeSet, matchedSet.storeIDPostingList...)
+			*storeSet = append(*storeSet, matchedSet.storeSet...)
 		} else {
-			storeSet.intersect(matchedSet.storeIDPostingList)
+			storeSet.intersect(matchedSet.storeSet)
 		}
 		if len(*storeSet) == 0 {
 			return
@@ -212,61 +190,26 @@ func (cm *constraintMatcher) storeMatches(
 
 // constrainStoresForExpr populates storeSet with the stores matching the
 // given expression.
-func (cm *constraintMatcher) constrainStoresForExpr(
-	expr constraintsDisj, storeSet *storeIDPostingList,
-) {
+func (cm *constraintMatcher) constrainStoresForExpr(expr constraintsDisj, set *storeSet) {
 	if len(expr) == 0 {
-		*storeSet = append(*storeSet, cm.allStores.storeIDPostingList...)
+		*set = append(*set, cm.allStores.storeSet...)
 		return
 	}
-	// Optimize for a single conjunction, by using storeSet directly in the call
+	// Optimize for a single conjunction, by using set directly in the call
 	// to constrainStoresForConjunction.
-	var scratch storeIDPostingList
-	scratchPtr := storeSet
+	var scratch storeSet
+	scratchPtr := set
 	for i := range expr {
 		cm.constrainStoresForConjunction(expr[i], scratchPtr)
 		if len(*scratchPtr) == 0 {
 			continue
 		}
-		if scratchPtr != storeSet {
-			storeSet.union(*scratchPtr)
+		if scratchPtr != set {
+			set.union(*scratchPtr)
 		} else {
-			// The storeSet contains the first non-empty set. Collect the remaining
+			// The set contains the first non-empty set. Collect the remaining
 			// sets in scratch.
 			scratchPtr = &scratch
 		}
 	}
 }
-
-func (cm *constraintMatcher) checkConsistency() error {
-	for storeID, mc := range cm.stores {
-		for c := range mc.matched {
-			pl, ok := cm.constraints[c]
-			if !ok {
-				return errors.AssertionFailedf("constraint not found")
-			}
-			if !pl.contains(storeID) {
-				return errors.AssertionFailedf("constraint set does not include storeID %d", storeID)
-			}
-		}
-	}
-	for c, pl := range cm.constraints {
-		for _, storeID := range pl.storeIDPostingList {
-			store, ok := cm.stores[storeID]
-			if !ok {
-				return errors.AssertionFailedf("constraint set mentions unknown storeID %d", storeID)
-			}
-			_, ok = store.matched[c]
-			if !ok {
-				return errors.AssertionFailedf("stores and constraints map are out of sync")
-			}
-		}
-	}
-	return nil
-}
-
-// Avoid unused lint errors.
-
-var _ = (&constraintMatcher{}).setStore
-var _ = (&constraintMatcher{}).removeStore
-var _ = (&constraintMatcher{}).checkConsistency

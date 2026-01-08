@@ -44,7 +44,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "@com_google_cloud_go_storage//:storage",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
         "@org_golang_google_api//googleapi",
         "@org_golang_google_api//iterator",
         "@org_golang_x_sync//errgroup",

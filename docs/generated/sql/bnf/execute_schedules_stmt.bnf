@@ -1,0 +1,3 @@
+execute_schedules_stmt ::=
+	'EXECUTE_SCHEDULE' 'SCHEDULE' a_expr
+	| 'EXECUTE_SCHEDULES' 'SCHEDULES' select_stmt

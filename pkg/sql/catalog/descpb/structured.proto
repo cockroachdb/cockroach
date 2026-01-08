@@ -1378,7 +1378,15 @@ message TableDescriptor {
   optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
 
-  // Next ID: 71
+  // StatsCanaryWindow specifies the duration for which newly collected statistics
+  // remain in "canary" state before being promoted to stable. During this
+  // window, the cluster setting sql.stats.canary_fraction determines what
+  // percentage of queries use the new canary statistics vs. the previous stable
+  // statistics. This provides a buffer period for observation and intervention
+  // before new statistics are fully deployed to all queries throughout the
+  // cluster.
+  optional int64 stats_canary_window = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
+  // Next ID: 72
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

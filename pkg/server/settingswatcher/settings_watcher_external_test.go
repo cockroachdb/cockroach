@@ -8,6 +8,7 @@ package settingswatcher_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -458,6 +459,10 @@ func CheckSettingsValuesMatch(t *testing.T, a, b *cluster.Settings) error {
 		s, ok := settings.LookupForLocalAccessByKey(k, false /* forSystemTenant */)
 		require.True(t, ok)
 		if s.Class() == settings.SystemOnly {
+			continue
+		}
+		if strings.Contains(string(s.Name()), "yield") {
+			// Testserver sets the pacer-yield settings automatically.
 			continue
 		}
 		if av, bv := s.String(&a.SV), s.String(&b.SV); av != bv {

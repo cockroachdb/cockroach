@@ -1,42 +1,25 @@
-allocate remaining=5
-----
-cpuTTG canBurst noBurst
-tier0  1        1
-tier1  1        1
-
-allocate remaining=4
-----
-cpuTTG canBurst noBurst
-tier0  2        2
-tier1  2        2
-
-allocate remaining=3
-----
-cpuTTG canBurst noBurst
-tier0  3        3
-tier1  3        2
-
-allocate remaining=2
-----
-cpuTTG canBurst noBurst
-tier0  4        4
-tier1  3        2
-
-allocate remaining=1
-----
-cpuTTG canBurst noBurst
-tier0  5        4
-tier1  3        2
-
+# The first call to resetInterval should add refillRates to all
+# buckets. We want the buckets to start full, and cpuTimeTokenFiller calls
+# resetInterval on startup. The refill rates are below for reference:
+#
+#        canBurst noBurst
+# tier0  5000     4000
+# tier1  3000     2000
+#
+# The target CPU utilizations are passed as an argument to fit, and they
+# are a function of cluster settings, plus some simple logic in resetInterval.
+# Here, the default values for the target CPU utilizations are shown.
 resetInterval
 ----
-
-# No more tokens added due to burst budget.
-allocate remaining=5
-----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
 cpuTTG canBurst noBurst
-tier0  5        4
-tier1  3        2
+tier0  5000     4000
+tier1  3000     2000
 
 # clear simulates tokens being taken due to admitted work.
 clear
@@ -45,16 +28,116 @@ cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        0
 
-# In the interval, one call to allocateTokens made already,
-# so we do not expect the full rates to end up in the buckets.
+# Over an interval (between calls to resetInterval), the refill rate should
+# be added to each bucket. Again, here are the refill rates:
+#
+#        canBurst noBurst
+# tier0  5000     4000
+# tier1  3000     2000
+#
+# The rates should be added as smoothly as possible over the 5 tick (
+# interval (see allocate remaining=5 calls below). So each call to
+# allocate should add refill rate / 5 tokens. So the amount that each call
+# to allocate should add is below:
+#
+#        canBurst noBurst
+# tier0  1000     800
+# tier1  600      400
+allocate remaining=5
+----
+cpuTTG canBurst noBurst
+tier0  1000     800
+tier1  600      400
+
+allocate remaining=4
+----
+cpuTTG canBurst noBurst
+tier0  2000     1600
+tier1  1200     800
+
+allocate remaining=3
+----
+cpuTTG canBurst noBurst
+tier0  3000     2400
+tier1  1800     1200
+
+allocate remaining=2
+----
+cpuTTG canBurst noBurst
+tier0  4000     3200
+tier1  2400     1600
+
 allocate remaining=1
 ----
 cpuTTG canBurst noBurst
-tier0  4        3
-tier1  2        1
+tier0  5000     4000
+tier1  3000     2000
 
 resetInterval
 ----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5000     4000
+tier1  3000     2000
+
+# resetInterval has been called, so a new interval has started.
+# So in theory more tokens can be added. But in this case the
+# buckets are already full. The max capacity for each bucket is
+# one second worth of tokens at the current refill rate. So no
+# tokens will be added on this call to allocate.
+allocate remaining=5
+----
+cpuTTG canBurst noBurst
+tier0  5000     4000
+tier1  3000     2000
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# In the interval, one call to allocateTokens was made already.
+# So we do not expect the full rates to end up in the buckets.
+# We expect the full rates - one tick worth of tokens to end up
+# in the bucket instead.
+#
+#        canBurst noBurst
+# tier0  5000-1000     4000-800
+# tier1  3000-600     2000-400
+#
+# Which yields:
+#
+#        canBurst noBurst
+# tier0  4000     3200
+# tier1  2400     1600
+#
+# Note that all remaining tokens were added in a single call to
+# allocate, which simulates three ticks being dropped (allocate
+# remaining=4, allocate remaining=3, & allocate remaining=2). See
+# the comment about dropped ticks above cpuTimeTokenFiller for more.
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  4000     3200
+tier1  2400     1600
+
+resetInterval
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  4000     3200
+tier1  2400     1600
 
 clear
 ----
@@ -63,15 +146,25 @@ tier0  0        0
 tier1  0        0
 
 # In this interval, no call to allocateTokens so far, so we do
-# expect the full rates to end up in the bucket.
+# expect the full rates to end up in the bucket, again in a single
+# call to allocate.
 allocate remaining=1
 ----
 cpuTTG canBurst noBurst
-tier0  5        4
-tier1  3        2
+tier0  5000     4000
+tier1  3000     2000
 
 resetInterval
 ----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5000     4000
+tier1  3000     2000
 
 clear
 ----
@@ -79,14 +172,109 @@ cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        0
 
+# In this interval, two ticks, so half of the tokens should be added
+# on the first call to allocate, and the other half on the second call.
 allocate remaining=2
 ----
 cpuTTG canBurst noBurst
-tier0  3        2
-tier1  2        1
+tier0  2500     2000
+tier1  1500     1000
 
 allocate remaining=1
 ----
 cpuTTG canBurst noBurst
-tier0  5        4
-tier1  3        2
+tier0  5000     4000
+tier1  3000     2000
+
+# These final cases test how cpuTimeTokenAllocator handles changes to
+# refillRates. See the comment above deltaRefillRates for a full explanation
+# of the approach. TLDR is the allocator will compute the amount of change in
+# refillRates & add it immediately to the buckets, before any calls to allocate
+# are made. Thus, if we increase refillRates by one (on all buckets), we expect
+# one token is added to all buckets, as below.
+resetInterval increase_rates_by=1
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  5001     4001
+tier1  3001     2001
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  5001     4001
+tier1  3001     2001
+
+# Another test of a change to refillRates. If we decrease refillRates by two
+# (on all buckets), we expect two tokens to be removed from all buckets, as
+# below.
+resetInterval increase_rates_by=-2
+----
+fit(
+	tier1 noBurst -> 80%
+	tier1 canBurst -> 85%
+	tier0 noBurst -> 95%
+	tier0 canBurst -> 100%
+)
+cpuTTG canBurst noBurst
+tier0  4999     3999
+tier1  2999     1999
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  4999     3999
+tier1  2999     1999
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# Test of computation of target CPU utilizations from overridden cluster
+# settings. The noBurst targets are configurable by cluster settings, which
+# are overridden in this test case. A canBurst target adds
+# admission.cpu_time_tokens.target_util.burst_delta, which is also overridden
+# here, to the corresponding noBurst target. See resetInterval for more.
+setClusterSettings app=0.5 system=0.75 burst=0.1
+----
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.app_tenant = 0.5
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.system_tenant = 0.75
+SET CLUSTER SETTING admission.cpu_time_tokens.target_util.burst_delta = 0.1
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+resetInterval
+----
+fit(
+	tier1 noBurst -> 50%
+	tier1 canBurst -> 60%
+	tier0 noBurst -> 75%
+	tier0 canBurst -> 85%
+)
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0

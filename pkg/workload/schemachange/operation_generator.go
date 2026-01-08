@@ -1157,6 +1157,11 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.potentialExecErrors.addAll(codesWithConditions{
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 		})
+		// We can still hit an error on commit if data is inserted that
+		// violates the unique constraint.
+		og.potentialCommitErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: def.Unique},
+		})
 	}
 
 	stmt.sql = tree.AsString(def)
@@ -1682,13 +1687,16 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	// Check if the table has any policies or triggers
-	tableHasPolicies, tableHasTriggers := false, false
+	// Check if the table has any policies, triggers, or foreign keys.
+	tableHasPolicies, tableHasTriggers, tableHasFK := false, false, false
 	if tableExists {
 		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 		if tableHasTriggers, err = og.tableHasTriggers(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+		if tableHasFK, err = og.tableHasFK(ctx, tx, tableName); err != nil {
 			return nil, err
 		}
 	}
@@ -1705,11 +1713,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
+	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -1731,7 +1735,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
+		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
 		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
 	stmt.potentialExecErrors.addAll(codesWithConditions{
@@ -1745,8 +1749,8 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		// it is referenced in a policy expression.
 		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies},
 		// It is possible that we cannot drop column because
-		// it is depended on by a trigger.
-		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers},
+		// it is depended on by a trigger or foreign key.
+		{code: pgcode.DependentObjectsStillExist, condition: tableHasTriggers || tableHasFK},
 	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
@@ -1800,6 +1804,19 @@ func (og *operationGenerator) tableHasPolicies(
 	}
 
 	return hasPolicies, nil
+}
+
+// tableHasFK checks if a table participates in any foreign key constraints.
+func (og *operationGenerator) tableHasFK(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+SELECT EXISTS (
+	SELECT 1
+	  FROM pg_constraint
+	 WHERE contype = 'f'
+	   AND (conrelid = $1::REGCLASS OR confrelid = $1::REGCLASS)
+)`, tableName.String())
 }
 
 func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2234,21 +2251,21 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	destColumnExists, err := og.columnExistsOnTable(ctx, tx, tableName, destColumnName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
-		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
 	})
-	// The column may be referenced in a view or trigger, which can lead to a
-	// dependency error. This is particularly hard to detect in cases where renaming
-	// a column that is part of a hash-sharded primary key triggers a cascading rename
-	// of the crdb_internal shard column, which might be used indirectly by other objects.
-	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		// The column may be referenced in a view or trigger, which can lead to a
+		// dependency error. This is particularly hard to detect in cases where renaming
+		// a column that is part of a hash-sharded primary key triggers a cascading rename
+		// of the crdb_internal shard column, which might be used indirectly by other objects.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
+		// Duplicate name errors are potential because destination name conflicts
+		// can change after checking.
+		{code: pgcode.DuplicateColumn, condition: srcColumnName != destColumnName},
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
 		tableName.String(), srcColumnName.String(), destColumnName.String())
@@ -2290,15 +2307,15 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if err != nil {
 		return nil, err
 	}
-	destIndexExists, err := og.indexExists(ctx, tx, tableName, destIndexName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: !srcIndexExists},
-		{code: pgcode.DuplicateRelation, condition: destIndexExists && srcIndexName != destIndexName},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: srcIndexName != destIndexName},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER INDEX %s@"%s" RENAME TO "%s"`,
@@ -2333,18 +2350,17 @@ func (og *operationGenerator) renameSequence(ctx context.Context, tx pgx.Tx) (*o
 		return nil, err
 	}
 
-	destSequenceExists, err := og.sequenceExists(ctx, tx, destSequenceName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
 		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName)
@@ -2383,11 +2399,6 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	destTableExists, err := og.tableExists(ctx, tx, destTableName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false, /* includeFKs */
 		false /* skipSelfRef */)
 	if err != nil {
@@ -2399,9 +2410,13 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcTableExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName)
@@ -2434,11 +2449,6 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	destViewExists, err := og.viewExists(ctx, tx, destViewName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true, /* includeFKs */
 		false /* skipSelfRef */)
 	if err != nil {
@@ -2450,9 +2460,13 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcViewExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
@@ -2658,7 +2672,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
+	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -3501,12 +3515,31 @@ func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{pgcode.FeatureNotSupported, asof != ""},
 	})
-
+	// Detached flag was added in 26.1, so we expect errors till the user upgrades.
+	isDetachedUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isDetachedUnsupported {
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
+	}
 	// Always run DETACHED as this allows us to use INSPECT inside of a
 	// transaction. We have post-processing at the end of the run to verify
 	// INSPECT didn't find any issues.
 	sb.WriteString(" WITH OPTIONS DETACHED")
 	stmt.sql = sb.String()
+
+	// If INSPECT is not supported yet, so we expect a syntax error or feature
+	// not supported.
+	isInspectUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isInspectUnsupported {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
+	}
 
 	return stmt, nil
 }
@@ -5698,7 +5731,19 @@ func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*op
 		// will fail with an error.
 		for fk := range fkSet {
 			if _, hasTable := tableSet[fk]; !hasTable {
-				op.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				// In mixed version workloads, we can see either pgcode.Uncategorized
+				// (pre-v26.1) or pgcode.FeatureNotSupported (v26.1+) depending on which
+				// node handles the TRUNCATE. The pgcode was changed in #154382 (v26.1).
+				versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+				if err != nil {
+					return nil, err
+				}
+				if versionBefore261 {
+					op.expectedExecErrors.add(pgcode.Uncategorized)
+					op.potentialExecErrors.add(pgcode.FeatureNotSupported)
+				} else {
+					op.expectedExecErrors.add(pgcode.FeatureNotSupported)
+				}
 				break
 			}
 		}

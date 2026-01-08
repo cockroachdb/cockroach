@@ -114,7 +114,7 @@ func (d *deleteSwapNode) processBatch(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.rowsAffected()))
+	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 
 	return nil
 }
@@ -141,6 +141,10 @@ func (d *deleteSwapNode) indexBytesWritten() int64 {
 
 func (d *deleteSwapNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
+}
+
+func (d *deleteSwapNode) kvCPUTime() int64 {
+	return d.run.td.kvCPUTime
 }
 
 func (d *deleteSwapNode) enableAutoCommit() {

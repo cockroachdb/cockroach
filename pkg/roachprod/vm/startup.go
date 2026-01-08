@@ -62,17 +62,20 @@ const (
 )
 
 type StartupArgs struct {
-	VMName               string   // Name of the VM
-	SharedUser           string   // The name of the shared user
-	StartupLogs          string   // File to redirect startup script output logs
-	OSInitializedFile    string   // File to touch when OS is initialized
-	DisksInitializedFile string   // File to touch when disks are initialized
-	Zfs                  bool     // Use ZFS instead of ext4
-	EnableFIPS           bool     // Enable FIPS mode
-	EnableCron           bool     // Enable cron service
-	ChronyServers        []string // List of NTP servers to use
-	NodeExporterPort     int      // Port that NodeExporter listens on
-	EbpfExporterPort     int      // Port that EbpfExporter listens on
+	VMName               string     // Name of the VM
+	SharedUser           string     // The name of the shared user
+	StartupLogs          string     // File to redirect startup script output logs
+	OSInitializedFile    string     // File to touch when OS is initialized
+	DisksInitializedFile string     // File to touch when disks are initialized
+	BootDiskOnly         bool       // Whether to use only the boot disk
+	UseMultipleDisks     bool       // Whether to use multiple disks
+	ExtraMountOpts       string     // Extra mount options for disks (if filesystem is not ZFS)
+	Filesystem           Filesystem // Filesystem to use for disks: ext4, zfs, xfs
+	EnableFIPS           bool       // Enable FIPS mode
+	EnableCron           bool       // Enable cron service
+	ChronyServers        []string   // List of NTP servers to use
+	NodeExporterPort     int        // Port that NodeExporter listens on
+	EbpfExporterPort     int        // Port that EbpfExporter listens on
 }
 
 func DefaultStartupArgs(overrides ...IArgOverride) StartupArgs {
@@ -106,6 +109,7 @@ var (
 		"fips_utils":            startupScriptFIPS,
 		"head_utils":            startupScriptHead,
 		"hostname_utils":        startupScriptHostname,
+		"setup_disks_utils":     startupScriptMountDisks,
 		"node_exporter":         startupScriptNodeExporter,
 		"ebpf_exporter":         startupScriptEbpfExporter,
 		"keepalives":            startupScriptKeepalives,
@@ -118,7 +122,16 @@ var (
 
 const startupScriptAptPackages = `
 sudo apt-get update -q
-sudo apt-get install -qy --no-install-recommends mdadm`
+sudo apt-get install -qy --no-install-recommends mdadm
+{{ if eq .Filesystem "zfs" }}
+apt-get install -yq zfsutils-linux
+{{ else if eq .Filesystem "f2fs" }}
+apt-get install -yq f2fs-tools linux-modules-extra-$(uname -r)
+{{ else if eq .Filesystem "btrfs" }}
+apt-get install -yq btrfs-progs
+{{ else if eq .Filesystem "xfs" }}
+apt-get install -yq xfsprogs
+{{ end }}`
 
 const startupScriptChrony = `
 sudo apt-get install -qy chrony
@@ -159,6 +172,8 @@ EOF
 
 cat <<'EOF' > /bin/gzip_core.sh
 #!/bin/sh
+mkdir -p /mnt/data1/cores
+chmod a+w /mnt/data1/cores
 exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
 EOF
 chmod +x /bin/gzip_core.sh
@@ -197,6 +212,8 @@ exec &> >(tee -a {{ .StartupLogs }})
 # Log the startup of the script with a timestamp
 echo "startup script starting: $(date -u)"
 
+# If disks are already initialized, exit early.
+# This happens upon VM restart if the disks are persistent.
 if [ -e {{ .DisksInitializedFile }} ]; then
 	echo "Already initialized, exiting."
 	exit 0
@@ -243,16 +260,48 @@ mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
 
+# Create iptables setup script for node_exporter
 export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
-sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport {{.NodeExporterPort}} -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport {{.NodeExporterPort}} -j DROP
-(
-	cd ${DEFAULT_USER_HOME}/node_exporter && \
-	sudo systemd-run --unit node_exporter --same-dir \
-		./node_exporter --collector.systemd --collector.interrupts --collector.processes \
-		--web.listen-address=":{{.NodeExporterPort}}" \
-		--web.telemetry-path="` + NodeExporterMetricsPath + `"
-)`
+cat <<FIREWALL_EOF | sudo tee /usr/local/bin/setup-node-exporter-firewall.sh
+#!/bin/bash
+# Remove existing rules for this port to avoid duplicates
+/usr/sbin/iptables -D INPUT -p tcp -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} --dport {{.NodeExporterPort}} -j ACCEPT 2>/dev/null || true
+/usr/sbin/iptables -D INPUT -p tcp --dport {{.NodeExporterPort}} -j DROP 2>/dev/null || true
+# Add firewall rules
+/usr/sbin/iptables -A INPUT -p tcp -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} --dport {{.NodeExporterPort}} -j ACCEPT
+/usr/sbin/iptables -A INPUT -p tcp --dport {{.NodeExporterPort}} -j DROP
+FIREWALL_EOF
+sudo chmod +x /usr/local/bin/setup-node-exporter-firewall.sh
+
+# Create systemd service file
+cat <<EOF | sudo tee /etc/systemd/system/node_exporter.service
+[Unit]
+Description=Prometheus Node Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=$(id -nu 1000)
+PermissionsStartOnly=true
+WorkingDirectory=${DEFAULT_USER_HOME}/node_exporter
+ExecStartPre=/usr/local/bin/setup-node-exporter-firewall.sh
+ExecStart=${DEFAULT_USER_HOME}/node_exporter/node_exporter \
+	--collector.systemd \
+	--collector.interrupts \
+	--collector.processes \
+	--web.listen-address=":{{.NodeExporterPort}}" \
+	--web.telemetry-path="` + NodeExporterMetricsPath + `"
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable node_exporter
+sudo systemctl start node_exporter`
 
 const startupScriptEbpfExporter = `
 # Add and start ebpf_exporter, only authorize scrapping from internal network.
@@ -263,18 +312,46 @@ mkdir -p ${DEFAULT_USER_HOME}/ebpf_exporter && curl -fsSL \
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/ebpf_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/ebpf_exporter
 
+# Create iptables setup script for ebpf_exporter
 export SCRAPING_PUBLIC_IPS=$(dig +short prometheus.testeng.crdb.io | awk '{printf "%s%s",sep,$0; sep=","} END {print ""}')
-sudo iptables -A INPUT -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} -p tcp --dport {{.EbpfExporterPort}} -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport {{.EbpfExporterPort}} -j DROP
-(
-	cd ${DEFAULT_USER_HOME}/ebpf_exporter && \
-	sudo systemd-run --unit ebpf_exporter --same-dir \
-		./ebpf_exporter \
-		--config.dir=examples \
-		--config.names=biolatency,timers,sched-trace,syscalls,uprobe \
-		--web.listen-address=":{{.EbpfExporterPort}}" \
-		--web.telemetry-path="` + EbpfExporterMetricsPath + `"
-)`
+cat <<FIREWALL_EOF | sudo tee /usr/local/bin/setup-ebpf-exporter-firewall.sh
+#!/bin/bash
+# Remove existing rules for this port to avoid duplicates
+/usr/sbin/iptables -D INPUT -p tcp -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} --dport {{.EbpfExporterPort}} -j ACCEPT 2>/dev/null || true
+/usr/sbin/iptables -D INPUT -p tcp --dport {{.EbpfExporterPort}} -j DROP 2>/dev/null || true
+# Add firewall rules
+/usr/sbin/iptables -A INPUT -p tcp -s 127.0.0.1,10.0.0.0/8,${SCRAPING_PUBLIC_IPS} --dport {{.EbpfExporterPort}} -j ACCEPT
+/usr/sbin/iptables -A INPUT -p tcp --dport {{.EbpfExporterPort}} -j DROP
+FIREWALL_EOF
+sudo chmod +x /usr/local/bin/setup-ebpf-exporter-firewall.sh
+
+# Create systemd service file
+cat <<EOF | sudo tee /etc/systemd/system/ebpf_exporter.service
+[Unit]
+Description=Prometheus eBPF Exporter
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${DEFAULT_USER_HOME}/ebpf_exporter
+ExecStartPre=/usr/local/bin/setup-ebpf-exporter-firewall.sh
+ExecStart=${DEFAULT_USER_HOME}/ebpf_exporter/ebpf_exporter \
+	--config.dir=examples \
+	--config.names=biolatency,timers,sched-trace,syscalls,uprobe \
+	--web.listen-address=":{{.EbpfExporterPort}}" \
+	--web.telemetry-path="` + EbpfExporterMetricsPath + `"
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start the service
+sudo systemctl daemon-reload
+sudo systemctl enable ebpf_exporter
+sudo systemctl start ebpf_exporter`
 
 const startupScriptSSH = `
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
@@ -330,6 +407,145 @@ const startupScriptUlimits = `
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
 sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'`
+
+const startupScriptMountDisks = `
+# Common disk setup logic shared across all cloud providers.
+# This function formats, mounts, and configures disks (including RAID0/ZFS if needed).
+# Args:
+#   $1 = first_setup ("true" or "false") - controls whether to write fstab entries
+#   $2 = filesystem (e.g., "ext4", "zfs", "btrfs")
+#   $3 = mount_prefix (e.g., "/mnt/data")
+#   $4 = mount_opts (e.g., "defaults,nofail")
+#   $5 = use_multiple_disks ("true" or empty) - mount disks individually vs RAID0/ZFS
+#   $6+ = disk paths to setup
+# Usage: setup_disks "true" "ext4" "/mnt/data" "defaults,nofail" "" "${disks[@]}"
+function setup_disks() {
+	local first_setup=$1
+	local filesystem=$2
+	local mount_prefix=$3
+	local mount_opts=$4
+	local use_multiple_disks=$5
+	shift 5
+	local disks=("$@")
+
+	if [ "${#disks[@]}" -eq "0" ]; then
+		mountpoint="${mount_prefix}1"
+		echo "No disks mounted, creating ${mountpoint}"
+		mkdir -p ${mountpoint}
+		chmod 777 ${mountpoint}
+	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
+		disknum=1
+		for disk in "${disks[@]}"
+		do
+			mountpoint="${mount_prefix}${disknum}"
+			disknum=$((disknum + 1 ))
+			echo "Mounting ${disk} at ${mountpoint}"
+			mkdir -p ${mountpoint}
+			if [ ${filesystem} == "zfs" ]; then
+				zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
+				# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+			elif [ ${filesystem} == "btrfs" ]; then
+				mkfs.btrfs -f -L data${disknum} "${disk}"
+				mount -t btrfs -L data${disknum} ${mountpoint}
+				if [ "$first_setup" = "true" ]; then
+					echo "LABEL=data${disknum} ${mountpoint} btrfs ${mount_opts} 0 0" | tee -a /etc/fstab
+				fi
+			else
+				mkfsForceOpt="-f"
+				if [ ${filesystem} == "ext4" ]; then
+					mkfsForceOpt="-F"
+				fi
+	
+				mkfs.{{ .Filesystem }} -q ${mkfsForceOpt} ${disk}
+				mount -o ${mount_opts} ${disk} ${mountpoint}
+				if [ "$first_setup" = "true" ]; then
+					echo "${disk} ${mountpoint} {{ .Filesystem }} ${mount_opts} 0 2" | tee -a /etc/fstab
+				fi
+			fi
+			chmod 777 ${mountpoint}
+		done
+	else
+		mountpoint="${mount_prefix}1"
+		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
+		mkdir -p ${mountpoint}
+
+		if [ ${filesystem} == "zfs" ]; then
+			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
+			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
+		elif [ ${filesystem} == "btrfs" ]; then
+			mkfs.btrfs -f -L data1 -d raid0 -m raid0 "${disks[@]}"
+			mount -t btrfs -L data1 ${mountpoint}
+			if [ "$first_setup" = "true" ]; then
+				echo "LABEL=data1 ${mountpoint} btrfs ${mount_opts} 0 0" | tee -a /etc/fstab
+			fi
+		else
+			mkfsForceOpt="-f"
+			if [ ${filesystem} == "ext4" ]; then
+				mkfsForceOpt="-F"
+			fi
+
+			raiddisk="/dev/md0"
+			mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
+			mkfs.{{ .Filesystem }} -q ${mkfsForceOpt} ${raiddisk}
+			mount -o ${mount_opts} ${raiddisk} ${mountpoint}
+			if [ "$first_setup" = "true" ]; then
+				echo "${raiddisk} ${mountpoint} {{ .Filesystem }} ${mount_opts} 0 2" | tee -a /etc/fstab
+			fi
+
+			if [ ${filesystem} == "ext4" ]; then
+				tune2fs -m 0 ${raiddisk}
+			fi
+		fi
+
+		chmod 777 ${mountpoint}
+	fi
+
+	# Print the block device and FS usage output. This is useful for debugging.
+	lsblk
+	df -h
+	if [ ${filesystem} == "zfs" ]; then
+		zpool list
+	fi
+
+	sudo touch {{ .DisksInitializedFile }}
+}
+	
+function setup_disks_wrapper() {
+	first_setup=$1
+
+{{ if .BootDiskOnly }}
+	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
+	echo "VM has no disk attached other than the boot disk."
+	return 0
+{{ end }}
+
+	# Define various parameters
+	mount_prefix="/mnt/data"
+	use_multiple_disks='{{ if .UseMultipleDisks }}true{{ end }}'
+	filesystem='{{ .Filesystem }}'
+
+	mount_opts="defaults,nofail{{- if .ExtraMountOpts -}},{{- .ExtraMountOpts -}}{{- end -}}"
+	if [ "${filesystem}" == "btrfs" ]; then
+		mount_opts="${mount_opts},noatime,noautodefrag"
+	fi
+	
+	# Detect disks
+	mapfile -t disks < <(detect_disks)
+
+	# Call shared setup logic
+	setup_disks "${first_setup}" "${filesystem}" "${mount_prefix}" "${mount_opts}" "${use_multiple_disks}" "${disks[@]}"
+}
+
+# Start the process of detecting disks to mount and configure them.
+if [ -e {{ .OSInitializedFile }} ]; then
+  echo "OS already initialized, only initializing disks."
+  # Initialize disks, but don't write fstab entries again.
+  setup_disks_wrapper false
+  exit 0
+fi
+
+# Initialize disks and write fstab entries.
+setup_disks_wrapper true`
 
 func GenerateStartupScript(w io.Writer, cloudSpecificTemplate string, args any) error {
 	t := template.New("start")

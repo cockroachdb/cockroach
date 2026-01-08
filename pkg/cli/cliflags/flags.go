@@ -719,6 +719,14 @@ information.
 `,
 	}
 
+	UseNewRPC = FlagInfo{
+		Name: "use-new-rpc",
+		Description: `
+Use the new RPC framework for internode communication instead of gRPC. This is
+a preview feature and is intended for non-production use only.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -939,6 +947,38 @@ A string of comma separated list of distinguished-name
 <attribute-type>=<attribute-value> mappings in accordance with RFC4514 for the node
 user. This strictly needs to match the DN subject in the client certificate
 provided for node user if this flag is set.
+`,
+	}
+
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+<PRE>
+
+</PRE>
+Note: Please ensure none of the certificates that are in use by the cluster or
+the SQL/RPC clients have a root in the SAN fields since the flag will block
+access to that client.
+`,
+	}
+
+	AllowDebugUser = FlagInfo{
+		Name: "allow-debug-user",
+		Description: `
+When set, allows authentication attempts by clients presenting certificates
+with "debuguser" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. By default,
+the debuguser is not allowed to authenticate. Authentication attempts by debuguser
+will be rejected with an error unless this flag is explicitly set.
+<PRE>
+
+</PRE>
+Note: This flag is intended for debugging and troubleshooting purposes. The
+debuguser should only be enabled when necessary and disabled when not in use.
 `,
 	}
 
@@ -1785,12 +1825,13 @@ Labs support.
 	ZipIncludeGoroutineStacks = FlagInfo{
 		Name: "include-goroutine-stacks",
 		Description: `
-Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
-and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
-a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
-latency. Note that any periodic goroutine dumps previously taken on the node will still be
-included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
-require any additional stop-the-world operations to be collected.
+Fetch full stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt files.
+Note that fetching text stack traces for all goroutines incurs a brief "stop-the-world" pause of each
+node which can momentarily have negative impacts on SQL service latency. This flag only controls
+collection of new full dump of all current goroutine stacks -- any previously recorded, periodic
+goroutine dumps retained in the logs directories are still included (in nodes/*/goroutines/*.txt.gz)
+and collection of aggregate counts of current goroutine stacks -- which does not incur a stop-the-world
+pause -- remains enabled regardless of this flag's value.
 `,
 	}
 

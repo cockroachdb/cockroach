@@ -14,13 +14,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func BenchmarkJobs(b *testing.B) { reg.Run(b) }
 func init() {
+	// Create a minimal table descriptor for the import job.
+	tableDesc := &descpb.TableDescriptor{
+		ID:            100,
+		ParentID:      1,
+		Name:          "benchmark_table",
+		FormatVersion: descpb.InterleavedFormatVersion,
+		Version:       1,
+	}
+
 	payloadBytes, err := protoutil.Marshal(&jobspb.Payload{
-		Details:       jobspb.WrapPayloadDetails(jobspb.ImportDetails{}),
+		Details: jobspb.WrapPayloadDetails(jobspb.ImportDetails{
+			Table: jobspb.ImportDetails_Table{
+				Desc: tableDesc,
+			},
+		}),
 		UsernameProto: username.RootUserName().EncodeProto(),
 	})
 	if err != nil {
@@ -43,15 +57,8 @@ func init() {
 			hex.EncodeToString(payloadBytes)),
 		"INSERT INTO system.jobs(id, status, created, job_type, owner) (SELECT id, 'succeeded', now(), 'IMPORT', 'test' FROM generate_series(1000, 3000) as id)",
 
-		// Job 3001 is a RUNNING job. We've marked it as
-		// claimed and added run stats that likely prevent it
-		// from being meaninfully used during the duration of
-		// the test.
-		fmt.Sprintf("INSERT INTO system.job_info(job_id, info_key, value) VALUES (3001, 'legacy_progress', '\\x%s')", hex.EncodeToString(progressBytes)),
-		fmt.Sprintf("INSERT INTO system.job_info(job_id, info_key, value) VALUES (3001, 'legacy_payload', '\\x%s')", hex.EncodeToString(payloadBytes)),
-		`INSERT INTO system.jobs(id, status, created, last_run, num_runs, job_type, owner, claim_instance_id, claim_session_id) VALUES (3001, 'running', now(), now(), 200, 'IMPORT', 'root',
-(SELECT id FROM system.sql_instances WHERE session_id IS NOT NULL ORDER BY id LIMIT 1),
-(SELECT session_id FROM system.sql_instances WHERE session_id IS NOT NULL ORDER BY id LIMIT 1))`,
+		"INSERT INTO system.job_progress (job_id, written, fraction) (SELECT id, now(), 1 FROM generate_series(1000,3000) as id)",
+		"INSERT INTO system.job_status (job_id, written, status) (SELECT id, now(), 'completed' FROM generate_series(1000,3000) as id)",
 
 		// Job 3002 is a PAUSED job.
 		fmt.Sprintf("INSERT INTO system.job_info(job_id, info_key, value) VALUES (3002, 'legacy_progress', '\\x%s')", hex.EncodeToString(progressBytes)),
@@ -63,7 +70,7 @@ func init() {
 		`ANALYZE system.job_info`,
 	}
 
-	cleanupQuery := "DELETE FROM system.jobs WHERE id >= 1000 AND id <= 4000; DELETE FROM system.job_info WHERE job_id >= 1000 AND job_id <= 4000"
+	cleanupQuery := "DELETE FROM system.jobs WHERE id >= 1000 AND id <= 4000; DELETE FROM system.job_info WHERE job_id >= 1000 AND job_id <= 4000; DELETE FROM system.job_progress WHERE job_id >= 1000 AND job_id <= 4000; DELETE FROM system.job_status WHERE job_id >= 1000 AND job_id <= 4000;"
 	defaultJobsQuery := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{})
 	limitJobsQuery := server.BuildJobQueryFromRequest(&serverpb.JobsRequest{
 		Limit: 50,
@@ -85,13 +92,13 @@ func init() {
 			SetupEx: setupQueries,
 			Reset:   cleanupQuery,
 			Name:    "pause job",
-			Stmt:    "PAUSE JOB 3001",
+			Stmt:    "PAUSE JOB 100",
 		},
 		{
 			SetupEx: setupQueries,
 			Reset:   cleanupQuery,
 			Name:    "cancel job",
-			Stmt:    "CANCEL JOB 3001",
+			Stmt:    "CANCEL JOB 3002",
 		},
 		{
 			SetupEx: setupQueries,

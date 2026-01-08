@@ -147,6 +147,7 @@ func nodeStatusToResp(n *statuspb.NodeStatus, hasViewClusterMetadata bool) serve
 		Activity:          activity,
 		TotalSystemMemory: n.TotalSystemMemory,
 		NumCpus:           n.NumCpus,
+		NumVcpus:          n.NumVcpus,
 	}
 
 	if hasViewClusterMetadata {

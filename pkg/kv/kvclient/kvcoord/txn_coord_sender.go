@@ -1525,11 +1525,6 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 
 // Step is part of the TxnSender interface.
 func (tc *TxnCoordSender) Step(ctx context.Context, allowReadTimestampStep bool) error {
-	// TODO(nvanbenschoten): it should be possible to make this assertion, but
-	// the API is currently misused by the connExecutor. See #86162.
-	// if tc.typ != kv.RootTxn {
-	//	return errors.AssertionFailedf("cannot step in non-root txn")
-	// }
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if allowReadTimestampStep && tc.shouldStepReadTimestampLocked() {

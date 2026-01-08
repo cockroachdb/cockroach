@@ -346,20 +346,12 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	return b.wrapFunctionImpl(fnName, lookup)
 }
 
-func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, retErr error) {
+	// This allows us to propagate errors without adding lots of checks for
+	// `if err != nil` throughout the construction code. This is only possible
+	// because the code does not update shared state and does not manipulate
+	// locks.
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	rel, ok := e.(memo.RelExpr)
 	if !ok {

@@ -1212,23 +1212,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
  SELECT time with time zone '01:30-08' - interval '02:01' AS "23:29:00-08";
   23:29:00-08 
  -------------
-@@ -1034,14 +661,14 @@
-             + interval '02:01' AS time with time zone) AS time) AS "07:31:00";
-  07:31:00 
- ----------
-- 07:31:00
-+ 08:31:00
- (1 row)
- 
- SELECT CAST(cast(date 'today' + time with time zone '03:30'
-   + interval '1 month 04:01' as timestamp without time zone) AS time) AS "07:31:00";
-  07:31:00 
- ----------
-- 07:31:00
-+ 08:31:00
- (1 row)
- 
- SELECT t.d1 AS t, i.f1 AS i, t.d1 + i.f1 AS "add", t.d1 - i.f1 AS "subtract"
 @@ -1049,347 +676,67 @@
    WHERE t.d1 BETWEEN '1990-01-01' AND '2001-01-01'
      AND i.f1 BETWEEN '00:00' AND '23:00'
@@ -2955,11 +2938,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 1997-02-10 17:32:01
 - 1997-02-10 17:32:01
 - 1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
 - 1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
 - 1997-02-10 17:32:01
 - 1997-06-10 18:32:01
 - 1997-02-10 17:32:01

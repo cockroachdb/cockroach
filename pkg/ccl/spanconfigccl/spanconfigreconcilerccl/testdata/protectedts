@@ -106,6 +106,7 @@ state offset=52
 /Table/7{4-5}                              database system (host)
 /Table/7{5-6}                              database system (host)
 /Table/7{6-7}                              database system (host)
+/Table/7{7-8}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -176,6 +177,7 @@ state offset=58
 /Table/7{4-5}                              database system (host)
 /Table/7{5-6}                              database system (host)
 /Table/7{6-7}                              database system (host)
+/Table/7{7-8}                              database system (host)
 /Table/10{6-7}                             protection_policies=[{ts: 3} {ts: 4}]
 /Table/10{7-8}                             protection_policies=[{ts: 3} {ts: 4}]
 
@@ -210,5 +212,6 @@ state offset=58
 /Table/7{4-5}                              database system (host)
 /Table/7{5-6}                              database system (host)
 /Table/7{6-7}                              database system (host)
+/Table/7{7-8}                              database system (host)
 /Table/10{6-7}                             range default
 /Table/10{7-8}                             range default

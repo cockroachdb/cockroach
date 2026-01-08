@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEncDatum(t *testing.T) {
@@ -150,7 +152,6 @@ func TestEncDatumNull(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 // checkEncDatumCmp encodes the given values using the given encodings,
@@ -766,6 +767,41 @@ func TestEncDatumFingerprintMemory(t *testing.T) {
 		}
 		if memAcc.Used() != c.newMemUsage {
 			t.Errorf("on %v\taccounted for %d, expected %d", c.encDatum, memAcc.Used(), c.newMemUsage)
+		}
+	}
+}
+
+func TestDecodesToCanonical(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 20; i++ {
+		typ := randgen.RandType(rng)
+		datum := randgen.RandDatum(rng, typ, false)
+
+		buf, err := valueside.Encode(nil, valueside.NoColumnID, datum)
+		require.NoError(t, err)
+		decoded, _, err := valueside.Decode(&tree.DatumAlloc{}, typ, buf)
+
+		valueType := decoded.ResolvedType()
+		require.NoError(t, err)
+		require.True(t, valueType.Identical(typ.Canonical()), "value type %+v not identical to canonical type %+v", valueType, typ)
+		require.Equal(t, decoded.ResolvedType().Oid(), typ.Canonical().Oid())
+
+		direction := encoding.Ascending
+		if rng.Int()%2 == 0 {
+			direction = encoding.Descending
+		}
+
+		if colinfo.ColumnTypeIsIndexable(typ) {
+			buf, err = keyside.Encode(nil, datum, direction)
+			require.NoError(t, err)
+
+			decodedKey, _, err := keyside.Decode(&tree.DatumAlloc{}, typ, buf, direction)
+			require.NoError(t, err)
+
+			keyType := decodedKey.ResolvedType()
+			require.NoError(t, err)
+			require.True(t, keyType.Identical(typ.Canonical()), "key type %+v not identical to canonical type %+v", keyType, typ)
+			require.Equal(t, decodedKey.ResolvedType().Oid(), typ.Canonical().Oid())
 		}
 	}
 }

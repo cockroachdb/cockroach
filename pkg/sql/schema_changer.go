@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -451,8 +452,11 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		localPlanner.MaybeReallocateAnnotations(stmt.NumAnnotations)
 		// Construct an optimized logical plan of the AS source stmt.
-		localPlanner.stmt = makeStatement(stmt, clusterunique.ID{}, /* queryID */
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)))
+		localPlanner.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{}, /* queryID */
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		localPlanner.optPlanningCtx.init(localPlanner)
 
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {
@@ -478,7 +482,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 						return
 					}
 					ptsCleaners = append(ptsCleaners,
-						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl, ts))
+						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl.GetID(), ts))
 				}
 			})
 			if err != nil {
@@ -528,7 +532,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
-			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main)
+			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main, notPostquery)
 			isLocal := !planDistribution.WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),
@@ -914,7 +918,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats(latestDesc)
+			sc.refreshStats(ctx, latestDesc)
 		}
 		return nil
 	}
@@ -1122,7 +1126,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 		// We wait to trigger a stats refresh until we know the leases have been
 		// updated.
 		if refreshStats {
-			sc.refreshStats(desc)
+			sc.refreshStats(ctx, desc)
 		}
 		return nil
 	}
@@ -1480,7 +1484,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).UpdateStatusMessage(ctx, runStatus); err != nil {
+			if err := jobs.StatusStorage(sc.job.ID()).Set(ctx, txn, string(runStatus)); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
@@ -1555,6 +1559,19 @@ func WaitToUpdateLeases(
 	return desc, err
 }
 
+type commentToDelete struct {
+	id          int64
+	subID       int64
+	commentType catalogkeys.CommentType
+}
+
+type commentToSwap struct {
+	id          int64
+	oldSubID    int64
+	newSubID    int64
+	commentType catalogkeys.CommentType
+}
+
 // done finalizes the mutations (adds new cols/indexes to the table).
 // It ensures that all nodes are on the current (pre-update) version of
 // sc.descID and that all nodes are on the new (post-update) version of
@@ -1563,18 +1580,6 @@ func WaitToUpdateLeases(
 // It also kicks off GC jobs as needed.
 func (sc *SchemaChanger) done(ctx context.Context) error {
 	// Gathers ant comments that need to be swapped/cleaned.
-	type commentToDelete struct {
-		id          int64
-		subID       int64
-		commentType catalogkeys.CommentType
-	}
-	type commentToSwap struct {
-		id          int64
-		oldSubID    int64
-		newSubID    int64
-		commentType catalogkeys.CommentType
-	}
-	var commentsToDelete []commentToDelete
 	var commentsToSwap []commentToSwap
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
@@ -1803,7 +1808,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					if scTable.RowLevelTTL.ScheduleID != 0 {
 						_, err := scheduledJobs.Load(
 							ctx,
-							JobSchedulerEnv(sc.execCfg.JobsKnobs()),
+							jobs.JobSchedulerEnv(sc.execCfg.JobsKnobs()),
 							scTable.RowLevelTTL.ScheduleID,
 						)
 						if err != nil {
@@ -1815,7 +1820,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if shouldCreateScheduledJob {
-						j, err := CreateRowLevelTTLScheduledJob(
+						j, err := ttlinit.CreateRowLevelTTLScheduledJob(
 							ctx,
 							sc.execCfg.JobsKnobs(),
 							scheduledJobs,
@@ -1832,7 +1837,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				} else if m.Dropped() {
 					if scTable.HasRowLevelTTL() {
 						if err := scheduledJobs.DeleteByID(
-							ctx, JobSchedulerEnv(sc.execCfg.JobsKnobs()),
+							ctx, jobs.JobSchedulerEnv(sc.execCfg.JobsKnobs()),
 							scTable.GetRowLevelTTL().ScheduleID,
 						); err != nil {
 							return err
@@ -1931,6 +1936,11 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		committedMutations := scTable.AllMutations()[:i]
 		// Trim the executed mutations from the descriptor.
 		scTable.Mutations = scTable.Mutations[i:]
+
+		commentsToDelete, err := sc.findCommentsToDelete(ctx, txn, scTable)
+		if err != nil {
+			return err
+		}
 
 		// Check any jobs that we need to depend on for the current
 		// job to be successful.
@@ -2202,6 +2212,46 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	return nil
 }
 
+// findCommentsToDelete will collect any constraint comments whose referenced
+// constraint no longer exists on the table. This is a catch-all for constraints
+// implicitly removed by other operations (e.g. column drops).
+func (sc *SchemaChanger) findCommentsToDelete(
+	ctx context.Context, txn descs.Txn, tbl catalog.TableDescriptor,
+) ([]commentToDelete, error) {
+	seen := make(map[commentToDelete]struct{})
+	constraintIDs := make(map[uint32]struct{})
+	for _, c := range tbl.AllConstraints() {
+		constraintIDs[uint32(c.GetConstraintID())] = struct{}{}
+	}
+	ckPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(
+		sc.execCfg.Codec, catalogkeys.ConstraintCommentType, tbl.GetID())
+	kvs, err := txn.KV().Scan(ctx, ckPrefix, ckPrefix.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	var comments []commentToDelete
+	for _, kv := range kvs {
+		_, key, err := catalogkeys.DecodeCommentMetadataID(sc.execCfg.Codec, kv.Key)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := constraintIDs[key.SubID]; ok {
+			continue
+		}
+		ctd := commentToDelete{
+			id:          int64(tbl.GetID()),
+			subID:       int64(key.SubID),
+			commentType: catalogkeys.ConstraintCommentType,
+		}
+		if _, dup := seen[ctd]; dup {
+			continue
+		}
+		comments = append(comments, ctd)
+		seen[ctd] = struct{}{}
+	}
+	return comments, nil
+}
+
 // maybeUpdateZoneConfigsForPKChange moves zone configs for any rewritten
 // indexes from the old index over to the new index. Noop if run on behalf of a
 // tenant. If forceSwap is set, we copy the zone configs for primary keys
@@ -2294,12 +2344,12 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(ctx context.Context) error {
 	return sc.done(ctx)
 }
 
-func (sc *SchemaChanger) refreshStats(desc catalog.Descriptor) {
+func (sc *SchemaChanger) refreshStats(ctx context.Context, desc catalog.Descriptor) {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
 	if tableDesc, ok := desc.(catalog.TableDescriptor); ok {
-		sc.execCfg.StatsRefresher.NotifyMutation(tableDesc, math.MaxInt32 /* rowsAffected */)
+		sc.execCfg.StatsRefresher.NotifyMutation(ctx, tableDesc, math.MaxInt32 /* rowsAffected */)
 	}
 }
 
@@ -2493,11 +2543,12 @@ func (sc *SchemaChanger) updateJobForRollback(
 	u := sc.job.WithTxn(txn)
 	if err := u.SetDetails(
 		ctx, jobspb.SchemaChangeDetails{
-			DescID:          sc.descID,
-			TableMutationID: sc.mutationID,
-			ResumeSpanList:  spanList,
-			FormatVersion:   oldDetails.FormatVersion,
-			SessionData:     sc.sessionData,
+			DescID:               sc.descID,
+			TableMutationID:      sc.mutationID,
+			ResumeSpanList:       spanList,
+			FormatVersion:        oldDetails.FormatVersion,
+			SessionData:          sc.sessionData,
+			DistributedMergeMode: oldDetails.DistributedMergeMode,
 		},
 	); err != nil {
 		return err
@@ -2528,6 +2579,11 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			constraint.GetName(),
 		)
 	} else if constraint.AsForeignKey() != nil {
+		// If the constraint being dropped is the regional-by-row constraint,
+		// we must clear the reference to it.
+		if desc.RBRUsingConstraint == constraint.GetConstraintID() {
+			desc.RBRUsingConstraint = descpb.ConstraintID(0)
+		}
 		for i, fk := range desc.OutboundFKs {
 			if fk.Name == constraint.GetName() {
 				desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)

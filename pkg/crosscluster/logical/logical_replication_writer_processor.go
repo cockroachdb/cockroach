@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"regexp"
-	"runtime/pprof"
 	"slices"
 	"strings"
 	"time"
@@ -22,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	kvbulk "github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -41,10 +42,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -148,6 +151,8 @@ type logicalReplicationWriterProcessor struct {
 	dupeCount  int64
 	seenEvery  log.EveryN
 	retryEvery log.EveryN
+
+	pacer *admission.Pacer
 }
 
 var (
@@ -229,6 +234,7 @@ func newLogicalReplicationWriterProcessor(
 		metrics:    flowCtx.Cfg.JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeLogicalReplication].(*Metrics),
 		seenEvery:  log.Every(1 * time.Minute),
 		retryEvery: log.Every(1 * time.Minute),
+		pacer:      kvbulk.NewCPUPacer(ctx, flowCtx.Cfg.DB.KV(), useLowPriority),
 	}
 	lrw.purgatory = purgatory{
 		deadline:    func() time.Duration { return retryQueueAgeLimit.Get(&flowCtx.Cfg.Settings.SV) },
@@ -349,12 +355,13 @@ func (lrw *logicalReplicationWriterProcessor) Start(ctx context.Context) {
 	})
 	lrw.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(lrw.checkpointCh)
-		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", lrw.ProcessorID)), func(ctx context.Context) {
+		pprofutil.Do(ctx, func(ctx context.Context) {
 			if err := lrw.consumeEvents(ctx); err != nil {
 				log.Dev.Infof(lrw.Ctx(), "consumer completed. Error: %s", err)
 				lrw.sendError(errors.Wrap(err, "consume events"))
 			}
-		})
+		}, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_LDR,
+			"proc", fmt.Sprintf("%d", lrw.ProcessorID))
 		return nil
 	})
 }
@@ -620,7 +627,7 @@ func (lrw *logicalReplicationWriterProcessor) checkpoint(
 	}
 
 	for _, p := range lrw.bh {
-		p.ReportMutations(lrw.FlowCtx.Cfg.StatsRefresher)
+		p.ReportMutations(ctx, lrw.FlowCtx.Cfg.StatsRefresher)
 		// We should drop our leases and re-acquire new ones at next flush, to avoid
 		// holding leases continually until they expire; re-acquire is cheap when it
 		// can be served from the cache so we can just stop these every checkpoint.
@@ -741,11 +748,17 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 func getWriterType(
 	ctx context.Context, mode jobspb.LogicalReplicationDetails_ApplyMode, settings *cluster.Settings,
 ) (sqlclustersettings.LDRWriterType, error) {
+	// TODO(jeffswenson): delete the kv and legacy sql ldr writers
 	switch mode {
 	case jobspb.LogicalReplicationDetails_Immediate:
 		return sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&settings.SV)), nil
 	case jobspb.LogicalReplicationDetails_Validated:
-		return sqlclustersettings.LDRWriterTypeSQL, nil
+		if crosscluster.LogicalReplicationUDFWriterEnabled.Get(&settings.SV) {
+			// If the UDF writer is enabled, fall back to the legacy SQL writer for
+			// validated mode.
+			return sqlclustersettings.LDRWriterTypeSQL, nil
+		}
+		return sqlclustersettings.LDRWriterTypeCRUD, nil
 	default:
 		return "", errors.Newf("unknown logical replication writer type: %s", mode)
 	}
@@ -1209,7 +1222,7 @@ type BatchHandler interface {
 	BatchSize() int
 	GetLastRow() cdcevent.Row
 	SetSyntheticFailurePercent(uint32)
-	ReportMutations(*stats.Refresher)
+	ReportMutations(context.Context, *stats.Refresher)
 	ReleaseLeases(context.Context)
 	Close(context.Context)
 }

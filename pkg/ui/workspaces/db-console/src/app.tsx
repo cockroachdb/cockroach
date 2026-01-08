@@ -58,6 +58,7 @@ import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
+import ClusterExplorerPage from "src/views/explorer/explorer";
 import HotRangesPage from "src/views/hotRanges/index";
 import JobDetails from "src/views/jobs/jobDetails";
 import JobsPage from "src/views/jobs/jobsPage";
@@ -90,6 +91,7 @@ import InsightsOverviewPage from "./views/insights/insightsOverview";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
+import MetricsWorkspace from "./views/reports/containers/metricsWorkspace/metricsWorkspace";
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 
@@ -356,6 +358,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           component={StatementInsightDetailsPage}
                         />
 
+                        {/* cluster explorer */}
+                        <Route
+                          exact
+                          path="/cluster-explorer"
+                          component={ClusterExplorerPage}
+                        />
+
                         {/* debug pages */}
                         <Route exact path="/debug" component={Debug} />
                         <Route
@@ -371,6 +380,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           exact
                           path="/debug/chart"
                           component={CustomChart}
+                        />
+                        <Route
+                          exact
+                          path="/debug/metrics_workspace"
+                          component={MetricsWorkspace}
                         />
                         <Route
                           exact

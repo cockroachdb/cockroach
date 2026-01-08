@@ -16,8 +16,13 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
+skipif config local-mixed-25.4
+query I rowsort
+SELECT count(id) FROM system.descriptor
+----
+74
+
+onlyif config local-mixed-25.4
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
@@ -47,7 +52,6 @@ SHOW COLUMNS FROM system.descriptor
 id          INT8   false  NULL  ·  {primary}  false
 descriptor  BYTES  true   NULL  ·  {primary}  false
 
-skipif config local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.users
 ----
@@ -82,7 +86,6 @@ session_id       BYTES  false  NULL  ·  {primary}  false
 crdb_region      BYTES  false  NULL  ·  {primary}  false
 
 
-skipif config local-mixed-25.2
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----
@@ -475,14 +478,10 @@ user root
 
 subtest statement_hints_table
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query IITTT
 SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
 ----
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 statement ok
 INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at)
 (VALUES
@@ -490,41 +489,29 @@ INSERT INTO system.statement_hints (row_id, fingerprint, hint, created_at)
   (200, 'bar', 'BEEFDEAD', '2018-01-02 1:00:00.00000+00:00')
 )
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query IITTT
 SELECT hash, row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
 ----
 -2824945433545984717  100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
 -2821042167266592640  200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'foo' ORDER BY row_id
 ----
 100  foo  DEADBEEF  2018-01-01 01:00:00 +0000 UTC
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'bar' ORDER BY row_id
 ----
 200  bar  BEEFDEAD  2018-01-02 01:00:00 +0000 UTC
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints WHERE fingerprint = 'baz' ORDER BY row_id
 ----
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement ok
+statement count 1
 DELETE FROM system.statement_hints WHERE fingerprint = 'foo'
 
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
 query ITTT
 SELECT row_id, fingerprint, hint, created_at FROM system.statement_hints ORDER BY row_id
 ----

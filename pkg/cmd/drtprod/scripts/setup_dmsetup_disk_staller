@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Sets up datadog for the drt clusters.
+# Sets up disk staller support (dmsetup) for /mnt/data1.
 # NOTE - This uses CLUSTER environment variable, if not set the script fails
 
 if [ -z "${CLUSTER}" ]; then
@@ -8,9 +8,19 @@ if [ -z "${CLUSTER}" ]; then
   exit 1
 fi
 
-drtprod ssh "$CLUSTER" -- "sudo apt-get purge -y snapd"
-drtprod ssh "$CLUSTER" -- "sudo umount -f /mnt/data1"
-drtprod ssh "$CLUSTER" -- "sudo dmsetup remove_all"
-drtprod ssh "$CLUSTER" -- "sudo tune2fs -O ^has_journal /dev/nvme0n1"
-drtprod ssh "$CLUSTER" -- 'echo "0 $(sudo blockdev --getsz /dev/nvme0n1) linear /dev/nvme0n1 0" | sudo dmsetup create data1'
-drtprod ssh "$CLUSTER" -- "sudo mount /dev/mapper/data1 /mnt/data1"
+# Create and upload the setup script to the remote cluster
+roachprod ssh "$CLUSTER" -- "tee setup_dmsetup.sh > /dev/null << 'EOF'
+#!/bin/bash
+
+DEVICE=\$(df -kh | grep \"/data1\" | cut -d\" \" -f1)
+
+sudo apt-get purge -y snapd
+sudo umount -f /mnt/data1
+sudo dmsetup remove_all
+sudo tune2fs -O ^has_journal \${DEVICE}
+echo \"0 \$(sudo blockdev --getsz \"\${DEVICE}\") linear \"\${DEVICE}\" 0\" | sudo dmsetup create data1
+sudo mount /dev/mapper/data1 /mnt/data1
+EOF"
+
+# Make the script executable and run it
+roachprod ssh "$CLUSTER" -- "chmod +x setup_dmsetup.sh && ./setup_dmsetup.sh"

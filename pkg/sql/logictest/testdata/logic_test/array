@@ -517,7 +517,7 @@ SELECT b FROM a
 ----
 {1,2,3}
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -528,7 +528,7 @@ SELECT b FROM a
 ----
 NULL
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -539,7 +539,7 @@ SELECT b FROM a
 ----
 {}
 
-statement ok
+statement count 1
 DELETE FROM a;
 
 # Make sure arrays originating from ARRAY_AGG work as expected.
@@ -578,7 +578,7 @@ INSERT INTO a VALUES (ARRAY['foo'])
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY[1, 'foo'])
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -600,7 +600,7 @@ NULL
 
 # NULL values
 
-statement ok
+statement count 3
 DELETE FROM a
 
 statement ok
@@ -614,7 +614,7 @@ SELECT * FROM a
 {1,NULL}
 {NULL,NULL}
 
-statement ok
+statement count 4
 DELETE FROM a
 
 # Test with arrays bigger than 8 elements so the NULL bitmap has to be larger than a byte
@@ -684,7 +684,7 @@ SELECT b FROM a
 
 # Test NULLs with strings
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -1727,7 +1727,7 @@ statement error duplicate key value violates unique constraint
 CREATE UNIQUE INDEX ON unique_array(b)
 
 # Create an indexes on a bad type.
-statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/dev/inverted-indexes.html
+statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v26.1/inverted-indexes.html
 CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
 
 # Test arrays of composite types.

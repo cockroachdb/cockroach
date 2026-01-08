@@ -997,7 +997,9 @@ func (n *mockSinkStorage) Writer(_ context.Context, _ string) (io.WriteCloser, e
 	return n.writer(), nil
 }
 
-func (n *mockSinkStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+func (n *mockSinkStorage) List(
+	_ context.Context, _ string, _ cloud.ListOptions, _ cloud.ListingFn,
+) error {
 	return nil
 }
 

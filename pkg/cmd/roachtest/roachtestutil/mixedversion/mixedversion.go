@@ -79,7 +79,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -94,7 +93,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 )
 
 const (
@@ -612,14 +610,6 @@ func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 	if t.options.minimumSupportedVersion.Series() == pred.Series() {
 		return false
-	}
-	// Special case for the current release series. This is useful to keep the
-	// test correct when we bump the minimum supported version separately from
-	// the current version.
-	r := clusterversion.Latest.ReleaseSeries()
-	currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
-	if currentMajor.Equals(v.Version.Major()) {
-		return len(clusterversion.SupportedPreviousReleases()) > 1
 	}
 
 	series := v.Version.Major()
@@ -1217,12 +1207,11 @@ func (t *Test) assertExpectedUserHooks(plan *TestPlan) error {
 	}
 
 	// Visit each step and remove the corresponding	user hook.
-	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, _ bool) {
 		from := ss.context.FromVersion().String()
 		if hook, ok := ss.impl.(runHookStep); ok {
 			delete(userHooks[from], hook.hook.name+"_"+hook.hook.id)
 		}
-		return nil
 	})
 	// Check that no unused hooks remain. If so, that's likely a bug in the planner, so we return an error.
 	for from := range userHooks {

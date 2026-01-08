@@ -125,16 +125,7 @@ func setupGenerator(
 				// (#135760). This should be safe since we assume that the
 				// generator functions do not update shared state and do not
 				// manipulate locks.
-				defer func() {
-					if r := recover(); r != nil {
-						if ok, e := errorutil.ShouldCatch(r); ok {
-							retErr = e
-						} else {
-							// Panic object that is not an error - unexpected.
-							panic(r)
-						}
-					}
-				}()
+				defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 				return worker(ctx, funcRowPusher(addRow))
 			}()
 			// Notify that we are done sending rows.

@@ -40,7 +40,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 31 MutationType ops
+## StatementPhase stage 1 of 1 with 32 MutationType ops
 upsert descriptor #108
   ...
        - 3
@@ -262,7 +262,7 @@ upsert descriptor #108
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 36 MutationType ops
+## PreCommitPhase stage 2 of 2 with 37 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -968,9 +968,8 @@ update progress of schema change job #1: "Pending: Validating NOT NULL constrain
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 24 with 3 ValidationType ops
-validate forward indexes [10] in table #108
+validate forward indexes [10 4] in table #108
 validate CHECK constraint crdb_internal_k_shard_16_auto_not_null in table #108
-validate forward indexes [4] in table #108
 commit transaction #17
 begin transaction #18
 ## PostCommitPhase stage 16 of 24 with 27 MutationType ops

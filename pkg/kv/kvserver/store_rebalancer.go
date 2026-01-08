@@ -32,7 +32,7 @@ var (
 		Help:        "Number of lease transfers motivated by store-level load imbalances",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}
@@ -41,7 +41,7 @@ var (
 		Help:        "Number of range rebalance operations motivated by store-level load imbalances",
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}

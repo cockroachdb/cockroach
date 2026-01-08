@@ -49,6 +49,7 @@ var (
 	_ Details = SqlActivityFlushDetails{}
 	_ Details = HotRangesLoggerDetails{}
 	_ Details = InspectDetails{}
+	_ Details = FingerprintDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -82,6 +83,7 @@ var (
 	_ ProgressDetails = SqlActivityFlushProgress{}
 	_ ProgressDetails = HotRangesLoggerProgress{}
 	_ ProgressDetails = InspectProgress{}
+	_ ProgressDetails = FingerprintProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -150,10 +152,6 @@ const AutoStatsName = "__auto__"
 // AutoPartialStatsName is the name to use for partial statistics created
 // automatically.
 const AutoPartialStatsName = "__auto_partial__"
-
-// ImportStatsName is the name to use for statistics created automatically
-// during import.
-const ImportStatsName = "__import__"
 
 // ForecastStatsName is the name to use for statistic forecasts.
 const ForecastStatsName = "__forecast__"
@@ -253,6 +251,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeHotRangesLogger, nil
 	case *Payload_InspectDetails:
 		return TypeInspect, nil
+	case *Payload_FingerprintDetails:
+		return TypeFingerprint, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -309,6 +309,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeSQLActivityFlush:             SqlActivityFlushDetails{},
 	TypeHotRangesLogger:              HotRangesLoggerDetails{},
 	TypeInspect:                      InspectDetails{},
+	TypeFingerprint:                  FingerprintDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -382,6 +383,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_HotRangesLogger{HotRangesLogger: &d}
 	case InspectProgress:
 		return &Progress_Inspect{Inspect: &d}
+	case FingerprintProgress:
+		return &Progress_Fingerprint{Fingerprint: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -453,6 +456,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.HotRangesLoggerDetails
 	case *Payload_InspectDetails:
 		return *d.InspectDetails
+	case *Payload_FingerprintDetails:
+		return *d.FingerprintDetails
 	default:
 		return nil
 	}
@@ -524,6 +529,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.HotRangesLogger
 	case *Progress_Inspect:
 		return d.Inspect
+	case *Progress_Fingerprint:
+		return d.Fingerprint
 	default:
 		return nil
 	}
@@ -619,6 +626,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_HotRangesLoggerDetails{HotRangesLoggerDetails: &d}
 	case InspectDetails:
 		return &Payload_InspectDetails{InspectDetails: &d}
+	case FingerprintDetails:
+		return &Payload_FingerprintDetails{FingerprintDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -654,7 +663,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 34
+const NumJobTypes = 35
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

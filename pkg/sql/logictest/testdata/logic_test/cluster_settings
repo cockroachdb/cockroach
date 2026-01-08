@@ -359,7 +359,7 @@ SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "cluste
 ----
 NULL
 
-onlyif config 3snode-tenant-default-config
+onlyif config 3node-tenant-default-configs
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTINGS FOR TENANT [10]
 
@@ -456,7 +456,7 @@ query T noticetrace
 SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 90;
 ----
 NOTICE: The TTL rate limit is per node per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v26.1/row-level-ttl#ttl-storage-parameters
 
 statement ok
 SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 100;
@@ -465,7 +465,7 @@ query T noticetrace
 SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 100;
 ----
 NOTICE: The TTL rate limit is per node per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v26.1/row-level-ttl#ttl-storage-parameters
 
 statement ok
 SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 0;

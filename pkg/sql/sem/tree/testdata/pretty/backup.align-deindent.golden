@@ -10,7 +10,7 @@ INTO
 AS OF SYSTEM TIME
 	'-10s'
 WITH
-	revision_history = true, incremental_location = 'gs://acme-co-backup/incrementals'
+	revision_history = true
 
 17:
 -----------------
@@ -18,10 +18,10 @@ WITH
          DATABASE bank
              INTO 'gs://acme-co-backup'
 AS OF SYSTEM TIME '-10s'
-             WITH revision_history = true, incremental_location = 'gs://acme-co-backup/incrementals'
+             WITH revision_history = true
 
-160:
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
-BACKUP DATABASE bank INTO 'gs://acme-co-backup' AS OF SYSTEM TIME '-10s' WITH revision_history = true, incremental_location = 'gs://acme-co-backup/incrementals'
+101:
+-----------------------------------------------------------------------------------------------------
+BACKUP DATABASE bank INTO 'gs://acme-co-backup' AS OF SYSTEM TIME '-10s' WITH revision_history = true
 
 

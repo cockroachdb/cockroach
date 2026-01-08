@@ -100,12 +100,12 @@ func (lResult *LocalResult) String() string {
 		return "LocalResult: nil"
 	}
 	return fmt.Sprintf("LocalResult (reply: %v, "+
-		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d"+
+		"#encountered intents: %d, #acquired locks: %d, #resolved locks: %d "+
 		"#updated txns: %d #end txns: %d, "+
 		"PopulateBarrierResponse:%t RepopulateSubsumeResponse:%t "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s ",
+		"MaybeGossipNodeLiveness:%s",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),

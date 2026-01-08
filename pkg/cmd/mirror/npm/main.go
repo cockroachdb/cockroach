@@ -19,10 +19,10 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"go.yaml.in/yaml/v4"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
-	yaml "gopkg.in/yaml.v3"
 )
 
 // getUnmirroredUrls finds packages in each provided pnpm-lock.yaml (each of

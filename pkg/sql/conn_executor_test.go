@@ -75,9 +75,10 @@ import (
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	srv, mainDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
@@ -369,7 +370,7 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	defer mutations.ResetMaxBatchSizeForTests()
 	numRows := smallerKvBatchSize + smallerInsertBatchSize + 10
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Insecure = true
 	params.Knobs.DistSQL = &execinfra.TestingKnobs{
 		TableReaderBatchBytesLimit: 10,
@@ -440,7 +441,7 @@ func TestAppNameStatisticsInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Insecure = true
 
 	s := serverutils.StartServerOnly(t, params)
@@ -643,7 +644,9 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(156146),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
@@ -1405,8 +1408,17 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	skip.UnderRace(t, "measure planning latency which is slower than usual under race")
 
 	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, sqlConn, _ := serverutils.StartServer(t, params)
+	var testTenant base.DefaultTestTenantOptions
+	if syncutil.DeadlockEnabled {
+		// Under deadlock, the planning latency in the secondary test tenant can
+		// sometimes exceed 1s allowed limit. (Note ideally we'd have used a
+		// different test tenant option since it's not "storage-layer specific"
+		// test, but there isn't a more suitable one.)
+		testTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+	}
+	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: testTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	testCases := []struct {
@@ -1732,13 +1744,29 @@ func TestInjectRetryOnCommitErrors(t *testing.T) {
 	})
 }
 
+// TestAbortedTxnLocks verifies the lock behavior when a transaction enters the
+// aborted state due to an error. The expected behavior depends on whether any
+// savepoints are active:
+//
+//   - Without savepoints (or with released savepoints): locks are released
+//     immediately when the transaction aborts, allowing other transactions to
+//     proceed without waiting for an explicit ROLLBACK.
+//
+//   - With unreleased savepoints (including after ROLLBACK TO SAVEPOINT): locks
+//     are held until the transaction is explicitly rolled back, because the
+//     client could potentially recover via ROLLBACK TO SAVEPOINT.
+//
+// This distinction exists because savepoints allow error recovery within a
+// transaction, so the database cannot safely release locks until it knows the
+// transaction will not continue.
 func TestAbortedTxnLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	var TransactionStatus string
 
@@ -1899,6 +1927,9 @@ func TestAbortedTxnLocks(t *testing.T) {
 	})
 
 	t.Run("with cockroach_restart savepoint and advanced retry", func(t *testing.T) {
+		if !s.Codec().IsSystem() {
+			skip.IgnoreLintf(t, "test is flaky on secondary tenants")
+		}
 		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (5,5), (6,6)`)
 		require.NoError(t, err)
 
@@ -2425,8 +2456,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 	ctx := context.Background()
 	params := base.TestServerArgs{}
 	params.Insecure = true
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create a test table.
 	_, err := sqlDB.Exec("CREATE TABLE test (k INT PRIMARY KEY, v INT)")
@@ -2434,13 +2466,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set at conn init", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme: "postgres",
-			User:   url.User(username.RootUser),
-			Host:   s.AdvSQLAddr(),
-		}
+		connURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
+		defer cleanup()
 		q := connURL.Query()
-		q.Add("sslmode", "disable")
 		q.Add("application_name", catconstants.InternalAppNamePrefix+"mytest")
 		connURL.RawQuery = q.Encode()
 		db, err := gosql.Open("postgres", connURL.String())
@@ -2462,15 +2490,7 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set in session", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(username.RootUser),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", connURL.String())
-		require.NoError(t, err)
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(username.RootUser))
 		runner := sqlutils.MakeSQLRunner(db)
 
 		// Get initial metric values

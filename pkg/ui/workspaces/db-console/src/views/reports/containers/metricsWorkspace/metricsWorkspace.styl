@@ -1,0 +1,48 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@require "~styl/base/palette.styl"
+@require "~src/components/core/index.styl"
+
+.metrics-workspace
+  padding 24px
+
+  &__header
+    display flex
+    justify-content space-between
+    align-items center
+    margin-bottom 24px
+
+  &__title
+    margin 0
+    font-size 24px
+    font-weight 600
+
+  &__header-actions
+    display flex
+    gap 12px
+
+  &__time-selector
+    margin-bottom 24px
+
+  &__empty-state
+    text-align center
+    padding 48px
+    color $colors--neutral-6
+
+  &__dashboard-content
+    padding 16px
+
+  &__graph-container
+    margin-bottom 24px
+
+  &__graph-header
+    display flex
+    justify-content space-between
+    align-items center
+    margin-bottom 16px
+
+  &__graph-title
+    margin 0

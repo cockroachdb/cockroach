@@ -71,8 +71,11 @@
 /pkg/sql/executor_statement_metrics.go @cockroachdb/obs-prs
 /pkg/sql/flowinfra/          @cockroachdb/sql-queries-prs
 /pkg/sql/hints/              @cockroachdb/sql-queries-prs
+/pkg/sql/parser/             @cockroachdb/sql-queries-prs
 /pkg/sql/physicalplan/       @cockroachdb/sql-queries-prs
 /pkg/sql/row*                @cockroachdb/sql-queries-prs
+/pkg/sql/sem/tree/           @cockroachdb/sql-queries-prs
+/pkg/sql/types/              @cockroachdb/sql-queries-prs
 /pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/job_exec_context*   @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
@@ -92,14 +95,10 @@
 /pkg/sql/tablemetadatacache/  @cockroachdb/obs-prs
 /pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/obs-prs
 
-/pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
-/pkg/sql/parser/             @cockroachdb/sql-syntax-prs
-/pkg/sql/lex/                @cockroachdb/sql-syntax-prs
-/pkg/sql/show_create*.go     @cockroachdb/sql-syntax-prs
-/pkg/sql/types/              @cockroachdb/sql-syntax-prs
-
 /pkg/sql/crdb_internal.go    @cockroachdb/sql-foundations
 /pkg/sql/pg_catalog.go       @cockroachdb/sql-foundations
+/pkg/sql/show_create*.go     @cockroachdb/sql-foundations
+/pkg/sql/lex/                @cockroachdb/sql-foundations
 /pkg/sql/pgwire/             @cockroachdb/sql-foundations @cockroachdb/product-security
 /pkg/sql/pgwire/auth.go      @cockroachdb/sql-foundations @cockroachdb/security-engineering
 /pkg/sql/sem/builtins/       @cockroachdb/sql-foundations

@@ -158,6 +158,12 @@ function addTransactionStats(
       countB,
     ),
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
+    kv_cpu_time_nanos: aggregateNumericStats(
+      a.kv_cpu_time_nanos,
+      b.kv_cpu_time_nanos,
+      countA,
+      countB,
+    ),
   };
 }
 

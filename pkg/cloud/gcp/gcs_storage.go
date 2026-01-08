@@ -76,6 +76,7 @@ func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
+	conf.URI = uri.String()
 	assumeRole, delegateRoles := cloud.ParseRoleString(gsURL.ConsumeParam(AssumeRoleParam))
 	conf.GoogleCloudConfig = &cloudpb.ExternalStorage_GCS{
 		Bucket:              uri.Host,
@@ -105,6 +106,7 @@ type gcsStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string
 	settings *cluster.Settings
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &gcsStorage{}
@@ -113,6 +115,7 @@ func (g *gcsStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:          cloudpb.ExternalStorageProvider_gs,
 		GoogleCloudConfig: g.conf,
+		URI:               g.uri,
 	}
 }
 
@@ -223,6 +226,7 @@ func makeGCSStorage(
 		ioConf:   args.IOConf,
 		prefix:   conf.Prefix,
 		settings: args.Settings,
+		uri:      dest.URI,
 	}, nil
 }
 
@@ -335,13 +339,22 @@ func (g *gcsStorage) ReadFile(
 	return r, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 
-func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (g *gcsStorage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
+	afterKey := opts.CanonicalAfterKey(g.prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(dest))
 
-	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
+	it := g.bucket.Objects(
+		ctx,
+		&gcs.Query{
+			Prefix:    dest,
+			Delimiter: opts.Delimiter,
+		},
+	)
 	for {
 		attrs, err := it.Next()
 		if errors.Is(err, iterator.Done) {
@@ -353,6 +366,9 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 		name := attrs.Name
 		if name == "" {
 			name = attrs.Prefix
+		}
+		if name <= afterKey {
+			continue
 		}
 		if err := fn(strings.TrimPrefix(name, dest)); err != nil {
 			return err

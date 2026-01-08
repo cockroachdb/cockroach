@@ -1889,3 +1889,37 @@ func TestWALFailoverWrapperRoundtrip(t *testing.T) {
 		return buf.String()
 	})
 }
+
+func TestUseNewRPC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	testCases := []struct {
+		args        []string
+		expectedVal bool
+	}{
+		{[]string{}, false},                      // Default value
+		{[]string{"--use-new-rpc"}, true},        // Flag enabled
+		{[]string{"--use-new-rpc=true"}, true},   // Flag explicitly enabled
+		{[]string{"--use-new-rpc=false"}, false}, // Flag explicitly disabled
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%v", tc.args), func(t *testing.T) {
+			// Reset to defaults before each test
+			initCLIDefaults()
+
+			f := startCmd.Flags()
+			if err := f.Parse(tc.args); err != nil {
+				t.Fatal(err)
+			}
+
+			if baseCfg.UseDRPC != tc.expectedVal {
+				t.Errorf("expected UseDRPC=%v, but got %v", tc.expectedVal, baseCfg.UseDRPC)
+			}
+		})
+	}
+}

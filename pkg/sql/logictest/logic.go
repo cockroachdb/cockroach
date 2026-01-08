@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -227,6 +228,11 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//    Usage of 'statement count N' is preferred whenever applicable (e.g. for
+//    DML statements) and in some cases is actually required by the framework.
+//    Use 'statement nocount ok' to explicitly opt out of the count check (e.g.
+//    because the count is non-determinstic).
+//
 //  - statement disable-cf-mutator ok
 //    Like "statement ok" but disables the column family mutator if applicable.
 //
@@ -330,6 +336,13 @@ import (
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
+//      - allowunsafe: allows access to unsafe internals during execution.
+//      - scrub-row-counts: removes lines containing "row count" from results
+//            to avoid test brittleness when virtual tables are added/removed.
+//      - strip-oids: replaces virtual table OIDs (9+ digit numbers) with
+//            "__OID__" placeholders. Automatically enabled for queries containing
+//            "pg_" references. To test specific OID values when enabled, adjust the
+// 						query projection to prefix, e.g 'oid='||t.oid.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -529,13 +542,19 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE    = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
-	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
-	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
-	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
-	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	resultsRE      = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE       = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
+	errorRE        = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE          = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE        = regexp.MustCompile(`(?i)ORDER\s+BY`)
+	explainRE      = regexp.MustCompile(`(?i)EXPLAIN\W+`)
+	showTraceRE    = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	sendingBatchRE = regexp.MustCompile(`r\d+: (sending batch .*)`)
+	beforeTableRE  = regexp.MustCompile(`(<before:/Table/)\d+(>)`)
+	afterTableRE   = regexp.MustCompile(`(<after:/Table/)\d+(/.*>)`)
+	// virtualOidRE matches large OIDs (9+ digits) to strip them for test stability.
+	// These OIDs shift when virtual tables or other objects are added/removed.
+	virtualOidRE = regexp.MustCompile(`\b[1-9]\d{8,9}\b`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -969,6 +988,20 @@ type logicQuery struct {
 	// roundFloatsInStringsSigFigs specifies the number of significant figures
 	// to round floats embedded in strings to where zero means do not round.
 	roundFloatsInStringsSigFigs int
+
+	// allowUnsafe indicates whether unsafe operations are allowed during execution.
+	allowUnsafe bool
+
+	// scrubRowCounts indicates whether to remove lines containing "row count"
+	// from results to avoid brittleness when virtual tables are added/removed.
+	scrubRowCounts bool
+
+	// stripOids indicates whether to replace virtual table OIDs (matching
+	// 429\d{7}) with a placeholder to avoid test brittleness. This is
+	// automatically enabled for queries containing "pg_" unless explicitly
+	// disabled with no-strip-oids. If you need to test actual OID values,
+	// offset them below the detection range or use no-strip-oids.
+	stripOids bool
 }
 
 var allowedKVOpTypes = []string{
@@ -1119,6 +1152,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe atomic.Bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1348,6 +1385,9 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	var envVars []string
 	// Set crash reporting URL to the empty string to disable Sentry crash reports.
 	envVars = append(envVars, "COCKROACH_CRASH_REPORTS=")
+	// Allow access to crdb_internal for mixed-version tests that need to check versions
+	// and for the framework's object validation queries.
+	envVars = append(envVars, "COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true")
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
 		// locally built, so we need to opt-out of version offsetting to
@@ -1493,6 +1533,10 @@ func (t *logicTest) newCluster(
 			DisableOptimizerRuleProbability: *disableOptRuleProbability,
 			OptimizerCostPerturbation:       *optimizerCostPerturbation,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
+			UnsafeOverride: func() *bool {
+				v := t.allowUnsafe.Load()
+				return &v
+			},
 		}
 		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			DeterministicExplain:            true,
@@ -1557,7 +1601,6 @@ func (t *logicTest) newCluster(
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
-			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
@@ -1825,6 +1868,18 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+		if cfg.UseDistributedMergeIndexBackfill {
+			mode := "declarative"
+			if cfg.DisableDeclarativeSchemaChanger {
+				mode = "legacy"
+			}
+			if _, err := conn.Exec(
+				fmt.Sprintf("SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = '%s'", mode),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
@@ -2115,6 +2170,18 @@ func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
 	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
+// knobOptAllowUnsafe always allows access to the unsafe internals.
+type knobOptAllowUnsafe struct{}
+
+var _ knobOpt = knobOptAllowUnsafe{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptAllowUnsafe) apply(args *base.TestingKnobs) {
+	e := args.SQLEvalContext.(*eval.TestingKnobs)
+	v := true
+	e.UnsafeOverride = func() *bool { return &v }
+}
+
 // clusterOptIgnoreStrictGCForTenants corresponds to the
 // ignore-tenant-strict-gc-enforcement directive.
 type clusterOptIgnoreStrictGCForTenants struct{}
@@ -2268,6 +2335,8 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 			res = append(res, knobOptDisableCorpusGeneration{})
 		case "sync-event-log":
 			res = append(res, knobOptSynchronousEventLog{})
+		case "allow-unsafe":
+			res = append(res, knobOptAllowUnsafe{})
 		default:
 			t.Fatalf("unrecognized knob option: %s", opt)
 		}
@@ -2733,6 +2802,7 @@ func (t *logicTest) processSubtest(
 			}
 			fullyConsumed := len(fields) == 1
 			var disableCFMutator bool
+			var matchedStatementOK bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2744,15 +2814,33 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
 				disableCFMutator = true
 				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "nocount" && fields[2] == "ok" {
+				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
 				fullyConsumed = true
+				matchedStatementOK = true
 			}
 			if !fullyConsumed {
 				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
+			}
+			isSQLite := strings.Contains(path, "sqllogictest")
+			if matchedStatementOK && !isSQLite {
+				// Require that DML stmts use 'statement count N', currently we
+				// only do this for "simple" DELETEs.
+				//
+				// We don't apply this to SQLite suite since we haven't adjusted
+				// it yet.
+				// TODO(yuzefovich): expand this to other DML statements.
+				// TODO(yuzefovich): apply this to more complex stmts with CTEs,
+				// etc.
+				// TODO(yuzefovich): expand this to sqllogictest too.
+				if strings.HasPrefix(strings.TrimSpace(strings.ToUpper(stmt.sql)), "DELETE") {
+					return errors.New("DELETE should use 'statement count N' directive instead of 'statement ok'")
+				}
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
@@ -2953,6 +3041,15 @@ func (t *logicTest) processSubtest(
 
 						case "async":
 							query.expectAsync = true
+
+						case "allowunsafe":
+							query.allowUnsafe = true
+
+						case "scrub-row-counts":
+							query.scrubRowCounts = true
+
+						case "strip-oids":
+							query.stripOids = true
 
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
@@ -3234,7 +3331,7 @@ func (t *logicTest) processSubtest(
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
 			//
-			// TODO(#76378): It seems the conditional should include `||
+			// TODO(#156124): It seems the conditional should include `||
 			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
 			// where the config specified "Random" and a test tenant was
 			// effectively created.
@@ -3332,7 +3429,9 @@ func (t *logicTest) processSubtest(
 				for _, configName := range args {
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 			case "backup-restore":
@@ -3385,7 +3484,9 @@ func (t *logicTest) processSubtest(
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						// Our config matches one item in the list.
 						shouldSkip = false
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 				if shouldSkip {
@@ -3599,6 +3700,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql, false)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3722,6 +3824,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql, query.allowUnsafe)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -3939,6 +4042,13 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 					}
 
 					rowCount++
+
+					if query.empty {
+						// Skip column assertions if we are expecting an empty
+						// result.
+						continue
+					}
+
 					for i, v := range vals {
 						colT := query.colTypes[i]
 						// Ignore column - useful for non-deterministic output.
@@ -4021,6 +4131,21 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 						if query.roundFloatsInStringsSigFigs > 0 {
 							s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
 						}
+						if colT == 'T' {
+							// Remove the rangeID prefix from 'sending batch ...'
+							// message in the trace to reduce test churn when
+							// adding new system tables.
+							//
+							// Also replace tableIDs with a constant in messages like
+							// '<before:/Table/77>' and '<after:/Table/107/1>'.
+							if matches := sendingBatchRE.FindStringSubmatch(s); len(matches) > 1 {
+								s = matches[1]
+							} else if matches = beforeTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							} else if matches = afterTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							}
+						}
 						// Replace any \n character with an escaped new line. This will ensure that
 						// tests pass and the output remains relatively well formatted. This will
 						// happen unless:
@@ -4041,6 +4166,25 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 			if err := rows.Err(); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Filter out lines containing "row count" if scrub-row-counts is enabled.
+	if query.scrubRowCounts {
+		filtered := actualResultsRaw[:0]
+		for _, result := range actualResultsRaw {
+			if !strings.Contains(result, "row count") {
+				filtered = append(filtered, result)
+			}
+		}
+		actualResultsRaw = filtered
+	}
+
+	// Replace virtual table OIDs with placeholders if strip-oids is enabled.
+	// Test files should use "oidX" placeholders in expected results.
+	if query.stripOids {
+		for i, result := range actualResultsRaw {
+			actualResultsRaw[i] = virtualOidRE.ReplaceAllString(result, "__OID__")
 		}
 	}
 
@@ -4610,6 +4754,7 @@ func RunLogicTest(
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
 	}
+	lt.allowUnsafe.Store(true)
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
 	}
@@ -4883,4 +5028,24 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// setSafetyGate is a utility function which controls whether access to the unsafe
+// internals is allowed by the contained sql statement. The reasoning behind it is
+// as follows. We want queries which explicitly access unsafe internals to have
+// access to them, but we want to prevent indirect access wherever possible.
+// Indirect access can be described as any query which doesn't reference an unsafe
+// object, but still accesses it under the hood. We want to flush out these cases
+// so that users can never execute statements which look safe, but block when executed.
+func (t *logicTest) setSafetyGate(sql string, skip bool) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	if skip || explicitlyUnsafe {
+		return func() {}
+	}
+
+	t.allowUnsafe.Store(false)
+	return func() {
+		t.allowUnsafe.Store(true)
+	}
 }

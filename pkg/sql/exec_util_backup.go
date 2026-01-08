@@ -94,6 +94,8 @@ type BackupRestoreTestingKnobs struct {
 	// AfterRevertRestoreDropDescriptors is called after a reverting restore
 	// drops its descriptors.
 	AfterRevertRestoreDropDescriptors func() error
+
+	RestoreSpanConfigConformanceRetryPolicy *retry.Options
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}

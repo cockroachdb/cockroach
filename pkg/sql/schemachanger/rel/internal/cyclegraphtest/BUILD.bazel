@@ -13,7 +13,7 @@ go_library(
     deps = [
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/rel/reltest",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 

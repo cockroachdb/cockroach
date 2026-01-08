@@ -123,6 +123,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V26_1_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"create table_statistics_locks table",
+		clusterversion.V26_1_AddTableStatisticsLocksTable.Version(),
+		upgrade.NoPrecondition,
+		createTableStatisticsLocksTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

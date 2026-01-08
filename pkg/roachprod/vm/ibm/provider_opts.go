@@ -5,7 +5,10 @@
 
 package ibm
 
-import "github.com/IBM/go-sdk-core/v5/core"
+import (
+	"github.com/IBM/go-sdk-core/v5/core"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+)
 
 type Option interface {
 	apply(*Provider)
@@ -33,4 +36,26 @@ func WithRegion(region string) OptionFunc {
 		}
 		p.regions[region] = struct{}{}
 	}
+}
+
+// WithDNSProvider returns an option to set the DNS provider.
+func WithDNSProvider(dnsProvider vm.DNSProvider) OptionFunc {
+	return func(p *Provider) {
+		p.dnsProvider = dnsProvider
+	}
+}
+
+// ProviderOptions holds options for configuring the IBM provider.
+type ProviderOptions struct {
+	DNSProvider vm.DNSProvider
+}
+
+// ToOptions converts ProviderOptions to a slice of Option functions to be used
+// in NewProvider(opts ...Option).
+func (po *ProviderOptions) ToOptions() []Option {
+	var opts []Option
+	if po.DNSProvider != nil {
+		opts = append(opts, WithDNSProvider(po.DNSProvider))
+	}
+	return opts
 }

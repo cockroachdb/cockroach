@@ -1696,7 +1696,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.True(t, closedTS.LessEq(writeTS), "timestamp %s below closed timestamp %s", result.Timestamp, closedTS)
 
 	// Check that the value was in fact written at the write timestamp.
-	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), key, key.Next(), 0)
+	kvs, err := storage.Scan(context.Background(), store.StateEngine(), key, key.Next(), 0)
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
 	require.Equal(t, storage.MVCCKey{Key: key, Timestamp: writeTS}, kvs[0].Key)

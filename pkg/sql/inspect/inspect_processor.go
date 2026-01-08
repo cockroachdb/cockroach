@@ -84,17 +84,19 @@ func getInspectQoS(sv *settings.Values) sessiondatapb.QoSLevel {
 type inspectCheckFactory func(asOf hlc.Timestamp) inspectCheck
 
 type inspectProcessor struct {
-	processorID       int32
-	flowCtx           *execinfra.FlowCtx
-	spec              execinfrapb.InspectSpec
-	cfg               *execinfra.ServerConfig
-	checkFactories    []inspectCheckFactory
-	spanSrc           spanSource
-	loggerBundle      *inspectLoggerBundle
-	concurrency       int
-	clock             *hlc.Clock
-	spansProcessedCtr *metric.Counter
-	mu                struct {
+	processorID         int32
+	flowCtx             *execinfra.FlowCtx
+	spec                execinfrapb.InspectSpec
+	cfg                 *execinfra.ServerConfig
+	checkFactories      []inspectCheckFactory
+	spanSrc             spanSource
+	loggerBundle        *inspectLoggerBundle
+	concurrency         int
+	clock               *hlc.Clock
+	spansProcessedCtr   *metric.Counter
+	numActiveSpansGauge *metric.Gauge
+
+	mu struct {
 		// Guards calls to output.Push because DistSQLReceiver.Push is not
 		// concurrency safe and progress metadata can be emitted from multiple
 		// worker goroutines.
@@ -131,12 +133,12 @@ func (p *inspectProcessor) Run(ctx context.Context, output execinfra.RowReceiver
 		ctx, span = execinfra.ProcessorSpan(ctx, p.flowCtx, "inspect", p.processorID)
 		defer span.Finish()
 	}
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, p.flowCtx, output)
 	err := p.runInspect(ctx, output)
 	if err != nil {
 		output.Push(nil, &execinfrapb.ProducerMetadata{Err: err})
 	}
-	execinfra.SendTraceData(ctx, p.flowCtx, output)
-	output.ProducerDone()
 }
 
 // runInspect starts a set of worker goroutines to process spans concurrently.
@@ -265,7 +267,20 @@ func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) *inspectLo
 func (p *inspectProcessor) processSpan(
 	ctx context.Context, span roachpb.Span, workerIndex int, output execinfra.RowReceiver,
 ) (err error) {
+	if p.numActiveSpansGauge != nil {
+		p.numActiveSpansGauge.Inc(1)
+		defer p.numActiveSpansGauge.Dec(1)
+	}
+
 	asOfToUse := p.getTimestampForSpan()
+
+	// If using "now" AOST, notify the coordinator so it can set up protected
+	// timestamp protection for this span.
+	if p.spec.InspectDetails.AsOf.IsEmpty() {
+		if err := p.sendSpanStartedProgress(ctx, output, span, asOfToUse); err != nil {
+			return err
+		}
+	}
 
 	// Only create checks that apply to this span.
 	var checks []inspectCheck
@@ -352,6 +367,37 @@ func (p *inspectProcessor) sendInspectProgress(
 	return nil
 }
 
+// sendSpanStartedProgress sends a progress message indicating a span has started
+// processing with a specific timestamp. The coordinator uses this to set up
+// protected timestamp protection for the span.
+func (p *inspectProcessor) sendSpanStartedProgress(
+	ctx context.Context, output execinfra.RowReceiver, span roachpb.Span, asOf hlc.Timestamp,
+) error {
+	log.VEventf(ctx, 2, "INSPECT: processor sending span started for %s at timestamp %s", span, asOf)
+
+	progressMsg := &jobspb.InspectProcessorProgress{
+		SpanStarted: span,
+		StartedAt:   asOf,
+	}
+
+	progressAny, err := pbtypes.MarshalAny(progressMsg)
+	if err != nil {
+		return errors.Wrapf(err, "unable to marshal inspect processor progress")
+	}
+
+	meta := &execinfrapb.ProducerMetadata{
+		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+			ProgressDetails: *progressAny,
+			NodeID:          p.flowCtx.NodeID.SQLInstanceID(),
+			FlowID:          p.flowCtx.ID,
+			ProcessorID:     p.processorID,
+		},
+	}
+
+	p.pushProgressMeta(output, meta)
+	return nil
+}
+
 // getTimestampForSpan returns the timestamp to use for processing a span.
 // If AsOf is empty, it returns the current timestamp from the processor's clock.
 // Otherwise, it returns the specified AsOf timestamp.
@@ -420,22 +466,25 @@ func newInspectProcessor(
 		return nil, err
 	}
 	var spansProcessedCtr *metric.Counter
+	var numActiveSpansGauge *metric.Gauge
 	if execCfg, ok := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig); ok {
 		inspectMetrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
 		spansProcessedCtr = inspectMetrics.SpansProcessed
+		numActiveSpansGauge = inspectMetrics.NumActiveSpans
 	}
 
 	return &inspectProcessor{
-		spec:              spec,
-		processorID:       processorID,
-		flowCtx:           flowCtx,
-		checkFactories:    checkFactories,
-		cfg:               flowCtx.Cfg,
-		spanSrc:           newSliceSpanSource(spec.Spans),
-		loggerBundle:      getInspectLogger(flowCtx, spec.JobID),
-		concurrency:       getProcessorConcurrency(flowCtx),
-		clock:             flowCtx.Cfg.DB.KV().Clock(),
-		spansProcessedCtr: spansProcessedCtr,
+		spec:                spec,
+		processorID:         processorID,
+		flowCtx:             flowCtx,
+		checkFactories:      checkFactories,
+		cfg:                 flowCtx.Cfg,
+		spanSrc:             newSliceSpanSource(spec.Spans),
+		loggerBundle:        getInspectLogger(flowCtx, spec.JobID),
+		concurrency:         getProcessorConcurrency(flowCtx),
+		clock:               flowCtx.Cfg.DB.KV().Clock(),
+		spansProcessedCtr:   spansProcessedCtr,
+		numActiveSpansGauge: numActiveSpansGauge,
 	}, nil
 }
 
@@ -452,6 +501,7 @@ func buildInspectCheckFactories(
 	for _, specCheck := range spec.InspectDetails.Checks {
 		tableID := specCheck.TableID
 		indexID := specCheck.IndexID
+		tableVersion := specCheck.TableVersion
 		switch specCheck.Type {
 		case jobspb.InspectCheckIndexConsistency:
 			checkFactories = append(checkFactories, func(asOf hlc.Timestamp) inspectCheck {
@@ -459,9 +509,10 @@ func buildInspectCheckFactories(
 					indexConsistencyCheckApplicability: indexConsistencyCheckApplicability{
 						tableID: tableID,
 					},
-					flowCtx: flowCtx,
-					indexID: indexID,
-					asOf:    asOf,
+					flowCtx:      flowCtx,
+					indexID:      indexID,
+					tableVersion: tableVersion,
+					asOf:         asOf,
 				}
 			})
 

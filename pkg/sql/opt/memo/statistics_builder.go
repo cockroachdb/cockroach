@@ -680,15 +680,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
-	// Find the most recent full statistic. (Stats are ordered with most recent first.)
-	var first int
-	for first < tab.StatisticCount() &&
-		(tab.Statistic(first).IsPartial() ||
-			tab.Statistic(first).IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
-			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
-		first++
-	}
-
+	first := cat.FindLatestFullStat(tab, sb.evalCtx.SessionData())
 	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
@@ -2201,8 +2193,17 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 		// count will equal the distinct count of the set of output columns.
 		setPrivate := setNode.Private().(*SetPrivate)
 		outputCols := setPrivate.OutCols.ToSet()
-		colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
-		s.RowCount = colStat.DistinctCount
+		if outputCols.Empty() {
+			// When there are no output columns (e.g., SELECT with no projected
+			// columns), the distinct count is either 0 or 1, so we use the
+			// already computed row count.
+			if s.RowCount > 0 {
+				s.RowCount = 1
+			}
+		} else {
+			colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
+			s.RowCount = colStat.DistinctCount
+		}
 	}
 
 	sb.finalizeFromCardinality(relProps)

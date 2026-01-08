@@ -42,7 +42,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(800),
-		spec.GCEVolumeType("pd-ssd"),
+		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 	}
 	testTimeout := 19 * time.Hour
@@ -160,6 +160,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// pg_catalog and information_schema.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'")
 						require.NoError(t, err)
+						// Enabled locked descriptor leasing for correctness.
+						_, err = conn.Exec("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'")
+						require.NoError(t, err)
 						// Since we will be making a large number of databases / tables
 						// quickly,on MR the job retention can slow things down. Let's
 						// minimize how long jobs are kept, so that the creation / ingest
@@ -169,6 +172,12 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// Use a higher number of retries, since we hit retry errors on importing
 						// a large number of tables
 						_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=500")
+						require.NoError(t, err)
+						// Disable the schema object count limit to allow creating 40,000+
+						// tables. This is a guardrail that prevents unbounded growth of the
+						// descriptor table, but for this benchmark we intentionally want to
+						// test with a large number of tables.
+						_, err = conn.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0")
 						require.NoError(t, err)
 						// Create a user that will be used for authentication for the REST
 						// API calls.
@@ -191,8 +200,19 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				"apiCalls",
 				0755,
 				c.WorkloadNode()))
-			// Get a list of web console URLs.
-			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
+
+			// Determine which nodes to use for the workload. In multi-region mode,
+			// we only connect to nodes in the same region as the workload node to
+			// avoid cross-region latency being included in query latency measurements.
+			// The zone assignment pattern is: us-east1, us-west1, us-central1 repeating,
+			// so nodes 1, 4, 7 are in us-east1 (same region as workload node 10).
+			localNodes := c.CRDBNodes()
+			if isMultiRegion {
+				localNodes = c.Nodes(1, 4, 7)
+			}
+
+			// Get a list of web console URLs for local nodes only.
+			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), localNodes)
 			require.NoError(t, err)
 			for urlIdx := range webConsoleURLs {
 				webConsoleURLs[urlIdx] = "https://" + webConsoleURLs[urlIdx]
@@ -221,6 +241,16 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							workloadInstance{
 								nodes:          c.CRDBNodes(),
 								prometheusPort: 5050,
+							},
+						)
+					} else {
+						// For active databases, connect only to local nodes to avoid
+						// cross-region latency in measurements.
+						wlInstance = append(
+							wlInstance,
+							workloadInstance{
+								nodes:          localNodes,
+								prometheusPort: 2112,
 							},
 						)
 					}

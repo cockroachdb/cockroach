@@ -77,6 +77,9 @@ func (s *TestState) ClusterID() uuid.UUID {
 
 // Codec implements the scbuild.Dependencies interface.
 func (s *TestState) Codec() keys.SQLCodec {
+	if s.evalCtx.Codec.IsSet() {
+		return s.evalCtx.Codec
+	}
 	return keys.SystemSQLCodec
 }
 
@@ -331,7 +334,7 @@ func (s *TestState) MayResolvePrefix(
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveTable(
-	ctx context.Context, name tree.UnresolvedObjectName,
+	ctx context.Context, name tree.UnresolvedObjectName, allowOffline bool,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	prefix, desc, err := s.mayResolveObject(name)
 	if err != nil {
@@ -385,7 +388,7 @@ func (s *TestState) MayResolveIndex(
 	idx catalog.Index,
 ) {
 	if tableIndexName.Table.Object() != "" {
-		prefix, tbl = s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName())
+		prefix, tbl = s.MayResolveTable(ctx, *tableIndexName.Table.ToUnresolvedObjectName(), false /* allowOffline */)
 		if tbl == nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil
 		}
@@ -1341,6 +1344,22 @@ func (s *TestState) UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.Tabl
 	return nil
 }
 
+// UpdateTTLScheduleCron implements scexec.DescriptorMetadataUpdater
+func (s *TestState) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	s.LogSideEffectf("update ttl schedule cron #%d to %q", scheduleID, cronExpr)
+	return nil
+}
+
+// CreateRowLevelTTLSchedule implements scexec.DescriptorMetadataUpdater
+func (s *TestState) CreateRowLevelTTLSchedule(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	s.LogSideEffectf("create row-level TTL schedule for table #%d", tbl.GetID())
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,
@@ -1543,8 +1562,21 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 }
 
 // InitializeSequence is part of the scexec.Catalog interface.
-func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+func (s *TestState) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
+	return nil
+}
+
+func (s *TestState) SetSequence(ctx context.Context, seq *scexec.SequenceToSet) error {
+	s.LogSideEffectf("sequence %d value to %d", seq.ID, seq.Value)
+	return nil
+}
+
+func (s *TestState) MaybeUpdateSequenceValue(
+	ctx context.Context, seq *scexec.SequenceToMaybeUpdate,
+) error {
+	s.LogSideEffectf("sequence %d value may be updated", seq.ID)
+	return nil
 }
 
 // CheckMaxSchemaObjects is part of the scexec.Catalog interface.

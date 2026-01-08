@@ -136,7 +136,7 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 		}
 
 		if priv.GrantOption {
-			privDesc, err := p.getPrivilegeDescriptor(ctx, privObject)
+			privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, privObject)
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}

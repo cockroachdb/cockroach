@@ -765,7 +765,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
 func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
-	batch := r.store.TODOEngine().NewBatch()
+	batch := r.store.StateEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
@@ -814,8 +814,10 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, g.LatchSpans())
+		spans := g.LatchSpans()
+		batch = spanset.NewBatch(batch, spans)
 	}
+
 	return batch, opLogger
 }
 

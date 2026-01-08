@@ -261,10 +261,13 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 
 			case "trace-sql":
 				mustHaveArgOrFatal(t, d, serverIdx)
+				var idx int
+				d.ScanArgs(t, serverIdx, &idx)
+				shouldRetry := d.HasArg(traceSQLRetryArg)
+				retryTimeout := testutils.DefaultSucceedsSoonDuration
+
 				var rec tracingpb.Recording
 				queryFunc := func() (localRead bool, followerRead bool, err error) {
-					var idx int
-					d.ScanArgs(t, serverIdx, &idx)
 					sqlDB, err := ds.getSQLConn(idx)
 					if err != nil {
 						return false, false, err
@@ -291,22 +294,41 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					}
 					return localRead, followerRead, nil
 				}
-				localRead, followerRead, err := queryFunc()
+
+				runOnce := func() (string, error) {
+					localRead, followerRead, err := queryFunc()
+					if err != nil {
+						return "", err
+					}
+					var output strings.Builder
+					output.WriteString(
+						fmt.Sprintf("served locally: %s\n", strconv.FormatBool(localRead)))
+					// Only print follower read information if the query was served locally.
+					if localRead {
+						output.WriteString(
+							fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
+					}
+					if d.Expected != output.String() {
+						return "", errors.AssertionFailedf("not a match, trace:\n%s\n", rec)
+					}
+					return output.String(), nil
+				}
+
+				var output string
+				var err error
+				if shouldRetry {
+					err = testutils.SucceedsWithinError(func() error {
+						var attemptErr error
+						output, attemptErr = runOnce()
+						return attemptErr
+					}, retryTimeout)
+				} else {
+					output, err = runOnce()
+				}
 				if err != nil {
 					return err.Error()
 				}
-				var output strings.Builder
-				output.WriteString(
-					fmt.Sprintf("served locally: %s\n", strconv.FormatBool(localRead)))
-				// Only print follower read information if the query was served locally.
-				if localRead {
-					output.WriteString(
-						fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
-				}
-				if d.Expected != output.String() {
-					return errors.AssertionFailedf("not a match, trace:\n%s\n", rec).Error()
-				}
-				return output.String()
+				return output
 
 			case "refresh-range-descriptor-cache":
 				mustHaveArgOrFatal(t, d, tableName)
@@ -484,6 +506,7 @@ const (
 	partitionName    = "partition-name"
 	numVoters        = "num-voters"
 	numNonVoters     = "num-non-voters"
+	traceSQLRetryArg = "retry"
 )
 
 type replicaType int

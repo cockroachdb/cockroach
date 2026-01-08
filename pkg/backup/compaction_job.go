@@ -73,14 +73,8 @@ func maybeStartCompactionJob(
 	}
 
 	switch {
-	case len(triggerJob.ExecutionLocality.Tiers) != 0:
-		return 0, errors.New("execution locality not supported for compaction")
-	case triggerJob.RevisionHistory:
-		return 0, errors.New("revision history not supported for compaction")
 	case triggerJob.ScheduleID == 0:
 		return 0, errors.New("only scheduled backups can be compacted")
-	case len(triggerJob.Destination.IncrementalStorage) != 0:
-		return 0, errors.New("custom incremental storage location not supported for compaction")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
 	case len(triggerJob.URIsByLocalityKV) != 0:
@@ -199,26 +193,60 @@ func StartCompactionJob(
 	ctx context.Context,
 	planner interface{},
 	scheduleID jobspb.ScheduleID,
-	collectionURI, incrLoc []string,
+	collectionURI []string,
 	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
+	options tree.BackupOptions,
 	start, end hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	planHook, ok := planner.(sql.PlanHookState)
 	if !ok {
 		return 0, errors.New("missing job execution context")
 	}
+
+	var executionLocality roachpb.Locality
+	if options.ExecutionLocality != nil {
+		if strVal, ok := options.ExecutionLocality.(*tree.StrVal); ok {
+			s := strVal.RawString()
+			if s != "" {
+				if err := executionLocality.Set(s); err != nil {
+					return 0, errors.Wrap(err, "error setting execution locality")
+				}
+			}
+		} else {
+			return 0, errors.Newf(
+				"expected string value, got %+v", options.ExecutionLocality,
+			)
+		}
+	}
+
+	encryption := jobspb.BackupEncryptionOptions{
+		Mode: jobspb.EncryptionMode_None,
+	}
+	if options.EncryptionPassphrase != nil {
+		encryption.Mode = jobspb.EncryptionMode_Passphrase
+		encryption.RawPassphrase = tree.AsStringWithFlags(
+			options.EncryptionPassphrase,
+			tree.FmtBareStrings,
+		)
+	}
+	if options.EncryptionKMSURI != nil {
+		if encryption.Mode != jobspb.EncryptionMode_None {
+			return 0, errors.Newf("only one encryption mode can be specified")
+		}
+		encryption.RawKmsUris = builtins.ExprSliceToStrSlice(options.EncryptionKMSURI)
+	}
+
 	details := jobspb.BackupDetails{
 		ScheduleID: scheduleID,
 		StartTime:  start,
 		EndTime:    end,
 		Destination: jobspb.BackupDetails_Destination{
-			To:                 collectionURI,
-			IncrementalStorage: incrLoc,
-			Subdir:             fullBackupPath,
-			Exists:             true,
+			To:     collectionURI,
+			Subdir: fullBackupPath,
+			Exists: true,
 		},
-		EncryptionOptions: &encryptionOpts,
+		EncryptionOptions: &encryption,
+		ExecutionLocality: executionLocality,
 		Compact:           true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
@@ -603,6 +631,7 @@ func updateCompactionBackupDetails(
 		ResolvedCompleteDbs: lastBackup.CompleteDbs,
 		FullCluster:         lastBackup.DescriptorCoverage == tree.AllDescriptors,
 		ScheduleID:          initialDetails.ScheduleID,
+		ExecutionLocality:   initialDetails.ExecutionLocality,
 		Compact:             true,
 	}
 	return compactedDetails, nil
@@ -634,6 +663,8 @@ func (c compactionChain) createCompactionManifest(
 	cManifest.Descriptors = details.ResolvedTargets
 	cManifest.IntroducedSpans = introducedSpans
 	cManifest.IsCompacted = true
+	// Compacted backups do not store revision-history.
+	cManifest.MVCCFilter = backuppb.MVCCFilter_Latest
 
 	cManifest.Dir = cloudpb.ExternalStorage{}
 	// As this manifest will be used prior to the manifest actually being written
@@ -676,15 +707,13 @@ func resolveBackupSubdir(
 }
 
 // resolveBackupDirs resolves the sub-directory, base backup directory, and
-// incremental backup directories for a backup collection. incrementalURIs may
-// be empty if an incremental location is not specified. subdir must be a
+// incremental backup directories for a backup collection. subdir must be a
 // resolved subdirectory and not `LATEST`.
 func resolveBackupDirs(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	collectionURIs []string,
-	incrementalURIs []string,
 	resolvedSubdir string,
 ) ([]string, []string, string, error) {
 	resolvedBaseDirs, err := backuputils.AppendPaths(collectionURIs[:], resolvedSubdir)
@@ -692,7 +721,7 @@ func resolveBackupDirs(
 		return nil, nil, "", err
 	}
 	resolvedIncDirs, err := backupdest.ResolveIncrementalsBackupLocation(
-		ctx, user, execCfg, incrementalURIs, collectionURIs, resolvedSubdir,
+		collectionURIs, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, "", err
@@ -728,7 +757,7 @@ func getBackupChain(
 		return nil, nil, nil, nil, err
 	}
 	resolvedBaseDirs, resolvedIncDirs, _, err := resolveBackupDirs(
-		ctx, execCfg, user, dest.To, dest.IncrementalStorage, resolvedSubdir,
+		ctx, execCfg, user, dest.To, resolvedSubdir,
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -761,7 +790,7 @@ func getBackupChain(
 	_, manifests, localityInfo, memReserved, err := backupdest.ResolveBackupManifests(
 		ctx, execCfg, &mem, defaultCollectionURI, dest.To, mkStore, resolvedSubdir,
 		resolvedBaseDirs, resolvedIncDirs, endTime, baseEncryptionInfo, kmsEnv,
-		user, false /*includeSkipped */, true /*includeCompacted */, len(dest.IncrementalStorage) > 0,
+		user, false /*includeSkipped */, true, /*includeCompacted */
 	)
 	if err != nil {
 		return nil, nil, nil, nil, err
@@ -820,7 +849,7 @@ func processProgress(
 
 // compactionJobDescription generates a redacted description of the job.
 func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple | tree.FmtShowFullURIs)
 	redactedURIs, err := sanitizeURIList(details.Destination.To)
 	if err != nil {
 		return "", err
@@ -833,15 +862,6 @@ func compactionJobDescription(details jobspb.BackupDetails) (string, error) {
 	fmtCtx.WriteString(details.StartTime.String())
 	fmtCtx.WriteString(" AND ")
 	fmtCtx.WriteString(details.EndTime.String())
-	if details.Destination.IncrementalStorage != nil {
-		redactedIncURIs, err := sanitizeURIList(details.Destination.IncrementalStorage)
-		if err != nil {
-			return "", err
-		}
-		fmtCtx.WriteString("WITH (incremental_location = ")
-		fmtCtx.FormatURIs(redactedIncURIs)
-		fmtCtx.WriteString(")")
-	}
 	return fmtCtx.CloseAndGetString(), nil
 }
 

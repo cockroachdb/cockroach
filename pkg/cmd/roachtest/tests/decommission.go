@@ -1001,7 +1001,8 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, 
 		decommNodeID = numNodes
 		decommNode   = c.Node(decommNodeID)
 	)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+
+	c.Start(ctx, t.L(), withDecommissionVMod(option.DefaultStartOpts()), install.MakeClusterSettings(), c.All())
 
 	h := newDecommTestHelper(t, c)
 
@@ -1026,7 +1027,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	// Decommission node 4 and poll its status during the decommission.
 	var (
-		maxAttempts = 50
+		maxAttempts = 125
 		retryOpts   = retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     5 * time.Second,
@@ -1518,7 +1519,8 @@ func execCLIExt(
 // debugging failures.
 const decommissionVModuleStartOpts = `--vmodule=store_rebalancer=5,allocator=5,
   allocator_scorer=5,replicate_queue=5,replicate=6,split_queue=5,
-  replica_command=2,replica_raft=2,replica_proposal=2,replica_application_result=1`
+  replica_command=2,replica_raft=2,replica_proposal=2,replica_application_result=1,
+  replica_range_lease=3,raft=4,replica_raft_quiesce=3`
 
 func withDecommissionVMod(startOpts option.StartOpts) option.StartOpts {
 	startOpts.RoachprodOpts.ExtraArgs = append(

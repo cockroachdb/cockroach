@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -1368,13 +1368,6 @@ func TestLogic_sqlsmith(
 	runLogicTest(t, "sqlsmith")
 }
 
-func TestLogic_statement_hint_builtins(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "statement_hint_builtins")
-}
-
 func TestLogic_statement_statistics_errors(
 	t *testing.T,
 ) {
@@ -1478,13 +1471,6 @@ func TestLogic_trigram_builtins(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "trigram_builtins")
-}
-
-func TestLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestLogic_tuple(

@@ -12,7 +12,8 @@ environment:
 
 targets:
   # crdb cluster specs
-  - target_name: $CLUSTER
+  - target_name: $CLUSTER initialisation
+    notify_progress: true
     steps:
       - command: create
         args:
@@ -30,14 +31,18 @@ targets:
             args:
               - $CLUSTER
       - command: sync
+        skip_notification: true
         flags:
           clouds: gce
       - command: stage
+        skip_notification: true
         args:
           - $CLUSTER
           - cockroach
       - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+        skip_notification: true
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+        skip_notification: true
       - command: start
         args:
           - $CLUSTER
@@ -83,25 +88,30 @@ targets:
           - workload
       - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
   - target_name: post_tasks
+    notify_progress: true
     dependent_targets:
-      - $CLUSTER
+      - $CLUSTER initialisation
       - $WORKLOAD_CLUSTER
     steps:
       - script: rm
+        skip_notification: true
         args:
           - -rf
           - certs-$CLUSTER
       - command: get
+        skip_notification: true
         args:
           - $CLUSTER:1
           - certs
           - certs-$CLUSTER
       - command: put
+        skip_notification: true
         args:
           - $WORKLOAD_CLUSTER
           - certs-$CLUSTER
           - certs
       - command: ssh
+        skip_notification: true
         args:
           - $WORKLOAD_CLUSTER
           - --
@@ -109,11 +119,13 @@ targets:
           - 600
           - './certs/*'
       - command: put
+        skip_notification: true
         args:
           - $WORKLOAD_CLUSTER
           - artifacts/roachprod
           - roachprod
       - command: put
+        skip_notification: true
         args:
           - $WORKLOAD_CLUSTER
           - artifacts/roachtest

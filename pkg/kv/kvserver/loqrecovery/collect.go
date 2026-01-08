@@ -180,21 +180,22 @@ func CollectStoresReplicaInfo(
 
 func visitStoreReplicas(
 	ctx context.Context,
-	state, raft storage.Reader,
+	stateRO kvstorage.StateRO,
+	raftRO kvstorage.RaftRO,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
-	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, state, func(desc roachpb.RangeDescriptor) error {
+	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, stateRO, func(desc roachpb.RangeDescriptor) error {
 		rsl := kvstorage.MakeStateLoader(desc.RangeID)
-		rstate, err := rsl.Load(ctx, state, &desc)
+		rstate, err := rsl.Load(ctx, stateRO, &desc)
 		if err != nil {
 			return err
 		}
 		// TODO(pav-kv): the LoQ recovery flow uses only the applied index, and the
 		// HardState.Commit loaded here is unused. Consider removing. Make sure this
 		// doesn't break compatibility for ReplicaInfo unmarshalling.
-		hstate, err := rsl.LoadHardState(ctx, raft)
+		hstate, err := rsl.LoadHardState(ctx, raftRO)
 		if err != nil {
 			return err
 		}
@@ -208,7 +209,7 @@ func visitStoreReplicas(
 		// For the heuristics here, it would probably make sense to read from all
 		// LogIDs with unapplied entries.
 		rangeUpdates, err := GetDescriptorChangesFromRaftLog(
-			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raft)
+			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raftRO)
 		if err != nil {
 			return err
 		}
@@ -234,10 +235,10 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	ctx context.Context, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, reader storage.Reader,
+	ctx context.Context, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, raftRO kvstorage.RaftRO,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
-	if err := raftlog.Visit(ctx, reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, raftRO, rangeID, lo, hi, func(ent raftpb.Entry) error {
 		e, err := raftlog.NewEntry(ent)
 		if err != nil {
 			return err

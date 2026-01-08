@@ -1,12 +1,8 @@
 # LogicTest: 5node-default-configs
 
+skip under race
+
 subtest setup
-
-statement ok
-SET enable_inspect_command = true;
-
-statement ok
-SET enable_inspect_command = true;
 
 statement ok
 CREATE VIEW last_inspect_job AS
@@ -44,7 +40,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS] ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/1/1         {1}       1
+<before:/Table/XX>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -102,7 +98,7 @@ ALTER TABLE table_ltree_array_leading SCATTER;
 statement ok
 INSPECT TABLE table_ltree_array_leading;
 
-query TI
+query TI allowunsafe
 SELECT * FROM last_inspect_job;
 ----
 succeeded 1

@@ -1121,6 +1121,7 @@ func (s *DoBlock) Format(ctx *tree.FmtCtx) {
 		// Format the body of the DO block separately so that FormatStringDollarQuotes
 		// can examine the resulting string and determine how to quote the block.
 		bodyCtx := ctx.Clone()
+		tree.FmtInPLpgSQL(true /* inPLpgSQL */)(bodyCtx)
 		bodyCtx.FormatNode(s.Block)
 		bodyStr := "\n" + bodyCtx.CloseAndGetString()
 

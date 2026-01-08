@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -151,7 +151,7 @@ func (s *SQLWatcher) watch(
 	}
 	defer ptsRF.Close()
 
-	checkpointNoops := util.Every(s.checkpointNoopsEvery)
+	checkpointNoops := util.EveryMono(s.checkpointNoopsEvery)
 	for {
 		select {
 		case <-ctx.Done():
@@ -166,7 +166,7 @@ func (s *SQLWatcher) watch(
 				return err
 			}
 			if len(sqlUpdates) == 0 &&
-				(!checkpointNoops.ShouldProcess(timeutil.Now()) || s.knobs.SQLWatcherSkipNoopCheckpoints) {
+				(!checkpointNoops.ShouldProcess(crtime.NowMono()) || s.knobs.SQLWatcherSkipNoopCheckpoints) {
 				continue
 			}
 			if err := handler(ctx, sqlUpdates, combinedFrontierTS); err != nil {

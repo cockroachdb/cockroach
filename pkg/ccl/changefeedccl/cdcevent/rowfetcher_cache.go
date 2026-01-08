@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -237,6 +238,9 @@ func (c *rowFetcherCache) tableDescForKey(
 // is not being watched and does not need to be decoded.
 var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
 
+// ErrTableOffline is a sentinel error that indicates the watched table is offline.
+var ErrTableOffline = errors.New("watched table is offline")
+
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
 // Returns ErrUnwatchedFamily error if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
@@ -318,7 +322,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			Alloc:             &c.a,
 			Spec:              &spec,
 			TraceKV:           c.rfArgs.traceKV,
-			TraceKVEvery:      &util.EveryN{N: c.rfArgs.traceKVLogFrequency},
+			TraceKVEvery:      &util.EveryN[crtime.Mono]{N: c.rfArgs.traceKVLogFrequency},
 		},
 	); err != nil {
 		return nil, nil, err

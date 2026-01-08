@@ -78,7 +78,8 @@ func TestSendKVBatch(t *testing.T) {
 		{
 			"header": {
 				"Timestamp": {},
-				"now": {}
+				"now": {},
+				"cpuTime": {}
 			},
 			"responses": [
 				{"put": {
@@ -112,9 +113,11 @@ func TestSendKVBatch(t *testing.T) {
 		require.NoError(t, err)
 
 		// Clean and check the BatchResponse output, by removing first line
-		// (contains input command) and emptying out all HLC timestamp objects.
+		// (contains input command), emptying out all HLC timestamp objects,
+		// and zeroing out the cpuTime value.
 		output = strings.SplitN(output, "\n", 2)[1]
 		output = regexp.MustCompile(`(?s)\{\s*"wallTime":.*?\}`).ReplaceAllString(output, "{}")
+		output = regexp.MustCompile(`"cpuTime"\s*:\s*("[^"]*"|\d+)`).ReplaceAllString(output, `"cpuTime": {}`)
 		require.JSONEq(t, jsonResponse, output)
 
 		// Check that a structured log event was emitted.

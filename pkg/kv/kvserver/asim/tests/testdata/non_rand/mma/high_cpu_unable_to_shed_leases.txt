@@ -16,7 +16,7 @@
 # the CPU overloaded s1, so we should observe a period of lease transfers before
 # any replica based rebalancing away from the store occurs.
 
-gen_cluster nodes=5 node_cpu_rate_capacity=9000000000
+gen_cluster nodes=5 node_cpu_cores=9
 ----
 
 setting split_queue_enabled=false

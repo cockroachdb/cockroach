@@ -6,6 +6,7 @@
 package task
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"sync"
@@ -35,6 +36,39 @@ func TestPanicHandler(t *testing.T) {
 	require.ErrorIs(t, e.Err, panicErr)
 	require.Equal(t, "task-1", e.Name)
 
+	m.Terminate(nilLogger())
+}
+
+func TestLoggerFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stdoutBuf := &bytes.Buffer{}
+	stderrBuf := &bytes.Buffer{}
+	loggerConf := logger.Config{
+		Stdout: stdoutBuf,
+		Stderr: stderrBuf,
+	}
+	rootLogger, err := loggerConf.NewLogger("" /* path */)
+	if err != nil {
+		panic(err)
+	}
+
+	ctx := context.Background()
+	m := NewManager(ctx, rootLogger)
+
+	brokenLoggerSupplierFunc := func(name string) (*logger.Logger, error) {
+		return nil, errors.New("logger error")
+	}
+
+	m.Go(func(ctx context.Context, l *logger.Logger) error {
+		l.Printf("this should be logged to the root logger")
+		return nil
+	}, LoggerFunc(brokenLoggerSupplierFunc), Name("def"))
+
+	e := <-m.CompletedEvents()
+	require.Equal(t, "def", e.Name)
+	require.Contains(t, stderrBuf.String(), "logger error")
+	require.Contains(t, stdoutBuf.String(), "this should be logged to the root logger")
 	m.Terminate(nilLogger())
 }
 

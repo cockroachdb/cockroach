@@ -636,6 +636,14 @@ func (ts *testServer) startDefaultTestTenant(
 ) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
+		// Use the same version constraints as the parent settings so that
+		// external process tenants can start when the cluster is running at
+		// a version older than Latest.
+		tenantSettings = cluster.MakeTestingClusterSettingsWithVersions(
+			st.Version.LatestVersion(),
+			st.Version.MinSupportedVersion(),
+			false, /* initializeVersion */
+		)
 		// Copy overrides and other test-specific configuration,
 		// as a convenience for test writers that do the following:
 		// - create a new Settings
@@ -700,6 +708,7 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 		}
 		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
 	}
+	serverutils.SetUnsafeOverride(tenantKnobs)
 	if ts.params.Knobs.UpgradeManager != nil {
 		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
 	}
@@ -1297,13 +1306,6 @@ func (t *testTenant) TracerI() interface{} {
 	return t.Tracer()
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
-func (t *testTenant) ForceTableGC(
-	ctx context.Context, database, table string, timestamp hlc.Timestamp,
-) error {
-	return internalForceTableGC(ctx, t, database, table, timestamp)
-}
-
 // DefaultZoneConfig is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) DefaultZoneConfig() zonepb.ZoneConfig {
 	return *t.SystemConfigProvider().GetSystemConfig().DefaultZoneConfig
@@ -1401,6 +1403,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}
+
+	// Allow access to unsafe internals for the tenant server in test environments.
+	serverutils.SetUnsafeOverride(&args.Knobs)
+
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1484,6 +1490,11 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	sqlServerWrapper := s.(*tenantServerWrapper).server
 	sqlServer := sqlServerWrapper.sqlServer
+
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
@@ -1560,6 +1571,11 @@ func (t *testTenant) SetReady(ready bool) {
 // SetAcceptSQLWithoutTLS is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) SetAcceptSQLWithoutTLS(accept bool) {
 	t.Cfg.AcceptSQLWithoutTLS = accept
+	// If we're running in a shared-process mode, the pre-serve handler has its
+	// own copy of base.Config (that is shared with the system tenant), so we
+	// must propagate the updated value there too. (For other deployments this
+	// call is redundant with the update above but otherwise harmless.)
+	t.pgPreServer.TestingSetAcceptSQLWithoutTLS(accept)
 }
 
 // PrivilegeChecker is part of the serverutils.ApplicationLayerInterface.
@@ -1780,6 +1796,9 @@ func (ts *testServer) StartTenant(
 		stopper.SetTracer(tr)
 	}
 
+	// Allow access to unsafe internals on this tenant.
+	serverutils.SetUnsafeOverride(&params.TestingKnobs)
+
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
@@ -1863,6 +1882,10 @@ func (ts *testServer) StartTenant(
 	if err := sw.Start(ctx); err != nil {
 		return nil, err
 	}
+
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
 
 	hts := &httpTestServer{}
 	hts.t.authentication = sw.authentication
@@ -2294,25 +2317,16 @@ func (ts *testServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// ForceTableGC is part of the serverutils.ApplicationLayerInterface.
+// ForceTableGC is part of the serverutils.StorageLayerInterface.
 func (ts *testServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
 ) error {
-	return internalForceTableGC(ctx, ts, database, table, timestamp)
-}
-
-func internalForceTableGC(
-	ctx context.Context,
-	app serverutils.ApplicationLayerInterface,
-	database, table string,
-	timestamp hlc.Timestamp,
-) error {
-	tableID, err := app.QueryTableID(ctx, username.RootUserName(), database, table)
+	tableID, err := ts.QueryTableID(ctx, username.RootUserName(), database, table)
 	if err != nil {
 		return err
 	}
 
-	tblKey := app.Codec().TablePrefix(uint32(tableID))
+	tblKey := ts.Codec().TablePrefix(uint32(tableID))
 	gcr := kvpb.GCRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key:    tblKey,
@@ -2320,7 +2334,7 @@ func internalForceTableGC(
 		},
 		Threshold: timestamp,
 	}
-	_, pErr := kv.SendWrapped(ctx, app.DistSenderI().(kv.Sender), &gcr)
+	_, pErr := kv.SendWrapped(ctx, ts.DistSenderI().(kv.Sender), &gcr)
 	return pErr.GoError()
 }
 

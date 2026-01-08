@@ -10,6 +10,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 // avgResponseEstimator is a helper that estimates the average size of responses
 // received by the Streamer. It is **not** thread-safe.
 type avgResponseEstimator struct {
+	initialAvgResponseSize  int64
 	avgResponseSizeMultiple float64
 	// responseBytes tracks the total footprint of all responses that the
 	// Streamer has already received.
@@ -25,13 +26,23 @@ type avgResponseEstimator struct {
 }
 
 const (
-	// InitialAvgResponseSize is the initial estimate of the size of a single
-	// response.
+	// DefaultInitialAvgResponseSize is the default initial estimate of the size
+	// of a single response.
 	// TODO(yuzefovich): use the optimizer-driven estimates.
-	InitialAvgResponseSize = 1 << 10 // 1KiB
+	DefaultInitialAvgResponseSize = 1 << 10 // 1KiB
 	// This value was determined using tpchvec/bench test on all TPC-H queries
 	// as well as the query in TestStreamerVaryingResponseSizes.
 	defaultAvgResponseSizeMultiple = 3.0
+)
+
+// streamerInitialAvgResponseSize determines the initial estimate when
+// calculating the average response size before any actual responses are
+// received.
+var streamerInitialAvgResponseSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"sql.distsql.streamer.initial_avg_response_size",
+	"determines the initial estimate used when calculating the average response size by the streamer component",
+	DefaultInitialAvgResponseSize,
 )
 
 // streamerAvgResponseSizeMultiple determines the multiple used when calculating
@@ -45,6 +56,7 @@ var streamerAvgResponseSizeMultiple = settings.RegisterFloatSetting(
 )
 
 func (e *avgResponseEstimator) init(sv *settings.Values) {
+	e.initialAvgResponseSize = streamerInitialAvgResponseSize.Get(sv)
 	e.avgResponseSizeMultiple = streamerAvgResponseSizeMultiple.Get(sv)
 }
 
@@ -62,7 +74,7 @@ func (e *avgResponseEstimator) init(sv *settings.Values) {
 // Scans.
 func (e *avgResponseEstimator) getAvgResponseSize() int64 {
 	if e.numRequestsStarted == 0 {
-		return InitialAvgResponseSize
+		return e.initialAvgResponseSize
 	}
 	// We're estimating the response size as the average over the received
 	// responses. Importantly, we divide the total responses' footprint by the

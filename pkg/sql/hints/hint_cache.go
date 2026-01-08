@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -92,6 +91,10 @@ type StatementHintsCache struct {
 	// generation is incremented any time the hint cache is updated by the
 	// rangefeed.
 	generation atomic.Int64
+
+	// frontier is the walltime of the rangefeed watcher frontier time, which is
+	// polled by goroutines in Await.
+	frontier atomic.Int64
 }
 
 // cacheSize is the size of the entries to store in the cache.
@@ -103,8 +106,8 @@ var cacheSize = settings.RegisterIntSetting(
 	"number of hint entries to store in the LRU",
 	metamorphic.ConstantWithTestChoice[int64](
 		"sql.hints.statement_hints_cache_size",
-		1024,                  /* defaultValue */
-		1, 2, 3, 8, 128, 4096, /* otherValues */
+		1024,                     /* defaultValue */
+		0, 1, 2, 3, 8, 128, 4096, /* otherValues */
 	),
 	settings.NonNegativeInt,
 )
@@ -135,7 +138,18 @@ func NewStatementHintsCache(
 			return s > int(cacheSize.Get(&st.SV))
 		},
 	})
+	hintsCache.generation.Store(1)
 	return hintsCache
+}
+
+// Clear removes all entries from the StatementHintsCache.
+func (c *StatementHintsCache) Clear() {
+	defer c.generation.Add(1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.hintCache.Clear()
+	// TODO(michae2): Consider whether we should also delete hintedHashes and
+	// restart the rangefeed.
 }
 
 // ============================================================================
@@ -213,6 +227,7 @@ func (c *StatementHintsCache) onUpdate(
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.handleIncrementalUpdate(ctx, update)
 	}
+	c.frontier.Store(update.Timestamp.WallTime)
 }
 
 // handleInitialScan builds the hintedHashes map and adds it to
@@ -250,6 +265,7 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 	defer c.generation.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	for _, ev := range update.Events {
 		// Drop outdated entries from hintCache.
 		c.mu.hintCache.Del(ev.hash)
@@ -303,8 +319,9 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 				c.mu.Lock()
 				defer c.mu.Unlock()
 				if refreshTS.Forward(c.mu.hintedHashes[hash]) {
-					// The refresh timestamp was bumped by a rangefeed event. Retry at the
-					// new timestamp.
+					// The refresh timestamp was bumped by a rangefeed event.
+					// Retry at the new timestamp (refreshTS has been updated in
+					// place).
 					return false
 				}
 				if hasHints {
@@ -357,6 +374,26 @@ var _ rangefeedbuffer.Event = &bufferEvent{}
 // Reading from the cache.
 // ============================================================================
 
+// Await blocks until the StatementHintsCache's rangefeed watcher catches up
+// with the present. After Await returns, MaybeGetStatementHints should
+// accurately reflect all hints that were modified before the call to Await
+// (assuming the ctx was not canceled).
+func (c *StatementHintsCache) Await(ctx context.Context) {
+	// Wait in intervals of at least 100 milliseconds to avoid busy-waiting.
+	const minWait = time.Millisecond * 100
+	waitUntil := c.clock.Now().WallTime
+
+	// Await is only used for testing, so we don't need to wake up immediately. We
+	// can get away with polling the frontier time.
+	for frontier := c.frontier.Load(); frontier <= waitUntil; frontier = c.frontier.Load() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(max(time.Duration(waitUntil-frontier), minWait)):
+		}
+	}
+}
+
 // GetGeneration returns the current generation, which will change if any
 // modifications happen to the cache.
 func (c *StatementHintsCache) GetGeneration() int64 {
@@ -367,9 +404,12 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 // fingerprint, along with the unique ID of each hint (for invalidating cached
 // plans). It returns nil if the statement has no hints, or there was an error
 // retrieving them.
+//
+// Hints are returned in order of creation time (descending) with the most
+// recent hints first.
 func (c *StatementHintsCache) MaybeGetStatementHints(
-	ctx context.Context, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context, statementFingerprint string, fingerprintFlags tree.FmtFlags,
+) (hints []Hint, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
@@ -392,7 +432,7 @@ func (c *StatementHintsCache) MaybeGetStatementHints(
 	if !ok {
 		// The plan hints were evicted from the cache. Retrieve them from the
 		// database and add them to the cache.
-		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint)
+		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint, fingerprintFlags)
 	}
 	entry := e.(*cacheEntry)
 	c.maybeWaitForRefreshLocked(ctx, entry, statementHash)
@@ -426,8 +466,11 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // other queries to wait for the result via sync.Cond. Note that the lock is
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
-	ctx context.Context, statementHash int64, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context,
+	statementHash int64,
+	statementFingerprint string,
+	fingerprintFlags tree.FmtFlags,
+) (hints []Hint, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -445,7 +488,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		defer c.mu.Lock()
 		log.VEventf(ctx, 1, "reading hints for query %s", statementFingerprint)
 		entry.ids, entry.fingerprints, entry.hints, err =
-			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash)
+			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash, fingerprintFlags)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", statementFingerprint)
 	}()
 
@@ -471,7 +514,8 @@ type cacheEntry struct {
 
 	// hints, fingerprints, and ids have the same length. fingerprints[i] is the
 	// statement fingerprint to which hints[i] applies, while ids[i] uniquely
-	// identifies a hint in the system table. They are kept in order of id.
+	// identifies a hint in the system table. They are kept in order of creation
+	// time (descending), meaning the most recent hints are first.
 	//
 	// We track the hint ID for invalidating cached query plans after a hint is
 	// added or removed. We track the fingerprint to resolve hash collisions. Note
@@ -479,16 +523,14 @@ type cacheEntry struct {
 	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	hints        []hintpb.StatementHintUnion
+	hints        []Hint
 	fingerprints []string
 	ids          []int64
 }
 
 // getMatchingHints returns the plan hints and row IDs for the given
 // fingerprint, or nil if they don't exist. The results are in order of row ID.
-func (entry *cacheEntry) getMatchingHints(
-	statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+func (entry *cacheEntry) getMatchingHints(statementFingerprint string) (hints []Hint, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
 			hints = append(hints, entry.hints[i])

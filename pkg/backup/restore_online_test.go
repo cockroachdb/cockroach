@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -73,7 +74,7 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
 	defer cleanupFnRestored()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB, rSQLDB)
 
 	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
 	createStmtRes := sqlDB.QueryStr(t, createStmt)
@@ -124,10 +125,11 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 
 	const numAccounts = 1000
 
-	externalStorage := "nodelocal://1/backup"
-
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
 	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
 
 	restoreToPausedDownloadJob := func(t *testing.T, newDBName string) int {
 		defer func() {
@@ -169,7 +171,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	t.Run("delete file", func(t *testing.T) {
 		dbName := "data_delete"
 		downloadJobID := restoreToPausedDownloadJob(t, dbName)
-		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.ExpectErr(t, "no such file or directory", "SELECT count(*) FROM data_delete.bank")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
 		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(downloadJobID))
@@ -200,7 +202,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 		var blockingJobID int
 		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&blockingJobID)
 		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(blockingJobID))
-		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", blockingJobID))
 		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(blockingJobID))
@@ -220,10 +222,11 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 
 	const numAccounts = 1000
 
-	externalStorage := "nodelocal://1/backup"
-
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
 	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
@@ -248,7 +251,7 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
-	corruptBackup(t, sqlDB, tmpDir, externalStorage)
+	corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
 	jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
@@ -292,13 +295,17 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP DATABASE data INTO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
-		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3')`)
+	a := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/a", "conn-a", sqlDB) + "?COCKROACH_LOCALITY=default"
+	b := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/b", "conn-b", sqlDB) + "?COCKROACH_LOCALITY=dc%3Ddc2"
+	c := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/c", "conn-c", sqlDB) + "?COCKROACH_LOCALITY=dc%3Ddc3"
 
-	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM LATEST IN ('nodelocal://1/a?COCKROACH_LOCALITY=default',
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
-		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3') WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO ('%s', '%s', '%s')", a, b, c))
+
+	j := sqlDB.QueryStr(t, fmt.Sprintf(
+		`RESTORE DATABASE data FROM LATEST IN ('%s', '%s', '%s')
+		WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`,
+		a, b, c,
+	))
 
 	srv.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
@@ -321,11 +328,14 @@ func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 		orParams,
 	)
 	defer cleanupFn()
-	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
+
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", externalStorage)
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_publishing_descriptors'")
 	var jobID jobspb.JobID
 	stmt := fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', %s, detached)", onlineImpl(rng))
-	sqlDB.QueryRow(t, stmt, localFoo).Scan(&jobID)
+	sqlDB.QueryRow(t, stmt, externalStorage).Scan(&jobID)
 	jobutils.WaitForJobToPause(t, sqlDB, jobID)
 
 	// Set a pauspoint during the link phase which should not get hit because of
@@ -354,18 +364,20 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 	)
 	defer cleanupFn()
 
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
+
 	sqlDB.ExecMultiple(
 		t,
 		"USE data",
 		"CREATE TABLE foo (x INT PRIMARY KEY, y INT)",
 		"INSERT INTO foo VALUES (1, 2)",
 	)
-	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", externalStorage)
 
 	rows := sqlDB.Query(
 		t,
 		"RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', experimental deferred copy)",
-		localFoo,
+		externalStorage,
 	)
 	columns, err := rows.Columns()
 	if err != nil {
@@ -419,7 +431,7 @@ func TestOnlineRestoreWaitForDownload(t *testing.T) {
 		},
 	})
 	defer cleanupFn()
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
@@ -445,8 +457,6 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	externalStorage := "nodelocal://1/backup"
-
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -467,6 +477,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer cleanupFn()
 	srv := tc.Server(0)
 
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", systemDB)
+
 	_ = securitytest.EmbeddedTenantIDs()
 
 	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -478,6 +490,9 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 		restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 		defer cleanupFnRestored()
+
+		// just using this to run CREATE EXTERNAL CONNECTION on the recovery db if we're using one
+		_ = backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", rSQLDB)
 
 		systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
@@ -555,9 +570,15 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
-		fullBackup                = "nodelocal://1/full-backup"
-		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
-		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
+		fullBackup = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/full-backup", "full-backup", sqlDB, rSQLDB,
+		)
+		fullBackupWithRevs = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/full-backup-with-revs", "full-backup-with-revs", sqlDB, rSQLDB,
+		)
+		incrementalBackupWithRevs = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/incremental-backup-with-revs", "incremental-backup-with-revs", sqlDB, rSQLDB,
+		)
 	)
 	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
 		var systemTime string
@@ -625,7 +646,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 	sqlDB.Exec(
 		t,
@@ -684,7 +705,7 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 	sqlDB.Exec(
 		t,
@@ -769,7 +790,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	var linkJobID jobspb.JobID

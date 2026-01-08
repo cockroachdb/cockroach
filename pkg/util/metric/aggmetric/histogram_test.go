@@ -98,10 +98,11 @@ func TestHighCardinalityHistogram(t *testing.T) {
 		Metadata: metric.Metadata{
 			Name: "histo_gram",
 		},
-		Duration:     base.DefaultHistogramWindowInterval(),
-		MaxVal:       100,
-		SigFigs:      1,
-		BucketConfig: metric.Percent100Buckets,
+		Duration:            base.DefaultHistogramWindowInterval(),
+		MaxVal:              100,
+		SigFigs:             1,
+		BucketConfig:        metric.Percent100Buckets,
+		HighCardinalityOpts: metric.HighCardinalityMetricOptions{},
 	}, "database", "application_name")
 
 	h.mu.children = &UnorderedCacheWrapper{

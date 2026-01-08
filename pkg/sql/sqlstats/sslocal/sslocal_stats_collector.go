@@ -7,9 +7,9 @@ package sslocal
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -35,12 +35,6 @@ import (
 //     persist statement and transaction insights to an in-memory cache.
 //     Events are sent to the insights subsystem for async processing.
 type StatsCollector struct {
-	// stmtFingerprintID is the fingerprint ID of the current statement we are
-	// recording. Note that we don't observe sql stats for all statements (e.g. COMMIT).
-	// If no stats have been attempted to be recorded yet for the current statement,
-	// this value will be 0.
-	stmtFingerprintID appstatspb.StmtFingerprintID
-
 	// phaseTimes tracks session-level phase times.
 	phaseTimes sessionphase.Times
 
@@ -67,8 +61,7 @@ type StatsCollector struct {
 
 	statsIngester *SQLStatsIngester
 
-	st    *cluster.Settings
-	knobs *sqlstats.TestingKnobs
+	st *cluster.Settings
 }
 
 // NewStatsCollector returns an instance of StatsCollector.
@@ -78,7 +71,6 @@ func NewStatsCollector(
 	ingester *SQLStatsIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
-	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	s := &StatsCollector{
 		flushTarget:        appStats,
@@ -86,17 +78,11 @@ func NewStatsCollector(
 		uniqueServerCounts: uniqueServerCounts,
 		statsIngester:      ingester,
 		st:                 st,
-		knobs:              knobs,
 	}
 
 	s.sendStats = s.enabled()
 
 	return s
-}
-
-// StatementFingerprintID returns the fingerprint ID for the current statement.
-func (s *StatsCollector) StatementFingerprintID() appstatspb.StmtFingerprintID {
-	return s.stmtFingerprintID
 }
 
 // PhaseTimes returns the sessionphase.Times that this StatsCollector is
@@ -118,7 +104,6 @@ func (s *StatsCollector) PreviousPhaseTimes() *sessionphase.Times {
 // Found a bug again? Consider refactoring.
 func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sessionphase.Times) {
 	s.flushTarget = appStats
-	s.stmtFingerprintID = 0
 	s.previousPhaseTimes = s.phaseTimes
 	s.phaseTimes = *phaseTime
 }
@@ -166,14 +151,8 @@ func (s *StatsCollector) RecordStatement(_ctx context.Context, value *sqlstats.R
 	if !s.sendStats {
 		return
 	}
-	s.stmtFingerprintID = value.FingerprintID
-	s.statsIngester.BufferStatement(value)
 
-	if s.knobs != nil && s.knobs.SynchronousSQLStats {
-		// Flush buffer and wait for the stats ingester to finish writing.
-		s.statsIngester.guard.ForceSync()
-		<-s.statsIngester.syncStatsTestingCh
-	}
+	s.statsIngester.RecordStatement(value)
 }
 
 // RecordTransaction sends the transaction statistics to the stats ingester.
@@ -182,13 +161,7 @@ func (s *StatsCollector) RecordTransaction(_ctx context.Context, value *sqlstats
 		return
 	}
 
-	s.statsIngester.BufferTransaction(value)
-
-	if s.knobs != nil && s.knobs.SynchronousSQLStats {
-		// Flush buffer and wait for the stats ingester to finish writing.
-		s.statsIngester.guard.ForceSync()
-		<-s.statsIngester.syncStatsTestingCh
-	}
+	s.statsIngester.RecordTransaction(value)
 }
 
 func (s *StatsCollector) EnabledForTransaction() bool {
@@ -205,3 +178,41 @@ func (s *StatsCollector) EnabledForTransaction() bool {
 func (s *StatsCollector) CurrentApplicationName() string {
 	return s.flushTarget.ApplicationName()
 }
+
+func (s *StatsCollector) RunLatency() time.Duration {
+	return s.PhaseTimes().GetRunLatency()
+}
+
+func (s *StatsCollector) IdleLatency() time.Duration {
+	return s.PhaseTimes().GetIdleLatency(s.PreviousPhaseTimes())
+}
+
+func (s *StatsCollector) ServiceLatency() time.Duration {
+	return s.PhaseTimes().GetServiceLatencyNoOverhead()
+}
+
+func (s *StatsCollector) ParsingLatency() time.Duration {
+	return s.PhaseTimes().GetParsingLatency()
+}
+
+func (s *StatsCollector) PlanningLatency() time.Duration {
+	return s.PhaseTimes().GetPlanningLatency()
+}
+
+func (s *StatsCollector) ProcessingLatency() time.Duration {
+	return s.ParsingLatency() + s.PlanningLatency() + s.RunLatency()
+}
+
+func (s *StatsCollector) ExecOverheadLatency() time.Duration {
+	return s.ServiceLatency() - s.ProcessingLatency()
+}
+
+func (s *StatsCollector) StartTime() time.Time {
+	return s.PhaseTimes().GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
+}
+
+func (s *StatsCollector) EndTime() time.Time {
+	return s.StartTime().Add(s.ServiceLatency())
+}
+
+var _ sqlstats.StatementLatencyRecorder = &StatsCollector{}

@@ -46,7 +46,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0} lastSupportWithdrawnTime:201.000000000,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) restarts.
@@ -71,7 +71,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0} lastSupportWithdrawnTime:0,0
 
 debug-metrics
 ----
@@ -109,7 +109,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:300.000000000,0} lastSupportWithdrawnTime:0,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) withdraws support after the grace period.
@@ -123,7 +123,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:311.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:4 Expiration:0,0}
+{Target:{NodeID:2 StoreID:2} Epoch:4 Expiration:0,0} lastSupportWithdrawnTime:311.000000000,0
 
 # -------------------------------------------------------------
 # Store (n1, s1) sends heartbeats but it forgot about support

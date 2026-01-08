@@ -133,10 +133,8 @@ if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "
   build_docker_tag="${gcr_repository}:${arch}-${build_name}"
   if [[ $platform == "linux-amd64-fips" ]]; then
     build_docker_tag="${gcr_repository}:${build_name}-fips"
-    docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" --build-arg fips_enabled=1 "build/deploy-${platform}"
-  else
-    docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
   fi
+  docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
   docker push "$build_docker_tag"
 
   tc_end_block "Make and push docker images"

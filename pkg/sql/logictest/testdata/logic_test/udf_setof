@@ -325,3 +325,114 @@ statement ok
 DROP FUNCTION f145414;
 
 subtest end
+
+# Test that ORDER BY is preserved in SQL UDFs with OUT parameters
+subtest out_params_ordering
+
+statement ok
+CREATE TABLE test_ordering (x INT PRIMARY KEY, y INT);
+
+statement ok
+INSERT INTO test_ordering VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+CREATE FUNCTION f_out_desc(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query T nosort
+SELECT f_out_desc();
+----
+(4,40)
+(3,30)
+(2,20)
+(1,10)
+
+query II nosort
+SELECT * FROM f_out_desc();
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_out_desc;
+
+statement ok
+CREATE FUNCTION f_out_asc(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x ASC;
+$$ LANGUAGE SQL;
+
+query T nosort
+SELECT f_out_asc();
+----
+(1,10)
+(2,20)
+(3,30)
+(4,40)
+
+query II nosort
+SELECT * FROM f_out_asc();
+----
+1  10
+2  20
+3  30
+4  40
+
+statement ok
+DROP FUNCTION f_out_asc;
+
+# Test with assignment casts using RETURNS SETOF RECORD and column definition list.
+# The function returns INT columns, but the column definition list specifies
+# FLOAT, which triggers assignment casts at query time.
+statement ok
+CREATE FUNCTION f_record_cast() RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query RR nosort
+SELECT * FROM f_record_cast() AS f(a FLOAT, b FLOAT);
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_record_cast;
+
+# Test that ordering is preserved with array_agg
+statement ok
+CREATE FUNCTION f_out_for_agg(OUT a INT, OUT b INT) RETURNS SETOF RECORD AS $$
+  SELECT x, y FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query T
+SELECT array_agg(f) FROM f_out_for_agg() AS f;
+----
+{"(4,40)","(3,30)","(2,20)","(1,10)"}
+
+statement ok
+DROP FUNCTION f_out_for_agg;
+
+# Test that ordering is preserved when a UDF returns a tuple and is used as a
+# data source. This exercises the expandRoutineTupleIntoCols code path.
+statement ok
+CREATE FUNCTION f_tuple() RETURNS SETOF RECORD AS $$
+  SELECT ROW(x, y) FROM test_ordering ORDER BY x DESC;
+$$ LANGUAGE SQL;
+
+query II nosort
+SELECT * FROM f_tuple() AS f(a INT, b INT);
+----
+4  40
+3  30
+2  20
+1  10
+
+statement ok
+DROP FUNCTION f_tuple;
+DROP TABLE test_ordering;
+
+subtest end

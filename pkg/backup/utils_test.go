@@ -65,6 +65,7 @@ const (
 // tc.WaitForFullReplication before calling this method,
 // so up-replication has usually already taken place.
 var InitManualReplication = backuptestutils.InitManualReplication
+var NoInitManipulation = func(tc *testcluster.TestCluster) {}
 
 func backupRestoreTestSetupWithParams(
 	t testing.TB,
@@ -239,7 +240,7 @@ func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) 
 	for _, file := range backupManifest.Files {
 		spans = append(spans, file.Span)
 	}
-	mergedSpans, _ := roachpb.MergeSpans(&spans)
+	mergedSpans, _ := roachpb.MergeSpans(spans)
 	return mergedSpans
 }
 

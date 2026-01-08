@@ -452,38 +452,38 @@ const spanThreshold = 10_000
 //	currentIndex: 0, finalKeyIndex: 3 (last Key is "[?(@.driver == "Piastri")]")
 //
 // Iteration 0 (Root component ($)):
+//   - Consider both the situations of object and array at root level.
+//     > encoded_json_prefix -> encoded_obj_json_prefix
+//     > encoded_json_prefix + array_marker -> encoded_arr_json_prefix
 //   - Skip Root, advance to currentIndex=1
 //   - Recurse with same prefixBytes
 //
 // Iteration 1 (Key "f1"):
-//   - Build object prefix: encoded_json_prefix + "f1" -> f1_obj_prefix
-//   - Build array prefix: encoded_json_prefix + "f1" + array_marker -> f1_arr_prefix
-//   - Recurse with prefixBytes: [f1_obj_prefix, f1_arr_prefix], currentIndex=2
+//   - Build object prefix:
+//     > encoded_obj_json_prefix + "f1" -> obj_f1_obj_prefix
+//     > encoded_arr_json_prefix + "f1" -> arr_f1_obj_prefix
+//   - Build array prefix:
+//     > encoded_obj_json_prefix + "f1" + array_marker -> obj_f1_arr_prefix
+//     > encoded_arr_json_prefix + "f1" + array_marker -> arr_f1_arr_prefix
+//   - Recurse with prefixBytes: [obj_f1_obj_prefix, arr_f1_obj_prefix, obj_f1_arr_prefix, arr_f1_arr_prefix], currentIndex=2
 //
 // Iteration 2 (Key "mclaren"):
-//   - f1_obj_prefix + "mclaren" -> f1_obj_mclaren_obj_prefix
-//   - f1_arr_prefix + "mclaren" -> f1_arr_mclaren_obj_prefix
-//   - f1_obj_prefix + "mclaren" + array_marker -> f1_obj_mclaren_arr_prefix
-//   - f1_arr_prefix + "mclaren" + array_marker -> f1_arr_mclaren_arr_prefix
-//   - Recurse with prefixBytes:
-//     > f1_obj_mclaren_obj_prefix
-//     > f1_arr_mclaren_obj_prefix
-//     > f1_obj_mclaren_arr_prefix
-//     > f1_arr_mclaren_arr_prefix
+//   - obj_f1_obj_prefix + "mclaren" -> obj_f1_obj_mclaren_obj_prefix
+//   - arr_f1_obj_prefix + "mclaren" -> arr_f1_obj_mclaren_obj_prefix
+//   - obj_f1_arr_prefix + "mclaren" -> obj_f1_arr_mclaren_obj_prefix
+//   - arr_f1_arr_prefix + "mclaren" -> arr_f1_arr_mclaren_obj_prefix
+//   - obj_f1_obj_prefix + "mclaren" + array_marker -> obj_f1_obj_mclaren_arr_prefix
+//   - arr_f1_obj_prefix + "mclaren" + array_marker -> arr_f1_obj_mclaren_arr_prefix
+//   - obj_f1_arr_prefix + "mclaren" + array_marker -> obj_f1_arr_mclaren_arr_prefix
+//   - arr_f1_arr_prefix + "mclaren" + array_marker -> arr_f1_arr_mclaren_arr_prefix
+//   - Recurse with 8 prefixBytes above.
 //   - currentIndex=3
 //
 // Iteration 3 (Filter - terminal case):
 //   - We need to add an optional array prefix, since the Filter enables
 //     unwrapping one extra layer of array.
-//   - Thus we have 8 prefixes now:
-//     > f1_obj_mclaren_obj_prefix
-//     > f1_arr_mclaren_obj_prefix
-//     > f1_obj_mclaren_arr_prefix
-//     > f1_arr_mclaren_arr_prefix
-//     > f1_obj_mclaren_obj_prefix_arr
-//     > f1_arr_mclaren_obj_prefix_arr
-//     > f1_obj_mclaren_arr_prefix_arr
-//     > f1_arr_mclaren_arr_prefix_arr
+//   - Thus we have 16 prefixes now:
+//     {obj|arr}_f1_{obj|arr}_mclaren_{obj|arr}_{arr}
 //   - Extract left path (@.driver) and right value ("Piastri")
 //   - We now construct the new start and new last key index with the left path
 //   - currentIndex: 0, finalKeyIndex: 2 (last Key is "Piastri")
@@ -499,23 +499,8 @@ const spanThreshold = 10_000
 // > Iteration 3.2 (Scalar "Piastri" - terminal case):
 //   - We are at terminal, thus generate single value spans with each of
 //     the prefixes built so far + "Piastri".
-//   - Eventually, we returns the concatenation (OR) of 16 (2^4) spans:
-//     > f1_obj_mclaren_obj_driver_obj_Piastri
-//     > f1_arr_mclaren_obj_driver_obj_Piastri
-//     > f1_obj_mclaren_arr_driver_obj_Piastri
-//     > f1_arr_mclaren_obj_driver_obj_Piastri
-//     > f1_obj_mclaren_obj_driver_arr_Piastri
-//     > f1_arr_mclaren_obj_driver_arr_Piastri
-//     > f1_obj_mclaren_arr_driver_arr_Piastri
-//     > f1_arr_mclaren_obj_driver_arr_Piastri
-//     > f1_obj_mclaren_obj_arr_driver_obj_Piastri
-//     > f1_arr_mclaren_obj_arr_driver_obj_Piastri
-//     > f1_obj_mclaren_arr_arr_driver_obj_Piastri
-//     > f1_arr_mclaren_obj_arr_driver_obj_Piastri
-//     > f1_obj_mclaren_obj_arr_driver_arr_Piastri
-//     > f1_arr_mclaren_obj_arr_driver_arr_Piastri
-//     > f1_obj_mclaren_arr_arr_driver_arr_Piastri
-//     > f1_arr_mclaren_obj_arr_driver_arr_Piastri
+//   - Eventually, we returns the concatenation (OR) of 32 (2^5) spans:
+//     > {obj|arr}_f1_{obj|arr}_mclaren_{obj|arr}_{arr}_driver_{obj|arr}_Piastri
 func buildInvertedIndexSpans(
 	prefixBytes [][]byte,
 	pathComponents []Path,
@@ -639,16 +624,16 @@ func buildInvertedIndexSpans(
 			// Encode as array element: {"key": [...]}.
 			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */)))
 		}
-	case Wildcard:
+	case Root, Wildcard:
 		prefixBytesLen := len(prefixBytes)
 		for i := 0; i < prefixBytesLen; i++ {
-			// Wildcard can unwrap one extra layer of array.
+			// Wildcard or Root can unwrap one extra layer of array.
 			prefix := prefixBytes[i]
 			prefixBytes = append(prefixBytes, encoding.EncodeArrayAscending(prefix[:len(prefix):len(prefix)]))
 		}
 		nextPrefixes = prefixBytes
-	case Root, Current:
-		// For non-Key components, pass through existing prefixes unchanged.
+	case Current:
+		// For Current (@), pass through existing prefixes unchanged.
 		nextPrefixes = prefixBytes
 	default:
 		// This is a pattern we don't support for inverted index.

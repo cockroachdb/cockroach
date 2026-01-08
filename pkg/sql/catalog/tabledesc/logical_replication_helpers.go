@@ -66,12 +66,30 @@ func CheckLogicalReplicationCompatibility(
 }
 
 func checkForbiddenTypes(dst *descpb.TableDescriptor) error {
+	var isForbiddenType func(typ *types.T) error
+	isForbiddenType = func(typ *types.T) error {
+		switch typ.Family() {
+		case types.RefCursorFamily:
+			// RefCursor is not supported by LDR because it has no definition of
+			// equality. It's a weird type that should never exist in a durable table
+			// since a cursor is a session scoped entity.
+			return errors.Newf("RefCursor is not supported by LDR")
+		case types.ArrayFamily:
+			return isForbiddenType(typ.ArrayContents())
+		case types.TupleFamily:
+			for _, tupleTyp := range typ.TupleContents() {
+				if err := isForbiddenType(tupleTyp); err != nil {
+					return err
+				}
+			}
+			return nil
+		default:
+			return nil
+		}
+	}
 	for _, col := range dst.Columns {
-		// RefCursor is not supported by LDR because it has no definition of
-		// equality. It's a weird type that should never exist in a durable table
-		// since a cursor is a session scoped entity.
-		if col.Type.Family() == types.RefCursorFamily {
-			return errors.Newf("column %s is a RefCursor", col.Name)
+		if err := isForbiddenType(col.Type); err != nil {
+			return err
 		}
 	}
 	return nil

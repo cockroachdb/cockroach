@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -194,6 +195,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
+	// Disable AC yielding as these tests can run many in-process clusters at once
+	// and overload the host. Generally overload would mean bulk work, which only
+	// uses strictly spare capacitym gets starved, but these tests expect it to
+	// still run (just slowly, along with everything else).
+	admission.YieldForElasticCPU.Override(context.Background(), &settings.SV, false)
 	params.ServerArgs.Settings = settings
 
 	clusterSize := cfg.nodes
@@ -344,7 +350,8 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
-//     setting testserverargs.DefaultTestTenant to base.TODOTestTenantDisabled.
+//     setting testserverargs.DefaultTestTenant to
+//     base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798).
 //
 //   - "upgrade-cluster version=<version>"
 //     Upgrade the cluster version of the active cluster to the passed in
@@ -608,7 +615,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
 			}
 			if d.HasArg("disable-tenant") {
-				defaultTestTenant = base.TODOTestTenantDisabled
+				defaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 			}
 
 			// TODO(ssd): Once TestServer starts up reliably enough:

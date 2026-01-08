@@ -29,6 +29,7 @@ var (
 	// version upgrade, the rollup threshold is used instead.
 	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
 	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
+	resolution1mDefaultRollupThreshold           = 10 * 24 * time.Hour
 	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
 	storeDataTimeout                             = 1 * time.Minute
@@ -52,6 +53,17 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
+	settings.WithPublic)
+
+// Resolution1mStorageTTL defines the maximum age of data that will be retained
+// at the 1 minute resolution. Data older than this is subject to being "rolled
+// up" into the 30 minute resolution and then deleted.
+var Resolution1mStorageTTL = settings.RegisterDurationSetting(
+	settings.SystemVisible, // currently used in DB Console.
+	"timeseries.storage.resolution_1m.ttl",
+	"the maximum age of time series data stored at the 1 minute resolution. Data older than this "+
+		"is subject to rollup and deletion.",
+	resolution1mDefaultRollupThreshold,
 	settings.WithPublic)
 
 // Resolution30mStorageTTL defines the maximum age of data that will be
@@ -89,6 +101,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 			return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 		},
 		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
+		Resolution1m:   func() int64 { return Resolution1mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
@@ -102,7 +115,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 
 // A DataSource can be queried for a slice of time series data.
 type DataSource interface {
-	GetTimeSeriesData() []tspb.TimeSeriesData
+	GetTimeSeriesData(childMetrics bool) []tspb.TimeSeriesData
 }
 
 // poller maintains information for a polling process started by PollSource().
@@ -113,6 +126,9 @@ type poller struct {
 	frequency time.Duration
 	r         Resolution
 	stopper   *stop.Stopper
+	// When childMetrics is set to true, the polling process calls alternate behaviour in metrics recorder,
+	// returning child metrics to be stored.
+	childMetrics bool
 }
 
 // PollSource begins a Goroutine which periodically queries the supplied
@@ -125,6 +141,7 @@ func (db *DB) PollSource(
 	frequency time.Duration,
 	r Resolution,
 	stopper *stop.Stopper,
+	childMetrics bool,
 ) (firstDone <-chan struct{}) {
 	ambient.AddLogTag("ts-poll", nil)
 	p := &poller{
@@ -134,6 +151,7 @@ func (db *DB) PollSource(
 		frequency:      frequency,
 		r:              r,
 		stopper:        stopper,
+		childMetrics:   childMetrics,
 	}
 	return p.start()
 }
@@ -179,7 +197,7 @@ func (p *poller) poll(ctx context.Context) {
 	}
 
 	if err := p.stopper.RunTask(ctx, "ts.poller: poll", func(ctx context.Context) {
-		data := p.source.GetTimeSeriesData()
+		data := p.source.GetTimeSeriesData(p.childMetrics)
 		if len(data) == 0 {
 			return
 		}

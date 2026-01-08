@@ -93,7 +93,7 @@ subtest end
 
 subtest create_table_crdb_internal_expiration_incorrect_explicit_default
 
-statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+statement error expected DEFAULT expression of crdb_internal_expiration to be \( current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL \)
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   crdb_internal_expiration TIMESTAMPTZ
@@ -103,7 +103,7 @@ subtest end
 
 subtest create_table_crdb_internal_expiration_incorrect_explicit_on_update
 
-statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
+statement error expected ON UPDATE expression of crdb_internal_expiration to be \( current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL \)
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   crdb_internal_expiration TIMESTAMPTZ DEFAULT current_timestamp() + '10 minutes'
@@ -289,35 +289,46 @@ DROP SCHEDULE $schedule_id
 
 subtest end
 
+# The following tests verify that the legacy schema changer detects concurrent
+# schema changes when modifying TTL settings. These are specific to the legacy
+# schema changer's behavior.
 subtest existing_ttl_concurrent_schema_change
 
+onlyif config local-legacy-schema-changer
 statement ok
 SET autocommit_before_ddl = false
 
+onlyif config local-legacy-schema-changer
 statement ok
 CREATE TABLE tbl_existing_ttl_concurrent_schema_change (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes', schema_locked=false)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl), RESET (ttl_expire_after)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change SET (ttl_select_batch_size = 200)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_existing_ttl_concurrent_schema_change RESET (ttl);
 CREATE INDEX tbl_idx ON tbl_existing_ttl_concurrent_schema_change (id)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement ok
 RESET autocommit_before_ddl
 
@@ -325,41 +336,51 @@ subtest end
 
 subtest add_ttl_concurrent_schema_change
 
+onlyif config local-legacy-schema-changer
 statement ok
 SET autocommit_before_ddl = false
 
+onlyif config local-legacy-schema-changer
 statement ok
 CREATE TABLE tbl_add_ttl_concurrent_schema_change (
    id INT PRIMARY KEY
 ) WITH (schema_locked = false)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 ALTER TABLE tbl_add_ttl_concurrent_schema_change RESET (ttl_select_batch_size)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot modify TTL settings while another schema change on the table is being processed
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id);
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement error cannot perform other schema changes in the same transaction as a TTL mutation
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE tbl_add_ttl_concurrent_schema_change SET (ttl_expire_after = '10 minutes');
 CREATE INDEX tbl_idx ON tbl_add_ttl_concurrent_schema_change (id)
 
+onlyif config local-legacy-schema-changer
 statement ok
 ROLLBACK
 
+onlyif config local-legacy-schema-changer
 statement ok
 RESET autocommit_before_ddl
 
@@ -737,6 +758,15 @@ CREATE TABLE tbl_set_ttl_job_cron (
 statement ok
 ALTER TABLE tbl_set_ttl_job_cron SET (ttl_job_cron = '@weekly')
 
+let $label_suffix
+SELECT relname || ' [' || oid || ']' FROM pg_class WHERE relname = 'tbl_set_ttl_job_cron'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl: $label_suffix'
+----
+ACTIVE  @weekly  root
+
 onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl_set_ttl_job_cron]
@@ -907,7 +937,7 @@ CREATE TABLE tbl_set_ttl_params (
 )
 ----
 NOTICE: The TTL rate limit is per node per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v26.1/row-level-ttl#ttl-storage-parameters
 
 onlyif config schema-locked-disabled
 query T
@@ -934,7 +964,7 @@ query T noticetrace
 ALTER TABLE tbl_set_ttl_params SET (ttl_select_batch_size = 110, ttl_delete_batch_size = 120, ttl_select_rate_limit = 130, ttl_delete_rate_limit = 140, ttl_row_stats_poll_interval = '2m0s')
 ----
 NOTICE: The TTL rate limit is per node per table.
-DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/dev/row-level-ttl#ttl-storage-parameters
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/v26.1/row-level-ttl#ttl-storage-parameters
 
 onlyif config local-read-committed local-repeatable-read
 statement ok
@@ -1103,14 +1133,6 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expres
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (ttl_expiration_expression = 'expire_at')
 
-# Tested below anyway, so we can skip this statement for legacy schema changer.
-skipif config local-legacy-schema-changer
-statement error cannot drop column "expire_at" referenced by row-level TTL expiration expression "expire_at"
-ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
-
-statement ok
-SET use_declarative_schema_changer = 'off'
-
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = false)
@@ -1121,9 +1143,6 @@ ALTER TABLE tbl_alter_table_ttl_expiration_expression DROP COLUMN expire_at
 skipif config schema-locked-disabled
 statement ok
 ALTER TABLE tbl_alter_table_ttl_expiration_expression SET (schema_locked = true)
-
-statement ok
-SET use_declarative_schema_changer = 'on'
 
 statement error cannot alter type of column "expire_at" referenced by row-level TTL expiration expression "expire_at"\nHINT: use ALTER TABLE .*
 ALTER TABLE tbl_alter_table_ttl_expiration_expression ALTER expire_at TYPE TIMESTAMP USING (expire_at AT TIME ZONE 'UTC')
@@ -1754,5 +1773,81 @@ query T noticetrace
 ALTER TABLE tbl_to_add_ttl SET (ttl_expiration_expression = 'expire_at')
 ----
 NOTICE: Columns within table tbl_to_add_ttl are referenced as foreign keys. This will make TTL deletion jobs more expensive as dependent rows in other tables will need to be updated as well. To improve performance of the TTL job, consider reducing the value of ttl_delete_batch_size.
+
+subtest end
+
+subtest execute_schedule
+
+statement ok
+CREATE TABLE tbl_execute_schedule (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() - '1 day'
+) WITH (ttl_expiration_expression = 'expire_at', ttl_job_cron = '@daily')
+
+statement ok
+CREATE TABLE tbl_execute_schedule_2 (
+  id INT PRIMARY KEY,
+  expire_at TIMESTAMPTZ NOT NULL DEFAULT now() - '1 day'
+) WITH (ttl_expiration_expression = 'expire_at', ttl_job_cron = '@daily')
+
+# Get the schedule IDs.
+let $schedule_id_1
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' ORDER BY id LIMIT 1
+
+let $schedule_id_2
+SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule_2%'
+
+# Verify both schedules exist.
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%'
+----
+2
+
+# Verify the schedules are initially set to run in the future (@daily means tomorrow).
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' AND next_run > now()
+----
+2
+
+# Verify EXECUTE SCHEDULE syntax works with a schedule ID and updates next_run to the past.
+statement ok
+EXECUTE SCHEDULE $schedule_id_1
+
+# Verify that next_run was updated to now (or past) for schedule 1.
+# This proves EXECUTE SCHEDULE changed next_run from the future to the past.
+query B
+SELECT next_run <= now() FROM [SHOW SCHEDULES] WHERE id = $schedule_id_1
+----
+true
+
+# Verify EXECUTE SCHEDULES syntax works with a SELECT statement returning one schedule.
+statement ok
+EXECUTE SCHEDULES SELECT $schedule_id_2
+
+# Verify that next_run was updated for schedule 2.
+query B
+SELECT next_run <= now() FROM [SHOW SCHEDULES] WHERE id = $schedule_id_2
+----
+true
+
+# Verify EXECUTE SCHEDULES works with multiple schedules.
+statement ok
+EXECUTE SCHEDULES (SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%')
+
+# Verify both schedules have next_run <= now().
+query I
+SELECT count(*) FROM [SHOW SCHEDULES] WHERE label LIKE '%tbl_execute_schedule%' AND next_run <= now()
+----
+2
+
+# Paused schedules should not be runnable.
+statement ok
+PAUSE SCHEDULE $schedule_id_1
+
+statement error cannot execute a paused schedule; use RESUME SCHEDULE instead
+EXECUTE SCHEDULE $schedule_id_1
+
+statement ok
+RESUME SCHEDULE $schedule_id_1
 
 subtest end

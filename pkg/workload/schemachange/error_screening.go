@@ -149,147 +149,8 @@ func (og *operationGenerator) tableHasDependencies(
 	return og.scanBool(ctx, tx, q, tableName.Object(), tableName.Schema(), skipSelfRef)
 }
 
-// columnRemovalWillDropFKBackingIndexes determines if dropping this column
-// will lead to no indexes backing a foreign key. CockroachDB will consider
-// alternative indexes backing a foreign key if they have the same number of
-// key columns as the FK in any order.
-func (og *operationGenerator) columnRemovalWillDropFKBackingIndexes(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columName tree.Name,
-) (bool, error) {
-	return og.scanBool(ctx, tx, fmt.Sprintf(`
-WITH
-	fk
-		AS (
-			SELECT
-				oid,
-				(
-					SELECT
-						r.relname
-					FROM
-						pg_class AS r
-					WHERE
-						r.oid = c.confrelid
-				)
-					AS base_table,
-				a.attname AS base_col,
-				array_position(c.confkey, a.attnum)
-					AS base_ordinal,
-				(
-					SELECT
-						r.relname
-					FROM
-						pg_class AS r
-					WHERE
-						r.oid = c.conrelid
-				)
-					AS referencing_table,
-				unnest(
-					(
-						SELECT
-							array_agg(attname)
-						FROM
-							pg_attribute
-						WHERE
-							attrelid = c.conrelid
-							AND ARRAY[attnum] <@ c.conkey
-							AND array_position(
-									c.confkey,
-									a.attnum
-								)
-								= array_position(
-										c.conkey,
-										attnum
-									)
-					)
-				)
-					AS referencing_col
-			FROM
-				pg_constraint AS c
-				JOIN pg_attribute AS a ON
-						c.confrelid = a.attrelid
-						AND ARRAY[attnum] <@ c.confkey
-			WHERE
-				c.confrelid = $1::REGCLASS::OID
-		),
-	valid_indexes
-		AS (
-			SELECT
-				*
-			FROM
-				[SHOW INDEXES FROM %s]
-			WHERE
-				index_name
-				NOT IN (
-						SELECT
-							DISTINCT index_name
-						FROM
-							[SHOW INDEXES FROM %s]
-						WHERE
-							column_name = $2
-							AND index_name
-								NOT LIKE '%%_pkey' -- renames would keep the old table name
-					)
-		),
-	fk_col_counts
-		AS (
-			SELECT
-				oid, count(*) AS num_cols
-			FROM
-				fk
-			GROUP BY
-				oid
-		),
-	index_col_counts
-		AS (
-			SELECT
-				index_name, count(*) AS num_cols
-			FROM
-				valid_indexes
-			WHERE
-				storing = 'f'
-			GROUP BY
-				index_name
-		),
-	matching_fks
-		AS (
-			SELECT
-				fk.oid
-			FROM
-				fk
-				JOIN valid_indexes
-					ON
-						fk.base_col = valid_indexes.column_name
-				JOIN fk_col_counts
-					ON
-						fk.oid = fk_col_counts.oid
-				JOIN index_col_counts
-					ON
-						valid_indexes.index_name = index_col_counts.index_name
-			WHERE
-				valid_indexes.storing = 'f'
-				AND valid_indexes.non_unique = 'f'
-				AND fk_col_counts.num_cols = index_col_counts.num_cols
-			GROUP BY
-				fk.oid,
-				valid_indexes.index_name,
-				fk_col_counts.num_cols
-			HAVING
-				count(*) = fk_col_counts.num_cols
-		)
-SELECT
-	EXISTS(
-		SELECT
-			*
-		FROM
-			fk
-		WHERE
-			oid NOT IN (SELECT DISTINCT oid FROM matching_fks)
-	);
-`, tableName.String(), tableName.String()), tableName.String(), columName)
-}
-
 func (og *operationGenerator) columnIsDependedOn(
-	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name,
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName, columnName tree.Name, includeFKs bool,
 ) (bool, error) {
 	// To see if a column is depended on, the ordinal_position of the column is looked up in
 	// information_schema.columns. Then, this position is used to see if that column has view dependencies
@@ -326,6 +187,7 @@ func (og *operationGenerator) columnIsDependedOn(
 			            WHERE fd.descriptor_id
 			                  = $1::REGCLASS
                     AND fd.dependedonby_type != 'sequence'
+										AND ($5::BOOL || fd.dependedonby_type != 'fk')
 			          )
 			   UNION  (
 			           SELECT unnest(confkey) AS column_id
@@ -347,7 +209,7 @@ func (og *operationGenerator) columnIsDependedOn(
 			      AND column_name = $4
 			  ) AS source ON source.column_id = cons.column_id
 )
-`, tableName.String(), tableName.Schema(), tableName.Object(), columnName)
+`, tableName.String(), tableName.Schema(), tableName.Object(), columnName, includeFKs)
 }
 
 // colIsRefByComputed determines if a column is referenced by a computed column.

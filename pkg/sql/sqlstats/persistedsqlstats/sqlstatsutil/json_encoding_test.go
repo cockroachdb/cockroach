@@ -54,6 +54,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "firstAttemptCnt": {{.Int64}},
          "failureCount":    {{.Int64}},
          "genericCount":    {{.Int64}},
+         "stmtHintsCount":  {{.Int64}},
          "maxRetries":      {{.Int64}},
          "lastExecAt":      "{{stringifyTime .Time}}",
          "numRows": {
@@ -96,6 +97,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "kvCPUTimeNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "nodes": [{{joinInts .IntArray}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "regions": [{{joinStrings .StringArray}}],
@@ -132,6 +137,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "cpuSQLNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "admissionWaitTime": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
@@ -323,6 +332,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "admissionWaitTime": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "mvccIteratorStats": {
            "stepCount": {
              "mean": {{.Float}},
@@ -469,6 +482,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "rowsWritten": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "kvCPUTimeNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
     }
   },
   "execution_statistics": {
@@ -494,6 +511,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "sqDiff": {{.Float}}
     },
     "cpuSQLNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
+    },
+    "admissionWaitTime": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     },

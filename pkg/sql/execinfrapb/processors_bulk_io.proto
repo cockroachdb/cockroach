@@ -85,7 +85,13 @@ message BackfillerSpec {
   // the value of 0 is specified then the primary index will be used implicitly.
   optional uint32 source_index_id = 16 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 
-  // NEXTID: 17.
+  optional bool use_distributed_merge_sink = 17 [(gogoproto.nullable) = false];
+
+  // distributed_merge_file_prefix is the ExternalStorage URI prefix to use when
+  // writing map outputs for the distributed merge pipeline.
+  optional string distributed_merge_file_prefix = 18 [(gogoproto.nullable) = false];
+
+  // NEXTID: 19.
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -175,7 +181,25 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 21.
+  // use_distributed_merge indicates whether this import should use the
+  // distributed merge pipeline. Determined at planning time.
+  optional bool use_distributed_merge = 21 [(gogoproto.nullable) = false];
+
+  // NEXTID: 22.
+}
+
+message MergeCoordinatorSpec {
+  optional int64 task_count = 1 [(gogoproto.nullable) = false];
+  repeated bytes worker_sql_instance_ids = 2;
+  // NEXT ID: 3.
+}
+
+// MergeLoopback is scheduled on the same node as the MergeCoordinator.
+// MergeCoordinator is the final processor in the flow and MergeLoopback is the
+// first processor in the flow. Scheduling them on the same node allows the
+// MergeCoordinator to inject task rows into the process.
+message MergeLoopbackSpec {
+
 }
 
 message IngestStoppedSpec {
@@ -322,8 +346,10 @@ message BackupDataSpec {
   // only be set on backups starting on cluster version 24.1 or
   // greater.
   optional bool include_mvcc_value_header = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IncludeMVCCValueHeader"];
+  
+  optional bool strict_locality = 14 [(gogoproto.nullable) = false];
 
-  // NEXTID: 14.
+  // NEXTID: 15.
 }
 
 message RestoreFileSpec {
@@ -582,4 +608,57 @@ message CompactBackupsSpec {
 	optional int64 target_size = 11 [(gogoproto.nullable) = false];
 	optional int64 max_files = 12 [(gogoproto.nullable) = false];
 	// NEXT ID: 13.
+}
+
+message BulkMergeSpec {
+  // SST represents metadata about a single SST file to be merged.
+  message SST {
+    // uri is a fully qualifed URI to the SST file. It will look something like
+    // 'nodelocal://2/<job_id>/input/0.sst'
+    optional string uri = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URI"];
+    // start_key is the first key in the SST.
+    optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    // end_key is the last key in the SST.
+    optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+  };
+
+  // ssts is the list of input SSTs to merge.
+  repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+
+  // spans are the merge tasks.  E.g.the merge task `n` is to merge all the input data that overlaps with
+  // [spans[n].Key, spans[n].EndKey)
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
+
+  // output_storage is the external storage connection where the merged output should be stored.
+  optional cloud.cloudpb.ExternalStorage output_storage = 3 [(gogoproto.nullable) = false];
+
+  // iteration identifies which merge iteration this processor is executing.
+  optional int32 iteration = 4 [(gogoproto.nullable) = false];
+
+  // max_iterations captures the total number of merge iterations. When
+  // iteration == max_iterations, the processor should write directly to KV
+  // instead of producing SSTs in external storage.
+  optional int32 max_iterations = 5 [(gogoproto.nullable) = false];
+
+  // write_timestamp is the MVCC timestamp to use when the final iteration writes
+  // directly into KV.
+  optional util.hlc.Timestamp write_timestamp = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTimestamp"];
+
+  message Output {
+    // output_ssts is the list of output SSTs.
+    repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
+  }
+  // NEXT ID: 7.
+}
+
+// IndexBackfillMapProgress is emitted by map-stage processors to describe newly
+// produced SST manifests.
+message IndexBackfillMapProgress {
+	repeated jobs.jobspb.IndexBackfillSSTManifest sst_manifests = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTManifests"];
+}
+
+// IngestFileSpec describes the set of SSTs to be ingested by an ingest
+// processor. Each SST is expected to be range-aligned and non-overlapping.
+message IngestFileSpec {
+	repeated BulkMergeSpec.SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
 }

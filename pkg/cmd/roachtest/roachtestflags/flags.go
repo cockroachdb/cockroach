@@ -342,6 +342,13 @@ var (
 		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
 	})
 
+	DatadogAlwaysUpload bool = false
+	_                        = registerRunFlag(&DatadogAlwaysUpload, FlagInfo{
+		Name: "datadog-always-upload",
+		Usage: `Always upload roachtest run log data to Datadog. Logs from master and release branches are uploaded by
+				default.`,
+	})
+
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",
@@ -523,10 +530,10 @@ var (
 		Usage: `Override use of local SSD`,
 	})
 
-	OverrideFilesystem string
+	OverrideFilesystem vm.Filesystem
 	_                  = registerRunFlag(&OverrideFilesystem, FlagInfo{
 		Name:  "filesystem",
-		Usage: `Override the underlying file system(ext4/zfs)`,
+		Usage: `Override the underlying file system(ext4/zfs/xfs/f2fs/btrfs)`,
 	})
 
 	OverrideNoExt4Barrier bool

@@ -169,7 +169,7 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.rowsAffected()))
+		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
@@ -307,6 +307,10 @@ func (u *updateNode) indexBytesWritten() int64 {
 
 func (u *updateNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
+}
+
+func (u *updateNode) kvCPUTime() int64 {
+	return u.run.tu.kvCPUTime
 }
 
 func (u *updateNode) enableAutoCommit() {

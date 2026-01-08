@@ -1063,9 +1063,11 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		//
 		// TODO(darrylwong): Once #137625 is complete, we can switch to querying prometheus using
 		// `clusterstats` instead and re-enable separate process.
+		//
+		// This test is flaky in shared process mode, so it is temporarily disabled to reduce noise.
+		// TODO(server):  #157164 is the tracking issue to re-enable this.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
 		),
 	)
 }

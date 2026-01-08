@@ -1,3 +1,5 @@
+# knob-opt: allow-unsafe
+
 statement ok
 CREATE SEQUENCE seq;
 

@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
@@ -23,8 +22,68 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestParseMachineType(t *testing.T) {
+	tests := []struct {
+		machineType     string
+		expectedFamily  string
+		expectedCores   int
+		expectedMemory  int // in MB
+		expectedSSDOpts string
+	}{
+		{
+			machineType:    "n1-standard-4",
+			expectedFamily: "n1",
+			expectedCores:  4,
+			expectedMemory: 0,
+		},
+		{
+			machineType:    "n2-highmem-8",
+			expectedFamily: "n2",
+			expectedCores:  8,
+			expectedMemory: 0,
+		},
+		{
+			machineType:    "n2-custom-16-32768",
+			expectedFamily: "n2",
+			expectedCores:  16,
+			expectedMemory: 32768,
+		},
+		{
+			machineType:     "c4a-standard-8-lssd",
+			expectedFamily:  "c4a",
+			expectedCores:   8,
+			expectedMemory:  0,
+			expectedSSDOpts: "lssd",
+		},
+		{
+			machineType:     "c4d-standard-384-metal",
+			expectedFamily:  "c4d",
+			expectedCores:   384,
+			expectedMemory:  0,
+			expectedSSDOpts: "",
+		},
+		{
+			machineType:     "z3-highmem-176-standardlssd",
+			expectedFamily:  "z3",
+			expectedCores:   176,
+			expectedMemory:  0,
+			expectedSSDOpts: "standardlssd",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.machineType, func(t *testing.T) {
+			family, _, cores, memory, ssdOpts, err := parseMachineType(tc.machineType)
+			assert.NoError(t, err)
+			assert.EqualValues(t, tc.expectedFamily, family)
+			assert.EqualValues(t, tc.expectedCores, cores)
+			assert.EqualValues(t, tc.expectedMemory, memory)
+			assert.EqualValues(t, tc.expectedSSDOpts, ssdOpts)
+		})
+	}
+}
+
 func TestAllowedLocalSSDCount(t *testing.T) {
-	for i, c := range []struct {
+	for _, c := range []struct {
 		machineType string
 		expected    []int
 		unsupported bool
@@ -32,7 +91,7 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		// N1 has the same ssd counts for all cpu counts.
 		{"n1-standard-4", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
 		{"n1-highcpu-64", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
-		{"n1-higmem-96", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
+		{"n1-highmem-96", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
 
 		{"n2-standard-4", []int{1, 2, 4, 8, 16, 24}, false},
 		{"n2-standard-8", []int{1, 2, 4, 8, 16, 24}, false},
@@ -54,7 +113,7 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		// c2-standard-64 doesn't exist and exceed cpu count, so we expect an error.
 		{"c2-standard-64", nil, true},
 	} {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(c.machineType, func(t *testing.T) {
 			actual, err := AllowedLocalSSDCount(c.machineType)
 			if c.unsupported {
 				assert.Error(t, err)

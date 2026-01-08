@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !local-legacy-schema-changer
 
 subtest setup
 
@@ -272,7 +272,6 @@ query T
 EXPLAIN (PLAN) select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -1373,7 +1372,7 @@ statement ok
 set role buck
 
 # Try to delete the row. The delete policy will prevent us from reading the row.
-statement ok
+statement count 0
 DELETE FROM bbteams;
 
 query TT
@@ -1396,7 +1395,7 @@ create policy restrict_delete on bbteams for delete to buck using (is_valid(leag
 statement ok
 set role buck
 
-statement ok
+statement count 1
 DELETE FROM bbteams WHERE team != 'pirates';
 
 query TT
@@ -2243,7 +2242,7 @@ INSERT INTO child VALUES ('bedroom', 4);
 statement ok
 ALTER TABLE parent NO FORCE ROW LEVEL SECURITY;
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE key = 1;
 
 statement ok
@@ -2452,7 +2451,7 @@ SELECT a, b FROM trunc ORDER BY a;
 3  c
 
 # This should not delete anything because the expression for delete is false.
-statement ok
+statement count 0
 DELETE FROM trunc;
 
 query IT
@@ -2550,7 +2549,7 @@ SELECT a, b FROM trunc ORDER BY a;
 7  a
 9  c
 
-statement ok
+statement count 0
 DELETE FROM trunc;
 
 query IT
@@ -3663,7 +3662,7 @@ query I
 delete from cnt where counter is not null returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 query I
@@ -3682,7 +3681,7 @@ query I
 delete from cnt where counter > 0 returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 statement ok
@@ -3704,7 +3703,7 @@ query I
 delete from cnt where counter > 0 returning counter;
 ----
 
-statement ok
+statement count 0
 delete from cnt;
 
 statement ok
@@ -3732,7 +3731,7 @@ query I
 DELETE FROM cnt WHERE counter > 0 RETURNING counter;
 ----
 
-statement ok
+statement count 0
 DELETE FROM cnt;
 
 statement ok
@@ -4503,7 +4502,7 @@ SELECT comment, c FROM ups WHERE pk = 3;
 ----
 original value 2
 
-statement ok
+statement count 1
 DELETE FROM ups WHERE pk = 3;
 
 statement ok
@@ -5405,7 +5404,7 @@ statement ok
 CREATE ROLE can_bypassrls_global;
 
 statement ok
-GRANT SYSTEM BYPASSRLS TO can_bypassrls_global; 
+GRANT SYSTEM BYPASSRLS TO can_bypassrls_global;
 
 query B
 SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
@@ -5449,7 +5448,7 @@ statement ok
 CREATE ROLE can_createrole_global;
 
 statement ok
-GRANT SYSTEM CREATEROLE TO can_createrole_global; 
+GRANT SYSTEM CREATEROLE TO can_createrole_global;
 
 query B
 SELECT rolcreaterole FROM pg_authid WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
@@ -5480,7 +5479,7 @@ statement ok
 DROP ROLE cannot_createrole;
 
 statement ok
-REVOKE SYSTEM CREATEROLE FROM can_createrole_global; 
+REVOKE SYSTEM CREATEROLE FROM can_createrole_global;
 
 statement ok
 DROP ROLE can_createrole_global;
@@ -5497,7 +5496,7 @@ statement ok
 CREATE ROLE can_createdb_global;
 
 statement ok
-GRANT SYSTEM CREATEDB TO can_createdb_global; 
+GRANT SYSTEM CREATEDB TO can_createdb_global;
 
 query B
 SELECT rolcreatedb FROM pg_authid WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
@@ -5528,7 +5527,7 @@ statement ok
 DROP ROLE cannot_createdb;
 
 statement ok
-REVOKE SYSTEM CREATEDB FROM can_createdb_global; 
+REVOKE SYSTEM CREATEDB FROM can_createdb_global;
 
 statement ok
 DROP ROLE can_createdb_global;
@@ -5814,7 +5813,7 @@ statement ok
 RESET row_security;
 
 # Test DELETE and UPSERT.
-statement ok
+statement count 1
 DELETE FROM accounts WHERE id = 1;
 
 statement ok
@@ -5929,5 +5928,62 @@ DROP TABLE accounts, non_rls;
 
 statement ok
 DROP USER alice;
+
+statement ok
+RESET SESSION row_security;
+
+subtest end
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build RLS constraints.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (c0 INT, c1 TEXT DEFAULT 'foobarbaz', FAMILY (c0, c1));
+
+statement ok
+CREATE ROLE user_158154
+
+statement ok
+GRANT ALL ON t158154 TO user_158154;
+
+statement ok
+ALTER TABLE t158154 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE t158154 OWNER TO user_158154;
+
+statement ok
+SET ROLE user_158154;
+
+statement ok
+CREATE POLICY IF NOT EXISTS p1 on t158154 WITH CHECK (c0 > 0 AND c1 = 'foobarbaz');
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  UPDATE t158154 SET c0 = 1 WHERE true;
+$$;
+
+statement ok
+CALL p158154();
+
+# The procedure does not directly depend on column b, so dropping column b
+# should be allowed after dropping the RLS constraint.
+statement ok
+DROP POLICY p1 on t158154;
+ALTER TABLE t158154 DROP COLUMN c1;
+
+statement ok
+CALL p158154();
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+statement ok
+DROP ROLE user_158154;
 
 subtest end

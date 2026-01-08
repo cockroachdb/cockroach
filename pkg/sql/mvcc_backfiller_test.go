@@ -61,7 +61,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	skip.UnderDuress(t, "this test fails under duress")
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 
 	writesPopulated := false
 	var writesFn func() error
@@ -182,7 +182,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 
 	const (
 		rowCount  = 2000
@@ -299,7 +299,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -496,7 +496,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var initialRows = 10000
 	rowIdx := 0
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -565,7 +565,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -759,7 +759,7 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	rowIdx := 0
 	mergeSerializeCh := make(chan struct{}, 1)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
@@ -813,7 +813,7 @@ func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
 
 	chunkSize := 10
 	const maxAutoRetries = 10
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	var writeMore func(sampleData bool) error
 	retryTracker := struct {
 		limitedPerKey map[string]int
@@ -966,7 +966,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	// Wait for the beginning of the Merge step of the schema change.
 	// Write data to the temp index and split it at the hazardous
 	// points.
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {

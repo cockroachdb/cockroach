@@ -56,7 +56,7 @@ type MMAStoreRebalancer struct {
 }
 
 type pendingChangeAndRangeUsageInfo struct {
-	change       mmaprototype.PendingRangeChange
+	change       mmaprototype.ExternalRangeChange
 	usage        allocator.RangeUsageInfo
 	syncChangeID mmaintegration.SyncChangeID
 }
@@ -137,7 +137,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				} else {
 					log.KvDistribution.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange.change)
 				}
-				msr.as.PostApply(curChange.syncChangeID, success)
+				msr.as.PostApply(ctx, curChange.syncChangeID, success)
 				msr.pendingChangeIdx++
 			} else {
 				log.KvDistribution.VInfof(ctx, 1, "operation for pendingChange=%v is still in progress", curChange.change)
@@ -152,10 +152,32 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			msr.pendingChangeIdx = 0
 			msr.lastRebalanceTime = tick
 			log.KvDistribution.VInfof(ctx, 1, "no more pending changes to process, will call compute changes again")
+			// Refresh store status from StorePool before computing changes.
+			// This uses the real production RefreshStoreStatus, which queries
+			// StorePool (backed by StatusTracker via NodeLivenessFn) and
+			// translates to MMA's status model.
+			msr.allocator.UpdateStoresStatuses(ctx, msr.as.GetMMAStoreStatuses())
 			storeLeaseholderMsg := MakeStoreLeaseholderMsgFromState(s, msr.localStoreID)
 			pendingChanges := msr.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 				LocalStoreID: roachpb.StoreID(msr.localStoreID),
+				PeriodicCall: true, /* to exercise observability code paths */
 			})
+			// After ComputeChanges succeeds, mark the span config as up-to-date
+			// on replicas.
+			for _, rm := range storeLeaseholderMsg.Ranges {
+				if rm.MaybeSpanConfIsPopulated {
+					rng, ok := s.Range(state.RangeID(rm.RangeID))
+					if !ok {
+						panic(fmt.Sprintf("range %d not found", rm.RangeID))
+					}
+
+					replica, ok := rng.Replica(msr.localStoreID)
+					if !ok {
+						panic(fmt.Sprintf("replica %d not found", msr.localStoreID))
+					}
+					replica.SetMMASpanConfigIsUpToDate(true)
+				}
+			}
 			log.KvDistribution.Infof(ctx, "store %d: computed %d changes", msr.localStoreID, len(pendingChanges))
 			for i, change := range pendingChanges {
 				usageInfo := s.RangeUsageInfo(state.RangeID(change.RangeID), msr.localStoreID)
@@ -174,7 +196,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 
 			// Record the last time a lease transfer was requested.
 			for _, change := range msr.pendingChanges {
-				if change.change.IsTransferLease() {
+				if change.change.IsPureTransferLease() {
 					msr.lastLeaseTransfer = tick
 				}
 			}
@@ -187,7 +209,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		}
 
 		var curOp op.ControlledOperation
-		if msr.pendingChanges[msr.pendingChangeIdx].change.IsTransferLease() {
+		if msr.pendingChanges[msr.pendingChangeIdx].change.IsPureTransferLease() {
 			curOp = op.NewTransferLeaseOp(
 				tick,
 				curChange.change.RangeID,

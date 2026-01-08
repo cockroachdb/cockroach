@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
@@ -83,7 +83,7 @@ var (
 
 	testClusterBaseClusterArgs = base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(127241),
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
@@ -895,9 +895,6 @@ func TestRandomTables(t *testing.T) {
 	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
-	// TODO(#148303): Remove this once the crud writer supports tables with array primary keys.
-	runnerA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
-
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
 	var tableName, streamStartStmt string
@@ -1655,9 +1652,9 @@ func compareReplicatedTables(
 		indexB, err := catalog.MustFindIndexByName(descB, indexA.GetName())
 		require.NoError(t, err)
 
-		aFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descA, indexA, []string{})
+		aFingerprintQuery, err := sql.BuildExperimentalFingerprintQueryForIndex(descA, indexA, []string{})
 		require.NoError(t, err)
-		bFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descB, indexB, []string{})
+		bFingerprintQuery, err := sql.BuildExperimentalFingerprintQueryForIndex(descB, indexB, []string{})
 		require.NoError(t, err)
 		t.Logf("fingerprinting index %s", indexA.GetName())
 		runnerB.CheckQueryResults(t, bFingerprintQuery, runnerA.QueryStr(t, aFingerprintQuery))
@@ -1764,12 +1761,12 @@ func (m mockBatchHandler) HandleBatch(
 	}
 	return batchStats{}, nil
 }
-func (m mockBatchHandler) GetLastRow() cdcevent.Row            { return cdcevent.Row{} }
-func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32) {}
-func (m mockBatchHandler) Close(context.Context)               {}
-func (m mockBatchHandler) ReportMutations(_ *stats.Refresher)  {}
-func (m mockBatchHandler) ReleaseLeases(_ context.Context)     {}
-func (m mockBatchHandler) BatchSize() int                      { return m.batchSize }
+func (m mockBatchHandler) GetLastRow() cdcevent.Row                          { return cdcevent.Row{} }
+func (m mockBatchHandler) SetSyntheticFailurePercent(_ uint32)               {}
+func (m mockBatchHandler) Close(context.Context)                             {}
+func (m mockBatchHandler) ReportMutations(context.Context, *stats.Refresher) {}
+func (m mockBatchHandler) ReleaseLeases(_ context.Context)                   {}
+func (m mockBatchHandler) BatchSize() int                                    { return m.batchSize }
 
 type mockDLQ int
 
@@ -2653,6 +2650,39 @@ func TestPartialIndexes(t *testing.T) {
 	dbB.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON b.foo (pi) WHERE pk = 0")
 }
 
+// TODO(msbutler): migrate TestLogicalReplicationCreationChecks to this test
+// which has subtests and no weird cross case dependencies.
+func TestSupportedSchemaChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	// source is allowed to have a seq expression but not dest.
+	t.Run("sequences", func(t *testing.T) {
+
+		dbA.Exec(t, "CREATE SEQUENCE my_seqA")
+		dbB.Exec(t, "CREATE SEQUENCE my_seqB")
+		dbA.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqA'))")
+		dbA.Exec(t, "INSERT INTO tab_with_seq (pk) VALUES (1), (2), (3)")
+
+		dbB.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqB'))")
+		dbB.Exec(t, "CREATE TABLE tab_no_seq (pk INT PRIMARY KEY, v INT)")
+
+		var jobBID jobspb.JobID
+		dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_no_seq", dbAURL.String()).Scan(&jobBID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+		dbB.ExpectErr(t, "references sequences with IDs", "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_with_seq", dbAURL.String())
+	})
+}
+
 // TestLogicalReplicationCreationChecks verifies that we check that the table
 // schemas are compatible when creating the replication stream.
 func TestLogicalReplicationCreationChecks(t *testing.T) {
@@ -2845,7 +2875,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Check that REFCURSOR columns are not allowed.
 	dbA.Exec(t, "CREATE TABLE tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
 	dbB.Exec(t, "CREATE TABLE b.tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
-	expectErr(t, "tab_with_refcursor", "cannot create logical replication stream: column curs is a RefCursor")
+	expectErr(t, "tab_with_refcursor", "cannot create logical replication stream: RefCursor is not supported by LDR")
 
 	// Add different default values to to the source and dest, verify the stream
 	// can be created, and that the default value is sent over the wire.
@@ -2897,17 +2927,19 @@ func TestGetWriterType(t *testing.T) {
 
 	t.Run("validated-mode", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
+
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
+		require.NoError(t, err)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeCRUD, wt)
+
+		crosscluster.LogicalReplicationUDFWriterEnabled.Override(ctx, &st.SV, true)
+		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
 		require.NoError(t, err)
 		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
 	t.Run("immediate-mode", func(t *testing.T) {
-		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.V25_3.Version(),
-			clusterversion.PreviousRelease.Version(),
-			true, /* initializeVersion */
-		)
+		st := cluster.MakeTestingClusterSettings()
 		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)

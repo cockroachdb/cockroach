@@ -134,9 +134,13 @@ message ProcessorCoreUnion {
   optional VectorMutationSearchSpec vectorMutationSearch = 48;
   optional CompactBackupsSpec compactBackups = 49;
   optional InspectSpec inspect = 50;
+  optional BulkMergeSpec bulkMerge = 51;
+  optional MergeCoordinatorSpec mergeCoordinator = 52;
+  optional MergeLoopbackSpec mergeLoopback = 53;
+  optional IngestFileSpec ingestFile = 54;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 51.
+  // NEXT ID: 55.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -156,4 +160,7 @@ message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
+  // SingleNodeWrap, if set, indicates that exactly one local planNode is
+  // wrapped by this LocalPlanNodeSpec.
+  optional bool SingleNodeWrap = 4 [(gogoproto.nullable) = false];
 }

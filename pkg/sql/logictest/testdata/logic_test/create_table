@@ -648,16 +648,16 @@ gen_by_default_as_id_seqopt_cache  CREATE TABLE public.gen_by_default_as_id_seqo
 statement ok
 CREATE SEQUENCE serial_test_sequence start 1 increment 1
 
-statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(v26.1)/serial.html
 CREATE TABLE serial_test1 (id INT PRIMARY KEY DEFAULT nextval('serial_test_sequence'), temp string)
 
-statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(v26.1)/serial.html
 CREATE TABLE serial_test2 (id SERIAL PRIMARY KEY, temp string)
 
-statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+statement notice NOTICE: using sequential values in a primary key does not perform as well as using random UUIDs. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(v26.1)/serial.html
 CREATE TABLE serial_test3 (id SERIAL, temp string, PRIMARY KEY (id))
 
-statement notice NOTICE: upgrading the column id to INT8 to utilize the session serial_normalization setting\nHINT: change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(dev)/serial.html
+statement notice NOTICE: upgrading the column id to INT8 to utilize the session serial_normalization setting\nHINT: change the serial_normalization to sql_sequence or sql_sequence_cached if you wish to use a smaller sized serial column at the cost of performance. See https://www.cockroachlabs.com/docs/(v\d+\.\d+)|(v26.1)/serial.html
 CREATE TABLE serial_test4 (id SERIAL4, temp string)
 
 statement ok
@@ -1233,7 +1233,7 @@ CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
 
 subtest end
 
-statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/dev
+statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/v26.1
 CREATE TABLE not_indexable (COL1 INT PRIMARY KEY, COL2 REFCURSOR, COL3 REFCURSOR, INDEX (COL2, COL3))
 
 subtest region_lookup_param

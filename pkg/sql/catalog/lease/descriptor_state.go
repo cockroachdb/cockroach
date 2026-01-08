@@ -47,6 +47,9 @@ type descriptorState struct {
 		// offline temporarily (as opposed to dropped).
 		takenOffline bool
 
+		// Timestamp at which this descriptor became offline.
+		takenOfflineAt hlc.Timestamp
+
 		// maxVersionSeen is used to prevent a race where a concurrent lease
 		// acquisition might miss an event indicating that there is a new version
 		// of a descriptor.
@@ -58,6 +61,9 @@ type descriptorState struct {
 		// acquisition finishes but indicate that that new lease is expired are not
 		// ignored.
 		acquisitionsInProgress int
+
+		// acquisitionChannel indicates that a bulk acquisition is in progress.
+		acquisitionChannel chan struct{}
 	}
 }
 
@@ -90,6 +96,14 @@ func (t *descriptorState) findForTimestamp(
 
 	// Acquire a lease if no descriptor exists in the cache.
 	if len(t.mu.active.data) == 0 {
+		// If the descriptor is marked as offline, we should attempt
+		// a historical query to fetch it, since it's likely querying
+		// the past. If the requested time is past the offline time,
+		// then attempt to renew again, since it could have come online
+		// again.
+		if t.mu.takenOffline && timestamp.GetTimestamp().Less(t.mu.takenOfflineAt) {
+			return nil, false, errReadOlderVersion
+		}
 		return nil, false, errRenewLease
 	}
 	return t.findForTimestampImpl(ctx, timestamp.GetTimestamp(), timestamp.GetBaseTimestamp(), expensiveLogEnabled)
@@ -113,6 +127,11 @@ func (t *descriptorState) findForTimestampImpl(
 		// Check to see if the ModificationTime is valid. If only the initial version
 		// of the descriptor is known, then read it at the base timestamp.
 		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(leaseTimestamp) {
+			// If the version within the time range is marked as dropped,
+			// then return a dropped descriptor error.
+			if err := catalog.FilterDroppedDescriptor(desc); err != nil {
+				return nil, false, err
+			}
 			latest := i+1 == len(t.mu.active.data)
 			if !desc.hasExpired(ctx, readTimestamp) {
 				// Existing valid descriptor version.
@@ -127,7 +146,7 @@ func (t *descriptorState) findForTimestampImpl(
 				return t.findForTimestampImpl(ctx, readTimestamp, readTimestamp, expensiveLogEnabled)
 			}
 
-			if latest {
+			if latest && !t.mu.takenOffline {
 				// Renew the lease if the lease has expired
 				// The latest descriptor always has a lease.
 				return nil, false, errRenewLease
@@ -138,7 +157,7 @@ func (t *descriptorState) findForTimestampImpl(
 
 	// If we have the initial version of the descriptor, and it satisfies the read
 	// timestamp, then the object was just created. We can confirm it satisfies
-	// the request, by executing findForTimestampImpl with the readTimestamp instead.
+	// the request by executing findForTimestampImpl with the readTimestamp instead.
 	if oldest := t.mu.active.findOldest(); hasDifferentReadTimeStamp &&
 		oldest != nil &&
 		oldest.GetVersion() == 1 &&
@@ -229,7 +248,8 @@ func newDescriptorVersionState(
 	if !expiration.IsEmpty() {
 		descState.expiration.Store(&expiration)
 	}
-
+	// Populate the size of the structure.
+	descState.byteSize = descState.calculateByteSize()
 	return descState
 }
 
@@ -344,4 +364,19 @@ func (t *descriptorState) markAcquisitionDone(ctx context.Context) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.acquisitionsInProgress--
+}
+
+// setTakenOfflineLocked marks the descriptor as offline and sets / clears the timestamp.
+func (t *descriptorState) setTakenOfflineLocked(offline bool) {
+	// If the descriptor is already offline or online
+	// don't modify the timestamp.
+	if t.mu.takenOffline == offline {
+		return
+	}
+	t.mu.takenOffline = offline
+	timestamp := hlc.Timestamp{}
+	if offline {
+		timestamp = t.m.storage.clock.Now()
+	}
+	t.mu.takenOfflineAt = timestamp
 }

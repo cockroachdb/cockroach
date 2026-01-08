@@ -94,8 +94,10 @@ write *eventpb.DropSequence to event log:
 delete object namespace entry {100 101 sq1} -> 104
 upsert descriptor #104
   ...
+       sequenceOwner: {}
        sessionCacheSize: "1"
-       start: "32"
+  -    start: "32"
+  +    start: "1"
   +  state: DROP
      unexposedParentSchemaId: 101
      version: "1"

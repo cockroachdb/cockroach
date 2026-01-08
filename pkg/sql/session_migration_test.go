@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -198,6 +200,30 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 					return err.Error()
 				}
 				return ret
+			case "change_session_size":
+				// Only the system layer can change the session size cluster
+				// setting.
+				query := fmt.Sprintf("SET CLUSTER SETTING sql.session_transfer.max_session_size = '%s'", d.CmdArgs[0].Key)
+				_, err := srv.SystemLayer().SQLConn(t).Exec(query)
+				if err != nil {
+					return err.Error()
+				}
+				// Block until the application layer observes the change.
+				testutils.SucceedsSoon(t, func() error {
+					row := dbConn.QueryRow(ctx, `SHOW CLUSTER SETTING sql.session_transfer.max_session_size;`)
+					var sessionSize string
+					err := row.Scan(&sessionSize)
+					if err != nil {
+						return err
+					}
+					// Remove spaces to match format from the test file.
+					sessionSize = strings.ReplaceAll(sessionSize, " ", "")
+					if sessionSize != d.CmdArgs[0].Key {
+						return errors.Newf("expected session size to be %s, got %s", d.CmdArgs[0].Key, sessionSize)
+					}
+					return nil
+				})
+				return ""
 
 			case "error":
 				var errorRE string

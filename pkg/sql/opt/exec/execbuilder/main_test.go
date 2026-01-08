@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -24,6 +25,9 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
+	// With DRPC enabled, its cluster setting "rpc.experimental_drpc.enabled"
+	// interferes with some tests hence we disable it here.
+	serverutils.TestingGlobalDRPCOption(base.TestDRPCDisabled)
 
 	os.Exit(m.Run())
 }

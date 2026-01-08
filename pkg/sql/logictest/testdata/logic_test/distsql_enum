@@ -53,11 +53,11 @@ ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 10), (ARRA
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE t1 WITH DETAILS] ORDER BY lease_holder, start_key
 ----
-start_key           end_key                 replicas  lease_holder
-<before:/Table/76>  …/1/0                   {1}       1
-…/1/0               …/1/10                  {1}       1
-…/1/10              …/1/20                  {2}       2
-…/1/20              <after:/Table/110/1/0>  {3}       3
+start_key           end_key                replicas  lease_holder
+<before:/Table/XX>  …/1/0                  {1}       1
+…/1/0               …/1/10                 {1}       1
+…/1/10              …/1/20                 {2}       2
+…/1/20              <after:/Table/XX/1/0>  {3}       3
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE t2 WITH DETAILS] ORDER BY lease_holder, start_key

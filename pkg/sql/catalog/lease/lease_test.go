@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -587,6 +589,28 @@ func TestWaitForNewVersion(testingT *testing.T) {
 		}
 	}
 
+	{
+		// Test context cancellation while waiting.
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		// Cancel the context after a short delay to simulate cancellation during execution.
+		grp := ctxgroup.WithContext(context.Background())
+		grp.GoCtx(func(ctx context.Context) error {
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+			return nil
+		})
+
+		_, err := leaseMgr.WaitForNewVersion(cancelCtx, descID, nil, retry.Options{})
+
+		// We expect the error to indicate context cancellation.
+		if !(sqltestutils.IsClientSideQueryCanceledErr(err) ||
+			errors.Is(err, context.Canceled)) {
+			t.Fatalf("The client or the context should have timed out. Unexpected error: %v", err)
+		}
+		require.NoError(testingT, grp.Wait())
+	}
+
 	t.mustAcquire(3, descID)
 	t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/3")
 
@@ -716,6 +740,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	srv, db, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+	lm := s.LeaseManager().(*lease.Manager)
 
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 	if err != nil {
@@ -757,6 +782,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
+	ts := s.Clock().Now()
 	_, err = db.Exec(`DROP TABLE test.t`)
 	if err != nil {
 		t.Fatal(err)
@@ -781,6 +807,12 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	if !testutils.IsError(err, "descriptor is being dropped") {
 		t.Fatalf("got a different error than expected: %v", err)
 	}
+	// Validate we can read the descriptor before the drop.
+	pastLease, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableDesc.GetID())
+	require.NoError(t, err)
+	require.Equalf(t, lease3.Underlying().GetVersion(), pastLease.Underlying().GetVersion(), "prior version does not match ")
+	pastLease.Release(ctx)
+
 }
 
 // TestSubqueryLeases tests that all leases acquired by a subquery are
@@ -1768,7 +1800,7 @@ func TestTableCreationPushesTxnsInRecentPast(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					MaxOffset: time.Second,
+					MaxOffset: 2 * time.Second,
 				},
 			},
 		},
@@ -2171,9 +2203,6 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	blockLeaseAcquisitionOfInterestingTable := make(chan chan struct{})
 	unblockAll := make(chan struct{})
 	args := base.TestServerArgs{}
-	args.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: args,
 	})
@@ -2808,9 +2837,6 @@ func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
 	var txnID string
 
 	var params base.TestServerArgs
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
-		base.TestTenantProbabilistic, 112957,
-	)
 	params.Settings = cluster.MakeTestingClusterSettings()
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
@@ -3744,99 +3770,267 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	numTablesToCreate := 100
-	// This test can get super expensive, so under stress create fewer tables
-	// and use the parallelism to detect bugs.
-	if skip.Stress() {
-		numTablesToCreate = 10
-	}
-	st := cluster.MakeTestingClusterSettings()
-	ctx := context.Background()
-	// Disable the automatic stats collection, which can make things slower
-	// with the large number of objects in this test.
-	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
-	tc := serverutils.StartCluster(
-		t, 3, base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Knobs: base.TestingKnobs{
-					SQLEvalContext: &eval.TestingKnobs{
-						ForceProductionValues: true,
+	testutils.RunTrueAndFalse(t, "oldVersionRetention", func(t *testing.T, b bool) {
+		numTablesToCreate := 100
+		// This test can get super expensive, so under stress create fewer tables
+		// and use the parallelism to detect bugs.
+		if skip.Duress() {
+			numTablesToCreate = 10
+		}
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		// Disable the automatic stats collection, which can make things slower
+		// with the large number of objects in this test.
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+		lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, b)
+		tc := serverutils.StartCluster(
+			t, 3, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Settings: st,
+					Knobs: base.TestingKnobs{
+						SQLEvalContext: &eval.TestingKnobs{
+							ForceProductionValues: true,
+						},
 					},
 				},
-			},
-		})
-	defer tc.Stopper().Stop(ctx)
+			})
+		defer tc.Stopper().Stop(ctx)
 
-	grp := ctxgroup.WithContext(ctx)
+		grp := ctxgroup.WithContext(ctx)
 
-	nextObjectToRead := make(chan string)
-	nextObjectToModify := make(chan string)
-	var objectModified atomic.Bool
+		nextObjectToRead := make(chan string)
+		nextObjectToModify := make(chan string)
+		var objectModified atomic.Bool
 
-	// Creates tables in the background.
-	createThreads := func(ctx context.Context) (err error) {
-		defer close(nextObjectToRead)
-		conn := tc.ServerConn(0)
-		for i := range numTablesToCreate {
-			objectName := fmt.Sprintf("t%d", i)
-			sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
-			}
-			select {
-			case nextObjectToRead <- objectName:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		return nil
-	}
-
-	// Reads from the object while a modification maybe occurring.
-	readThreads := func(ctx context.Context) (err error) {
-		defer close(nextObjectToModify)
-		conn := tc.ServerConn(0)
-		for objectName := range nextObjectToRead {
-			// Initial usage of the descriptor.
-			sql := fmt.Sprintf("SELECT * FROM %s", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
-			}
-			objectModified.Store(false)
-			select {
-			case nextObjectToModify <- objectName:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			for !objectModified.Load() {
-				// Repeat usage of the descriptor.
-				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+		// Creates tables in the background.
+		createThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToRead)
+			conn := tc.ServerConn(0)
+			for i := range numTablesToCreate {
+				objectName := fmt.Sprintf("t%d", i)
+				sql := fmt.Sprintf("CREATE TABLE %s(n int PRIMARY KEY)\n", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
 					panic(err)
 				}
+				select {
+				case nextObjectToRead <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return nil
+		}
+
+		// Reads from the object while a modification maybe occurring.
+		readThreads := func(ctx context.Context) (err error) {
+			defer close(nextObjectToModify)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToRead {
+				// Initial usage of the descriptor.
+				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					panic(err)
+				}
+				objectModified.Store(false)
+				select {
+				case nextObjectToModify <- objectName:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				for !objectModified.Load() {
+					// Repeat usage of the descriptor.
+					sql := fmt.Sprintf("SELECT * FROM %s", objectName)
+					if _, err := conn.ExecContext(ctx, sql); err != nil {
+						if errors.Is(err, context.Canceled) {
+							return nil
+						}
+						panic(err)
+					}
+				}
+			}
+			return nil
+		}
+
+		// Alters the object in the background.
+		modifyThreads := func(ctx context.Context) (err error) {
+			defer objectModified.Store(true)
+			conn := tc.ServerConn(0)
+			for objectName := range nextObjectToModify {
+				sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
+				if _, err := conn.ExecContext(ctx, sql); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return nil
+					}
+					panic(err)
+				}
+				objectModified.Store(true)
+			}
+			return nil
+		}
+
+		grp.GoCtx(createThreads)
+		grp.GoCtx(readThreads)
+		grp.GoCtx(modifyThreads)
+		require.NoError(t, grp.Wait())
+	})
+}
+
+// BenchmarkLargeDatabaseColdPgClass measures the cold performance for selecting
+// descriptors for the first time in pg_class. When leased descriptors are used,
+// a large number of individual round trips can occur.
+func BenchmarkLargeDatabaseColdPgClass(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	for _, useLeasedDescriptors := range []bool{true, false} {
+		for _, usePrefetch := range []bool{true, false} {
+			// There is no concept of prefetching without leased descriptors.
+			if !useLeasedDescriptors && usePrefetch {
+				continue
+			}
+			const numTables = 8192
+			b.Run(fmt.Sprintf("pg_class/leased_descriptors=%t/use_prefetch=%t/tables=%d", useLeasedDescriptors, usePrefetch, numTables), func(b *testing.B) {
+				ctx := context.Background()
+				s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						DialerKnobs: nodedialer.DialerTestingKnobs{
+							// Disable RPC optimizations for the local case so that there is
+							// more round trip overhead.
+							TestingNoLocalClientOptimization: true,
+						},
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: rpc.ContextTestingKnobs{
+								// Disable RPC optimizations for the local case so that there is
+								// more round trip overhead.
+								NoLoopbackDialer: true,
+							},
+						},
+					},
+				})
+				sqlConn, err := sqlDB.Conn(ctx)
+				require.NoError(b, err)
+				defer s.Stopper().Stop(ctx)
+				b.ResetTimer()
+				b.StopTimer()
+				tdb := sqlutils.MakeSQLRunner(sqlConn)
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled= %t;", useLeasedDescriptors))
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = %t;", useLeasedDescriptors))
+				tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = %t;", usePrefetch))
+				tdb.Exec(b, fmt.Sprintf(`SELECT crdb_internal.generate_test_objects('{"names":"gen.public.foo","counts":[1,1,%d], "name_gen": {"noise": false}}'::JSONB);`, numTables))
+				tdb.Exec(b, "USE gen_1")
+				// Cold run.
+				b.StartTimer()
+				tdb.Exec(b, "SELECT * FROM pg_class")
+				b.StopTimer()
+			})
+		}
+	}
+}
+
+// BenchmarkLargeDatabaseWarmPgClass measures the warm performance for selecting
+// descriptors for using leased descriptors repeatedly in a bulk fashion.
+func BenchmarkLargeDatabaseWarmPgClass(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	for _, tables := range []int{8192, 16384, 32768} {
+		for _, useLeasedDescriptors := range []bool{true, false} {
+			for _, usePrefetch := range []bool{true, false} {
+				// There is no concept of prefetching without leased descriptors.
+				if !useLeasedDescriptors && usePrefetch {
+					continue
+				}
+				b.Run(fmt.Sprintf("pg_class/leased_descriptors=%t/use_prefetch=%t/tables=%d", useLeasedDescriptors, usePrefetch, tables), func(b *testing.B) {
+					ctx := context.Background()
+					s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{
+						Knobs: base.TestingKnobs{
+							DialerKnobs: nodedialer.DialerTestingKnobs{
+								// Disable RPC optimizations for the local case so that there is
+								// more round trip overhead.
+								TestingNoLocalClientOptimization: true,
+							},
+							Server: &server.TestingKnobs{
+								ContextTestingKnobs: rpc.ContextTestingKnobs{
+									// Disable RPC optimizations for the local case so that there is
+									// more round trip overhead.
+									NoLoopbackDialer: true,
+								},
+							},
+						},
+					})
+					sqlConn, err := sqlDB.Conn(ctx)
+					require.NoError(b, err)
+					defer s.Stopper().Stop(ctx)
+					b.ResetTimer()
+					b.StopTimer()
+					tdb := sqlutils.MakeSQLRunner(sqlConn)
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled= %t;", useLeasedDescriptors))
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = %t;", useLeasedDescriptors))
+					tdb.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.prefetch.enabled = %t;", usePrefetch))
+					tdb.Exec(b, fmt.Sprintf(`SELECT crdb_internal.generate_test_objects('{"names":"gen.public.foo","counts":[1,1,%d], "name_gen": {"noise": false}}'::JSONB);`, tables))
+					tdb.Exec(b, "USE gen_1")
+					// Cold run.
+					tdb.Exec(b, "SELECT * FROM pg_class")
+					b.StartTimer()
+					// Warm iterations.
+					for range b.N {
+						tdb.Exec(b, "SELECT * FROM pg_class")
+					}
+					b.StopTimer()
+				})
 			}
 		}
-		return nil
 	}
+}
 
-	// Alters the object in the background.
-	modifyThreads := func(ctx context.Context) (err error) {
-		defer objectModified.Store(true)
-		conn := tc.ServerConn(0)
-		for objectName := range nextObjectToModify {
-			sql := fmt.Sprintf("ALTER TABLE %s ADD COLUMN n2 int", objectName)
-			if _, err := conn.ExecContext(ctx, sql); err != nil {
-				panic(err)
-			}
-			objectModified.Store(true)
-		}
-		return nil
-	}
+// TestLeaseManagerLockedTimestampRenames confirms that retry errors
+// are generated when objects get renamed and inconsistency exists
+// between leased and KV descriptors.
+func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-	grp.GoCtx(createThreads)
-	grp.GoCtx(readThreads)
-	grp.GoCtx(modifyThreads)
-	require.NoError(t, grp.Wait())
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+
+	ts, conn, _ := serverutils.StartServer(
+		t, base.TestServerArgs{
+			Settings: st,
+		})
+	defer ts.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+	// Populate leased descriptors with the new object.
+	runner.Exec(t, "CREATE TABLE t1(n int)")
+	runner.Exec(t, "SHOW CREATE TABLE t1")
+	txn1 := runner.Begin(t)
+	_, err := txn1.Exec("SET autocommit_before_ddl=false")
+	require.NoError(t, err)
+	_, err = txn1.Exec("ALTER TABLE t1 RENAME TO t2;")
+	require.NoError(t, err)
+	txn2 := runner.Begin(t)
+	_, err = txn2.Exec("SET autocommit_before_ddl=false")
+	require.NoError(t, err)
+	_, err = txn2.Exec("SELECT 't1'::REGCLASS::OID")
+	require.NoError(t, err)
+	// Intentionally pause schema change jobs.
+	runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints='schemachanger.before.exec,newschemachanger.before.exec'")
+	// Expected due to the pause point, since we don't want to wait for one version.
+	require.Regexp(t, `pq: transaction committed but schema change aborted with error: \(XXUUU\): job \d+ was paused before it completed with reason: pause point.*`, txn1.Commit())
+	// Execute the rename, which has looked up the old name via
+	// a leased descriptor.
+	_, err = txn2.Exec("ALTER TABLE t1 RENAME TO t2;")
+	require.NotNilf(t, err, "expected error when renaming table with stale descriptor")
+	require.Regexp(t, `pq: restart transaction: the descriptor t1\(\d+\) has been renamed before timestamp.*`, err)
+	require.NoError(t, txn2.Rollback())
+
 }

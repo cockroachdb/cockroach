@@ -22,6 +22,7 @@ var hibernateIgnoreList = blocklist{
 	"org.hibernate.orm.test.batch.BatchTest.testBatchInsertUpdate":                                       "flaky",
 	"org.hibernate.orm.test.bulkid.OracleInlineMutationStrategyIdTest.testDeleteFromEngineer":            "flaky",
 	"org.hibernate.orm.test.hql.BulkManipulationTest.testInsertWithManyToOne":                            "https://hibernate.atlassian.net/browse/HHH-19332",
+	"org.hibernate.orm.test.jpa.txn.JtaTransactionJoiningTest.testImplicitJoining":                       "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testUnNamedSessionFactorySerialization": "flaky",
 	"org.hibernate.serialization.SessionFactorySerializationTest.testNamedSessionFactorySerialization":   "flaky",
 	"org.hibernate.test.batch.BatchTest.testBatchInsertUpdate":                                           "flaky",

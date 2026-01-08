@@ -374,6 +374,9 @@ func runBackupProcessor(
 		if localitySinkURI != "" {
 			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
 			destURI = localitySinkURI
+		} else if spec.StrictLocality {
+			// This shouldn't happen unless there was a bug in distsql planning.
+			return errors.Errorf("sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality", flowCtx.EvalCtx.Locality, spec.URIsByLocalityKV)
 		} else {
 			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
 			for _, i := range flowCtx.EvalCtx.Locality.Tiers {
@@ -663,7 +666,15 @@ func runBackupProcessor(
 						// Even if the ExportRequest did not export any data we want to report
 						// the span as completed for accurate progress tracking.
 						if len(resp.Files) == 0 {
-							sink.WriteWithNoData(backupsink.ExportedSpan{CompletedSpans: completedSpans})
+							var revStart hlc.Timestamp
+							if spec.MVCCFilter == kvpb.MVCCFilter_All {
+								// Even if no data is written, we need to track the revision
+								// start time.
+								revStart = spec.BackupStartTime
+							}
+							sink.WriteWithNoData(
+								backupsink.ExportedSpan{CompletedSpans: completedSpans, RevStart: revStart},
+							)
 						}
 						for i, file := range resp.Files {
 							entryCounts := countRows(file.Exported, spec.PKIDs)

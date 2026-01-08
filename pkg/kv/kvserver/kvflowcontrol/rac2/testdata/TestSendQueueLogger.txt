@@ -1,0 +1,3 @@
+echo
+----
+send queues: t2/s2: 400 B, t1/s1: 200 B, + 125 B more bytes across 2 streams

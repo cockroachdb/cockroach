@@ -694,7 +694,7 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	snap := repl.store.TODOEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
+	snap := repl.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
 	if util.RaceEnabled {
 		ss := rditer.MakeReplicatedKeySpanSet(desc)
 		defer ss.Release()

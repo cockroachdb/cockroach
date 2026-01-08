@@ -8,7 +8,9 @@
 # remote execution arguments to the invocation. You must call get-engflow-keys.sh
 # before this.
 
-ARGS='--config engflowpublic --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key --experimental_build_event_upload_retry_minimum_delay 3s --experimental_build_event_upload_max_retries 8'
+tmpfile=$(mktemp)
+
+ARGS="--config engflowpublic --tls_client_certificate=/home/agent/engflow.crt --tls_client_key=/home/agent/engflow.key --experimental_build_event_upload_retry_minimum_delay 3s --experimental_build_event_upload_max_retries 8 --execution_log_compact_file=$tmpfile --experimental_build_event_upload_strategy=remote"
 
 if [[ "$GITHUB_ACTIONS_BRANCH" == staging-* ]]
 then

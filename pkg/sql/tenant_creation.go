@@ -6,10 +6,12 @@
 package sql
 
 import (
+	"cmp"
 	"context"
 	gojson "encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -170,16 +172,30 @@ func BootstrapTenant(
 		// cluster's bootstrapping logic.
 		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
-	case execCfg.Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
-		// If the previous major version is active, use that version to create the
-		// tenant and bootstrap it just like the previous major version binary
-		// would, using hardcoded initial values.
-		tenantVersion.Version = clusterversion.PreviousRelease.Version()
-		bootstrapVersionOverride = clusterversion.PreviousRelease
 	default:
-		// Otherwise, use the initial values from the min supported version.
-		tenantVersion.Version = clusterversion.MinSupported.Version()
-		bootstrapVersionOverride = clusterversion.MinSupported
+		// Iterate through supported previous releases in reverse order to find the
+		// appropriate bootstrap version.
+		supportedReleases := clusterversion.SupportedPreviousReleases()
+
+		// Sort to ensure proper ordering (should already be sorted, but being safe).
+		slices.SortFunc(supportedReleases, func(a, b clusterversion.Key) int {
+			return cmp.Compare(a, b)
+		})
+
+		// If no supported release is active, fall back to min supported version.
+		// This should not happen in practice.
+		foundVersion := clusterversion.MinSupported
+		for i := len(supportedReleases) - 1; i >= 0; i-- {
+			k := supportedReleases[i]
+			if execCfg.Settings.Version.IsActive(ctx, k) {
+				// Use the highest active supported release to create the tenant and
+				// bootstrap it with the hardcoded initial values for that version.
+				foundVersion = k
+				break
+			}
+		}
+		tenantVersion.Version = foundVersion.Version()
+		bootstrapVersionOverride = foundVersion
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{

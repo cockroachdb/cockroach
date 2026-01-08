@@ -233,6 +233,11 @@ func (ep *DummyEvalPlanner) UnsafeDeleteComment(ctx context.Context, objectID in
 	return errors.WithStack(errEvalPlanner)
 }
 
+// ResetLeaseTimestamp is part of the Planner interface.
+func (ep *DummyEvalPlanner) ResetLeaseTimestamp(ctx context.Context) {
+	panic(errors.WithStack(errEvalPlanner))
+}
+
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
@@ -578,6 +583,12 @@ func (ep *DummyEvalPlanner) ClearQueryPlanCache() {}
 // ClearTableStatsCache is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
 
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ClearStatementHintsCache() {}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AwaitStatementHintsCache(ctx context.Context) {}
+
 // RetryCounter is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) RetryCounter() int {
 	return 0
@@ -595,6 +606,16 @@ func (ep *DummyEvalPlanner) InsertStatementHint(
 	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
 ) (int64, error) {
 	return 0, nil
+}
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetHintIDs() []int64 {
+	return nil
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

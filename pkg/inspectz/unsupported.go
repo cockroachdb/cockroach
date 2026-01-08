@@ -51,13 +51,13 @@ func (u Unsupported) KVFlowHandlesV2(
 // StoreLivenessSupportFrom is part of the inspectzpb.InspectzServer interface.
 func (u Unsupported) StoreLivenessSupportFrom(
 	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
-) (*slpb.InspectStoreLivenessResponse, error) {
+) (*slpb.InspectSupportFromResponse, error) {
 	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }
 
 // StoreLivenessSupportFor is part of the inspectzpb.InspectzServer interface.
 func (u Unsupported) StoreLivenessSupportFor(
 	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
-) (*slpb.InspectStoreLivenessResponse, error) {
+) (*slpb.InspectSupportForResponse, error) {
 	return nil, errorutil.UnsupportedUnderClusterVirtualization(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 }

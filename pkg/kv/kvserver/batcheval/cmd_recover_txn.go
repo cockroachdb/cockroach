@@ -204,7 +204,7 @@ func RecoverTxn(
 		sp := roachpb.Span{Key: w.Key}
 		reply.RecoveredTxn.LockSpans = append(reply.RecoveredTxn.LockSpans, sp)
 	}
-	reply.RecoveredTxn.LockSpans, _ = roachpb.MergeSpans(&reply.RecoveredTxn.LockSpans)
+	reply.RecoveredTxn.LockSpans, _ = roachpb.MergeSpans(reply.RecoveredTxn.LockSpans)
 	reply.RecoveredTxn.InFlightWrites = nil
 
 	// Recover the transaction based on whether or not all of its writes

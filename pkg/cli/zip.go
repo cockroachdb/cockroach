@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -229,6 +230,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	// We later print a deprecation warning at the end of the zip operation for visibility.
 	if zipCtx.redactLogs {
 		zipCtx.redact = true
+	}
+
+	if cliCtx.clientOpts.User != username.RootUser {
+		// Error is ignored because PurposeValidation does not return errors.
+		serverCfg.User, _ = username.MakeSQLUsernameFromUserInput(cliCtx.clientOpts.User, username.PurposeValidation)
 	}
 
 	var tenants []*serverpb.Tenant

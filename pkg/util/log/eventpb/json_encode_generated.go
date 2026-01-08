@@ -4624,6 +4624,13 @@ func (m *SampledExecStats) AppendJSONFields(printComma bool, b redact.Redactable
 	printComma, b = m.MVCCIteratorStats.AppendJSONFields(false, b)
 	b = append(b, '}')
 
+	if printComma {
+		b = append(b, ',')
+	}
+	printComma = true
+	b = append(b, "\"AdmissionWaitTime\":"...)
+	b = strconv.AppendInt(b, int64(m.AdmissionWaitTime), 10)
+
 	return printComma, b
 }
 

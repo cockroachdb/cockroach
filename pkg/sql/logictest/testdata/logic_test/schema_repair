@@ -1,4 +1,5 @@
-# LogicTest: !local-prepared
+# LogicTest: !local-prepared default-configs 3node-tenant
+# knob-opt: allow-unsafe
 
 subtest lost_table_data
 

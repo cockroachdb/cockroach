@@ -531,7 +531,8 @@ func Compact(
 func (s *LogStore) ComputeSize(ctx context.Context) (int64, error) {
 	prefix := keys.RaftLogPrefix(s.RangeID)
 	prefixEnd := prefix.PrefixEnd()
-	ms, err := storage.ComputeStats(ctx, s.Engine, prefix, prefixEnd, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, s.Engine, fs.ReplicationReadCategory,
+		prefix, prefixEnd, 0 /* nowNanos */)
 	if err != nil {
 		return 0, err
 	}

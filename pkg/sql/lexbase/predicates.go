@@ -49,6 +49,7 @@ var lookaheadKeywords = []string{
 	"tenant",
 	"set",
 	"for",
+	"execute",
 }
 
 // reservedOrLookaheadKeywords are the reserved keywords plus those keywords for

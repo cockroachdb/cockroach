@@ -58,7 +58,12 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
+	ctx context.Context,
+	t testing.TB,
+	rng *rand.Rand,
+	tr *SeqTracker,
+	partitioner *rpc.Partitioner,
+	mode TestMode,
 ) (base.TestClusterArgs, stop.Closer) {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		DisableRaftLogQueue:                   true,
@@ -72,6 +77,16 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			if seq := vh.KVNemesisSeq.Get(); seq > 0 {
 				tr.Add(key, endKey, ts, seq)
+			}
+		},
+		// Enable SysBytes verification on every Raft command application.
+		SysBytesVerificationOnRaftApply: func(mismatchErr error) {
+			if mismatchErr != nil {
+				// Fail the test if there was ever a SysBytes mismatch detected. This
+				// will likely be caught by the consistency checker at the end of the
+				// test as well, but it may not be if there is a stats recomputation for
+				// some reason.
+				t.Errorf("SysBytes mismatch detected during Raft command application: %v", mismatchErr)
 			}
 		},
 	}
@@ -165,6 +180,13 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			}
 			return 0, nil
 		}
+		storeKnobs.AfterSplitApplication = func(desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState) {
+			asserter.ApplySplitRHS(
+				state.Desc.RangeID, desc.ReplicaID,
+				state.RaftAppliedIndex, state.RaftAppliedIndexTerm,
+				state.LeaseAppliedIndex, state.RaftClosedTimestamp,
+			)
+		}
 		storeKnobs.AfterSnapshotApplication = func(
 			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,
 		) {
@@ -175,8 +197,6 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	// TODO(mira): Remove this cluster setting once the default is set to true.
-	kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &st.SV, true)
 	kvcoord.NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
 	if cfg.leaseTypeOverride != 0 {
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
@@ -250,7 +270,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	reg := fs.NewStickyRegistry()
+	reg := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
@@ -260,15 +280,28 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			for i := 0; i < cfg.numNodes; i++ {
 				nodeId := i + 1
 				ctk := rpc.ContextTestingKnobs{}
+				// Test clock injection
+				//
+				// We need to stay away within 80% of the max offset, so we set our
+				// offset to 70% of the configured MaxOffset. Since MaxOffset is
+				// relatively small, this doesn't give us much wiggle room.
+				//
+				// NOTE(ssd): If we see flakes because of untrustworthy remote clocks,
+				// don't hesitate to increase this safety margin for now.
+				maxOffset := time.Duration(float64(storeKnobs.MaxOffset) * 0.70)
+				period := 1 * time.Second
+				clock := NewTestClock(maxOffset, period, rng)
+				t.Logf("n%d using %s", nodeId, clock)
 				partitioner.RegisterTestingKnobs(roachpb.NodeID(nodeId), &ctk)
 				perNodeServerArgs := commonServerArgs
 				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
+					StickyVFSRegistry:   reg,
+					WallClock:           clock,
 					ContextTestingKnobs: ctk,
 				}
 				perNodeServerArgs.Locality = roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("n%d", nodeId)}},
 				}
-				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{StickyVFSRegistry: reg}
 				perNodeServerArgs.StoreSpecs = append(
 					perNodeServerArgs.StoreSpecs,
 					base.StoreSpec{InMemory: true, StickyVFSID: strconv.Itoa(nodeId)},
@@ -508,7 +541,15 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 			// Epoch leases can experience indefinite unavailability in the case of a
 			// leader-leaseholder split and a network partition. This test starts off
 			// with leader leases, and lease type changes are disallowed.
-			cfg.Ops.ChangeSetting = ChangeSettingConfig{}
+			cfg.Ops.ChangeSetting.SetLeaseType = 0
+			// Disallow lease transfers because they can lead to unavailability during
+			// the temporary period of using an expiration lease while transferring a
+			// leader lease. These manifest as poisoned latches held by the
+			// partitioned expiration-lease holder that can't upgrade the lease.
+			// See #157966 for a detailed example.
+			// TODO(mira): We can mitigate this in other ways too: client timeouts,
+			// lease transfers only among protected nodes (n1 and n2).
+			cfg.Ops.ChangeLease.TransferLease = 0
 		},
 	})
 }
@@ -540,6 +581,47 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
 		},
 	})
+}
+
+func TestKVNemesisMultiNode_Crash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		// assertRaftApply is disabled because the asserter assumes no node
+		// restarts (see asserter.go:29).
+		//
+		// Crashing nodes violates this assumption since node crashes differ
+		// from graceful restarts (abrupt stop vs a graceful shutdown).
+		//
+		// There's a race condition in crash simulation where
+		// CrashNode/CrashClone() can run while the server is still active, so
+		// WAL syncs and Raft applies can complete between the snapshot and
+		// stopServerLocked(). When assertRaftApply is true, the Asserter may
+		// record applies that aren't in the crash snapshot; after restart, the
+		// replica recovers from an earlier snapshot and re-applies, causing the
+		// Asserter to flag a false regression. This is a bug in the crash
+		// simulation code, not a bug in the database logic.
+		// TODO(dodeca12): resolve crash simulation bug for kvnemesis crashes for
+		// when assertRaftApply is true.
+		assertRaftApply: false,
+		mode:            Liveness,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		},
+	},
+	)
 }
 
 func TestKVNemesisMultiNode(t *testing.T) {
@@ -610,7 +692,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	ctx := context.Background()
 	tr := &SeqTracker{}
 	var partitioner rpc.Partitioner
-	args, closer := cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode)
+	args, closer := cfg.testClusterArgs(ctx, t, rng, tr, &partitioner, cfg.mode)
 	tc := testcluster.StartTestCluster(t, cfg.numNodes, args)
 	tc.Stopper().AddCloser(closer)
 	defer tc.Stopper().Stop(ctx)
@@ -629,6 +711,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
+	// This allows more operations to be eligible for follower reads.
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 	// In liveness mode, set up zone config constraints to ensure all ranges
 	// have a voter on nodes 1 and 2, the nodes guaranteed to be available.
@@ -654,7 +738,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, Restarter: tc}
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, ServerController: tc}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
@@ -665,6 +749,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 func logMetricsReport(t testing.TB, tc *testcluster.TestCluster) {
 	metricsOfInterest := []string{
+		"follower_reads.success_count",
 		// Raft command metrics
 		"raft.commands.proposed",
 		"raft.commands.reproposed.new-lai",
@@ -824,7 +909,9 @@ func setAndVerifyZoneConfigs(
 							Key:    desc.StartKey.AsRawKey(),
 							EndKey: desc.EndKey.AsRawKey(),
 						}
-						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 3 {
+						// Ranges 1-4 are the ranges we constrained above
+						// (1: meta1, 2: meta2, 3: liveness, 4: system).
+						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 4 {
 							overlappingReplicas = append(overlappingReplicas, replica)
 						}
 						return true // continue

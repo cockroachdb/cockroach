@@ -29,6 +29,23 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// TxnStatsNumStmtFingerprintStatsToRecord limits the number of recorded
+// statement statistics that may be associated with transaction statistics for
+// a single transaction. If the number of statements executed exceeds this
+// value, SQL Stats will force the ingester to flush the buffered stats. These
+// stats will not be associated with the current transaction. SQL Stats will
+// continue to buffer statements until this limit is reached again. In the case
+// that it isn't reached again, the buffered statements will be flushed when
+// the transaction is committed, and they will be associated with the
+// transaction.
+var TxnStatsNumStmtFingerprintStatsToRecord = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.metrics.transaction_details.max_statement_stats",
+	"max number of statement statistics that may be associated with transaction statistics",
+	100_000,
+	settings.PositiveInt,
+)
+
 // TxnStatsEnable determines whether to collect per-application transaction
 // statistics.
 // TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.

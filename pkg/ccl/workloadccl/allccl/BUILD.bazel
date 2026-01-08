@@ -26,6 +26,7 @@ go_library(
         "//pkg/workload/rand",
         "//pkg/workload/schemachange",
         "//pkg/workload/sqlsmith",
+        "//pkg/workload/sqlstats",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpccchecks",
         "//pkg/workload/tpcds",
@@ -46,7 +47,7 @@ go_test(
         "main_test.go",
     ],
     embed = [":allccl"],
-    shard_count = 16,
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/ccl",

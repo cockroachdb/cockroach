@@ -38,9 +38,9 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 			spec.CPU(16),
 			spec.WorkloadNode(),
 			spec.WorkloadNodeCPU(16),
-			spec.GCEVolumeType("pd-ssd"),
+			spec.VolumeType("pd-ssd"),
 			spec.VolumeSize(200),
-			spec.GCEVolumeCount(4),
+			spec.VolumeCount(4),
 		),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),

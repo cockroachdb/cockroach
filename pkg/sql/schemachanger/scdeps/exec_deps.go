@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -33,6 +35,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/errors"
+)
+
+// batchFlushThresholdSize is the size of the metadata batch that,
+// when exceeded, causes the schema changer to flush the batch to the KV store.
+var batchFlushThresholdSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"sql.schema_changer.batch_flush_threshold_size",
+	"maximum size in bytes of the schema changer's metadata batch before it's flushed to the KV store. "+
+		"This setting should be smaller or equal to kv.raft.command.max_size",
+	32*1024*1024,
+	settings.IntInRange(1024*1024, 512*1024*1024),
 )
 
 // JobRegistry implements the methods the schema changer needs from the
@@ -206,22 +219,38 @@ func (d *txnDeps) MustReadMutableDescriptor(
 func (d *txnDeps) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
-	return d.descsCollection.WriteDescToBatch(ctx, d.kvTrace, desc, d.getOrCreateBatch())
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.WriteDescToBatch(ctx, d.kvTrace, desc, b)
 }
 
 // DeleteName implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
-	return d.descsCollection.DeleteNamespaceEntryToBatch(ctx, d.kvTrace, &nameInfo, d.getOrCreateBatch())
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.DeleteNamespaceEntryToBatch(ctx, d.kvTrace, &nameInfo, b)
 }
 
 // AddName implements the scexec.Catalog interface.
 func (d *txnDeps) AddName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
-	return d.descsCollection.InsertNamespaceEntryToBatch(ctx, d.kvTrace, &nameEntry{nameInfo, id}, d.getOrCreateBatch())
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.InsertNamespaceEntryToBatch(ctx, d.kvTrace, &nameEntry{nameInfo, id}, b)
 }
 
 // DeleteDescriptor implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, b)
 }
 
 // GetZoneConfig implements the scexec.Catalog interface.
@@ -237,7 +266,11 @@ func (d *txnDeps) GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.Zone
 func (d *txnDeps) WriteZoneConfigToBatch(
 	ctx context.Context, id descpb.ID, zc catalog.ZoneConfig,
 ) error {
-	err := d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, zc)
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	err = d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, b, id, zc)
 	if err != nil {
 		return err
 	}
@@ -260,7 +293,11 @@ func (d *txnDeps) UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb
 		rawBytes = oldZc.GetRawBytesInStorage()
 	}
 	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
-	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id, newZc)
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, b, id, newZc)
 }
 
 // UpdateSubzoneConfig implements the scexec.Catalog interface. Note that this
@@ -310,7 +347,11 @@ func (d *txnDeps) UpdateSubzoneConfig(
 
 // DeleteZoneConfig implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
-	return d.descsCollection.DeleteZoneConfigInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id)
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.DeleteZoneConfigInBatch(ctx, d.kvTrace, b, id)
 }
 
 // DeleteSubzoneConfig implements the scexec.Catalog interface.
@@ -344,7 +385,11 @@ func (d *txnDeps) DeleteSubzoneConfig(
 	zc.DeleteSubzoneSpans(subzoneSpans)
 
 	newZc = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
-	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, d.getOrCreateBatch(),
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.WriteZoneConfigToBatch(ctx, d.kvTrace, b,
 		tableID, newZc)
 }
 
@@ -368,11 +413,97 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	return nil
 }
 
-// InitializeSequence implements the scexec.Caatalog interface.
-func (d *txnDeps) InitializeSequence(id descpb.ID, startVal int64) {
-	batch := d.getOrCreateBatch()
+// InitializeSequence implements the scexec.Catalog interface.
+func (d *txnDeps) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
+	batch, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
 	sequenceKey := d.codec.SequenceKey(uint32(id))
 	batch.Inc(sequenceKey, startVal)
+	return nil
+}
+
+// SetSequence implements the scexec.Catalog interface.
+func (d *txnDeps) SetSequence(ctx context.Context, seq *scexec.SequenceToSet) error {
+	batch, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	sequenceKey := d.codec.SequenceKey(uint32(seq.ID))
+	batch.PutMustAcquireExclusiveLock(sequenceKey, seq.Value)
+	return nil
+}
+
+// MaybeUpdateSequenceValue implements the scexec.Catalog interface.
+func (d *txnDeps) MaybeUpdateSequenceValue(
+	ctx context.Context, seq *scexec.SequenceToMaybeUpdate,
+) error {
+	sequenceKey := d.codec.SequenceKey(uint32(seq.ID))
+
+	// Read the sequence value directly using txn.GetForUpdate. This acquires a
+	// lock on the sequence key and returns the current value. Importantly, this
+	// uses its own internal batch (not d.batch), so it won't prematurely flush
+	// any pending descriptor writes that are buffered in d.batch.
+	kv, err := d.txn.KV().GetForUpdate(ctx, sequenceKey, kvpb.GuaranteedDurability)
+	if err != nil {
+		return err
+	}
+
+	if !kv.Exists() {
+		// Sequence has never been initialized so no need to update its value.
+		return nil
+	}
+
+	currValue := kv.ValueInt()
+
+	// setSequenceValue writes the sequence value directly using txn.Put. This
+	// bypasses d.batch to avoid flushing pending descriptor writes.
+	setSequenceValue := func(value int64) error {
+		return d.txn.KV().Put(ctx, sequenceKey, value)
+	}
+
+	// Due to the semantics of sequence initialization (see #21564) and sequence
+	// caching (see sql.planner.incrementSequenceUsingCache()), it is possible
+	// for a sequence to have a value that exceeds its MinValue or MaxValue.
+	// Users do not see values beyond the sequence's bounds, and instead see
+	// "bounds exceeded" errors. To make a sequence usable again after exceeding
+	// its bounds, there are two options:
+	//
+	// 1. The user changes the sequence's value by calling setval(...)
+	//
+	// 2. The user performs a schema change to alter the sequence's MinValue,
+	// MaxValue, or Increment. In this case, the value of the sequence must be
+	// (transactionally) restored to a value within MinValue and MaxValue.
+	//
+	// The code below handles the second case.
+
+	if currValue == seq.Opts.PrevStart-seq.Opts.PrevIncrement {
+		// If the sequence were never advanced, its current value is offset by the increment.
+		if err := setSequenceValue(seq.Opts.UpdatedStart - seq.Opts.UpdatedIncrement); err != nil {
+			return err
+		}
+	} else if seq.Opts.PrevIncrement < 0 && seq.Opts.UpdatedMinValue < seq.Opts.PrevMinValue {
+		// If the sequence were exhausted, it would be beyond its previous bounds.
+		if currValue < seq.Opts.PrevMinValue {
+			// Every call to nextval increments the sequence even if the
+			// sequence is exhausted. Find the final valid value of the sequence
+			// by calculating the number of valid calls to it.
+			calls := (seq.Opts.PrevMinValue - seq.Opts.PrevStart) / seq.Opts.PrevIncrement
+			if err := setSequenceValue(seq.Opts.PrevStart + calls*seq.Opts.PrevIncrement); err != nil {
+				return err
+			}
+		}
+	} else if seq.Opts.PrevIncrement > 0 && seq.Opts.UpdatedMaxValue > seq.Opts.PrevMaxValue {
+		if currValue > seq.Opts.PrevMaxValue {
+			calls := (seq.Opts.PrevMaxValue - seq.Opts.PrevStart) / seq.Opts.PrevIncrement
+			if err := setSequenceValue(seq.Opts.PrevStart + calls*seq.Opts.PrevIncrement); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // CheckMaxSchemaObjects implements the scexec.Catalog interface.
@@ -394,21 +525,54 @@ func (d *txnDeps) Reset(ctx context.Context) error {
 	return nil
 }
 
-func (d *txnDeps) getOrCreateBatch() *kv.Batch {
+// maybeFlushBatch flushes the current batch if it exceeds the maximum size.
+func (d *txnDeps) maybeFlushBatch(ctx context.Context) error {
+	if int64(d.batch.ApproximateMutationBytes()) > batchFlushThresholdSize.Get(&d.settings.SV) {
+		err := d.flushBatch(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// flushBatch flushes the current batch.
+func (d *txnDeps) flushBatch(ctx context.Context) error {
+	if err := d.Run(ctx); err != nil {
+		return err
+	}
+	d.batch = d.txn.KV().NewBatch()
+	return nil
+}
+
+func (d *txnDeps) getOrCreateBatch(ctx context.Context) (*kv.Batch, error) {
 	if d.batch == nil {
 		d.batch = d.txn.KV().NewBatch()
+	} else {
+		// Otherwise, flush the batch if its too big.
+		if err := d.maybeFlushBatch(ctx); err != nil {
+			return nil, err
+		}
 	}
-	return d.batch
+	return d.batch, nil
 }
 
 // UpdateComment implements the scexec.Catalog interface.
 func (d *txnDeps) UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error {
-	return d.descsCollection.WriteCommentToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key, cmt)
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.WriteCommentToBatch(ctx, d.kvTrace, b, key, cmt)
 }
 
 // DeleteComment implements the scexec.Catalog interface.
 func (d *txnDeps) DeleteComment(ctx context.Context, key catalogkeys.CommentKey) error {
-	return d.descsCollection.DeleteCommentInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key)
+	b, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	return d.descsCollection.DeleteCommentInBatch(ctx, d.kvTrace, b, key)
 }
 
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)

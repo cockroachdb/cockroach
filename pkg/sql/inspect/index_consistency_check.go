@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -80,7 +81,10 @@ type indexConsistencyCheck struct {
 
 	flowCtx *execinfra.FlowCtx
 	indexID descpb.IndexID
-	asOf    hlc.Timestamp
+	// tableVersion is the descriptor version recorded when the check was planned.
+	// It is used to detect concurrent schema changes for non-AS OF inspections.
+	tableVersion descpb.DescriptorVersion
+	asOf         hlc.Timestamp
 
 	tableDesc catalog.TableDescriptor
 	secIndex  catalog.Index
@@ -443,10 +447,32 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 // descriptor and index metadata in the indexConsistencyCheck struct.
 func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 	return c.flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if !c.asOf.IsEmpty() {
+			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
+				return err
+			}
+		}
+
+		byIDGetter := txn.Descriptors().ByIDWithLeased(txn.KV())
+		if !c.asOf.IsEmpty() {
+			byIDGetter = txn.Descriptors().ByIDWithoutLeased(txn.KV())
+		}
+
 		var err error
-		c.tableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, c.tableID)
+		c.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, c.tableID)
 		if err != nil {
 			return err
+		}
+		if c.tableVersion != 0 && c.tableDesc.GetVersion() != c.tableVersion {
+			return errors.WithHintf(
+				errors.Newf(
+					"table %s [%d] has had a schema change since the job has started at %s",
+					c.tableDesc.GetName(),
+					c.tableDesc.GetID(),
+					c.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
+				),
+				"use AS OF SYSTEM TIME to avoid schema changes during inspection",
+			)
 		}
 
 		c.priIndex = c.tableDesc.GetPrimaryIndex()

@@ -197,7 +197,7 @@ func DropIngestedExternalCatalog(
 	// immediately.
 	dropTime := int64(1)
 	scheduledJobs := jobs.ScheduledJobTxn(txn)
-	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 	for i := range mutableTables {
 		tableToDrop := mutableTables[i]
 		tablesToGC = append(tablesToGC, tableToDrop.ID)

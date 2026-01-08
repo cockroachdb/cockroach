@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -43,8 +44,9 @@ type showFingerprintsNode struct {
 	tableDesc catalog.TableDescriptor
 	indexes   []catalog.Index
 
-	tenantSpec tenantSpec
-	options    *resolvedShowTenantFingerprintOptions
+	tenantSpec   tenantSpec
+	options      *resolvedShowTenantFingerprintOptions
+	experimental bool
 
 	run showFingerprintsRun
 }
@@ -56,21 +58,21 @@ type showFingerprintsNode struct {
 // STORING cols are included. The hashed rows are all combined with XOR using
 // distsql.
 //
-// Our hash functions expect input of type BYTES (or string but we use bytes
-// here), so we have to convert any datums that are not BYTES. This is currently
-// done by round tripping through the string representation of the column
-// (`::string::bytes`) and is an obvious area for improvement in the next
-// version.
-//
 // To extract the fingerprints at some point in the past, the following
 // query can be used:
 //
-//	SELECT * FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME xxx
+//	SELECT * FROM [SHOW FINGERPRINTS FROM TABLE foo] AS OF SYSTEM TIME xxx
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
 
-	op := "SHOW EXPERIMENTAL_FINGERPRINTS"
+	var op string
+	if n.Experimental {
+		op = "SHOW EXPERIMENTAL_FINGERPRINTS"
+	} else {
+		op = "SHOW FINGERPRINTS"
+	}
+
 	evalOptions, err := evalShowFingerprintOptions(ctx, n.Options, p.EvalContext(), p.SemaCtx(),
 		op, p.ExprEvaluator(op))
 	if err != nil {
@@ -83,7 +85,7 @@ func (p *planner) ShowFingerprints(
 			err = pgerror.New(pgcode.InvalidParameterValue, "cannot use the EXCLUDE COLUMNS option when fingerprinting a tenant.")
 			return nil, err
 		}
-		return p.planShowTenantFingerprint(ctx, n.TenantSpec, evalOptions)
+		return p.planShowTenantFingerprint(ctx, n.TenantSpec, n.Experimental, evalOptions)
 	}
 
 	// Only allow this for virtual clusters as it uses the KV fingerprint method instead of SQL
@@ -105,10 +107,11 @@ func (p *planner) ShowFingerprints(
 	}
 
 	return &showFingerprintsNode{
-		columns:   colinfo.ShowFingerprintsColumns,
-		tableDesc: tableDesc,
-		indexes:   tableDesc.ActiveIndexes(),
-		options:   evalOptions,
+		columns:      colinfo.ShowFingerprintsColumns,
+		tableDesc:    tableDesc,
+		indexes:      tableDesc.ActiveIndexes(),
+		options:      evalOptions,
+		experimental: n.Experimental,
 	}, nil
 }
 
@@ -148,7 +151,10 @@ func evalShowFingerprintOptions(
 }
 
 func (p *planner) planShowTenantFingerprint(
-	ctx context.Context, ts *tree.TenantSpec, evalOptions *resolvedShowTenantFingerprintOptions,
+	ctx context.Context,
+	ts *tree.TenantSpec,
+	experimental bool,
+	evalOptions *resolvedShowTenantFingerprintOptions,
 ) (planNode, error) {
 	if err := CanManageTenant(ctx, p); err != nil {
 		return nil, err
@@ -158,15 +164,23 @@ func (p *planner) planShowTenantFingerprint(
 		return nil, err
 	}
 
-	tspec, err := p.planTenantSpec(ctx, ts, "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER")
+	var op string
+	if experimental {
+		op = "SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER"
+	} else {
+		op = "SHOW FINGERPRINTS FROM VIRTUAL CLUSTER"
+	}
+
+	tspec, err := p.planTenantSpec(ctx, ts, op)
 	if err != nil {
 		return nil, err
 	}
 
 	return &showFingerprintsNode{
-		columns:    colinfo.ShowTenantFingerprintsColumns,
-		tenantSpec: tspec,
-		options:    evalOptions,
+		columns:      colinfo.ShowTenantFingerprintsColumns,
+		tenantSpec:   tspec,
+		options:      evalOptions,
+		experimental: experimental,
 	}, nil
 }
 
@@ -178,12 +192,18 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
-func (n *showFingerprintsNode) startExec(_ runParams) error {
+func (n *showFingerprintsNode) startExec(params runParams) error {
 	if n.tenantSpec != nil {
 		n.run.values = []tree.Datum{tree.DNull, tree.DNull, tree.DNull, tree.DNull}
 		return nil
 	}
 
+	if n.experimental {
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf("SHOW EXPERIMENTAL_FINGERPRINTS is deprecated. Use SHOW FINGERPRINTS instead."),
+		)
+	}
 	n.run.values = []tree.Datum{tree.DNull, tree.DNull}
 	return nil
 }
@@ -326,7 +346,13 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	if n.options != nil && len(n.options.excludedUserColumns) > 0 {
 		excludedColumns = append(excludedColumns, n.options.excludedUserColumns...)
 	}
-	sql, err := BuildFingerprintQueryForIndex(n.tableDesc, index, excludedColumns)
+	var sql string
+	var err error
+	if n.experimental {
+		sql, err = BuildExperimentalFingerprintQueryForIndex(n.tableDesc, index, excludedColumns)
+	} else {
+		sql, err = BuildFingerprintQueryForIndex(n.tableDesc, index, excludedColumns)
+	}
 	if err != nil {
 		return false, err
 	}
@@ -361,7 +387,51 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	return true, nil
 }
 
-func BuildFingerprintQueryForIndex(
+func makeColumnNameOrExpr(col catalog.Column) string {
+	if col.IsExpressionIndexColumn() {
+		return fmt.Sprintf("(%s)", col.GetComputeExpr())
+	} else {
+		name := col.GetName()
+		return tree.NameStringP(&name)
+	}
+}
+
+func addColumnsForIndex(
+	index catalog.Index, tableDesc catalog.TableDescriptor, addColumn func(catalog.Column),
+) error {
+	if index.Primary() {
+		for _, col := range tableDesc.PublicColumns() {
+			addColumn(col)
+		}
+	} else {
+		for i := 0; i < index.NumKeyColumns(); i++ {
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeyColumnID(i))
+			if err != nil {
+				return err
+			}
+			addColumn(col)
+		}
+		for i := 0; i < index.NumKeySuffixColumns(); i++ {
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeySuffixColumnID(i))
+			if err != nil {
+				return err
+			}
+			addColumn(col)
+		}
+		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+			col, err := catalog.MustFindColumnByID(tableDesc, index.GetStoredColumnID(i))
+			if err != nil {
+				return err
+			}
+			addColumn(col)
+		}
+	}
+	return nil
+}
+
+// Experimental version is still provided to ease testing transition. Once we no longer
+// reference this in tests, we should delete this code.
+func BuildExperimentalFingerprintQueryForIndex(
 	tableDesc catalog.TableDescriptor, index catalog.Index, ignoredColumns []string,
 ) (string, error) {
 	cols := make([]string, 0, len(tableDesc.PublicColumns()))
@@ -371,13 +441,8 @@ func BuildFingerprintQueryForIndex(
 			return
 		}
 
-		var colNameOrExpr string
-		if col.IsExpressionIndexColumn() {
-			colNameOrExpr = fmt.Sprintf("(%s)", col.GetComputeExpr())
-		} else {
-			name := col.GetName()
-			colNameOrExpr = tree.NameStringP(&name)
-		}
+		colNameOrExpr := makeColumnNameOrExpr(col)
+
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
@@ -392,32 +457,8 @@ func BuildFingerprintQueryForIndex(
 		}
 	}
 
-	if index.Primary() {
-		for _, col := range tableDesc.PublicColumns() {
-			addColumn(col)
-		}
-	} else {
-		for i := 0; i < index.NumKeyColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeyColumnID(i))
-			if err != nil {
-				return "", err
-			}
-			addColumn(col)
-		}
-		for i := 0; i < index.NumKeySuffixColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(tableDesc, index.GetKeySuffixColumnID(i))
-			if err != nil {
-				return "", err
-			}
-			addColumn(col)
-		}
-		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-			col, err := catalog.MustFindColumnByID(tableDesc, index.GetStoredColumnID(i))
-			if err != nil {
-				return "", err
-			}
-			addColumn(col)
-		}
+	if err := addColumnsForIndex(index, tableDesc, addColumn); err != nil {
+		return "", err
 	}
 
 	if len(cols) != numBytesCols && numBytesCols != 0 {
@@ -452,6 +493,45 @@ func BuildFingerprintQueryForIndex(
 	  xor_agg(fnv64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), tableDesc.GetID(), index.GetID())
+	if index.IsPartial() {
+		sql = fmt.Sprintf("%s WHERE %s", sql, index.GetPredicate())
+	}
+	return sql, nil
+}
+
+func BuildFingerprintQueryForIndex(
+	tableDesc catalog.TableDescriptor, index catalog.Index, ignoredColumns []string,
+) (string, error) {
+	cols := make([]string, 0, len(tableDesc.PublicColumns()))
+	addColumn := func(col catalog.Column) {
+		if slices.Contains(ignoredColumns, col.GetName()) {
+			return
+		}
+
+		cols = append(cols, makeColumnNameOrExpr(col))
+	}
+
+	if err := addColumnsForIndex(index, tableDesc, addColumn); err != nil {
+		return "", err
+	}
+
+	// The fnv64 hash was chosen mostly due to speed. I did an AS OF SYSTEM TIME
+	// fingerprint over 31GiB on a 4 node production cluster (with no other
+	// traffic to try and keep things comparable). The cluster was restarted in
+	// between each run. Resulting times:
+	//
+	//  fnv => 17m
+	//  sha512 => 1h6m
+	//  sha265 => 1h6m
+	//  fnv64 (again) => 17m
+	//
+	sql := fmt.Sprintf(
+		`SELECT lpad(to_hex(xor_agg(fnv64(crdb_internal.datums_to_bytes(%s):::BYTES))), 16, '0') AS fingerprint
+           FROM [%d AS t]@{FORCE_INDEX=[%d]}`,
+		strings.Join(cols, `,`),
+		tableDesc.GetID(),
+		index.GetID(),
+	)
 	if index.IsPartial() {
 		sql = fmt.Sprintf("%s WHERE %s", sql, index.GetPredicate())
 	}

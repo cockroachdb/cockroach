@@ -94,7 +94,7 @@ type testMessageSender struct {
 	messages []slpb.Message
 }
 
-func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (sent bool) {
+func (tms *testMessageSender) EnqueueMessage(_ context.Context, msg slpb.Message) (sent bool) {
 	tms.mu.Lock()
 	defer tms.mu.Unlock()
 	tms.messages = append(tms.messages, msg)

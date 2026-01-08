@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -36,7 +37,7 @@ func TestTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	// Protects errorReturned.
 	var mu syncutil.Mutex
 	errorReturned := false
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
 			mu.Lock()
@@ -81,7 +82,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 	var mu syncutil.Mutex
 	// Ensures just the first try to cleanup returns a retryable error.
 	errReturned := false
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	cleanupSuccessfullyFinished := make(chan struct{})
 	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 		RunBeforeExec: func() error {
@@ -141,7 +142,7 @@ func TestFailedTypeSchemaChangeIgnoresDrops(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	startDrop := make(chan struct{})
 	dropFinished := make(chan struct{})
 	cancelled := atomic.Bool{}
@@ -201,7 +202,7 @@ func TestAddDropValuesInTransaction(t *testing.T) {
 
 	ctx := context.Background()
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
@@ -346,7 +347,7 @@ func TestEnumMemberTransitionIsolation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// Protects blocker.
 	var mu syncutil.Mutex
 	blocker := make(chan struct{})
@@ -492,14 +493,12 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-
-			params, _ := createTestServerParamsAllowTenants()
-
 			// Wait groups for synchronizing various parts of the test.
 			typeSchemaChangeStarted := make(chan struct{})
 			blockTypeSchemaChange := make(chan struct{})
 			finishedSchemaChange := make(chan struct{})
 
+			var params base.TestServerArgs
 			params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
 				RunBeforeEnumMemberPromotion: func(ctx context.Context) error {
@@ -583,7 +582,7 @@ func TestAddDropEnumValues(t *testing.T) {
 	defer ccl.TestingEnableEnterprise()()
 	ctx := context.Background()
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 

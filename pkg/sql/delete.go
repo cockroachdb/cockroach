@@ -161,7 +161,7 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(d.run.td.tableDesc(), int(d.run.rowsAffected()))
+		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
@@ -262,6 +262,10 @@ func (d *deleteNode) indexBytesWritten() int64 {
 
 func (d *deleteNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
+}
+
+func (d *deleteNode) kvCPUTime() int64 {
+	return d.run.td.kvCPUTime
 }
 
 func (d *deleteNode) enableAutoCommit() {

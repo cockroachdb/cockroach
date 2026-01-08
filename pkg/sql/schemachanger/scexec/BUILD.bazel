@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sessiondata",
+        "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/intsets",

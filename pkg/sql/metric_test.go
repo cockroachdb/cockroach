@@ -14,9 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -59,7 +61,7 @@ func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
@@ -212,8 +214,7 @@ func TestStatementMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	s := srv.ApplicationLayer()
@@ -344,7 +345,13 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
-		params, cmdFilters := createTestServerParamsAllowTenants()
+		var cmdFilters tests.CommandFilters
+		params := base.TestServerArgs{}
+		params.Knobs.Store = &kvserver.StoreTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				TestingEvalFilter: cmdFilters.RunFilters,
+			},
+		}
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
@@ -455,8 +462,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
@@ -490,8 +497,7 @@ func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)

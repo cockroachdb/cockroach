@@ -34,7 +34,7 @@ func makeSpans(s string) Spans {
 }
 
 func TestMergeSpans(t *testing.T) {
-	testCases := []struct {
+	for _, tc := range []struct {
 		spans    string
 		expected string
 		distinct bool
@@ -53,13 +53,15 @@ func TestMergeSpans(t *testing.T) {
 		{"a-c,c", "a-c\x00", true},
 		{"a-c,b-bb", "a-c", false},
 		{"a-c,b-c", "a-c", false},
-	}
-	for _, c := range testCases {
-		spans := makeSpans(c.spans)
-		spans, distinct := MergeSpans((*[]Span)(&spans))
-		expected := makeSpans(c.expected)
-		require.Equal(t, expected, spans)
-		require.Equal(t, c.distinct, distinct)
+		{"a-c,b-d", "a-d", false},
+	} {
+		t.Run("", func(t *testing.T) {
+			spans := makeSpans(tc.spans)
+			spans, distinct := MergeSpans(spans)
+			expected := makeSpans(tc.expected)
+			require.Equal(t, expected, spans)
+			require.Equal(t, tc.distinct, distinct)
+		})
 	}
 }
 

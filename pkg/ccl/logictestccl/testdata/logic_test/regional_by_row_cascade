@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs !metamorphic-batch-sizes
 
 # Set the closed timestamp interval to be short to shorten the amount of time
 # we need to wait for the system config to propagate.

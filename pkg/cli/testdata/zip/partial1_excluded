@@ -1,6 +1,6 @@
 zip
 ----
-debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --validate-zip-file=false
+debug zip --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 --validate-zip-file=false --cluster-name=<cluster-name> /dev/null
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
@@ -23,6 +23,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 -
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response...
@@ -49,6 +50,7 @@ debug zip /dev/null --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0 -
 [node 3] requesting data for debug/nodes/3/gossip... received response... writing JSON output: debug/nodes/3/gossip.json... done
 [node 3] requesting stacks... received response... writing binary output: debug/nodes/3/stacks.txt... done
 [node 3] requesting stacks with labels... received response... writing binary output: debug/nodes/3/stacks_with_labels.txt... done
+[node 3] requesting goroutine profile... received response... writing binary output: debug/nodes/3/stacks.pprof... done
 [node 3] requesting heap profile... received response... writing binary output: debug/nodes/3/heap.pprof... done
 [node 3] requesting engine stats... received response... writing binary output: debug/nodes/3/lsm.txt... done
 [node 3] requesting heap profile list... received response...

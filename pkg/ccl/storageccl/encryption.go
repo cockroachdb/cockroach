@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -149,6 +148,13 @@ func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Wr
 	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
 }
 
+func (e *encWriter) StartMetadataPortion() error {
+	if err := e.flush(); err != nil {
+		return err
+	}
+	return e.ciphertext.StartMetadataPortion()
+}
+
 func (e *encWriter) Write(p []byte) error {
 	var wrote int
 	for wrote < len(p) {
@@ -220,7 +226,7 @@ type readerAndReaderAt interface {
 	io.ReaderAt
 }
 
-func decryptingReader(ciphertext readerAndReaderAt, key []byte) (sstable.ReadableFile, error) {
+func decryptingReader(ciphertext readerAndReaderAt, key []byte) (objstorage.ReadableFile, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err

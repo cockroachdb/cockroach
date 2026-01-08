@@ -754,6 +754,7 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	h.Now.Forward(o.Now)
 	h.RangeInfos = append(h.RangeInfos, o.RangeInfos...)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	h.CPUTime += o.CPUTime
 	return nil
 }
 
@@ -1902,8 +1903,10 @@ func (*DeleteRequest) flags() flag {
 }
 
 func (drr *DeleteRangeRequest) flags() flag {
-	// DeleteRangeRequest using MVCC range tombstones cannot be transactional.
-	if drr.UseRangeTombstone {
+	// DeleteRangeRequest using MVCC range tombstones or deletion predicates
+	// cannot be transactional.
+	hasPredicate := drr.Predicates != (DeleteRangePredicates{})
+	if drr.UseRangeTombstone || hasPredicate {
 		return isWrite | isRange | isAlone | appliesTSCache
 	}
 	// DeleteRangeRequest has different properties if the "inline" flag is set.
@@ -2183,6 +2186,28 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}
 	return &cpy
+}
+
+// EventType returns a string description of the type of event..
+func (e *RangeFeedEvent) EventType() string {
+	switch {
+	case e.Val != nil:
+		return "Value"
+	case e.Checkpoint != nil:
+		return "Checkpoint"
+	case e.SST != nil:
+		return "SST"
+	case e.DeleteRange != nil:
+		return "DeleteRange"
+	case e.Metadata != nil:
+		return "Metadata"
+	case e.Error != nil:
+		return "Error"
+	case e.BulkEvents != nil:
+		return "BulkEvents"
+	default:
+		return "Unknown"
+	}
 }
 
 // Timestamp is part of rangefeedbuffer.Event.
@@ -2634,4 +2659,14 @@ func (r *AddSSTableRequest) Validate(bh Header) error {
 		}
 	}
 	return nil
+}
+
+func (m *QuorumReplicationFlowAdmissionEvent) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m *QuorumReplicationFlowAdmissionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	prefix := redact.SafeString("range controller waited for quorum flow control")
+	w.Printf("%s for %d nanos", prefix, m.WaitDurationNanos)
 }

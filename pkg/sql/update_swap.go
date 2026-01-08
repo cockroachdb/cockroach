@@ -114,7 +114,7 @@ func (u *updateSwapNode) processBatch(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.rowsAffected()))
+	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
 
 	return nil
 }
@@ -140,6 +140,10 @@ func (u *updateSwapNode) indexBytesWritten() int64 {
 
 func (u *updateSwapNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
+}
+
+func (u *updateSwapNode) kvCPUTime() int64 {
+	return u.run.tu.kvCPUTime
 }
 
 func (u *updateSwapNode) enableAutoCommit() {

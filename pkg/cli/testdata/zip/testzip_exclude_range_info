@@ -22,6 +22,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false -
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
 [node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response... done

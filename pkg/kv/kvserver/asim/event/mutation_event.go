@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -31,12 +30,29 @@ type AddNodeEvent struct {
 	LocalityString string
 }
 
-// SetNodeLivenessEvent represents a mutation event responsible for setting
-// liveness status of a node identified by the NodeID to the specified
-// LivenessStatus.
+// SetStoreStatusEvent represents a mutation event for setting the liveness
+// of a single store.
+type SetStoreStatusEvent struct {
+	StoreID state.StoreID
+	Status  state.StoreStatus
+}
+
+// SetNodeStatusEvent represents a mutation event for setting the membership
+// and draining signals of a node.
+type SetNodeStatusEvent struct {
+	NodeID state.NodeID
+	Status state.NodeStatus
+}
+
+// SetNodeLivenessEvent represents a mutation event for setting the liveness
+// of all stores on a node at once. This exists because DSL commands are parsed
+// before the simulation runs, at which point we don't yet know which stores
+// exist on each node - that's determined when the cluster is built. So we
+// can't expand "node=X liveness=Y" into individual store events at parse time;
+// we must defer to runtime when the state knows the node's stores.
 type SetNodeLivenessEvent struct {
-	NodeId         state.NodeID
-	LivenessStatus livenesspb.NodeLivenessStatus
+	NodeID   state.NodeID
+	Liveness state.LivenessState
 }
 
 // SetCapacityOverrideEvent represents a mutation event responsible for updating
@@ -63,6 +79,8 @@ type SetSimulationSettingsEvent struct {
 
 var _ Event = &SetSpanConfigEvent{}
 var _ Event = &AddNodeEvent{}
+var _ Event = &SetStoreStatusEvent{}
+var _ Event = &SetNodeStatusEvent{}
 var _ Event = &SetNodeLivenessEvent{}
 var _ Event = &SetCapacityOverrideEvent{}
 var _ Event = &SetNodeLocalityEvent{}
@@ -149,17 +167,35 @@ func (ae AddNodeEvent) String() string {
 	return buf.String()
 }
 
-func (sne SetNodeLivenessEvent) Func() EventFunc {
+func (ssse SetStoreStatusEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
-		s.SetNodeLiveness(
-			sne.NodeId,
-			sne.LivenessStatus,
-		)
+		s.SetStoreStatus(ssse.StoreID, ssse.Status)
 	})
 }
 
-func (sne SetNodeLivenessEvent) String() string {
-	return fmt.Sprintf("set n%d to %v", sne.NodeId, sne.LivenessStatus)
+func (ssse SetStoreStatusEvent) String() string {
+	return fmt.Sprintf("set s%d liveness=%v", ssse.StoreID, ssse.Status.Liveness)
+}
+
+func (snse SetNodeStatusEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		s.SetNodeStatus(snse.NodeID, snse.Status)
+	})
+}
+
+func (snse SetNodeStatusEvent) String() string {
+	return fmt.Sprintf("set n%d membership=%v, draining=%t",
+		snse.NodeID, snse.Status.Membership, snse.Status.Draining)
+}
+
+func (snle SetNodeLivenessEvent) Func() EventFunc {
+	return MutationFunc(func(ctx context.Context, s state.State) {
+		s.SetAllStoresLiveness(snle.NodeID, snle.Liveness)
+	})
+}
+
+func (snle SetNodeLivenessEvent) String() string {
+	return fmt.Sprintf("set n%d liveness=%v (all stores)", snle.NodeID, snle.Liveness)
 }
 
 func (sce SetCapacityOverrideEvent) Func() EventFunc {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1429,7 +1430,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	}
 }
 
-func TestConvertFilesToBatchAndCommit(t *testing.T) {
+func TestIngestAndExciseFilesToWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1498,11 +1499,16 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	require.NoError(t, w2.Finish())
 	w2.Close()
 
-	require.NoError(t, engs[batchEngine].ConvertFilesToBatchAndCommit(
+	b := engs[batchEngine].NewWriteBatch()
+	defer b.Close()
+	require.NoError(t, engs[batchEngine].IngestLocalFilesToWriter(
 		ctx, []string{fileName1, fileName2}, []roachpb.Span{
 			{Key: lkStart, EndKey: lkEnd}, {Key: startKey, EndKey: endKey},
-		}))
+		}, b))
+	require.NoError(t, b.Commit(true /* sync */))
+
 	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
+
 	outputState := func(eng Engine) []string {
 		it, err := eng.NewEngineIterator(context.Background(), IterOptions{
 			UpperBound: roachpb.KeyMax,
@@ -1635,6 +1641,10 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 
 func TestPebbleFormatVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if len(pebbleFormatVersionMap) == 1 {
+		skip.IgnoreLint(t, "test requires multiple entries in pebbleFormatVersionMap")
+	}
 
 	latestKey := pebbleFormatVersionKeys[0]
 	latestVersion := latestKey.Version()
@@ -1888,9 +1898,8 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 				return k
 			}(),
 			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression:          true,
-				DisableValueSeparationBySuffix: true,
-				ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLowReadLatency,
 			},
 			wantEndKey: spanPolicyLockTableEndKey,
 		},
@@ -1904,28 +1913,12 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%x", tc.startKey), func(t *testing.T) {
 			ek := EngineKey{Key: tc.startKey}.Encode()
-			policy, endKey, err := spanPolicyFunc(ek)
+			policy, endKey, err := spanPolicyFuncFactory(nil /* sv */)(ek)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantPolicy, policy)
 			require.Equal(t, tc.wantEndKey, endKey)
 		})
 	}
-}
-
-type testAsyncRunner struct {
-	b      *strings.Builder
-	closed atomic.Bool
-}
-
-func (r *testAsyncRunner) async(fn func()) {
-	fmt.Fprintf(r.b, "asyncRunner.async\n")
-	go fn()
-}
-
-func (r *testAsyncRunner) Closed() bool {
-	closed := r.closed.Load()
-	fmt.Fprintf(r.b, "asyncRunner.Closed(): %t\n", closed)
-	return closed
 }
 
 func TestDiskUnhealthyTracker(t *testing.T) {
@@ -1938,14 +1931,22 @@ func TestDiskUnhealthyTracker(t *testing.T) {
 		b.Reset()
 		return str
 	}
-	runner := &testAsyncRunner{b: &b}
+	var isClosed atomic.Bool
 	ts := timeutil.NewManualTime(time.Unix(0, 0))
 	st := cluster.MakeTestingClusterSettings()
-	UnhealthyWriteDuration.Override(context.Background(), &st.SV, 5*time.Second)
+	UnhealthyWriteDuration.Override(t.Context(), &st.SV, 5*time.Second)
 	tickReceivedCh := make(chan time.Time, 1)
 	tracker := &diskUnhealthyTracker{
-		st:                    st,
-		asyncRunner:           runner,
+		st: st,
+		isClosed: func() bool {
+			closed := isClosed.Load()
+			fmt.Fprintf(&b, "asyncRunner.Closed(): %t\n", closed)
+			return closed
+		},
+		runAsync: func(fn func()) {
+			fmt.Fprintf(&b, "asyncRunner.async\n")
+			go fn()
+		},
 		ts:                    ts,
 		testingTickReceivedCh: tickReceivedCh,
 	}
@@ -1975,7 +1976,7 @@ func TestDiskUnhealthyTracker(t *testing.T) {
 				return builderStr()
 
 			case "close":
-				runner.closed.Store(true)
+				isClosed.Store(true)
 				return ""
 
 			default:

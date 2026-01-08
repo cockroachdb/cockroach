@@ -1438,6 +1438,13 @@ type CaseExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CaseExpr) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(FmtPLpgSQLParen) && ctx.inPLpgSQL {
+		// In some cases in PLpgSQL context we need to wrap the CASE expression
+		// in parenthesis to make it parsable. We do so only if the caller
+		// requested it.
+		ctx.WriteByte('(')
+		defer ctx.WriteByte(')')
+	}
 	ctx.WriteString("CASE ")
 	if node.Expr != nil {
 		ctx.FormatNode(node.Expr)

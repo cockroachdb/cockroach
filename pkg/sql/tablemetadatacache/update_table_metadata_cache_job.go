@@ -43,6 +43,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	j.job.MarkIdle(true)
 
 	execCtx := execCtxI.(sql.JobExecContext)
+	db := execCtx.ExecCfg().InternalDB
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	j.metrics = &metrics
@@ -60,7 +61,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 
 	if updater == nil {
 		updater = newTableMetadataUpdater(
-			j.updateProgress,
+			func(ctx context.Context, progress float32) { j.updateProgress(ctx, db, progress) },
 			&metrics,
 			execCtx.ExecCfg().TenantStatusServer,
 			execCtx.ExecCfg().InternalDB.Executor(),
@@ -126,8 +127,12 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	}
 }
 
-func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
-	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
+func (j *tableMetadataUpdateJobResumer) updateProgress(
+	ctx context.Context, db isql.DB, progress float32,
+) {
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.ProgressStorage(j.job.ID()).SetFraction(ctx, txn, float64(progress))
+	}); err != nil {
 		log.Dev.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }

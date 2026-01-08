@@ -6,6 +6,7 @@
 package screl
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -55,8 +56,13 @@ const (
 	Name
 	// ReferencedDescID is the descriptor ID to which this element refers.
 	ReferencedDescID
-	// Comment is the comment metadata on descriptors.
-	Comment
+	// Value is a string attribute that can be used in different elements.
+	// Fields referring to the Value attribute cannot be used in rules and
+	// are only used as a part of the key to make an element unique. Current
+	// use includes:
+	//   1. comment metadata on descriptors.
+	//   2. string representation of column generated as identity sequence options
+	Value
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
@@ -114,16 +120,25 @@ const (
 	// PolicyID is an attribute for row-level security policies to uniquely
 	// identify a policy within a table.
 	PolicyID
+	// GeneratedAsIdentityType is the type for a generated as identity column.
+	// It's value must be in catpb.GeneratedAsIdentityType.
+	GeneratedAsIdentityType
+
+	// IntValue A int64 used only for element uniqueness, and this can map out
+	// to any int64 attribute. It is currently used for:
+	// 1) SchemaID in the namespace element.
+	IntValue
 
 	// AttrMax is the largest possible Attr value.
-	// Note: add any new enum values before TargetStatus, leave these at the end.
+	// Note: add any new enum values before IntValue, leave these at the end.
 	AttrMax = iota - 1
 )
 
 var t = reflect.TypeOf
 
+// elementSchemaOptions maps attributes to the elements' fields.
 var elementSchemaOptions = []rel.SchemaOption{
-	// We need this `Element` attribute to be of type `protoulti.Message`
+	// We need this `Element` attribute to be of type `protoutil.Message`
 	// interface and better have it as the first in the schema option list. This
 	// is because the schema needs to know a type of each attribute, and it
 	// creates a mapping between attribute and the type. If you're trying to add a
@@ -136,6 +151,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// concrete type underneath an interface value, so we won't have a problem
 	// evaluating field values within a concrete Element struct.
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
+
 	// Top-level elements.
 	rel.EntityMapping(t((*scpb.Database)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
@@ -247,6 +263,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.Trigger)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -286,6 +303,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
 		rel.EntityAttr(Name, "Key"),
+		rel.EntityAttr(Value, "Value"),
+	),
+	rel.EntityMapping(t((*scpb.SequenceValue)(nil)),
+		rel.EntityAttr(DescID, "SequenceID"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -321,6 +342,16 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(IndexID, "IndexIDForValidation"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnGeneratedAsIdentity)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(GeneratedAsIdentityType, "Type"),
+		rel.EntityAttr(Value, "SequenceOption"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnHidden)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),
@@ -409,6 +440,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
 		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+		rel.EntityAttr(IntValue, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
@@ -439,34 +471,34 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// Comment elements.
 	rel.EntityMapping(t((*scpb.TableComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.TypeComment)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseComment)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.SchemaComment)(nil)),
 		rel.EntityAttr(DescID, "SchemaID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ConstraintComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexColumn)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -512,6 +544,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.TableSchemaLocked)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+	),
+	rel.EntityMapping(t((*scpb.TableStorageParam)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Name, "Name"),
+		rel.EntityAttr(Value, "Value"),
 	),
 	rel.EntityMapping(t((*scpb.RowLevelSecurityEnabled)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -585,3 +622,14 @@ var (
 			}
 		})
 )
+
+func init() {
+	// Ensure that the element schema options are updated when new element
+	// protos are added.
+	// The options are one longer because of the `Element` attribute at the
+	// start.
+	if len(elementSchemaOptions)-1 != len(scpb.GetElementOneOfProtos()) {
+		panic(fmt.Sprintf("mismatched element schema options length %d and element protos length %d",
+			len(elementSchemaOptions), len(scpb.GetElementOneOfProtos())))
+	}
+}

@@ -35,7 +35,7 @@ var (
 		Name:        "physical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_BYTES,
 		HowToUse:    "Track PCR throughput",
@@ -79,7 +79,7 @@ var (
 		Name:        "physical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the physical replication stream in seconds since the unix epoch.",
 		Measurement: "Seconds",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_SECONDS,
 		HowToUse:    "Track replication lag via current time - physical_replication.replicated_time_seconds",
@@ -114,6 +114,18 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReceiveWaitNanos = metric.Metadata{
+		Name:        "physical_replication.receive_wait_nanos",
+		Help:        "Cumulative time spent waiting to receive events from producer; use rate() to compare against flush_wait_nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaFlushWaitNanos = metric.Metadata{
+		Name:        "physical_replication.flush_wait_nanos",
+		Help:        "Cumulative time spent waiting to send buffer to flush loop; use rate() to compare against receive_wait_nanos",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // Metrics are for production monitoring of stream ingestion jobs.
@@ -126,6 +138,8 @@ type Metrics struct {
 	FlushHistNanos             metric.IHistogram
 	CommitLatency              metric.IHistogram
 	AdmitLatency               metric.IHistogram
+	ReceiveWaitNanos           *metric.Counter
+	FlushWaitNanos             *metric.Counter
 	RunningCount               *metric.Gauge
 	ReplicatedTimeSeconds      *metric.Gauge
 	ReplicationCutoverProgress *metric.Gauge
@@ -165,6 +179,8 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:      1,
 		}),
+		ReceiveWaitNanos:           metric.NewCounter(metaReceiveWaitNanos),
+		FlushWaitNanos:             metric.NewCounter(metaFlushWaitNanos),
 		RunningCount:               metric.NewGauge(metaStreamsRunning),
 		ReplicatedTimeSeconds:      metric.NewGauge(metaReplicatedTimeSeconds),
 		ReplicationCutoverProgress: metric.NewGauge(metaReplicationCutoverProgress),

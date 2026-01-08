@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,8 +186,9 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		inFlightWrites []roachpb.SequencedWrite
 		deadline       hlc.Timestamp
 		// Expected result.
-		expError string
-		expTxn   *roachpb.TransactionRecord
+		expError      string
+		expTxn        *roachpb.TransactionRecord
+		validateError func(t *testing.T, err error)
 	}{
 		{
 			// Standard case where a transaction is rolled back when
@@ -1050,6 +1052,28 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 			}(),
 		},
 		{
+			// Non-standard case where the transaction is being rolled back after a
+			// successful refresh. In this case we want to be sure that the staging
+			// record is returned so that we don't attempt transaction recovery using
+			// the refreshed transaction.
+			name: "record staging, rollback after refresh.",
+			// Replica state.
+			existingTxn: stagingRecord,
+			// Request state.
+			headerTxn: refreshedHeaderTxn,
+			commit:    false,
+			// Expected result.
+			expError: "found txn in indeterminate STAGING state",
+			expTxn:   stagingRecord,
+			validateError: func(t *testing.T, err error) {
+				var icErr *kvpb.IndeterminateCommitError
+				errors.As(err, &icErr)
+				require.NotNil(t, icErr)
+				require.Equal(t, stagingRecord.WriteTimestamp, icErr.StagingTxn.WriteTimestamp)
+			},
+		},
+
+		{
 			// Non-standard case where a transaction record is re-staged during
 			// a parallel commit. The record already exists because of a failed
 			// parallel commit attempt in a prior epoch.
@@ -1597,10 +1621,11 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 				if !testutils.IsError(err, regexp.QuoteMeta(c.expError)) {
 					t.Fatalf("expected error %q; found %v", c.expError, err)
 				}
-			} else {
-				if err != nil {
-					t.Fatal(err)
+				if c.validateError != nil {
+					c.validateError(t, err)
 				}
+			} else {
+				require.NoError(t, err)
 
 				// Assert that the txn record is written as expected.
 				var resTxnRecord roachpb.TransactionRecord

@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2
+# knob-opt: allow-unsafe
 
 # Set up functions that inspect function dependencies.
 statement ok
@@ -202,7 +202,7 @@ SELECT * FROM test_tbl_t@t_idx2;
 statement error cannot drop function "test_tbl_partial_f" because other objects \(\[test.public.test_tbl_t\]\) still depend on it
 DROP FUNCTION test_tbl_partial_f;
 
-statement ok
+statement count 3
 DELETE FROM test_tbl_t WHERE true;
 
 # Test expression index with UDF in expression.

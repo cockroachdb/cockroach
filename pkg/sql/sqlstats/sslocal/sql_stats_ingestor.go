@@ -7,6 +7,7 @@ package sslocal
 
 import (
 	"context"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	prometheus "github.com/prometheus/client_model/go"
 )
@@ -24,6 +26,8 @@ import (
 // defaultFlushInterval specifies a default for the amount of time an ingester
 // will go before flushing its contents to the registry.
 const defaultFlushInterval = time.Millisecond * 500
+
+const forceFlushTransactionFingerprintId = appstatspb.TransactionFingerprintID(math.MaxUint64)
 
 // Metrics holds running measurements of various ingester-related runtime stats.
 type Metrics struct {
@@ -88,6 +92,14 @@ type SQLStatsIngester struct {
 	statementsBySessionID map[clusterunique.ID]*statementBuf
 	resetStatementsBuf    atomic.Bool
 
+	// acc is the memory account that tracks memory allocations for buffered
+	// statements in statementsBySessionID.
+	acc *mon.ConcurrentBoundAccount
+
+	// stmtSizes tracks the memory footprint of buffered statements per session.
+	// This is used to properly account for memory when statements are flushed.
+	stmtSizes map[clusterunique.ID]int64
+
 	sinks []SQLStatsSink
 
 	eventBufferCh chan eventBufChPayload
@@ -149,6 +161,7 @@ type event struct {
 	sessionID   clusterunique.ID
 	transaction *sqlstats.RecordedTxnStats
 	statement   *sqlstats.RecordedStmtStats
+	forceFlush  bool
 }
 
 type BufferOpt func(i *SQLStatsIngester)
@@ -183,6 +196,8 @@ func (i *SQLStatsIngester) Start(ctx context.Context, stopper *stop.Stopper, opt
 				i.ingest(ctx, payload.events) // note that ingest clears the buffer
 				if payload.resetStatementsBuf {
 					i.statementsBySessionID = make(map[clusterunique.ID]*statementBuf)
+					i.stmtSizes = make(map[clusterunique.ID]int64)
+					i.acc.Clear(ctx) // Clear all memory accounting when resetting the buffer.
 				}
 				eventBufferPool.Put(payload.events)
 
@@ -243,7 +258,7 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			break
 		}
 		if e.statement != nil {
-			i.processStatement(e.statement)
+			i.processStatement(ctx, e.statement)
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 			// When under an outer transaction, we don't have a txn to associate
@@ -251,17 +266,50 @@ func (i *SQLStatsIngester) ingest(ctx context.Context, events *eventBuffer) {
 			// we can send immediately to the sinks.
 			if e.statement.UnderOuterTxn {
 				i.flushBuffer(ctx, e.statement.SessionID, nil)
+			} else {
+				// Statements that are flushed cannot be associated with the
+				// transaction in since this association can only be done once a
+				// transaction has been committed. As a result, these recorded stats
+				// will be given a static transaction fingerprint ID to indicate that
+				// they are flushed. Since these flushes may occur in the middle of a
+				// transaction, any remaining statement stats will be flushed when the
+				// transaction is committed, causing them to be associated with the
+				// correct transaction fingerprint.
+				i.maybeFlushStatements(ctx, e.statement.SessionID)
 			}
 		} else if e.transaction != nil {
 			i.flushBuffer(ctx, e.transaction.SessionID, e.transaction)
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		} else {
-			i.clearSession(e.sessionID)
+			if e.forceFlush {
+				i.flushStatementsOnly(ctx, e.sessionID)
+			} else {
+				i.clearSession(ctx, e.sessionID)
+			}
 			i.metrics.NumProcessed.Inc(1)
 			i.metrics.QueueSize.Dec(1)
 		}
 		events[idx] = event{}
+	}
+}
+
+func (i *SQLStatsIngester) RecordStatement(statement *sqlstats.RecordedStmtStats) {
+	i.BufferStatement(statement)
+	if i.testingKnobs != nil && i.testingKnobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		i.guard.ForceSync()
+		<-i.syncStatsTestingCh
+	}
+}
+
+func (i *SQLStatsIngester) RecordTransaction(transaction *sqlstats.RecordedTxnStats) {
+	i.BufferTransaction(transaction)
+
+	if i.testingKnobs != nil && i.testingKnobs.SynchronousSQLStats {
+		// Flush buffer and wait for the stats ingester to finish writing.
+		i.guard.ForceSync()
+		<-i.syncStatsTestingCh
 	}
 }
 
@@ -304,8 +352,24 @@ func (i *SQLStatsIngester) ClearSession(sessionID clusterunique.ID) {
 	})
 }
 
+// FlushBuffer sends a signal to the underlying registry to flush any cached
+// data associated with the given sessionID. This is an async operation.
+func (i *SQLStatsIngester) FlushBuffer(sessionID clusterunique.ID) {
+	i.guard.AtomicWrite(func(writerIdx int64) {
+		i.guard.eventBuffer[writerIdx] = event{
+			sessionID:  sessionID,
+			forceFlush: true,
+		}
+		i.metrics.QueueSize.Inc(1)
+	})
+}
+
 func NewSQLStatsIngester(
-	st *cluster.Settings, knobs *sqlstats.TestingKnobs, metrics Metrics, sinks ...SQLStatsSink,
+	st *cluster.Settings,
+	knobs *sqlstats.TestingKnobs,
+	metrics Metrics,
+	parentMon *mon.BytesMonitor,
+	sinks ...SQLStatsSink,
 ) *SQLStatsIngester {
 	i := &SQLStatsIngester{
 		// A channel size of 1 is sufficient to avoid unnecessarily
@@ -317,10 +381,17 @@ func NewSQLStatsIngester(
 		eventBufferCh:         make(chan eventBufChPayload, 1),
 		closeCh:               make(chan struct{}),
 		statementsBySessionID: make(map[clusterunique.ID]*statementBuf),
+		stmtSizes:             make(map[clusterunique.ID]int64),
 		sinks:                 sinks,
 		settings:              st,
 		testingKnobs:          knobs,
 		metrics:               metrics,
+	}
+
+	if parentMon != nil {
+		i.acc = parentMon.MakeConcurrentBoundAccount()
+	} else {
+		i.acc = mon.NewStandaloneUnlimitedConcurrentAccount()
 	}
 
 	if knobs != nil && knobs.SynchronousSQLStats {
@@ -354,10 +425,16 @@ func NewSQLStatsIngester(
 
 // clearSession removes the session from the registry and releases the
 // associated statement buffer.
-func (i *SQLStatsIngester) clearSession(sessionID clusterunique.ID) {
+func (i *SQLStatsIngester) clearSession(ctx context.Context, sessionID clusterunique.ID) {
 	if b, ok := i.statementsBySessionID[sessionID]; ok {
 		delete(i.statementsBySessionID, sessionID)
 		b.release()
+
+		// Release memory for this session's buffered statements.
+		if size, ok := i.stmtSizes[sessionID]; ok {
+			i.acc.Shrink(ctx, size)
+			delete(i.stmtSizes, sessionID)
+		}
 
 		if i.testingKnobs != nil && i.testingKnobs.OnIngesterSessionClear != nil {
 			i.testingKnobs.OnIngesterSessionClear(sessionID)
@@ -366,7 +443,18 @@ func (i *SQLStatsIngester) clearSession(sessionID clusterunique.ID) {
 	}
 }
 
-func (i *SQLStatsIngester) processStatement(statement *sqlstats.RecordedStmtStats) {
+func (i *SQLStatsIngester) processStatement(
+	ctx context.Context, statement *sqlstats.RecordedStmtStats,
+) {
+	stmtSize := statement.Size()
+	if err := i.acc.Grow(ctx, stmtSize); err != nil {
+		// If we hit memory limits, we cannot buffer this statement.
+		// The error will propagate through the SQL memory pool accounting,
+		// causing queries to fail with "budget exceeded error" when the pool is exhausted.
+		return
+	}
+	i.stmtSizes[statement.SessionID] += stmtSize
+
 	b, ok := i.statementsBySessionID[statement.SessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
@@ -393,6 +481,12 @@ func (i *SQLStatsIngester) flushBuffer(
 	}
 	defer statements.release()
 
+	// Release memory for this session's buffered statements.
+	if size, ok := i.stmtSizes[sessionID]; ok {
+		i.acc.Shrink(ctx, size)
+		delete(i.stmtSizes, sessionID)
+	}
+
 	if len(*statements) == 0 {
 		return
 	}
@@ -418,5 +512,48 @@ func (i *SQLStatsIngester) flushBuffer(
 
 	for _, sink := range i.sinks {
 		sink.ObserveTransaction(ctx, transaction, *statements)
+	}
+}
+
+// flushStatementsOnly sends the buffered statementsBySessionID to the registered sinks
+func (i *SQLStatsIngester) flushStatementsOnly(ctx context.Context, sessionID clusterunique.ID) {
+	var statements statementBuf
+	if sessionStatements, ok := i.statementsBySessionID[sessionID]; ok {
+		defer sessionStatements.release()
+		statements = *sessionStatements
+		delete(i.statementsBySessionID, sessionID)
+
+		if size, ok := i.stmtSizes[sessionID]; ok {
+			i.acc.Shrink(ctx, size)
+			delete(i.stmtSizes, sessionID)
+		}
+	} else {
+		// No statements to flush, return early
+		return
+	}
+
+	// Here we'll set the transaction fingerprint ID for each statement if the
+	// below cluster setting is enabled.
+	if AssociateStmtWithTxnFingerprint.Get(&i.settings.SV) {
+		// These values are only known at the time of the transaction.
+		for _, s := range statements {
+			s.TransactionFingerprintID = forceFlushTransactionFingerprintId
+		}
+	}
+
+	for _, sink := range i.sinks {
+		sink.ObserveTransaction(ctx, nil, statements)
+	}
+}
+
+// maybeFlushStatements flushes the buffered statements for a given sessionID
+// if the number of buffered statements has reached the configured limit. This
+// may occur even if the session is in the middle of a transaction.
+func (i *SQLStatsIngester) maybeFlushStatements(ctx context.Context, sessionID clusterunique.ID) {
+	if sessionStatements, ok := i.statementsBySessionID[sessionID]; ok {
+		maxStatements := sqlstats.TxnStatsNumStmtFingerprintStatsToRecord.Get(&i.settings.SV)
+		if int64(len(*sessionStatements)) >= maxStatements {
+			i.flushStatementsOnly(ctx, sessionID)
+		}
 	}
 }

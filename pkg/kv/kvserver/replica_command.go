@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -362,7 +363,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			var err error
 			targetSize := r.GetMaxBytes(ctx) / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
-				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.StateEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, errors.Wrap(err, "unable to determine split key")
 			}
@@ -393,7 +394,7 @@ func (r *Replica) adminSplitWithDescriptor(
 					return reply, err
 				}
 				if foundSplitKey, err = storage.MVCCFirstSplitKey(
-					ctx, r.store.TODOEngine(), desiredSplitKey,
+					ctx, r.store.StateEngine(), desiredSplitKey,
 					desc.StartKey, desc.EndKey,
 				); err != nil {
 					return reply, errors.Wrap(err, "unable to determine split key")
@@ -538,7 +539,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		// post-split LHS stats by combining these stats with the non-user stats
 		// computed in splitTrigger. More details in makeEstimatedSplitStatsHelper.
 		userOnlyLeftStats, err = rditer.ComputeStatsForRangeUserOnly(
-			ctx, leftDesc, r.store.TODOEngine(), r.store.Clock().NowAsClockTimestamp().WallTime)
+			ctx, leftDesc, r.store.StateEngine(), fs.BatchEvalReadCategory,
+			r.store.Clock().NowAsClockTimestamp().WallTime)
 		if err != nil {
 			return reply, errors.Wrapf(err, "unable to compute user-only pre-split stats for LHS range")
 		}

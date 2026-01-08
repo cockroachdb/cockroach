@@ -1,0 +1,176 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, CONSTRAINT cc CHECK (i > 0));
+----
+
+ops
+ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: crdb_internal_constraint_2_name_placeholder
+      TableID: 104
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: cc_renamed
+      TableID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: crdb_internal_constraint_2_name_placeholder
+      TableID: 104
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: cc_renamed
+      TableID: 104
+
+deps
+ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
+----
+- from: [ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT]
+  to:   [ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: old constraint name is dropped before new constraint name is added
+
+setup
+CREATE TABLE t2 (i INT PRIMARY KEY, CONSTRAINT u UNIQUE (i));
+----
+
+ops
+ALTER TABLE t2 RENAME CONSTRAINT u TO u_renamed;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetIndexName
+      IndexID: 2
+      Name: crdb_internal_index_2_name_placeholder
+      TableID: 105
+    *scop.SetIndexName
+      IndexID: 2
+      Name: u_renamed
+      TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetIndexName
+      IndexID: 2
+      Name: crdb_internal_index_2_name_placeholder
+      TableID: 105
+    *scop.SetIndexName
+      IndexID: 2
+      Name: u_renamed
+      TableID: 105
+
+deps
+ALTER TABLE t2 RENAME CONSTRAINT u TO u_renamed;
+----
+- from: [IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT]
+  to:   [IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: old index name is dropped before new index name is added
+
+setup
+CREATE TABLE t3 (i INT PRIMARY KEY, j INT, CONSTRAINT con1 CHECK (i > 0), CONSTRAINT con2 CHECK (j > 0));
+----
+
+ops
+ALTER TABLE t3 RENAME CONSTRAINT con1 TO con1_old, RENAME CONSTRAINT con2 TO con1;
+----
+StatementPhase stage 1 of 1 with 4 MutationType ops
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con2, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: crdb_internal_constraint_2_name_placeholder
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 3
+      Name: crdb_internal_constraint_3_name_placeholder
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: con1_old
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 3
+      Name: con1
+      TableID: 106
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con2, ConstraintID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con2, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: crdb_internal_constraint_2_name_placeholder
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 3
+      Name: crdb_internal_constraint_3_name_placeholder
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 2
+      Name: con1_old
+      TableID: 106
+    *scop.SetConstraintName
+      ConstraintID: 3
+      Name: con1
+      TableID: 106
+
+deps
+ALTER TABLE t3 RENAME CONSTRAINT con1 TO con1_old, RENAME CONSTRAINT con2 TO con1;
+----
+- from: [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT]
+  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC]
+  kind: Precedence
+  rule: old constraint name is dropped before conflicting new constraint name is added when at least one is non-index-backed
+- from: [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT]
+  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: old constraint name is dropped before new constraint name is added
+- from: [ConstraintWithoutIndexName:{DescID: 106, Name: con2, ConstraintID: 3}, ABSENT]
+  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC]
+  kind: SameStagePrecedence
+  rule: old constraint name is dropped before new constraint name is added

@@ -845,8 +845,9 @@ var (
 	// NB: this metric is independent of whether slots enforcement is happening
 	// or not.
 	kvSlotsExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.slots_exhausted_duration.kv",
-		Help:        "Total duration when KV slots were exhausted, in micros",
+		Name: "admission.granter.slots_exhausted_duration.kv",
+		Help: "Total duration (in micros) when KV slots were exhausted, as observed by the slot " +
+			"granter (not waiters)",
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -879,14 +880,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	kvIOTokensExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.io_tokens_exhausted_duration.kv",
-		Help:        "Total duration when IO tokens were exhausted, in micros",
+		Name: "admission.granter.io_tokens_exhausted_duration.kv",
+		Help: "Total duration (in micros) when IO tokens were exhausted, as observed by " +
+			"the token granter (not waiters)",
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}
 	kvElasticIOTokensExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.elastic_io_tokens_exhausted_duration.kv",
-		Help:        "Total duration when Elastic IO tokens were exhausted, in micros",
+		Name: "admission.granter.elastic_io_tokens_exhausted_duration.kv",
+		Help: "Total duration (in micros) when Elastic IO tokens were exhausted, as observed by " +
+			"the token granter (not waiters)",
 		Measurement: "Microseconds",
 		Unit:        metric.Unit_COUNT,
 	}

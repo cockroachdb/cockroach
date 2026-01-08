@@ -3207,6 +3207,10 @@ message BatchResponse {
     // The field is cleared by the DistSender because it refers routing
     // information not exposed by the KV API.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
+    // CPUTime is tracked in Replica.Send, meaning it only tracks the CPU time
+    // for the request evaluation goroutine, and not the other replication related
+    // work. The value is either zero (unset) or positive.
+    int64 cpu_time = 8 [(gogoproto.customname) = "CPUTime"];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -3870,6 +3874,17 @@ message ContentionEvent {
   // IsLatch, if true, indicates that the contention event was due to waiting to
   // acquire a latch.
   bool is_latch = 4;
+}
+
+// QuorumReplicationFlowAdmissionEvent is a message that is recorded on traces by a
+// range controller when waiting for quorum flow control.
+message QuorumReplicationFlowAdmissionEvent {
+  option (gogoproto.goproto_stringer) = false;
+  // WaitDurationNanos is the time spent waiting.
+  int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
+
+  // When adding a new field, please also update
+  // QuorumReplicationFlowAdmissionEvent.SafeFormat().
 }
 
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,

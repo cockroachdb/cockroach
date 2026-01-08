@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -85,6 +85,11 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(context.Background())
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	conn1 = tc.ServerConn(0)
 	conn2 = tc.ServerConn(1)
 
@@ -125,7 +130,10 @@ func TestCancelDistSQLQuery(t *testing.T) {
 		errChan <- err
 	}()
 	_, err := conn2.Exec(cancelQuery)
-	if err != nil && !testutils.IsError(err, "query ID") {
+	// We might have blocked the cancellation query longer than it took the
+	// target query to execute, in which case the cancel query itself errors out
+	// (and it's ok).
+	if err != nil && !testutils.IsError(err, "could not cancel query") {
 		t.Fatal(err)
 	}
 
@@ -213,7 +221,7 @@ GRANT admin TO has_admin2;
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Open a session for the target user.
-			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			targetDB := testCluster.ApplicationLayer(0).SQLConn(t, serverutils.User(tc.targetUser), serverutils.ClientCerts(false))
 			defer targetDB.Close()
 			sqlutils.MakeSQLRunner(targetDB).Exec(t, `SELECT version()`)
 
@@ -233,7 +241,7 @@ GRANT admin TO has_admin2;
 
 			// Attempt to cancel the session. We connect to the other node to make sure
 			// non-local sessions can be canceled.
-			db := getUserConn(t, tc.user, testCluster.Server(1))
+			db := testCluster.ApplicationLayer(1).SQLConn(t, serverutils.User(tc.user), serverutils.ClientCerts(false))
 			defer db.Close()
 			runner := sqlutils.MakeSQLRunner(db)
 			if tc.shouldSucceed {
@@ -331,7 +339,7 @@ GRANT admin TO has_admin2;
 		func() {
 			wg.Add(1)
 			// Start a query with the target user.
-			targetDB := getUserConn(t, tc.targetUser, testCluster.Server(0))
+			targetDB := testCluster.ApplicationLayer(0).SQLConn(t, serverutils.User(tc.targetUser), serverutils.ClientCerts(false))
 			defer targetDB.Close()
 			go func(shouldSucceed bool) {
 				var errRE string
@@ -365,7 +373,7 @@ GRANT admin TO has_admin2;
 
 			// Attempt to cancel the query. We connect to the other node to make sure
 			// non-local queries can be canceled.
-			db := getUserConn(t, tc.user, testCluster.Server(1))
+			db := testCluster.ApplicationLayer(1).SQLConn(t, serverutils.User(tc.user), serverutils.ClientCerts(false))
 			defer db.Close()
 			runner := sqlutils.MakeSQLRunner(db)
 			if tc.shouldSucceed {
@@ -410,8 +418,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, conn, _ := serverutils.StartServer(t, params)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	_, err := conn.Exec("CANCEL SESSION (SELECT session_id FROM [SHOW session_id]);")
@@ -939,20 +946,6 @@ func TestStatementTimeoutRetryableErrors(t *testing.T) {
 				t.Fatal("expected the query to error out due to the statement_timeout.")
 			}
 		})
-}
-
-func getUserConn(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
-	pgURL := url.URL{
-		Scheme:   "postgres",
-		User:     url.User(username),
-		Host:     server.AdvSQLAddr(),
-		RawQuery: "sslmode=disable",
-	}
-	db, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return db
 }
 
 // TestTenantStatementTimeoutAdmissionQueueCancellation tests that a KV request

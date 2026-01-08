@@ -754,6 +754,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) showAfterBefore() *tree.ShowAfterBefore {
+  return u.val.(*tree.ShowAfterBefore)
+}
 func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
   return u.val.(*tree.CheckExternalConnectionOptions)
 }
@@ -967,7 +970,10 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 }
 func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
     return u.val.(tree.ChangefeedFilterOption)
-} 
+}
+func (u *sqlSymUnion) filterType() tree.FilterType {
+    return u.val.(tree.FilterType)
+}
 
 %}
 
@@ -1017,7 +1023,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
-%token <str> FILES FILTER
+%token <str> FILES FILTER FINGERPRINTS
 %token <str> FIRST FIRST_CONTAINED_BY FIRST_CONTAINS FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
 %token <str> FORCE_INVERTED_INDEX FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
 %token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
@@ -1030,7 +1036,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
-%token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
+%token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
@@ -1071,7 +1077,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFERENCING REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
-%token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
+%token <str> RELEASE RESET RESOLVED RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
@@ -1124,6 +1130,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
 %token USER_ALL ON_LA TENANT_ALL CLUSTER_ALL SET_TRACING CREATE_CHANGEFEED_FOR_DATABASE FOR_TABLE
 %token FOR_JOB
+%token EXECUTE_SCHEDULE EXECUTE_SCHEDULES
 
 %union {
   id    int32
@@ -1361,6 +1368,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <tree.Statement> reset_stmt reset_session_stmt reset_csetting_stmt
 %type <tree.Statement> resume_stmt resume_jobs_stmt resume_schedules_stmt resume_all_jobs_stmt
 %type <tree.Statement> drop_schedule_stmt
+%type <tree.Statement> execute_schedules_stmt
 %type <tree.Statement> restore_stmt
 %type <tree.StringOrPlaceholderOptList> string_or_placeholder_opt_list
 %type <tree.Statement> revoke_stmt
@@ -1400,6 +1408,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_external_connections_stmt
 %type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
+%type <bool> experimental_or_not_fingerprints
 %type <tree.Statement> show_functions_stmt
 %type <tree.Statement> show_procedures_stmt
 %type <tree.Statement> show_grants_stmt
@@ -1474,7 +1483,8 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options show_backups_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
+%type <*tree.ShowAfterBefore> opt_show_after_before_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1607,7 +1617,8 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <tree.ReturningClause> returning_clause
 %type <tree.TableExprs> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
-%type <tree.ChangefeedFilterOption> db_level_changefeed_filter_option
+%type <tree.ChangefeedFilterOption> db_level_changefeed_filter_option optional_db_level_changefeed_filter_option
+%type <tree.FilterType> include_or_exclude
 
 %type <tree.BatchParam> batch_param
 %type <[]tree.BatchParam> batch_param_list
@@ -3207,7 +3218,7 @@ identity_option_elem:
   | SET INCREMENT signed_iconst64    { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
   | SET INCREMENT BY signed_iconst64 { x := $4.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
   | SET MINVALUE signed_iconst64     { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
   | SET NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue} }
@@ -3217,12 +3228,12 @@ identity_option_elem:
   | SET START signed_iconst64        { x := $3.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
   | SET START WITH signed_iconst64   { x := $4.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
   | RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
   | RESTART signed_iconst64      { x := $2.int64()
                                   $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
   | RESTART WITH signed_iconst64 { x := $3.int64()
-                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
   | SET sequence_option_elem error                      { return setErr(sqllex, errors.Newf("sequence option \"%s\" not supported here", $2.seqOpt().Name)) }
 
 identity_option_list:
@@ -3460,7 +3471,6 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_location: specify a different path to store the incremental backup
 //    include_all_virtual_clusters: enable backups of all virtual clusters during a cluster backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
@@ -3571,10 +3581,6 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-  {
-    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
-  }
 | EXECUTION LOCALITY '=' string_or_placeholder
   {
     $$.val = &tree.BackupOptions{ExecutionLocality: $4.expr()}
@@ -3595,6 +3601,10 @@ backup_options:
 | UPDATES_CLUSTER_MONITORING_METRICS '=' a_expr
   {
     $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: $3.expr()}
+  }
+| STRICT STORAGE LOCALITY
+  {
+    $$.val = &tree.BackupOptions{Strict: true}
   }
 
 include_all_clusters:
@@ -4141,10 +4151,6 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-	{
-		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
-	}
 | virtual_cluster_name '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
@@ -6273,7 +6279,7 @@ create_changefeed_stmt:
       Level: tree.ChangefeedLevelTable,
     }
   }
-| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
+| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name optional_db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       DatabaseTarget: tree.ChangefeedDatabaseTarget($5),
@@ -6504,6 +6510,16 @@ opt_using_clause:
     $$.val = tree.TableExprs{}
   }
 
+optional_db_level_changefeed_filter_option:
+  db_level_changefeed_filter_option
+  {
+    $$.val = $1.changefeedFilterOption()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.ChangefeedFilterOption{}
+  }
+
 db_level_changefeed_filter_option:
   EXCLUDE TABLES table_name_list
   {
@@ -6513,11 +6529,6 @@ db_level_changefeed_filter_option:
   {
     $$.val = tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.IncludeFilter}
   }
-| /* EMPTY */ 
-  {
-    $$.val = tree.ChangefeedFilterOption{}
-  }
-
 
 // %Help: DISCARD - reset the session to its initial state
 // %Category: Cfg
@@ -6924,6 +6935,7 @@ preparable_stmt:
 | drop_stmt      // help texts in sub-rule
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
 | import_stmt    // EXTEND WITH HELP: IMPORT
+| execute_schedules_stmt // EXTEND WITH HELP: EXECUTE SCHEDULES
 | insert_stmt    // EXTEND WITH HELP: INSERT
 | inspect_stmt   // EXTEND WITH HELP: INSPECT
 | pause_stmt     // help texts in sub-rule
@@ -7043,6 +7055,31 @@ alter_changefeed_cmd:
     $$.val = &tree.AlterChangefeedUnsetOptions{
       Options: $2.nameList(),
     }
+  }
+| SET db_level_changefeed_filter_option
+  {
+    $$.val = &tree.AlterChangefeedSetFilterOption{
+      ChangefeedFilterOption: $2.changefeedFilterOption(),
+    }
+  }
+| UNSET include_or_exclude TABLES
+  {
+    $$.val = &tree.AlterChangefeedUnsetFilterOption{
+      ChangefeedFilterOption: tree.ChangefeedFilterOption{
+        FilterType: $2.filterType(),
+        Tables:     tree.TableNames{},
+      },
+    }
+  }
+
+include_or_exclude:
+  INCLUDE
+  {
+    $$.val = tree.IncludeFilter
+  }
+  | EXCLUDE
+  {
+    $$.val = tree.ExcludeFilter
   }
 
 // %Help: ALTER BACKUP - alter an existing backup's encryption keys
@@ -7961,7 +7998,7 @@ inspect_option:
 //   [WITH DETAILS]
 //
 // When table is specified errors will be filtered to that table. When job is
-// not set results from the most recent, completed job with errors is reported on. 
+// not set results from the most recent, completed job with errors is reported on.
 // %SeeAlso: INSPECT
 show_inspect_errors_stmt:
   SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
@@ -8971,11 +9008,12 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list opt_with_show_backups_options
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_after_before_clause
  {
+
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
-      Options: *$5.showBackupOptions(),
+      TimeRange: *$5.showAfterBefore(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -9058,38 +9096,6 @@ show_backup_details:
 	$$.val = tree.BackupValidateDetails
 	}
 
-opt_with_show_backups_options:
-  WITH show_backups_options_list
-  {
-    $$.val = $2.showBackupOptions()
-  }
-| WITH OPTIONS '(' show_backups_options_list ')'
-  {
-    $$.val = $4.showBackupOptions()
-  }
-| /* EMPTY */
-  {
-    $$.val = &tree.ShowBackupOptions{}
-  }
-
-show_backups_options_list:
-  show_backups_options
-  {
-    $$.val = $1.showBackupOptions()
-  }
-| show_backups_options_list ',' show_backups_options
-  {
-    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
-      return setErr(sqllex, err)
-    }
-  }
-
-show_backups_options:
- INDEX
- {
-    $$.val = &tree.ShowBackupOptions{Index: true}
- }
-
 opt_with_show_backup_options:
   WITH show_backup_options_list
   {
@@ -9139,10 +9145,6 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
  }
- | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
- {
- $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
- }
  | KMS '=' string_or_placeholder_opt_list
  {
  $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
@@ -9159,6 +9161,28 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
  }
+
+opt_show_after_before_clause:
+  AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr()}
+  }
+  | BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{Before: $2.expr()}
+  }
+  | AFTER a_expr BEFORE a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $2.expr(), Before: $4.expr()}
+  }
+  | BEFORE a_expr AFTER a_expr
+  {
+    $$.val = &tree.ShowAfterBefore{After: $4.expr(), Before: $2.expr()}
+  }
+  | /* EMPTY */
+  {
+    $$.val = &tree.ShowAfterBefore{}
+  }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
@@ -9613,13 +9637,19 @@ show_job_options:
       ExecutionDetails: true,
     }
   }
+| RESOLVED TIMESTAMP
+  {
+    $$.val = &tree.ShowJobOptions{
+      ResolvedTimestamp: true,
+    }
+  }
 
 // %Help: SHOW SCHEDULES - list periodic schedules
 // %Category: Misc
 // %Text:
 // SHOW [RUNNING | PAUSED] SCHEDULES [FOR BACKUP]
 // SHOW SCHEDULE <schedule_id>
-// %SeeAlso: PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES
+// %SeeAlso: PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES, EXECUTE SCHEDULES
 show_schedules_stmt:
   SHOW SCHEDULES opt_schedule_executor_type
   {
@@ -10075,7 +10105,7 @@ opt_show_create_format_options:
 // %Text:
 // SHOW CREATE ALL SCHEDULES
 // SHOW CREATE SCHEDULE <schedule_id>
-// %SeeAlso: SHOW SCHEDULES, PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES
+// %SeeAlso: SHOW SCHEDULES, PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES, EXECUTE SCHEDULES
 show_create_schedules_stmt:
   SHOW CREATE ALL SCHEDULES
   {
@@ -10404,15 +10434,33 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
+  SHOW experimental_or_not_fingerprints FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
+    $$.val = &tree.ShowFingerprints{
+                Table: $5.unresolvedObjectName(),
+                Experimental: $2.bool(),
+                Options: *$6.showFingerprintOptions(),
+             }
   }
-| SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
+| SHOW experimental_or_not_fingerprints FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec(), Options: *$6.showFingerprintOptions()}
+    $$.val = &tree.ShowFingerprints{
+                TenantSpec: $5.tenantSpec(),
+                Experimental: $2.bool(),
+                Options: *$6.showFingerprintOptions(),
+             }
+  }
+
+experimental_or_not_fingerprints:
+  EXPERIMENTAL_FINGERPRINTS
+  {
+    $$.val = true
+  }
+| FINGERPRINTS
+  {
+    $$.val = false
   }
 
 opt_with_show_fingerprints_options:
@@ -10850,7 +10898,7 @@ for_schedules_clause:
 // PAUSE SCHEDULES <selectclause>
 //   select clause: select statement returning schedule id to pause.
 // PAUSE SCHEDULE <scheduleID>
-// %SeeAlso: RESUME SCHEDULES, SHOW JOBS, CANCEL JOBS
+// %SeeAlso: RESUME SCHEDULES, EXECUTE SCHEDULES, SHOW JOBS, CANCEL JOBS
 pause_schedules_stmt:
   PAUSE SCHEDULE a_expr
   {
@@ -12051,7 +12099,7 @@ sequence_option_elem:
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | INCREMENT BY signed_iconst64 { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | MINVALUE signed_iconst64     { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue, IntVal: &x} }
 | NO MINVALUE                  { $$.val = tree.SequenceOption{Name: tree.SeqOptMinValue} }
@@ -12061,12 +12109,12 @@ sequence_option_elem:
 | START signed_iconst64        { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | START WITH signed_iconst64   { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptStart, IntVal: &x} }
 | RESTART                      { $$.val = tree.SequenceOption{Name: tree.SeqOptRestart} }
 | RESTART signed_iconst64      { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
 | RESTART WITH signed_iconst64 { x := $3.int64()
-                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x, OptionalWord: true} }
+                                 $$.val = tree.SequenceOption{Name: tree.SeqOptRestart, IntVal: &x} }
 
 | VIRTUAL                      { $$.val = tree.SequenceOption{Name: tree.SeqOptVirtual} }
 
@@ -12578,7 +12626,7 @@ opt_composite_type_list:
   }
 
 composite_type_list:
-  name simple_typename
+  name typename
   {
     $$.val = []tree.CompositeTypeElem{
         tree.CompositeTypeElem{
@@ -12587,7 +12635,7 @@ composite_type_list:
         },
     }
   }
-| composite_type_list ',' name simple_typename
+| composite_type_list ',' name typename
   {
     $$.val = append($1.compositeTypeList(),
         tree.CompositeTypeElem{
@@ -13411,7 +13459,7 @@ resume_jobs_stmt:
 //
 // RESUME SCHEDULE <scheduleID>
 //
-// %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, RESUME JOBS
+// %SeeAlso: PAUSE SCHEDULES, EXECUTE SCHEDULES, SHOW JOBS, RESUME JOBS
 resume_schedules_stmt:
   RESUME SCHEDULE a_expr
   {
@@ -13440,7 +13488,7 @@ resume_schedules_stmt:
 //
 // DROP SCHEDULE <scheduleID>
 //
-// %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
+// %SeeAlso: PAUSE SCHEDULES, EXECUTE SCHEDULES, SHOW JOBS, CANCEL JOBS
 drop_schedule_stmt:
   DROP SCHEDULE a_expr
   {
@@ -13460,6 +13508,35 @@ drop_schedule_stmt:
     }
   }
 | DROP SCHEDULES error // SHOW HELP: DROP SCHEDULES
+
+// %Help: EXECUTE SCHEDULES - execute scheduled jobs immediately
+// %Category: Misc
+// %Text:
+// EXECUTE SCHEDULES <selectclause>
+//  selectclause: select statement returning schedule IDs to execute.
+//
+// EXECUTE SCHEDULE <scheduleID>
+//
+// %SeeAlso: PAUSE SCHEDULES, RESUME SCHEDULES, DROP SCHEDULES, SHOW JOBS
+execute_schedules_stmt:
+  EXECUTE_SCHEDULE SCHEDULE a_expr
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$3.expr()}}},
+      },
+      Command: tree.ExecuteSchedule,
+    }
+  }
+| EXECUTE_SCHEDULE error // SHOW HELP: EXECUTE SCHEDULES
+| EXECUTE_SCHEDULES SCHEDULES select_stmt
+  {
+    $$.val = &tree.ControlSchedules{
+      Schedules: $3.slct(),
+      Command: tree.ExecuteSchedule,
+    }
+  }
+| EXECUTE_SCHEDULES error // SHOW HELP: EXECUTE SCHEDULES
 
 // %Help: SAVEPOINT - start a sub-transaction
 // %Category: Txn
@@ -18604,6 +18681,7 @@ unreserved_keyword:
 | FAILURE
 | FILES
 | FILTER
+| FINGERPRINTS
 | FIRST
 | FOLLOWING
 | FORMAT
@@ -18647,8 +18725,6 @@ unreserved_keyword:
 | INCLUDE_ALL_SECONDARY_TENANTS
 | INCLUDE_ALL_VIRTUAL_CLUSTERS
 | INCREMENT
-| INCREMENTAL
-| INCREMENTAL_LOCATION
 | INDEX
 | INDEXES
 | INHERITS
@@ -18825,6 +18901,7 @@ unreserved_keyword:
 | REPLICATED
 | REPLICATION
 | RESET
+| RESOLVED
 | RESTART
 | RESTORE
 | RESTRICT
@@ -19145,6 +19222,7 @@ bare_label_keywords:
 | FALSE
 | FAMILY
 | FILES
+| FINGERPRINTS
 | FIRST
 | FLOAT
 | FOLLOWING
@@ -19200,8 +19278,6 @@ bare_label_keywords:
 | INCLUDE_ALL_VIRTUAL_CLUSTERS
 | INCLUDING
 | INCREMENT
-| INCREMENTAL
-| INCREMENTAL_LOCATION
 | INDEX
 | INDEXES
 | INDEX_AFTER_ORDER_BY_BEFORE_AT
@@ -19412,6 +19488,7 @@ bare_label_keywords:
 | REPLICATED
 | REPLICATION
 | RESET
+| RESOLVED
 | RESTART
 | RESTORE
 | RESTRICT

@@ -581,7 +581,6 @@ func TestStatusUpdateTableMetadataCache(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: &jobs.TestingKnobs{
 					IntervalOverrides: jobs.TestingIntervalOverrides{

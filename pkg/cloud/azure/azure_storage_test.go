@@ -176,6 +176,9 @@ func TestAzureFaultInjection(t *testing.T) {
 	conf, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
 	require.NoError(t, err)
 
+	settings := cluster.MakeTestingClusterSettings()
+	tryTimeout.Override(context.Background(), &settings.SV, time.Minute)
+
 	args := cloud.EarlyBootExternalStorageContext{
 		IOConf:          base.ExternalIODirConfig{},
 		Settings:        cluster.MakeTestingClusterSettings(),

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // restorationData specifies the data that is to be restored in a restoration flow.
@@ -25,6 +26,10 @@ import (
 type restorationData interface {
 	// getSpans returns the data spans that we're restoring into this cluster.
 	getSpans() []roachpb.Span
+
+	// getRekeyedSpans returns the spans we're restoring after applying rekeying.
+	// Note this allocates a new set of spans.
+	getRekeyedSpans(codec keys.SQLCodec) ([]roachpb.Span, error)
 
 	// getSystemTables returns nil for non-cluster restores. It returns the
 	// descriptors of the temporary system tables that should be restored into the
@@ -107,6 +112,26 @@ func (b *restorationDataBase) getPKIDs() map[uint64]bool {
 // getSpans implements restorationData.
 func (b *restorationDataBase) getSpans() []roachpb.Span {
 	return b.spans
+}
+
+func (b *restorationDataBase) getRekeyedSpans(codec keys.SQLCodec) ([]roachpb.Span, error) {
+	kr, err := MakeKeyRewriterFromRekeys(codec, b.tableRekeys, b.tenantRekeys,
+		false /* restoreTenantFromStream */)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating key rewriter from rekeys")
+	}
+	rekeySpans := make([]roachpb.Span, 0, len(b.spans))
+	for _, span := range b.spans {
+		rekeySpans = append(rekeySpans, span.Clone())
+	}
+	for i := range rekeySpans {
+		var err error
+		rekeySpans[i], err = rewriteSpan(kr, rekeySpans[i], execinfrapb.ElidePrefix_None)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rekeySpans, nil
 }
 
 // getSystemTables implements restorationData.

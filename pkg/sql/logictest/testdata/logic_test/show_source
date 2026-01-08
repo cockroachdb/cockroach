@@ -40,7 +40,7 @@ variable                                                         value
 allow_create_trigger_function_with_argv_references               off
 allow_ordinal_column_references                                  off
 allow_role_memberships_to_change_during_transaction              off
-allow_unsafe_internals                                           on
+allow_unsafe_internals                                           off
 alter_primary_region_super_region_override                       off
 always_distribute_full_scans                                     off
 application_name                                                 ·
@@ -84,6 +84,7 @@ disable_optimizer_rules                                          ·
 disable_partially_distributed_plans                              off
 disable_plan_gists                                               off
 disable_vec_union_eager_cancellation                             off
+disable_wait_for_jobs_notice                                     off
 disallow_full_table_scans                                        off
 distribute_group_by_row_count_threshold                          1000
 distribute_join_row_count_threshold                              1000
@@ -91,6 +92,7 @@ distribute_scan_row_count_threshold                              10000
 distribute_sort_row_count_threshold                              1000
 distsql                                                          off
 distsql_plan_gateway_bias                                        2
+distsql_prevent_partitioning_soft_limited_scans                  on
 distsql_use_reduced_leaf_write_sets                              on
 enable_auto_rehoming                                             off
 enable_create_stats_using_extremes                               on
@@ -101,7 +103,6 @@ enable_implicit_fk_locking_for_serializable                      off
 enable_implicit_select_for_update                                on
 enable_implicit_transaction_for_batch_statements                 on
 enable_insert_fast_path                                          on
-enable_inspect_command                                           off
 enable_multiple_modifications_of_table                           off
 enable_multiregion_placement_policy                              off
 enable_seqscan                                                   on
@@ -203,6 +204,7 @@ plan_cache_mode                                                  auto
 plpgsql_use_strict_into                                          off
 prefer_lookup_joins_for_fks                                      off
 prepared_statements_cache_size                                   0 B
+prevent_update_set_column_drop                                   on
 propagate_admission_header_to_leaf_transactions                  on
 propagate_input_ordering                                         off
 recursion_depth_limit                                            1000
@@ -255,9 +257,11 @@ unsafe_allow_triggers_modifying_cascades                         off
 use_cputs_on_non_unique_indexes                                  off
 use_declarative_schema_changer                                   on
 use_improved_routine_dependency_tracking                         on
+use_improved_routine_deps_triggers_and_computed_cols             on
 use_pre_25_2_variadic_builtins                                   off
 use_proc_txn_control_extended_protocol_fix                       on
 use_soft_limit_for_distribute_scan                               on
+use_swap_mutations                                               off
 variable_inequality_lookup_join_enabled                          on
 vector_search_beam_size                                          32
 vector_search_rerank_multiplier                                  50
@@ -501,7 +505,6 @@ v           CREATE VIEW public.v (
             ) AS SELECT id FROM system.public.descriptor;
 
 
-skipif config local-mixed-25.2
 query TTT colnames
 SELECT username,options,member_of FROM [SHOW USERS] ORDER BY 1
 ----
@@ -515,7 +518,7 @@ query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/76  /Max     {1}       1
+/Table/77  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

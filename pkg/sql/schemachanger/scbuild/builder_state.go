@@ -605,6 +605,42 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
+// TTLExpirationExpression returns a validated TTL expiration expression for
+// a table's row-level TTL configuration. It verifies that the expression:
+// - type-checks as a TIMESTAMPTZ
+// - is not volatile
+// - references valid columns in the table
+func (b *builderState) TTLExpirationExpression(
+	tableID catid.DescID,
+	ttl *catpb.RowLevelTTL,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn schemaexpr.ColumnLookupFn,
+) tree.Expr {
+	if ttl == nil || !ttl.HasExpirationExpr() {
+		return nil
+	}
+	b.ensureDescriptor(tableID)
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
+	tableName := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
+	serializedExpr, err := schemaexpr.ValidateTTLExpirationExpression(
+		b.ctx,
+		b.semaCtx,
+		&tableName,
+		ttl,
+		b.clusterSettings.Version.ActiveVersion(b.ctx),
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
+	)
+	if err != nil {
+		panic(err)
+	}
+	parsedExpr, err := parser.ParseExpr(serializedExpr)
+	if err != nil {
+		panic(err)
+	}
+	return parsedExpr
+}
+
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 	{
 		b.ensureDescriptor(id)
@@ -906,8 +942,8 @@ func (b *builderState) ComputedColumnExpression(
 func (b *builderState) PartialIndexPredicateExpression(
 	tableID catid.DescID, expr tree.Expr,
 ) tree.Expr {
-	// Ensure that an namespace entry exists for the table.
-	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+	// Ensure that a namespace entry exists for the table.
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 	if ns == nil {
 		panic(errors.AssertionFailedf("unable to find namespace for %d.", tableID))
 	}
@@ -1156,7 +1192,7 @@ func (b *builderState) resolveRelation(
 ) *cachedDesc {
 	var prefix catalog.ResolvedObjectPrefix
 	var rel catalog.Descriptor
-	prefix, rel = b.cr.MayResolveTable(b.ctx, *name)
+	prefix, rel = b.cr.MayResolveTable(b.ctx, *name, p.WithOffline)
 	if rel == nil {
 		if p.ResolveTypes {
 			prefix, rel = b.cr.MayResolveType(b.ctx, *name)
@@ -1402,6 +1438,8 @@ func (b *builderState) ResolveConstraint(
 	rel := b.descCache[relationID].desc.(catalog.TableDescriptor)
 	elts := b.QueryByID(rel.GetID())
 	var constraintID catid.ConstraintID
+	var indexID catid.IndexID
+
 	scpb.ForEachConstraintWithoutIndexName(elts,
 		func(status scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 			if tree.Name(e.Name) == constraintName {
@@ -1411,7 +1449,6 @@ func (b *builderState) ResolveConstraint(
 	)
 
 	if constraintID == 0 {
-		var indexID catid.IndexID
 		scpb.ForEachIndexName(elts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
 			if tree.Name(e.Name) == constraintName {
 				indexID = e.IndexID
@@ -1443,8 +1480,14 @@ func (b *builderState) ResolveConstraint(
 	}
 
 	return elts.Filter(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) bool {
-		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
-		return idI != nil && idI.(catid.ConstraintID) == constraintID
+		constraintIDAttr, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
+		constraintIDMatches := constraintIDAttr != nil && constraintIDAttr.(catid.ConstraintID) == constraintID
+
+		// For index-backed constraints, we also want to include the elements that
+		// pertain to that index.
+		indexIDAttr, _ := screl.Schema.GetAttribute(screl.IndexID, e)
+		indexIDMatches := indexIDAttr != nil && indexID != 0 && indexIDAttr.(catid.IndexID) == indexID
+		return constraintIDMatches || indexIDMatches
 	})
 }
 

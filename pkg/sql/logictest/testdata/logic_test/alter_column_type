@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer
+# LogicTest: default-configs 3node-tenant !local-legacy-schema-changer local-dist-merge-backfill-declarative-schema-changer
 
 # A basic sanity check to demonstrate column type changes.
 subtest SanityCheck
@@ -1540,7 +1540,7 @@ INSERT INTO stored1 VALUES (2147483648),(2147483647);
 statement error pq: validate check constraint: integer out of range for type int4
 ALTER TABLE stored1 ALTER COLUMN COMP1 SET DATA TYPE INT4;
 
-statement ok
+statement count 1
 DELETE FROM stored1 WHERE a = 2147483648;
 
 statement ok
@@ -1592,7 +1592,6 @@ ALTER TABLE stored1 ALTER COLUMN comp1 SET DATA TYPE INT2 USING -1;
 statement ok
 INSERT INTO stored1 VALUES (-1000);
 
-skipif config local-mixed-24.3
 onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE stored1;
@@ -1684,7 +1683,7 @@ virt1  CREATE TABLE public.virt1 (
 statement error pq: validate check constraint: integer out of range for type int2
 ALTER TABLE virt1 ALTER COLUMN v1 SET DATA TYPE INT2;
 
-statement ok
+statement count 1
 DELETE FROM virt1 WHERE c1 = 2147483647;
 
 statement ok
@@ -1921,16 +1920,6 @@ t_droppedcol  CREATE TABLE public.t_droppedcol (
                 CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
               );
 
-onlyif config local-schmea-locked
-query TT
-SHOW CREATE TABLE t_droppedcol;
-----
-t_droppedcol  CREATE TABLE public.t_droppedcol (
-                dropme INT8 NULL,
-                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT t_droppedcol_pkey PRIMARY KEY (rowid ASC)
-              ) WITH (schema_locked = true);
-
 statement ok
 DROP TABLE t_droppedcol;
 
@@ -1980,7 +1969,6 @@ select * from t_multi_alter order by c1;
 10 10 2024-04-22 00:00:00 +0000 +0000
 20 20 2024-04-22 00:00:00 +0000 +0000
 
-skipif config local-mixed-24.3
 onlyif config schema-locked-disabled
 query TT colnames
 show create table t_multi_alter

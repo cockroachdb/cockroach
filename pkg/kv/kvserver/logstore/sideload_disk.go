@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -36,7 +35,7 @@ type DiskSideloadStorage struct {
 	st      *cluster.Settings
 	limiter *rate.Limiter
 	dir     string
-	eng     storage.Engine
+	fs      *fs.Env
 }
 
 func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
@@ -57,15 +56,11 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 // NewDiskSideloadStorage creates a SideloadStorage for a given replica, stored
 // in the specified engine.
 func NewDiskSideloadStorage(
-	st *cluster.Settings,
-	rangeID roachpb.RangeID,
-	baseDir string,
-	limiter *rate.Limiter,
-	eng storage.Engine,
+	st *cluster.Settings, rangeID roachpb.RangeID, baseDir string, limiter *rate.Limiter, fs *fs.Env,
 ) *DiskSideloadStorage {
 	return &DiskSideloadStorage{
 		dir:     sideloadedPath(baseDir, rangeID),
-		eng:     eng,
+		fs:      fs,
 		st:      st,
 		limiter: limiter,
 	}
@@ -86,14 +81,14 @@ func (ss *DiskSideloadStorage) Put(
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := kvserverbase.WriteFileSyncing(ctx, filename, contents, ss.eng.Env(), 0644, ss.st, ss.limiter, fs.PebbleIngestionWriteCategory); err == nil {
+		if err := kvserverbase.WriteFileSyncing(ctx, filename, contents, ss.fs, 0644, ss.st, ss.limiter, fs.PebbleIngestionWriteCategory); err == nil {
 			return nil
 		} else if !oserror.IsNotExist(err) {
 			return err
 		}
 		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
 		// so the next loop iteration should succeed.
-		if err := mkdirAllAndSyncParents(ss.eng.Env(), ss.dir, os.ModePerm); err != nil {
+		if err := mkdirAllAndSyncParents(ss.fs, ss.dir, os.ModePerm); err != nil {
 			return err
 		}
 		continue
@@ -102,7 +97,7 @@ func (ss *DiskSideloadStorage) Put(
 
 // Sync implements SideloadStorage.
 func (ss *DiskSideloadStorage) Sync() error {
-	dir, err := ss.eng.Env().OpenDir(ss.dir)
+	dir, err := ss.fs.OpenDir(ss.dir)
 	// The directory can be missing because we did not Put() any entry to it yet,
 	// or it has been removed by TruncateTo() or Clear().
 	//
@@ -127,7 +122,7 @@ func (ss *DiskSideloadStorage) Get(
 	ctx context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm,
 ) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
-	b, err := fs.ReadFile(ss.eng.Env(), filename)
+	b, err := fs.ReadFile(ss.fs, filename)
 	if oserror.IsNotExist(err) {
 		return nil, errSideloadedFileNotFound
 	}
@@ -155,7 +150,7 @@ func (ss *DiskSideloadStorage) Purge(
 }
 
 func (ss *DiskSideloadStorage) fileSize(filename string) (int64, error) {
-	info, err := ss.eng.Env().Stat(filename)
+	info, err := ss.fs.Stat(filename)
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
@@ -170,7 +165,7 @@ func (ss *DiskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 	if err != nil {
 		return 0, err
 	}
-	if err := ss.eng.Env().Remove(filename); err != nil {
+	if err := ss.fs.Remove(filename); err != nil {
 		if oserror.IsNotExist(err) {
 			return 0, errSideloadedFileNotFound
 		}
@@ -181,7 +176,7 @@ func (ss *DiskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 
 // Clear implements SideloadStorage.
 func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
-	return ss.eng.Env().RemoveAll(ss.dir)
+	return ss.fs.RemoveAll(ss.dir)
 }
 
 // TruncateTo implements SideloadStorage.
@@ -207,7 +202,7 @@ func (ss *DiskSideloadStorage) TruncateTo(ctx context.Context, lastIndex kvpb.Ra
 	if deletedAll {
 		// The directory may not exist, or it may exist and have been empty.
 		// Not worth trying to figure out which one, just try to delete.
-		err := ss.eng.Env().Remove(ss.dir)
+		err := ss.fs.Remove(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
 			// TODO(pavelkalinnikov): this is possible because deletedAll can be left
 			// true despite existence of files with index < from which are skipped.
@@ -246,7 +241,7 @@ func (ss *DiskSideloadStorage) forEach(
 	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) (bool, error),
 ) error {
 	// TODO(pavelkalinnikov): consider making the List method iterative.
-	matches, err := ss.eng.Env().List(ss.dir)
+	matches, err := ss.fs.List(ss.dir)
 	if oserror.IsNotExist(err) {
 		return nil // nothing to do
 	} else if err != nil {

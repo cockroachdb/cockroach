@@ -7,11 +7,13 @@ package inspect
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -135,6 +138,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				GCJob: &sql.GCJobTestingKnobs{
 					SkipWaitingForMVCCGC: true,
 				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
 	})
@@ -467,9 +471,6 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				FROM generate_series(1001, 2000) AS gs1;`,
 					)
 
-					_, err = db.Exec(`SET enable_inspect_command=true`)
-					require.NoError(t, err)
-
 					// If not using timestamp before corruption, get current timestamp
 					if !tc.useTimestampBeforeCorruption {
 						// Convert relative timestamp to absolute timestamp using CRDB
@@ -588,7 +589,11 @@ func TestDanglingIndexEntryInEmptyTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	codec := s.ApplicationLayer().Codec()
 
@@ -608,10 +613,6 @@ CREATE INDEX secondary ON t.test (v);
 	// which doesn't exist in the primary index.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	err = insertSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
-	require.NoError(t, err)
-
-	// Enable INSPECT command.
-	_, err = db.Exec(`SET enable_inspect_command = true`)
 	require.NoError(t, err)
 
 	// Run INSPECT and expect it to find the dangling index entry.
@@ -651,7 +652,11 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 
 	issueLogger := &testIssueCollector{}
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 
@@ -684,9 +689,7 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 		`CREATE INDEX idx_having ON test.reserved_table ("having", "group")`,
 	)
 
-	_, err := db.Exec(`SET enable_inspect_command=true`)
-	require.NoError(t, err)
-	_, err = db.Query(`INSPECT TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
+	_, err := db.Query(`INSPECT TABLE test.reserved_table WITH OPTIONS INDEX ALL`)
 	require.NoError(t, err, "should succeed on table with reserved word column names")
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 
@@ -712,7 +715,11 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 	codec := s.ApplicationLayer().Codec()
@@ -734,9 +741,6 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	// Delete the secondary index entry to create corruption.
 	err := deleteSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
 	require.NoError(t, err)
-
-	// Enable INSPECT command.
-	r.Exec(t, `SET enable_inspect_command = true`)
 
 	// Run INSPECT and expect it to find the missing index entry.
 	// INSPECT returns an error when inconsistencies are found.
@@ -765,4 +769,148 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	require.Error(t, err, "expected INSPECT to find corruption at historical timestamp")
 	require.Contains(t, err.Error(), "INSPECT found inconsistencies",
 		"INSPECT should detect the missing index entry that existed at the historical timestamp")
+}
+
+func TestInspectWithoutASOFSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	unblockCh := make(chan struct{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Inspect: &sql.InspectTestingKnobs{
+				OnInspectJobStart: func() error {
+					// Block the INSPECT job from starting until the DROP INDEX completes.
+					const maxWait = 30 * time.Second
+					select {
+					case <-unblockCh:
+						return nil
+					case <-time.After(maxWait):
+						return errors.New("timed out waiting for DROP INDEX to complete")
+					}
+				},
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.ExecMultiple(t,
+		`SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms'`,
+		`CREATE DATABASE t`,
+		`CREATE TABLE t.pk_swap (
+                       old_pk INT PRIMARY KEY,
+                       new_pk INT UNIQUE NOT NULL,
+                       payload INT NOT NULL,
+                       INDEX payload_idx (payload)
+              )`,
+		`INSERT INTO t.pk_swap SELECT i, i+100, i+200 FROM generate_series(1, 5) AS g(i)`,
+	)
+
+	r.Exec(t, `INSPECT TABLE t.pk_swap WITH OPTIONS INDEX ALL, DETACHED`)
+	r.Exec(t, `DROP INDEX t.pk_swap@payload_idx`)
+	// Unblock the INSPECT job now that the DROP INDEX has completed.
+	close(unblockCh)
+
+	var jobID int64
+	require.Eventually(t, func() bool {
+		row := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1`)
+		return row.Scan(&jobID) == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	var (
+		status string
+		jobErr gosql.NullString
+	)
+	require.Eventually(t, func() bool {
+		row := db.QueryRow(`SELECT status, error FROM [SHOW JOBS] WHERE job_id = $1`, jobID)
+		if err := row.Scan(&status, &jobErr); err != nil {
+			t.Logf("error polling job status: %v", err)
+			return false
+		}
+		return status == "failed"
+	}, 60*time.Second, time.Second)
+
+	require.Equal(t, "failed", status, "detached job should fail after schema change")
+	require.Regexp(t, `table pk_swap \[\d+\] has had a schema change since the job has started at .+\nHINT: use AS OF SYSTEM TIME to avoid schema changes during inspection`, jobErr.String)
+
+	rows, err := db.Query(`SHOW INSPECT ERRORS FOR TABLE t.pk_swap WITH DETAILS`)
+	require.NoError(t, err)
+	defer rows.Close()
+	require.False(t, rows.Next(), "no inspect errors are recorded when the job aborts before running checks")
+}
+
+// TestInspectASOFAfterPrimaryKeySwapFails runs an INSPECT ASOF statement while
+// doing a schema change after the ASOF time.
+func TestInspectASOFAfterPrimaryKeySwap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+
+	r.ExecMultiple(t,
+		`CREATE DATABASE t`,
+		`CREATE TABLE t.pk_swap (
+			old_pk INT PRIMARY KEY,
+			new_pk INT UNIQUE NOT NULL,
+			payload INT NOT NULL,
+			INDEX payload_idx (payload)
+		)`,
+		`INSERT INTO t.pk_swap SELECT i, i+100, i+200 FROM generate_series(1, 5) AS g(i)`,
+	)
+
+	var asOf string
+	r.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&asOf)
+
+	// Rewrite the table descriptors by swapping the primary key.
+	r.Exec(t, `ALTER TABLE t.pk_swap ALTER PRIMARY KEY USING COLUMNS (new_pk)`)
+
+	// Helper function to wait for the latest INSPECT job to complete successfully.
+	waitForInspectJob := func() {
+		var jobID int64
+		var status string
+		var fractionCompleted float64
+		testutils.SucceedsSoon(t, func() error {
+			row := db.QueryRow(`SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`)
+			if err := row.Scan(&jobID, &status, &fractionCompleted); err != nil {
+				return err
+			}
+			if status == "succeeded" || status == "failed" {
+				return nil
+			}
+			return errors.Newf("job is not in the succeeded or failed state: %q", status)
+		})
+		require.Equal(t, "succeeded", status, "INSPECT job should succeed")
+		require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
+		requireCheckCountsMatch(t, r, jobID)
+	}
+
+	t.Run("non-detached", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, asOf))
+		waitForInspectJob()
+	})
+
+	t.Run("detached with implicit transaction", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL, DETACHED`, asOf))
+		waitForInspectJob()
+	})
+
+	t.Run("detached with explicit transaction", func(t *testing.T) {
+		_, err := db.Exec("BEGIN AS OF SYSTEM TIME '" + asOf + "'")
+		require.NoError(t, err)
+		_, err = db.Exec(fmt.Sprintf(`INSPECT TABLE t.pk_swap AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL, DETACHED`, asOf))
+		require.NoError(t, err)
+		_, err = db.Exec("COMMIT")
+		// Expecting the commit to fail due to the schema change after ASOF time.
+		require.Contains(t, err.Error(), "TransactionRetryError")
+	})
 }

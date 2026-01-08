@@ -49,7 +49,19 @@ active_exists() {
   [[ $age -lt $AUTO_SHUTDOWN_DURATION ]]
 }
 
-if active_exists || w -hs | grep pts | grep -vq "pts/[0-9]* *tmux" || pgrep unison || pgrep -f remote-dev-server.sh; then
+active_session(){
+  # Check for active sessions that are not tmux/screen/zellij sessions.
+  # Example of who output:
+  # rail_cockroachlabs_com pts/0        2025-11-07 18:10 (179.78.23.130)
+  # rail_cockroachlabs_com pts/1        2025-11-07 18:13 (tmux(2747).%0)
+  # rail_cockroachlabs_com pts/2        2025-11-07 18:13 (tmux(2747).%0)
+  if who | grep "pts/" | grep -vqE '\((tmux|screen|zellij)\('; then
+    return 0
+  fi
+  return 1
+}
+
+if active_exists || active_session || pgrep -f remote-dev-server.sh; then
   # Auto-shutdown is disabled (via /.active) or there is a remote session.
   echo 0 > $FILE
   exit 0

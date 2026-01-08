@@ -5,7 +5,15 @@
 
 package kvstorage
 
-import "github.com/cockroachdb/cockroach/pkg/storage"
+import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
+)
 
 // The following are type aliases that help annotating various storage
 // interaction functions in this package and its clients, accordingly to the
@@ -66,6 +74,11 @@ func WrapState(rw StateRW) State {
 	return State{RO: rw, WO: rw}
 }
 
+// WrapRaft interprets the provided storage accessor as the Raft engine.
+func WrapRaft(rw RaftRW) Raft {
+	return Raft{RO: rw, WO: rw}
+}
+
 // TODORaft interprets the provided storage accessor as the Raft engine.
 //
 // TODO(pav-kv): remove when all callers have clarified their access patterns.
@@ -90,4 +103,230 @@ func TODOReaderWriter(r storage.Reader, w storage.Writer) ReadWriter {
 // TODO(pav-kv): remove when all callers have clarified their access patterns.
 func TODOReadWriter(rw storage.ReadWriter) ReadWriter {
 	return TODOReaderWriter(rw, rw)
+}
+
+// Engines contains the engines that support the operations of the Store. At the
+// time of writing, all three fields will be populated with the same Engine. As
+// work on separate raft log proceeds, we will be able to experimentally run
+// with a separate log engine, and ultimately allow doing so in production
+// deployments.
+type Engines struct {
+	// stateEngine is the state machine engine, in which the committed raft state
+	// materializes after being "applied".
+	stateEngine storage.Engine
+	// todoEngine is a placeholder used in cases where:
+	// - the code does not yet cleanly separate between state and log engine
+	// - it is still unclear which of the two engines is the better choice for a
+	//   particular write, or there is a candidate, but it needs to be verified.
+	todoEngine storage.Engine
+	// logEngine is the engine holding mainly the raft state, such as HardState
+	// and logs, and the Store-local keys. This engine provides timely durability,
+	// by frequent and on-demand syncing.
+	logEngine storage.Engine
+	// separated is true iff the engines are logically or physically separated.
+	// Can be true only in tests.
+	separated bool
+}
+
+// MakeEngines creates an Engines handle in which both state machine and log
+// engine reside in the same physical engine.
+func MakeEngines(eng storage.Engine) Engines {
+	if util.RaceEnabled {
+		// Wrap the engines with span set engines to catch incorrect engine
+		// accesses.
+		return Engines{
+			stateEngine: spanset.NewEngine(eng, validateIsStateEngineSpan),
+			logEngine:   spanset.NewEngine(eng, validateIsRaftEngineSpan),
+			todoEngine:  eng,
+		}
+	}
+	return Engines{
+		stateEngine: eng,
+		todoEngine:  eng,
+		logEngine:   eng,
+	}
+}
+
+// MakeSeparatedEnginesForTesting creates an Engines handle in which the state
+// machine and log engines are logically (or physically) separated. To be used
+// only in tests, until separated engines are correctly supported.
+func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
+	if !buildutil.CrdbTestBuild {
+		panic("separated engines are not supported")
+	}
+	if util.RaceEnabled {
+		// Wrap the engines with span set engines to catch incorrect engine
+		// accesses.
+		return Engines{
+			stateEngine: spanset.NewEngine(state, validateIsStateEngineSpan),
+			todoEngine:  nil,
+			logEngine:   spanset.NewEngine(log, validateIsRaftEngineSpan),
+			separated:   true,
+		}
+	}
+	return Engines{
+		stateEngine: state,
+		todoEngine:  nil,
+		logEngine:   log,
+		separated:   true,
+	}
+}
+
+// Engine returns the single engine. Used when the caller implements backwards
+// compatible code and neither StateEngine nor LogEngine can be used. This is
+// different from TODOEngine in that the caller explicitly acknowledges the fact
+// that they are using a combined engine.
+func (e *Engines) Engine() storage.Engine {
+	if buildutil.CrdbTestBuild && e.separated {
+		panic("engines are separated")
+	}
+	return e.todoEngine
+}
+
+// StateEngine returns the state machine engine.
+func (e *Engines) StateEngine() storage.Engine {
+	return e.stateEngine
+}
+
+// LogEngine returns the raft/log engine.
+func (e *Engines) LogEngine() storage.Engine {
+	return e.logEngine
+}
+
+// TODOEngine returns the combined engine, used in the code which currently does
+// not support separated engines. The caller must eventually "resolve" this call
+// to one of StateEngine, LogEngine, or Engine.
+func (e *Engines) TODOEngine() storage.Engine {
+	return e.todoEngine
+}
+
+// Separated returns true iff the engines are logically or physically separated.
+// Can return true only in tests, until separated engines are supported.
+func (e *Engines) Separated() bool {
+	return e.separated
+}
+
+// validateIsStateEngineSpan asserts that the provided span only overlaps with
+// keys in the State engine and returns an error if not.
+// Note that we could receive the span with a nil startKey, which has a special
+// meaning that the span represents: [endKey.Prev(), endKey).
+func validateIsStateEngineSpan(span spanset.TrickySpan) error {
+	// If the provided span overlaps with local store span, it cannot be a
+	// StateEngine span because Store-local keys belong to the LogEngine.
+	if spanset.Overlaps(roachpb.Span{
+		Key:    keys.LocalStorePrefix,
+		EndKey: keys.LocalStoreMax,
+	}, span) {
+		return errors.Errorf("overlaps with store local keys")
+	}
+
+	// If the provided span is completely outside the rangeID local spans for any
+	// rangeID, then there is no overlap with any rangeID local keys.
+	fullRangeIDLocalSpans := roachpb.Span{
+		Key:    keys.LocalRangeIDPrefix.AsRawKey(),
+		EndKey: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(),
+	}
+	if !spanset.Overlaps(fullRangeIDLocalSpans, span) {
+		return nil
+	}
+
+	// At this point, we know that we overlap with fullRangeIDLocalSpans. If we
+	// are not completely within fullRangeIDLocalSpans, return an error as we
+	// make an assumption that spans should respect the local RangeID tree
+	// structure, and that spans that partially overlaps with
+	// fullRangeIDLocalSpans don't make logical sense.
+	if !spanset.Contains(fullRangeIDLocalSpans, span) {
+		return errors.Errorf("overlapping an unreplicated rangeID key")
+	}
+
+	// If the span in inside fullRangeIDLocalSpans, we expect that both start and
+	// end keys should be in the same rangeID.
+	rangeIDKey := span.Key
+	if rangeIDKey == nil {
+		rangeIDKey = span.EndKey
+	}
+	rangeID, err := keys.DecodeRangeIDPrefix(rangeIDKey)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			"could not decode range ID for span: %s", span)
+	}
+
+	// If the span is inside RangeIDLocalSpans but outside RangeIDUnreplicated,
+	// it cannot overlap local raft keys.
+	rangeIDPrefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	if !spanset.Overlaps(roachpb.Span{
+		Key:    rangeIDPrefixBuf.UnreplicatedPrefix(),
+		EndKey: rangeIDPrefixBuf.UnreplicatedPrefix().PrefixEnd(),
+	}, span) {
+		return nil
+	}
+
+	// RangeTombstoneKey and RaftReplicaIDKey belong to the StateEngine, and can
+	// be accessed as point keys.
+	if roachpb.Span(span).Equal(roachpb.Span{
+		Key: rangeIDPrefixBuf.RangeTombstoneKey(),
+	}) {
+		return nil
+	}
+
+	if roachpb.Span(span).Equal(roachpb.Span{
+		Key: rangeIDPrefixBuf.RaftReplicaIDKey(),
+	}) {
+		return nil
+	}
+
+	return errors.Errorf("overlapping an unreplicated rangeID span")
+}
+
+// validateIsRaftEngineSpan asserts that the provided span only overlaps with
+// keys in the Raft engine and returns an error if not.
+// Note that we could receive the span with a nil startKey, which has a special
+// meaning that the span represents: [endKey.Prev(), endKey).
+func validateIsRaftEngineSpan(span spanset.TrickySpan) error {
+	// The LogEngine owns only Store-local and RangeID-local raft keys. A span
+	// inside Store-local is correct. If it's only partially inside, an error is
+	// returned below, as part of checking RangeID-local spans.
+	if spanset.Contains(roachpb.Span{
+		Key:    keys.LocalStorePrefix,
+		EndKey: keys.LocalStoreMax,
+	}, span) {
+		return nil
+	}
+
+	// At this point, the remaining possible LogEngine keys are inside
+	// LocalRangeID spans. If the span is not completely inside it, it must
+	// overlap with some StateEngine keys.
+	if !spanset.Contains(roachpb.Span{
+		Key:    keys.LocalRangeIDPrefix.AsRawKey(),
+		EndKey: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd(),
+	}, span) {
+		return errors.Errorf("overlaps with state engine keys")
+	}
+
+	// If the span in inside LocalRangeID, we assume that both start and
+	// end keys should be in the same rangeID.
+	rangeIDKey := span.Key
+	if rangeIDKey == nil {
+		rangeIDKey = span.EndKey
+	}
+	rangeID, err := keys.DecodeRangeIDPrefix(rangeIDKey)
+	if err != nil {
+		return errors.NewAssertionErrorWithWrappedErrf(err,
+			"could not decode range ID for span: %s", span)
+	}
+	rangeIDPrefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	if !spanset.Contains(roachpb.Span{
+		Key:    rangeIDPrefixBuf.UnreplicatedPrefix(),
+		EndKey: rangeIDPrefixBuf.UnreplicatedPrefix().PrefixEnd(),
+	}, span) {
+		return errors.Errorf("overlaps with state engine keys")
+	}
+	if spanset.Overlaps(roachpb.Span{Key: rangeIDPrefixBuf.RangeTombstoneKey()}, span) {
+		return errors.Errorf("overlaps with state engine keys")
+	}
+	if spanset.Overlaps(roachpb.Span{Key: rangeIDPrefixBuf.RaftReplicaIDKey()}, span) {
+		return errors.Errorf("overlaps with state engine keys")
+	}
+
+	return nil
 }

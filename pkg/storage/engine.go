@@ -13,8 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -26,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/metrics"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
@@ -926,6 +925,9 @@ type Engine interface {
 	Capacity() (roachpb.StoreCapacity, error)
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
+	// ProfileSeparatedValueRetrievals collects a profile of the engine's
+	// separated value retrievals. It stops when the context is done.
+	ProfileSeparatedValueRetrievals(ctx context.Context) (*metrics.ValueRetrievalProfile, error)
 	// Compact forces compaction over the entire database.
 	Compact(ctx context.Context) error
 	// Env returns the filesystem environment used by the Engine.
@@ -1049,28 +1051,24 @@ type Engine interface {
 	// modified or deleted by the Engine doing the ingestion.
 	IngestExternalFiles(ctx context.Context, external []pebble.ExternalFile) (pebble.IngestOperationStats, error)
 
-	// PreIngestDelay offers an engine the chance to backpressure ingestions.
-	// When called, it may choose to block if the engine determines that it is in
-	// or approaching a state where further ingestions may risk its health.
-	PreIngestDelay(ctx context.Context)
 	// ApproximateDiskBytes returns an approximation of the on-disk size and file
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-	// ConvertFilesToBatchAndCommit converts local files with the given paths to
-	// a WriteBatch and commits the batch with sync=true. The files represented
-	// in paths must not be overlapping -- this is the same contract as
-	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
-	// must be deleted before writing the data contained in these paths.
+	// IngestLocalFilesToWriter converts local files with the given paths to
+	// equivalent writes into the Writer, after also clearing the specified spans.
+	// The caller is then responsible for committing the batch behind the Writer.
 	//
-	// This method is expected to be used instead of IngestLocalFiles* or
-	// IngestAndExciseFiles when the sum of the file sizes is small.
+	// This call bears that same expectations as other Ingest* methods, e.g. the
+	// files must not overlap. The call is semantically same, except that instead
+	// of running an ingestion, it populates a batch with an equivalent write. It
+	// is used when the sum of the file sizes is small.
 	//
 	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
 	// This should be easy since we use NewSSTEngineIterator to read the ssts,
 	// which supports multiple levels.
-	ConvertFilesToBatchAndCommit(
-		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	IngestLocalFilesToWriter(
+		ctx context.Context, paths []string, clearedSpans []roachpb.Span, writer Writer,
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
@@ -1339,6 +1337,7 @@ type MetricsForInterval struct {
 	WALFsyncLatency                prometheusgo.Metric
 	FlushWriteThroughput           pebble.ThroughputMetric
 	WALFailoverWriteAndSyncLatency prometheusgo.Metric
+	WALSecondaryFileOpLatency      prometheusgo.Metric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
@@ -1368,6 +1367,8 @@ func (m *Metrics) CompactedBytes() (read, written uint64) {
 		read += lm.TableBytesRead + lm.BlobBytesRead
 		written += lm.TablesCompacted.Bytes + lm.BlobBytesCompacted
 	}
+	read += uint64(m.Metrics.Compact.BlobFileRewrite.BytesRead)
+	written += uint64(m.Metrics.Compact.BlobFileRewrite.BytesWritten)
 	return read, written
 }
 
@@ -1401,10 +1402,10 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		WalPhysicalSize:            m.WAL.PhysicalSize,
 		WalBytesIn:                 m.WAL.BytesIn,
 		WalBytesWritten:            m.WAL.BytesWritten,
-		TableObsoleteCount:         int64(m.Table.Obsolete.All.Count),
-		TableObsoleteSize:          m.Table.Obsolete.All.Bytes,
-		TableZombieCount:           int64(m.Table.Zombie.All.Count),
-		TableZombieSize:            m.Table.Zombie.All.Bytes,
+		TableObsoleteCount:         int64(m.Table.Physical.Obsolete.Total().Count),
+		TableObsoleteSize:          m.Table.Physical.Obsolete.Total().Bytes,
+		TableZombieCount:           int64(m.Table.Physical.Zombie.Total().Count),
+		TableZombieSize:            m.Table.Physical.Zombie.Total().Bytes,
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
 	e.CacheHits, e.CacheMisses = m.BlockCache.HitsAndMisses.Aggregate()
@@ -1710,79 +1711,6 @@ func ClearRangeWithHeuristic(
 	}
 
 	return nil
-}
-
-var ingestDelayL0Threshold = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"rocksdb.ingest_backpressure.l0_file_count_threshold",
-	"number of L0 files after which to backpressure SST ingestions",
-	20,
-)
-
-var ingestDelayTime = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"rocksdb.ingest_backpressure.max_delay",
-	"maximum amount of time to backpressure a single SST ingestion",
-	time.Second*5,
-)
-
-var preIngestDelayEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"pebble.pre_ingest_delay.enabled",
-	"controls whether the pre-ingest delay mechanism is active",
-	false,
-)
-
-// PreIngestDelay may choose to block for some duration if L0 has an excessive
-// number of files in it or if PendingCompactionBytesEstimate is elevated. This
-// it is intended to be called before ingesting a new SST, since we'd rather
-// backpressure the bulk operation adding SSTs than slow down the whole RocksDB
-// instance and impact all foreground traffic by adding too many files to it.
-// After the number of L0 files exceeds the configured limit, it gradually
-// begins delaying more for each additional file in L0 over the limit until
-// hitting its configured (via settings) maximum delay. If the pending
-// compaction limit is exceeded, it waits for the maximum delay.
-func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings) {
-	if settings == nil {
-		return
-	}
-	if !preIngestDelayEnabled.Get(&settings.SV) {
-		return
-	}
-	metrics := eng.GetMetrics()
-	targetDelay := calculatePreIngestDelay(settings, metrics.Metrics)
-
-	if targetDelay == 0 {
-		return
-	}
-	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
-		targetDelay, metrics.Levels[0].Tables.Count, metrics.Levels[0].Sublevels)
-
-	select {
-	case <-time.After(targetDelay):
-	case <-ctx.Done():
-	}
-}
-
-func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics) time.Duration {
-	maxDelay := ingestDelayTime.Get(&settings.SV)
-	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
-
-	const ramp = 10
-	l0ReadAmp := int64(metrics.Levels[0].Tables.Count)
-	if metrics.Levels[0].Sublevels >= 0 {
-		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
-	}
-
-	if l0ReadAmp > l0ReadAmpLimit {
-		delayPerFile := maxDelay / time.Duration(ramp)
-		targetDelay := time.Duration(l0ReadAmp-l0ReadAmpLimit) * delayPerFile
-		if targetDelay > maxDelay {
-			return maxDelay
-		}
-		return targetDelay
-	}
-	return 0
 }
 
 // Helper function to implement Reader.MVCCIterate().

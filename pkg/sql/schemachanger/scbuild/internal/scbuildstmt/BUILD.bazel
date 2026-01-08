@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "scbuildstmt",
@@ -7,17 +8,24 @@ go_library(
         "alter_table.go",
         "alter_table_add_column.go",
         "alter_table_add_constraint.go",
+        "alter_table_alter_column_add_identity.go",
         "alter_table_alter_column_drop_not_null.go",
         "alter_table_alter_column_drop_stored.go",
+        "alter_table_alter_column_identity.go",
         "alter_table_alter_column_set_default.go",
+        "alter_table_alter_column_set_identity.go",
         "alter_table_alter_column_set_not_null.go",
         "alter_table_alter_column_set_on_update.go",
+        "alter_table_alter_column_set_visible.go",
         "alter_table_alter_column_type.go",
         "alter_table_alter_primary_key.go",
         "alter_table_drop_column.go",
         "alter_table_drop_constraint.go",
         "alter_table_rename_column.go",
+        "alter_table_rename_constraint.go",
         "alter_table_set_rls_mode.go",
+        "alter_table_set_schema.go",
+        "alter_table_set_storage_param.go",
         "alter_table_validate_constraint.go",
         "comment_on.go",
         "configure_zone.go",
@@ -103,8 +111,10 @@ go_library(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
+        "//pkg/sql/sem/semenumpb",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
@@ -113,9 +123,10 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/storageparam",
         "//pkg/sql/storageparam/indexstorageparam",
+        "//pkg/sql/storageparam/tablestorageparam",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/vecpb",
+        "//pkg/sql/vecindex/vecsettings",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
@@ -138,4 +149,9 @@ go_test(
         "//pkg/sql/sem/tree",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+disallowed_imports_test(
+    "scbuildstmt",
+    ["//pkg/sql/vecindex"],
 )

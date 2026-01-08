@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -53,7 +55,14 @@ var tryTimeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"cloudstorage.azure.try.timeout",
 	"the timeout for individual retry attempts in Azure operations",
-	60*time.Second)
+	0)
+
+var reuseSession = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.azure.session_reuse.enabled",
+	"persist the last opened azure client and re-use it when opening a new client with the same argument (some settings may take 2mins to take effect)",
+	true,
+)
 
 // A note on Azure authentication:
 //
@@ -134,6 +143,7 @@ func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
+	conf.URI = uri.String()
 	auth, err := azureAuthMethod(uri, &azureURL)
 	if err != nil {
 		return conf, err
@@ -212,6 +222,21 @@ type azureStorage struct {
 	container *container.Client
 	prefix    string
 	settings  *cluster.Settings
+	uri       string // original URI used to construct this storage
+}
+
+type azCacheKey struct {
+	conf    cloudpb.ExternalStorage_Azure
+	envFile string
+	envID   string
+}
+
+var azClientCache struct {
+	syncutil.Mutex
+	// TODO(dt): make this an >1 item cache e.g. add a FIFO ring.
+	key    azCacheKey
+	set    time.Time
+	client *service.Client
 }
 
 var _ cloud.ExternalStorage = &azureStorage{}
@@ -224,6 +249,7 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
+
 	env, err := azure.EnvironmentFromName(conf.Environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
@@ -256,6 +282,35 @@ func makeAzureStorage(
 	opts.Retry.TryTimeout = tryTimeout.Get(&args.Settings.SV)
 
 	var azClient *service.Client
+
+	clientID, _ := envutil.ExternalEnvString("AZURE_CLIENT_ID", 0)
+	cacheKey := azCacheKey{
+		conf:    *conf,
+		envFile: credFileEnv(),
+		envID:   clientID,
+	}
+	cacheKey.conf.Prefix = "" // Prefix is not part of the client identity.
+
+	if reuseSession.Get(&args.Settings.SV) {
+		func() {
+			azClientCache.Lock()
+			defer azClientCache.Unlock()
+			if cached := azClientCache.client; cached != nil && azClientCache.key == cacheKey && timeutil.Since(azClientCache.set) < 2*time.Minute {
+				azClient = cached
+			}
+		}()
+		if azClient != nil {
+			return &azureStorage{
+				conf:      conf,
+				ioConf:    args.IOConf,
+				container: azClient.NewContainerClient(conf.Container),
+				prefix:    conf.Prefix,
+				settings:  args.Settings,
+				uri:       dest.URI,
+			}, nil
+		}
+	}
+
 	switch conf.Auth {
 	case cloudpb.AzureAuth_LEGACY:
 		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
@@ -299,12 +354,21 @@ func makeAzureStorage(
 		return nil, errors.Errorf("unsupported value %s for %s", conf.Auth, cloud.AuthParam)
 	}
 
+	if reuseSession.Get(&args.Settings.SV) {
+		azClientCache.Lock()
+		defer azClientCache.Unlock()
+		azClientCache.key = cacheKey
+		azClientCache.client = azClient
+		azClientCache.set = timeutil.Now()
+	}
+
 	return &azureStorage{
 		conf:      conf,
 		ioConf:    args.IOConf,
 		container: azClient.NewContainerClient(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  args.Settings,
+		uri:       dest.URI,
 	}, nil
 }
 
@@ -317,6 +381,7 @@ func (s *azureStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:    cloudpb.ExternalStorageProvider_azure,
 		AzureConfig: s.conf,
+		URI:         s.uri,
 	}
 }
 
@@ -399,14 +464,17 @@ func (s *azureStorage) ReadFile(
 	return r, r.Size, nil
 }
 
-func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *azureStorage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.List")
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
-	pager := s.container.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &dest})
+	pager := s.container.NewListBlobsHierarchyPager(opts.Delimiter, &container.ListBlobsHierarchyOptions{Prefix: &dest})
 	for pager.More() {
 		response, err := pager.NextPage(ctx)
 
@@ -414,11 +482,17 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
 		for _, blob := range response.Segment.BlobPrefixes {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
+			if *blob.Name <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}

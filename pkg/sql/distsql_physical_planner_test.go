@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -278,6 +277,10 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				// Probably this test could work in shared-process mode, but
+				// it's occasionally flaking there and doesn't seem worth
+				// investigating since we're touching the ranges directly.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
@@ -298,7 +301,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
+	tc.ApplicationLayer(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Force the DistSQL on this connection.
 	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always;`)
@@ -921,6 +924,11 @@ func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	localityTag := func(nodeID int) string {
+		// Example output: 1: "x=1,y=1", 2: "x=1,y=0", 3: "x=2,y=1"
+		return fmt.Sprintf("x=%d,y=%d", (nodeID/3)+1, nodeID%2)
+	}
+
 	testCases := []struct {
 		ranges    []testSpanResolverRange
 		deadNodes []int
@@ -931,7 +939,11 @@ func TestPartitionSpans(t *testing.T) {
 		// the span is actually a point lookup.
 		spans [][2]string
 
-		locFilter string
+		// Note that each node's filter is determined by localityTag().
+		locFilter []string
+
+		// Planning should not error with strict locality filtering.
+		strictCompatible bool
 
 		// expected result: a map of node to list of spans.
 		partitions      map[int][][2]string
@@ -1243,7 +1255,7 @@ func TestPartitionSpans(t *testing.T) {
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=1",
+			locFilter: []string{"x=1"}, // nodes 1 and 2 should match this.
 			partitions: map[int][][2]string{
 				1: {{"A1", "B"}, {"C", "C1"}},
 				2: {{"B", "C"}, {"D1", "X"}},
@@ -1278,7 +1290,7 @@ func TestPartitionSpans(t *testing.T) {
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "y=0",
+			locFilter: []string{"y=0"}, // Even nodes should match this.
 			partitions: map[int][][2]string{
 				2: {{"A1", "C1"}},
 				4: {{"D1", "X"}},
@@ -1310,7 +1322,7 @@ func TestPartitionSpans(t *testing.T) {
 			gatewayNode: 7,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=3",
+			locFilter: []string{"x=3"}, // Node 6 - 8 should match this.
 			partitions: map[int][][2]string{
 				6: {{"B", "C1"}},
 				7: {{"A1", "B"}, {"D1", "X"}},
@@ -1345,7 +1357,7 @@ func TestPartitionSpans(t *testing.T) {
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=3,y=1",
+			locFilter: []string{"x=3,y=1"}, // node 7 should match this. gateway node 1 is ineligible.
 			partitions: map[int][][2]string{
 				7: {{"A1", "C1"}, {"D1", "X"}},
 			},
@@ -1363,6 +1375,76 @@ func TestPartitionSpans(t *testing.T) {
 				},
 				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM: 4,
+				},
+				totalPartitionSpans: 4,
+			},
+		},
+
+		// 13: filter with multiple localities. Essentially the same as test case 9,
+		// except passing a locality that matches node 3.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:            [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter:        []string{"x=1", "x=2"}, // all nodes should match this
+			strictCompatible: true,
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
+			},
+		},
+		// 14: filter with multiple hierarchical localities.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:            [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter:        []string{"x=1,y=1", "x=1,y=0", "x=2,y=1"}, // 1, 2, 3
+			strictCompatible: true,
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
@@ -1387,7 +1469,7 @@ func TestPartitionSpans(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
 		var l roachpb.Locality
-		require.NoError(t, l.Set(fmt.Sprintf("x=%d,y=%d", (i/3)+1, i%2)))
+		require.NoError(t, l.Set(localityTag(i)))
 		desc := &roachpb.NodeDescriptor{
 			NodeID:   roachpb.NodeID(sqlInstanceID),
 			Address:  util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
@@ -1406,6 +1488,21 @@ func TestPartitionSpans(t *testing.T) {
 		}
 
 		nodeDescs = append(nodeDescs, desc)
+	}
+
+	stringifyPartition := func(partitions []SpanPartition) map[int][][2]string {
+		resMap := make(map[int][][2]string)
+		for _, p := range partitions {
+			if _, ok := resMap[int(p.SQLInstanceID)]; ok {
+				t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
+			}
+			var spans [][2]string
+			for _, s := range p.Spans {
+				spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+			}
+			resMap[int(p.SQLInstanceID)] = spans
+		}
+		return resMap
 	}
 
 	for testIdx, tc := range testCases {
@@ -1464,9 +1561,11 @@ func TestPartitionSpans(t *testing.T) {
 				nodeDescs: mockGossip,
 			}
 
-			var locFilter roachpb.Locality
-			if tc.locFilter != "" {
-				require.NoError(t, locFilter.Set(tc.locFilter))
+			var locFilters []roachpb.Locality
+			for _, filter := range tc.locFilter {
+				locFilter := roachpb.Locality{}
+				require.NoError(t, locFilter.Set(filter))
+				locFilters = append(locFilters, locFilter)
 			}
 			evalCtx := &eval.Context{
 				Codec: s.Codec(),
@@ -1478,7 +1577,7 @@ func TestPartitionSpans(t *testing.T) {
 			}
 			planCtx := dsp.NewPlanningCtxWithOracle(
 				ctx, &extendedEvalContext{Context: *evalCtx}, nil, /* planner */
-				nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilter,
+				nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, NoStrictLocalityFiltering,
 			)
 			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
@@ -1490,6 +1589,7 @@ func TestPartitionSpans(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			countRanges := func(parts []SpanPartition) (count int) {
 				for _, sp := range parts {
 					ri := tsp.NewSpanResolverIterator(nil, nil)
@@ -1525,25 +1625,42 @@ func TestPartitionSpans(t *testing.T) {
 					tc.partitionState, *planCtx.spanPartitionState)
 			}
 
-			resMap := make(map[int][][2]string)
-			for _, p := range partitions {
-				if _, ok := resMap[int(p.SQLInstanceID)]; ok {
-					t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
-				}
-				var spans [][2]string
-				for _, s := range p.Spans {
-					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
-				}
-				resMap[int(p.SQLInstanceID)] = spans
-			}
-
 			recording := getRecAndFinish()
 			for _, expectedMsg := range tc.partitionStates {
 				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
 			}
 
+			resMap := stringifyPartition(partitions)
+
 			if !reflect.DeepEqual(resMap, tc.partitions) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
+
+			// Test strict locality filtering if applicable.
+			if len(locFilters) > 0 {
+				// create new ctx and evalCtx to avoid spanUseAfterFinish panic.
+				ctxLoc := context.Background()
+				evalCtxLoc := &eval.Context{
+					Codec: s.Codec(),
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+						SessionData: sessiondatapb.SessionData{
+							DistsqlPlanGatewayBias: 2,
+						},
+					}),
+				}
+				planCtxStrict := dsp.NewPlanningCtxWithOracle(
+					ctxLoc, &extendedEvalContext{Context: *evalCtxLoc}, nil, /* planner */
+					nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, true, /* strictFiltering */
+				)
+				planCtxStrict.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
+
+				partitionsStrict, strictErr := dsp.PartitionSpans(ctxLoc, planCtxStrict, spans, PartitionSpansBoundDefault)
+				if !tc.strictCompatible {
+					require.Error(t, strictErr, testIdx)
+				} else {
+					resMapStrict := stringifyPartition(partitionsStrict)
+					require.Equal(t, resMapStrict, tc.partitions)
+				}
 			}
 		})
 	}
@@ -1744,112 +1861,6 @@ func TestShouldPickGatewayNode(t *testing.T) {
 			shouldPick := mockDsp.shouldPickGateway(mockPlanCtx, tc.instances)
 			require.Equal(t, tc.shouldPick, shouldPick)
 		})
-	}
-}
-
-// Test that a node whose descriptor info is not accessible through gossip is
-// not used. This is to simulate nodes that have been decomisioned and also
-// nodes that have been "replaced" by another node at the same address (which, I
-// guess, is also a type of decomissioning).
-func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// The spans that we're going to plan for.
-	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
-	gatewayNode := roachpb.NodeID(2)
-	ranges := []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}}
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	codec := keys.SystemSQLCodec
-
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
-	var nodeDescs []*roachpb.NodeDescriptor
-	for i := 1; i <= 2; i++ {
-		sqlInstanceID := base.SQLInstanceID(i)
-		desc := &roachpb.NodeDescriptor{
-			NodeID:  roachpb.NodeID(sqlInstanceID),
-			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
-		}
-		if i == 2 {
-			if err := mockGossip.SetNodeDescriptor(desc); err != nil {
-				t.Fatal(err)
-			}
-		}
-		// All the nodes advertise that they are not draining. This is to
-		// simulate the "node overridden by another node at the same address"
-		// case mentioned in the test comment - for such a node, the descriptor
-		// would be taken out of the gossip data, but other datums it advertised
-		// are left in place.
-		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLDrainingKey(sqlInstanceID),
-			&execinfrapb.DistSQLDrainingInfo{
-				Draining: false,
-			},
-			0, // ttl - no expiration
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		nodeDescs = append(nodeDescs, desc)
-	}
-	tsp := &testSpanResolver{
-		nodes:  nodeDescs,
-		ranges: ranges,
-	}
-
-	st := cluster.MakeTestingClusterSettings()
-	gw := gossip.MakeOptionalGossip(mockGossip)
-	dsp := DistSQLPlanner{
-		st:                   st,
-		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
-		stopper:              stopper,
-		spanResolver:         tsp,
-		gossip:               gw,
-		nodeHealth: distSQLNodeHealth{
-			gossip: gw,
-			connHealthSystem: func(node roachpb.NodeID, _ rpcbase.ConnectionClass) error {
-				_, _, err := mockGossip.GetNodeIDAddress(node)
-				return err
-			},
-			isAvailable: func(base.SQLInstanceID) bool {
-				return true
-			},
-		},
-		codec: codec,
-	}
-
-	ctx := context.Background()
-	// This test is specific to gossip-based planning.
-	useGossipPlanning.Override(ctx, &st.SV, true)
-	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
-		nil /* planner */, nil /* txn */, FullDistribution,
-	)
-	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	resMap := make(map[base.SQLInstanceID][][2]string)
-	for _, p := range partitions {
-		if _, ok := resMap[p.SQLInstanceID]; ok {
-			t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
-		}
-		var spans [][2]string
-		for _, s := range p.Spans {
-			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
-		}
-		resMap[p.SQLInstanceID] = spans
-	}
-
-	expectedPartitions :=
-		map[base.SQLInstanceID][][2]string{
-			2: {{"A", "Z"}},
-		}
-	if !reflect.DeepEqual(resMap, expectedPartitions) {
-		t.Errorf("expected partitions:\n  %v\ngot:\n  %v", expectedPartitions, resMap)
 	}
 }
 

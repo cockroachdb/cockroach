@@ -305,7 +305,7 @@ func EndTxn(
 		// and various timestamps). We must be careful to update it with the
 		// supplied ba.Txn if we return it with an error which might be
 		// retried, as for example to avoid client-side serializable restart.
-		reply.Txn = &existingTxn
+		reply.Txn = existingTxn.Clone()
 
 		// Verify that we can either commit it or abort it (according
 		// to args.Commit), and also that the Timestamp and Epoch have
@@ -498,7 +498,19 @@ func EndTxn(
 		// committed. Doing so is only possible if we can guarantee that under no
 		// circumstances can an implicitly committed transaction be rolled back.
 		if reply.Txn.Status == roachpb.STAGING {
-			err := kvpb.NewIndeterminateCommitError(*reply.Txn)
+			// Note that reply.Txn has been updated with the Txn from the request
+			// header. But, the transaction might have been pushed since it was
+			// written. In fact, the transaction from the request header might
+			// actually be in a state that _would have_ been implicitly committed IF
+			// it had been able to write a transaction record with this new state. We
+			// use the transaction record from disk to avoid erroneously attempting to
+			// commit this transaction during recovery. Attempting to commit the
+			// transaction based on the pushed timestamp would result in an assertion
+			// failure.
+			if !recordAlreadyExisted {
+				return result.Result{}, errors.AssertionFailedf("programming error: transaction in STAGING without transaction record")
+			}
+			err := kvpb.NewIndeterminateCommitError(existingTxn)
 			log.VEventf(ctx, 1, "%v", err)
 			return result.Result{}, err
 		}
@@ -707,7 +719,7 @@ func resolveLocalLocksWithPagination(
 				// If requested, replace point tombstones with range tombstones.
 				if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 					if err := storage.ReplacePointTombstonesWithRangeTombstones(
-						ctx, spanset.DisableReadWriterAssertions(readWriter),
+						ctx, spanset.DisableUndeclaredSpanAssertions(readWriter),
 						ms, update.Key, update.EndKey); err != nil {
 						return 0, 0, 0, errors.Wrapf(err,
 							"replacing point tombstones with range tombstones for write intent at %s on end transaction [%s]",
@@ -745,7 +757,7 @@ func resolveLocalLocksWithPagination(
 			// If requested, replace point tombstones with range tombstones.
 			if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
 				if err := storage.ReplacePointTombstonesWithRangeTombstones(
-					ctx, spanset.DisableReadWriterAssertions(readWriter),
+					ctx, spanset.DisableUndeclaredSpanAssertions(readWriter),
 					ms, update.Key, update.EndKey); err != nil {
 					return 0, 0, 0, errors.Wrapf(err,
 						"replacing point tombstones with range tombstones for write intent range at %s on end transaction [%s]",
@@ -1265,6 +1277,22 @@ func TestingSplitTrigger(
 var splitScansRightForStatsFirst = metamorphic.ConstantWithTestBool(
 	"split-scans-right-for-stats-first", false)
 
+// DisableMetamorphicSplitScansRightForStatsFirst disables the
+// splitScansRightForStatsFirst metamorphic bool for the duration of a test,
+// resetting it at the end.
+func DisableMetamorphicSplitScansRightForStatsFirst(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	if splitScansRightForStatsFirst {
+		splitScansRightForStatsFirst = false
+		t.Cleanup(func() {
+			splitScansRightForStatsFirst = true
+		})
+	}
+}
+
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
 // range descriptor which computes the range's statistics.
 func makeScanStatsFn(
@@ -1280,7 +1308,7 @@ func makeScanStatsFn(
 		computeStatsFn = rditer.ComputeStatsForRangeExcludingUser
 	}
 	return func() (enginepb.MVCCStats, error) {
-		sideMS, err := computeStatsFn(ctx, sideDesc, reader, ts.WallTime)
+		sideMS, err := computeStatsFn(ctx, sideDesc, reader, fs.BatchEvalReadCategory, ts.WallTime)
 		if err != nil {
 			return enginepb.MVCCStats{}, errors.Wrapf(err,
 				"unable to compute stats for %s range after split", sideName)
@@ -1302,6 +1330,9 @@ type SplitTriggerHelperInput struct {
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
 // reduced scope that has all stats-related concerns bundled into a
 // splitStatsHelper.
+//
+// TODO(arul): consider having this function write keys to the batch in sorted
+// order, much like how destroyReplicaImpl does.
 func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
@@ -1325,8 +1356,10 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
+
 	if err := storage.MVCCPutProto(
-		ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
+		ctx, spanset.DisableForbiddenSpanAssertions(batch),
+		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
 		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
@@ -1526,7 +1559,8 @@ func splitTriggerHelper(
 		// as all replicas will be responsible for writing it locally before
 		// applying the split.
 		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_4_WriteInitialTruncStateBeforeSplitApplication) {
-			if err := kvstorage.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
+			if err := kvstorage.WriteInitialTruncState(ctx,
+				spanset.DisableForbiddenSpanAssertions(batch), split.RightDesc.RangeID); err != nil {
 				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 			}
 		}

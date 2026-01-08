@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
@@ -17,6 +18,13 @@ type ChangeOptions struct {
 	// DryRun tells the allocator not to update its internal state with the
 	// proposed pending changes.
 	DryRun bool
+	// PeriodicCall is only used for observability, for deciding when to update
+	// gauges and log a summary of what happened in the rebalancing pass. We
+	// expect that when this is true, more significant changes may be produced,
+	// and the subsequent calls in a tight loop will have diminishing returns
+	// (due to pending changes from a load perspective), and so choose not to
+	// update gauges and logs in those subsequent calls.
+	PeriodicCall bool
 }
 
 // Allocator is the interface for a distributed allocator. We expect that the
@@ -29,8 +37,17 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	// LoadSummaryForAllStores returns a human-readable string summarizing the
+	// current load state of all known stores in the cluster. This is primarily
+	// used for debugging and observability purposes.
 	LoadSummaryForAllStores(context.Context) string
-	Metrics() *MMAMetrics
+
+	// InitMetricsForLocalStore initializes and registers metrics for the
+	// specified local store with the provided metric registry. This should be
+	// called once per store during startup to register metrics for mma.
+	InitMetricsForLocalStore(
+		ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry)
+
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
 
@@ -39,46 +56,47 @@ type Allocator interface {
 	// about the nodes in the cluster is a side effect of this method.
 	SetStore(store StoreAttributesAndLocality)
 
-	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
-	// stores.
-	RemoveNodeAndStores(nodeID roachpb.NodeID) error
-
-	// UpdateFailureDetectionSummary tells the allocator about the current
-	// failure detection state for a node. A node starts in the fdOK state.
-	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
-
 	// ProcessStoreLoadMsg provides frequent the state of every store and its
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
-	// TODO(sumeer): only a subset of the fields in
-	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide
-	// the remaining.
+	// UpdateStoresStatuses updates the health and disposition for the stores in
+	// storeStatuses. Stores unknown to the allocator are ignored with logging.
+	// to the allocator are ignored with logging.
+	UpdateStoresStatuses(ctx context.Context, storeStatuses map[roachpb.StoreID]Status)
 
 	// Methods related to making changes.
 
-	// AdjustPendingChangesDisposition is optional feedback to inform the
-	// allocator of success or failure of proposed changes. For successful
-	// changes, this is a faster way to know about success than waiting for the
-	// next ProcessNodeLoadResponse from the local node. For failed changes, in
-	// the absence of this feedback, proposed changes that have not been enacted
-	// in N seconds will be garbage collected and assumed to have failed.
+	// AdjustPendingChangeDisposition is optional feedback to inform the
+	// allocator of success or failure of proposed changes to a range. For
+	// successful changes, this is a faster way to know about success than
+	// waiting for the next ProcessNodeLoadResponse from the local node. For
+	// failed changes, in the absence of this feedback, proposed changes that
+	// have not been enacted in N seconds will be garbage collected and assumed
+	// to have failed.
 	//
-	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
+	// Calls to AdjustPendingChangeDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangesDisposition(changes []ChangeID, success bool)
+	AdjustPendingChangeDisposition(ctx context.Context, change ExternalRangeChange, success bool)
 
-	// RegisterExternalChanges informs this allocator about yet to complete
-	// changes to the cluster which were not initiated by this allocator. The
-	// caller is returned a list of ChangeIDs, corresponding 1:1 to each  replica
-	// change provided as an argument. The returned list of ChangeIDs should then
-	// be used to call AdjustPendingChangesDisposition when the changes are
-	// completed, either successfully or not. All changes should correspond to the
-	// same range.
-	RegisterExternalChanges(changes []ReplicaChange) []ChangeID
+	// RegisterExternalChange informs this allocator about yet to complete
+	// changes to the cluster (on behalf of localStoreID) which were not
+	// initiated by this allocator. The ownership of all state inside change is
+	// handed off to the callee. If ok is true, the change was registered, and
+	// the caller is returned an ExternalRangeChange that it should subsequently
+	// use in a call to AdjustPendingChangeDisposition when the changes are
+	// completed, either successfully or not. If ok is false, the change was not
+	// registered.
+	RegisterExternalChange(
+		ctx context.Context, localStoreID roachpb.StoreID, change PendingRangeChange,
+	) (_ ExternalRangeChange, ok bool)
 
-	// ComputeChanges is called periodically and frequently, say every 10s.
+	// ComputeChanges is called to compute changes. The caller may use a
+	// combination of periodic calls (say every 60s) and calling in a tight
+	// loop. The tight loop is useful when the periodic call produced changes
+	// that have been enacted, and the caller want to keep producing more
+	// changes immediately.
 	//
 	// It accepts the latest StoreLeaseholderMsg for ChangeOptions.LocalStoreID.
 	//
@@ -93,7 +111,7 @@ type Allocator interface {
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
 	ComputeChanges(
-		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []PendingRangeChange
+		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []ExternalRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//
@@ -158,6 +176,23 @@ type Allocator interface {
 	//
 	// TODO(sumeer): remove once the integration is properly done.
 	KnownStores() map[roachpb.StoreID]struct{}
+
+	// BuildMMARebalanceAdvisor is called by the allocator sync to build a
+	// MMARebalanceAdvisor for the given existing store and candidates. The
+	// advisor should be later passed to IsInConflictWithMMA to determine if a
+	// given candidate is in conflict with the existing store.
+	//
+	// TODO(sumeer): merge the above comment with the comment in the
+	// implementation.
+	BuildMMARebalanceAdvisor(existing roachpb.StoreID, cands []roachpb.StoreID) *MMARebalanceAdvisor
+
+	// IsInConflictWithMMA is called by the allocator sync to determine if the
+	// given candidate is in conflict with the existing store.
+	//
+	// TODO(sumeer): merge the above comment with the comment in the
+	// implementation.
+	IsInConflictWithMMA(
+		ctx context.Context, cand roachpb.StoreID, advisor *MMARebalanceAdvisor, cpuOnly bool) bool
 }
 
 // Avoid unused lint errors.

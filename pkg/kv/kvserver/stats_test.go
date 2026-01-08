@@ -7,7 +7,6 @@ package kvserver
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRangeStatsInit(t *testing.T) {
@@ -44,14 +44,8 @@ func TestRangeStatsInit(t *testing.T) {
 		LastUpdateNanos: 11,
 	}
 	rsl := kvstorage.MakeStateLoader(tc.repl.RangeID)
-	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
-		t.Fatal(err)
-	}
-	loadMS, err := rsl.LoadMVCCStats(ctx, tc.engine)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(ms, loadMS) {
-		t.Errorf("mvcc stats mismatch %+v != %+v", ms, loadMS)
-	}
+	require.NoError(t, rsl.SetMVCCStats(ctx, tc.stateEng, &ms))
+	loadMS, err := rsl.LoadMVCCStats(ctx, tc.stateEng)
+	require.NoError(t, err)
+	require.Equal(t, ms, loadMS)
 }

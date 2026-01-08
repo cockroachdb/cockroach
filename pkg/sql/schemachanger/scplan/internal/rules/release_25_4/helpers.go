@@ -161,11 +161,6 @@ func isWithTypeTOrHasReferences(element scpb.Element) bool {
 
 func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	switch e := element.(type) {
-	case *scpb.ColumnType:
-		if e == nil {
-			return nil, nil
-		}
-		return e.ComputeExpr, nil
 	case *scpb.ColumnComputeExpression:
 		if e == nil {
 			return nil, nil
@@ -251,7 +246,7 @@ func isColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnType, *scpb.ColumnNotNull:
 		return true
-	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
+	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn, *scpb.ColumnHidden:
 		return true
 	}
 	return isColumnTypeDependent(e)

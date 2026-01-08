@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -48,18 +47,16 @@ type mmaStoreRebalancer struct {
 	store *mmaStore
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
-	sp    *storepool.StorePool
 	as    *mmaintegration.AllocatorSync
 }
 
 func newMMAStoreRebalancer(
-	s *Store, mma mmaprototype.Allocator, st *cluster.Settings, sp *storepool.StorePool,
+	s *Store, mma mmaprototype.Allocator, st *cluster.Settings,
 ) *mmaStoreRebalancer {
 	return &mmaStoreRebalancer{
 		store: (*mmaStore)(s),
 		mma:   mma,
 		st:    st,
-		sp:    sp,
 		as:    s.cfg.AllocatorSync,
 	}
 }
@@ -87,11 +84,13 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 
 			// Keeps rebalancing until no changes are computed. Then exit and await
 			// for the next interval.
+			periodicCall := true
 			for {
-				attemptedChanges := m.rebalance(ctx)
+				attemptedChanges := m.rebalance(ctx, periodicCall)
 				if !attemptedChanges {
 					break
 				}
+				periodicCall = false
 			}
 		}
 	}
@@ -125,7 +124,8 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 // signal to the caller that it should continue calling rebalance. Note that
 // rebalance may return true if errors happen in the process and fail to apply
 // the changes successfully.
-func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
+func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) bool {
+	m.mma.UpdateStoresStatuses(ctx, m.as.GetMMAStoreStatuses())
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
@@ -135,6 +135,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 
 	changes := m.mma.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
+		PeriodicCall: periodicCall,
 	})
 
 	// TODO(wenyihu6): add allocator sync and post apply here
@@ -150,17 +151,17 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 // applyChange safely applies a single change to the store. It handles the case
 // where the replica might not exist and provides proper error handling.
 func (m *mmaStoreRebalancer) applyChange(
-	ctx context.Context, change mmaprototype.PendingRangeChange,
+	ctx context.Context, change mmaprototype.ExternalRangeChange,
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangesAsFailed(change.ChangeIDs())
+		m.as.MarkChangeAsFailed(ctx, change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
 	var err error
 	switch {
-	case change.IsTransferLease():
+	case change.IsPureTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
@@ -169,13 +170,13 @@ func (m *mmaStoreRebalancer) applyChange(
 	}
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
-	m.as.PostApply(changeID, err == nil /*success*/)
+	m.as.PostApply(ctx, changeID, err == nil /*success*/)
 	return err
 }
 
 // applyLeaseTransfer applies a lease transfer change.
 func (m *mmaStoreRebalancer) applyLeaseTransfer(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	return repl.AdminTransferLease(
 		ctx,
@@ -186,7 +187,7 @@ func (m *mmaStoreRebalancer) applyLeaseTransfer(
 
 // applyReplicaChanges applies replica membership changes.
 func (m *mmaStoreRebalancer) applyReplicaChanges(
-	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
 	// TODO(mma): We should be setting a timeout on the ctx here, in the case
 	// where rebalancing takes a long time (stuck behind other snapshots).

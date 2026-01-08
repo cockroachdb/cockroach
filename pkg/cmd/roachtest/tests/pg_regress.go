@@ -104,13 +104,15 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		`ALTER ROLE ALL SET create_table_with_schema_locked=false`,
 		`CREATE USER test_admin`,
 		`GRANT admin TO test_admin`,
+		`SET disable_wait_for_jobs_notice=true`,
+		`ALTER ROLE ALL SET disable_wait_for_jobs_notice=true`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{})
+	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{DisallowUnsafeInternals: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +151,8 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	initPGRegress(ctx, t, c)
 
 	node := c.Node(1)
-	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{})
+	// psql doesn't support the CRDB specific "allow_unsafe_internals" parameter.
+	urls, err := c.InternalPGUrl(ctx, t.L(), node, roachprod.PGURLOptions{DisallowUnsafeInternals: true})
 	if err != nil {
 		t.Fatal(err)
 	}

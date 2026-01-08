@@ -190,13 +190,16 @@ var localClusterRegex = regexp.MustCompile(`^local(|-[a-zA-Z0-9\-]+)$`)
 // establishing a remote session.
 // See https://github.com/openssh/openssh-portable/blob/86bdd385/ssh_config.5#L1123-L1130
 var DefaultPubKeyNames = []string{
+	// google_compute_engine is listed first because it's typically not
+	// passphrase-protected, avoiding passphrase prompts when connecting to GCE
+	// VMs if the ssh-agent is slow to respond.
+	"google_compute_engine",
 	"id_rsa",
 	"id_ecdsa",
 	"id_ecdsa_sk",
 	"id_ed25519",
 	"id_ed25519_sk",
 	"id_dsa",
-	"google_compute_engine",
 }
 
 // SSHPublicKeyPath returns the path to the default public key expected by

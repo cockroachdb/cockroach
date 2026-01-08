@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"net"
-	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -931,7 +932,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
-		pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+		pprofutil.Do(ctx, worker, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_RAFT, "remote_node_id", toNodeID.String())
 	}(ctx)
 	return true
 }

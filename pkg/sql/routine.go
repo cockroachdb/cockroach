@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -325,12 +327,23 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
-		func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
+		func(plan tree.RoutinePlan, builder tree.RoutineStatsBuilder, stmtForDistSQLDiagram string, isFinalPlan bool) error {
 			stmtIdx++
 			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 			ctx, sp := tracing.ChildSpan(ctx, opName)
 			defer sp.Finish()
-
+			var statsBuilder *sqlstats.RecordedStatementStatsBuilder
+			var latencyRecorder *sqlstats.LatencyRecorder
+			if builder != nil {
+				if builderWithRecorder, ok := builder.(*sqlstats.StatsBuilderWithLatencyRecorder); !ok {
+					if buildutil.CrdbTestBuild {
+						panic("Statement stats builder is not of expected type")
+					}
+				} else {
+					statsBuilder = builderWithRecorder.StatsBuilder
+					latencyRecorder = builderWithRecorder.LatencyRecorder
+				}
+			}
 			var w rowResultWriter
 			var openCursor bool
 			switch {
@@ -365,13 +378,45 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 					return err
 				}
 			}
-
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+			if statsBuilder != nil {
+				defer func() {
+					flags := plan.(*planComponents).flags
+					sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEnd)
+					if g.p.statsCollector == nil {
+						if buildutil.CrdbTestBuild {
+							panic("No stats collector exists on the planner, cannot record statement stats")
+						}
+						log.Dev.Error(ctx, "No stats collector exists on the planner, cannot record statement stats")
+						return
+					}
+					stmtStats := statsBuilder.
+						SessionID(g.p.ExtendedEvalContext().SessionID).
+						QueryID(g.p.execCfg.GenerateID()).
+						LatencyRecorder(latencyRecorder).
+						PlanMetadata(
+							flags.IsSet(planFlagGeneric),
+							flags.ShouldBeDistributed(),
+							flags.IsSet(planFlagVectorized),
+							flags.IsSet(planFlagImplicitTxn),
+							flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan),
+						).
+						QueryTags(g.p.stmt.QueryTags).
+						Build()
+					g.p.statsCollector.RecordStatement(ctx,
+						stmtStats,
+					)
+				}()
+			}
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartExec)
+			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram, statsBuilder)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndExec)
 			if err != nil {
+				statsBuilder.StatementError(err)
 				return err
 			}
+			statsBuilder.QueryLevelStats(queryStats.bytesRead, queryStats.rowsRead, queryStats.rowsWritten, queryStats.kvCPUTimeNanos.Nanoseconds())
 			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)
@@ -460,12 +505,19 @@ func (g *routineGenerator) handleException(ctx context.Context, err error) error
 			g.reset(ctx, g.p, branch, args)
 
 			// Configure stepping for volatile routines so that mutations made by the
-			// invoking statement are visible to the routine.
+			// invoking statement are visible to the routine. Make sure to also step
+			// before caching the read sequence number, since the read sequence number
+			// may be part of "ignored" list set when restoring the savepoint above.
 			var prevSteppingMode kv.SteppingMode
 			var prevSeqNum enginepb.TxnSeq
 			txn := g.p.Txn()
 			if g.expr.EnableStepping {
 				prevSteppingMode = txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+				stepErr := txn.Step(ctx, false /* allowReadTimestampStep */)
+				if stepErr != nil {
+					// This error is unexpected, so return immediately.
+					return errors.CombineErrors(err, errors.WithAssertionFailure(stepErr))
+				}
 				prevSeqNum = txn.GetReadSeqNum()
 			}
 

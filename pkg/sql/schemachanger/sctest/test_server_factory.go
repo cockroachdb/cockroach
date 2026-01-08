@@ -117,8 +117,6 @@ func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) T
 				UseTransactionalDescIDGenerator: true,
 			},
 		},
-		// TODO(postamar): remove this
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 	if f.server != nil {
 		args.Knobs.Server = f.server

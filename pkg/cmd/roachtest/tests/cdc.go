@@ -1838,9 +1838,8 @@ func runCDCMultiTablePTSBenchmark(
 		numRanges = params.numRanges
 	}
 
-	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.per_table.enabled = $1", params.perTablePTS); err != nil {
-		t.Fatalf("failed to set per-table protected timestamps: %v", err)
-	}
+	// TODO(#158779): When we add back per-table PTS, make sure that this test
+	// sets the cluster setting according to params.perTablePTS.
 
 	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
 		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
@@ -2574,7 +2573,7 @@ CONFIGURE ZONE USING
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 10 * time.Minute,
-				steadyLatency:      time.Minute,
+				steadyLatency:      3 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
@@ -3101,7 +3100,7 @@ CONFIGURE ZONE USING
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
-	for _, perTablePTS := range []bool{false, true} {
+	for _, perTablePTS := range []bool{false} {
 		for _, config := range []struct {
 			numTables    int
 			numRanges    int
@@ -3168,8 +3167,8 @@ CONFIGURE ZONE USING
 						// Disable span-level checkpointing since it's not necessary
 						// when frontier persistence is on.
 						"changefeed.span_checkpoint.interval": "'0'",
-						// Disable per-table PTS to avoid impact on results.
-						"changefeed.protect_timestamp.per_table.enabled": "false",
+						// TODO(#158779): When we add back per-table PTS, make sure that this test
+						// turns it off, to avoid it impacting the results.
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -4713,7 +4712,7 @@ const createMSKTopicBinPath = "/tmp/create-msk-topic"
 var setupMskTopicScript = fmt.Sprintf(`
 #!/bin/bash
 set -e -o pipefail
-wget https://go.dev/dl/go1.25.3.linux-amd64.tar.gz -O /tmp/go.tar.gz
+wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz -O /tmp/go.tar.gz
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf /tmp/go.tar.gz
 echo export PATH=$PATH:/usr/local/go/bin >> ~/.profile

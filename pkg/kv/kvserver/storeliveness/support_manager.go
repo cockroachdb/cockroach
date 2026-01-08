@@ -34,7 +34,7 @@ var Enabled = settings.RegisterBoolSetting(
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
-	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+	EnqueueMessage(ctx context.Context, msg slpb.Message) (sent bool)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -58,6 +58,7 @@ type SupportManager struct {
 }
 
 var _ Fabric = (*SupportManager)(nil)
+var _ SupportStatus = (*SupportManager)(nil)
 
 // NewSupportManager creates a new Store Liveness SupportManager. The main
 // goroutine that processes Store Liveness messages is initialized
@@ -115,21 +116,36 @@ var _ MessageHandler = (*SupportManager)(nil)
 // SupportFor implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
-	ss := sm.supporterStateHandler.getSupportFor(id)
+	ss := sm.supporterStateHandler.getSupportFor(id).SupportState
 	// An empty expiration implies support has expired.
 	return ss.Epoch, !ss.Expiration.IsEmpty()
 }
 
+// SupportState implements the SupportStatus interface.
+func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.ClockTimestamp) {
+	ss := sm.supporterStateHandler.getSupportFor(id)
+	// If we've never seen this store, return StateUnknown.
+	if ss.empty() {
+		return StateUnknown, hlc.ClockTimestamp{}
+	}
+	// If the expiration is non-empty, we're currently supporting the store.
+	if !ss.Expiration.IsEmpty() {
+		return StateSupporting, ss.lastSupportWithdrawnTime
+	}
+	// Otherwise, support has been withdrawn.
+	return StateNotSupporting, ss.lastSupportWithdrawnTime
+}
+
 // InspectSupportFrom implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFrom() slpb.SupportStatesPerStore {
-	supportStates := sm.requesterStateHandler.exportAllSupportFrom()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFrom() slpb.InspectSupportFromStatesPerStore {
+	supportFromStates := sm.requesterStateHandler.exportAllSupportFrom()
+	return slpb.InspectSupportFromStatesPerStore{StoreID: sm.storeID, SupportFromStates: supportFromStates}
 }
 
 // InspectSupportFor implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFor() slpb.SupportStatesPerStore {
-	supportStates := sm.supporterStateHandler.exportAllSupportFor()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFor() slpb.InspectSupportForStatesPerStore {
+	supportForStates := sm.supporterStateHandler.exportAllSupportFor()
+	return slpb.InspectSupportForStatesPerStore{StoreID: sm.storeID, SupportForStates: supportForStates}
 }
 
 // SupportFrom implements the Fabric interface. It delegates the response to the
@@ -313,17 +329,20 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
+	beforePersist := timeutil.Now()
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.HeartbeatPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
 	successes := 0
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); sent {
+		if sent := sm.sender.EnqueueMessage(ctx, msg); sent {
 			successes++
 		} else {
 			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
@@ -352,24 +371,28 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
+	// NB: updating the support state involves a few writes under the hood, so we
+	// do them using a batch.
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
+	beforePersist := timeutil.Now()
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.KvExec.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.SupportWithdrawPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	log.KvExec.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 	if sm.withdrawalCallback != nil {
 		beforeProcess := timeutil.Now()
 		sm.withdrawalCallback(supportWithdrawnForStoreIDs)
-		afterProcess := timeutil.Now()
-		processDur := afterProcess.Sub(beforeProcess)
+		processDur := timeutil.Since(beforeProcess)
 		if processDur > minCallbackDurationToRecord {
 			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
 		}
@@ -412,11 +435,14 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
+	beforePersist := timeutil.Now()
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.KvExec.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.MessageHandlePersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	sm.metrics.MessageHandleSuccesses.Inc(int64(len(msgs)))
@@ -424,7 +450,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 
 	for _, response := range responses {
-		_ = sm.sender.SendAsync(ctx, response)
+		_ = sm.sender.EnqueueMessage(ctx, response)
 	}
 	log.KvExec.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
@@ -432,7 +458,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 // maxReceiveQueueSize is the maximum number of messages the receive queue can
 // store. If message consumption is slow (e.g. due to a disk stall) and the
 // queue reaches maxReceiveQueueSize, incoming messages will be dropped.
-const maxReceiveQueueSize = 10000
+const maxReceiveQueueSize = 10_000
 
 var receiveQueueSizeLimitReachedErr = errors.Errorf("store liveness receive queue is full")
 

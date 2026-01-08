@@ -16,7 +16,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )
 
@@ -30,6 +30,6 @@ go_test(
         "//pkg/util/yamlutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@in_yaml_go_yaml_v4//:yaml",
     ],
 )

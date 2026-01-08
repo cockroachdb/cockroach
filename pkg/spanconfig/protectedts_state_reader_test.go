@@ -29,7 +29,7 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 
 	mkRecordAndAddToState := func(state *ptpb.State, ts hlc.Timestamp, target *ptpb.Target) {
 		recordID := uuid.MakeV4()
-		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
+		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts,
 			jobsprotectedts.Jobs, target)
 		state.Records = append(state.Records, *rec)
 	}

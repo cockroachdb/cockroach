@@ -25,6 +25,8 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false --
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] Skipping fetching goroutine stacks. Enable via the --include-goroutine-stacks flag.
+[node 1] requesting stacks with labels... received response... writing binary output: debug/nodes/1/stacks_with_labels.txt... done
+[node 1] requesting goroutine profile... received response... writing binary output: debug/nodes/1/stacks.pprof... done
 [node 1] requesting heap profile... received response... writing binary output: debug/nodes/1/heap.pprof... done
 [node 1] requesting engine stats... received response... writing binary output: debug/nodes/1/lsm.txt... done
 [node 1] requesting heap profile list... received response... done

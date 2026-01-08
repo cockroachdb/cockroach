@@ -241,6 +241,11 @@ const (
 	// meta1 and meta2.
 	V26_1_InstallMeta2StaticSplitPoint
 
+	// V26_1_AddTableStatisticsLocksTable adds the system.table_statistics_locks
+	// table. The table is used to limit the number of concurrent automatic
+	// table statistics collections.
+	V26_1_AddTableStatisticsLocksTable
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -311,6 +316,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V26_1_InstallMeta2StaticSplitPoint: {Major: 25, Minor: 4, Internal: 4},
 
+	V26_1_AddTableStatisticsLocksTable: {Major: 25, Minor: 4, Internal: 6},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -322,11 +329,11 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V25_2
+const MinSupported Key = V25_4
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
-const PreviousRelease Key = V25_3
+const PreviousRelease Key = V25_4
 
 // V26_1 is a placeholder that will eventually be replaced by the actual 26.1
 // version Key, but in the meantime it points to the latest Key. The placeholder

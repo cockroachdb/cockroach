@@ -220,6 +220,7 @@ func (s *FileSSTSink) Write(ctx context.Context, resp ExportedSpan) (roachpb.Key
 
 func (s *FileSSTSink) WriteWithNoData(resp ExportedSpan) {
 	s.completedSpans += resp.CompletedSpans
+	s.flushedRevStart.Forward(resp.RevStart)
 	s.midRow = false
 }
 
@@ -247,6 +248,7 @@ func (s *FileSSTSink) Flush(ctx context.Context) error {
 		if s.completedSpans != 0 {
 			progDetails := backuppb.BackupManifest_Progress{
 				CompletedSpans: s.completedSpans,
+				RevStartTime:   s.flushedRevStart,
 			}
 			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 			details, err := gogotypes.MarshalAny(&progDetails)
@@ -259,6 +261,7 @@ func (s *FileSSTSink) Flush(ctx context.Context) error {
 				return ctx.Err()
 			case s.conf.ProgCh <- prog:
 			}
+			s.flushedRevStart.Reset()
 			s.completedSpans = 0
 		}
 		return nil
@@ -361,7 +364,7 @@ func (s *FileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachp
 
 	empty := true
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
-		if err := s.pacer.Pace(ctx); err != nil {
+		if _, err := s.pacer.Pace(ctx); err != nil {
 			return nil, err
 		}
 		if valid, err := iter.Valid(); !valid || err != nil {

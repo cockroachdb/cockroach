@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"reflect"
-	"runtime/pprof"
 	"runtime/trace"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -131,18 +132,29 @@ func (r *Replica) SendWithWriteBytes(
 	defer r.MeasureReqCPUNanos(ctx, startCPU)
 
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
-		defer pprof.SetGoroutineLabels(ctx)
-		// Note: the defer statement captured the previous context.
-		var lbls pprof.LabelSet
+		var reset func()
 		if tenantIDOrZero.IsSet() {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
+			ctx, reset = pprofutil.SetProfilerLabels(ctx, "range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
 		} else {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID())
+			ctx, reset = pprofutil.SetProfilerLabels(ctx, "range_str", r.rangeStr.ID())
 		}
-		ctx = pprof.WithLabels(ctx, lbls)
-		pprof.SetGoroutineLabels(ctx)
+		defer reset()
 	}
+
 	if trace.IsEnabled() {
+		foundLabel := ""
+		for i, l := range ba.ProfileLabels {
+			if i%2 == 0 && l == workloadid.ProfileTag && i < len(ba.ProfileLabels)-1 {
+				// This label is set in conn_executor_exec if tracing is active.
+				foundLabel = ba.ProfileLabels[i+1]
+				break
+			}
+		}
+		// This construction avoids calling `defer` in a loop which is
+		// not permitted by our linter.
+		if foundLabel != "" {
+			defer trace.StartRegion(ctx, foundLabel).End()
+		}
 		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
 	}
 	// Add the range log tag.
@@ -206,6 +218,10 @@ func (r *Replica) SendWithWriteBytes(
 		}
 	}
 
+	cpuTime := grunning.Difference(startCPU, grunning.Time())
+	if br != nil {
+		br.CPUTime = int64(cpuTime)
+	}
 	if pErr == nil {
 		// Return range information if it was requested. Note that we don't return it
 		// on errors because the code doesn't currently support returning both a br
@@ -213,7 +229,7 @@ func (r *Replica) SendWithWriteBytes(
 		// ways of returning range info.
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 		// Handle load-based splitting, if necessary.
-		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
+		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(cpuTime))
 	}
 
 	// Record summary throughput information about the batch request for

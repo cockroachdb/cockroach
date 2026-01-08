@@ -226,6 +226,15 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		return br, pErr
 	}
 
+	// Before retrying the batch in a transaction, strip the header's timestamp.
+	// It may have been set to try a follower read, but it's not allowed in a txn
+	// (see comment near Header.Timestamp). Currently, this non-transactional API
+	// is used for follower reads only by KVNemesis.
+	//
+	// We can end up here if the batch contains transactional requests and spans
+	// multiple ranges.
+	ba.Header.Timestamp = hlc.Timestamp{}
+
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
@@ -668,8 +677,14 @@ func (db *DB) AdminSplit(
 func (db *DB) AdminScatter(
 	ctx context.Context, key roachpb.Key, maxSize int64,
 ) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, roachpb.Span{Key: key, EndKey: key.Next()}, maxSize)
+}
+
+func (db *DB) sendAdminScatterRequest(
+	ctx context.Context, span roachpb.Span, maxSize int64,
+) (*kvpb.AdminScatterResponse, error) {
 	scatterReq := &kvpb.AdminScatterRequest{
-		RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+		RequestHeader:   kvpb.RequestHeaderFromSpan(span),
 		RandomizeLeases: true,
 		MaxSize:         maxSize,
 	}
@@ -682,6 +697,13 @@ func (db *DB) AdminScatter(
 		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
 	return resp, nil
+}
+
+// AdminScatterSpan scatters the ranges that overlap the specified span.
+func (db *DB) AdminScatterSpan(
+	ctx context.Context, span roachpb.Span,
+) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, span, 0 /* maxSize */)
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.

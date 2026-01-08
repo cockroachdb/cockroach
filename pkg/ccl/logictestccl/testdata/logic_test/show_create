@@ -91,7 +91,6 @@ r1  CREATE FUNCTION public.r1(i INT8)
       SELECT 1;
     $$
 
-skipif config local-mixed-23.1
 query TT
 SELECT * FROM [SHOW CREATE PROCEDURE r1] ORDER BY 2
 ----

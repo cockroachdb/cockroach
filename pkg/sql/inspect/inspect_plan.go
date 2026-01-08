@@ -177,12 +177,7 @@ func inspectPlanHook(
 
 	switch inspectStmt.Typ {
 	case tree.InspectTable, tree.InspectDatabase:
-		if !p.ExtendedEvalContext().SessionData().EnableInspectCommand {
-			return nil, nil, false, errors.WithHint(
-				pgerror.Newf(pgcode.ExperimentalFeature, "INSPECT is an experimental feature and is disabled by default"),
-				"To enable, run SET enable_inspect_command = true;",
-			)
-		}
+		// valid types.
 	default:
 		return nil, nil, false, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", inspectStmt.Typ)
 	}
@@ -207,7 +202,7 @@ func inspectPlanHook(
 		return nil, nil, false, err
 	}
 
-	if detached {
+	if detached && !p.ExtendedEvalContext().TxnImplicit {
 		fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
 			jr := makeInspectJobRecord(tree.AsString(stmt), jobID, run.checks, run.asOfTimestamp)
@@ -216,12 +211,7 @@ func inspectPlanHook(
 			); err != nil {
 				return err
 			}
-			var notice pgnotice.Notice
-			if p.ExtendedEvalContext().TxnImplicit {
-				notice = pgnotice.Newf("INSPECT job %d running in the background", jobID)
-			} else {
-				notice = pgnotice.Newf("INSPECT job %d queued; will start after the current transaction commits", jobID)
-			}
+			notice := pgnotice.Newf("INSPECT job %d queued; will start after the current transaction commits", jobID)
 			if err := p.SendClientNotice(ctx, notice, true /* immediateFlush */); err != nil {
 				return err
 			}
@@ -232,30 +222,37 @@ func inspectPlanHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		// We create the job record in the planner's transaction to ensure that
-		// the job record creation happens transactionally.
-		plannerTxn := p.InternalSQLTxn()
-
-		sj, err := TriggerJob(ctx, tree.AsString(stmt), p.ExecCfg(), plannerTxn, run.checks, run.asOfTimestamp)
+		sj, err := TriggerJob(ctx, tree.AsString(stmt), p.ExecCfg(), run.checks, run.asOfTimestamp)
 		if err != nil {
 			return err
 		}
 
-		if err = p.SendClientNotice(
-			ctx,
-			pgnotice.Newf("waiting for INSPECT job to complete: %s\nIf the statement is canceled, the job will continue in the background.", sj.ID()),
-			true, /* immediateFlush */
-		); err != nil {
+		var notice pgnotice.Notice
+		if detached {
+			notice = pgnotice.Newf("INSPECT job %d running in the background", sj.ID())
+		} else {
+			notice = pgnotice.Newf("waiting for INSPECT job to complete: %s\nIf the statement is canceled, the job will continue in the background.", sj.ID())
+		}
+		if err = p.SendClientNotice(ctx, notice, true /* immediateFlush */); err != nil {
 			return err
 		}
 
-		if err := sj.AwaitCompletion(ctx); err != nil {
+		if detached {
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID()))}
+			return nil
+		}
+
+		if err = sj.AwaitCompletion(ctx); err != nil {
 			return err
 		}
 		return sj.ReportExecutionResults(ctx, resultsCh)
 	}
 
-	return fn, jobs.InspectJobExecutionResultHeader, false, nil
+	header := jobs.InspectJobExecutionResultHeader
+	if detached {
+		header = jobs.DetachedJobExecutionResultHeader
+	}
+	return fn, header, false, nil
 }
 
 func makeInspectJobRecord(

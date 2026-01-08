@@ -641,7 +641,9 @@ func TestAvroSchemaNaming(t *testing.T) {
 		)
 
 		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfMetamorphicDBLevelChangefeed{
+			reason: "changefeed watches tables not in the default database",
+		})
 		defer closeFeed(t, movrFeed)
 
 		foo := movrFeed.(*kafkaFeed)
@@ -656,7 +658,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, fqnFeed)
 
 		foo = fqnFeed.(*kafkaFeed)
@@ -671,8 +676,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, prefixFeed)
 
 		foo = prefixFeed.(*kafkaFeed)
@@ -687,7 +694,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 		})
 
 		prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, prefixFQNFeed)
 
 		foo = prefixFQNFeed.(*kafkaFeed)
@@ -707,7 +717,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 		sqlDB.Exec(t, `ALTER TABLE movr.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
 		multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies))
+			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, multiFamilyFeed)
 		foo = multiFamilyFeed.(*kafkaFeed)
 
@@ -744,8 +757,15 @@ func TestAvroSchemaNamespace(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		noNamespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+		noNamespaceFeed := feed(t, f,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR movr.drivers WITH format=%s`,
+				changefeedbase.OptFormatAvro,
+			),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			},
+		)
 		defer closeFeed(t, noNamespaceFeed)
 
 		assertPayloads(t, noNamespaceFeed, []string{
@@ -758,7 +778,10 @@ func TestAvroSchemaNamespace(t *testing.T) {
 		require.NotContains(t, foo.registry.SchemaForSubject(`drivers-value`), `namespace`)
 
 		namespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, namespaceFeed)
 
 		foo = namespaceFeed.(*kafkaFeed)
@@ -787,7 +810,10 @@ func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
 		)
 
 		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+			`WITH format=%s`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, foo)
 
 		assertPayloads(t, foo, []string{

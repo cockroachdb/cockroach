@@ -282,9 +282,10 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 		}
 		var err error
 		ri.it, err = ri.reader.NewMVCCIterator(ri.ctx, ri.IterKind, storage.IterOptions{
-			LowerBound: ri.spans[ri.curIndex].Key,
-			UpperBound: ri.spans[ri.curIndex].EndKey,
-			KeyTypes:   ri.KeyTypes,
+			LowerBound:   ri.spans[ri.curIndex].Key,
+			UpperBound:   ri.spans[ri.curIndex].EndKey,
+			KeyTypes:     ri.KeyTypes,
+			ReadCategory: ri.ReadCategory,
 		})
 		if err != nil {
 			ri.err = err
@@ -420,6 +421,7 @@ func IterateReplicaKeySpans(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
+	readCategory fs.ReadCategory,
 	opts SelectOpts,
 	visitor func(storage.EngineIterator, roachpb.Span) error,
 ) error {
@@ -432,9 +434,10 @@ func IterateReplicaKeySpans(
 	for _, span := range spans {
 		err := func() error {
 			iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				LowerBound: span.Key,
-				UpperBound: span.EndKey,
+				KeyTypes:     storage.IterKeyTypePointsAndRanges,
+				LowerBound:   span.Key,
+				UpperBound:   span.EndKey,
+				ReadCategory: readCategory,
 			})
 			if err != nil {
 				return err

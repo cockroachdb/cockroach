@@ -427,19 +427,41 @@ func (p *queryBuilder) setSubQueryDepths(entitySlots []slotIdx) {
 }
 
 func (p *queryBuilder) setSubqueryDepth(s *subQuery, entitySlots []slotIdx) {
-	var max int
+	// First, figure out which entity binds each variable.
+	// slotToEntityProvider maps slot -> entity slot that provides it.
+	slotToEntityProvider := make(map[int]int)
+	for _, f := range p.facts {
+		if p.slotIsEntity[f.variable] {
+			// This fact is about an entity, so it might bind a variable
+			slotToEntityProvider[int(f.value)] = int(f.variable)
+		}
+	}
+
+	var maxEntitySlot int
 	s.inputSlotMappings.ForEach(func(key, _ int) {
-		if p.slotIsEntity[key] && key > max {
-			max = key
+		if p.slotIsEntity[key] {
+			if key > maxEntitySlot {
+				maxEntitySlot = key
+			}
+		} else {
+			// For non-entity variables, find which entity provides them
+			provider, hasProvider := slotToEntityProvider[key]
+			if hasProvider {
+				if provider > maxEntitySlot {
+					maxEntitySlot = provider
+				}
+			}
 		}
 	})
+
 	got := sort.Search(len(entitySlots), func(i int) bool {
-		return int(entitySlots[i]) >= max
+		return int(entitySlots[i]) >= maxEntitySlot
 	})
 	if got == len(entitySlots) {
 		panic(errors.AssertionFailedf("failed to find maximum entity in entitySlots: %v not in %v",
-			max, entitySlots))
+			maxEntitySlot, entitySlots))
 	}
+
 	s.depth = queryDepth(got + 1)
 }
 

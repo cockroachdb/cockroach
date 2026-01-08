@@ -1,9 +1,10 @@
 # LogicTest: local fakedist
 
-# Tests for creating partial table statistics with a WHERE clause.
-
+# Speed up job adoption.
 statement ok
-SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
+# Tests for creating partial table statistics with a WHERE clause.
 
 statement ok
 CREATE TABLE products (

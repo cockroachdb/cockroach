@@ -13,12 +13,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/redact"
 )
+
+var allowUnsafeSetting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.override.allow_unsafe_internals.enabled",
+	"overrides the allow_unsafe_internals session variable behavior"+
+		" as a failsafe in case of emergencies. This setting should not be"+
+		" externally visible.",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
+	settings.Sensitive)
 
 // The accessedLogLimiter is used to limit the rate of logging unsafe internal access
 // events. It is set to allow ten events per second.
@@ -48,7 +58,18 @@ func CheckInternalsAccess(
 	stmt tree.Statement,
 	ann *tree.Annotations,
 	sv *settings.Values,
+	override func() *bool,
 ) error {
+	allowUnsafe := sd.AllowUnsafeInternals
+	if override != nil && override() != nil {
+		allowUnsafe = *override()
+	}
+
+	// If the cluster setting override is set, allow without logging.
+	if allowUnsafeSetting.Get(sv) {
+		return nil
+	}
+
 	// If the querier is internal, we should allow it.
 	if sd.Internal || sd.IsInternalAppName() {
 		return nil
@@ -56,18 +77,19 @@ func CheckInternalsAccess(
 
 	q := SafeFormatQuery(stmt, ann, sv)
 	// If an override is set, allow access to this virtual table.
-	if sd.AllowUnsafeInternals {
+	if allowUnsafe {
 		// Log this access to the SENSITIVE_ACCESS channel since the override condition bypassed normal access controls.
-		if accessedLogLimiter.ShouldProcess(timeutil.Now()) {
+		if accessedLogLimiter.ShouldProcess(crtime.NowMono()) {
 			log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsAccessed{Query: q})
 		}
 		return nil
 	}
 
 	// Log this access to the SENSITIVE_ACCESS channel to show where failing internals accesses are happening.
-	if deniedLogLimiter.ShouldProcess(timeutil.Now()) {
+	if deniedLogLimiter.ShouldProcess(crtime.NowMono()) {
 		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsDenied{Query: q})
 	}
+
 	return sqlerrors.ErrUnsafeTableAccess
 }
 

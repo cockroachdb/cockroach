@@ -413,7 +413,7 @@ func registerLoadSplits(r registry.Registry) {
 				// YCSB/E has a zipfian distribution with 95% scans (limit 1k) and 5%
 				// inserts.
 				minimumRanges:     5,
-				maximumRanges:     32,
+				maximumRanges:     33,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "e",

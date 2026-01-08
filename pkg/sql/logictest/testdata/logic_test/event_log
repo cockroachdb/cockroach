@@ -1,7 +1,7 @@
 # Legacy schema changer is skipped because mutation IDs throughout log
 # entries will differ. "event_log_legacy" file is for the legacy schema changer.
 # LogicTest: !local-legacy-schema-changer
-# knob-opt: sync-event-log
+# knob-opt: sync-event-log allow-unsafe
 
 # For some reason, some of the queries produce non-deterministic results if
 # distsql_workmem value is randomized, so we'll override it to the production
@@ -245,16 +245,8 @@ ORDER BY "timestamp", info
 # Truncate a table
 ##################
 
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE a SET (schema_locked=false)
-
 statement ok
 TRUNCATE TABLE a
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE a SET (schema_locked=true)
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
@@ -488,6 +480,8 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%sql.catalog.allow_leased_descriptor%'
+AND info NOT LIKE '%sql.catalog.descriptor_lease.use_locked_timestamps.enabled%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}
@@ -508,6 +502,8 @@ AND info NOT LIKE '%sql.defaults%'
 AND info NOT LIKE '%sql.distsql%'
 AND info NOT LIKE '%sql.testing%'
 AND info NOT LIKE '%sql.stats%'
+AND info NOT LIKE '%sql.catalog.allow_leased_descriptor%'
+AND info NOT LIKE '%sql.catalog.descriptor_lease.use_locked_timestamps.enabled%'
 ORDER BY "timestamp", info
 ----
 1  {"ApplicationName": "$ internal-optInToDiagnosticsStatReporting", "DefaultValue": "true", "EventType": "set_cluster_setting", "SettingName": "diagnostics.reporting.enabled", "Statement": "SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true", "Tag": "SET CLUSTER SETTING", "User": "node", "Value": "true"}

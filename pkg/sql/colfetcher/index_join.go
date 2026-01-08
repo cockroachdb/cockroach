@@ -416,6 +416,7 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
 	trailingMeta = append(trailingMeta, *meta)
 	if !s.flowCtx.Gateway {
 		if trace := tracing.SpanFromContext(s.Ctx).GetConfiguredRecording(); trace != nil {
@@ -437,6 +438,13 @@ func (s *ColIndexJoin) GetKVPairsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.cf.getKVPairsRead()
+}
+
+// GetKVResponseCPUTime is part of the colexecop.KVReader interface.
+func (s *ColIndexJoin) GetKVResponseCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getKVCPUTime()
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.

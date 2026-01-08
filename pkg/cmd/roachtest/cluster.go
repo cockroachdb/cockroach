@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -797,7 +798,7 @@ type clusterFactory struct {
 	// counter is incremented with every new cluster. It's used as part of the cluster's name.
 	// Accessed atomically.
 	counter atomic.Uint64
-	// The registry with whom all clustered will be registered.
+	// The registry with whom all clusters will be registered.
 	r *clusterRegistry
 	// artifactsDir is the directory in which the cluster creation log file will be placed.
 	artifactsDir string
@@ -977,7 +978,7 @@ func (f *clusterFactory) newCluster(
 		if i > 1 {
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
-		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", genName+retryStr+".log")
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			log.Fatalf("%v", err)
@@ -1413,7 +1414,7 @@ func (c *clusterImpl) FetchDebugZip(
 			//
 			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			excludeFiles := "*.log,*.pprof"
+			excludeFiles := "*.log"
 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
@@ -1909,7 +1910,7 @@ func (c *clusterImpl) CreateSnapshot(
 func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error {
 	opts := vm.VolumeCreateOpts{
 		Size: c.spec.VolumeSize,
-		Type: c.spec.GCE.VolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
+		Type: c.spec.VolumeType,
 		Labels: map[string]string{
 			vm.TagUsage: "roachtest",
 		},
@@ -2721,9 +2722,6 @@ func (c *clusterImpl) InternalPGUrl(
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
-// Silence unused warning.
-var _ = (&clusterImpl{}).InternalPGUrl
-
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
 func (c *clusterImpl) ExternalPGUrl(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,
@@ -3278,7 +3276,7 @@ func randomArch(
 }
 
 // bucketVMsByProvider buckets cachedCluster.VMs by provider.
-func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
+func bucketVMsByProvider(cachedCluster *cloudcluster.Cluster) map[string][]vm.VM {
 	providerToVMs := make(map[string][]vm.VM)
 	for _, vm := range cachedCluster.VMs {
 		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
@@ -3288,7 +3286,7 @@ func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
 
 // getCachedCluster checks if the passed cluster name is present in cached clusters
 // and returns an error if not found.
-func getCachedCluster(clusterName string) (*cloud.Cluster, error) {
+func getCachedCluster(clusterName string) (*cloudcluster.Cluster, error) {
 	cachedCluster, ok := roachprod.CachedCluster(clusterName)
 	if !ok {
 		var availableClusters []string

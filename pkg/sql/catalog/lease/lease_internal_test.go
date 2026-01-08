@@ -573,12 +573,15 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 	expiration := lease.Expiration(context.Background())
 	// Acquire another lease.
-	if _, err := leaseManager.acquireNodeLease(
-		context.Background(), tableDesc.GetID(), AcquireBlock,
-	); err != nil {
-		t.Fatal(err)
-	}
-
+	func() {
+		lease.t.markAcquisitionStart(context.Background())
+		defer lease.t.markAcquisitionDone(context.Background())
+		if _, err := leaseManager.acquireNodeLease(
+			context.Background(), tableDesc.GetID(), AcquireBlock,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	// Check the name resolves to the new lease.
 	newLease, _ := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {
@@ -1257,7 +1260,7 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			resetDescriptorState(manager, tableID, tc)
 
 			// Retrieve historicalDescriptors modification times.
-			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, tc.ts)
+			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, TimestampToReadTimestamp(tc.ts))
 			require.NoError(t, err)
 
 			// Validate retrieved descriptors match expected versions.
@@ -1561,7 +1564,7 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'baz'`).Scan(&tableID)
 	descs, err := getDescriptorsFromStoreForInterval(ctx, kvDB, s.Codec(), descpb.ID(tableID),
-		beforeCreate, afterCreate)
+		beforeCreate, afterCreate, false /*isOffline */)
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
 	require.Equal(t, numRequests, 1)
@@ -1747,6 +1750,9 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	// Old versions need to be retained, since we don't have code
+	// to read them from storage in this test.
+	RetainOldVersionsForLocked.Override(ctx, &st.SV, true)
 	// Intentionally disable WaitForInitialVersion support, so that we can run
 	// historical queries at timestamps before the lease manager is fully caught
 	// up.

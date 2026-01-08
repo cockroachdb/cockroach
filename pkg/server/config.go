@@ -211,6 +211,19 @@ type BaseConfig struct {
 	// which a feature unique to the demo shell.
 	EnableDemoLoginEndpoint bool
 
+	// DisallowRootLogin when set, prevents authentication attempts by clients
+	// presenting certificates with "root" as one of the principals (CommonName
+	// or SubjectAlternativeName). This applies to both SQL client connections
+	// and RPC connections.
+	DisallowRootLogin bool
+
+	// AllowDebugUser when set, allows authentication attempts by clients
+	// presenting certificates with "debuguser" as one of the principals
+	// (CommonName or SubjectAlternativeName). This applies to both SQL client
+	// connections and RPC connections. By default, debuguser is not allowed to
+	// authenticate.
+	AllowDebugUser bool
+
 	// ReadyFn is called when the server has started listening on its
 	// sockets.
 	//
@@ -872,13 +885,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
-					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
-						switch name {
-						case "none":
+					NewFilterPolicy: func(name string) (pebble.TableFilterPolicy, error) {
+						if name == "none" {
 							return nil, nil
-						case "rocksdb.BuiltinBloomFilter":
-							return bloom.FilterPolicy(10), nil
 						}
+						if p, ok := bloom.PolicyFromName(name); ok {
+							return p, nil
+						}
+						// Ignore unknown policies.
+						log.Dev.Warningf(ctx, "ignoring unknown table filter policy %q", name)
 						return nil, nil
 					},
 				}))

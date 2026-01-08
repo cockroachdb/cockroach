@@ -51,7 +51,7 @@ func handleSchemaChangeWorkloadError(err error) error {
 	// crash.
 	if err != nil {
 		flattenedErr := errors.FlattenDetails(err)
-		if strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
+		if strings.Contains(flattenedErr, "workload run error: ***") || strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
 			return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
 		}
 	}
@@ -568,7 +568,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			return errors.Wrap(err, "failed to remove pausepoint for online restore")
 		}
 
-		if err := d.deleteUserTableSST(ctx, t.L(), dbConn, collection); err != nil {
+		if err := d.deleteSSTFromBackupLayers(ctx, t.L(), dbConn, collection); err != nil {
 			return err
 		}
 		if _, err := dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID); err != nil {

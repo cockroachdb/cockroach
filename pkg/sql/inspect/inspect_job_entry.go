@@ -25,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// TriggerJob starts an inspect job for the snapshot.
+// TriggerJob starts an inspect job for the snapshot. This always uses a fresh
+// transaction to create and start the job.
 func TriggerJob(
 	ctx context.Context,
 	jobRecordDescription string,
 	execCfg *sql.ExecutorConfig,
-	txn isql.Txn,
 	checks []*jobspb.InspectDetails_Check,
 	asOf hlc.Timestamp,
 ) (*jobs.StartableJob, error) {
@@ -55,35 +55,15 @@ func TriggerJob(
 	}
 
 	var job *jobs.StartableJob
-	if txn == nil {
-		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-			return execCfg.JobRegistry.CreateStartableJobWithTxn(ctx, &job, record.JobID, txn, record)
-		}); err != nil {
-			if job != nil {
-				if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		return execCfg.JobRegistry.CreateStartableJobWithTxn(ctx, &job, record.JobID, txn, record)
+	}); err != nil {
+		if job != nil {
+			if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
-			return nil, err
 		}
-	} else {
-		if err := func() (err error) {
-			defer func() {
-				if err == nil || job == nil {
-					return
-				}
-				if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Dev.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
-				}
-			}()
-			if err := execCfg.JobRegistry.CreateStartableJobWithTxn(ctx, &job, record.JobID, txn, record); err != nil {
-				return err
-			}
-
-			return txn.KV().Commit(ctx)
-		}(); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	if err := job.Start(ctx); err != nil {
@@ -148,7 +128,12 @@ func ChecksForTable(
 			}
 			continue
 		}
-		check := jobspb.InspectDetails_Check{Type: jobspb.InspectCheckIndexConsistency, TableID: table.GetID(), IndexID: index.GetID()}
+		check := jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckIndexConsistency,
+			TableID:      table.GetID(),
+			IndexID:      index.GetID(),
+			TableVersion: table.GetVersion(),
+		}
 		checks = append(checks, &check)
 	}
 
@@ -184,7 +169,12 @@ func checksByIndexNames(
 			return nil, pgerror.Newf(pgcode.InvalidName, "index %q on table %q is not supported for index consistency checking", index.GetName(), table.GetName())
 		}
 
-		checks = append(checks, &jobspb.InspectDetails_Check{Type: jobspb.InspectCheckIndexConsistency, TableID: table.GetID(), IndexID: index.GetID()})
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:         jobspb.InspectCheckIndexConsistency,
+			TableID:      table.GetID(),
+			IndexID:      index.GetID(),
+			TableVersion: table.GetVersion(),
+		})
 	}
 
 	return checks, nil

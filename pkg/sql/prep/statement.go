@@ -187,14 +187,14 @@ func (p *planCosts) NumCustom() int {
 // average cost of the custom plans.
 func (p *planCosts) IsGenericOptimal() bool {
 	// Check cost flags and full scan counts.
-	if gc := p.generic.FullScanCount(); gc > 0 ||
-		p.generic.HasUnboundedCardinality() ||
-		p.generic.Penalties != memo.NoPenalties {
+	genFullScans := p.generic.FullScanCount()
+	genUnboundedReads := p.generic.UnboundedReadCount()
+	if genFullScans > 0 || genUnboundedReads > 0 || p.generic.Penalties != memo.NoPenalties {
 		for i := 0; i < p.custom.length; i++ {
 			custom := &p.custom.costs[i]
 			if custom.Penalties < p.generic.Penalties ||
-				(p.generic.HasUnboundedCardinality() && !custom.HasUnboundedCardinality()) ||
-				gc > custom.FullScanCount() {
+				genFullScans > custom.FullScanCount() ||
+				genUnboundedReads > custom.UnboundedReadCount() {
 				return false
 			}
 		}
@@ -229,7 +229,7 @@ func (p *planCosts) avgCustom() memo.Cost {
 //
 // A full example:
 //
-//	custom costs: 1.5 [3]{1.25:U:0u 1.75:U:0u 1.50:U:0u}, generic cost: 4.56:U:0u
+//	custom costs: 1.5 [3]{1.25:U:0f0u 1.75:U:0f0u 1.50:U:0f0u}, generic cost: 4.56:U:0f0u
 func (p *planCosts) Summary() string {
 	var sb strings.Builder
 	sb.WriteString("custom costs: ")

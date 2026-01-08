@@ -1,10 +1,9 @@
-# LogicTest: !local-mixed-24.3 !local-mixed-25.1 !local-mixed-25.2
 # Tests for parsing/validation of the PROVISIONSRC role option.
 
 statement error role "root" cannot have a PROVISIONSRC
 ALTER ROLE root PROVISIONSRC 'ldap:ldap.example.com'
 
-statement error pq: PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods \["ldap" "jwt_token"\]
+statement error pq: PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods \["ldap" "jwt_token" "oidc"\]
 CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap.example.com'
 
 statement error pq: conflicting role options

@@ -82,7 +82,13 @@ func (ex *connExecutor) maybeAdjustTxnForDDL(ctx context.Context, stmt Statement
 					return err
 				}
 				ex.extraTxnState.upgradedToSerializable = true
-				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
+				if err := p.SendClientNotice(
+					ctx,
+					pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"),
+					false, /* immediateFlush */
+				); err != nil {
+					return err
+				}
 			} else {
 				return txnSchemaChangeErr
 			}

@@ -543,3 +543,32 @@ func TestBlobClientStat(t *testing.T) {
 		})
 	}
 }
+
+type mockClient struct {
+	blobspb.RPCBlobClient
+	ctx context.Context
+}
+
+func (m *mockClient) GetStream(
+	ctx context.Context, in *blobspb.GetRequest,
+) (blobspb.RPCBlob_GetStreamClient, error) {
+	m.ctx = ctx
+	return nil, nil
+}
+
+func (m *mockClient) Stat(ctx context.Context, in *blobspb.StatRequest) (*blobspb.BlobStat, error) {
+	return &blobspb.BlobStat{}, nil
+}
+
+// TestBlobClientReadFileClose tests that closing a reader cancels the context
+// passed to the rpc stream.
+func TestBlobClientReadFileClose(t *testing.T) {
+	mock := &mockClient{}
+	r := remoteClient{blobClient: mock}
+
+	reader, _, err := r.ReadFile(context.Background(), "doesn't matter", 0)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close(context.Background()))
+
+	<-mock.ctx.Done()
+}

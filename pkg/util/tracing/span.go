@@ -716,7 +716,7 @@ func (sp *Span) reset(
 				goroutineID:  goroutineID,
 				recording: recordingState{
 					logs:             makeSizeLimitedBuffer[*tracingpb.LogRecord](maxLogBytesPerSpan, nil /* scratch */),
-					structured:       makeSizeLimitedBuffer[*tracingpb.StructuredRecord](maxStructuredBytesPerSpan, h.structuredEventsAlloc[:]),
+					structured:       makeSizeLimitedBuffer[*tracingpb.StructuredRecord](sp.i.tracer.MaxStructuredBytesPerSpan(), h.structuredEventsAlloc[:]),
 					childrenMetadata: h.childrenMetadataAlloc,
 					finishedChildren: MakeTrace(tracingpb.RecordedSpan{}),
 				},

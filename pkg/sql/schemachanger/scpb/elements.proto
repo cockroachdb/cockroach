@@ -2,6 +2,9 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+// 
+// This file is used by `element_generator.go` to build `elements_generated.go`.
+// It's sensitive to formatting; tools such as `buf format` aren't recommended.
 
 syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
@@ -92,6 +95,7 @@ message ElementProto {
     Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
     RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableStorageParam table_storage_param = 142 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -109,9 +113,12 @@ message ElementProto {
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComputeExpression column_compute_expression = 190 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnGeneratedAsIdentity column_generated_as_identity = 191 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnHidden column_hidden = 192 [(gogoproto.moretags) = "parent:\"Column\""];
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
+    SequenceValue sequence_value = 38 [(gogoproto.moretags) = "parent:\"Sequence\""];
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -217,10 +224,12 @@ message Expression {
 message Column {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool is_hidden = 3;
+  // Deprecated.
+  // The hidden attribute is now handled as a separate element (see ColumnHidden).
+  bool is_hidden = 3 [deprecated = true];
   bool is_inaccessible = 4;
-  uint32 generated_as_identity_type = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
-  string generated_as_identity_sequence_option = 6;
+  uint32 generated_as_identity_type = 5 [deprecated = true, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string generated_as_identity_sequence_option = 6 [deprecated = true];
   uint32 pg_attribute_num = 7 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
   bool is_system_column = 8;
 }
@@ -241,16 +250,13 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 5;
-  // Deprecated
-  // compute expression is now handled as a separate element (see ColumnComputeExpression).
-  Expression compute_expr = 6 [deprecated = true];
+  reserved 5, 6;
   bool is_virtual = 7;
   reserved 8, 9, 10;
   // ElementCreationMetadata stores information about when this element is created.
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
-  ElementCreationMetadata element_creation_metadata= 11;
+  ElementCreationMetadata element_creation_metadata = 11;
   // If non-zero, the column will be added to the column family after the column with
   // this ID. This is used for operations like 'ALTER COLUMN .. TYPE', where
   // maintaining column family order is necessary when replacing columns.
@@ -273,6 +279,19 @@ message ColumnComputeExpression {
   }
   Usage usage = 5;
 }
+
+message ColumnGeneratedAsIdentity {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string sequence_option = 4;
+}
+
+message ColumnHidden {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+}
+
 
 message ColumnFamily {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -450,6 +469,17 @@ message SequenceOption {
   string value = 3;
 }
 
+message SequenceValue {
+  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  int64 prev_increment = 2;
+  int64 updated_increment = 3;
+  int64 prev_min_value = 4;
+  int64 updated_min_value = 5;
+  int64 prev_max_value = 6;
+  int64 updated_max_value = 7;
+  int64 prev_start = 8;
+  int64 updated_start = 9;
+}
 
 message SequenceOwner {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -740,6 +770,10 @@ message RowLevelTTL {
   // ExpirationExpr is not set. This expression is used to establish column
   // dependencies.
   Expression ttl_expr = 3 [(gogoproto.customname) = "TTLExpr"];
+  // SeqNum differentiates different versions of the TTL configuration for the
+  // same table. When modifying TTL parameters, the old element is dropped and
+  // a new one with an incremented SeqNum is added.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message ColumnName {
@@ -940,6 +974,13 @@ message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
+// TableStorageParam models the storage parameters of a table other than `schema_locked` and RowLevelTTL-related ones.
+message TableStorageParam {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+  string value = 3;
+}
+
 // LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
 message LDRJobIDs {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -1011,6 +1052,6 @@ message FunctionSecurity {
 }
 
 message ElementCreationMetadata {
-  bool in_23_1_or_later = 1;
-  bool in_24_3_or_later = 2;
+  reserved 1, 2;
+  bool in_26_1_or_later = 3;
 }

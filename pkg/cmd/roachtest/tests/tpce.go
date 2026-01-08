@@ -105,7 +105,7 @@ func initTPCESpec(ctx context.Context, l *logger.Logger, c cluster.Cluster) (*tp
 }
 
 func (ts *tpceSpec) newCmd(o tpceCmdOptions) *roachtestutil.Command {
-	cmd := roachtestutil.NewCommand(`sudo docker run us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:master`)
+	cmd := roachtestutil.NewCommand(`sudo docker run --ulimit nofile=1048576 us-east1-docker.pkg.dev/crl-ci-images/cockroach/tpc-e:master`)
 	o.AddCommandOptions(cmd)
 	return cmd
 }

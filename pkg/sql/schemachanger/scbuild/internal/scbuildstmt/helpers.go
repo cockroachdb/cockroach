@@ -10,7 +10,6 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -1191,13 +1190,10 @@ func checkTableSchemaChangePrerequisites(
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	// No-op by default unless schema_locked has been setup.
 	maybeCleanupSchemaLockedFn = func() {}
-	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
-		// Before 25.2 we don't support auto-unsetting schema locked.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
-			ns := tableElements.FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
-		}
-		// Unset schema_locked for the user.
+	hasSchemaLockedChange := tree.HasSetOrResetSchemaLocked(n)
+	if schemaLocked != nil && !hasSchemaLockedChange {
+		// If the user is not explicitly setting schema_locked, then we should
+		// use the auto-unset logic.
 		b.DropTransient(schemaLocked)
 		maybeCleanupSchemaLockedFn = func() {
 			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)
@@ -1435,7 +1431,7 @@ func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.Resu
 		ret = append(ret, colinfo.ResultColumn{
 			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
 			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
-			Hidden:         col.IsHidden,
+			Hidden:         col.IsHidden || retrieveColumnHidden(b, tableID, col.ColumnID) != nil,
 			TableID:        tableID,
 			PGAttributeNum: uint32(col.PgAttributeNum),
 		})
@@ -2036,23 +2032,19 @@ func retrieveColumnTypeElem(
 }
 
 // retrieveColumnComputeExpression returns the compute expression of the column.
-// If no expression exists, then nil is returned. This will handle older
-// versions that may store the expression as part of the ColumnType.
+// If no expression exists, then nil is returned.
 func retrieveColumnComputeExpression(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) (expr *scpb.Expression) {
 	// First try to retrieve the expression from the ColumnComputeExpression. This
-	// may be unavailable because the column doesn't have a compute expression, or
-	// it's an older version that stores the expression as part of the ColumnType.
-	colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
+	// may be unavailable because the column doesn't have a compute expression.
+	if colComputeExpression := b.QueryByID(tableID).FilterColumnComputeExpression().Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnComputeExpression) bool {
 		return e.ColumnID == columnID
-	}).MustGetZeroOrOneElement()
-	if colComputeExpression != nil {
+	}).MustGetZeroOrOneElement(); colComputeExpression != nil {
 		return &colComputeExpression.Expression
 	}
-	// Check the ColumnType in case this is an older version.
-	columnType := mustRetrieveColumnTypeElem(b, tableID, columnID)
-	return columnType.ComputeExpr
+
+	return nil
 }
 
 // mustRetrieveColumnTypeElem retrieves the index column elements associated
@@ -2119,6 +2111,14 @@ func retrieveColumnNotNull(
 ) *scpb.ColumnNotNull {
 	return b.QueryByID(tableID).FilterColumnNotNull().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnNotNull) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
+func retrieveColumnHidden(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnHidden {
+	return b.QueryByID(tableID).FilterColumnHidden().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnHidden) bool { return e.ColumnID == columnID }).
 		MustGetZeroOrOneElement()
 }
 
@@ -2217,4 +2217,39 @@ func isShardColumn(b BuildCtx, col *scpb.Column) bool {
 	})
 
 	return found
+}
+
+// retrieveColumnGeneratedAsIdentityElem returns the element for GeneratedAsIdentity.
+// Returns nil in versions before 26.1.
+func retrieveColumnGeneratedAsIdentityElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (generatedAsIdentity *scpb.ColumnGeneratedAsIdentity) {
+	return b.QueryByID(tableID).FilterColumnGeneratedAsIdentity().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnGeneratedAsIdentity) bool {
+			return e.ColumnID == columnID
+		}).MustGetZeroOrOneElement()
+}
+
+// retrieveColumnGeneratedAsIdentityType returns the GeneratedAsIdentityType.
+// Handles versions before 26.1 that store it in Column.GeneratedAsIdentityType.
+func retrieveColumnGeneratedAsIdentityType(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (generatedAsIdentityType catpb.GeneratedAsIdentityType) {
+	// First try to retrieve it from ColumnGeneratedAsIdentity. This may be nil
+	// if the column is not a generated identity column or the cluster version is older
+	// than 26.1. In that case, will return Column.GeneratedAsIdentityType.
+	colGeneratedAsID := retrieveColumnGeneratedAsIdentityElem(b, tableID, columnID)
+	if colGeneratedAsID != nil {
+		return colGeneratedAsID.Type
+	}
+	// Check the ColumnType in case this is an older version.
+	col := mustRetrieveColumnElem(b, tableID, columnID)
+	return col.GeneratedAsIdentityType
+}
+
+func isColumnGeneratedAsIdentity(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (isGenerated bool) {
+	generatedAsIdentityType := retrieveColumnGeneratedAsIdentityType(b, tableID, columnID)
+	return generatedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
 }

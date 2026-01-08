@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/stop",

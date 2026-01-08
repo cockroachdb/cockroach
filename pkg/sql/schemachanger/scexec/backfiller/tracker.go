@@ -60,12 +60,13 @@ func NewTracker(
 	codec keys.SQLCodec,
 	counter RangeCounter,
 	job *jobs.Job,
+	db isql.DB,
 	jobBackfillProgress []jobspb.BackfillProgress,
 	jobMergeProgress []jobspb.MergeProgress,
 ) *Tracker {
 	return newTracker(
 		codec,
-		newTrackerConfig(codec, counter, job),
+		newTrackerConfig(codec, counter, job, db),
 		convertFromJobBackfillProgress(codec, jobBackfillProgress),
 		convertFromJobMergeProgress(codec, jobMergeProgress),
 	)
@@ -93,13 +94,15 @@ func newTracker(
 	return bt
 }
 
-func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) trackerConfig {
+func newTrackerConfig(
+	codec keys.SQLCodec, rc RangeCounter, job *jobs.Job, db isql.DB,
+) trackerConfig {
 	return trackerConfig{
 		numRangesInSpanContainedBy: rc.NumRangesInSpanContainedBy,
 		writeProgressFraction: func(ctx context.Context, fractionProgressed float32) error {
-			if err := job.NoTxn().FractionProgressed(
-				ctx, jobs.FractionUpdater(fractionProgressed),
-			); err != nil {
+			if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return jobs.ProgressStorage(job.ID()).SetFraction(ctx, txn, float64(fractionProgressed))
+			}); err != nil {
 				return jobs.SimplifyInvalidStateError(err)
 			}
 			return nil

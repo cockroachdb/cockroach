@@ -16,7 +16,7 @@ import (
 
 // Event outlines the necessary behaviours that event structs must implement.
 // Some key implementations of the interface includes assertionEvent,
-// SetSpanConfigEvent, AddNodeEvent, SetNodeLivenessEvent,
+// SetSpanConfigEvent, AddNodeEvent, SetNodeStatusEvent,
 // SetCapacityOverrideEvent.
 type Event interface {
 	// Func returns a closure associated with event which could be an assertion

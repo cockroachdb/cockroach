@@ -378,7 +378,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if ca.knobs.OverrideExecCfg != nil {
 		execCfg = ca.knobs.OverrideExecCfg(execCfg)
 	}
-	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg)
+	targetTS := ca.spec.GetSchemaTS()
+	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg, targetTS)
 	if err != nil {
 		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
 		ca.MoveToDraining(err)
@@ -425,6 +426,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error wrapping metrics controller: %v", err)
 		ca.MoveToDraining(err)
 		ca.cancel()
+		return
 	}
 
 	ca.sink, err = getEventSink(ctx, ca.FlowCtx.Cfg, ca.spec.Feed, timestampOracle,
@@ -567,7 +569,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, ca.targets,
-			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
+			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle(),
+			isDBLevelChangefeed(ca.spec.Feed))
 	}
 
 	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.FlowCtx.Cfg.Settings)
@@ -813,10 +816,10 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 					err = kvFeedErr
 				}
 			}
-			// Shut down the poller if it wasn't already.
-			ca.cancel()
 			log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error from tick: %v", err)
 			ca.MoveToDraining(err)
+			// Shut down the poller if it wasn't already.
+			ca.cancel()
 			break
 		}
 	}
@@ -1115,7 +1118,7 @@ const (
 )
 
 // slowLogEveryN rate-limits the logging of slow spans
-var slowLogEveryN = log.Every(slowSpanMaxFrequency)
+var slowLogEveryN = util.Every(slowSpanMaxFrequency)
 
 // jobState encapsulates changefeed job state.
 type jobState struct {
@@ -1352,7 +1355,8 @@ func newChangeFrontierProcessor(
 	if cf.knobs.OverrideExecCfg != nil {
 		execCfg = cf.knobs.OverrideExecCfg(execCfg)
 	}
-	targets, err := AllTargets(ctx, spec.Feed, execCfg)
+	targetTS := cf.spec.GetSchemaTS()
+	targets, err := AllTargets(ctx, cf.spec.Feed, execCfg, targetTS)
 	if err != nil {
 		return nil, err
 	}
@@ -2103,7 +2107,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			return err
 		}
 		ptr := createUserTablesProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
+			ctx, cf.spec.JobID, targets, tableHighWater,
 		)
 		uuid := ptr.ID.GetUUID()
 		ptsEntries.UserTables[tableID] = uuid
@@ -2192,7 +2196,7 @@ func (cf *changeFrontier) advanceProtectedTimestamp(
 		// in the single PTS record for the changefeed with all other targets
 		// in a combined record.
 		ptr := createCombinedProtectedTimestampRecord(
-			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, timestamp,
+			ctx, cf.spec.JobID, cf.targets, timestamp,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
 		return true, pts.Protect(ctx, ptr)
@@ -2251,7 +2255,7 @@ func (cf *changeFrontier) remakePTSRecord(
 ) error {
 	prevRecordId := progress.ProtectedTimestampRecord
 	ptr := createCombinedProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, resolved,
+		ctx, cf.spec.JobID, cf.targets, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
 		return err
@@ -2275,7 +2279,7 @@ func (cf *changeFrontier) remakeSystemTablesPTSRecord(
 	resolved hlc.Timestamp,
 ) error {
 	ptr := createSystemTablesProtectedTimestampRecord(
-		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, resolved,
+		ctx, cf.spec.JobID, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
 		return err
@@ -2432,7 +2436,7 @@ type saveRateConfig struct {
 // duration it takes to save progress.
 type saveRateLimiter struct {
 	config     saveRateConfig
-	warnEveryN util.EveryN
+	warnEveryN util.EveryN[time.Time]
 
 	clock timeutil.TimeSource
 

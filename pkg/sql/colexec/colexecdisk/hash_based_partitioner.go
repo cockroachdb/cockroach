@@ -442,7 +442,7 @@ StateChanged:
 				// FDs to the semaphore.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.inMemMainOp.Init(op.Ctx)
@@ -487,7 +487,7 @@ StateChanged:
 					for {
 						op.unlimitedAllocator.PerformOperation(batch.ColVecs(), func() {
 							if err := partitioner.Dequeue(op.Ctx, parentPartitionIdx, batch); err != nil {
-								colexecerror.InternalError(err)
+								colexecutils.HandleErrorFromDiskQueue(err)
 							}
 						})
 						if batch.Length() == 0 {
@@ -498,7 +498,7 @@ StateChanged:
 					// We're done reading from this partition, and it will never
 					// be read from again, so we can close it.
 					if err := partitioner.CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 					// We're done writing to the newly created partitions.
 					// TODO(yuzefovich): we should not release the descriptors
@@ -512,7 +512,7 @@ StateChanged:
 					// want. This will allow us to remove the call to
 					// CloseAllOpen... in the first state as well.
 					if err := partitioner.CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				for idx := 0; idx < op.numBuckets; idx++ {
@@ -594,7 +594,7 @@ StateChanged:
 				// transition to processing new ones.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.state = hbpProcessNewPartitionUsingMain
@@ -625,7 +625,7 @@ StateChanged:
 				// transition to processing new ones.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.state = hbpProcessNewPartitionUsingFallback

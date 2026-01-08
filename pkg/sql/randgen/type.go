@@ -117,6 +117,9 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 	case types.BitFamily:
 		return types.MakeBit(int32(rng.Intn(50)))
 	case types.CollatedStringFamily:
+		if typ.Oid() == oidext.T_citext {
+			return types.CIText
+		}
 		return types.MakeCollatedString(types.String, *RandCollationLocale(rng))
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.AnyFamily {

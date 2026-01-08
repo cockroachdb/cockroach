@@ -12,12 +12,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -34,13 +39,19 @@ const inspectCompletedSpansKey = "inspect_completed_spans"
 // It maintains completed spans to enable job restarts without reprocessing.
 // Progress updates occur at two frequencies: fraction complete updates happen
 // more frequently than full checkpoint updates to minimize writes.
+//
+// When AsOf is empty (using "now" timestamps), the tracker also manages
+// protected timestamps for active spans. It sets up PTS when a span starts
+// processing and cleans up when the span completes.
 type inspectProgressTracker struct {
 	job                *jobs.Job
 	jobID              jobspb.JobID
 	clock              timeutil.TimeSource
 	checkpointInterval func() time.Duration
 	fractionInterval   func() time.Duration
-	internalDB         isql.DB
+	internalDB         descs.DB
+	codec              keys.SQLCodec
+	ptsManager         scexec.ProtectedTimestampManager
 
 	mu struct {
 		syncutil.Mutex
@@ -53,23 +64,50 @@ type inspectProgressTracker struct {
 		receivedSpanCount int
 		// lastCheckpointedSpanCount tracks the span count at the last checkpoint write.
 		lastCheckpointedSpanCount int
+		// activeSpanTimestamps tracks the timestamp for each active span (keyed by
+		// span.String()). Used to determine the minimum timestamp for PTS
+		// protection.
+		// Note: we add spans to this map even if PTS setup fails, since this
+		// is only meant to indicate which spans are being processed.
+		activeSpanTimestamps map[string]hlc.Timestamp
+		// currentPTSCleaner is the cleaner for the current PTS record (if any).
+		// We maintain at most one PTS record, protecting the minimum timestamp.
+		currentPTSCleaner jobsprotectedts.Cleaner
+		// currentPTSTimestamp is the timestamp currently being protected.
+		currentPTSTimestamp hlc.Timestamp
+		// lastLoggedPercent tracks the last percentage milestone we logged, to avoid
+		// spamming logs with progress updates. We log at every 1% increment.
+		lastLoggedPercent int
 	}
 
 	// Goroutine management.
 	stopFunc func()
+
+	// testingPTSProtector is a testing hook that overrides the normal PTS setup.
+	// When set, it is called instead of the real TryToProtectBeforeGC logic.
+	// The returned cleaner is stored and called when the span completes.
+	testingPTSProtector func(ctx context.Context, span roachpb.Span, ts hlc.Timestamp) jobsprotectedts.Cleaner
 }
 
 func newInspectProgressTracker(
-	job *jobs.Job, sv *settings.Values, internalDB isql.DB,
+	job *jobs.Job,
+	sv *settings.Values,
+	internalDB descs.DB,
+	codec keys.SQLCodec,
+	ptsManager scexec.ProtectedTimestampManager,
 ) *inspectProgressTracker {
-	return &inspectProgressTracker{
+	t := &inspectProgressTracker{
 		job:                job,
 		jobID:              job.ID(),
 		clock:              timeutil.DefaultTimeSource{},
 		fractionInterval:   func() time.Duration { return fractionUpdateInterval.Get(sv) },
 		checkpointInterval: func() time.Duration { return checkpointInterval.Get(sv) },
 		internalDB:         internalDB,
+		codec:              codec,
+		ptsManager:         ptsManager,
 	}
+	t.mu.activeSpanTimestamps = make(map[string]hlc.Timestamp)
+	return t
 }
 
 // loadCompletedSpansFromStorage loads completed spans from jobfrontier.
@@ -156,12 +194,35 @@ func (t *inspectProgressTracker) initJobProgress(
 
 // handleProgressUpdate handles incoming processor metadata and performs any necessary
 // job updates. Determines how to handle the update (immediate vs deferred).
+// Also handles protected timestamp setup for span started events and cleanup for
+// span completed events.
 func (t *inspectProgressTracker) handleProgressUpdate(
 	ctx context.Context, meta *execinfrapb.ProducerMetadata,
 ) error {
-	needsImmediatePersistence, err := t.updateProgressCache(meta)
+	if meta.BulkProcessorProgress == nil {
+		return nil
+	}
+
+	var incomingProcProgress jobspb.InspectProcessorProgress
+	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &incomingProcProgress); err != nil {
+		return errors.Wrapf(err, "unable to unmarshal inspect progress details")
+	}
+
+	// Handle span started: set up PTS protection.
+	if !incomingProcProgress.SpanStarted.Equal(roachpb.Span{}) {
+		t.setupSpanPTS(ctx, incomingProcProgress.SpanStarted, incomingProcProgress.StartedAt)
+		return nil
+	}
+
+	// Update the progress cache (with lock).
+	needsImmediatePersistence, err := t.updateProgressCache(meta, incomingProcProgress)
 	if err != nil {
 		return err
+	}
+
+	// Handle span completed: call cleaner and pick a new PTS if needed.
+	for _, completedSpan := range meta.BulkProcessorProgress.CompletedSpans {
+		t.cleanupSpanPTS(ctx, completedSpan)
 	}
 
 	// If updateProgressCache returned true (indicating immediate persistence needed),
@@ -184,17 +245,8 @@ func (t *inspectProgressTracker) handleProgressUpdate(
 // updateProgressCache computes updated job progress from processor metadata and updates
 // the internal cache. Returns true when immediate persistence is needed.
 func (t *inspectProgressTracker) updateProgressCache(
-	meta *execinfrapb.ProducerMetadata,
+	meta *execinfrapb.ProducerMetadata, incomingProcProgress jobspb.InspectProcessorProgress,
 ) (bool, error) {
-	if meta.BulkProcessorProgress == nil {
-		return false, nil
-	}
-
-	var incomingProcProgress jobspb.InspectProcessorProgress
-	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &incomingProcProgress); err != nil {
-		return false, errors.Wrapf(err, "unable to unmarshal inspect progress details")
-	}
-
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -236,12 +288,212 @@ func (t *inspectProgressTracker) updateProgressCache(
 }
 
 // terminateTracker performs any necessary cleanup when the job completes or fails.
-func (t *inspectProgressTracker) terminateTracker() {
+// This includes cleaning up the PTS record if one exists.
+func (t *inspectProgressTracker) terminateTracker(ctx context.Context) {
 	if t.stopFunc != nil {
 		t.stopFunc()
 		t.stopFunc = nil
 	}
+
+	// Clean up the PTS record if one exists (in case of early termination).
+	var cleaner jobsprotectedts.Cleaner
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		cleaner = t.mu.currentPTSCleaner
+		t.mu.currentPTSCleaner = nil
+		t.mu.currentPTSTimestamp = hlc.Timestamp{}
+		t.mu.activeSpanTimestamps = make(map[string]hlc.Timestamp)
+	}()
+
+	if cleaner != nil {
+		if err := cleaner(ctx); err != nil {
+			log.Dev.Warningf(ctx, "failed to clean up PTS during termination: %v", err)
+		}
+	}
 }
+
+// setupSpanPTS sets up protected timestamp protection for a span that has started
+// processing. This is called when the coordinator receives a "span started" message
+// from a processor.
+//
+// We maintain at most one PTS record, protecting the minimum timestamp across all
+// active spans. Since PROTECT_AFTER mode protects all data at or after the specified
+// timestamp, protecting at the minimum covers all active spans. When a new span
+// starts with an older timestamp than the current PTS, we update the PTS to protect
+// the new minimum.
+func (t *inspectProgressTracker) setupSpanPTS(
+	ctx context.Context, spanStarted roachpb.Span, tsToProtect hlc.Timestamp,
+) {
+	spanKey := spanStarted.String()
+
+	// Check if we need to update the PTS (first span or new minimum timestamp).
+	var needsNewPTS bool
+	var oldCleaner jobsprotectedts.Cleaner
+	var currentPTSTimestamp hlc.Timestamp
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.activeSpanTimestamps[spanKey] = tsToProtect
+		currentPTSTimestamp = t.mu.currentPTSTimestamp
+		if t.mu.currentPTSCleaner == nil || tsToProtect.Less(currentPTSTimestamp) {
+			needsNewPTS = true
+			oldCleaner = t.mu.currentPTSCleaner
+		}
+	}()
+
+	if !needsNewPTS {
+		log.VEventf(ctx, 2, "INSPECT: span %s at %s covered by existing PTS at %s",
+			spanStarted, tsToProtect, currentPTSTimestamp)
+		return
+	}
+
+	// Clean up old PTS before setting new one.
+	if oldCleaner != nil {
+		if err := oldCleaner(ctx); err != nil {
+			log.Dev.Warningf(ctx, "failed to clean up old PTS: %v", err)
+		}
+	}
+
+	// Create new PTS at the new minimum timestamp.
+	var cleaner jobsprotectedts.Cleaner
+	if t.testingPTSProtector != nil {
+		cleaner = t.testingPTSProtector(ctx, spanStarted, tsToProtect)
+	} else {
+		// Extract table ID from the span key prefix.
+		_, tableID, err := t.codec.DecodeTablePrefix(spanStarted.Key)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to decode table ID from span %s: %v", spanStarted, err)
+			return
+		}
+		cleaner = t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), tsToProtect)
+	}
+
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		t.mu.currentPTSCleaner = cleaner
+		t.mu.currentPTSTimestamp = tsToProtect
+	}()
+
+	log.VEventf(ctx, 2, "INSPECT: set up PTS protection at minimum timestamp %s (triggered by span %s)",
+		tsToProtect, spanStarted)
+}
+
+// cleanupSpanPTS handles PTS management when a span completes processing.
+// This is called when the coordinator receives a "span completed" message.
+//
+// When the oldest span (with the minimum timestamp) completes, we update the PTS
+// to protect the new minimum timestamp among remaining active spans. This allows
+// GC of data between the old and new minimum timestamps.
+func (t *inspectProgressTracker) cleanupSpanPTS(ctx context.Context, completedSpan roachpb.Span) {
+	spanKey := completedSpan.String()
+
+	// Determine what action to take based on current state.
+	var action ptsCleanupAction
+	var oldCleaner jobsprotectedts.Cleaner
+	var newMinTimestamp hlc.Timestamp
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		completedTimestamp, ok := t.mu.activeSpanTimestamps[spanKey]
+		if !ok {
+			// Span not tracked - either PTS was never set up (e.g., AsOf was specified),
+			// or it was already cleaned up.
+			action = ptsActionNone
+			return
+		}
+		delete(t.mu.activeSpanTimestamps, spanKey)
+
+		if len(t.mu.activeSpanTimestamps) == 0 {
+			// No more active spans - clean up PTS entirely.
+			action = ptsActionCleanup
+			oldCleaner = t.mu.currentPTSCleaner
+			t.mu.currentPTSCleaner = nil
+			t.mu.currentPTSTimestamp = hlc.Timestamp{}
+			return
+		}
+
+		// Check if the completed span was the one with the minimum timestamp.
+		if completedTimestamp.Equal(t.mu.currentPTSTimestamp) {
+			// Find the new minimum timestamp among remaining spans.
+			var foundMin bool
+			var minSpanKey string
+			for sk, ts := range t.mu.activeSpanTimestamps {
+				if !foundMin || ts.Less(newMinTimestamp) {
+					newMinTimestamp = ts
+					minSpanKey = sk
+					foundMin = true
+				}
+			}
+			if foundMin && !newMinTimestamp.Less(t.mu.currentPTSTimestamp) {
+				// New minimum is newer than current PTS - need to update.
+				action = ptsActionUpdate
+				oldCleaner = t.mu.currentPTSCleaner
+				t.mu.currentPTSCleaner = nil
+				// We'll extract the table ID from the span key outside the lock.
+				// Store the span key for later processing.
+				_ = minSpanKey // Used for logging if needed.
+			}
+		}
+		// If the completed span wasn't the minimum, no PTS change needed.
+	}()
+
+	switch action {
+	case ptsActionNone:
+		return
+
+	case ptsActionCleanup:
+		if oldCleaner != nil {
+			if err := oldCleaner(ctx); err != nil {
+				log.Dev.Warningf(ctx, "failed to clean up PTS: %v", err)
+			} else {
+				log.VEventf(ctx, 2, "INSPECT: cleaned up PTS protection (no more active spans)")
+			}
+		}
+
+	case ptsActionUpdate:
+		// Clean up old PTS.
+		if oldCleaner != nil {
+			if err := oldCleaner(ctx); err != nil {
+				log.Dev.Warningf(ctx, "failed to clean up old PTS: %v", err)
+			}
+		}
+
+		// Create new PTS at the new minimum timestamp.
+		var cleaner jobsprotectedts.Cleaner
+		if t.testingPTSProtector != nil {
+			cleaner = t.testingPTSProtector(ctx, completedSpan, newMinTimestamp)
+		} else {
+			// Extract table ID from the completed span. All spans in an INSPECT job
+			// typically belong to the same table, so this is safe.
+			_, tableID, err := t.codec.DecodeTablePrefix(completedSpan.Key)
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to decode table ID from span %s: %v", completedSpan, err)
+				return
+			}
+			cleaner = t.ptsManager.TryToProtectBeforeGC(ctx, t.job, descpb.ID(tableID), newMinTimestamp)
+		}
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			t.mu.currentPTSCleaner = cleaner
+			t.mu.currentPTSTimestamp = newMinTimestamp
+		}()
+
+		log.VEventf(ctx, 2, "INSPECT: updated PTS protection to new minimum timestamp %s", newMinTimestamp)
+	}
+}
+
+// ptsCleanupAction indicates what action to take when a span completes.
+type ptsCleanupAction int
+
+const (
+	ptsActionNone    ptsCleanupAction = iota // No action needed.
+	ptsActionCleanup                         // Clean up PTS entirely (no more active spans).
+	ptsActionUpdate                          // Update PTS to new minimum timestamp.
+)
 
 // startPeriodicUpdates launches background goroutines to periodically flush
 // progress updates at different intervals. Returns a stop function to terminate
@@ -364,20 +616,40 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 		defer frontier.Release()
 		return jobfrontier.Store(ctx, txn, t.jobID, inspectCompletedSpansKey, frontier)
 	})
-
-	// If the checkpoint write succeeded, update the last checkpointed span count.
-	// This prevents unnecessary future writes when no new spans have been completed.
-	if err == nil {
-		func() {
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			if capturedReceivedCount > t.mu.lastCheckpointedSpanCount {
-				t.mu.lastCheckpointedSpanCount = capturedReceivedCount
-			}
-		}()
+	if err != nil {
+		return err
 	}
 
-	return err
+	// If the checkpoint write succeeded, update the last checkpointed span count.
+	// This prevents unnecessary future writes when no new spans have been
+	// completed. Also check if we should log a progress milestone.
+	var shouldLog bool
+	var currentPercent int
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if capturedReceivedCount > t.mu.lastCheckpointedSpanCount {
+			t.mu.lastCheckpointedSpanCount = capturedReceivedCount
+		}
+		// Check if we've crossed a 1% threshold since last log.
+		inspectProgress := t.mu.cachedProgress.GetInspect()
+		if inspectProgress != nil && inspectProgress.JobTotalCheckCount > 0 {
+			currentPercent = int(float64(inspectProgress.JobCompletedCheckCount) / float64(inspectProgress.JobTotalCheckCount) * 100)
+			if currentPercent > t.mu.lastLoggedPercent {
+				t.mu.lastLoggedPercent = currentPercent
+				shouldLog = true
+			}
+		}
+	}()
+
+	// Log progress at 1% milestones so operators can monitor long-running jobs.
+	if shouldLog {
+		totalChecks, completedChecks := t.getCachedCheckCounts()
+		log.Dev.Infof(ctx, "INSPECT job %d progress: %d%% complete (%d/%d checks, %d spans checkpointed)",
+			t.jobID, currentPercent, completedChecks, totalChecks, len(completedSpans))
+	}
+
+	return nil
 }
 
 // getCachedCheckCounts returns the current cached check counts (total and completed).

@@ -79,9 +79,12 @@ func TestAdminAPINonTableStats(t *testing.T) {
 func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "too slow under stressrace")
+
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(81590),
 		},
 	})
 	require.NoError(t, testCluster.WaitForFullReplication())

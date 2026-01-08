@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -243,16 +244,18 @@ func createTestStoreWithoutStart(
 		nil, /* knobs */
 	)
 
+	nodeIDContainer := &base.NodeIDContainer{}
+	nodeIDContainer.Set(ctx, 1)
 	{
 		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
 		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
 		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
 		transport, err := storeliveness.NewTransport(
-			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, nil, /* knobs */
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, cfg.Settings, nil, /* knobs */
 		)
 		require.NoError(t, err)
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
-		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, nodeIDContainer, options, transport, knobs)
 	}
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
@@ -390,9 +393,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
-		t.Fatalf("unable to read store ident: %+v", err)
-	}
+	_, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
+	require.NoError(t, err)
 
 	store.VisitReplicas(func(repl *Replica) (more bool) {
 		// Stats should agree with recomputation. Hold raftMu to avoid
@@ -403,7 +405,9 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(
+			ctx, repl.Desc(), store.StateEngine(),
+			fs.UnknownReadCategory, now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
@@ -766,7 +770,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
 	require.NoError(t, kvstorage.MakeStateLoader(newID.RangeID).SetRaftReplicaID(
-		ctx, store.TODOEngine(), newID.ReplicaID))
+		ctx, store.StateEngine(), newID.ReplicaID))
 
 	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
@@ -1308,7 +1312,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1619,7 +1623,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -4043,10 +4047,10 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
-	splitPreApply(
-		ctx, lhsRepl, kvstorage.StateRW(batch), kvstorage.TODORaft(batch),
-		roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil,
-	)
+	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil)
+	require.NoError(t, err)
+
+	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
 
 	// Verify that the RHS truncated state is initialized as expected.
 	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)

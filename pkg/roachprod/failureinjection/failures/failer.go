@@ -214,3 +214,15 @@ func (f *Failer) Cleanup(ctx context.Context, l *logger.Logger) error {
 	}
 	return nil
 }
+
+// SetSetupArgs sets the setupArgs field directly. This should only be used when
+// state validation is disabled and you need to manually provide args for cleanup.
+func (f *Failer) SetSetupArgs(args FailureArgs) {
+	f.setupArgs = args
+}
+
+// SetInjectArgs sets the injectArgs field directly. This should only be used when
+// state validation is disabled and you need to manually provide args for recovery.
+func (f *Failer) SetInjectArgs(args FailureArgs) {
+	f.injectArgs = args
+}

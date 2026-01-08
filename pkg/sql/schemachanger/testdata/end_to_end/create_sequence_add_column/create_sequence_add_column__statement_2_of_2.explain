@@ -39,12 +39,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 23 elements transitioning toward PUBLIC
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (sq1+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Sequence:{DescID: 105 (sq1+)}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
@@ -72,12 +72,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 23 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── ABSENT → PUBLIC        Owner:{DescID: 105 (sq1+)}
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC        UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
@@ -103,7 +103,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
  │         │    └── PUBLIC → ABSENT        TableSchemaLocked:{DescID: 104 (t)}
  │         └── 42 Mutation operations
  │              ├── CreateSequenceDescriptor {"SequenceID":105}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
+ │              ├── SetSequenceOption {"Key":"START","SequenceID":105,"Value":"32"}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}

@@ -22,14 +22,12 @@ type Cost struct {
 	// cost is compared to other costs with Less.
 	aux struct {
 		// fullScanCount is the number of full table or index scans in a
-		// sub-plan, up to 255.
-		fullScanCount uint8
-		// unboundedCardinality is true if the operator or any of its
-		// descendants have no guaranteed upperbound on the number of rows that
-		// they can produce. It is similar to UnboundedCardinalityPenalty, but
-		// different in that it is used to propagate the same information up the
-		// tree without affecting cost comparisons.
-		unboundedCardinality bool
+		// sub-plan, up to 65535.
+		fullScanCount uint16
+		// unboundedReadCount is the number of read expressions (e.g., scans,
+		// lookup joins, etc.) in a sub-plan that have no upper-bound
+		// cardinality, up to 65535.
+		unboundedReadCount uint16
 	}
 }
 
@@ -63,45 +61,28 @@ func (c Cost) Less(other Cost) bool {
 func (c *Cost) Add(other Cost) {
 	c.C += other.C
 	c.Penalties |= other.Penalties
-	if c.aux.fullScanCount > math.MaxUint8-other.aux.fullScanCount {
-		// Avoid overflow.
-		c.aux.fullScanCount = math.MaxUint8
-	} else {
-		c.aux.fullScanCount += other.aux.fullScanCount
-	}
-	c.aux.unboundedCardinality = c.aux.unboundedCardinality || other.aux.unboundedCardinality
+	c.aux.fullScanCount = addUint16(c.aux.fullScanCount, other.aux.fullScanCount)
+	c.aux.unboundedReadCount = addUint16(c.aux.unboundedReadCount, other.aux.unboundedReadCount)
 }
 
 // FullScanCount returns the number of full scans in the cost.
-func (c Cost) FullScanCount() uint8 {
+func (c Cost) FullScanCount() uint16 {
 	return c.aux.fullScanCount
 }
 
 // IncrFullScanCount increments that auxiliary full scan count within c.
 func (c *Cost) IncrFullScanCount() {
-	// Avoid overflow.
-	if c.aux.fullScanCount < math.MaxUint8 {
-		c.aux.fullScanCount++
-	}
+	c.aux.fullScanCount = addUint16(c.aux.fullScanCount, 1)
 }
 
-// HasUnboundedCardinality returns true if any expression in the tree has no
-// guaranteed upperbound on the number of rows that it will produce.
-//
-// NOTE: The returned value is independent of the UnboundedCardinalityPenalty
-// and true may be returned when the penalty is not set. It has no effect on
-// cost comparisons.
-func (c Cost) HasUnboundedCardinality() bool {
-	return c.aux.unboundedCardinality
+// UnboundedReadCount returns the number of full scans in the cost.
+func (c Cost) UnboundedReadCount() uint16 {
+	return c.aux.unboundedReadCount
 }
 
-// SetUnboundedCardinality is called to indicate that an expression has no
-// guaranteed upperbound on the number of rows that it will produce.
-//
-// NOTE: This flag does not affect cost comparisons and is independent of the
-// UnboundedCardinalityPenalty.
-func (c *Cost) SetUnboundedCardinality() {
-	c.aux.unboundedCardinality = true
+// IncrUnboundedReadCount increments that auxiliary full scan count within c.
+func (c *Cost) IncrUnboundedReadCount() {
+	c.aux.unboundedReadCount = addUint16(c.aux.unboundedReadCount, 1)
 }
 
 // Penalties is an ordered bitmask where each bit indicates a cost penalty. The
@@ -142,12 +123,11 @@ const (
 //	<Cost> is the floating point cost value.
 //	<Penalties> contains "H", "F", or "U" for HugeCostPenalty, FullScanPenalty,
 //	  and UnboundedCardinalityPenalty, respectively.
-//	<aux> contains a number for full scan count and "u" for
-//	  unboundedCardinality.
+//	<aux> contains the number of full scans and unbounded reads.
 //
-// For example, the summary "1.23:HF:5fu" indicates a cost of 1.23 with the
-// HugeCostPenalty and FullScanPenalty penalties, 5 full scans, and the
-// unboundedCardinality flag set.
+// For example, the summary "1.23:HF:5f6u" indicates a cost of 1.23 with the
+// HugeCostPenalty and FullScanPenalty penalties, 5 full scans, and 6 unbounded
+// reads.
 func (c Cost) Summary() string {
 	var sb strings.Builder
 	_, _ = fmt.Fprintf(&sb, "%.9g:", c.C)
@@ -161,8 +141,13 @@ func (c Cost) Summary() string {
 		sb.WriteByte('U')
 	}
 	_, _ = fmt.Fprintf(&sb, ":%df", c.aux.fullScanCount)
-	if c.aux.unboundedCardinality {
-		sb.WriteByte('u')
-	}
+	_, _ = fmt.Fprintf(&sb, "%du", c.aux.unboundedReadCount)
 	return sb.String()
+}
+
+func addUint16(a, b uint16) uint16 {
+	if a > math.MaxUint16-b {
+		return math.MaxUint16
+	}
+	return a + b
 }

@@ -1162,6 +1162,15 @@ func (twb *txnWriteBuffer) mergeWithScanResp(
 			"with COL_BATCH_RESPONSE scan format")
 	}
 
+	if twb.buffer.Len() == 0 {
+		// If we haven't buffered any writes, then we can just return the server
+		// response unchanged.
+		// TODO(yuzefovich): we could take the optimization further by examining
+		// whether any buffered writes overlap with the Scan request and
+		// skipping the merge step if not.
+		return resp, nil
+	}
+
 	respIter := newScanRespIter(req, resp)
 	// First, calculate the size of the merged response. This then allows us to
 	// exactly pre-allocate the response slice when constructing the respMerger.
@@ -1184,6 +1193,15 @@ func (twb *txnWriteBuffer) mergeWithReverseScanResp(
 	if req.ScanFormat == kvpb.COL_BATCH_RESPONSE {
 		return nil, errors.AssertionFailedf("unexpectedly called mergeWithReverseScanResp on a " +
 			"ReverseScanRequest with COL_BATCH_RESPONSE scan format")
+	}
+
+	if twb.buffer.Len() == 0 {
+		// If we haven't buffered any writes, then we can just return the server
+		// response unchanged.
+		// TODO(yuzefovich): we could take the optimization further by examining
+		// whether any buffered writes overlap with the ReverseScan request and
+		// skipping the merge step if not.
+		return resp, nil
 	}
 
 	respIter := newReverseScanRespIter(req, resp)

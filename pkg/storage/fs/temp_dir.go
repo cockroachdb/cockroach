@@ -25,8 +25,8 @@ type lockStruct struct {
 }
 
 // lockFile sets a lock on the specified file, using flock.
-func lockFile(filename string) (lockStruct, error) {
-	closer, err := vfs.Default.Lock(filename)
+func lockFile(fs vfs.FS, filename string) (lockStruct, error) {
+	closer, err := fs.Lock(filename)
 	if err != nil {
 		return lockStruct{}, err
 	}
@@ -64,7 +64,7 @@ func CreateTempDir(parentDir, prefix string) (_ string, unlockDirFn func(), _ er
 	}
 
 	// Create a lock file.
-	flock, err := lockFile(filepath.Join(absPath, lockFilename))
+	flock, err := lockFile(vfs.Default, filepath.Join(absPath, lockFilename))
 	if err != nil {
 		return "", nil, errors.Wrapf(err, "could not create lock on new temporary directory")
 	}
@@ -98,11 +98,11 @@ func RecordTempDir(recordPath, tempPath string) error {
 // up abandoned temporary directories.
 // It should also be invoked when a newly created temporary directory is no
 // longer needed and needs to be removed from the record file.
-func CleanupTempDirs(recordPath string) error {
+func CleanupTempDirs(ctx context.Context, fs vfs.FS, recordPath string) error {
 	// Reading the entire file into memory shouldn't be a problem since
 	// it is extremely rare for this record file to contain more than a few
 	// entries.
-	f, err := os.OpenFile(recordPath, os.O_RDWR, 0644)
+	f, err := fs.Open(recordPath)
 	// There is no existing record file and thus nothing to clean up.
 	if oserror.IsNotExist(err) {
 		return nil
@@ -110,7 +110,11 @@ func CleanupTempDirs(recordPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+	}()
 
 	scanner := bufio.NewScanner(f)
 	// Iterate through each temporary directory path and remove the
@@ -122,14 +126,14 @@ func CleanupTempDirs(recordPath string) error {
 		}
 
 		// Check if the temporary directory exists; if it does not, skip over it.
-		if _, err := os.Stat(path); oserror.IsNotExist(err) {
-			log.Dev.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
+		if _, err := fs.Stat(path); oserror.IsNotExist(err) {
+			log.Dev.Warningf(ctx, "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
 			continue
 		}
 
 		// Check if another Cockroach instance is using this temporary
 		// directory i.e. has a lock on the temp dir lock file.
-		flock, err := lockFile(filepath.Join(path, lockFilename))
+		flock, err := lockFile(fs, fs.PathJoin(path, lockFilename))
 		if err != nil {
 			return errors.Wrapf(err, "could not lock temporary directory %s, may still be in use", path)
 		}
@@ -143,15 +147,29 @@ func CleanupTempDirs(recordPath string) error {
 		// process is dead because we were able to acquire the lock in the first
 		// place.
 		if err := unlockFile(flock); err != nil {
-			log.Dev.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
+			log.Dev.Errorf(ctx, "could not unlock file lock when removing temporary directory: %s", err.Error())
 		}
 
 		// If path/directory does not exist, error is nil.
-		if err := os.RemoveAll(path); err != nil {
+		if err := fs.RemoveAll(path); err != nil {
 			return err
 		}
 	}
+	// If the scanner ecnoutners an error, we may not have been able to remove
+	// all the temporary directories.
+	if err := scanner.Err(); err != nil {
+		err = errors.CombineErrors(err, f.Close())
+		f = nil
+		return err
+	}
 
-	// Clear out the record file now that we're done.
-	return f.Truncate(0)
+	// Close and remove the record file now that we're done. We need to close
+	// the file first to accommodate Windows.
+	err = f.Close()
+	f = nil
+	rmErr := fs.Remove(recordPath)
+	if rmErr != nil && !oserror.IsNotExist(rmErr) {
+		err = errors.CombineErrors(err, rmErr)
+	}
+	return err
 }

@@ -71,7 +71,7 @@ func (r *Replica) executeReadOnlyBatch(
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
 	// we're stuck with a ReadWriter because of the way evaluateBatch is
 	// designed.
-	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
+	rw := r.store.StateEngine().NewReadOnly(storage.StandardDurability)
 	if !rw.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
@@ -93,7 +93,8 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, g, nil, kvpb.NewError(err)
 	}
 	if util.RaceEnabled {
-		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
+		spans := g.LatchSpans()
+		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
 	}
 	defer rw.Close()
 

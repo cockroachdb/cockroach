@@ -654,6 +654,7 @@ func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
 // OnRangeDescUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 	m.twq.OnRangeDescUpdated(desc)
+	m.lm.OnRangeDescUpdated(desc)
 }
 
 var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}

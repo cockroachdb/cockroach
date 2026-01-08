@@ -67,6 +67,18 @@ func (c *userCertDistinguishedNameMu) setDNWithString(dnString string) error {
 
 var rootSubjectMu, nodeSubjectMu userCertDistinguishedNameMu
 
+// disallowRootLoginMu controls whether root login should be disallowed.
+var disallowRootLoginMu struct {
+	syncutil.RWMutex
+	disallowed bool
+}
+
+// allowDebugUserMu controls whether debuguser login should be allowed.
+var allowDebugUserMu struct {
+	syncutil.RWMutex
+	allowed bool
+}
+
 func SetRootSubject(rootDNString string) error {
 	return rootSubjectMu.setDNWithString(rootDNString)
 }
@@ -81,6 +93,34 @@ func SetNodeSubject(nodeDNString string) error {
 
 func UnsetNodeSubject() {
 	nodeSubjectMu.unsetDN()
+}
+
+// SetDisallowRootLogin sets whether root login should be disallowed.
+func SetDisallowRootLogin(disallow bool) {
+	disallowRootLoginMu.Lock()
+	defer disallowRootLoginMu.Unlock()
+	disallowRootLoginMu.disallowed = disallow
+}
+
+// CheckRootLoginDisallowed returns whether root login is currently disallowed.
+func CheckRootLoginDisallowed() bool {
+	disallowRootLoginMu.RLock()
+	defer disallowRootLoginMu.RUnlock()
+	return disallowRootLoginMu.disallowed
+}
+
+// SetAllowDebugUser sets whether debuguser login should be allowed.
+func SetAllowDebugUser(allow bool) {
+	allowDebugUserMu.Lock()
+	defer allowDebugUserMu.Unlock()
+	allowDebugUserMu.allowed = allow
+}
+
+// CheckDebugUserLoginAllowed returns whether debuguser login is currently allowed.
+func CheckDebugUserLoginAllowed() bool {
+	allowDebugUserMu.RLock()
+	defer allowDebugUserMu.RUnlock()
+	return allowDebugUserMu.allowed
 }
 
 // CertificateUserScope indicates the scope of a user certificate i.e. which
@@ -490,6 +530,16 @@ func ValidateUserScope(
 		return roleSubject.Equal(certSubject)
 	}
 	for _, scope := range certUserScope {
+		// Check if root login is disallowed and certificate contains "root" as a principal
+		if CheckRootLoginDisallowed() && scope.Username == username.RootUser {
+			return false
+		}
+
+		// Check if debuguser login is not allowed and certificate contains "debuguser" as a principal
+		if !CheckDebugUserLoginAllowed() && scope.Username == username.DebugUser {
+			return false
+		}
+
 		if scope.Username == user {
 			// If username matches, allow authentication to succeed if
 			// the tenantID is a match or if the certificate scope is global.

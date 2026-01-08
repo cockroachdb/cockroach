@@ -178,11 +178,9 @@ func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (ou
 		tabMeta := b.addTable(t, &tn)
 		tabID = tabMeta.MetaID
 	} else if _, ok = ds.(cat.View); ok {
-		panic(pgerror.New(
-			pgcode.WrongObjectType, "cannot create statistics on views"))
+		panic(pgerror.New(pgcode.WrongObjectType, "cannot create statistics on views"))
 	} else {
-		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"cannot create statistics on %T", ds))
+		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot create statistics on %T", ds))
 	}
 
 	indexOrd := cat.PrimaryIndex

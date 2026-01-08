@@ -450,10 +450,19 @@ func kvsToRangeDescriptors(kvs []roachpb.KeyValue) ([]roachpb.RangeDescriptor, e
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
 func TestingIsRangeLookup(ba *kvpb.BatchRequest) bool {
-	if ba.IsSingleRequest() {
-		return TestingIsRangeLookupRequest(ba.Requests[0].GetInner())
+	if !ba.IsSingleRequest() {
+		return false
 	}
-	return false
+	req := ba.Requests[0].GetInner()
+	switch req.(type) {
+	case *kvpb.ScanRequest:
+	case *kvpb.ReverseScanRequest:
+	default:
+		return false
+	}
+	s := req.Header()
+	return rangeLookupStartKeyBounds.ContainsKey(s.Key) &&
+		rangeLookupEndKeyBounds.ContainsKey(s.EndKey)
 }
 
 // These spans bounds the start and end keys of the spans returned from
@@ -466,19 +475,4 @@ var rangeLookupStartKeyBounds = roachpb.Span{
 var rangeLookupEndKeyBounds = roachpb.Span{
 	Key:    keys.Meta1Prefix.Next(),
 	EndKey: keys.SystemPrefix.Next(),
-}
-
-// TestingIsRangeLookupRequest returns if the provided Request looks like a single
-// RangeLookup scan. It can return false positives and should only be used in
-// tests.
-func TestingIsRangeLookupRequest(req kvpb.Request) bool {
-	switch req.(type) {
-	case *kvpb.ScanRequest:
-	case *kvpb.ReverseScanRequest:
-	default:
-		return false
-	}
-	s := req.Header()
-	return rangeLookupStartKeyBounds.ContainsKey(s.Key) &&
-		rangeLookupEndKeyBounds.ContainsKey(s.EndKey)
 }

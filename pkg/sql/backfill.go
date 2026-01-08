@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -943,12 +944,15 @@ func (sc *SchemaChanger) distIndexBackfill(
 ) error {
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
+	var resumeManifests []jobspb.IndexBackfillSSTManifest
 	var mutationIdx int
+	jobDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
+	useDistributedMerge := jobDetails.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
+		todoSpans, resumeManifests, _, mutationIdx, err = rowexec.GetResumeSpansAndSSTManifests(
 			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, txn.Descriptors(), sc.descID,
 			sc.mutationID, filter,
 		)
@@ -963,7 +967,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		return nil
 	}
 
-	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	manifestBuf := backfill.NewSSTManifestBuffer(resumeManifests)
+
+	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
@@ -1044,6 +1050,10 @@ func (sc *SchemaChanger) distIndexBackfill(
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
+		if useDistributedMerge {
+			storagePrefix := fmt.Sprintf("nodelocal://%d/", sc.execCfg.NodeInfo.NodeID.SQLInstanceID())
+			backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, sc.job.ID(), &spec)
+		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
 	}); err != nil {
@@ -1071,6 +1081,18 @@ func (sc *SchemaChanger) distIndexBackfill(
 				mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
 				copy(mu.updatedTodoSpans, todoSpans)
 			}()
+
+			if useDistributedMerge {
+				var mapProgress execinfrapb.IndexBackfillMapProgress
+				if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+					if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+						return err
+					}
+					if len(mapProgress.SSTManifests) > 0 {
+						manifestBuf.Append(mapProgress.SSTManifests)
+					}
+				}
+			}
 
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := updateJobDetails(); err != nil {
@@ -1135,9 +1157,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err != nil {
 					return err
 				}
-				if err := sc.job.WithTxn(txn).FractionProgressed(
-					ctx, jobs.FractionUpdater(fractionCompleted),
-				); err != nil {
+				if err := jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStateError(err)
 				}
 			}
@@ -1152,15 +1172,28 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
+		manifestDirty := manifestBuf.Dirty()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			updateJobMu.Lock()
 			defer updateJobMu.Unlock()
-			// No processor has returned completed spans yet.
-			if updatedTodoSpans == nil {
+			// No processor has returned completed spans yet and no new manifests.
+			if updatedTodoSpans == nil && !manifestDirty {
 				return nil
 			}
-			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+			spansToPersist := updatedTodoSpans
+			if spansToPersist == nil {
+				spansToPersist = todoSpans
+			}
+			var manifestSnapshot []jobspb.IndexBackfillSSTManifest
+			if manifestDirty {
+				manifestSnapshot = manifestBuf.SnapshotAndMarkClean()
+			} else {
+				manifestSnapshot = manifestBuf.Snapshot()
+			}
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", spansToPersist)
+			return rowexec.SetResumeSpansAndSSTManifestsInJob(
+				ctx, &sc.execCfg.Codec, spansToPersist, manifestSnapshot, mutationIdx, txn, sc.job,
+			)
 		})
 	}
 
@@ -1263,7 +1296,16 @@ func (sc *SchemaChanger) distColumnBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
+
+	var origFractionCompleted float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ts, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		origFractionCompleted = float32(ts)
+		return err
+	}); err != nil {
+		return err
+	}
+
 	fractionLeft := 1 - origFractionCompleted
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
@@ -1288,13 +1330,11 @@ func (sc *SchemaChanger) distColumnBackfill(
 		}
 		fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 		fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-		// Note that this explicitly uses a nil txn, which will lead to a new
-		// transaction being created as a part of this update. We want this
-		// update operation to be short and to not be coupled to any other
-		// backfill work, which may take much longer.
-		return sc.job.NoTxn().FractionProgressed(
-			ctx, jobs.FractionUpdater(fractionCompleted),
-		)
+		// Use a short dedicated transaction for this progress update so it's
+		// not coupled to any other backfill work, which may take much longer.
+		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	readAsOf := sc.clock.Now()
@@ -1682,7 +1722,7 @@ func ValidateInvertedIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
@@ -1897,7 +1937,7 @@ func ValidateForwardIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
@@ -2284,7 +2324,16 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	fractionScaler := &multiStageFractionScaler{initial: sc.job.FractionCompleted(), stages: backfillStageFractions}
+	var initalFrac float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		f, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		initalFrac = float32(f)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	fractionScaler := &multiStageFractionScaler{initial: initalFrac, stages: backfillStageFractions}
 	if writeAtRequestTimestamp {
 		fractionScaler.stages = mvccCompatibleBackfillStageFractions
 	}
@@ -3056,7 +3105,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
 		return NumRangesInSpans(ctx, sc.db.KV(), sc.distSQLPlanner, spans)
 	}
-	tracker := NewIndexMergeTracker(progress, sc.job, rc, fractionScaler)
+	tracker := NewIndexMergeTracker(progress, sc.job, sc.db, rc, fractionScaler)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {

@@ -31,6 +31,7 @@ go_library(
         "backfill.go",
         "buffer.go",
         "buffer_util.go",
+        "bulk_bridge.go",
         "cancel_queries.go",
         "cancel_sessions.go",
         "check.go",
@@ -85,6 +86,7 @@ go_library(
         "descriptor.go",
         "discard.go",
         "distinct.go",
+        "distsql_check.go",
         "distsql_leaf_txn.go",
         "distsql_physical_planner.go",
         "distsql_plan_backfill.go",
@@ -296,6 +298,7 @@ go_library(
         "zone_config.go",
         "zone_config_helper.go",
         ":gen-advancecode-stringer",  # keep
+        ":gen-distsqlblocker-stringer",  # keep
         ":gen-nodestatus-stringer",  # keep
         ":gen-txneventtype-stringer",  # keep
         ":gen-txntype-stringer",  # keep
@@ -350,6 +353,7 @@ go_library(
         "//pkg/multitenant/multitenantcpu",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/obs/workloadid",
         "//pkg/repstream",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
@@ -545,11 +549,12 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/syntheticprivilegecache",
         "//pkg/sql/tablemetadatacache/util",
-        "//pkg/sql/ttl/ttlbase",
+        "//pkg/sql/ttl/ttlinit",
         "//pkg/sql/types",
         "//pkg/sql/unsafesql",
         "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/vecpb",
+        "//pkg/sql/vecindex/vecsettings",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/sql/vtable",
         "//pkg/storage",
@@ -567,7 +572,6 @@ go_library(
         "//pkg/util/collatedstring",
         "//pkg/util/ctxgroup",
         "//pkg/util/ctxlog",
-        "//pkg/util/ctxutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
         "//pkg/util/encoding/csv",
@@ -575,7 +579,6 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/fsm",
-        "//pkg/util/growstack",
         "//pkg/util/grpcutil",
         "//pkg/util/grunning",
         "//pkg/util/hlc",
@@ -598,6 +601,7 @@ go_library(
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/optional",
+        "//pkg/util/pprofutil",
         "//pkg/util/pretty",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
@@ -678,6 +682,7 @@ go_test(
         "delete_preserving_index_test.go",
         "descriptor_mutation_test.go",
         "descriptor_test.go",
+        "distsql_check_test.go",
         "distsql_leaf_txn_test.go",
         "distsql_physical_planner_test.go",
         "distsql_plan_backfill_test.go",
@@ -732,7 +737,6 @@ go_test(
         "schema_changer_test.go",
         "schema_resolver_test.go",
         "sequence_test.go",
-        "server_params_test.go",
         "session_migration_test.go",
         "set_zone_config_test.go",
         "show_cluster_setting_test.go",
@@ -870,6 +874,7 @@ go_test(
         "//pkg/sql/execstats",
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
+        "//pkg/sql/inverted",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/mutations",
@@ -968,6 +973,7 @@ go_test(
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",
@@ -1021,6 +1027,12 @@ stringer(
     name = "gen-advancecode-stringer",
     src = "txn_state.go",
     typ = "advanceCode",
+)
+
+stringer(
+    name = "gen-distsqlblocker-stringer",
+    src = "distsql_check.go",
+    typ = "distSQLBlocker",
 )
 
 stringer(

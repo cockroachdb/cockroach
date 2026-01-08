@@ -42,8 +42,16 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		// TODO(aaditya): change to weekly once the test stabilizes.
 		Suites: registry.Suites(registry.Nightly),
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
-		Cluster: r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)),
-		Leases:  registry.MetamorphicLeases,
+		Cluster: r.MakeClusterSpec(
+			2,
+			spec.CPU(8),
+			spec.WorkloadNode(),
+			spec.ReuseNone(),
+			spec.Arch(spec.AllExceptFIPS),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
+		Leases: registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)

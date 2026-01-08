@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -156,6 +155,57 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic,
 )
+
+// canaryFraction controls the probabilistic sampling rate for queries
+// participating in the canary statistics rollout feature.
+//
+// This cluster-level setting determines what fraction of queries will use
+// "canary statistics" (newly collected stats within their canary window)
+// versus "stable statistics" (previously proven stats). For example, a value
+// of 0.2 means 20% of queries will test canary stats while 80% use stable stats.
+//
+// The selection is atomic per query: if a query is chosen for canary evaluation,
+// it will use canary statistics for ALL tables it references (where available).
+// A query never uses a mix of canary and stable statistics.
+var canaryFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary_fraction",
+	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
+	0,
+	settings.Fraction,
+	settings.WithVisibility(settings.Reserved),
+)
+
+// canaryRollDice performs the probabilistic check to determine if a query
+// should use the "canary path" for statistics.
+// This selection is atomic per query, meaning that if a query is chosen to use
+// canary stats, all the tables involved in this query will use canary stats for
+// planning, if applicable.
+// This canary stats decision is made only for non-internal queries.
+func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) bool {
+	switch m := evalCtx.SessionData().CanaryStatsMode; m {
+	case sessiondatapb.CanaryStatsModeAuto:
+		threshold := canaryFraction.Get(&evalCtx.Settings.SV)
+		// If the fraction is 0, never use canary stats.
+		if threshold == 0 {
+			return false
+		}
+		// If the fraction is 1, always use canary stats.
+		if threshold == 1 {
+			return true
+		}
+
+		actual := rng.Float64()
+		return actual < threshold
+	case sessiondatapb.CanaryStatsModeOff:
+		return false
+	case sessiondatapb.CanaryStatsModeOn:
+		return true
+	}
+	// This should not happen but just in case of an unknown mode, we
+	// default to not using canary stats.
+	return false
+}
 
 // The metric label name we'll use to facet latency metrics by statement fingerprint.
 var detailedLatencyMetricLabel = "fingerprint"
@@ -465,7 +515,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		cfg.SQLStatsTestingKnobs,
 	)
 	sqlStatsIngester := sslocal.NewSQLStatsIngester(
-		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, insightsProvider, localSQLStats)
+		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, pool, insightsProvider, localSQLStats)
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
 		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
@@ -1261,15 +1311,12 @@ func (s *Server) newConnExecutor(
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
-	// We ignore statements and transactions run by the internal executor by
-	// passing a nil writer.
 	ex.statsCollector = sslocal.NewStatsCollector(
 		s.cfg.Settings,
 		applicationStats,
 		s.sqlStatsIngester,
 		ex.phaseTimes,
 		s.localSqlStats.GetCounters(),
-		s.cfg.SQLStatsTestingKnobs,
 	)
 	ex.dataMutatorIterator.OnApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
@@ -1665,6 +1712,11 @@ type connExecutor struct {
 			// will be used to synthesize an ExecStmt command to avoid attempting to
 			// execute the portal twice.
 			resumeStmt statements.Statement[tree.Statement]
+
+			// callRowDescSent tracks whether RowDescription has already been
+			// sent for a CALL statement to prevent duplicate RowDescription
+			// messages when stored procedures contain COMMIT/ROLLBACK.
+			callRowDescSent bool
 		}
 
 		// shouldExecuteOnTxnRestart indicates that ex.onTxnRestart will be
@@ -1710,15 +1762,14 @@ type connExecutor struct {
 		// client to send statements while holding the transaction open.
 		idleLatency time.Duration
 
-		// rowsRead and bytesRead are separate from QueryLevelStats because they are
-		// accumulated independently since they are always collected, as opposed to
-		// QueryLevelStats which are sampled.
+		// rowsRead, bytesRead, kvCPUTimeNanos, and rowsWritten are separate from accumulatedStats
+		// since they are always collected as opposed to QueryLevelStats which are sampled.
 		rowsRead  int64
 		bytesRead int64
-
 		// rowsWritten tracks the number of rows written (modified) by all
 		// statements in this txn so far.
-		rowsWritten int64
+		rowsWritten    int64
+		kvCPUTimeNanos time.Duration
 
 		// rowsWrittenLogged and rowsReadLogged indicates whether we have
 		// already logged an event about reaching written/read rows setting,
@@ -1805,7 +1856,8 @@ type connExecutor struct {
 	// rng contains random number generators for this session.
 	rng struct {
 		// internal is used for internal operations like determining the query
-		// cancel key and whether sampling execution stats should be performed.
+		// cancel key, whether sampling execution stats should be performed, and
+		// whether the query should use canary stats versus stable stats.
 		internal *rand.Rand
 		// external is used to power random() builtin. It is important to store
 		// this field by value so that the same RNG is reused throughout the
@@ -2754,6 +2806,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		ex.extraTxnState.storedProcTxnState.resumeProc = nil
 		ex.extraTxnState.storedProcTxnState.resumeStmt = statements.Statement[tree.Statement]{}
 		ex.extraTxnState.storedProcTxnState.txnModes = nil
+		ex.extraTxnState.storedProcTxnState.callRowDescSent = false
 	}
 
 	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
@@ -3228,6 +3281,12 @@ func (ex *connExecutor) execCopyIn(
 	// Disable the buffered writes for COPY since there is no benefit in this
 	// ability here.
 	ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
+	// Step the txn in case it had just been rolled back to a savepoint (if it
+	// wasn't, this is harmless). This also matches what we do unconditionally
+	// on the main query path.
+	if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+		return ex.makeErrEvent(err, cmd.ParsedStmt.AST)
+	}
 	txnOpt := copyTxnOpt{
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
@@ -3286,7 +3345,7 @@ func (ex *connExecutor) execCopyIn(
 				defer p.curPlan.close(ctx)
 				_, err := ex.execWithDistSQLEngine(
 					ctx, p, tree.RowsAffected, res, LocalDistribution,
-					nil /* progressAtomic */, nil, /* distSQLProhibitedErr */
+					nil /* progressAtomic */, 0, /* distSQLBlockers */
 				)
 				return err
 			},
@@ -3449,6 +3508,11 @@ func stmtHasNoData(stmt tree.Statement, resultColumns colinfo.ResultColumns) boo
 		return true
 	}
 	if stmt.StatementReturnType() == tree.Rows {
+		// If the procedure doesn't contain output parameters, write a NoData
+		// message.
+		if stmt.StatementTag() == tree.CallStmtTag {
+			return len(resultColumns) == 0
+		}
 		return false
 	}
 	// The statement may not always return rows (e.g. EXECUTE), but if it does,
@@ -3929,6 +3993,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
+	evalCtx.UseCanaryStats = false
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
@@ -3963,7 +4028,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.cancelChecker.Reset(ctx)
 
 	ex.initEvalCtx(ctx, &p.extendedEvalCtx, p)
-
+	p.statsCollector = ex.statsCollector
 	p.sessionDataMutatorIterator = ex.dataMutatorIterator
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
@@ -4174,6 +4239,11 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
 				return advanceInfo{}, err
 			}
+			// If a repair query was executed, then we need to confirm that the lease manager
+			// is handing out the new descirptor version. This is covered by the previous waits
+			// if the prior version was valid, but if it was invalid then we need the lease manager
+			// to have a new timestamp available.
+			ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ex.Ctx(), advInfo.txnEvent.commitTimestamp)
 
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
@@ -4235,20 +4305,21 @@ func (ex *connExecutor) waitForTxnJobs() error {
 		}
 	}
 	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
-		jobIDs := strings.Builder{}
-		for i, jobID := range ex.extraTxnState.jobs.created {
-			if i > 0 {
-				jobIDs.WriteString(", ")
+		if !ex.sessionData().DisableWaitForJobsNotice {
+			jobIDs := strings.Builder{}
+			for i, jobID := range ex.extraTxnState.jobs.created {
+				if i > 0 {
+					jobIDs.WriteString(", ")
+				}
+				jobIDs.WriteString(jobID.String())
 			}
-			jobIDs.WriteString(jobID.String())
+			if err := ex.planner.SendClientNotice(ex.Ctx(),
+				pgnotice.Newf("waiting for job(s) to complete: %s\nIf the statement is canceled, jobs will continue in the background.", redact.SafeString(jobIDs.String())),
+				true, /* immediateFlush */
+			); err != nil {
+				return err
+			}
 		}
-		if err := ex.planner.SendClientNotice(ex.Ctx(),
-			pgnotice.Newf("waiting for job(s) to complete: %s\nIf the statement is canceled, jobs will continue in the background.", redact.SafeString(jobIDs.String())),
-			true, /* immediateFlush */
-		); err != nil {
-			return err
-		}
-
 		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
 			ex.extraTxnState.jobs.created); err != nil {
 			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
@@ -4324,8 +4395,17 @@ func (ex *connExecutor) initStatementResult(
 	// ANALYZE), then the columns will be set later.
 	if ex.planner.instrumentation.outputMode == unmodifiedOutput &&
 		ast.StatementReturnType() == tree.Rows {
+		// Only write RowDescription message if the procedure has output parameters.
+		skipRowDescription := false
+		if ast.StatementTag() == tree.CallStmtTag {
+			if len(cols) == 0 || ex.extraTxnState.storedProcTxnState.callRowDescSent {
+				skipRowDescription = true
+			} else {
+				ex.extraTxnState.storedProcTxnState.callRowDescSent = true
+			}
+		}
 		// Note that this call is necessary even if cols is nil.
-		res.SetColumns(ctx, cols)
+		res.SetColumns(ctx, cols, skipRowDescription)
 	}
 	return nil
 }
@@ -4516,8 +4596,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 
 	txnFingerprintIDs := ex.txnFingerprintIDCache.GetAllTxnFingerprintIDs()
 	sessionActiveTime := ex.totalActiveTimeStopWatch.Elapsed()
-	if startedAt, started := ex.totalActiveTimeStopWatch.LastStartedAt(); started {
-		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + timeutil.Since(startedAt).Nanoseconds())
+	if elapsed, started := ex.totalActiveTimeStopWatch.CurrentElapsed(); started {
+		sessionActiveTime = time.Duration(sessionActiveTime.Nanoseconds() + elapsed.Nanoseconds())
 	}
 
 	return serverpb.Session{
@@ -4587,7 +4667,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			// Initiate a run of CREATE STATISTICS. We use a large number
 			// for rowsAffected because we want to make sure that stats always get
 			// created/refreshed here.
-			ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+			ex.planner.execCfg.StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt32 /* rowsAffected */)
 		}
 	}
 	if cnt := ex.extraTxnState.descCollection.CountUncommittedNewOrDroppedDescriptors(); cnt > 0 {
@@ -4598,7 +4678,7 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 			log.Dev.Warningf(ctx, "failed to fetch descriptor table to refresh stats: %v", err)
 			return
 		}
-		ex.planner.execCfg.StatsRefresher.NotifyMutation(desc, cnt)
+		ex.planner.execCfg.StatsRefresher.NotifyMutation(ctx, desc, cnt)
 		// Release the lease after.
 		ex.extraTxnState.descCollection.ReleaseSpecifiedLeases(ctx, []lease.IDVersion{{Version: desc.GetVersion(), ID: desc.GetID()}})
 	}
@@ -4936,29 +5016,4 @@ func (ex *connExecutor) WithAnonymizedStatementAndGist(err error) error {
 		err = errors.WithSafeDetails(err, "plan gist: %s", ex.curStmtPlanGist)
 	}
 	return err
-}
-
-var contextPlanGistKey = ctxutil.RegisterFastValueKey()
-
-func withPlanGist(ctx context.Context, gist string) context.Context {
-	if gist == "" {
-		return ctx
-	}
-	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
-}
-
-func planGistFromCtx(ctx context.Context) string {
-	val := ctxutil.FastValue(ctx, contextPlanGistKey)
-	if val != nil {
-		return val.(string)
-	}
-	return ""
-}
-
-func init() {
-	// Register a function to include the plan gist in crash reports.
-	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
-		return planGistFromCtx(ctx)
-	})
-	tree.PlanGistFromCtx = planGistFromCtx
 }

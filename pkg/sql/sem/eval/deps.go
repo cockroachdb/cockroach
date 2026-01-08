@@ -286,6 +286,13 @@ type Planner interface {
 		force bool,
 	) error
 
+	// ResetLeaseTimestamp is used to release the locked lease timestamp.
+	// Note: This should only be used if we have a deadlock between the current txn
+	// and another txn conducting a schema change on our behalf. The correct way
+	// to achieve this is to execute the schema change on the same transaction,
+	// which also reduces the risk of waiting for leases to expire.
+	ResetLeaseTimestamp(ctx context.Context)
+
 	// UnsafeDeleteComment is used to delete comments for a non-existent object.
 	UnsafeDeleteComment(ctx context.Context, objectID int64) error
 
@@ -457,6 +464,14 @@ type Planner interface {
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
 
+	// ClearStatementHintsCache removes all entries from the node's statement
+	// hints cache.
+	ClearStatementHintsCache()
+
+	// AwaitStatementHintsCache waits for the node's statement hints cache to
+	// catch up with recent hint injections.
+	AwaitStatementHintsCache(ctx context.Context)
+
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
 
@@ -468,6 +483,14 @@ type Planner interface {
 	// the system.statement_hints table. It returns the hint ID of the newly
 	// created hint.
 	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion) (int64, error)
+
+	// UsingHintInjection returns whether we are planning with externally-injected
+	// hints.
+	UsingHintInjection() bool
+
+	// GetHintIDs returns the external statement hints we're using for this
+	// statement.
+	GetHintIDs() []int64
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

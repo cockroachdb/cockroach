@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -4265,26 +4264,11 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	// This is only kept for backwards compatibility and no longer has any effect.
-	`enable_scrub_job`: makeBackwardsCompatBoolVar(
-		"enable_scrub_job", false,
-	),
+	`enable_scrub_job`: makeBackwardsCompatBoolVar("enable_scrub_job", false),
 
 	// CockroachDB extension.
-	`enable_inspect_command`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_inspect_command`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_inspect_command", s)
-			if err != nil {
-				return err
-			}
-			m.SetEnableInspectCommand(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableInspectCommand), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enable_inspect_command`: makeBackwardsCompatBoolVar("enable_inspect_command", true),
 
 	// CockroachDB extension. Configures the initial backoff duration for
 	// automatic retries of statements in explicit READ COMMITTED transactions
@@ -4395,15 +4379,12 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
 		},
-		GlobalDefault: func(_ *settings.Values) string {
-			if envutil.EnvOrDefaultBool("COCKROACH_ACCEPTANCE_ALLOW_UNSAFE", false) {
-				return "on"
-			}
-			// In 26.1 we will change the default to false/off.
-			return "on"
+		GlobalDefault: func(sv *settings.Values) string {
+			return "off"
 		},
 	},
 
+	// CockroachDB extension.
 	`optimizer_use_improved_hoist_join_project`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_improved_hoist_join_project`),
 		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
@@ -4454,6 +4435,110 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(
 				evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 			), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`disable_wait_for_jobs_notice`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_wait_for_jobs_notice`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`disable_wait_for_jobs_notice`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableWaitForJobsNotice(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableWaitForJobsNotice), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	`canary_stats_mode`: {
+		Hidden:       true,
+		GetStringVal: makePostgresBoolGetStringValFn(`canary_stats_mode`),
+		Set: func(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			mode, ok := sessiondatapb.CanaryStatsModeFromString(s)
+			if !ok {
+				return newVarValueError(`canary_stats_mode`, s, "auto", "off", "on")
+			}
+			m.SetCanaryStatsMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().CanaryStatsMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.CanaryStatsModeAuto.String()
+		},
+	},
+
+	// CockroachDB extension.
+	`use_swap_mutations`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_swap_mutations`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_swap_mutations", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseSwapMutations(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseSwapMutations), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
+	`prevent_update_set_column_drop`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`prevent_update_set_column_drop`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("prevent_update_set_column_drop", s)
+			if err != nil {
+				return err
+			}
+			m.SetPreventUpdateSetColumnDrop(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PreventUpdateSetColumnDrop), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`use_improved_routine_deps_triggers_and_computed_cols`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_improved_routine_deps_triggers_and_computed_cols`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_improved_routine_deps_triggers_and_computed_cols", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseImprovedRoutineDepsTriggersAndComputedCols(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
+	`distsql_prevent_partitioning_soft_limited_scans`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`distsql_prevent_partitioning_soft_limited_scans`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("distsql_prevent_partitioning_soft_limited_scans", s)
+			if err != nil {
+				return err
+			}
+			m.SetDistSQLPreventPartitioningSoftLimitedScans(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DistSQLPreventPartitioningSoftLimitedScans), nil
 		},
 		GlobalDefault: globalTrue,
 	},

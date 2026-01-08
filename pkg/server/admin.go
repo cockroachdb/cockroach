@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -290,11 +291,42 @@ func (s *adminServer) AllMetricMetadata(
 	ctx context.Context, req *serverpb.MetricMetadataRequest,
 ) (*serverpb.MetricMetadataResponse, error) {
 
-	md, _, _ := s.metricsRecorder.GetMetricsMetadata(true /* combine */)
-	metricNames := s.metricsRecorder.GetRecordedMetricNames(md)
+	var md map[string]metric.Metadata
+	var metricNames map[string]string
+	var metricLayers map[string]string
+
+	if req.IncludeLayers {
+		// Get separate metadata for each layer to populate layer information
+		nodeMd, appMd, srvMd := s.metricsRecorder.GetMetricsMetadata(false /* combine */)
+
+		// Build combined metadata map and metric layers map
+		md = make(map[string]metric.Metadata)
+		metricLayers = make(map[string]string)
+
+		for name, meta := range nodeMd {
+			md[name] = meta
+			metricLayers[name] = "STORAGE"
+		}
+		for name, meta := range appMd {
+			md[name] = meta
+			metricLayers[name] = "APPLICATION"
+		}
+		for name, meta := range srvMd {
+			md[name] = meta
+			metricLayers[name] = "SERVER"
+		}
+
+		metricNames = s.metricsRecorder.GetRecordedMetricNames(md)
+	} else {
+		// Get combined metadata (original behavior)
+		md, _, _ = s.metricsRecorder.GetMetricsMetadata(true /* combine */)
+		metricNames = s.metricsRecorder.GetRecordedMetricNames(md)
+	}
+
 	resp := &serverpb.MetricMetadataResponse{
 		Metadata:      md,
 		RecordedNames: metricNames,
+		MetricLayers:  metricLayers,
 	}
 
 	return resp, nil
@@ -2449,12 +2481,15 @@ func jobHelper(
 	return &job, nil
 }
 
+// fetchJobMessages retrieves the messages associated with a job using the node
+// user; its results should only be shown to a user already known to have access
+// to the passed job.
 func fetchJobMessages(
 	ctx context.Context, jobID int64, user username.SQLUsername, sqlServer *SQLServer,
 ) (messages []serverpb.JobMessage) {
 	const msgQuery = `SELECT kind, written, message FROM system.job_message WHERE job_id = $1 ORDER BY written DESC`
 	it, err := sqlServer.internalExecutor.QueryIteratorEx(ctx, "admin-job-messages", nil,
-		sessiondata.InternalExecutorOverride{User: user},
+		sessiondata.NodeUserSessionDataOverride, // We are post-priv check and sys table requires node.
 		msgQuery,
 		jobID,
 	)

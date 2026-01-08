@@ -65,9 +65,12 @@ while true; do
     ./cockroach workload init tpcc \
         --warehouses=3000 \
         --secure \
-  --concurrency 4 \
+        --concurrency 4 \
         --db cct_tpcc_drop \
-        \$PG_URL_N1 | tee "\$INIT_LOG"
+        "$PG_URL_N1" | tee "\$INIT_LOG"
+    if [ \$? -eq 0 ]; then
+        rm "\$INIT_LOG"
+    fi
     echo ">> Dropping cct_tpcc_drop_old if it exists"
     ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE cct_tpcc_drop_old CASCADE;"
     sleep 5
@@ -77,12 +80,15 @@ while true; do
         --active-warehouses 1000 \
         --db cct_tpcc_drop \
         --secure \
-  --prometheus-port 2113 \
+        --prometheus-port 2113 \
         --ramp 5m \
         --display-every 5s \
         --duration 60m \
-  --tolerate-errors \
-   "\${PGURLS_ARR[@]}" | tee "\$RUN_LOG"
+        --tolerate-errors \
+        "\${PGURLS_ARR[@]}" | tee "\$RUN_LOG"
+    if [ \$? -eq 0 ]; then
+        rm "\$RUN_LOG"
+    fi
 
     echo ">> Renaming to cct_tpcc_drop_old"
     ./cockroach sql --url "${PG_URL_N1}" -e "ALTER DATABASE cct_tpcc_drop RENAME TO cct_tpcc_drop_old;"

@@ -107,14 +107,15 @@ func TestReplicateQueue(t *testing.T) {
 	}
 
 	testCases := []struct {
-		desc               string
-		replicaCounts      map[state.StoreID]int
-		spanConfig         roachpb.SpanConfig
-		initialRF          int
-		nonLiveNodes       map[state.NodeID]livenesspb.NodeLivenessStatus
-		nodeLocalities     map[state.NodeID]roachpb.Locality
-		ticks              []int64
-		expectedReplCounts map[int64]map[int]int
+		desc                  string
+		replicaCounts         map[state.StoreID]int
+		spanConfig            roachpb.SpanConfig
+		initialRF             int
+		nodeLivenessOverrides map[state.NodeID]state.LivenessState // liveness for all stores
+		nodeStatusOverrides   map[state.NodeID]state.NodeStatus    // membership, draining
+		nodeLocalities        map[state.NodeID]roachpb.Locality
+		ticks                 []int64
+		expectedReplCounts    map[int64]map[int]int
 	}{
 		{
 			// NB: Expect no action, range counts are balanced.
@@ -208,8 +209,8 @@ func TestReplicateQueue(t *testing.T) {
 				NumReplicas: 3,
 				NumVoters:   3,
 			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				3: livenesspb.NodeLivenessStatus_DEAD},
+			nodeLivenessOverrides: map[state.NodeID]state.LivenessState{
+				3: state.LivenessDead},
 			ticks: []int64{5, 10, 15},
 			expectedReplCounts: map[int64]map[int]int{
 				5:  {1: 1, 2: 1, 3: 1, 4: 0},
@@ -227,8 +228,8 @@ func TestReplicateQueue(t *testing.T) {
 				NumReplicas: 3,
 				NumVoters:   3,
 			},
-			nonLiveNodes: map[state.NodeID]livenesspb.NodeLivenessStatus{
-				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING},
+			nodeStatusOverrides: map[state.NodeID]state.NodeStatus{
+				3: {Membership: livenesspb.MembershipStatus_DECOMMISSIONING}},
 			ticks: []int64{5, 10, 15, 20, 25},
 			expectedReplCounts: map[int64]map[int]int{
 				5:  {1: 10, 2: 10, 3: 10, 4: 0},
@@ -299,8 +300,11 @@ func TestReplicateQueue(t *testing.T) {
 			)
 			s.TickClock(start)
 
-			for nodeID, livenessStatus := range tc.nonLiveNodes {
-				s.SetNodeLiveness(nodeID, livenessStatus)
+			for nodeID, liveness := range tc.nodeLivenessOverrides {
+				s.SetAllStoresLiveness(nodeID, liveness)
+			}
+			for nodeID, status := range tc.nodeStatusOverrides {
+				s.SetNodeStatus(nodeID, status)
 			}
 
 			for nodeID, locality := range tc.nodeLocalities {

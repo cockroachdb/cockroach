@@ -61,11 +61,11 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     cpu_per_access=0 raft_cpu_per_write=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
-//     [store_byte_capacity_gib=<int>] [node_cpu_rate_capacity=<int>]
+//     [store_byte_capacity_gib=<int>] [node_cpu_cores=<float>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity_gib=256, node_cpu_rate_capacity=0.
+//     store_byte_capacity_gib=256, node_cpu_cores=8.0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -89,11 +89,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     an extra line should follow with the replica placement. A example of
 //     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
 //
-//   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
-//     status=(dead|decommisssioning|draining|unavailable)
-//     Set the liveness status of the node with ID NodeID. This applies at the
-//     start of the simulation or with some delay after the simulation starts,
-//     if specified.
+//   - set_status store=<int> [delay=<duration>] liveness=(live|unavailable|dead)
+//   - set_status node=<int> [delay=<duration>] [liveness=(live|unavailable|dead)]
+//       [membership=(active|decommissioning|decommissioned)] [draining=<bool>]
+//     Set status signals for stores or nodes. The store= form sets liveness for
+//     a single store. The node= form can set liveness for all stores on a node
+//     and/or set membership/draining (which are per-node). Defaults for node=:
+//     membership=active, draining=false.
 //
 //   - set_locality node=<int> [delay=<duration] locality=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
@@ -342,7 +344,7 @@ func TestDataDriven(t *testing.T) {
 				case "gen_cluster":
 					var nodes = 3
 					var storesPerNode = 1
-					var nodeCPURateCapacity = []uint64{config.DefaultNodeCPURateCapacityNanos}
+					var nodeCPUCores = []float64{config.DefaultNodeCPUCores}
 					var region []string
 					var nodesPerRegion []int
 					var storeByteCapacityGiB int64 = 256
@@ -351,16 +353,16 @@ func TestDataDriven(t *testing.T) {
 					scanIfExists(t, d, "store_byte_capacity_gib", &storeByteCapacityGiB)
 					scanIfExists(t, d, "region", &region)
 					scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
-					scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+					scanIfExists(t, d, "node_cpu_cores", &nodeCPUCores)
 
 					var buf strings.Builder
-					require.NotEmpty(t, nodeCPURateCapacity)
+					require.NotEmpty(t, nodeCPUCores)
 					{
-						n := len(nodeCPURateCapacity)
-						require.True(t, n == 1 || n == nodes, "need to specify node_cpu_rate_capacity for each node")
+						n := len(nodeCPUCores)
+						require.True(t, n == 1 || n == nodes, "need to specify node_cpu_cores for each node")
 
-						for _, cpct := range nodeCPURateCapacity {
-							if cores := float64(cpct) / 1e9; cores < 1 {
+						for _, cores := range nodeCPUCores {
+							if cores < 1.0 {
 								// TODO(mma): fix up the tests that trigger this warning.
 								// TODO(mma): print a warning whenever the measured CPU utilization
 								// on a node exceeds this capacity, as that's likely not what the test
@@ -377,7 +379,7 @@ func TestDataDriven(t *testing.T) {
 						StoreByteCapacity:   storeByteCapacityGiB << 30,
 						Region:              region,
 						NodesPerRegion:      nodesPerRegion,
-						NodeCPURateCapacity: nodeCPURateCapacity,
+						NodeCPURateCapacity: state.NodeCPUCores(nodeCPUCores).ToRateCapacityNanos(),
 					}
 					return buf.String()
 				case "load_cluster":
@@ -423,20 +425,100 @@ func TestDataDriven(t *testing.T) {
 						})
 					}
 					return ""
-				case "set_liveness":
-					var nodeID int
+				case "set_status":
+					var storeID, nodeID int
 					var delay time.Duration
-					livenessStatus := livenesspb.NodeLivenessStatus_LIVE
-					scanMustExist(t, d, "node", &nodeID)
-					scanMustExist(t, d, "liveness", &livenessStatus)
+					var livenessStr string
+
 					scanIfExists(t, d, "delay", &delay)
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetNodeLivenessEvent{
-							NodeId:         state.NodeID(nodeID),
-							LivenessStatus: livenessStatus,
-						},
-					})
+
+					// Check if this is a store-level or node-level command.
+					if scanIfExists(t, d, "store", &storeID) {
+						// Store-level: only liveness is valid.
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetStoreStatusEvent{
+								StoreID: state.StoreID(storeID),
+								Status:  state.StoreStatus{Liveness: liveness},
+							},
+						})
+					} else if scanIfExists(t, d, "node", &nodeID) {
+						// Node-level: can set liveness (for all stores) and/or membership/draining.
+						var hasLiveness bool
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							hasLiveness = true
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+
+						// If liveness was specified, add a SetNodeLivenessEvent.
+						// See SetNodeLivenessEvent for why we can't expand to individual
+						// store events here.
+						if hasLiveness {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeLivenessEvent{
+									NodeID:   state.NodeID(nodeID),
+									Liveness: liveness,
+								},
+							})
+						}
+
+						// If membership or draining was specified, add a SetNodeStatusEvent.
+						var membershipStr string
+						var membership livenesspb.MembershipStatus
+						var draining bool
+						hasMembership := scanIfExists(t, d, "membership", &membershipStr)
+						if hasMembership {
+							switch membershipStr {
+							case "active":
+								membership = livenesspb.MembershipStatus_ACTIVE
+							case "decommissioning":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONING
+							case "decommissioned":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONED
+							default:
+								t.Fatalf("unknown membership value: %s", membershipStr)
+							}
+						}
+						hasDraining := scanIfExists(t, d, "draining", &draining)
+						if hasMembership || hasDraining {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeStatusEvent{
+									NodeID: state.NodeID(nodeID),
+									Status: state.NodeStatus{
+										Membership: membership,
+										Draining:   draining,
+									},
+								},
+							})
+						}
+					} else {
+						t.Fatalf("set_status requires either store=<int> or node=<int>")
+					}
 					return ""
 				case "set_locality":
 					var nodeID int
@@ -724,7 +806,6 @@ func TestDataDriven(t *testing.T) {
 					dns = scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold) || dns
 					dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
 					dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
-					dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
 					var snapshotRateMiB int
 					dns = scanIfExists(t, d, "rebalancing_snapshot_rate_mib", &snapshotRateMiB) || dns
 					if snapshotRateMiB != 0 {
@@ -744,6 +825,17 @@ func TestDataDriven(t *testing.T) {
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
 								Value:            rebalanceMode,
+							}})
+					}
+
+					var rebalanceObjective int64
+					if scanIfExists(t, d, "rebalance_objective", &rebalanceObjective) {
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingObjective",
+								Value:            rebalanceObjective,
 							}})
 					}
 					return ""

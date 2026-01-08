@@ -7,11 +7,16 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -25,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -81,6 +87,15 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	}
 	// Add spans that were already completed before the job resumed.
 	addCompleted(progress.CompletedSpans...)
+	sstManifestBuf := backfill.NewSSTManifestBuffer(progress.SSTManifests)
+	progress.SSTManifests = sstManifestBuf.Snapshot()
+	updateSSTManifests := func(newManifests []jobspb.IndexBackfillSSTManifest) {
+		progress.SSTManifests = sstManifestBuf.Append(newManifests)
+	}
+	mode, err := getIndexBackfillDistributedMergeMode(job)
+	if err != nil {
+		return err
+	}
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
@@ -88,6 +103,13 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 			return nil
 		}
 		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
+		var mapProgress execinfrapb.IndexBackfillMapProgress
+		if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+			if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+				return err
+			}
+			updateSSTManifests(mapProgress.SSTManifests)
+		}
 		// Make sure the progress update does not contain overlapping spans.
 		// This is a sanity check that only runs in test configurations, since it
 		// is an expensive n^2 check.
@@ -128,8 +150,24 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	// timestamp because other writing transactions have been writing at the
 	// appropriate timestamps in-between.
 	readAsOf := now
+	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
+
+	// addStoragePrefix records a storage prefix before any SST is written to that
+	// location, ensuring cleanup can occur even if the job fails mid-backfill or
+	// mid-merge. Duplicates are skipped by checking the existing prefixes.
+	addStoragePrefix := func(ctx context.Context, prefix string) error {
+		for _, existing := range progress.SSTStoragePrefixes {
+			if existing == prefix {
+				return nil // Already recorded.
+			}
+		}
+		progress.SSTStoragePrefixes = append(progress.SSTStoragePrefixes, prefix)
+		return tracker.SetBackfillProgress(ctx, progress)
+	}
+
 	run, retErr := ib.plan(
 		ctx,
+		job.ID(),
 		descriptor,
 		now,
 		progress.MinimumWriteTimestamp,
@@ -137,12 +175,20 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		spansToDo,
 		progress.DestIndexIDs,
 		progress.SourceIndexID,
+		useDistributedMerge,
 		updateFunc,
+		addStoragePrefix,
 	)
 	if retErr != nil {
 		return retErr
 	}
-	return run(ctx)
+	if err := run(ctx); err != nil {
+		return err
+	}
+	if !useDistributedMerge {
+		return nil
+	}
+	return ib.runDistributedMerge(ctx, job, descriptor, &progress, tracker, sstManifestBuf.Snapshot(), addStoragePrefix)
 }
 
 // Index backfilling ingests SSTs that don't play nicely with running txns
@@ -183,12 +229,15 @@ var _ scexec.Backfiller = (*IndexBackfillPlanner)(nil)
 
 func (ib *IndexBackfillPlanner) plan(
 	ctx context.Context,
+	jobID jobspb.JobID,
 	tableDesc catalog.TableDescriptor,
 	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
 	sourceIndexID descpb.IndexID,
+	useDistributedMerge bool,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
+	addStoragePrefix func(ctx context.Context, prefix string) error,
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
@@ -211,6 +260,14 @@ func (ib *IndexBackfillPlanner) plan(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
+		if useDistributedMerge {
+			// Record the storage prefix before any SSTs are written.
+			storagePrefix := fmt.Sprintf("nodelocal://%d/", ib.execCfg.NodeInfo.NodeID.SQLInstanceID())
+			backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
+			if err := addStoragePrefix(ctx, storagePrefix); err != nil {
+				return err
+			}
+		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
@@ -235,4 +292,141 @@ func (ib *IndexBackfillPlanner) plan(
 		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
+}
+
+func getIndexBackfillDistributedMergeMode(
+	job *jobs.Job,
+) (jobspb.IndexBackfillDistributedMergeMode, error) {
+	payload := job.Payload()
+	details := payload.GetNewSchemaChange()
+	if details == nil {
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled,
+			errors.AssertionFailedf("expected new schema change details on job %d", job.ID())
+	}
+	return details.DistributedMergeMode, nil
+}
+
+// runDistributedMerge runs a multi-pass distributed merge of the provided SSTs.
+// Intermediate iterations emit merged SSTs to nodelocal storage and update the
+// progress with the new manifests; the final iteration ingests the files directly
+// into KV and clears the manifests.
+//
+// The addStoragePrefix callback is invoked before any SST is written to a new
+// storage location, allowing the caller to persist the prefix for cleanup.
+func (ib *IndexBackfillPlanner) runDistributedMerge(
+	ctx context.Context,
+	job *jobs.Job,
+	descriptor catalog.TableDescriptor,
+	progress *scexec.BackfillProgress,
+	tracker scexec.BackfillerProgressWriter,
+	manifests []jobspb.IndexBackfillSSTManifest,
+	addStoragePrefix func(ctx context.Context, prefix string) error,
+) error {
+	if len(manifests) == 0 {
+		return nil
+	}
+	ssts := make([]execinfrapb.BulkMergeSpec_SST, 0, len(manifests))
+	for _, manifest := range manifests {
+		if manifest.Span == nil {
+			return errors.AssertionFailedf("manifest missing span metadata")
+		}
+		ssts = append(ssts, execinfrapb.BulkMergeSpec_SST{
+			URI:      manifest.URI,
+			StartKey: append([]byte(nil), manifest.Span.Key...),
+			EndKey:   append([]byte(nil), manifest.Span.EndKey...),
+		})
+	}
+	targetSpans := make([]roachpb.Span, 0, len(progress.DestIndexIDs))
+	for _, idxID := range progress.DestIndexIDs {
+		span := descriptor.IndexSpan(ib.execCfg.Codec, idxID)
+		targetSpans = append(targetSpans, span)
+	}
+	if len(targetSpans) == 0 {
+		return errors.AssertionFailedf("no destination index spans provided for merge")
+	}
+
+	mem := &MemoryMetrics{}
+	jobExecCtx, cleanup := MakeJobExecContext(ctx, "index-backfill-distributed-merge", username.NodeUserName(), mem, ib.execCfg)
+	defer cleanup()
+
+	maxIterations := int(backfill.DistributedMergeIterations.Get(&ib.execCfg.Settings.SV))
+
+	// Iterate through merge passes, with all but the final iteration writing to
+	// intermediate storage, and the final iteration ingesting directly into KV.
+	currentSSTs := ssts
+	for iteration := 1; iteration <= maxIterations; iteration++ {
+		genOutputURIAndRecordPrefix := func(instanceID base.SQLInstanceID) (string, error) {
+			// Use nodelocal for temporary storage of merged SSTs. These SSTs are
+			// only needed during the lifetime of the job. Record the storage prefix
+			// for cleanup on job completion - this must happen before writing any SST.
+			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
+			if err := addStoragePrefix(ctx, prefix); err != nil {
+				return "", err
+			}
+			// The '/job/<jobID>' prefix allows for easy cleanup in the event of job
+			// cancellation or failure.
+			return fmt.Sprintf("%sjob/%d/merge/iter-%d/", prefix, job.ID(), iteration), nil
+		}
+
+		var writeTS *hlc.Timestamp
+		if iteration == maxIterations {
+			// Final iteration: ingest directly into KV.
+			ts := progress.MinimumWriteTimestamp
+			writeTS = &ts
+		}
+
+		merged, err := invokeBulkMerge(
+			ctx,
+			jobExecCtx,
+			currentSSTs,
+			targetSpans,
+			genOutputURIAndRecordPrefix,
+			iteration,
+			maxIterations,
+			writeTS,
+		)
+		if err != nil {
+			return err
+		}
+
+		// If this is the final iteration, we're done (merged will be nil as the
+		// final iteration writes to KV, not external storage). Keep the manifests
+		// from the previous iteration so they can be used for cleanup or debugging.
+		if iteration == maxIterations {
+			return nil
+		}
+
+		if len(merged) == 0 {
+			return errors.AssertionFailedf("expected merged sst output: iteration %d", iteration)
+		}
+
+		// Convert merged SSTs to manifests and append them to the existing manifests.
+		// This accumulates SSTs from all iterations, allowing for potential resume
+		// and cleanup operations.
+		newManifests := make([]jobspb.IndexBackfillSSTManifest, 0, len(merged))
+		for _, sst := range merged {
+			span := roachpb.Span{
+				Key:    append([]byte(nil), sst.StartKey...),
+				EndKey: append([]byte(nil), sst.EndKey...),
+			}
+			newManifests = append(newManifests, jobspb.IndexBackfillSSTManifest{
+				URI:  sst.URI,
+				Span: &span,
+			})
+		}
+		progress.SSTManifests = newManifests
+		if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
+			return err
+		}
+
+		// Call testing knob after updating progress for this iteration.
+		if fn := ib.execCfg.DistSQLSrv.TestingKnobs.AfterDistributedMergeIteration; fn != nil {
+			fn(ctx, iteration, progress.SSTManifests)
+		}
+
+		// Use the output of this iteration as input to the next.
+		currentSSTs = merged
+	}
+
+	return nil
 }

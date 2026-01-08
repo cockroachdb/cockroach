@@ -32,43 +32,16 @@ func RenameTable(b BuildCtx, n *tree.RenameTable) {
 	}
 
 	// Validate the object type matches what was requested.
-	validateObjectType(elts, n)
-
-	// Get the fully qualified object name.
-	objectName := n.Name.ToTableName()
-	dbElts, scElts := b.ResolveTargetObject(n.Name, privilege.CREATE /* this should be 0 */)
-	_, _, scName := scpb.FindNamespace(scElts)
-	_, _, dbname := scpb.FindNamespace(dbElts)
-	objectName.SchemaName = tree.Name(scName.Name)
-	objectName.CatalogName = tree.Name(dbname.Name)
-	objectName.ExplicitCatalog = true
-	objectName.ExplicitSchema = true
+	currName := n.Name.ToTableName().ObjectName
+	validateObjectType(elts, currName, n.IsSequence, n.IsView, n.IsMaterialized)
 
 	// Get the descriptor ID for further processing.
-	var targetDescriptorID catid.DescID
-	var targetElement scpb.Element
-	_, _, tbl := scpb.FindTable(elts)
-	if tbl != nil {
-		targetElement = tbl
-		targetDescriptorID = tbl.TableID
-	}
-	if n.IsView || targetDescriptorID == 0 {
-		_, _, view := scpb.FindView(elts)
-		if view != nil {
-			targetElement = view
-			targetDescriptorID = view.ViewID
-		}
-	}
-	if n.IsSequence || targetDescriptorID == 0 {
-		_, _, seq := scpb.FindSequence(elts)
-		if seq != nil {
-			targetElement = seq
-			targetDescriptorID = seq.SequenceID
-		}
-	}
+	targetDescriptorID, targetElement, _ := getRelationElement(elts)
+	// Get the fully qualified object name.
+	objectName := tree.MakeTableNameFromPrefix(b.NamePrefix(targetElement), currName)
 
 	// Check for name-based dependencies that would prevent renaming.
-	checkNameBasedDependencies(b, targetDescriptorID, targetElement, objectName)
+	checkNameBasedDependencies(b, targetDescriptorID, targetElement, objectName, "rename")
 
 	// Need CREATE privilege on database to match legacy schema changer behavior.
 	b.ResolveDatabase(objectName.CatalogName, ResolveParams{RequiredPrivilege: privilege.CREATE})
@@ -104,6 +77,7 @@ func RenameTable(b BuildCtx, n *tree.RenameTable) {
 	newName.ExplicitCatalog = true
 	newName.ExplicitSchema = true
 	checkTableNameConflicts(b, objectName, newName, currentNS)
+	validateTableRename(b, objectName, newName)
 
 	// Check if the new name is the same as the old name (no-op case).
 	if currentNS.Name == string(newName.ObjectName) {
@@ -187,34 +161,51 @@ func checkTableNameConflicts(
 		}
 		panic(sqlerrors.NewRelationAlreadyExistsError(newName.String()))
 	}
+}
 
-	validateTableRename(b, currentName, newName)
+func getRelationElement(
+	elts ElementResultSet,
+) (descID catid.DescID, element scpb.Element, isTemp bool) {
+	if tbl := elts.FilterTable().MustGetZeroOrOneElement(); tbl != nil {
+		element = tbl
+		descID = tbl.TableID
+		isTemp = tbl.IsTemporary
+	} else if view := elts.FilterView().MustGetZeroOrOneElement(); view != nil {
+		element = view
+		descID = view.ViewID
+		isTemp = view.IsTemporary
+	} else if seq := elts.FilterSequence().MustGetZeroOrOneElement(); seq != nil {
+		element = seq
+		descID = seq.SequenceID
+		isTemp = seq.IsTemporary
+	}
+	return descID, element, isTemp
 }
 
 // validateObjectType validates that the resolved object type matches what was
 // requested in the statement. Note that we allow ALTER TABLE to be used for
 // views or sequences, just like in Postgres.
-func validateObjectType(elts ElementResultSet, n *tree.RenameTable) {
+func validateObjectType(
+	elts ElementResultSet, objectName tree.Name, isSequence bool, isView bool, isMaterialized bool,
+) {
 	_, _, view := scpb.FindView(elts)
 	_, _, seq := scpb.FindSequence(elts)
 
-	objectName := n.Name.ToTableName().ObjectName
-
-	if n.IsView && view == nil {
+	if isView && view == nil {
 		// User asked for view but we found something else.
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a view", objectName))
-	} else if n.IsSequence && seq == nil {
+	} else if isSequence && seq == nil {
 		// User asked for sequence but we found something else.
 		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a sequence", objectName))
 	}
 
 	if view != nil {
 		// Validate view type (materialized vs non-materialized).
-		if view.IsMaterialized && !n.IsMaterialized {
+		if view.IsMaterialized && !isMaterialized {
 			panic(errors.WithHint(pgerror.Newf(pgcode.WrongObjectType, "%q is a materialized view", objectName),
 				"use the corresponding MATERIALIZED VIEW command"))
 		}
-		if !view.IsMaterialized && n.IsMaterialized {
+		if !view.IsMaterialized && isMaterialized {
 			panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", objectName))
 		}
 	}
@@ -223,7 +214,7 @@ func validateObjectType(elts ElementResultSet, n *tree.RenameTable) {
 // checkNameBasedDependencies validates that no objects depend on this object
 // via its name.
 func checkNameBasedDependencies(
-	b BuildCtx, descriptorID catid.DescID, element scpb.Element, objectName tree.TableName,
+	b BuildCtx, descriptorID catid.DescID, element scpb.Element, objectName tree.TableName, op string,
 ) {
 	switch element.(type) {
 	case *scpb.Sequence:
@@ -238,14 +229,14 @@ func checkNameBasedDependencies(
 			// blocked.
 			viewElts := b.QueryByID(backRefElem.ViewID)
 			_, _, viewNS := scpb.FindNamespace(viewElts)
-			panic(sqlerrors.NewDependentBlocksOpError("rename", "relation", objectName.String(), "view", viewNS.Name))
+			panic(sqlerrors.NewDependentBlocksOpError(op, "relation", objectName.String(), "view", viewNS.Name))
 		case *scpb.FunctionName:
 			funcElem := b.QueryByID(backRefElem.FunctionID).FilterFunction().MustGetOneElement()
 			funcType := "function"
 			if funcElem.IsProcedure {
 				funcType = "procedure"
 			}
-			panic(sqlerrors.NewDependentBlocksOpError("rename", "relation", objectName.String(), funcType, backRefElem.Name))
+			panic(sqlerrors.NewDependentBlocksOpError(op, "relation", objectName.String(), funcType, backRefElem.Name))
 		case *scpb.TriggerDeps:
 			for _, usesRelation := range backRefElem.UsesRelations {
 				if usesRelation.ID == descriptorID {
@@ -256,8 +247,8 @@ func checkNameBasedDependencies(
 						return e.TriggerID == dependentTriggerID && e.TableID == dependentTableID
 					}).MustGetOneElement()
 					panic(sqlerrors.NewDependentObjectErrorf(
-						"cannot rename relation %q because trigger %q on table %q depends on it",
-						objectName.String(), dependentTriggerName.Name, dependentTableNS.Name,
+						"cannot %s relation %q because trigger %q on table %q depends on it",
+						op, objectName.String(), dependentTriggerName.Name, dependentTableNS.Name,
 					))
 				}
 			}

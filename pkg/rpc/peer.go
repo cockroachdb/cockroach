@@ -9,16 +9,17 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"runtime/pprof"
 	"time"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -269,9 +270,11 @@ func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Con
 	b = circuit.NewBreaker(circuit.Options{
 		Name: "breaker", // log tags already represent `k`
 		AsyncProbe: func(report func(error), done func()) {
-			pprof.Do(ctx, pprof.Labels("tags", logtags.FromContext(ctx).String()), func(ctx context.Context) {
+			pprofutil.Do(ctx, func(ctx context.Context) {
 				p.launch(ctx, report, done)
-			})
+			},
+				workloadid.ProfileTag, workloadid.WORKLOAD_NAME_RPC_HEARTBEAT,
+				"tags", logtags.FromContext(ctx).String())
 		},
 	})
 	p.b = b

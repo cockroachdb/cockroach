@@ -13,6 +13,7 @@ import (
 	roachprodConfig "github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +35,7 @@ Typical usage:
     roachprod-microbench run output_dir --cluster=roachprod-cluster
         Run binaries located in the default location ("bin/test_binaries.tar.gz") on a roachprod cluster and output the results to output_dir.
 
-    roachprod-microbench compare output_dir/0 output_dir/1 --sheet-desc="master vs. release-20.1"
+    roachprod-microbench compare output_dir/0 output_dir/1 --version-context="master vs. release-20.1" --generate-sheet 
         Publish a Google Sheet containing the comparison of the results in output_dir/0 and output_dir/1.
 `,
 		SilenceUsage:  true,
@@ -161,30 +162,52 @@ func makeCompareCommand() *cobra.Command {
 
 		comparisonResult := c.createComparisons(metricMaps, "baseline", "experiment")
 
+		// Collect errors from all operations but continue attempting each one.
+		// This ensures we attempt to post to Slack, create
+		// GitHub issues, and push to InfluxDB regardless of individual failures.
+		// Errors are propagated at the end to fail the CI job if any operation failed.
+		var errs []error
 		var links map[string]string
-		if c.sheetDesc != "" {
+		if c.generateSheet {
 			links, err = c.publishToGoogleSheets(comparisonResult)
 			if err != nil {
-				return err
+				log.Printf("Failed to publish to Google Sheets: %v", err)
+				errs = append(errs, err)
 			}
 			if c.slackConfig.token != "" {
 				err = c.postToSlack(links, comparisonResult)
 				if err != nil {
-					return err
+					log.Printf("Failed to post to Slack: %v", err)
+					errs = append(errs, err)
 				}
+			}
+		}
+
+		if c.postIssues {
+			err = c.maybePostRegressionIssues(comparisonResult)
+			if err != nil {
+				log.Printf("Failed to post GitHub issues: %v", err)
+				errs = append(errs, err)
 			}
 		}
 
 		if c.influxConfig.token != "" {
 			err = c.pushToInfluxDB(comparisonResult)
 			if err != nil {
-				return err
+				log.Printf("Failed to push to InfluxDB: %v", err)
+				errs = append(errs, err)
 			}
 		}
 
 		// if the threshold is set, we want to compare and fail the job in case of perf regressions
 		if c.threshold != skipComparison {
-			return c.compareUsingThreshold(comparisonResult)
+			if err := c.compareUsingThreshold(comparisonResult); err != nil {
+				errs = append(errs, err)
+			}
+		}
+
+		if len(errs) > 0 {
+			return errors.Join(errs...)
 		}
 		return nil
 	}
@@ -199,7 +222,8 @@ func makeCompareCommand() *cobra.Command {
 		Args: cobra.ExactArgs(2),
 		RunE: runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "set a sheet description to publish the results to Google Sheets")
+	cmd.Flags().StringVar(&config.versionContext, "version-context", config.versionContext, "version comparison context (e.g., 'v25.3.4 (1cddb3a2) -> refs/heads/master (ddeef368)') used for sheets, Slack, and GitHub issues")
+	cmd.Flags().BoolVar(&config.generateSheet, "generate-sheet", config.generateSheet, "publish the comparison results to Google Sheets")
 	cmd.Flags().StringVar(&config.slackConfig.token, "slack-token", config.slackConfig.token, "pass a slack token to post the results to a slack channel")
 	cmd.Flags().StringVar(&config.slackConfig.user, "slack-user", config.slackConfig.user, "slack user to post the results as")
 	cmd.Flags().StringVar(&config.slackConfig.channel, "slack-channel", config.slackConfig.channel, "slack channel to post the results to")
@@ -207,6 +231,7 @@ func makeCompareCommand() *cobra.Command {
 	cmd.Flags().StringVar(&config.influxConfig.token, "influx-token", config.influxConfig.token, "pass an InfluxDB auth token to push the results to InfluxDB")
 	cmd.Flags().StringToStringVar(&config.influxConfig.metadata, "influx-metadata", config.influxConfig.metadata, "pass metadata to add to the InfluxDB measurement")
 	cmd.Flags().Float64Var(&config.threshold, "threshold", config.threshold, "threshold in percentage value for detecting perf regression ")
+	cmd.Flags().BoolVar(&config.postIssues, "post-issues", config.postIssues, "post GitHub issues for performance regressions (requires GITHUB_API_TOKEN to be set)")
 	return cmd
 }
 

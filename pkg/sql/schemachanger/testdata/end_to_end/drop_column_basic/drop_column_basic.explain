@@ -26,7 +26,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
- │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Comment: "j has a comment"}
+ │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Value: "j has a comment"}
  │         └── 10 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
@@ -54,7 +54,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │    │    ├── 3 elements transitioning toward ABSENT
  │    │    │    ├── WRITE_ONLY    → PUBLIC Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │    │    │    ├── ABSENT        → PUBLIC ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
- │    │    │    └── ABSENT        → PUBLIC ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Comment: "j has a comment"}
+ │    │    │    └── ABSENT        → PUBLIC ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Value: "j has a comment"}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -72,7 +72,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104 (t), ColumnID: 2 (j-)}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104 (t), Name: "j", ColumnID: 2 (j-)}
- │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Comment: "j has a comment"}
+ │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104 (t), ColumnID: 2 (j-), Value: "j has a comment"}
  │         └── 14 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}

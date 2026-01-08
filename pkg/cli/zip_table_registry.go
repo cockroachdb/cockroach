@@ -1232,6 +1232,21 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"resolved_age",
 		},
 	},
+	"crdb_internal.cluster_replication_node_processors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"stream_id",
+			"processor_id",
+			"state",
+			"recv_wait",
+			"last_recv_wait",
+			"flush_wait",
+			"last_flush_wait",
+			"events_received",
+			"flush_cnt",
+			"last_event_age",
+			"last_flush_age",
+		},
+	},
 }
 
 // NB: The following system tables explicitly forbidden:
@@ -1585,6 +1600,14 @@ JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
 			"username",
 		},
 	},
+	"system.statement_hints": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"row_id",
+			"fingerprint",
+			"hint",
+			"created_at",
+		},
+	},
 	// statement_statistics can have over 100k rows in just the last hour.
 	// Select all the statements that are part of a transaction where one of
 	// the statements is in the 100 by cpu usage, and all the transaction
@@ -1670,6 +1693,15 @@ limit 5000;`,
 			`"distinctCount"`,
 			`"nullCount"`,
 			`"avgSize"`,
+			`"partialPredicate"`,
+			`"fullStatisticID"`,
+		},
+	},
+	"system.table_statistics_locks": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"table_id",
+			"kind",
+			"job_ids",
 		},
 	},
 	"system.task_payloads": {

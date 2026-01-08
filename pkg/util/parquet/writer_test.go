@@ -654,7 +654,7 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 
 func removeFileUnlessFailed(t *testing.T, f *os.File) {
 	t.Helper()
-	if !t.Failed() {
+	if t.Failed() {
 		return
 	}
 	if err := os.Remove(f.Name()); err != nil {

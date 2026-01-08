@@ -33,7 +33,7 @@ func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string)
 }
 
 func newInternalSession(t *testing.T, s serverutils.ApplicationLayerInterface) isql.Session {
-	sd := tableHandlerSessionSettings(sql.NewInternalSessionData(context.Background(), s.ClusterSettings(), ""))
+	sd := tableHandlerSessionSettings(sql.NewInternalSessionData(context.Background(), s.ClusterSettings(), ""), s.ClusterSettings())
 	session, err := s.InternalDB().(isql.DB).Session(context.Background(), "test_session", isql.WithSessionData(sd))
 	require.NoError(t, err)
 	return session

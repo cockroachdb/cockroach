@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -284,6 +285,11 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
+}
+
+// ClusterSettings returns the registry's cluster settings handle.
+func (r *Registry) ClusterSettings() *cluster.Settings {
+	return r.settings
 }
 
 // makeCtx returns a new context from r's ambient context and an associated
@@ -1035,7 +1041,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		defer cancel()
 
 		cancelLoopTask(ctx)
-		lc := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
+		lc := makeLoopController(r, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
 		defer lc.cleanup()
 		for {
 			select {
@@ -1066,7 +1072,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		lc := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
+		lc := makeLoopController(r, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
 		defer lc.cleanup()
 
 		// Retention duration of terminal job records.
@@ -1104,7 +1110,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		lc := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
+		lc := makeLoopController(r, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
 		defer lc.cleanup()
 		for {
 			select {
@@ -1119,6 +1125,12 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if shouldClaim {
+					// A nudge to claim and adopt suggests someone is waiting for periodic
+					// registry behaviors like claiming to happen; some of those behaviors
+					// are in the cancel loop, like clearing stale claims or detecting a
+					// cancel request, so run that fn as well when nudged in case that is
+					// or is part of what the nudge was sent to hasten.
+					cancelLoopTask(ctx)
 					claimJobs(ctx)
 				}
 				processClaimedJobs(ctx)
@@ -2075,4 +2087,16 @@ func (r *Registry) IsIngesting(jobID catpb.JobID) bool {
 	defer r.mu.Unlock()
 	_, ok := r.mu.ingestingJobs[jobID]
 	return ok
+}
+
+// GetLoopInterval fetches the loop interval for a specific setting, applying
+// any overrides and scaling as necessary.
+func (r *Registry) GetLoopInterval(
+	s *settings.DurationSetting, overrideKnob *time.Duration,
+) time.Duration {
+	if overrideKnob != nil {
+		return *overrideKnob
+	}
+	interval := s.Get(&r.settings.SV)
+	return time.Duration(intervalBaseSetting.Get(&r.settings.SV) * float64(interval))
 }

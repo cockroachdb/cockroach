@@ -8,11 +8,12 @@ admission.sql_sql_response.enabled	boolean	true	when true, work performed by the
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
+bulkio.merge.file_size	byte size	60 MiB	target size for individual data files produced during merge phase	application
 changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a fraction of min_checkpoint_frequency. This setting has no effect if min_checkpoint_frequency is set to 0.	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
-changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions. this setting can be overridden by the changefeed option `range_distribution_strategy` [default = 0, balanced_simple = 1]	application
+changefeed.default_range_distribution_strategy	enumeration	default	controls how changefeed work is distributed across nodes. 'default' defers to DistSQL for node selection and work distribution. 'balanced_simple' uses DistSQL for node selection but then attempts to evenly distribute ranges across those selected nodes for better load balancing. this setting does not override locality restrictions and can be overridden per-changefeed using the 'range_distribution_strategy' option. [default = 0, balanced_simple = 1]	application
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
@@ -179,7 +180,7 @@ sql.auth.change_own_password.enabled	boolean	false	controls whether a user is al
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
-sql.catalog.allow_leased_descriptors.enabled	boolean	false	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
+sql.catalog.allow_leased_descriptors.enabled	boolean	true	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application
 sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	application
@@ -357,7 +358,9 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_extremes_concurrency_limit	integer	128	determines the maximum number of concurrent automatic partial USING EXTREMES table statistics collection jobs	application
 sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statistics collection mode	application
+sql.stats.automatic_full_concurrency_limit	integer	1	determines the maximum number of concurrent automatic full table statistics collection jobs	application
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
@@ -417,6 +420,7 @@ storage.sstable.compression_algorithm	enumeration	fastest	determines the compres
 storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
+timeseries.storage.resolution_1m.ttl	duration	240h0m0s	the maximum age of time series data stored at the 1 minute resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.	application
@@ -426,4 +430,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.4-upgrading-to-1000026.1-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.4-upgrading-to-1000026.1-step-006	set the active cluster version in the format '<major>.<minor>'	application

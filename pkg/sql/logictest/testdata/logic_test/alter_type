@@ -317,7 +317,7 @@ hello
 
 # Once the use of "yo" has been removed, we should be able to remove it from the
 # enum
-statement ok
+statement count 1
 DELETE FROM use_greetings WHERE use_greetings.v = 'yo'
 
 statement ok
@@ -345,7 +345,7 @@ ALTER TYPE alphabets DROP VALUE 'b'
 statement error pq: could not remove enum value "c" as it is being used by "uses_alphabets"
 ALTER TYPE alphabets DROP VALUE 'c'
 
-statement ok
+statement count 1
 DELETE FROM uses_alphabets WHERE k = 1
 
 statement ok
@@ -545,7 +545,7 @@ statement error could not remove enum value "d" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'd'
 
 # Remove the row that uses 'd' in it and then try dropping.
-statement ok
+statement count 1
 DELETE FROM using_alphabets_60004 WHERE k = 2
 
 statement ok

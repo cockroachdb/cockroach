@@ -144,8 +144,7 @@ var LDRImmediateModeWriter = settings.RegisterStringSetting(
 	settings.ApplicationLevel,
 	"logical_replication.consumer.immediate_mode_writer",
 	"the writer to use when in immediate mode",
-	// TODO(jeffswenson): make the crud writer the default
-	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeLegacyKV), string(LDRWriterTypeCRUD), string(LDRWriterTypeSQL)),
+	metamorphic.ConstantWithTestChoice("logical_replication.consumer.immediate_mode_writer", string(LDRWriterTypeCRUD), string(LDRWriterTypeLegacyKV), string(LDRWriterTypeSQL)),
 	settings.WithValidateString(func(sv *settings.Values, val string) error {
 		if val != string(LDRWriterTypeSQL) && val != string(LDRWriterTypeLegacyKV) && val != string(LDRWriterTypeCRUD) {
 			return errors.Newf("immediate mode writer must be either 'sql', 'legacy-kv', or 'crud', got '%s'", val)

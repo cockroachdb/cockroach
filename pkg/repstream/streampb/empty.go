@@ -396,3 +396,150 @@ func (d *DebugLogicalConsumerStatus) RecordPurgatory(netEvents int64) {
 	d.mu.stats.Purgatory.CurrentCount += netEvents
 	d.mu.Unlock()
 }
+
+// PhysicalConsumerState represents the current state of a physical stream consumer.
+type PhysicalConsumerState int
+
+const (
+	PhysicalConsumerReceiving PhysicalConsumerState = iota
+	PhysicalConsumerBuffering
+	PhysicalConsumerWaitingForFlush
+	PhysicalConsumerFlushing
+)
+
+func (s PhysicalConsumerState) String() string {
+	switch s {
+	case PhysicalConsumerReceiving:
+		return "receiving"
+	case PhysicalConsumerBuffering:
+		return "buffering"
+	case PhysicalConsumerWaitingForFlush:
+		return "waiting_for_flush"
+	case PhysicalConsumerFlushing:
+		return "flushing"
+	default:
+		return "unknown"
+	}
+}
+
+// DebugPhysicalConsumerStatusHolder holds the debug status for a physical stream consumer.
+type DebugPhysicalConsumerStatusHolder struct {
+	mu syncutil.Mutex
+	s  DebugPhysicalConsumerStatus
+}
+
+// DebugPhysicalConsumerStatus captures debug state of a physical stream consumer.
+type DebugPhysicalConsumerStatus struct {
+	// Identification info.
+	StreamID    StreamID
+	ProcessorID int32
+
+	// Current state.
+	State              PhysicalConsumerState
+	StateEnteredMicros int64
+
+	// Wait time tracking (cumulative nanoseconds).
+	ReceiveWaitNanos     int64
+	LastReceiveWaitNanos int64
+	FlushWaitNanos       int64
+	LastFlushWaitNanos   int64
+
+	// Counters.
+	EventsReceived  int64
+	FlushesEnqueued int64
+
+	// Last timestamps (micros since epoch).
+	LastEventMicros int64
+	LastFlushMicros int64
+}
+
+// Setup initializes the status holder with identification info.
+func (h *DebugPhysicalConsumerStatusHolder) Setup(streamID StreamID, processorID int32) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.StreamID = streamID
+	h.s.ProcessorID = processorID
+}
+
+// Get returns a copy of the current status.
+func (h *DebugPhysicalConsumerStatusHolder) Get() DebugPhysicalConsumerStatus {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.s
+}
+
+// Receiving marks the consumer as waiting to receive events.
+func (h *DebugPhysicalConsumerStatusHolder) Receiving() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.State = PhysicalConsumerReceiving
+	h.s.StateEnteredMicros = timeutil.Now().UnixMicro()
+}
+
+// ReceivedEvent records that an event was received and how long we waited.
+func (h *DebugPhysicalConsumerStatusHolder) ReceivedEvent(waitNanos int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.State = PhysicalConsumerBuffering
+	h.s.StateEnteredMicros = timeutil.Now().UnixMicro()
+	h.s.EventsReceived++
+	h.s.LastEventMicros = h.s.StateEnteredMicros
+	h.s.ReceiveWaitNanos += waitNanos
+	h.s.LastReceiveWaitNanos = waitNanos
+}
+
+// WaitingForFlush marks the consumer as waiting to send buffer to flush loop.
+func (h *DebugPhysicalConsumerStatusHolder) WaitingForFlush() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.State = PhysicalConsumerWaitingForFlush
+	h.s.StateEnteredMicros = timeutil.Now().UnixMicro()
+}
+
+// FlushEnqueued records that a flush was successfully enqueued and how long we waited.
+func (h *DebugPhysicalConsumerStatusHolder) FlushEnqueued(waitNanos int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.s.State = PhysicalConsumerFlushing
+	h.s.StateEnteredMicros = timeutil.Now().UnixMicro()
+	h.s.FlushesEnqueued++
+	h.s.LastFlushMicros = h.s.StateEnteredMicros
+	h.s.FlushWaitNanos += waitNanos
+	h.s.LastFlushWaitNanos = waitNanos
+}
+
+// activePhysicalConsumerStatuses is the debug statuses of all active physical
+// consumer processors in the process at any given time.
+var activePhysicalConsumerStatuses = struct {
+	syncutil.Mutex
+	m map[*DebugPhysicalConsumerStatusHolder]struct{}
+}{m: make(map[*DebugPhysicalConsumerStatusHolder]struct{})}
+
+// RegisterPhysicalConsumerStatus registers a DebugPhysicalConsumerStatusHolder so
+// that it is returned by GetActivePhysicalConsumerStatuses. It *must* be
+// unregistered with UnregisterPhysicalConsumerStatus when its processor closes.
+func RegisterPhysicalConsumerStatus(s *DebugPhysicalConsumerStatusHolder) {
+	activePhysicalConsumerStatuses.Lock()
+	defer activePhysicalConsumerStatuses.Unlock()
+	activePhysicalConsumerStatuses.m[s] = struct{}{}
+}
+
+// UnregisterPhysicalConsumerStatus unregisters a previously registered
+// DebugPhysicalConsumerStatusHolder. It is idempotent.
+func UnregisterPhysicalConsumerStatus(s *DebugPhysicalConsumerStatusHolder) {
+	activePhysicalConsumerStatuses.Lock()
+	defer activePhysicalConsumerStatuses.Unlock()
+	delete(activePhysicalConsumerStatuses.m, s)
+}
+
+// GetActivePhysicalConsumerStatuses gets the DebugPhysicalConsumerStatus for all
+// registered physical consumer processors in the process.
+func GetActivePhysicalConsumerStatuses() []DebugPhysicalConsumerStatus {
+	activePhysicalConsumerStatuses.Lock()
+	defer activePhysicalConsumerStatuses.Unlock()
+	res := make([]DebugPhysicalConsumerStatus, 0, len(activePhysicalConsumerStatuses.m))
+	for e := range activePhysicalConsumerStatuses.m {
+		res = append(res, e.Get())
+	}
+	return res
+}

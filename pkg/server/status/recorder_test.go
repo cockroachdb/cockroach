@@ -8,12 +8,14 @@ package status
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"os"
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -250,13 +252,266 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		},
 	}
 
-	actualData := recorder.GetTimeSeriesData()
+	actualData := recorder.GetTimeSeriesData(false)
 
 	// compare actual vs expected values
 	sort.Sort(byTimeAndName(actualData))
 	sort.Sort(byTimeAndName(expectedData))
 	if a, e := actualData, expectedData; !reflect.DeepEqual(a, e) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
+	}
+
+	// ========================================
+	// Verify that GetTimeSeriesData with includeChildMetrics=true returns child labels
+	// ========================================
+	// Add aggmetrics with child labels to the app registry
+	aggCounter := aggmetric.NewCounter(
+		metric.Metadata{
+			Name:     "changefeed.emitted_messages",
+			Category: metric.Metadata_CHANGEFEEDS,
+		},
+		"some-id", "feed_id",
+	)
+	appReg.AddMetric(aggCounter)
+	// Add child metrics with specific labels
+	child1 := aggCounter.AddChild("123", "feed-a")
+	child1.Inc(100)
+	child2 := aggCounter.AddChild("456", "feed-b")
+	child2.Inc(200)
+
+	aggGauge := aggmetric.NewGauge(
+		metric.Metadata{
+			Name:     "changefeed.lagging_ranges",
+			Category: metric.Metadata_CHANGEFEEDS,
+		},
+		"db", "status!!",
+	)
+	appReg.AddMetric(aggGauge)
+	// Add child metrics with different label combinations
+	child3 := aggGauge.AddChild("mine", "active")
+	child3.Update(1)
+	child4 := aggGauge.AddChild("yours", "paused")
+	child4.Update(0)
+
+	aggHistogram := aggmetric.NewHistogram(
+		metric.HistogramOptions{
+			Metadata: metric.Metadata{
+				Name:     "changefeed.stage.downstream_client_send.latency",
+				Category: metric.Metadata_CHANGEFEEDS,
+			},
+			Duration:     10 * time.Second,
+			BucketConfig: metric.IOLatencyBuckets,
+			Mode:         metric.HistogramModePrometheus,
+		},
+		"scope",
+	)
+	appReg.AddMetric(aggHistogram)
+	// Add child histogram metrics
+	child5 := aggHistogram.AddChild("default")
+	child5.RecordValue(100)
+	child5.RecordValue(200)
+	child6 := aggHistogram.AddChild("user")
+	child6.RecordValue(300)
+	child6.RecordValue(400)
+	child6.RecordValue(500)
+
+	// Enable the cluster setting for child metrics storage
+	ChildMetricsStorageEnabled.Override(context.Background(), &st.SV, true)
+
+	// Get time series data with child metrics enabled
+	childData := recorder.GetTimeSeriesData(true)
+
+	appMetricTestCases := []struct {
+		name           string
+		metricPrefix   string
+		labelMatchers  []string
+		expectedSource string
+		expectedValue  float64
+	}{
+		{
+			name:           "counter feed-a with some_id=123",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{"feed_id=\"feed-a\"", "some_id=\"123\""},
+			expectedSource: "7",
+			expectedValue:  100,
+		},
+		{
+			name:           "counter feed-b with some_id=456",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{"feed_id=\"feed-b\"", "some_id=\"456\""},
+			expectedSource: "7",
+			expectedValue:  200,
+		},
+		{
+			name:           "gauge mine with status=active",
+			metricPrefix:   "cr.node.changefeed.lagging_ranges",
+			labelMatchers:  []string{"db=\"mine\"", "status__=\"active\""},
+			expectedSource: "7",
+			expectedValue:  1,
+		},
+		{
+			name:           "gauge yours with status=paused",
+			metricPrefix:   "cr.node.changefeed.lagging_ranges",
+			labelMatchers:  []string{"db=\"yours\"", "status__=\"paused\""},
+			expectedSource: "7",
+			expectedValue:  0,
+		},
+		{
+			name:           "histogram default -count",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"default\"", "-count"},
+			expectedSource: "7",
+			expectedValue:  2,
+		},
+		{
+			name:           "histogram user -count",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"user\"", "-count"},
+			expectedSource: "7",
+			expectedValue:  3,
+		},
+		{
+			name:           "histogram default -avg",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"default\"", "-avg"},
+			expectedSource: "7",
+			expectedValue:  150,
+		},
+		{
+			name:           "histogram user -avg",
+			metricPrefix:   "cr.node.changefeed.stage.downstream_client_send.latency",
+			labelMatchers:  []string{"scope=\"user\"", "-avg"},
+			expectedSource: "7",
+			expectedValue:  400,
+		},
+	}
+
+	for _, tc := range appMetricTestCases {
+		var found bool
+		for _, ts := range childData {
+			if !strings.Contains(ts.Name, tc.metricPrefix) {
+				continue
+			}
+			allMatch := true
+			for _, matcher := range tc.labelMatchers {
+				if !strings.Contains(ts.Name, matcher) {
+					allMatch = false
+					break
+				}
+			}
+			if !allMatch {
+				continue
+			}
+			found = true
+			require.Equal(t, tc.expectedSource, ts.Source, "Expected source for %s", tc.name)
+			require.Len(t, ts.Datapoints, 1, "Expected 1 datapoint for %s", tc.name)
+			require.Equal(t, tc.expectedValue, ts.Datapoints[0].Value, "Expected value for %s", tc.name)
+			break
+		}
+		require.True(t, found, "Expected to find %s", tc.name)
+	}
+
+	// ========================================
+	// Verify that tenant changefeed child metrics are collected with proper source
+	// ========================================
+
+	// Add changefeed aggmetrics to the tenant registry with TsdbRecordLabeled
+	tsdbRecordLabeled := true
+	tenantAggCounter := aggmetric.NewCounter(
+		metric.Metadata{
+			Name:              "changefeed.emitted_messages",
+			TsdbRecordLabeled: &tsdbRecordLabeled,
+			Category:          metric.Metadata_CHANGEFEEDS,
+		},
+		"scope", "feed_id",
+	)
+	regTenant.AddMetric(tenantAggCounter)
+
+	// Add child metrics for different changefeeds in the tenant
+	tenantChild1 := tenantAggCounter.AddChild("default", "tenant-feed-1")
+	tenantChild1.Inc(500)
+	tenantChild2 := tenantAggCounter.AddChild("user", "tenant-feed-2")
+	tenantChild2.Inc(750)
+
+	tenantAggGauge := aggmetric.NewGauge(
+		metric.Metadata{
+			Name:              "changefeed.backfill_pending_ranges",
+			TsdbRecordLabeled: &tsdbRecordLabeled,
+			Category:          metric.Metadata_CHANGEFEEDS,
+		},
+		"scope",
+	)
+	regTenant.AddMetric(tenantAggGauge)
+
+	tenantChild3 := tenantAggGauge.AddChild("default")
+	tenantChild3.Update(2)
+	tenantChild4 := tenantAggGauge.AddChild("user")
+	tenantChild4.Update(1)
+
+	// Get time series data with child metrics enabled
+	tenantChildData := recorder.GetTimeSeriesData(true)
+
+	tenantMetricTestCases := []struct {
+		name           string
+		metricPrefix   string
+		labelMatchers  []string
+		expectedSource string
+		expectedValue  float64
+	}{
+		{
+			name:           "tenant counter default with tenant-feed-1",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{`scope="default"`, `feed_id="tenant-feed-1"`},
+			expectedSource: "7-123",
+			expectedValue:  500,
+		},
+		{
+			name:           "tenant counter user with tenant-feed-2",
+			metricPrefix:   "cr.node.changefeed.emitted_messages",
+			labelMatchers:  []string{`scope="user"`, `feed_id="tenant-feed-2"`},
+			expectedSource: "7-123",
+			expectedValue:  750,
+		},
+		{
+			name:           "tenant gauge default",
+			metricPrefix:   "cr.node.changefeed.backfill_pending_ranges",
+			labelMatchers:  []string{`scope="default"`},
+			expectedSource: "7-123",
+			expectedValue:  2,
+		},
+		{
+			name:           "tenant gauge user",
+			metricPrefix:   "cr.node.changefeed.backfill_pending_ranges",
+			labelMatchers:  []string{`scope="user"`},
+			expectedSource: "7-123",
+			expectedValue:  1,
+		},
+	}
+
+	for _, tc := range tenantMetricTestCases {
+		var found bool
+		for _, ts := range tenantChildData {
+			if !strings.Contains(ts.Name, tc.metricPrefix) {
+				continue
+			}
+			// Check if all label matchers are present
+			allMatch := true
+			for _, matcher := range tc.labelMatchers {
+				if !strings.Contains(ts.Name, matcher) {
+					allMatch = false
+					break
+				}
+			}
+			if !allMatch {
+				continue
+			}
+			found = true
+			require.Equal(t, tc.expectedSource, ts.Source, "Expected source for %s", tc.name)
+			require.Len(t, ts.Datapoints, 1, "Expected 1 datapoint for %s", tc.name)
+			require.Equal(t, tc.expectedValue, ts.Datapoints[0].Value, "Expected value for %s", tc.name)
+			break
+		}
+		require.True(t, found, "Expected to find %s", tc.name)
 	}
 }
 
@@ -650,7 +905,7 @@ func TestMetricsRecorder(t *testing.T) {
 	// ========================================
 	// Verify time series data
 	// ========================================
-	actual := recorder.GetTimeSeriesData()
+	actual := recorder.GetTimeSeriesData(false)
 
 	// Actual comparison is simple: sort the resulting arrays by time and name,
 	// and use reflect.DeepEqual.
@@ -686,6 +941,7 @@ func TestMetricsRecorder(t *testing.T) {
 		},
 		TotalSystemMemory: totalMemory,
 		NumCpus:           int32(system.NumCPU()),
+		NumVcpus:          GetVCPUs(context.Background()),
 	}
 
 	// Make sure there is at least one environment variable that will be
@@ -725,7 +981,7 @@ func TestMetricsRecorder(t *testing.T) {
 				t.Error(err)
 			}
 			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText, false)
-			_ = recorder.GetTimeSeriesData()
+			_ = recorder.GetTimeSeriesData(false)
 			wg.Done()
 		}()
 	}
@@ -762,4 +1018,311 @@ func BenchmarkExtractValueAllocs(b *testing.B) {
 		}
 	}
 	b.ReportAllocs()
+}
+
+func TestRecordChangefeedChildMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+
+	t.Run("empty registry", func(t *testing.T) {
+		reg := metric.NewRegistry()
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		require.Empty(t, dest)
+	})
+
+	t.Run("non-changefeed metrics ignored", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		// Add non-changefeed metrics
+		gauge := metric.NewGauge(metric.Metadata{Name: "sql.connections"})
+		reg.AddMetric(gauge)
+		gauge.Update(10)
+
+		counter := metric.NewCounter(metric.Metadata{Name: "kv.requests"})
+		reg.AddMetric(counter)
+		counter.Inc(5)
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		require.Empty(t, dest)
+	})
+
+	t.Run("changefeed metrics without child collection", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		// Add changefeed aggmetric with child collection explicitly disabled
+		tsdbRecordLabeled := false
+		gauge := aggmetric.NewGauge(
+			metric.Metadata{
+				Name:              "changefeed.error_retries",
+				TsdbRecordLabeled: &tsdbRecordLabeled,
+				Category:          metric.Metadata_CHANGEFEEDS,
+			},
+			"job_id", "feed_id",
+		)
+		reg.AddMetric(gauge)
+
+		// Add child metrics with labels
+		child1 := gauge.AddChild("123", "abc")
+		child1.Update(50)
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		// Should be empty since TsdbRecordLabeled is false
+		require.Empty(t, dest)
+	})
+
+	t.Run("changefeed aggmetrics with child collection", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		// Create an aggmetric which supports child metrics and is in the allowed list
+		gauge := aggmetric.NewGauge(metric.Metadata{
+			Name:     "changefeed.max_behind_nanos",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "job_id", "feed_id")
+		reg.AddMetric(gauge)
+
+		// Add child metrics with labels
+		child1 := gauge.AddChild("123", "abc")
+		child1.Update(50)
+
+		child2 := gauge.AddChild("456", "def")
+		child2.Update(75)
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		// Should have data for child metrics (TsdbRecordLabeled is defaulted true and metric is in allowed list)
+		require.Len(t, dest, 2)
+
+		// Verify the data structure
+		for _, data := range dest {
+			require.Contains(t, data.Name, "changefeed.max_behind_nanos")
+			require.Equal(t, "test-source", data.Source)
+			require.Len(t, data.Datapoints, 1)
+			require.Equal(t, manual.Now().UnixNano(), data.Datapoints[0].TimestampNanos)
+			require.Contains(t, []float64{50, 75}, data.Datapoints[0].Value)
+		}
+	})
+
+	t.Run("cardinality limit enforcement", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		gauge := aggmetric.NewGauge(metric.Metadata{
+			Name:     "changefeed.total_ranges",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "job_id")
+		reg.AddMetric(gauge)
+
+		// Add more than 1024 child metrics to test the limit
+		for i := 0; i < 1500; i++ {
+			child := gauge.AddChild(strconv.Itoa(i))
+			child.Update(int64(i))
+		}
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		// Should be limited to 1024 child metrics
+		require.Len(t, dest, 1024)
+	})
+
+	t.Run("label sanitization and sorting", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		gauge := aggmetric.NewGauge(metric.Metadata{
+			Name:     "changefeed.aggregator_progress",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "job-id", "feed.name")
+		reg.AddMetric(gauge)
+
+		// Add child with labels that need sanitization
+		child := gauge.AddChild("test@123", "my-feed!")
+		child.Update(42)
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		require.Len(t, dest, 1)
+
+		// Verify that the metric name contains sanitized labels
+		metricName := dest[0].Name
+		require.Contains(t, metricName, "changefeed.aggregator_progress{feed_name=\"my-feed!\", job_id=\"test@123\"}")
+	})
+
+	t.Run("counter, gauge, histogram support", func(t *testing.T) {
+		reg := metric.NewRegistry()
+
+		// Test with gauge
+		gauge := aggmetric.NewGauge(metric.Metadata{
+			Name:     "changefeed.checkpoint_progress",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "type")
+		reg.AddMetric(gauge)
+		gaugeChild := gauge.AddChild("gauge")
+		gaugeChild.Update(100)
+
+		// Test with counter
+		counter := aggmetric.NewCounter(metric.Metadata{
+			Name:     "changefeed.internal_retry_message_count",
+			Category: metric.Metadata_CHANGEFEEDS,
+		}, "type")
+		reg.AddMetric(counter)
+		counterChild := counter.AddChild("counter")
+		counterChild.Inc(50)
+
+		// Test with histogram
+		histogram := aggmetric.NewHistogram(
+			metric.HistogramOptions{
+				Metadata: metric.Metadata{
+					Name:     "changefeed.emitted_batch_sizes",
+					Category: metric.Metadata_CHANGEFEEDS,
+				},
+				Duration:     10 * time.Second,
+				BucketConfig: metric.IOLatencyBuckets,
+				Mode:         metric.HistogramModePrometheus,
+			},
+			"scope",
+		)
+		reg.AddMetric(histogram)
+		histChild := histogram.AddChild("default")
+		histChild.RecordValue(100)
+		histChild.RecordValue(200)
+		histChild.RecordValue(300)
+
+		recorder := registryRecorder{
+			registry:       reg,
+			format:         nodeTimeSeriesPrefix,
+			source:         "test-source",
+			timestampNanos: manual.Now().UnixNano(),
+		}
+
+		var dest []tspb.TimeSeriesData
+		recorder.recordChangefeedChildMetrics(&dest)
+
+		require.Len(t, dest, 13) // 1 gauge + 1 counter + 11 histogram metrics
+
+		// Find gauge and counter data points
+		var gaugeValue, counterValue float64
+		for _, data := range dest {
+			if data.Datapoints[0].Value == 100 {
+				gaugeValue = data.Datapoints[0].Value
+			} else if data.Datapoints[0].Value == 50 {
+				counterValue = data.Datapoints[0].Value
+			}
+		}
+
+		require.Equal(t, float64(100), gaugeValue)
+		require.Equal(t, float64(50), counterValue)
+
+		// Verify that histogram suffixes are present
+		foundSuffixes := make(map[string]bool)
+		expectedSuffixes := []string{"-count", "-sum", "-p50", "-p75", "-p90", "-p99", "-p99.9", "-p99.99", "-p99.999", "-max", "-avg"}
+
+		for _, data := range dest {
+			for _, suffix := range expectedSuffixes {
+				if strings.Contains(data.Name, suffix) {
+					foundSuffixes[suffix] = true
+				}
+			}
+		}
+
+		require.Equal(t, len(expectedSuffixes), len(foundSuffixes), "Expected to find histogram metric suffixes")
+	})
+}
+
+func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	enableChildCollection := true
+
+	// Get metrics from the allowed list and convert to slice for indexing
+	allowedMetricsList := make([]string, 0, len(tsutil.AllowedChildMetrics))
+	for metricName := range tsutil.AllowedChildMetrics {
+		allowedMetricsList = append(allowedMetricsList, metricName)
+	}
+
+	// Benchmark with varying numbers of child metrics
+	for childCount := 10; childCount <= 1024; childCount *= 10 {
+		b.Run(fmt.Sprintf("children-%d", childCount), func(b *testing.B) {
+			reg := metric.NewRegistry()
+
+			// Create a single gauge with varying numbers of children
+			gauge := aggmetric.NewGauge(
+				metric.Metadata{
+					Name:              allowedMetricsList[0],
+					TsdbRecordLabeled: &enableChildCollection,
+					Category:          metric.Metadata_CHANGEFEEDS,
+				},
+				"job_id",
+			)
+			reg.AddMetric(gauge)
+
+			for i := 0; i < childCount; i++ {
+				child := gauge.AddChild(strconv.Itoa(i))
+				child.Update(int64(rand.Intn(1000)))
+			}
+
+			recorder := registryRecorder{
+				registry:       reg,
+				format:         nodeTimeSeriesPrefix,
+				source:         "test-source",
+				timestampNanos: manual.Now().UnixNano(),
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for n := 0; n < b.N; n++ {
+				var dest []tspb.TimeSeriesData
+				recorder.recordChangefeedChildMetrics(&dest)
+			}
+		})
+	}
 }

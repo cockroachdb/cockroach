@@ -104,6 +104,9 @@ const (
 	// RBRUsingConstraintTableSettingName is the name of the REGIONAL BY ROW region
 	// column inference setting.
 	RBRUsingConstraintTableSettingName = "infer_rbr_region_col_using_constraint"
+
+	// CanaryStatsWindowSettingName is the name of the stats canary window table setting.
+	CanaryStatsWindowSettingName = "sql_stats_canary_window"
 )
 
 // AutoStatsCollectionEnabled indicates if automatic statistics collection is

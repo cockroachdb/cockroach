@@ -153,6 +153,18 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	return child
 }
 
+// EachChild iterates over all child histograms, calling the provided function for each one.
+// This allows direct access to child histogram objects and their individual snapshots.
+// The labelNames parameter will be set to the label names configured for this histogram.
+func (a *AggHistogram) EachChild(f func(labelNames, labelVals []string, child *Histogram)) {
+	labelNames := a.labels
+	a.apply(func(item MetricItem) {
+		if h, ok := item.(*Histogram); ok {
+			f(labelNames, h.labelValues(), h)
+		}
+	})
+}
+
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the
 // parent. When metrics are collected by prometheus, each of the children will
 // appear with a distinct label, however, when cockroach internally collects
@@ -186,6 +198,24 @@ func (g *Histogram) RecordValue(v int64) {
 	defer g.parent.ticker.RUnlock()
 	g.h.RecordValue(v)
 	g.parent.h.RecordValue(v)
+}
+
+// CumulativeSnapshot returns the cumulative snapshot for this child histogram.
+// Returns an empty snapshot if the underlying histogram doesn't implement CumulativeHistogram.
+func (g *Histogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	if ch, ok := g.h.(metric.CumulativeHistogram); ok {
+		return ch.CumulativeSnapshot()
+	}
+	return metric.HistogramSnapshot{}
+}
+
+// WindowedSnapshot returns the windowed snapshot for this child histogram.
+// Returns an empty snapshot if the underlying histogram doesn't implement WindowedHistogram.
+func (g *Histogram) WindowedSnapshot() metric.HistogramSnapshot {
+	if wh, ok := g.h.(metric.WindowedHistogram); ok {
+		return wh.WindowedSnapshot()
+	}
+	return metric.HistogramSnapshot{}
 }
 
 // SQLHistogram maintains a histogram as the sum of its children. The histogram will
@@ -382,7 +412,9 @@ var _ metric.WindowedHistogram = (*HighCardinalityHistogram)(nil)
 var _ metric.CumulativeHistogram = (*HighCardinalityHistogram)(nil)
 
 // NewHighCardinalityHistogram constructs a new HighCardinalityHistogram that uses cache storage
-// with eviction for child metrics.
+// with eviction for child metrics. The HighCardinalityOpts field in opts allows configuring
+// the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
+// If HighCardinalityOpts is not provided or has zero values, defaults will be used.
 func NewHighCardinalityHistogram(
 	opts metric.HistogramOptions, childLabels ...string,
 ) *HighCardinalityHistogram {
@@ -410,7 +442,7 @@ func NewHighCardinalityHistogram(
 				childHist.h.Tick()
 			})
 		})
-	h.initWithCacheStorageType(childLabels, opts.Metadata.Name)
+	h.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts.HighCardinalityOpts)
 	return h
 }
 

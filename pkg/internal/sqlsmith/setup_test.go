@@ -8,8 +8,6 @@ package sqlsmith_test
 import (
 	"context"
 	"flag"
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -92,9 +90,7 @@ func TestGenerateParse(t *testing.T) {
 		t.Fatalf("unknown setting %s", settingName)
 	}
 	settings := setting(rnd)
-	t.Log("setting:", settingName, settings.Options)
 	setupSQL := setup(rnd)
-	t.Log(strings.Join(setupSQL, "\n"))
 	for _, stmt := range setupSQL {
 		db.Exec(t, stmt)
 	}
@@ -119,7 +115,6 @@ func TestGenerateParse(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
 			_, err = conn.ExecContext(ctx, `SET statement_timeout = '9s'`)
 			if err != nil {
@@ -129,7 +124,7 @@ func TestGenerateParse(t *testing.T) {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true
-					fmt.Printf("ERR (%d): %v\n", i, err)
+					t.Logf("ERR (%d): %v\n", i, err)
 				}
 			}
 		}

@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	catpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	idxtype "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
@@ -58,24 +59,43 @@ func migrateDeprecatedFields(
 		}
 	}
 
-	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
-	if columnType := target.GetColumnType(); columnType != nil {
-		if columnType.ComputeExpr != nil {
+	// Migrate GeneratedAsIdentity from column to a separate element
+	if column := target.GetColumn(); column != nil &&
+		version.IsActive(clusterversion.V26_1) &&
+		column.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+		newTarget := MakeTarget(
+			AsTargetStatus(target.TargetStatus),
+			&ColumnGeneratedAsIdentity{
+				TableID:        column.TableID,
+				ColumnID:       column.ColumnID,
+				Type:           column.GeneratedAsIdentityType,
+				SequenceOption: column.GeneratedAsIdentitySequenceOption,
+			},
+			&target.Metadata,
+		)
+		newTargets = append(newTargets, newTarget)
+		column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+		column.GeneratedAsIdentitySequenceOption = ""
+		migrated = true
+	}
+
+	if column := target.GetColumn(); column != nil {
+		if column.IsHidden && version.IsActive(clusterversion.V26_1) {
 			newTarget := MakeTarget(
 				AsTargetStatus(target.TargetStatus),
-				&ColumnComputeExpression{
-					TableID:    columnType.TableID,
-					ColumnID:   columnType.ColumnID,
-					Expression: *columnType.ComputeExpr,
+				&ColumnHidden{
+					TableID:  column.TableID,
+					ColumnID: column.ColumnID,
 				},
 				&target.Metadata,
 			)
 			newTargets = append(newTargets, newTarget)
-			columnType.ComputeExpr = nil
+			column.IsHidden = false
 			migrated = true
 		}
 	}
-	return
+
+	return migrated, newTargets
 }
 
 // migrateTargetElement migrates an individual target at a given index.
@@ -86,22 +106,6 @@ func migrateTargetElement(targets []Target, idx int) {
 		// No-op case to defeat unused linter when there are no elements to migrate.
 		_ = t.element
 	}
-}
-
-// migrateStatuses used to migrate individual statuses and generate
-// new current and target statuses.
-func migrateStatuses(
-	currentStatus Status, targetStatus Status,
-) (newCurrentStatus Status, newTargetStatus Status, updated bool) {
-	// Target state of TXN_DROPPED has been removed, so push plans further along.
-	// Note: No version is required for this transition, since it will be valid
-	// for all releases.
-	if targetStatus == Status_ABSENT && currentStatus == Status_TXN_DROPPED {
-		return Status_PUBLIC, targetStatus, true
-	} else if targetStatus == Status_PUBLIC && currentStatus == Status_TXN_DROPPED {
-		return Status_ABSENT, targetStatus, true
-	}
-	return currentStatus, targetStatus, false
 }
 
 // MigrateCurrentState migrates a current state by upgrading elements based
@@ -118,12 +122,6 @@ func MigrateCurrentState(version clusterversion.ClusterVersion, state *CurrentSt
 			updated = true
 			migrateTargetElement(state.Targets, idx)
 			targetsToRemove[idx] = struct{}{}
-		}
-		current, targetStatus, update := migrateStatuses(state.Current[idx], target.TargetStatus)
-		if update {
-			state.Current[idx] = current
-			target.TargetStatus = targetStatus
-			updated = true
 		}
 	}
 	if !updated {
@@ -191,12 +189,6 @@ func MigrateDescriptorState(
 			if descID != catid.InvalidDescID {
 				newIndexes[descID] = nil
 			}
-		}
-		current, targetStatus, update := migrateStatuses(state.CurrentStatuses[idx], target.TargetStatus)
-		if update {
-			state.CurrentStatuses[idx] = current
-			target.TargetStatus = targetStatus
-			updated = true
 		}
 		if migrated, newTargets := migrateDeprecatedFields(version, target); migrated {
 			updated = true

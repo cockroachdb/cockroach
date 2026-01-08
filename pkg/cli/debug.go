@@ -497,7 +497,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	defer snapshot.Close()
 
 	var results int
-	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, rditer.SelectOpts{
+	return rditer.IterateReplicaKeySpans(cmd.Context(), &desc, snapshot, fs.UnknownReadCategory, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			SystemKeys: true,
 			LockTable:  true,
@@ -1602,6 +1602,7 @@ func init() {
 
 	f = debugTimeSeriesDumpCmd.Flags()
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw, openmetrics)")
+	f.StringVarP(&debugTimeSeriesDumpOpts.output, "output", "o", "", "output file path; writes output to file instead of stdout")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
 	f.StringVar(&debugTimeSeriesDumpOpts.clusterLabel, "cluster-label",
@@ -1622,8 +1623,10 @@ func init() {
 	f.IntVar(&debugTimeSeriesDumpOpts.noOfUploadWorkers, "upload-workers", 75, "number of workers to upload the time series data in parallel")
 	f.BoolVar(&debugTimeSeriesDumpOpts.retryFailedRequests, "retry-failed-requests", false, "retry previously failed requests from file")
 	f.BoolVar(&debugTimeSeriesDumpOpts.disableDeltaProcessing, "disable-delta-processing", false, "disable delta calculation for counter metrics (enabled by default)")
+	f.BoolVar(&debugTimeSeriesDumpOpts.nonVerbose, "non-verbose", false, "dump only essential and support-tagged metrics (cannot be used with --metrics-list-file)")
 	f.Int64Var(&debugTimeSeriesDumpOpts.ddMetricInterval, "dd-metric-interval", debugTimeSeriesDumpOpts.ddMetricInterval, "interval in seconds for datadoginit format only (default 10). Regular datadog format uses actual intervals from tsdump.")
 	f.Lookup("dd-metric-interval").Hidden = true // this is for internal use only
+	f.StringVar(&debugTimeSeriesDumpOpts.metricsListFile, "metrics-list-file", "", "text file containing metric names or regex patterns to dump (one per line). Prefixes cr.node., cr.store., and cockroachdb. are automatically stripped if present. When specified, only matching metrics are dumped instead of all metrics.")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,

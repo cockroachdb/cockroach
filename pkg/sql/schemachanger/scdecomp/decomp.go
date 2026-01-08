@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -234,22 +235,13 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 	}
 }
 
+// GetSequenceOptions returns the non-default sequence options from descriptor
+// sequence options.
 func GetSequenceOptions(
 	sequenceID descpb.ID, opts *descpb.TableDescriptor_SequenceOpts,
 ) []*scpb.SequenceOption {
 	// Compute the default sequence options.
-	defaultOpts := descpb.TableDescriptor_SequenceOpts{
-		Increment: 1,
-	}
-	err := schemaexpr.AssignSequenceOptions(&defaultOpts,
-		nil,
-		64,
-		true,
-		nil,
-	)
-	if err != nil {
-		panic(err)
-	}
+	defaultOpts := schemaexpr.DefaultSequenceOptions()
 	var sequenceOptions []*scpb.SequenceOption
 	addSequenceOption := func(key string, defaultValue, value interface{}) {
 		// Nil or empty values can be skipped. Or values which
@@ -487,6 +479,36 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			JobIDs:  tbl.TableDesc().LDRJobIDs,
 		})
 	}
+	w.walkStorageParams(tbl)
+}
+
+// walkStorageParams walks through table storage parameters and creates
+// TableStorageParam elements for each non-null parameter.
+func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
+	tableID := tbl.GetID()
+	storageParams, err := tbl.GetStorageParams(false)
+	if err != nil {
+		panic(err)
+	}
+	for _, param := range storageParams {
+		key, value, found := strings.Cut(param, "=")
+		if !found {
+			continue
+		}
+		if key == "schema_locked" {
+			// schema_locked is handled separately via the TableSchemaLocked element.
+			continue
+		}
+		if strings.HasPrefix(key, "ttl") {
+			// ttl parameters are handled separately via the RowLevelTTL element.
+			continue
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.TableStorageParam{
+			TableID: tableID,
+			Name:    key,
+			Value:   value,
+		})
+	}
 }
 
 func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityConfig) {
@@ -543,7 +565,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	column := &scpb.Column{
 		TableID:                           tbl.GetID(),
 		ColumnID:                          col.GetID(),
-		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
@@ -580,17 +601,43 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			expr, err := w.newExpression(col.GetComputeExpr())
 			onErrPanic(err)
 
-			if columnType.ElementCreationMetadata.In_24_3OrLater {
-				w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
-					TableID:    tbl.GetID(),
-					ColumnID:   col.GetID(),
-					Expression: *expr,
-				})
-			} else {
-				columnType.ComputeExpr = expr
+			w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
+				TableID:    tbl.GetID(),
+				ColumnID:   col.GetID(),
+				Expression: *expr,
+			})
+		}
+
+		if columnType.ElementCreationMetadata.In_26_1OrLater {
+			if col.IsGeneratedAsIdentity() {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.ColumnGeneratedAsIdentity{
+						TableID:        tbl.GetID(),
+						ColumnID:       col.GetID(),
+						Type:           col.GetGeneratedAsIdentityType(),
+						SequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
+					})
+				column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+				column.GeneratedAsIdentitySequenceOption = ""
 			}
+		} else {
+			column.GeneratedAsIdentityType = col.GetGeneratedAsIdentityType()
+			column.GeneratedAsIdentitySequenceOption = col.GetGeneratedAsIdentitySequenceOptionStr()
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+
+		if col.IsHidden() {
+			if columnType.ElementCreationMetadata.In_26_1OrLater {
+				columnHidden := scpb.ColumnHidden{
+					TableID:  tbl.GetID(),
+					ColumnID: col.GetID(),
+				}
+				w.ev(scpb.Status_PUBLIC, &columnHidden)
+			} else {
+				column.IsHidden = true
+			}
+		}
+
 	}
 	if !col.IsNullable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{

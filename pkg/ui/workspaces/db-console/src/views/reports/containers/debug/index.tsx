@@ -333,6 +333,11 @@ export default function Debug() {
             url="#/reports/nodes/history"
             note="#/reports/nodes/history"
           />
+          <DebugTableLink
+            name="Node activity honeycomb visualizer"
+            url="#/cluster-explorer"
+            note="#/cluster-explorer"
+          />
         </DebugTableRow>
         <DebugTableRow
           title="Stores"

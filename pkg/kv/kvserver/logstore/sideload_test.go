@@ -86,7 +86,7 @@ func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
 	return NewDiskSideloadStorage(
 		cluster.MakeTestingClusterSettings(), 1,
 		filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
-		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
+		rate.NewLimiter(rate.Inf, math.MaxInt64), eng.Env())
 }
 
 // TODO(pavelkalinnikov): give these tests a good refactor.
@@ -96,7 +96,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertExists := func(exists bool) {
 		t.Helper()
-		_, err := ss.eng.Env().Stat(ss.dir)
+		_, err := ss.fs.Stat(ss.dir)
 		if !exists {
 			require.True(t, oserror.IsNotExist(err), err)
 		} else {
@@ -537,7 +537,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			if test.size != stats.SideloadedBytes {
 				t.Fatalf("expected %d sideloadedSize, but found %d", test.size, stats.SideloadedBytes)
 			}
-			actKeys, err := sideloaded.eng.Env().List(sideloaded.Dir())
+			actKeys, err := sideloaded.fs.List(sideloaded.Dir())
 			if oserror.IsNotExist(err) {
 				t.Log("swallowing IsNotExist")
 				err = nil

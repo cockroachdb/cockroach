@@ -8,6 +8,7 @@ package backuptestutils
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -48,6 +49,27 @@ const (
 // bugs in time-bound iterators. We disable this in race builds, which can
 // be too slow.
 var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithTestBool("small-engine-blocks", false)
+var externalConnection = metamorphic.ConstantWithTestBool("external-connection", false)
+
+// GetExternalStorageURI metamorphically chooses between baseURI,
+// and an external connection pointing to baseURI.
+// if external connection is chosen, it will apply `CREATE EXTERNAL CONNECTION` commands to dbs
+func GetExternalStorageURI(
+	t *testing.T, baseURI string, extConnName string, dbs ...*sqlutils.SQLRunner,
+) string {
+	uri := baseURI
+	if externalConnection {
+		for _, db := range dbs {
+			db.Exec(t, fmt.Sprintf(
+				"CREATE EXTERNAL CONNECTION '%s' AS '%s';",
+				extConnName,
+				baseURI,
+			))
+		}
+		uri = "external://" + extConnName
+	}
+	return uri
+}
 
 // InitManualReplication calls tc.ToggleReplicateQueues(false).
 //

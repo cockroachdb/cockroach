@@ -8,7 +8,7 @@ package yamlutil
 import (
 	"bytes"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Marshal is like yaml.v3.Marshal but indents to 2 spaces.

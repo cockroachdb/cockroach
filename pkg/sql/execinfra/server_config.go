@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -246,6 +247,11 @@ type TestingKnobs struct {
 	// progress for a single index backfill.
 	RunBeforeIndexBackfillProgressUpdate func(ctx context.Context, completed []roachpb.Span)
 
+	// AfterDistributedMergeIteration is called after each iteration of a
+	// distributed merge during index backfill. It receives the iteration number
+	// and the current SST manifests.
+	AfterDistributedMergeIteration func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest)
+
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the
 	// next batch or returning.
@@ -323,6 +329,9 @@ type TestingKnobs struct {
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 
+	// BulkMergeTestingKnobs are specific to the distributed merge pipeline.
+	BulkMergeTestingKnobs base.ModuleTestingKnobs
+
 	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
 	// in ProcessorBase.StartInternal if the tracing is enabled.
 	ProcessorNoTracingSpan bool
@@ -345,6 +354,10 @@ type TestingKnobs struct {
 	// TableReaderStartScanCb, when non-nil, will be called whenever the
 	// TableReader processor starts its scan.
 	TableReaderStartScanCb func()
+
+	// SampleAggregatorTestingKnobRowHook, if non-nil, is called for each row
+	// processed by the sample aggregator. Used for testing, e.g., to inject panics.
+	SampleAggregatorTestingKnobRowHook func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

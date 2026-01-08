@@ -100,6 +100,7 @@ type ShowBackup struct {
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
+	TimeRange    ShowAfterBefore
 }
 
 // Format implements the NodeFormatter interface.
@@ -107,10 +108,9 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
-		if !node.Options.IsDefault() {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
+		if !node.TimeRange.IsDefault() {
+			ctx.WriteString(" ")
+			ctx.FormatNode(&node.TimeRange)
 		}
 		return
 	}
@@ -140,16 +140,42 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowAfterBefore represents the AFTER <expr> BEFORE <expr> option for
+// SHOW BACKUPS.
+type ShowAfterBefore struct {
+	After  Expr
+	Before Expr
+}
+
+var _ NodeFormatter = &ShowAfterBefore{}
+
+func (s *ShowAfterBefore) Format(ctx *FmtCtx) {
+	if s.After != nil {
+		ctx.WriteString("AFTER ")
+		ctx.FormatNode(s.After)
+	}
+
+	if s.Before != nil {
+		if s.After != nil {
+			ctx.WriteString(" ")
+		}
+		ctx.WriteString("BEFORE ")
+		ctx.FormatNode(s.Before)
+	}
+}
+
+func (s *ShowAfterBefore) IsDefault() bool {
+	return s.After == nil && s.Before == nil
+}
+
 type ShowBackupOptions struct {
 	AsJson               bool
 	CheckFiles           bool
 	DebugIDs             bool
-	IncrementalStorage   StringOrPlaceholderOptList
 	DecryptionKMSURI     StringOrPlaceholderOptList
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
-	Index                bool
 
 	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
 	//
@@ -176,10 +202,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		}
 		addSep = true
 	}
-	// Index is only used in SHOW BACKUPS
-	if o.Index {
-		ctx.WriteString("index")
-	}
 
 	if o.AsJson {
 		ctx.WriteString("as_json")
@@ -201,11 +223,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		} else {
 			ctx.WriteString(PasswordSubstitution)
 		}
-	}
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
 	}
 
 	if o.Privileges {
@@ -251,7 +268,6 @@ func (o ShowBackupOptions) IsDefault() bool {
 	return o.AsJson == options.AsJson &&
 		o.CheckFiles == options.CheckFiles &&
 		o.DebugIDs == options.DebugIDs &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
@@ -259,8 +275,7 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
-		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
-		o.Index == options.Index
+		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -308,11 +323,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	}
 	o.EncryptionPassphrase, err = combineExpr(o.EncryptionPassphrase, other.EncryptionPassphrase,
 		"encryption_passphrase")
-	if err != nil {
-		return err
-	}
-	o.IncrementalStorage, err = combineStringOrPlaceholderOptList(o.IncrementalStorage,
-		other.IncrementalStorage, "incremental_location")
 	if err != nil {
 		return err
 	}
@@ -538,16 +548,25 @@ type ShowJobOptions struct {
 	// execution. These details will provide improved observability into the
 	// execution of the job.
 	ExecutionDetails bool
+	// ResolvedTimestamp, if true, will render the resolved timestamp of the job.
+	ResolvedTimestamp bool
 }
 
 func (s *ShowJobOptions) Format(ctx *FmtCtx) {
 	if s.ExecutionDetails {
 		ctx.WriteString(" EXECUTION DETAILS")
 	}
+	if s.ResolvedTimestamp {
+		if s.ExecutionDetails {
+			ctx.WriteString(",")
+		}
+		ctx.WriteString(" RESOLVED TIMESTAMP")
+	}
 }
 
 func (s *ShowJobOptions) CombineWith(other *ShowJobOptions) error {
-	s.ExecutionDetails = other.ExecutionDetails
+	s.ExecutionDetails = s.ExecutionDetails || other.ExecutionDetails
+	s.ResolvedTimestamp = s.ResolvedTimestamp || other.ResolvedTimestamp
 	return nil
 }
 
@@ -1157,19 +1176,25 @@ func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
-	TenantSpec *TenantSpec
-	Table      *UnresolvedObjectName
+	TenantSpec   *TenantSpec
+	Table        *UnresolvedObjectName
+	Experimental bool
 
 	Options ShowFingerprintOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowFingerprints) Format(ctx *FmtCtx) {
+	if node.Experimental {
+		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS ")
+	} else {
+		ctx.WriteString("SHOW FINGERPRINTS ")
+	}
 	if node.Table != nil {
-		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
+		ctx.WriteString("FROM TABLE ")
 		ctx.FormatNode(node.Table)
 	} else {
-		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER ")
+		ctx.WriteString("FROM VIRTUAL CLUSTER ")
 		ctx.FormatNode(node.TenantSpec)
 	}
 

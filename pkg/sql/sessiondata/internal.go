@@ -79,9 +79,6 @@ type InternalExecutorOverride struct {
 	OriginTimestampForLogicalDataReplication hlc.Timestamp
 	// PlanCacheMode, if set, overrides the plan_cache_mode session variable.
 	PlanCacheMode *sessiondatapb.PlanCacheMode
-	// GrowStackSize, if true, indicates that the connExecutor goroutine stack
-	// should be grown to 32KiB right away.
-	GrowStackSize bool
 	// DisablePlanGists, if true, overrides the disable_plan_gists session var.
 	DisablePlanGists bool
 	// BufferedWritesEnabled, if set, controls whether the buffered writes KV transaction

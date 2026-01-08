@@ -58,6 +58,8 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
+	defer c.maybeCleanupProtectedTimestamp(ctx, execCfg)
+
 	if err := c.maybeRunAfterProtectedTimestampHook(execCfg); err != nil {
 		return err
 	}
@@ -91,8 +93,6 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
 		return err
 	}
-
-	c.maybeCleanupProtectedTimestamp(ctx, execCfg)
 
 	return nil
 }
@@ -260,6 +260,8 @@ func (c *inspectResumer) setupProgressTracking(
 		c.job,
 		&execCfg.Settings.SV,
 		execCfg.InternalDB,
+		execCfg.Codec,
+		execCfg.ProtectedTimestampManager,
 	)
 	completedSpans, err := progressTracker.initTracker(ctx)
 	if err != nil {
@@ -267,7 +269,7 @@ func (c *inspectResumer) setupProgressTracking(
 	}
 
 	cleanup := func() {
-		progressTracker.terminateTracker()
+		progressTracker.terminateTracker(ctx)
 	}
 
 	return progressTracker, completedSpans, cleanup, nil

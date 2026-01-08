@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // ComparisonTests exercise the comparison logic of the rel package.

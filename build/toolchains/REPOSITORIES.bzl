@@ -12,48 +12,48 @@ def toolchain_dependencies():
         name = "toolchain_cross_aarch64-unknown-linux-gnu",
         host = "x86_64",
         target = "aarch64-unknown-linux-gnu",
-        tarball_sha256 = "f9b073774826747cf2a91514d5ab27e3ba7f0c7b63acaf80a5ed58c82b08fd44",
+        tarball_sha256 = "daa11aa45c6389417378320f74756cfb6667590eaebc2bcf6e2c1e4a8656c624",
     )
     _crosstool_toolchain_repo(
         name = "toolchain_cross_s390x-ibm-linux-gnu",
         host = "x86_64",
         target = "s390x-ibm-linux-gnu",
-        tarball_sha256 = "027d7d3b89d0c9745243610b9c12aa26f5605884b058934645cb344927228dab",
+        tarball_sha256 = "994a327c068a982f4bc56c8d985680b72e0a06a58504c39f0721d5933a31b8d9",
     )
     _crosstool_toolchain_repo(
         name = "toolchain_cross_x86_64-unknown-linux-gnu",
         host = "x86_64",
         target = "x86_64-unknown-linux-gnu",
-        tarball_sha256 = "5f79da0a9e580bc0a869ca32c2e5a21990676ec567aabf54ccc1dec4c3f2c827",
+        tarball_sha256 = "fecff90dd09ee5011bf20e4a1db819ea6c33194440e9d866b83a62658bc44950",
     )
     _crosstool_toolchain_repo(
         name = "toolchain_cross_x86_64-w64-mingw32",
         host = "x86_64",
         target = "x86_64-w64-mingw32",
-        tarball_sha256 = "94e64e0e8de05706dfd5ab2f1fee6e7f75280e35b09b5628980805d27939b418",
+        tarball_sha256 = "84d3fb2c0bc1250acdedd75a8d47b042514e93a7972a3258ba7f693ebeddff51",
     )
     _crosstool_toolchain_repo(
         name = "armtoolchain_cross_aarch64-unknown-linux-gnu",
         host = "aarch64",
         target = "aarch64-unknown-linux-gnu",
-        tarball_sha256 = "1e7e5ccc142a528ea4e79a002824af8c15225393d42e452259ed4e99ea45eabe",
+        tarball_sha256 = "80618b9a8b46ad45966f59e2ee922cd606f2b12420033703be40d633556ae833",
     )
     _crosstool_toolchain_repo(
         name = "armtoolchain_cross_s390x-ibm-linux-gnu",
         host = "aarch64",
         target = "s390x-ibm-linux-gnu",
-        tarball_sha256 = "76ede410bba820ff9e5e10d68802abc8cf809720fc035a93b1e16f40e987bfd4",
+        tarball_sha256 = "e3cc0ec7ee206480b5fb2ac4b8e3b65a2c3dcb7b56334dc6068e3a0252b4e847",
     )
     _crosstool_toolchain_repo(
         name = "armtoolchain_cross_x86_64-unknown-linux-gnu",
         host = "aarch64",
         target = "x86_64-unknown-linux-gnu",
-        tarball_sha256 = "7b6101ec5b55e8d10004734823bca221b54b6163e0b500df25ede38f1cc27d2e",
+        tarball_sha256 = "4370da607fda2692497d520a03f3f3ae9bc99445656f4ddd8472eca248e9f207",
     )
     _crosstool_toolchain_repo(
         name = "armtoolchain_cross_x86_64-w64-mingw32",
         host = "aarch64",
         target = "x86_64-w64-mingw32",
-        tarball_sha256 = "1bca59b5aac70bdbbb17499141f2f261dbfeb4accb14cd9a3f699579b5372dc4",
+        tarball_sha256 = "cd4f54274d450b88b6aeecb6b46e2903cff219cf03af5dcbc0dac9c185f4011a",
     )
     _macos_toolchain_repos()

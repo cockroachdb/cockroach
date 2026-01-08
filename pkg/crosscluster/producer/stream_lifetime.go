@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -124,10 +123,9 @@ func StartReplicationProducerJob(
 	}
 
 	ptp := execConfig.ProtectedTimestampProvider.WithTxn(txn)
-	deprecatedSpansToProtect := roachpb.Spans{keys.MakeTenantSpan(tenantID)}
 	targetToProtect := ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID})
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), replicationStartTime,
-		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+		jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, pts); err != nil {
 		return streampb.ReplicationProducerSpec{}, err
@@ -288,19 +286,18 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 
 	// Partition the spans with SQLPlanner
 	dsp := jobExecCtx.DistSQLPlanner()
-	noLoc := roachpb.Locality{}
 	var streaks kvfollowerreadsccl.StreakConfig
 	if useStreaks {
 		streaks = kvfollowerreadsccl.StreakConfig{
 			Min: 10, SmallPlanMin: 3, SmallPlanThreshold: 3, MaxSkew: 0.95,
 		}
 	}
-	oracle := kvfollowerreadsccl.NewBulkOracle(
-		dsp.ReplicaOracleConfig(evalCtx.Locality), noLoc, streaks,
+	oracle := kvfollowerreadsccl.NewStreakBulkOracle(
+		dsp.ReplicaOracleConfig(evalCtx.Locality), streaks,
 	)
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
-		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, noLoc,
+		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
 	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans, sql.PartitionSpansBoundDefault)

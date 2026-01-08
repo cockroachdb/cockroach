@@ -27,10 +27,6 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	kvtenant.InitTestConnectorFactory()
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
-
+	serverutils.TestingGlobalDRPCOption(base.TestDRPCEnabledRandomly)
 	os.Exit(m.Run())
 }

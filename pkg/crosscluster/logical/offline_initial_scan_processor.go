@@ -8,7 +8,6 @@ package logical
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup"
@@ -17,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -225,7 +226,7 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 	o.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(o.checkpointCh)
 		defer close(o.rangeStatsCh)
-		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", o.ProcessorID)), func(ctx context.Context) {
+		pprofutil.Do(ctx, func(ctx context.Context) {
 			for event := range o.subscription.Events() {
 				if err := o.handleEvent(ctx, event); err != nil {
 					log.Dev.Infof(o.Ctx(), "consumer completed. Error: %s", err)
@@ -235,7 +236,8 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 			if err := o.subscription.Err(); err != nil {
 				o.sendError(errors.Wrap(err, "subscription"))
 			}
-		})
+		}, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_LDR,
+			"proc", fmt.Sprintf("%d", o.ProcessorID))
 		return nil
 	})
 }

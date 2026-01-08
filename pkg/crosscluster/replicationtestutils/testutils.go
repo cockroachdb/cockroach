@@ -131,11 +131,12 @@ type TenantStreamingClusters struct {
 	SrcURL          url.URL
 	SrcCleanup      func()
 
-	DestCluster    *testcluster.TestCluster
-	DestSysServer  serverutils.ApplicationLayerInterface
-	DestSysSQL     *sqlutils.SQLRunner
-	DestTenantConn *gosql.DB
-	DestTenantSQL  *sqlutils.SQLRunner
+	DestCluster      *testcluster.TestCluster
+	DestSysServer    serverutils.ApplicationLayerInterface
+	DestSysSQL       *sqlutils.SQLRunner
+	DestTenantConn   *gosql.DB
+	DestTenantSQL    *sqlutils.SQLRunner
+	DestTenantServer serverutils.ApplicationLayerInterface
 
 	ReaderTenantSQL *sqlutils.SQLRunner
 
@@ -186,19 +187,18 @@ func (c *TenantStreamingClusters) init(ctx context.Context) {
 func (c *TenantStreamingClusters) StartDestTenant(
 	ctx context.Context, withTestingKnobs *base.TestingKnobs, server int,
 ) func() {
+	var err error
+	var testKnobs base.TestingKnobs
 	if withTestingKnobs != nil {
-		var err error
-		_, c.DestTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-			TenantID:    c.Args.DestTenantID,
-			TenantName:  c.Args.DestTenantName,
-			Knobs:       *withTestingKnobs,
-			UseDatabase: "defaultdb",
-		})
-		require.NoError(c.T, err)
-	} else {
-		c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 START SERVICE SHARED`, c.Args.DestTenantName)
-		c.DestTenantConn = c.DestCluster.Server(server).SystemLayer().SQLConn(c.T, serverutils.DBName("cluster:"+string(c.Args.DestTenantName)+"/defaultdb"))
+		testKnobs = *withTestingKnobs
 	}
+	c.DestTenantServer, c.DestTenantConn, err = c.DestCluster.Server(server).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+		TenantID:    c.Args.DestTenantID,
+		TenantName:  c.Args.DestTenantName,
+		Knobs:       testKnobs,
+		UseDatabase: "defaultdb",
+	})
+	require.NoError(c.T, err)
 
 	c.DestTenantSQL = sqlutils.MakeSQLRunner(c.DestTenantConn)
 	testutils.SucceedsSoon(c.T, func() error {

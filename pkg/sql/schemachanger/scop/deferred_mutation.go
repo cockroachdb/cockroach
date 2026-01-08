@@ -68,8 +68,9 @@ type CreateSchemaChangerJob struct {
 
 	// NonCancelable maps to the job's property, but in the schema changer can
 	// be thought of as !Revertible.
-	NonCancelable bool
-	RunningStatus redact.RedactableString
+	NonCancelable        bool
+	RunningStatus        redact.RedactableString
+	DistributedMergeMode jobspb.IndexBackfillDistributedMergeMode
 }
 
 // RemoveDatabaseRoleSettings is used to delete a role setting for a database.
@@ -105,4 +106,19 @@ type UpdateTTLScheduleMetadata struct {
 	deferredMutationOp
 	TableID descpb.ID
 	NewName string
+}
+
+// UpdateTTLScheduleCron updates the cron schedule expression for a TTL job.
+type UpdateTTLScheduleCron struct {
+	deferredMutationOp
+	TableID     descpb.ID
+	ScheduleID  jobspb.ScheduleID
+	NewCronExpr string
+}
+
+// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+// This is used when adding TTL to a table that doesn't already have one.
+type CreateRowLevelTTLSchedule struct {
+	deferredMutationOp
+	TableID descpb.ID
 }

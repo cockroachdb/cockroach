@@ -392,80 +392,114 @@ func TestAuthenticationHook(t *testing.T) {
 		tenantID                   roachpb.TenantID
 		isSubjectRoleOptionOrDNSet bool
 		subjectRequired            bool
+		disallowRootLogin          bool
+		allowDebugUser             bool
 		expectedErr                string
 	}{
 		// Insecure mode, empty username.
-		{true, "", username.EmptyRole, "", "", true, false, false, roachpb.SystemTenantID, false, false, `user is missing`},
+		{true, "", username.EmptyRole, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, `user is missing`},
 		// Insecure mode, non-empty username.
-		{true, "", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, `user "foo" is not allowed`},
+		{true, "", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, false, `user "foo" is not allowed`},
 		// Secure mode, no TLS state.
-		{false, "", username.EmptyRole, "", "", false, false, false, roachpb.SystemTenantID, false, false, `no client certificates in request`},
+		{false, "", username.EmptyRole, "", "", false, false, false, roachpb.SystemTenantID, false, false, false, false, `no client certificates in request`},
 		// Secure mode, bad user.
 		{false, "(CN=foo)", username.NodeUser, "", "", true, false, false, roachpb.SystemTenantID,
-			false, false, `certificate authentication failed for user "node"`},
+			false, false, false, false, `certificate authentication failed for user "node"`},
 		// Secure mode, node user.
-		{false, "(CN=node)", username.NodeUser, "", "", true, true, true, roachpb.SystemTenantID, false, false, ``},
+		{false, "(CN=node)", username.NodeUser, "", "", true, true, true, roachpb.SystemTenantID, false, false, false, false, ``},
 		// Secure mode, node cert and unrelated user.
 		{false, "(CN=node)", fooUser, "", "", true, false, false, roachpb.SystemTenantID,
-			false, false, `certificate authentication failed for user "foo"`},
+			false, false, false, false, `certificate authentication failed for user "foo"`},
 		// Secure mode, root user.
 		{false, "(CN=root)", username.NodeUser, "", "", true, false, false, roachpb.SystemTenantID,
-			false, false, `certificate authentication failed for user "node"`},
+			false, false, false, false, `certificate authentication failed for user "node"`},
 		// Secure mode, tenant cert, foo user.
 		{false, "(OU=Tenants,CN=foo)", fooUser, "", "", true, false, false, roachpb.SystemTenantID,
-			false, false, `using tenant client certificate as user certificate is not allowed`},
+			false, false, false, false, `using tenant client certificate as user certificate is not allowed`},
 		// Secure mode, multiple cert principals.
-		{false, "(CN=foo)dns:bar", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, `user "foo" is not allowed`},
-		{false, "(CN=foo)dns:bar", barUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, `user "bar" is not allowed`},
+		{false, "(CN=foo)dns:bar", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, false, `user "foo" is not allowed`},
+		{false, "(CN=foo)dns:bar", barUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, false, `user "bar" is not allowed`},
 		// Secure mode, principal map.
-		{false, "(CN=foo)dns:bar", blahUser, "", "foo:blah", true, true, false, roachpb.SystemTenantID, false, false, `user "blah" is not allowed`},
-		{false, "(CN=foo)dns:bar", blahUser, "", "bar:blah", true, true, false, roachpb.SystemTenantID, false, false, `user "blah" is not allowed`},
+		{false, "(CN=foo)dns:bar", blahUser, "", "foo:blah", true, true, false, roachpb.SystemTenantID, false, false, false, false, `user "blah" is not allowed`},
+		{false, "(CN=foo)dns:bar", blahUser, "", "bar:blah", true, true, false, roachpb.SystemTenantID, false, false, false, false, `user "blah" is not allowed`},
 		{false, "(CN=foo)uri:crdb://tenant/123/user/foo", fooUser, "", "", true, true, false, roachpb.MustMakeTenantID(123),
-			false, false, `user "foo" is not allowed`},
+			false, false, false, false, `user "foo" is not allowed`},
 		{false, "(CN=foo)uri:crdb://tenant/123/user/foo", fooUser, "", "", true, false, false, roachpb.SystemTenantID,
-			false, false, `certificate authentication failed for user "foo"`},
+			false, false, false, false, `certificate authentication failed for user "foo"`},
 		{false, "(CN=foo)", fooUser, subjectDNString, "", true, true, false, roachpb.MustMakeTenantID(123),
-			false, false, `user "foo" is not allowed`},
+			false, false, false, false, `user "foo" is not allowed`},
 		{false, "(CN=foo)uri:crdb://tenant/1/user/foo", fooUser, "", "", true, false, false, roachpb.MustMakeTenantID(123),
-			false, false, `certificate authentication failed for user "foo"`},
+			false, false, false, false, `certificate authentication failed for user "foo"`},
 		{false, "(CN=foo)uri:crdb://tenant/123/user/foo", blahUser, "", "", true, false, false, roachpb.MustMakeTenantID(123),
-			false, false, `certificate authentication failed for user "blah"`},
+			false, false, false, false, `certificate authentication failed for user "blah"`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option not set.
 		{false, "(" + subjectDNString + ")", fooUser, "", "", true, true, false, roachpb.MustMakeTenantID(123),
-			false, false, `user "foo" is not allowed`},
+			false, false, false, false, `user "foo" is not allowed`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option set matching TLS cert subject.
 		{false, "(" + subjectDNString + ")", fooUser, subjectDNString, "", true, true, false, roachpb.MustMakeTenantID(123),
-			true, false, `user "foo" is not allowed`},
+			true, false, false, false, `user "foo" is not allowed`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option set, TLS cert DN empty.
 		{false, "(CN=foo)", fooUser, subjectDNString, "", true, false, false, roachpb.MustMakeTenantID(123),
-			true, false, `certificate authentication failed for user "foo"`},
+			true, false, false, false, `certificate authentication failed for user "foo"`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option set, TLS cert DN mismatches on OU field.
 		{false, "(" + fieldMismatchSubjectDNString + ")", fooUser, subjectDNString, "", true, false, false, roachpb.MustMakeTenantID(123),
-			true, false, `certificate authentication failed for user "foo"`},
+			true, false, false, false, `certificate authentication failed for user "foo"`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option set, TLS cert DN subset of role subject DN.
 		{false, "(" + subsetSubjectDNString + ")", fooUser, subjectDNString, "", true, false, false, roachpb.MustMakeTenantID(123),
-			true, false, `certificate authentication failed for user "foo"`},
+			true, false, false, false, `certificate authentication failed for user "foo"`},
 		// Secure mode, client cert having full DN, foo user with subject role
 		// option set mismatching TLS cert subject only on CN(required for
 		// matching) having DNS as foo.
 		{false, "(" + fieldMismatchOnlyOnCommonNameString + ")dns:foo", fooUser, subjectDNString, "", true, false, false, roachpb.MustMakeTenantID(123),
-			true, false, `certificate authentication failed for user "foo"`},
+			true, false, false, false, `certificate authentication failed for user "foo"`},
 		{false, "(" + rootDNString + ")", username.RootUser, rootDNString, "", true, true, false, roachpb.MustMakeTenantID(123),
-			true, false, `user "root" is not allowed`},
+			true, false, false, false, `user "root" is not allowed`},
 		{false, "(" + nodeDNString + ")", username.NodeUser, nodeDNString, "", true, true, true, roachpb.MustMakeTenantID(123),
-			true, false, ""},
+			true, false, false, false, ""},
 		// tls cert dn matching root dn set, where CN != root
 		{false, "(" + subjectDNString + ")", username.RootUser, subjectDNString, "", true, true, false, roachpb.MustMakeTenantID(123),
-			true, false, `user "root" is not allowed`},
+			true, false, false, false, `user "root" is not allowed`},
 		{false, "(" + subjectDNString + ")", fooUser, "", "", true, false, false, roachpb.MustMakeTenantID(123),
-			false, true, `user "foo" does not have a distinguished name set which subject_required cluster setting mandates`},
+			false, true, false, false, `user "foo" does not have a distinguished name set which subject_required cluster setting mandates`},
 		{false, "(" + subjectDNString + ")", fooUser, subjectDNString, "", true, true, false, roachpb.MustMakeTenantID(123),
-			true, true, `user "foo" is not allowed`},
+			true, true, false, false, `user "foo" is not allowed`},
+
+		// Test cases for disallow root login functionality
+		// Root user with disallow root login disabled - should succeed
+		{false, "(CN=root)", username.RootUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, false, ``},
+		// Root user with disallow root login enabled - should fail
+		{false, "(CN=root)", username.RootUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, true, false, `certificate authentication failed for user "root"`},
+		// Non-root user with disallow root login enabled - should succeed
+		{false, "(CN=foo)", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, true, false, `user "foo" is not allowed`},
+		// Node user with disallow root login enabled - should succeed
+		{false, "(CN=node)", username.NodeUser, "", "", true, true, true, roachpb.SystemTenantID, false, false, true, false, ``},
+		// Root user with tenant-scoped certificate and disallow root login enabled - should fail
+		{false, "(CN=root)uri:crdb://tenant/123/user/root", username.RootUser, "", "", true, false, false, roachpb.MustMakeTenantID(123), false, false, true, false, `certificate authentication failed for user "root"`},
+		// Root user with DNS SAN and disallow root login enabled - should fail
+		{false, "(CN=root)dns:root", username.RootUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, true, false, `certificate authentication failed for user "root"`},
+
+		// Test cases for allow debug user functionality
+		// Debug user with allow debug user disabled (default) - should fail
+		{false, "(CN=debug_user)", username.DebugUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, `certificate authentication failed for user "debug_user"`},
+		// Debug user with allow debug user enabled - should succeed
+		{false, "(CN=debug_user)", username.DebugUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, true, `user "debug_user" is not allowed`},
+		// Non-debug user with allow debug user enabled - should succeed (no impact)
+		{false, "(CN=foo)", fooUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, true, `user "foo" is not allowed`},
+		// Node user with allow debug user enabled - should succeed (no impact)
+		{false, "(CN=node)", username.NodeUser, "", "", true, true, true, roachpb.SystemTenantID, false, false, false, true, ``},
+		// Debug user with tenant-scoped certificate and allow debug user disabled - should fail
+		{false, "(CN=debug_user)uri:crdb://tenant/123/user/debug_user", username.DebugUser, "", "", true, false, false, roachpb.MustMakeTenantID(123), false, false, false, false, `certificate authentication failed for user "debug_user"`},
+		// Debug user with tenant-scoped certificate and allow debug user enabled - should succeed
+		{false, "(CN=debug_user)uri:crdb://tenant/123/user/debug_user", username.DebugUser, "", "", true, true, false, roachpb.MustMakeTenantID(123), false, false, false, true, `user "debug_user" is not allowed`},
+		// Debug user with DNS SAN and allow debug user disabled - should fail
+		{false, "(CN=debug_user)dns:debug_user", username.DebugUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, `certificate authentication failed for user "debug_user"`},
+		// Debug user with DNS SAN and allow debug user enabled - should succeed
+		{false, "(CN=debug_user)dns:debug_user", username.DebugUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, true, `user "debug_user" is not allowed`},
 	}
 
 	ctx := context.Background()
@@ -475,11 +509,17 @@ func TestAuthenticationHook(t *testing.T) {
 			defer func() {
 				security.UnsetRootSubject()
 				security.UnsetNodeSubject()
+				security.SetDisallowRootLogin(false)
+				security.SetAllowDebugUser(false)
 			}()
 			err := security.SetCertPrincipalMap(strings.Split(tc.principalMap, ","))
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			// Set the global flags for disallowing root login and allowing debug user
+			security.SetDisallowRootLogin(tc.disallowRootLogin)
+			security.SetAllowDebugUser(tc.allowDebugUser)
 
 			var roleSubject *ldap.DN
 			if tc.isSubjectRoleOptionOrDNSet {

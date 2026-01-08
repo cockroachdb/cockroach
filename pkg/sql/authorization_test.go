@@ -98,8 +98,8 @@ func TestConcurrentGrants(t *testing.T) {
 
 	runConcurrentGrantsWithPriority := func(t *testing.T, priority string) {
 		ctx := context.Background()
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
+		srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
 		tdb := sqlutils.MakeSQLRunner(db)
 
 		// Shortening this cluster setting is essential for this test. A small value
@@ -107,7 +107,7 @@ func TestConcurrentGrants(t *testing.T) {
 		// commit. This is needed to force `txn2` to encounter a WriteTooOldError
 		// after being unblocked, and hence enter a retry, as retry in `txn2` is
 		// prerequisite for the potential deadlock described in #117144.
-		tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
+		sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1ms'")
 
 		tdb.Exec(t, "CREATE ROLE developer;")
 		tdb.Exec(t, "CREATE USER user1")

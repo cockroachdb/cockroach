@@ -10,7 +10,7 @@ set -euxo pipefail
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 BIN_DIR=$(realpath $THIS_DIR/../../bin/aspect-bazel-lib-utils-$(date +%Y%m%d-%H%M%S))
 
-PLATS=(darwin_amd64 darwin_arm64 linux_amd64 linux_arm64 linux_s390x windows_amd64)
+PLATS=(darwin_arm64 linux_amd64 linux_arm64 linux_s390x windows_amd64)
 
 mkdir -p $BIN_DIR
 

@@ -25,8 +25,7 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           ClosedTypeIDs:
@@ -76,8 +75,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           ClosedTypeIDs:
@@ -193,8 +191,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -283,8 +280,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -569,8 +565,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -596,8 +591,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -710,8 +704,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -737,8 +730,7 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1043,8 +1035,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1144,8 +1135,7 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1429,8 +1419,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1519,8 +1508,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1800,8 +1788,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1826,8 +1813,7 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 107
         TypeT:
           Type:
@@ -1877,8 +1863,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -1903,8 +1888,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       ColumnType:
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 107
         TypeT:
           Type:
@@ -2468,8 +2452,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 109
         TypeT:
           Type:
@@ -2558,8 +2541,7 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
+          in261OrLater: true
         TableID: 109
         TypeT:
           Type:
@@ -3141,6 +3123,10 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, VALIDATED]
   kind: Precedence
   rule: secondary index named before validation (without index swap)
+- from: [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT]
+  to:   [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: old index name is dropped before conflicting new index name is added
 - from: [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence

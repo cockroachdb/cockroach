@@ -40,9 +40,9 @@ type BackupOptions struct {
 	EncryptionPassphrase            Expr
 	Detached                        *DBool
 	EncryptionKMSURI                StringOrPlaceholderOptList
-	IncrementalStorage              StringOrPlaceholderOptList
 	ExecutionLocality               Expr
 	UpdatesClusterMonitoringMetrics Expr
+	Strict                          bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -119,7 +119,6 @@ type RestoreOptions struct {
 	Detached                         bool
 	SkipLocalitiesCheck              bool
 	NewDBName                        Expr
-	IncrementalStorage               StringOrPlaceholderOptList
 	AsTenant                         Expr
 	ForceTenantID                    Expr
 	SchemaOnly                       bool
@@ -279,12 +278,6 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatURIs(o.EncryptionKMSURI)
 	}
 
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
-
 	if o.ExecutionLocality != nil {
 		maybeAddSep()
 		ctx.WriteString("execution locality = ")
@@ -301,6 +294,10 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("updates_cluster_monitoring_metrics = ")
 		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
+	}
+	if o.Strict {
+		maybeAddSep()
+		ctx.WriteString("strict storage locality")
 	}
 }
 
@@ -335,12 +332,6 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("kms specified multiple times")
 	}
 
-	if o.IncrementalStorage == nil {
-		o.IncrementalStorage = other.IncrementalStorage
-	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_location option specified multiple times")
-	}
-
 	if o.ExecutionLocality == nil {
 		o.ExecutionLocality = other.ExecutionLocality
 	} else if other.ExecutionLocality != nil {
@@ -362,6 +353,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	} else {
 		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
 	}
+	if o.Strict {
+		if other.Strict {
+			return errors.New("strict storage locality option specified multiple times")
+		}
+	} else {
+		o.Strict = other.Strict
+	}
 	return nil
 }
 
@@ -372,10 +370,10 @@ func (o BackupOptions) IsDefault() bool {
 		(o.Detached == nil || o.Detached == DBoolFalse) &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics &&
+		o.Strict == options.Strict
 }
 
 // Format implements the NodeFormatter interface.
@@ -448,12 +446,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("new_db_name = ")
 		ctx.FormatNode(o.NewDBName)
-	}
-
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
 	}
 
 	if o.AsTenant != nil {
@@ -588,12 +580,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("new_db_name specified multiple times")
 	}
 
-	if o.IncrementalStorage == nil {
-		o.IncrementalStorage = other.IncrementalStorage
-	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_location option specified multiple times")
-	}
-
 	if o.AsTenant == nil {
 		o.AsTenant = other.AsTenant
 	} else if other.AsTenant != nil {
@@ -676,7 +662,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.NewDBName == options.NewDBName &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant &&
 		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&

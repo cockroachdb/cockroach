@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/bits"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -148,6 +149,9 @@ type Metadata struct {
 	// execution.
 	rlsMeta RowLevelSecurityMeta
 
+	// hintIDs are the external statement hints that match this statement.
+	hintIDs []int64
+
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
@@ -254,7 +258,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 		len(md.sequences) != 0 || len(md.views) != 0 || len(md.userDefinedTypes) != 0 ||
 		len(md.userDefinedTypesSlice) != 0 || len(md.dataSourceDeps) != 0 ||
 		len(md.routineDeps) != 0 || len(md.objectRefsByName) != 0 || len(md.privileges) != 0 ||
-		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized {
+		len(md.builtinRefsByName) != 0 || md.rlsMeta.IsInitialized || len(md.hintIDs) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -337,6 +341,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta.Copy()
+
+	md.hintIDs = append(md.hintIDs, from.hintIDs...)
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -602,6 +608,15 @@ func (md *Metadata) CheckDependencies(
 		return upToDate, err
 	}
 
+	// Check that external statement hints have not changed.
+	var hintIDs []int64
+	if evalCtx.Planner != nil {
+		hintIDs = evalCtx.Planner.GetHintIDs()
+	}
+	if !slices.Equal(md.hintIDs, hintIDs) {
+		return false, nil
+	}
+
 	// Update the digest after a full dependency check, since our fast
 	// check did not succeed.
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled {
@@ -636,20 +651,38 @@ func maybeSwallowMetadataResolveErr(err error) error {
 // query for the referenced data sources have been revoked.
 func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog cat.Catalog) error {
 	for _, dataSource := range md.dataSourceDeps {
-		privileges := md.privileges[dataSource.ID()]
-		for privs := privileges; privs != 0; {
-			// Strip off each privilege bit and make call to CheckPrivilege for it.
-			// Note that priv == 0 can occur when a dependency was added with
-			// privilege.Kind = 0 (e.g. for a table within a view, where the table
-			// privileges do not need to be checked). Ignore the "zero privilege".
-			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
-			if priv != 0 {
-				if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
-					return err
-				}
+		err := func() error {
+			privileges := md.privileges[dataSource.ID()]
+
+			// Check if this dependency has the special builtin-allowed privilege.
+			// If so, disable unsafe internal checks for all privilege checks on this data source.
+			if (privileges & (1 << privilege.BUILTIN_UNSAFE_ALLOWED)) != 0 {
+				// Clear the BUILTIN_UNSAFE_ALLOWED bit so the loop doesn't process it.
+				privileges &= ^privilegeBitmap(1 << privilege.BUILTIN_UNSAFE_ALLOWED)
+
+				// Disable unsafe internal checks for this data source.
+				defer optCatalog.DisableUnsafeInternalCheck()()
 			}
-			// Set the just-handled privilege bit to zero and look for next.
-			privs &= ^(1 << priv)
+
+			for privs := privileges; privs != 0; {
+				// Strip off each privilege bit and make call to CheckPrivilege for it.
+				// Note that priv == 0 can occur when a dependency was added with
+				// privilege.Kind = 0 (e.g. for a table within a view, where the table
+				// privileges do not need to be checked). Ignore the "zero privilege".
+				priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
+				if priv != 0 {
+					if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
+						return err
+					}
+				}
+				// Set the just-handled privilege bit to zero and look for next.
+				privs &= ^(1 << priv)
+			}
+
+			return nil
+		}()
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1261,4 +1294,9 @@ func (md *Metadata) checkRLSDependencies(
 	// a new version of the table descriptor is created. The metadata dependency
 	// check already accounts for changes in the table descriptor version.
 	return true, nil
+}
+
+// SetHintIDs copies the given matching hintIDs into the metadata.
+func (md *Metadata) SetHintIDs(hintIDs []int64) {
+	md.hintIDs = append(md.hintIDs, hintIDs...)
 }

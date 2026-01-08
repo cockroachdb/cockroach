@@ -120,7 +120,11 @@ func TestStoreLiveness(t *testing.T) {
 					case "debug-supporter-state":
 						var sortedSupportMap []string
 						for _, support := range sm.supporterStateHandler.supporterState.supportFor {
-							sortedSupportMap = append(sortedSupportMap, fmt.Sprintf("%+v", support))
+							sortedSupportMap = append(sortedSupportMap, fmt.Sprintf(
+								"%+v lastSupportWithdrawnTime:%s",
+								support.SupportState,
+								support.lastSupportWithdrawnTime,
+							))
 						}
 						slices.Sort(sortedSupportMap)
 						return fmt.Sprintf(

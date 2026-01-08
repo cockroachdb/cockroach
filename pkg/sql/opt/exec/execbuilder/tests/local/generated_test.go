@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
 	)()
 
 	os.Exit(m.Run())
@@ -636,6 +636,13 @@ func TestExecBuild_subquery_correlated(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "subquery_correlated")
+}
+
+func TestExecBuild_swap_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "swap_mutation")
 }
 
 func TestExecBuild_system(

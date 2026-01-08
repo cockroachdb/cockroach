@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -66,7 +66,7 @@ var scpTimeout = func() time.Duration {
 // components.
 type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
-	cloud.Cluster
+	cloudcluster.Cluster
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
@@ -93,7 +93,7 @@ type SyncedCluster struct {
 //
 // See ListNodes for a description of the node selector string.
 func NewSyncedCluster(
-	metadata *cloud.Cluster, nodeSelector string, settings ClusterSettings,
+	metadata *cloudcluster.Cluster, nodeSelector string, settings ClusterSettings,
 ) (*SyncedCluster, error) {
 	c := &SyncedCluster{
 		Cluster:         *metadata,
@@ -1721,6 +1721,26 @@ func (c *SyncedCluster) PutString(
 	return errors.Wrap(c.Put(ctx, l, nodes, src, dest), "syncedCluster.PutString")
 }
 
+// GetString retrieves the contents of a file from a remote node.
+// Returns an error if the file does not exist.
+func (c *SyncedCluster) GetString(
+	ctx context.Context, l *logger.Logger, node Node, src string,
+) (string, error) {
+	opts := defaultCmdOpts("get-string")
+	opts.combinedOut = true
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, fmt.Sprintf("cat %s", src), opts)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s from node %d", src, node)
+	}
+
+	if result.Err != nil {
+		return "", errors.Wrapf(result.Err, "failed to read file %s from node %d", src, node)
+	}
+
+	return result.CombinedOut, nil
+}
+
 // Put TODO(peter): document
 func (c *SyncedCluster) Put(
 	ctx context.Context, l *logger.Logger, nodes Nodes, src string, dest string,
@@ -2304,7 +2324,7 @@ func (c *SyncedCluster) pgurls(
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */, false /* disallowUnsafeInternals */)
 	}
 	return m, nil
 }
@@ -2347,7 +2367,7 @@ func (c *SyncedCluster) loadBalancerURL(
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */, false /* disallowUnsafeInternals */)
 	return loadBalancerURL, nil
 }
 

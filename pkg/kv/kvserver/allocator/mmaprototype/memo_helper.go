@@ -7,7 +7,7 @@ package mmaprototype
 
 // clearableMemoMap is a generic map suited to the needs of various memos used
 // in the allocator. The key is any type that implements the mapKey interface
-// (e.g. storeIDPostingList). There is no removal from the map since the memo
+// (e.g. storeSet). There is no removal from the map since the memo
 // is built up during an allocator round and then cleared for the next round.
 // The key-value pairs are stored in a mapEntry, which the caller is
 // responsible for initializing. The mapEntrySlice and its mapEntries are

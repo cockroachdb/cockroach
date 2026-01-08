@@ -90,8 +90,8 @@ func TestHighCardinalityGauge(t *testing.T) {
 	r := metric.NewRegistry()
 	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
 
-	g := NewHighCardinalityGauge(metric.Metadata{
-		Name: "foo_gauge",
+	g := NewHighCardinalityGauge(metric.HighCardinalityMetricOptions{
+		Metadata: metric.Metadata{Name: "foo_gauge"},
 	}, "database", "application_name")
 	g.mu.children = &UnorderedCacheWrapper{
 		cache: initialiseCacheStorageForTesting(),
@@ -155,8 +155,8 @@ func TestHighCardinalityGaugeMethods(t *testing.T) {
 	r := metric.NewRegistry()
 	writePrometheusMetrics := WritePrometheusMetricsFunc(r)
 
-	g := NewHighCardinalityGauge(metric.Metadata{
-		Name: "foo_gauge",
+	g := NewHighCardinalityGauge(metric.HighCardinalityMetricOptions{
+		Metadata: metric.Metadata{Name: "foo_gauge"},
 	}, "database", "application_name")
 	g.mu.children = &UnorderedCacheWrapper{
 		cache: initialiseCacheStorageForTesting(),

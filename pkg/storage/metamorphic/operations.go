@@ -160,7 +160,7 @@ func addKeyToLockSpans(txn *roachpb.Transaction, key roachpb.Key) {
 	newLockSpans = append(newLockSpans, roachpb.Span{
 		Key: key,
 	})
-	txn.LockSpans, _ = roachpb.MergeSpans(&newLockSpans)
+	txn.LockSpans, _ = roachpb.MergeSpans(newLockSpans)
 }
 
 type mvccGetOp struct {

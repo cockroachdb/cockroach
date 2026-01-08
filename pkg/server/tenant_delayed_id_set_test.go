@@ -73,6 +73,9 @@ func TestStartTenantWithDelayedID(t *testing.T) {
 		}, nil
 	}
 
+	// Allow unsafe introspection.
+	serverutils.SetUnsafeOverride(&baseCfg.TestingKnobs)
+
 	go func() {
 		sw, err := NewSeparateProcessTenantServer(
 			ctx,

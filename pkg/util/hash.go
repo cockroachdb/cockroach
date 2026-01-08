@@ -56,3 +56,12 @@ func (f *FNV64) Add(c uint64) {
 func (f *FNV64) Sum() uint64 {
 	return f.sum
 }
+
+// Fibonacci Hash is a multiplicative hash that maps the given `v` into 2^bits
+// values.
+//
+// Reference:
+//   - https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+func FibHash(v uint64, bits int) uint64 {
+	return (v * 11400714819323198485) >> (64 - bits)
+}

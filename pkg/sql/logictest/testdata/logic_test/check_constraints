@@ -494,3 +494,33 @@ ALTER TABLE t_91697 ADD CHECK (a < 123);
 
 statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(a < 'public.t67100a'::REGCLASS\)
 INSERT INTO t_91697 VALUES (321);
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (a INT, b INT, CONSTRAINT foo CHECK (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+# The procedure does not directly depend on column b, so dropping column b
+# should be allowed after dropping the check constraint.
+statement ok
+ALTER TABLE t158154 DROP CONSTRAINT foo, DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

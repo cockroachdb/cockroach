@@ -367,6 +367,9 @@ func (q *SpillingQueue) Dequeue(ctx context.Context) (coldata.Batch, error) {
 		}
 		ok, err := q.diskQueue.Dequeue(ctx, q.dequeueScratch)
 		if err != nil {
+			// TODO(yuzefovich): err here could be DiskFull, but we don't want
+			// to use HandleErrorFromDiskQueue helper since it panics and we do
+			// explicit error propagation from this method.
 			return nil, err
 		}
 		if !ok {

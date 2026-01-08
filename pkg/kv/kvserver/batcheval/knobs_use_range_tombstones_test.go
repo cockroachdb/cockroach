@@ -45,7 +45,6 @@ func TestKnobsUseRangeTombstonesForPointDeletes(t *testing.T) {
 
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.TODOEngine()
 	txn := db.NewTxn(ctx, "test")
 
 	// Write a non-transactional and transactional tombstone.
@@ -76,7 +75,7 @@ func TestKnobsUseRangeTombstonesForPointDeletes(t *testing.T) {
 
 	// Assert that they're now range tombstones.
 	var rangeTombstones []storage.MVCCRangeKey
-	for _, kvI := range storageutils.ScanKeySpan(t, eng, roachpb.Key("a"), roachpb.Key("z")) {
+	for _, kvI := range storageutils.ScanKeySpan(t, store.StateEngine(), roachpb.Key("a"), roachpb.Key("z")) {
 		switch kv := kvI.(type) {
 		case storage.MVCCRangeKeyValue:
 			kv.RangeKey.Timestamp = hlc.Timestamp{}

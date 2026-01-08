@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -27,8 +28,8 @@ var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var supportedRailsVersion = "8.0.1"
-var activerecordAdapterVersion = "v8.0.1"
+var supportedRailsVersion = "8.1.0"
+var activerecordAdapterVersion = "v8.1.0"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -172,7 +173,18 @@ func registerActiveRecord(r registry.Registry) {
 
 		t.Status("running activerecord test suite")
 
+		// Enable autocommit before DDL by default within the test suite.
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
+			`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
+				`sudo sed -i 's/autocommit_before_ddl: false/autocommit_before_ddl: true/g' test/config.yml`,
+		)
+		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
+		// Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || rperrors.IsTransient(err)) {
+			t.Fatal(err)
+		}
+
+		result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
 					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),
@@ -245,7 +257,7 @@ func registerActiveRecord(r registry.Registry) {
 		Name:             "activerecord",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          5 * time.Hour,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.AllExceptFIPS)),
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),

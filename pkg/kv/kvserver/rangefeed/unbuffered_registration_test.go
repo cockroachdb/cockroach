@@ -49,7 +49,7 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	t.Run("register 50 streams", func(t *testing.T) {
 		for id := int64(0); id < 50; id++ {
 			sm.RegisteringStream(id)
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				sm.NewStream(id, r1))
 			require.True(t, registered)
@@ -145,7 +145,7 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	// Register one stream.
 	sm.RegisteringStream(s1)
 	registered, d, _ := p.Register(ctx, h.span, startTs,
-		makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
+		makeCatchUpSnap(catchUpIter, span, startTs), /* catchUpSnap */
 		true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 		sm.NewStream(s1, r1))
 	sm.AddStream(s1, d)
@@ -258,11 +258,11 @@ func TestUnbufferedRegOnCatchUpSwitchOver(t *testing.T) {
 			withCatchUpIter(iter)).(*unbufferedRegistration)
 		catchUpReg.publish(ctx, ev1, nil /* alloc */)
 		catchUpReg.Disconnect(kvpb.NewError(nil))
-		require.Nil(t, catchUpReg.mu.catchUpIter)
+		require.Nil(t, catchUpReg.mu.catchUpSnap)
 		// Catch up scan should not be initiated.
 		go catchUpReg.runOutputLoop(ctx, 0)
 		require.NoError(t, catchUpReg.waitForCaughtUp(ctx))
-		require.Nil(t, catchUpReg.mu.catchUpIter)
+		require.Nil(t, catchUpReg.mu.catchUpSnap)
 		// No events should be sent since the registration has catch up buffer and
 		// is disconnected before catch up scan starts.
 		require.Nil(t, s.GetAndClearEvents())

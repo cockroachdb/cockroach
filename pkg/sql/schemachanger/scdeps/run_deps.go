@@ -137,6 +137,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				d.codec,
 				d.rangeCounter,
 				d.job,
+				d.db,
 				pl.GetNewSchemaChange().BackfillProgress,
 				pl.GetNewSchemaChange().MergeProgress,
 			),
@@ -170,7 +171,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				if err != nil {
 					return err
 				}
-				d.statsRefresher.NotifyMutation(tbl, math.MaxInt32)
+				d.statsRefresher.NotifyMutation(ctx, tbl, math.MaxInt32)
 			}
 			return nil
 		})

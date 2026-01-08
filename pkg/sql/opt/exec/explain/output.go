@@ -300,7 +300,9 @@ func (ob *OutputBuilder) AddDistribution(value string) {
 // AddVectorized adds a top-level vectorized field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddVectorized(value bool) {
-	ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
+	if ob.flags.Verbose || !value {
+		ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
+	}
 }
 
 // AddPlanType adds a top-level generic field, if value is true. Cannot be called
@@ -314,6 +316,15 @@ func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 	default:
 		ob.AddTopLevelField("plan type", "custom")
 	}
+}
+
+// AddStmtHintCount adds a top-level field displaying the number of statement
+// hints applied to the query. Cannot be called while inside a node.
+func (ob *OutputBuilder) AddStmtHintCount(hintCount uint64) {
+	if hintCount == 0 {
+		return
+	}
+	ob.AddTopLevelField("statement hints count", string(humanizeutil.Count(hintCount)))
 }
 
 // AddPlanningTime adds a top-level planning time field. Cannot be called
@@ -360,8 +371,10 @@ func (ob *OutputBuilder) AddKVReadStats(rows, bytes, kvPairs, batchRequests int6
 
 // AddKVTime adds a top-level field for the cumulative time spent in KV.
 func (ob *OutputBuilder) AddKVTime(kvTime time.Duration) {
-	ob.AddFlakyTopLevelField(
-		DeflakeVolatile, "cumulative time spent in KV", string(humanizeutil.Duration(kvTime)))
+	if ob.flags.Verbose {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile, "cumulative time spent in KV", string(humanizeutil.Duration(kvTime)))
+	}
 }
 
 // AddContentionTime adds a top-level field for the cumulative contention time.
@@ -409,20 +422,34 @@ func (ob *OutputBuilder) AddLatchWaitTime(latchWaitTime time.Duration) {
 	)
 }
 
+// AddAdmissionWaitTime adds a top-level field for the cumulative time spent waiting
+// in admission control.
+func (ob *OutputBuilder) AddAdmissionWaitTime(admissionWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent waiting in admission control",
+		string(humanizeutil.Duration(admissionWaitTime)),
+	)
+}
+
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
-	ob.AddFlakyTopLevelField(
-		DeflakeVolatile, "maximum memory usage", string(humanizeutil.IBytes(bytes)),
-	)
+	if ob.flags.Verbose {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile, "maximum memory usage", string(humanizeutil.IBytes(bytes)),
+		)
+	}
 }
 
 // AddDistSQLNetworkStats adds a top-level field for DistSQL network statistics.
 func (ob *OutputBuilder) AddDistSQLNetworkStats(messages, bytes int64) {
-	ob.AddFlakyTopLevelField(
-		DeflakeVolatile,
-		"DistSQL network usage",
-		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
-	)
+	if ob.flags.Verbose || bytes > 0 {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile,
+			"DistSQL network usage",
+			fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+		)
+	}
 }
 
 // AddMaxDiskUsage adds a top-level field for the sql temporary disk space used
@@ -438,13 +465,20 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
-// AddCPUTime adds a top-level field for the cumulative cpu time spent by SQL
+// AddSQLCPUTime adds a top-level field for the cumulative cpu time spent by SQL
 // execution. If we're redacting, we leave this out to keep test outputs
 // independent of platform because the grunning library isn't currently
 // supported on all platforms.
-func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
-	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+func (ob *OutputBuilder) AddSQLCPUTime(cpuTime time.Duration) {
+	if ob.flags.Verbose && !ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		ob.AddTopLevelField("sql cpu time", string(humanizeutil.Duration(cpuTime)))
+	}
+}
+
+// AddKVCPUTime adds a top-level field for the cumulative CPU time spent in KV.
+func (ob *OutputBuilder) AddKVCPUTime(kvCPUTime time.Duration) {
+	if ob.flags.Verbose && !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+		ob.AddTopLevelField("kv cpu time", string(humanizeutil.Duration(kvCPUTime)))
 	}
 }
 
@@ -475,9 +509,15 @@ func (ob *OutputBuilder) AddTxnInfo(
 	txnQoSLevel sessiondatapb.QoSLevel,
 	asOfSystemTime *eval.AsOfSystemTime,
 ) {
-	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
-	ob.AddTopLevelField("priority", txnPriority.String())
-	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	if ob.flags.Verbose || txnIsoLevel != isolation.Serializable {
+		ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
+	}
+	if ob.flags.Verbose || txnPriority != roachpb.NormalUserPriority {
+		ob.AddTopLevelField("priority", txnPriority.String())
+	}
+	if ob.flags.Verbose || txnQoSLevel != sessiondatapb.Normal {
+		ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	}
 	if asOfSystemTime != nil {
 		var boundedStaleness string
 		if asOfSystemTime.BoundedStaleness {

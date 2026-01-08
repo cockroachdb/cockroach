@@ -535,6 +535,15 @@ func (c *transientCluster) startTenantService(
 						InjectedLatencyEnabled: c.latencyEnabled.Load,
 					},
 				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					// Allow the scheduler daemon to start earlier in demo.
+					SchedulerDaemonInitialScanDelay: func() time.Duration {
+						return time.Second * 2
+					},
+					SchedulerDaemonScanDelay: func() time.Duration {
+						return time.Second * 5
+					},
+				},
 			},
 		}
 
@@ -561,6 +570,15 @@ func (c *transientCluster) startTenantService(
 						ContextTestingKnobs: rpc.ContextTestingKnobs{
 							InjectedLatencyOracle:  latencyMap,
 							InjectedLatencyEnabled: c.latencyEnabled.Load,
+						},
+					},
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						// Allow the scheduler daemon to start earlier in demo.
+						SchedulerDaemonInitialScanDelay: func() time.Duration {
+							return time.Second * 2
+						},
+						SchedulerDaemonScanDelay: func() time.Duration {
+							return time.Second * 5
 						},
 					},
 				},
@@ -924,7 +942,10 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				// Allow the scheduler daemon to start earlier in demo.
 				SchedulerDaemonInitialScanDelay: func() time.Duration {
-					return time.Second * 15
+					return time.Second * 2
+				},
+				SchedulerDaemonScanDelay: func() time.Duration {
+					return time.Second * 5
 				},
 			},
 		},
@@ -963,6 +984,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Insecure = false
 		args.SSLCertsDir = demoDir
 	}
+
+	// Allow access to system and crdb_internal tables in demo mode.
+	// Demo mode is for development/testing, so we want to allow access
+	// to these tables for debugging and introspection.
+	serverutils.SetUnsafeOverride(&args.Knobs)
 
 	return args
 }

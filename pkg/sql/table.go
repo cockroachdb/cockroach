@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -172,6 +173,12 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 	}
 
 	if !recordExists {
+		mode, err := backfill.DetermineDistributedMergeMode(
+			ctx, p.extendedEvalCtx.ExecCfg.Settings, backfill.DistributedMergeConsumerLegacy,
+		)
+		if err != nil {
+			return err
+		}
 		// Queue a new job.
 		newRecord := jobs.Record{
 			JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
@@ -184,8 +191,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 				ResumeSpanList:  spanList,
 				// The version distinction for database jobs doesn't matter for jobs on
 				// tables.
-				FormatVersion: jobspb.DatabaseJobFormatVersion,
-				SessionData:   &p.SessionData().SessionData,
+				FormatVersion:        jobspb.DatabaseJobFormatVersion,
+				SessionData:          &p.SessionData().SessionData,
+				DistributedMergeMode: mode,
 			},
 			Progress: jobspb.SchemaChangeProgress{},
 			// Mark jobs without a mutation ID as non-cancellable,
@@ -215,8 +223,9 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		ResumeSpanList:  spanList,
 		// The version distinction for database jobs doesn't matter for jobs on
 		// tables.
-		FormatVersion: jobspb.DatabaseJobFormatVersion,
-		SessionData:   &p.SessionData().SessionData,
+		FormatVersion:        jobspb.DatabaseJobFormatVersion,
+		SessionData:          &p.SessionData().SessionData,
+		DistributedMergeMode: oldDetails.DistributedMergeMode,
 	}
 	if oldDetails.TableMutationID != descpb.InvalidMutationID {
 		// The previous queued schema change job was associated with a mutation,

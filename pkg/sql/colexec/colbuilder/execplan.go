@@ -341,6 +341,14 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.VectorMutationSearch != nil:
 	case core.CompactBackups != nil:
 		return errCoreNotWorthWrapping
+	case core.BulkMerge != nil:
+		return errCoreNotWorthWrapping
+	case core.MergeCoordinator != nil:
+		return errCoreNotWorthWrapping
+	case core.MergeLoopback != nil:
+		return errCoreNotWorthWrapping
+	case core.IngestFile != nil:
+		return errCoreNotWorthWrapping
 	default:
 		err := errors.AssertionFailedf("unexpected processor core %q", core)
 		if buildutil.CrdbTestBuild {
@@ -2828,11 +2836,16 @@ func planProjectionExpr(
 		resultIdx = len(typs)
 		// The projection result will be outputted to a new column which is
 		// appended to the input batch.
-		// TODO(#127814): We may need to handle the case when the left is DNull.
-		op, err = colexecprojconst.GetProjectionLConstOperator(
-			allocator, typs, left.ResolvedType(), outputType, projOp, input,
-			rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, calledOnNullInput,
-		)
+		if !calledOnNullInput && (left == tree.DNull || right == tree.DNull) {
+			// If the left or right is NULL and the operator is not called on
+			// NULL, simply project NULL.
+			op = colexecbase.NewConstNullOp(allocator, outputType, input, resultIdx)
+		} else {
+			op, err = colexecprojconst.GetProjectionLConstOperator(
+				allocator, typs, left.ResolvedType(), outputType, projOp, input,
+				rightIdx, lConstArg, resultIdx, evalCtx, binOp, cmpExpr, calledOnNullInput,
+			)
+		}
 	} else {
 		var leftIdx int
 		input, leftIdx, typs, err = planProjectionOperators(

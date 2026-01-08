@@ -61,14 +61,26 @@ func TestCopyOutTransaction(t *testing.T) {
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 
-	_, err = tx.Exec(ctx, "INSERT INTO t VALUES (1)")
-	require.NoError(t, err)
+	for val, doSavepoint := range []bool{true, false} {
+		func() {
+			if doSavepoint {
+				_, err = tx.Exec(ctx, "SAVEPOINT s")
+				require.NoError(t, err)
+				defer func() {
+					_, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT s")
+					require.NoError(t, err)
+				}()
+			}
 
-	var buf bytes.Buffer
-	_, err = tx.Conn().PgConn().CopyTo(ctx, &buf, "COPY t TO STDOUT")
-	require.NoError(t, err)
-	require.Equal(t, "1\n", buf.String())
+			_, err = tx.Exec(ctx, "INSERT INTO t VALUES ($1)", val)
+			require.NoError(t, err)
 
+			var buf bytes.Buffer
+			_, err = tx.Conn().PgConn().CopyTo(ctx, &buf, "COPY t TO STDOUT")
+			require.NoError(t, err)
+			require.Equal(t, fmt.Sprintf("%d\n", val), buf.String())
+		}()
+	}
 	require.NoError(t, tx.Rollback(ctx))
 }
 

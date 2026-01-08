@@ -59,7 +59,10 @@ go_test(
         "export_test.go",
         "github_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//:TEAMS.yaml",
+        "//.github:CODEOWNERS",
+    ],
     embed = [":roachprod-microbench_lib"],
     deps = [
         "//pkg/cmd/bazci/githubpost/issues",

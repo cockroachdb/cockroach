@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -69,7 +69,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	if n.Type == idxtype.VECTOR {
 		// Disable vector indexes by default in 25.2.
 		// TODO(andyk): Remove this check after 25.2.
-		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+		if err := vecsettings.CheckEnabled(&b.ClusterSettings().SV); err != nil {
 			panic(err)
 		}
 	}
@@ -412,7 +412,7 @@ func processColNodeType(
 		case types.PGVectorFamily:
 			// Create config for vector index, using the number of dimensions from
 			// the vector column.
-			cfg, err := vecindex.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
+			cfg, err := vecsettings.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
 			if err != nil {
 				panic(err)
 			}
@@ -820,7 +820,7 @@ func maybeCreateAndAddShardCol(
 		}
 	})
 	scpb.ForEachColumn(elts, func(_ scpb.Status, _ scpb.TargetStatus, col *scpb.Column) {
-		if col.ColumnID == existingShardColID && !col.IsHidden {
+		if col.ColumnID == existingShardColID && !(col.IsHidden || retrieveColumnHidden(b, tbl.TableID, col.ColumnID) != nil) {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
 			panic(pgerror.Newf(pgcode.DuplicateColumn,
@@ -841,7 +841,6 @@ func maybeCreateAndAddShardCol(
 		col: &scpb.Column{
 			TableID:  tbl.TableID,
 			ColumnID: shardColID,
-			IsHidden: true,
 		},
 		name: &scpb.ColumnName{
 			TableID:  tbl.TableID,
@@ -858,14 +857,16 @@ func maybeCreateAndAddShardCol(
 		notNull: true,
 	}
 	wexpr := b.WrapExpression(tbl.TableID, parsedExpr)
-	if spec.colType.ElementCreationMetadata.In_24_3OrLater {
-		spec.compute = &scpb.ColumnComputeExpression{
-			TableID:    tbl.TableID,
-			ColumnID:   shardColID,
-			Expression: *wexpr,
-		}
+	spec.compute = &scpb.ColumnComputeExpression{
+		TableID:    tbl.TableID,
+		ColumnID:   shardColID,
+		Expression: *wexpr,
+	}
+
+	if spec.colType.ElementCreationMetadata.In_26_1OrLater {
+		spec.hidden = true
 	} else {
-		spec.colType.ComputeExpr = wexpr
+		spec.col.IsHidden = true
 	}
 
 	backing := addColumn(b, spec, n)

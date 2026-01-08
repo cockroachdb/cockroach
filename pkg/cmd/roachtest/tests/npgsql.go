@@ -173,7 +173,7 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		// .NET only supports AMD64 arch for 7.0.
 		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllExceptAWS.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNpgsql(ctx, t, c)

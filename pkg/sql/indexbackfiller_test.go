@@ -62,7 +62,7 @@ func TestIndexBackfiller(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 
 	moveToTDelete := make(chan bool)
 	moveToTWrite := make(chan bool)
@@ -583,14 +583,16 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	skip.UnderRace(t, "slow timing sensitive test")
 
 	ctx := context.Background()
+	// backfillProgressCompletedCh will be used to communicate completed spans
+	// with the tenant prefix removed, if applicable.
 	backfillProgressCompletedCh := make(chan []roachpb.Span)
 	const numRows = 100
 	const numSpans = 20
 	var isBlockingBackfillProgress atomic.Bool
-	isBlockingBackfillProgress.Store(true)
+	var codec keys.SQLCodec
 
 	// Start the server with testing knob.
-	tc, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -599,6 +601,18 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 				BulkAdderFlushesEveryBatch: true,
 				RunBeforeIndexBackfillProgressUpdate: func(ctx context.Context, completed []roachpb.Span) {
 					if isBlockingBackfillProgress.Load() {
+						if toRemove := len(codec.TenantPrefix()); toRemove > 0 {
+							// Remove the tenant prefix from completed spans.
+							updated := make([]roachpb.Span, len(completed))
+							for i := range updated {
+								sp := completed[i]
+								updated[i] = roachpb.Span{
+									Key:    append(roachpb.Key(nil), sp.Key[toRemove:]...),
+									EndKey: append(roachpb.Key(nil), sp.EndKey[toRemove:]...),
+								}
+							}
+							completed = updated
+						}
 						select {
 						case <-ctx.Done():
 						case backfillProgressCompletedCh <- completed:
@@ -625,7 +639,11 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	codec = s.Codec()
+	isBlockingBackfillProgress.Store(true)
 
 	_, err := db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = 10`)
 	require.NoError(t, err)
@@ -772,4 +790,108 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestDistributedMergeStoragePrefixTracking(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+
+	// Create a non-unique index. This triggers the distributed merge pipeline.
+	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
+
+	// Find the schema change job that was created.
+	var jobID int64
+	tdb.QueryRow(t, `
+		SELECT job_id FROM crdb_internal.jobs
+		WHERE job_type = 'NEW SCHEMA CHANGE'
+		AND description LIKE '%CREATE INDEX idx%'
+		ORDER BY created DESC
+		LIMIT 1
+	`).Scan(&jobID)
+	require.NotZero(t, jobID, "expected to find schema change job")
+
+	// Read the job payload to check for storage prefixes.
+	var payloadBytes []byte
+	tdb.QueryRow(t, `SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&payloadBytes)
+
+	payload := &jobspb.Payload{}
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, payload))
+	schemaChangeDetails := payload.Details.(*jobspb.Payload_NewSchemaChange).NewSchemaChange
+	require.NotNil(t, schemaChangeDetails)
+	require.NotEmpty(t, schemaChangeDetails.BackfillProgress)
+	backfillProgress := schemaChangeDetails.BackfillProgress[0]
+	require.NotEmpty(t, backfillProgress.SSTStoragePrefixes)
+
+	// Verify the prefix format matches nodelocal://<nodeID>/.
+	for _, prefix := range backfillProgress.SSTStoragePrefixes {
+		t.Logf("found storage prefix: %s", prefix)
+		require.Regexp(t, `^nodelocal://\d+/$`, prefix,
+			"storage prefix should match nodelocal://<nodeID>/ format")
+	}
+}
+
+func TestMultiMergeIndexBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Create a temp directory for nodelocal storage used by distributed merge.
+	tempDir := t.TempDir()
+
+	// Track manifests from each iteration using the testing knob.
+	manifestCountByIteration := make(map[int]int, 0)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: tempDir,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+					manifestCountByIteration[iteration] = len(manifests)
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 4`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
+
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v TEXT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, repeat('x', 100) || i::text FROM generate_series(1, 5000) AS g(i)`)
+
+	// Trigger the distributed merge index backfill. It validates the final rows
+	// itself, so a successful run implies the new pipeline produced correct
+	// results. The remaining validation checks that intermediate files were
+	// created and recorded in job progress for each iteration.
+	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
+
+	// Verify that we saw all intermediate iterations (1, 2, 3) via the testing knob.
+	// Iteration 4 is the final one that ingests to KV, so it doesn't generate manifests.
+	require.GreaterOrEqual(t, manifestCountByIteration[1], 12)
+	require.GreaterOrEqual(t, manifestCountByIteration[2], 12)
+	require.GreaterOrEqual(t, manifestCountByIteration[3], 12)
 }

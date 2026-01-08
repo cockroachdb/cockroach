@@ -207,6 +207,10 @@ type instrumentationHelper struct {
 	// stats scanned by this query.
 	nanosSinceStatsForecasted time.Duration
 
+	// stmtHintsCount is the number of hints from system.statement_hints applied
+	// to the statement.
+	stmtHintsCount uint64
+
 	// retryCount is the number of times the transaction was retried.
 	retryCount uint64
 
@@ -429,6 +433,12 @@ func (ih *instrumentationHelper) Setup(
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
 	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
+	ih.stmtHintsCount = 0
+	for _, hint := range stmt.Hints {
+		if hint.Enabled && hint.Err == nil {
+			ih.stmtHintsCount += 1
+		}
+	}
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -861,6 +871,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
+	ob.AddStmtHintCount(ih.stmtHintsCount)
 	ob.AddRetryCount("transaction", ih.retryCount)
 	ob.AddRetryTime("transaction", phaseTimes.GetTransactionRetryLatency())
 	ob.AddRetryCount("statement", ih.retryStmtCount)
@@ -882,6 +893,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		if queryStats.LatchWaitTime != 0 {
 			ob.AddLatchWaitTime(queryStats.LatchWaitTime)
 		}
+		if queryStats.AdmissionWaitTime != 0 {
+			ob.AddAdmissionWaitTime(queryStats.AdmissionWaitTime)
+		}
 
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddDistSQLNetworkStats(queryStats.DistSQLNetworkMessages, queryStats.DistSQLNetworkBytesSent)
@@ -893,13 +907,16 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 			ob.AddTopLevelField("used follower read", "")
 		}
 
+		if grunning.Supported {
+			ob.AddKVCPUTime(ih.topLevelStats.kvCPUTimeNanos)
+		}
 		if !ih.containsMutation && ih.vectorized && grunning.Supported {
 			// Currently we cannot separate SQL CPU time from local KV CPU time for
 			// mutations, since they do not collect statistics. Additionally, CPU time
 			// is only collected for vectorized plans since it is gathered by the
 			// vectorizedStatsCollector operator.
 			// TODO(drewk): lift these restrictions.
-			ob.AddCPUTime(queryStats.CPUTime)
+			ob.AddSQLCPUTime(queryStats.SQLCPUTime)
 		}
 		if ih.isTenant && ih.vectorized {
 			// Only output RU estimate if this is a tenant. Additionally, RUs aren't
@@ -924,7 +941,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
 	// Highlight that write buffering was enabled on the current txn, unless
 	// we're in "deterministic explain" mode.
-	if ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
+	if flags.Verbose && ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
 		// In order to not pollute the output, we don't include the write
 		// buffering info for read-only implicit txns. However, if we're in an
 		// explicit txn, even if the stmt is read-only, it might still be
@@ -959,7 +976,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 	trace tracingpb.Recording,
 ) (commErr error) {
 	res.ResetStmtType(&tree.ExplainAnalyze{})
-	res.SetColumns(ctx, colinfo.ExplainPlanColumns)
+	res.SetColumns(ctx, colinfo.ExplainPlanColumns, false /* skipRowDescription */)
 
 	if res.Err() != nil {
 		// Can't add rows if there was an error.

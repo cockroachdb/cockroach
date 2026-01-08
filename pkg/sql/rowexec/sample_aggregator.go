@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -191,15 +191,21 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
 	s.input.Start(ctx)
 
-	earlyExit, err := s.mainLoop(ctx, output)
-	if err != nil {
-		execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
-	} else if !earlyExit {
-		execinfra.SendTraceData(ctx, s.FlowCtx, output)
-		s.input.ConsumerClosed()
-		output.ProducerDone()
-	}
-	s.MoveToDraining(nil /* err */)
+	// Use defer to ensure cleanup happens even on panic (fix for issue #160337).
+	var earlyExit bool
+	var err error
+	defer func() {
+		if err != nil {
+			execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
+		} else if !earlyExit {
+			execinfra.SendTraceData(ctx, s.FlowCtx, output)
+			s.input.ConsumerClosed()
+			output.ProducerDone()
+		}
+		s.MoveToDraining(nil /* err */)
+	}()
+
+	earlyExit, err = s.mainLoop(ctx, output)
 }
 
 // Close is part of the execinfra.Processor interface.
@@ -241,18 +247,21 @@ func (s *sampleAggregator) mainLoop(
 			return job.NoTxn().CheckState(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
+		return s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(jobID).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	var rowsProcessed uint64
-	progressUpdates := util.Every(SampleAggregatorProgressInterval)
+	progressUpdates := util.EveryMono(SampleAggregatorProgressInterval)
 	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
+
 		if meta != nil {
 			if meta.SamplerProgress != nil {
 				rowsProcessed += meta.SamplerProgress.RowsProcessed
-				if progressUpdates.ShouldProcess(timeutil.Now()) {
+				if progressUpdates.ShouldProcess(crtime.NowMono()) {
 					// Periodically report fraction progressed and check that the job has
 					// not been paused or canceled.
 					var fractionCompleted float32
@@ -296,6 +305,8 @@ func (s *sampleAggregator) mainLoop(
 		}
 		if row == nil {
 			break
+		} else if s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook != nil {
+			s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook()
 		}
 
 		// There are four kinds of rows. They should be identified in this order:
@@ -529,8 +540,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded,
-			// if the new statistic is not partial
+			// Delete old stats that have been superseded, if the new statistic
+			// is not partial.
 			if si.spec.PartialPredicate == "" {
 				if err := stats.DeleteOldStatsForColumns(
 					ctx,
@@ -661,8 +672,7 @@ func (s *sampleAggregator) generateHistogram(
 	}
 
 	if lowerBound != nil {
-		h, buckets, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
-		_ = buckets
+		h, _, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
 		return h, err
 	}
 
