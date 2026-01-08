@@ -34,6 +34,8 @@ type ElasticCPUWorkHandle struct {
 	yield bool
 	// bypassedAdmission is true if the allotment happened without waiting.
 	bypassedAdmission bool
+	// granter is used to record yield delays in metrics.
+	granter granterAndYieldDelayRecorder
 
 	// This handle is used in tight loops that are sensitive to per-iteration
 	// overhead (checking against the running time too can have an effect). To
@@ -53,10 +55,19 @@ type ElasticCPUWorkHandle struct {
 }
 
 func newElasticCPUWorkHandle(
-	tenantID roachpb.TenantID, allotted time.Duration, yield bool, bypassedAdmission bool,
+	tenantID roachpb.TenantID,
+	allotted time.Duration,
+	yield bool,
+	bypassedAdmission bool,
+	granter granterAndYieldDelayRecorder,
 ) *ElasticCPUWorkHandle {
 	h := &ElasticCPUWorkHandle{
-		tenantID: tenantID, allotted: allotted, yield: yield, bypassedAdmission: bypassedAdmission}
+		tenantID:          tenantID,
+		allotted:          allotted,
+		yield:             yield,
+		bypassedAdmission: bypassedAdmission,
+		granter:           granter,
+	}
 	h.cpuStart = grunning.Time()
 	return h
 }
@@ -107,7 +118,9 @@ func (h *ElasticCPUWorkHandle) SetYield(yield bool) {
 // of excessive pre-work).
 //
 // When yielding is enabled, at construction time of the handle, or later by
-// calling SetYield, the callee also calls runtime.Yield.
+// calling SetYield, the callee also calls runtime.Yield. The yieldDelay
+// return value indicates how long the goroutine was delayed by the yield
+// (0 if no delay occurred or yielding is disabled).
 //
 // Integrated callers are expected to invoke this in tight loops (we assume
 // most callers are CPU-intensive and thus have tight loops somewhere) and
@@ -118,12 +131,16 @@ func (h *ElasticCPUWorkHandle) SetYield(yield bool) {
 func (h *ElasticCPUWorkHandle) IsOverLimitAndPossiblyYield() (
 	overLimit bool,
 	difference time.Duration,
+	yieldDelay time.Duration,
 ) {
 	if h == nil { // not applicable
-		return false, time.Duration(0)
+		return false, 0, 0
 	}
 	if h.yield {
-		runtimeYield()
+		yieldDelay = runtimeYield()
+		if yieldDelay > 0 {
+			h.granter.RecordYieldDelay(yieldDelay)
+		}
 	}
 	// What we're effectively doing is just:
 	//
@@ -140,9 +157,10 @@ func (h *ElasticCPUWorkHandle) IsOverLimitAndPossiblyYield() (
 	// adjust for it elsewhere by penalizing subsequent waiters.
 	h.itersSinceLastCheck++
 	if h.itersSinceLastCheck < h.itersUntilCheck {
-		return false, h.preWork + h.differenceWithAllottedAtLastCheck
+		return false, h.preWork + h.differenceWithAllottedAtLastCheck, yieldDelay
 	}
-	return h.overLimitInner()
+	overLimit, difference = h.overLimitInner()
+	return overLimit, difference, yieldDelay
 }
 
 // RunningTime returns the pre-work duration and the work duration. This
@@ -212,7 +230,7 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // TestingNewElasticCPUHandle exports the ElasticCPUWorkHandle constructor for
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
-	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour, false, false) // use a very high allotment
+	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour, false, false, nil) // use a very high allotment
 }
 
 // TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
