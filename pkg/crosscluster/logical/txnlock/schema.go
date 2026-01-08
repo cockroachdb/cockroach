@@ -184,6 +184,7 @@ func (t *tableConstraints) deriveLocks(row ldrdecoder.DecodedRow, locks []Lock) 
 	return locks
 }
 
+// DependsOn returns true if b must be applied before a can be applied.
 func (t *tableConstraints) DependsOn(a, b ldrdecoder.DecodedRow) bool {
 	// TODO(jeffswenson): we should get a real eval context during
 	// initialization.
@@ -192,7 +193,7 @@ func (t *tableConstraints) DependsOn(a, b ldrdecoder.DecodedRow) bool {
 		return false
 	}
 	for _, uc := range t.UniqueConstraints {
-		if uc.equal(&evalCtx, a.PrevRow, b.Row) {
+		if uc.equal(&evalCtx, a.Row, b.PrevRow) {
 			return true
 		}
 	}

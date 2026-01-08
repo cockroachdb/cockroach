@@ -6,8 +6,6 @@
 package txnlock
 
 import (
-	"slices"
-
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/errors"
 )
@@ -29,14 +27,12 @@ func (ls *LockSynthesizer) sort(
 
 	// We iterate backwards so that the order is stable with respect to the input
 	// if there are no dependencies.
-	for i := len(rows) - 1; 0 <= i; i-- {
+	for i := range rows {
 		err := ls.sortInner(i, rows, status, rowLocks, locks, &sorted)
 		if err != nil {
 			return nil, err
 		}
 	}
-
-	slices.Reverse(sorted)
 
 	return sorted, nil
 }
