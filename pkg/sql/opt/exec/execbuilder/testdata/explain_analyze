@@ -220,7 +220,7 @@ regions: <hidden>
 
 # Verify that the number of applied statement hints is displayed.
 statement ok
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT k FROM kv WHERE k >= _',
   'SELECT k FROM kv@kv_v_idx WHERE k >= _'
 )
