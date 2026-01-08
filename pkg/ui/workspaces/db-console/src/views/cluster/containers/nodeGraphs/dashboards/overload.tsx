@@ -143,6 +143,26 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Elastic CPU Yield Delay Per Second"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`Total time goroutines were delayed by runtime.Yield per second of wall time. This shows how much elastic CPU work was paused by cooperative scheduling.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.admission.elastic_cpu.yield_delay_nanos"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Admission Queueing Delay p99 – Foreground (Regular) CPU"
       sources={nodeSources}
       tenantSource={tenantSource}
