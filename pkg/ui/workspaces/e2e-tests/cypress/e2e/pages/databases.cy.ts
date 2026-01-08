@@ -18,18 +18,16 @@ describe("databases page", () => {
 
   it("displays table of databases", () => {
     function checkDatabases(): void {
-      cy.get("table").should("exist");
-      cy.get("table").contains("Name");
-      cy.get("table").contains("Size");
-      cy.get("table").contains("Tables");
-      cy.get("table").contains("Regions / Nodes");
+      cy.get('[data-testid="databases-table"]').should("exist");
+      cy.get('[data-testid="databases-table"]').contains("Name");
+      cy.get('[data-testid="databases-table"]').contains("Size");
+      cy.get('[data-testid="databases-table"]').contains("Tables");
+      cy.get('[data-testid="databases-table"]').contains("Regions / Nodes");
 
-      cy.get("table tbody").within(() => {
+      cy.get('[data-testid="databases-table"]').within(() => {
         cy.contains("tr", "defaultdb").within(() => {
           cy.get("td").should("have.length.greaterThan", 0);
-          // Size column should have a value
           cy.get("td").eq(1).invoke("text").should("not.be.empty");
-          // Tables column should have a value
           cy.get("td").eq(2).invoke("text").should("not.be.empty");
         });
 
@@ -58,7 +56,7 @@ describe("databases page", () => {
     cy.get('input[placeholder="Search databases"]').as("dbSearch");
     cy.get("@dbSearch").clear().type("sys{enter}");
 
-    cy.get("table tbody")
+    cy.get('[data-testid="databases-table"]')
       .should("exist")
       .within(() => {
         // 'system' should be visible
@@ -71,7 +69,7 @@ describe("databases page", () => {
   });
 
   it("displays database metadata", () => {
-    cy.get("table tbody").within(() => {
+    cy.get('[data-testid="databases-table"]').within(() => {
       cy.contains("tr", "system").within(() => {
         cy.get("a").contains("system").click();
       });
@@ -83,8 +81,7 @@ describe("databases page", () => {
       .contains("Select Nodes")
       .should("exist");
 
-    // Table of tables assertions
-    cy.get(".crdb-ant-table-container").within(() => {
+    cy.get('[data-testid="tables-table"]').within(() => {
       cy.get("table").should("exist");
 
       cy.get("table thead").within(() => {
@@ -99,34 +96,29 @@ describe("databases page", () => {
         cy.contains("th", "Stats last updated");
       });
 
+      // System should have at least one table
       cy.get("table tbody tr").should("have.length.at.least", 1);
     });
 
-    // Click the 'Grants' tab
-    cy.get(".crdb-ant-tabs-nav-list").within(() => {
-      cy.contains(
-        '[data-node-key="grants"] .crdb-ant-tabs-tab-btn, .crdb-ant-tabs-tab-btn',
-        "Grants",
-      ).click();
-    });
-
-    cy.get(".crdb-ant-table-container").within(() => {
+    cy.get('[data-node-key="grants"] .crdb-ant-tabs-tab-btn').click();
+    cy.get('[data-testid="database-grants-table"]').within(() => {
       cy.get("table thead").within(() => {
         cy.contains("th", "Grantee");
         cy.contains("th", "Privileges");
       });
 
+      // there should be at least one grant
       cy.get("table tbody tr").should("have.length.at.least", 1);
     });
   });
 
   it("displays table metadata", () => {
-    cy.get("table tbody").within(() => {
+    cy.get('[data-testid="databases-table"]').within(() => {
       cy.contains("tr", "system").within(() => {
         cy.get("a").contains("system").click();
       });
     });
-    cy.get(".crdb-ant-table-container").within(() => {
+    cy.get('[data-testid="tables-table"]').within(() => {
       cy.get("table tbody tr")
         .first()
         .within(() => {
@@ -152,34 +144,22 @@ describe("databases page", () => {
     ];
 
     cy.wrap(summaryLabels).each((label) => {
-      cy.contains(".summary--card__item--label--21ANh", String(label));
+      cy.contains('[class*="summary--card__item--label"]', String(label));
     });
 
-    // grants of the table
-    cy.get(".crdb-ant-tabs-nav-list").within(() => {
-      cy.contains(
-        '[data-node-key="grants"] .crdb-ant-tabs-tab-btn, .crdb-ant-tabs-tab-btn',
-        "Grants",
-      ).click();
-    });
-
-    cy.get(".crdb-ant-table-container").within(() => {
+    cy.get('[data-node-key="grants"] .crdb-ant-tabs-tab-btn').click();
+    cy.get('[data-testid="table-grants-table"]').within(() => {
       cy.get("table thead").within(() => {
         cy.contains("th", "Grantee");
         cy.contains("th", "Privileges");
       });
 
+      // there should be at least one grant
       cy.get("table tbody tr").should("have.length.at.least", 1);
     });
 
     // indexes of the table
-    cy.get(".crdb-ant-tabs-nav-list").within(() => {
-      cy.contains(
-        '[data-node-key="grants"] .crdb-ant-tabs-tab-btn, .crdb-ant-tabs-tab-btn',
-        "Indexes",
-      ).click();
-    });
-
+    cy.get('[data-node-key="indexes"] .crdb-ant-tabs-tab-btn').click();
     cy.get(".crdb-ant-table-container").within(() => {
       cy.get("table thead").within(() => {
         cy.contains("th", "Index Name");
@@ -190,6 +170,7 @@ describe("databases page", () => {
         cy.contains("th", "Action");
       });
 
+      // there should be a primary index
       cy.get("table tbody tr").should("have.length.at.least", 1);
     });
   });

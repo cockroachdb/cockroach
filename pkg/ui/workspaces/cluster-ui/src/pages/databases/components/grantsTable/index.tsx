@@ -43,12 +43,14 @@ type GrantsTableProps = {
   data: GrantsByUser[];
   error?: Error;
   loading?: boolean;
+  dataTest?: string;
 };
 
 export const GrantsTable: React.FC<GrantsTableProps> = ({
   data,
   error,
   loading,
+  dataTest,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -73,6 +75,7 @@ export const GrantsTable: React.FC<GrantsTableProps> = ({
         loading={loading}
         dataSource={data}
         columns={COLUMNS}
+        dataTest={dataTest}
         pagination={{
           size: "small",
           current: currentPage,
