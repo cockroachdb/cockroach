@@ -2518,13 +2518,13 @@ statement ok
 CREATE TABLE t_hints (k INT PRIMARY KEY, v INT, INDEX (v))
 
 statement ok
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT k FROM t_hints WHERE k >= _',
   'SELECT k FROM t_hints@t_hints_v_idx WHERE k >= _'
 )
 
 statement ok
-SELECT crdb_internal.await_statement_hints_cache()
+SELECT information_schema.crdb_await_statement_hints_cache()
 
 query T
 EXPLAIN SELECT k FROM t_hints WHERE k >= 100

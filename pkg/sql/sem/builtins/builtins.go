@@ -9665,7 +9665,7 @@ WHERE object_id = table_descriptor_id
 		},
 	),
 
-	"crdb_internal.inject_hint": makeBuiltin(
+	"information_schema.crdb_rewrite_inline_hints": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
@@ -9747,12 +9747,14 @@ WHERE object_id = table_descriptor_id
 				}
 				return tree.NewDInt(tree.DInt(hintID)), nil
 			},
-			Info: "This function is used to build a serialized statement hint to be inserted into" +
-				" the system.statement_hints table. It returns the hint ID of the newly created hint.",
+			Info: `This function adds an inline-hint rewrite rule for a statement fingerprint. It ` +
+				`returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to ` +
+				`matching statement fingerprints. It first removes all inline hints from the target ` +
+				`statement, and then copies inline hints from the donor statement.`,
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
+	"information_schema.crdb_clear_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
 			Undocumented:     true,
@@ -9769,7 +9771,7 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Volatile,
 		},
 	),
-	"crdb_internal.await_statement_hints_cache": makeBuiltin(
+	"information_schema.crdb_await_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
 			Undocumented:     true,
