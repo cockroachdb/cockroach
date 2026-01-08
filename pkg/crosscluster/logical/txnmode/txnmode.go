@@ -5,6 +5,8 @@
 
 package txnmode
 
+// TODO(jeffswenson): move this to a txncoordinator package.
+
 import (
 	"context"
 	"time"
@@ -177,21 +179,24 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 						return errors.Wrap(err, "deriving locks for transaction")
 					}
 					transactions[i].WriteSet = lockSet.SortedRows
-				}
 
-				status, err := writer.ApplyBatch(ctx, transactions)
-				if err != nil {
-					// TODO(jeffswenson): ensure this gets logged somewhere higher up
-					log.Dev.Errorf(ctx, "failed to apply transaction batch: %+v", err)
-					return errors.Wrap(err, "applying transaction batch")
-				}
-				for _, s := range status {
-					if s.DlqReason != nil {
-						log.Dev.Errorf(ctx, "transaction batch sent to DLQ: %+v", s.DlqReason)
-						// TODO(jeffswenson): DLQ failed transactions
-						return errors.Wrap(s.DlqReason, "transaction batch failed with DLQ reason")
+					// TODO(jeffswenson): why can't I put multiple transactions touching the same
+					// constraint in a batch?
+					status, err := writer.ApplyBatch(ctx, transactions[i:i+1])
+					if err != nil {
+						// TODO(jeffswenson): ensure this gets logged somewhere higher up
+						log.Dev.Errorf(ctx, "failed to apply transaction batch: %+v", err)
+						return errors.Wrap(err, "applying transaction batch")
+					}
+					for _, s := range status {
+						if s.DlqReason != nil {
+							log.Dev.Errorf(ctx, "transaction batch sent to DLQ: %+v", s.DlqReason)
+							// TODO(jeffswenson): DLQ failed transactions
+							return errors.Wrap(s.DlqReason, "transaction batch failed with DLQ reason")
+						}
 					}
 				}
+
 				err = p.checkpoint(ctx, transactions[len(transactions)-1].Timestamp)
 				if err != nil {
 					return errors.Wrap(err, "checkpointing progress")
@@ -255,6 +260,7 @@ func (t *TxnLdrCoordinator) createTxnFeed(ctx context.Context) (_ *txnfeed.Order
 			// TODO(jeffswenson): do we need to scope this down to the spans we care
 			// about?
 			frontier,
+			streamclient.WithDiff(true),
 		)
 		if err != nil {
 			return nil, errors.Wrapf(err, "subscribing to partition %d", i)

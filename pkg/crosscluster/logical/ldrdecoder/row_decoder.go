@@ -1,3 +1,8 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package ldrdecoder
 
 import (
@@ -29,7 +34,12 @@ type tableDecoder struct {
 	srcToDest map[descpb.ID]*destinationTable
 }
 
-func newTableDecoder(ctx context.Context, descriptors descs.DB, settings *cluster.Settings, tableMappings []TableMapping) (tableDecoder, error) {
+func newTableDecoder(
+	ctx context.Context,
+	descriptors descs.DB,
+	settings *cluster.Settings,
+	tableMappings []TableMapping,
+) (tableDecoder, error) {
 	srcToDest := make(map[descpb.ID]*destinationTable, len(tableMappings))
 	err := descriptors.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for _, table := range tableMappings {
@@ -75,7 +85,9 @@ type destinationTable struct {
 	columnTypes []*types.T
 }
 
-func (t *tableDecoder) decodeEvent(ctx context.Context, event streampb.StreamEvent_KV) (DecodedRow, cdcevent.Row, error) {
+func (t *tableDecoder) decodeEvent(
+	ctx context.Context, event streampb.StreamEvent_KV,
+) (DecodedRow, cdcevent.Row, error) {
 	var err error
 	event.KeyValue.Key, err = keys.StripTenantPrefix(event.KeyValue.Key)
 	if err != nil {
@@ -97,26 +109,31 @@ func (t *tableDecoder) decodeEvent(ctx context.Context, event streampb.StreamEve
 		return DecodedRow{}, cdcevent.Row{}, err
 	}
 
-	var prev roachpb.KeyValue
-	prev.Key = event.KeyValue.Key
-	prev.Value = event.PrevValue
+	var prevRow tree.Datums
+	if len(event.PrevValue.RawBytes) != 0 {
+		var prev roachpb.KeyValue
+		prev.Key = event.KeyValue.Key
+		prev.Value = event.PrevValue
 
-	decodedPrevRow, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.PrevValue.Timestamp, false)
-	if err != nil {
-		return DecodedRow{}, cdcevent.Row{}, err
-	}
+		// TODO(jeffswenson): it would be nice if decoded row has the Timestamp,
+		// but for some reason it is missing from the rangefeed.
+		decodedPrevRow, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.KeyValue.Value.Timestamp, false)
+		if err != nil {
+			return DecodedRow{}, cdcevent.Row{}, err
+		}
 
-	prevRow, err := dstTable.toLocalDatums(decodedPrevRow)
-	if err != nil {
-		return DecodedRow{}, cdcevent.Row{}, err
+		prevRow, err = dstTable.toLocalDatums(decodedPrevRow)
+		if err != nil {
+			return DecodedRow{}, cdcevent.Row{}, err
+		}
 	}
 
 	return DecodedRow{
-		TableID:       dstTable.id,
-		IsDelete:        decodedRow.IsDeleted(),
+		TableID:      dstTable.id,
+		IsDelete:     decodedRow.IsDeleted(),
 		RowTimestamp: event.KeyValue.Value.Timestamp,
-		Row:             row,
-		PrevRow:         prevRow,
+		Row:          row,
+		PrevRow:      prevRow,
 	}, decodedRow, nil
 }
 
@@ -154,4 +171,3 @@ func (d *destinationTable) toLocalDatums(row cdcevent.Row) (tree.Datums, error) 
 
 	return localRow, nil
 }
-

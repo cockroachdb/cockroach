@@ -64,6 +64,9 @@ func (c *columnSet) hash(row tree.Datums) uint64 {
 }
 
 func (c *columnSet) null(row tree.Datums) bool {
+	if len(row) == 0 {
+		return true
+	}
 	for _, idx := range c.columns {
 		if row[idx] == tree.DNull {
 			return true
