@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnfeed"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -21,20 +22,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
 
 type TxnLdrCoordinator struct {
-  execCtx sql.JobExecContext
+	execCtx sql.JobExecContext
 
-	job   *jobs.Job
+	job     *jobs.Job
 	payload jobspb.LogicalReplicationDetails
-	client streamclient.Client
-	tables []ldrdecoder.TableMapping
+	client  streamclient.Client
+	tables  []ldrdecoder.TableMapping
 }
 
-func NewTxnLdrCoordinator(ctx context.Context, execCtx sql.JobExecContext, job *jobs.Job, client streamclient.Client, tables []ldrdecoder.TableMapping) *TxnLdrCoordinator {
+func NewTxnLdrCoordinator(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	job *jobs.Job,
+	client streamclient.Client,
+	tables []ldrdecoder.TableMapping,
+) *TxnLdrCoordinator {
 	payload := job.Details().(jobspb.LogicalReplicationDetails)
 	return &TxnLdrCoordinator{
 		job:     job,
@@ -65,6 +73,19 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 		p.execCtx.ExecCfg().Settings,
 		p.tables,
 	)
+	if err != nil {
+		return errors.Wrap(err, "creating txn decoder")
+	}
+
+	lockSynthesizer, err := txnlock.NewLockSynthesizer(
+		ctx,
+		p.execCtx.ExecCfg().LeaseManager,
+		p.execCtx.ExecCfg().Clock,
+		p.tables,
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating lock synthesizer")
+	}
 
 	// TODO(jeffswenson): we need to sometimes emit checkpoints even if there are
 	// no transactions so that we can advance resolved time.
@@ -128,7 +149,7 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case batches<- transactions:
+			case batches <- transactions:
 				transactions = nil
 				rows = 0
 				ticker.Reset(maxInterval)
@@ -149,12 +170,24 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 					continue
 				}
 
+				// Run lock synthesis on each transaction to determine apply order
+				for i := range transactions {
+					lockSet, err := lockSynthesizer.DeriveLocks(transactions[i].WriteSet)
+					if err != nil {
+						return errors.Wrap(err, "deriving locks for transaction")
+					}
+					transactions[i].WriteSet = lockSet.SortedRows
+				}
+
 				status, err := writer.ApplyBatch(ctx, transactions)
 				if err != nil {
+					// TODO(jeffswenson): ensure this gets logged somewhere higher up
+					log.Dev.Errorf(ctx, "failed to apply transaction batch: %+v", err)
 					return errors.Wrap(err, "applying transaction batch")
 				}
 				for _, s := range status {
 					if s.DlqReason != nil {
+						log.Dev.Errorf(ctx, "transaction batch sent to DLQ: %+v", s.DlqReason)
 						// TODO(jeffswenson): DLQ failed transactions
 						return errors.Wrap(s.DlqReason, "transaction batch failed with DLQ reason")
 					}
@@ -215,8 +248,8 @@ func (t *TxnLdrCoordinator) createTxnFeed(ctx context.Context) (_ *txnfeed.Order
 		sub, err := t.client.Subscribe(
 			ctx,
 			streampb.StreamID(t.payload.StreamID),
-			0,                          // consumerNode - not used in logical replication
-			int32(i),                   // consumerProc - use partition index
+			0,        // consumerNode - not used in logical replication
+			int32(i), // consumerProc - use partition index
 			partition.SubscriptionToken,
 			t.payload.ReplicationStartTime,
 			// TODO(jeffswenson): do we need to scope this down to the spans we care
