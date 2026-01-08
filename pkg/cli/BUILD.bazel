@@ -46,6 +46,7 @@ go_library(
         "flags.go",
         "flags_util.go",
         "gen.go",
+        "gen_dashboard.go",
         "gen_encryption.go",
         "haproxy.go",
         "init.go",
@@ -109,6 +110,7 @@ go_library(
     embedsrcs = [
         "files/cockroachdb_metrics_base.yaml",
         "files/cockroachdb_datadog_metrics.yaml",
+        "files/dashboard.yaml",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cli",
     visibility = ["//visibility:public"],
@@ -372,6 +374,7 @@ go_test(
         "doctor_test.go",
         "ear_test.go",
         "flags_test.go",
+        "gen_dashboard_test.go",
         "gen_encryption_test.go",
         "gen_test.go",
         "haproxy_test.go",
