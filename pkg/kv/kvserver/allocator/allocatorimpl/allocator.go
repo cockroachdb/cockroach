@@ -2543,6 +2543,11 @@ func (a *Allocator) TransferLeaseTarget(
 			return validTargets[a.randGen.Intn(len(validTargets))]
 		}
 
+		// Construct targetStores from sl.Stores (all constraint-satisfying
+		// stores) so that MMA computes its load summary over the same set used
+		// to compute candidateLeasesMean above. This ensures both the allocator
+		// and MMA reason about the same baseline when validating lease transfer
+		// targets. See the detailed explanation in mmaintegration/thrashing.go.
 		targetStores := make([]roachpb.StoreID, 0, len(sl.Stores))
 		for _, s := range sl.Stores {
 			targetStores = append(targetStores, s.StoreID)
