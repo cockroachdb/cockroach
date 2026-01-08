@@ -85,13 +85,11 @@ func FindAllIncrementalPaths(
 	incStore cloud.ExternalStorage,
 	rootStore cloud.ExternalStorage,
 	subdir string,
-	customIncLocation bool,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindAllIncrementalPaths")
 	defer sp.Finish()
 
-	// Backup indexes do not support custom incremental locations.
-	if customIncLocation || !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
+	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
 		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
@@ -160,38 +158,6 @@ func LegacyFindPriorBackups(
 	return prev, nil
 }
 
-// backupsFromLocation is a small helper function to retrieve all prior
-// backups from the specified location.
-func backupsFromLocation(
-	ctx context.Context,
-	user username.SQLUsername,
-	execCfg *sql.ExecutorConfig,
-	collectionURI string,
-	subdir string,
-	incLoc string,
-	customIncLocation bool,
-) ([]string, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
-	defer sp.Finish()
-
-	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
-	rootStore, err := mkStore(ctx, collectionURI, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open root storage location")
-	}
-	defer rootStore.Close()
-
-	incStore, err := mkStore(ctx, incLoc, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open backup storage location")
-	}
-	defer incStore.Close()
-
-	return FindAllIncrementalPaths(
-		ctx, execCfg, incStore, rootStore, subdir, customIncLocation,
-	)
-}
-
 // MakeBackupDestinationStores makes ExternalStorage handles to the passed in
 // destinationDirs, and returns a cleanup function that closes this stores. It
 // is the callers responsibility to call the returned cleanup function.
@@ -225,57 +191,11 @@ func MakeBackupDestinationStores(
 }
 
 // ResolveIncrementalsBackupLocation returns the resolved locations of
-// incremental backups by looking into either the explicitly provided
-// incremental backup collections, or the full backup collections if no explicit
-// incremental collections are provided.
+// incremental backups within the default incremental directory.
 func ResolveIncrementalsBackupLocation(
-	ctx context.Context,
-	user username.SQLUsername,
-	execCfg *sql.ExecutorConfig,
-	explicitIncrementalCollections []string,
-	fullBackupCollections []string,
-	subdir string,
+	fullBackupCollections []string, subdir string,
 ) ([]string, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveIncrementalsBackupLocation")
-	defer sp.Finish()
-	defaultCollectionURI, _, err := GetURIsByLocalityKV(fullBackupCollections, "")
-	if err != nil {
-		return nil, errors.Wrapf(err, "get default full backup collection URI")
-	}
-	rootStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultCollectionURI, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open root storage location")
-	}
-	defer rootStore.Close()
-
-	customIncLocation := len(explicitIncrementalCollections) > 0
-	if customIncLocation {
-		incPaths, err := backuputils.AppendPaths(explicitIncrementalCollections, subdir)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check we can read from this location, though we don't need the backups here.
-		// If we can't read, we want to throw the appropriate error so the caller
-		// knows this isn't a usable incrementals store.
-		// Some callers will abort, e.g. BACKUP. Others will proceed with a
-		// warning, e.g. SHOW and RESTORE.
-		_, err = backupsFromLocation(
-			ctx, user, execCfg, defaultCollectionURI, subdir, incPaths[0], customIncLocation,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return incPaths, nil
-	}
 	resolvedIncrementalsBackupLocation, err := backuputils.AppendPaths(fullBackupCollections, backupbase.DefaultIncrementalsSubdir, subdir)
-	if err != nil {
-		return nil, err
-	}
-	_, err = backupsFromLocation(
-		ctx, user, execCfg, defaultCollectionURI, subdir,
-		resolvedIncrementalsBackupLocation[0], customIncLocation,
-	)
 	if err != nil {
 		return nil, err
 	}

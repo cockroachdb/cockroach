@@ -785,6 +785,35 @@ func (decommissionPurgatoryError) PurgatoryErrorMarker() {}
 
 var _ PurgatoryError = decommissionPurgatoryError{}
 
+// withTraceCollection runs fn within a tracing span that is a child of any
+// span in ctx. If recordVerbose is true, verbose recording is enabled and
+// the recording is returned; otherwise the returned recording is nil.
+//
+// The bool return from fn is passed through unchanged. This could be made
+// generic in future if needed for other return types.
+func withTraceCollection(
+	ctx context.Context,
+	tracer *tracing.Tracer,
+	spanName string,
+	recordVerbose bool,
+	fn func(ctx context.Context) (bool, error),
+) (bool, tracingpb.Recording, error) {
+	var opts []tracing.SpanOption
+	if recordVerbose {
+		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, tracer, spanName, opts...)
+	defer sp.Finish()
+
+	result, err := fn(ctx)
+
+	var rec tracingpb.Recording
+	if recordVerbose {
+		rec = sp.GetConfiguredRecording()
+	}
+	return result, rec, err
+}
+
 // filterTracingSpans is a utility for processOneChangeWithTracing in order to
 // remove spans with Operation names in opNamesToFilter, as well as all of
 // their child spans, to exclude overly verbose spans prior to logging.
@@ -820,46 +849,35 @@ func (rq *replicateQueue) processOneChangeWithTracing(
 	priorityAtEnqueue float64,
 ) (requeue bool, _ error) {
 	processStart := timeutil.Now()
-	startTracing := log.ExpensiveLogEnabled(ctx, 1)
-	var opts []tracing.SpanOption
-	if startTracing {
-		// If we enable expensive logging, we also want to record the traces for
-		// the entire operation. We only log the trace below if we both exceed
-		// the timeout and expensive logging is enabled.
-		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
-	}
-	ctx, sp := tracing.EnsureChildSpan(ctx, rq.Tracer, "process replica", opts...)
-	defer sp.Finish()
+	recordVerbose := log.ExpensiveLogEnabled(ctx, 1)
 
-	requeue, err := rq.processOneChange(ctx, repl, desc, conf,
-		false /* scatter */, false /* dryRun */, priorityAtEnqueue,
+	requeue, rec, err := withTraceCollection(ctx, rq.Tracer, "process replica", recordVerbose,
+		func(ctx context.Context) (bool, error) {
+			return rq.processOneChange(ctx, repl, desc, conf,
+				false /* scatter */, false /* dryRun */, priorityAtEnqueue,
+			)
+		},
 	)
+
+	// Determine if we should log the trace.
 	processDuration := timeutil.Since(processStart)
 	loggingThreshold := rq.logTracesThresholdFunc(rq.store.cfg.Settings, repl)
-	exceededDuration := loggingThreshold > time.Duration(0) && processDuration > loggingThreshold
+	exceededDuration := loggingThreshold > 0 && processDuration > loggingThreshold
 
-	var traceOutput redact.RedactableString
-	if startTracing {
-		// Utilize a new background context (properly annotated) to avoid writing
-		// traces from a child context into its parent.
-		ctx = repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
-		var rec tracingpb.Recording
-		traceLoggingNeeded := (err != nil || exceededDuration)
-		if traceLoggingNeeded {
-			// If we have tracing spans from execChangeReplicasTxn, filter it from
-			// the recording so that we can render the traces to the log without it,
-			// as the traces from this span (and its children) are highly verbose.
-			rec = filterTracingSpans(sp.GetConfiguredRecording(),
-				replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
-			)
-			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
+	if recordVerbose && (err != nil || exceededDuration) {
+		// Use fresh context to avoid duplicating trace into parent span.
+		logCtx := repl.AnnotateCtx(rq.AnnotateCtx(context.Background()))
+		// Filter out overly verbose spans from execChangeReplicasTxn.
+		rec = filterTracingSpans(rec,
+			replicaChangeTxnGetDescOpName, replicaChangeTxnUpdateDescOpName,
+		)
+		traceOutput := redact.Sprintf("\ntrace:\n%s", rec)
+		if err != nil {
+			log.KvDistribution.Infof(logCtx, "error processing replica: %v%s", err, traceOutput)
+		} else {
+			log.KvDistribution.Infof(logCtx, "processing replica took %s, exceeding threshold of %s%s",
+				processDuration, loggingThreshold, traceOutput)
 		}
-	}
-	if err != nil {
-		log.KvDistribution.Infof(ctx, "error processing replica: %v%s", err, traceOutput)
-	} else if exceededDuration {
-		log.KvDistribution.Infof(ctx, "processing replica took %s, exceeding threshold of %s%s",
-			processDuration, loggingThreshold, traceOutput)
 	}
 
 	return requeue, err

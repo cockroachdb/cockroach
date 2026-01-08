@@ -119,7 +119,6 @@ type RestoreOptions struct {
 	Detached                         bool
 	SkipLocalitiesCheck              bool
 	NewDBName                        Expr
-	IncrementalStorage               StringOrPlaceholderOptList
 	AsTenant                         Expr
 	ForceTenantID                    Expr
 	SchemaOnly                       bool
@@ -449,12 +448,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.NewDBName)
 	}
 
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
-
 	if o.AsTenant != nil {
 		maybeAddSep()
 		ctx.WriteString("virtual_cluster_name = ")
@@ -587,12 +580,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("new_db_name specified multiple times")
 	}
 
-	if o.IncrementalStorage == nil {
-		o.IncrementalStorage = other.IncrementalStorage
-	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_location option specified multiple times")
-	}
-
 	if o.AsTenant == nil {
 		o.AsTenant = other.AsTenant
 	} else if other.AsTenant != nil {
@@ -675,7 +662,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.NewDBName == options.NewDBName &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant &&
 		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&

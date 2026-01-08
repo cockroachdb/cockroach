@@ -292,42 +292,17 @@ func setupPartitionedRangeWithHandlers(
 	return pr, nil
 }
 
-func (pr *testClusterPartitionedRange) deactivate() { pr.set(false) }
-func (pr *testClusterPartitionedRange) activate()   { pr.set(true) }
+func (pr *testClusterPartitionedRange) activate() { pr.set(true) }
 func (pr *testClusterPartitionedRange) set(active bool) {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	pr.mu.partitioned = active
 }
 
-func (pr *testClusterPartitionedRange) addReplica(replicaID roachpb.ReplicaID) {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
-	pr.mu.partitionedReplicas[replicaID] = true
-}
-
 func (pr *testClusterPartitionedRange) addStore(storeID roachpb.StoreID) {
 	pr.mu.Lock()
 	defer pr.mu.Unlock()
 	pr.mu.partitionedStores[storeID] = true
-}
-
-func (pr *testClusterPartitionedRange) removeStore(storeID roachpb.StoreID) {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
-
-	pr.mu.partitionedStores[storeID] = false
-}
-
-func (pr *testClusterPartitionedRange) extend(
-	tc *testcluster.TestCluster,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	partitionedNode int,
-	activated bool,
-	funcs kvtestutils.UnreliableRaftHandlerFuncs,
-) (*testClusterPartitionedRange, error) {
-	return setupPartitionedRangeWithHandlers(tc, rangeID, replicaID, partitionedNode, activated, pr.handlers, funcs)
 }
 
 // dropRaftMessagesFrom sets up a Raft message handler on the given server that

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
@@ -637,6 +636,14 @@ func (ts *testServer) startDefaultTestTenant(
 ) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
+		// Use the same version constraints as the parent settings so that
+		// external process tenants can start when the cluster is running at
+		// a version older than Latest.
+		tenantSettings = cluster.MakeTestingClusterSettingsWithVersions(
+			st.Version.LatestVersion(),
+			st.Version.MinSupportedVersion(),
+			false, /* initializeVersion */
+		)
 		// Copy overrides and other test-specific configuration,
 		// as a convenience for test writers that do the following:
 		// - create a new Settings
@@ -1486,8 +1493,7 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
-	admission.YieldInPacer.Override(ctx, &sqlServer.cfg.Settings.SV, false)
-	bulk.YieldIfNoPacer.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
 
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
@@ -1879,8 +1885,7 @@ func (ts *testServer) StartTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
-	admission.YieldInPacer.Override(ctx, &st.SV, false)
-	bulk.YieldIfNoPacer.Override(ctx, &st.SV, false)
+	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
 
 	hts := &httpTestServer{}
 	hts.t.authentication = sw.authentication

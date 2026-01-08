@@ -8,6 +8,7 @@ go_library(
         "chaos_disk.go",
         "chaos_network.go",
         "chaos_process.go",
+        "chaos_reset.go",
         "commands.go",
         "flags.go",
         "handlers.go",

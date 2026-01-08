@@ -866,16 +866,30 @@ func (dsp *DistSQLPlanner) Run(
 				}
 				return false
 			}()
-			// We disable the usage of the Streamer API whenever usage of
-			// DistSQL was prohibited with an error. The thinking behind it is
-			// that we might have a plan where some expression (e.g. a cast to
-			// an Oid type) uses the planner's txn (which is the RootTxn), so
-			// it'd be illegal to use LeafTxns for a part of such plan.
-			// TODO(yuzefovich): this check could be excessive. For example, it
-			// disables the usage of the Streamer when a subquery has an Oid
-			// type (due to a serialization issue), but that would have no
-			// impact on usage of the Streamer in the main query.
-			if !containsLocking && !mustUseRootTxn && planCtx.distSQLProhibitedErr == nil {
+			// We audit all reasons for why DistSQL was disabled to decide
+			// whether the usage of the Streamer API is safe. We disable the
+			// Streamer for:
+			// - funcDistSQLBlocklist (in case the builtin uses the txn)
+			// - oidProhibited and castToOidProhibited (Oids might use the txn)
+			// - rowLevelLockingProhibited (also done via containsLocking above,
+			//   see #94290)
+			// - vectorSearchProhibited (we currently don't collect
+			//   LeafTxnFinalInfo metadata)
+			// - systemColumnsAndBufferedWritesProhibited (also done via
+			//   mustUseRootTxn() check above)
+			// - valuesNodeProhibited (it probably would be fine, but it's an
+			//   edge case for newContainerValuesNode, so not worth it).
+			const safeForStreamerBits = routineProhibited |
+				arrayOfUntypedTuplesProhibited |
+				untypedTupleProhibited |
+				jsonpathProhibited |
+				unsupportedPlanNode | // here we only will allow 'scan buffer' and 'buffer' nodes via mustUseRootTxn() check
+				aggDistSQLBlocklist |
+				invertedFilterProhibited |
+				localityOptimizedOpProhibited |
+				ordinalityProhibited
+			safeForStreamer := planCtx.distSQLBlockers&distSQLBlockers(^safeForStreamerBits) == 0
+			if !containsLocking && !mustUseRootTxn && safeForStreamer {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
 						if jr := proc.Spec.Core.JoinReader; jr != nil {
@@ -2123,13 +2137,13 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	skipDistSQLDiagramGeneration bool,
 	innerPlansMustUseLeafTxn bool,
 ) error {
-	subqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, subqueryPlan.plan)
+	subqueryDistribution, blockers := planner.getPlanDistribution(ctx, subqueryPlan.plan, notPostquery)
 	distribute := DistributionType(LocalDistribution)
 	if subqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-	subqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	subqueryPlanCtx.distSQLBlockers = blockers
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	subqueryPlanCtx.subOrPostQuery = true
@@ -2720,7 +2734,8 @@ var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 type postqueryInfo byte
 
 const (
-	sequentialPostquery postqueryInfo = iota
+	notPostquery postqueryInfo = iota
+	sequentialPostquery
 	parallelCheckMainGoroutine
 	parallelCheckWorkerGoroutine
 )
@@ -2729,7 +2744,7 @@ const (
 // use if parallelCheck is true.
 //
 // - postqueryInfo indicates whether this is a check query that runs in parallel
-// with other check queries. If parallelCheck is not sequentialPostquery, then
+// with other check queries. If postqueryInfo is not sequentialPostquery, then
 // getSaveFlowsFunc, associateNodeWithComponents, and addTopLevelQueryStats must
 // be concurrency-safe (if non-nil).
 // - getSaveFlowsFunc will only be called if
@@ -2745,13 +2760,13 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	associateNodeWithComponents func(exec.Node, execComponents),
 	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
-	postqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, postqueryPlan)
+	postqueryDistribution, blockers := planner.getPlanDistribution(ctx, postqueryPlan, postqueryInfo)
 	distribute := DistributionType(LocalDistribution)
 	if postqueryDistribution.WillDistribute() {
 		distribute = FullDistribution
 	}
 	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
-	postqueryPlanCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	postqueryPlanCtx.distSQLBlockers = blockers
 	postqueryPlanCtx.stmtType = tree.Rows
 	// Postqueries are only executed on the main query path where we skip the
 	// diagram generation.

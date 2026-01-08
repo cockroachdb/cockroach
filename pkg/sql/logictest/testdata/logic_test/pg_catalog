@@ -3078,6 +3078,7 @@ distribute_scan_row_count_threshold                              10000          
 distribute_sort_row_count_threshold                              1000                NULL      NULL        NULL        string
 distsql                                                          off                 NULL      NULL        NULL        string
 distsql_plan_gateway_bias                                        2                   NULL      NULL        NULL        string
+distsql_prevent_partitioning_soft_limited_scans                  on                  NULL      NULL        NULL        string
 distsql_use_reduced_leaf_write_sets                              on                  NULL      NULL        NULL        string
 enable_auto_rehoming                                             off                 NULL      NULL        NULL        string
 enable_create_stats_using_extremes                               on                  NULL      NULL        NULL        string
@@ -3328,6 +3329,7 @@ distribute_scan_row_count_threshold                              10000          
 distribute_sort_row_count_threshold                              1000                NULL  user     NULL      1000                1000
 distsql                                                          off                 NULL  user     NULL      off                 off
 distsql_plan_gateway_bias                                        2                   NULL  user     NULL      2                   2
+distsql_prevent_partitioning_soft_limited_scans                  on                  NULL  user     NULL      on                  on
 distsql_use_reduced_leaf_write_sets                              on                  NULL  user     NULL      on                  on
 enable_auto_rehoming                                             off                 NULL  user     NULL      off                 off
 enable_create_stats_using_extremes                               on                  NULL  user     NULL      on                  on
@@ -3565,6 +3567,7 @@ distribute_scan_row_count_threshold                              NULL    NULL   
 distribute_sort_row_count_threshold                              NULL    NULL     NULL     NULL        NULL
 distsql                                                          NULL    NULL     NULL     NULL        NULL
 distsql_plan_gateway_bias                                        NULL    NULL     NULL     NULL        NULL
+distsql_prevent_partitioning_soft_limited_scans                  NULL    NULL     NULL     NULL        NULL
 distsql_use_reduced_leaf_write_sets                              NULL    NULL     NULL     NULL        NULL
 distsql_workmem                                                  NULL    NULL     NULL     NULL        NULL
 enable_auto_rehoming                                             NULL    NULL     NULL     NULL        NULL

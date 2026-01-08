@@ -25,7 +25,12 @@ type supportState struct {
 
 	// lastSupportWithdrawnTime is the timestamp at which support was last
 	// withdrawn for the remote store.
-	lastSupportWithdrawnTime hlc.Timestamp
+	lastSupportWithdrawnTime hlc.ClockTimestamp
+}
+
+// empty returns true if the supportState is empty.
+func (ss supportState) empty() bool {
+	return ss == supportState{}
 }
 
 // supporterState stores the core data structures for providing support.
@@ -107,12 +112,12 @@ type supporterStateForUpdate struct {
 	inProgress supporterState
 }
 
-// getSupportFor returns the SupportState corresponding to the given store in
+// getSupportFor returns the supportState corresponding to the given store in
 // supporterState.supportFor.
-func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.SupportState {
+func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) supportState {
 	ssh.mu.RLock()
 	defer ssh.mu.RUnlock()
-	return ssh.supporterState.supportFor[id].SupportState
+	return ssh.supporterState.supportFor[id]
 }
 
 // getNumSupportFor returns the size of the supporterState.supportFor map.
@@ -131,7 +136,7 @@ func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.InspectSupportFor
 	for _, ss := range ssh.supporterState.supportFor {
 		supportForStates = append(supportForStates, slpb.InspectSupportForState{
 			SupportState:             ss.SupportState,
-			LastSupportWithdrawnTime: ss.lastSupportWithdrawnTime,
+			LastSupportWithdrawnTime: ss.lastSupportWithdrawnTime.ToTimestamp(),
 		})
 	}
 	return supportForStates
@@ -353,7 +358,7 @@ func maybeWithdrawSupport(ss supportState, now hlc.ClockTimestamp) (supportState
 	if !ss.Expiration.IsEmpty() && ss.Expiration.LessEq(now.ToTimestamp()) {
 		ss.Epoch++
 		ss.Expiration = hlc.Timestamp{}
-		ss.lastSupportWithdrawnTime = now.ToTimestamp()
+		ss.lastSupportWithdrawnTime = now
 		return ss, true
 	}
 	return ss, false

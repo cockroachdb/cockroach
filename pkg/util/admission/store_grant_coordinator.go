@@ -298,6 +298,18 @@ func (sgc *StoreGrantCoordinators) TryGetSnapshotQueueForStore(storeID roachpb.S
 	return nil
 }
 
+// TryGetProvisionedBandwidthForStore returns the provisioned bandwidth for the
+// given store in bytes/second, or 0 if the store is not found or bandwidth is
+// not configured.
+func (sgc *StoreGrantCoordinators) TryGetProvisionedBandwidthForStore(
+	storeID roachpb.StoreID,
+) int64 {
+	if gc, ok := sgc.gcMap.Load(storeID); ok {
+		return gc.ioLoadListener.diskBandwidthLimiter.getProvisionedBandwidth()
+	}
+	return 0
+}
+
 func (sgc *StoreGrantCoordinators) close() {
 	// closeCh can be nil in tests that never called SetPebbleMetricsProvider.
 	if sgc.closeCh != nil {

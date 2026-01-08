@@ -435,6 +435,35 @@ func (bd *backupDriver) fingerprintFixture(ctx context.Context, asOfTime string)
 		bd.t, conn, bd.sp.fixture.DatabaseName(), asOfTime)
 }
 
+func (bd *backupDriver) checkRestorability(ctx context.Context) error {
+	bd.t.L().Printf("running schema-only online restore to verify restorability of fixture")
+	conn := bd.c.Conn(ctx, bd.t.L(), 1)
+	defer conn.Close()
+
+	uri := bd.registry.URI(bd.fixture.DataPath)
+	var restoreJobID jobspb.JobID
+	err := conn.QueryRowContext(
+		ctx,
+		fmt.Sprintf(
+			`RESTORE DATABASE %s FROM LATEST IN '%s'
+			WITH detached, new_db_name='%s_restored', schema_only, experimental deferred copy`,
+			bd.sp.fixture.DatabaseName(),
+			uri.String(),
+			bd.sp.fixture.DatabaseName(),
+		),
+	).Scan(&restoreJobID)
+	if err != nil {
+		return errors.Wrapf(err, "error starting restore job")
+	}
+
+	bd.t.L().Printf("waiting for restore job %d to complete", restoreJobID)
+	if err := WaitForSucceeded(ctx, conn, restoreJobID, 5*time.Minute); err != nil {
+		return errors.Wrapf(err, "error waiting for restore job %d to complete", restoreJobID)
+	}
+	bd.t.L().Printf("restore job %d completed successfully", restoreJobID)
+	return nil
+}
+
 // getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
 // backup in the fixture.
 func (bd *backupDriver) getLatestAOST(ctx context.Context) string {
@@ -663,6 +692,8 @@ func registerBackupFixtures(r registry.Registry) {
 					fingerprint := bd.fingerprintFixture(ctx, fingerprintTime)
 					require.NoError(t, handle.SetFingerprint(ctx, fingerprint, fingerprintTime))
 				}
+
+				require.NoError(t, bd.checkRestorability(ctx))
 
 				require.NoError(t, handle.SetReadyAt(ctx))
 			},

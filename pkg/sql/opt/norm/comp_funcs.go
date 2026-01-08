@@ -173,3 +173,32 @@ func (c *CustomFuncs) CollapseRepeatedLikePatternWildcards(
 	}
 	return nil, false
 }
+
+// MakeLevenshteinLessEqualFunction constructs a new levenshtein_less_equal()
+// function with the three given arguments.
+func (c *CustomFuncs) MakeLevenshteinLessEqualFunction(
+	arg1, arg2, maxD opt.ScalarExpr,
+) opt.ScalarExpr {
+	args := memo.ScalarListExpr{arg1, arg2, maxD}
+	props, overload := findLevenshteinLessEqualFunction()
+	return c.f.ConstructFunction(args, &memo.FunctionPrivate{
+		Name:       "levenshtein_less_equal",
+		Typ:        types.Int,
+		Properties: props,
+		Overload:   overload,
+	})
+}
+
+// findLevenshteinLessEqualFunction returns the function properties and overload
+// of the levenshtein_less_equal function with the signature (string, string,
+// int).
+func findLevenshteinLessEqualFunction() (*tree.FunctionProperties, *tree.Overload) {
+	props, overloads := builtinsregistry.GetBuiltinProperties("levenshtein_less_equal")
+	for o := range overloads {
+		overload := &overloads[o]
+		if overload.Types.Match([]*types.T{types.String, types.String, types.Int}) {
+			return props, overload
+		}
+	}
+	panic(errors.AssertionFailedf("could not find overload for levenshtein_less_equal"))
+}

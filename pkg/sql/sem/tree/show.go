@@ -172,7 +172,6 @@ type ShowBackupOptions struct {
 	AsJson               bool
 	CheckFiles           bool
 	DebugIDs             bool
-	IncrementalStorage   StringOrPlaceholderOptList
 	DecryptionKMSURI     StringOrPlaceholderOptList
 	EncryptionPassphrase Expr
 	Privileges           bool
@@ -225,11 +224,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(PasswordSubstitution)
 		}
 	}
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
 
 	if o.Privileges {
 		maybeAddSep()
@@ -274,7 +268,6 @@ func (o ShowBackupOptions) IsDefault() bool {
 	return o.AsJson == options.AsJson &&
 		o.CheckFiles == options.CheckFiles &&
 		o.DebugIDs == options.DebugIDs &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
@@ -330,11 +323,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	}
 	o.EncryptionPassphrase, err = combineExpr(o.EncryptionPassphrase, other.EncryptionPassphrase,
 		"encryption_passphrase")
-	if err != nil {
-		return err
-	}
-	o.IncrementalStorage, err = combineStringOrPlaceholderOptList(o.IncrementalStorage,
-		other.IncrementalStorage, "incremental_location")
 	if err != nil {
 		return err
 	}

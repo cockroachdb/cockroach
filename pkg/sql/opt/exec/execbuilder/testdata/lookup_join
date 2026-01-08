@@ -555,7 +555,6 @@ FROM (SELECT * FROM data WHERE c = 1) AS l
 NATURAL JOIN (SELECT * FROM data WHERE c > 0) AS r
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join
 │ estimated row count: 1
@@ -694,7 +693,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT authors.name FROM books AS b1, books2 AS b2, authors WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ estimated row count: 96
@@ -777,7 +775,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ estimated row count: 99
@@ -944,7 +941,6 @@ query T
 EXPLAIN (DISTSQL) SELECT t1.a, t2.b FROM small t1 LEFT JOIN large t2 ON t1.a = t2.a AND t2.b % 6 = 0 ORDER BY t1.a
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (left outer)
 │ estimated row count: 100
@@ -1506,7 +1502,6 @@ query T
   SELECT a,b from small WHERE EXISTS (SELECT a FROM data WHERE small.a=data.a) ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (semi)
 │ estimated row count: 100
@@ -1525,7 +1520,6 @@ query T
   SELECT a,b from small WHERE a+b<20 AND EXISTS (SELECT a FROM data WHERE small.a=data.a AND small.b+data.c>15) ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • lookup join (semi)
 │ estimated row count: 11
@@ -2097,7 +2091,6 @@ ORDER BY numwait DESC, s_name
    LIMIT 100;
 ----
 distribution: full
-vectorized: true
 ·
 • top-k
 │ estimated row count: 1
@@ -2226,7 +2219,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) LEFT JOIN t59615 t ON u.y = t.y
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (left outer)
 │ table: t59615@t59615_pkey
@@ -2243,7 +2235,6 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1), (2)) AS u(y) WHERE NOT EXISTS (
 )
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (anti)
 │ table: t59615@t59615_pkey
@@ -2271,7 +2262,6 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
 ON u.w = t.w AND u.x = t.x
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (left outer)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2290,7 +2280,6 @@ EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS u(w, x) 
 )
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (anti)
 │ table: lookup_expr@lookup_expr_r_x_y_z_w_idx
@@ -2344,7 +2333,6 @@ query T
 EXPLAIN SELECT * FROM abc INNER LOOKUP JOIN def_e_decimal ON f = b AND e <= a::DECIMAL ORDER BY a, b, c, d, e, f
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33

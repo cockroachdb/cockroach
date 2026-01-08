@@ -886,8 +886,17 @@ func (tc *TestCluster) Targets(serverIdxs ...int) []roachpb.ReplicationTarget {
 func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
+	return tc.changeReplicasCtx(context.Background(), changeType, startKey, targets...)
+}
+
+// changeReplicasCtx is like changeReplicas but accepts a context.
+func (tc *TestCluster) changeReplicasCtx(
+	ctx context.Context,
+	changeType roachpb.ReplicaChangeType,
+	startKey roachpb.RKey,
+	targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
 	tc.t.Helper()
-	ctx := context.TODO()
 
 	var returnErr error
 	var desc *roachpb.RangeDescriptor
@@ -932,10 +941,20 @@ func (tc *TestCluster) changeReplicas(
 func (tc *TestCluster) addReplica(
 	startKey roachpb.Key, typ roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
+	return tc.addReplicaCtx(context.Background(), startKey, typ, targets...)
+}
+
+// addReplicaCtx is like addReplica but accepts a context.
+func (tc *TestCluster) addReplicaCtx(
+	ctx context.Context,
+	startKey roachpb.Key,
+	typ roachpb.ReplicaChangeType,
+	targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 
-	rangeDesc, err := tc.changeReplicas(
-		typ, rKey, targets...,
+	rangeDesc, err := tc.changeReplicasCtx(
+		ctx, typ, rKey, targets...,
 	)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, err
@@ -952,7 +971,14 @@ func (tc *TestCluster) addReplica(
 func (tc *TestCluster) AddVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.addReplica(startKey, roachpb.ADD_VOTER, targets...)
+	return tc.AddVotersCtx(context.Background(), startKey, targets...)
+}
+
+// AddVotersCtx is like AddVoters but accepts a context.
+func (tc *TestCluster) AddVotersCtx(
+	ctx context.Context, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+) (roachpb.RangeDescriptor, error) {
+	return tc.addReplicaCtx(ctx, startKey, roachpb.ADD_VOTER, targets...)
 }
 
 // AddNonVoters is part of TestClusterInterface.
@@ -1075,8 +1101,18 @@ func (tc *TestCluster) waitForNewReplicas(
 func (tc *TestCluster) AddVotersOrFatal(
 	t serverutils.TestFataler, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
+	return tc.AddVotersOrFatalCtx(context.Background(), t, startKey, targets...)
+}
+
+// AddVotersOrFatalCtx is like AddVotersOrFatal but accepts a context.
+func (tc *TestCluster) AddVotersOrFatalCtx(
+	ctx context.Context,
+	t serverutils.TestFataler,
+	startKey roachpb.Key,
+	targets ...roachpb.ReplicationTarget,
+) roachpb.RangeDescriptor {
 	t.Helper()
-	desc, err := tc.AddVoters(startKey, targets...)
+	desc, err := tc.AddVotersCtx(ctx, startKey, targets...)
 	if err != nil {
 		t.Fatalf(`could not add %v replicas to range containing %s: %+v`,
 			targets, startKey, err)
@@ -2218,7 +2254,7 @@ func (tc *TestCluster) SplitTable(
 
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
-		pik, err := randgen.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		pik, err := randgen.TestingMakePrimaryIndexKeyForTenant(desc, tc.Server(0).Codec(), sp.Vals...)
 		if err != nil {
 			t.Fatal(err)
 		}

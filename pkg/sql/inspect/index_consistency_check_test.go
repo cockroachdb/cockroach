@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -137,6 +138,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				GCJob: &sql.GCJobTestingKnobs{
 					SkipWaitingForMVCCGC: true,
 				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
 	})
@@ -587,7 +589,11 @@ func TestDanglingIndexEntryInEmptyTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	codec := s.ApplicationLayer().Codec()
 
@@ -646,7 +652,11 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 
 	issueLogger := &testIssueCollector{}
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 
@@ -705,7 +715,11 @@ func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 	codec := s.ApplicationLayer().Codec()
@@ -777,6 +791,7 @@ func TestInspectWithoutASOFSchemaChange(t *testing.T) {
 					}
 				},
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	defer s.Stopper().Stop(ctx)
@@ -834,7 +849,11 @@ func TestInspectASOFAfterPrimaryKeySwap(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 

@@ -28,7 +28,7 @@ import (
 
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
 func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
-	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
+	if cmt, hasCmt, cached := tc.uncommittedMetadata.getUncommittedComment(key); cached {
 		return cmt, hasCmt
 	}
 	if tc.cr.IsCommentInCache(descpb.ID(key.ObjectID)) {
@@ -45,8 +45,8 @@ func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 }
 
 // AddUncommittedComment adds a comment to uncommitted cache.
-func (tc *Collection) AddUncommittedComment(key catalogkeys.CommentKey, cmt string) {
-	tc.uncommittedComments.upsert(key, cmt)
+func (tc *Collection) AddUncommittedComment(key catalogkeys.CommentKey, cmt string) error {
+	return tc.uncommittedMetadata.upsertComment(key, cmt)
 }
 
 // GetZoneConfig is similar to GetZoneConfigs but only
@@ -70,7 +70,7 @@ func (tc *Collection) GetZoneConfigs(
 	ret := make(map[descpb.ID]catalog.ZoneConfig)
 	var storageIDs catalog.DescriptorIDSet
 	for _, id := range descIDs {
-		if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(id); cached {
+		if zc, cached := tc.uncommittedMetadata.getUncommittedZoneConfig(id); cached {
 			if zc != nil {
 				ret[id] = zc.Clone()
 			}
@@ -96,27 +96,27 @@ func (tc *Collection) GetZoneConfigs(
 
 // AddUncommittedZoneConfig adds a zone config to the uncommitted cache.
 func (tc *Collection) AddUncommittedZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) error {
-	return tc.uncommittedZoneConfigs.upsert(id, zc)
+	return tc.uncommittedMetadata.upsertZoneConfig(id, zc)
 }
 
 // MarkUncommittedZoneConfigDeleted adds the descriptor id to the uncommitted zone config layer, but indicates
 // that the zone config has been dropped or does not exist for this descriptor id.
 func (tc *Collection) MarkUncommittedZoneConfigDeleted(id descpb.ID) {
-	tc.uncommittedZoneConfigs.markNoZoneConfig(id)
+	tc.uncommittedMetadata.markNoZoneConfig(id)
 }
 
 // MarkUncommittedCommentDeleted adds the key to uncommitted cache, but indicates
 // that the comment has been dropped, therefore the cached information is that
 // "there is no comment for this key".
 func (tc *Collection) MarkUncommittedCommentDeleted(key catalogkeys.CommentKey) {
-	tc.uncommittedComments.markNoComment(key)
+	tc.uncommittedMetadata.markNoComment(key)
 }
 
 // MarkUncommittedCommentDeletedForTable is similar to
 // MarkUncommittedCommentDeleted, but it marks all comments on the table as
 // deleted.
 func (tc *Collection) MarkUncommittedCommentDeletedForTable(tblID descpb.ID) {
-	tc.uncommittedComments.markTableDeleted(tblID)
+	tc.uncommittedMetadata.markTableCommentsDeleted(tblID)
 }
 
 // getDescriptorsByID implements the Collection method of the same name.

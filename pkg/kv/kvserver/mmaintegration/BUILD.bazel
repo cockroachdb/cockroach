@@ -7,6 +7,7 @@ go_library(
         "allocator_sync.go",
         "mma_conversion.go",
         "store_load_msg.go",
+        "store_status.go",
         "testing_knobs.go",
         "thrashing.go",
     ],
@@ -16,6 +17,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
@@ -28,15 +30,20 @@ go_library(
 
 go_test(
     name = "mmaintegration_test",
-    srcs = ["mma_conversion_test.go"],
+    srcs = [
+        "mma_conversion_test.go",
+        "store_status_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":mmaintegration"],
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",

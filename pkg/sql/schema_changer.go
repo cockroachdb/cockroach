@@ -482,7 +482,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 						return
 					}
 					ptsCleaners = append(ptsCleaners,
-						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl, ts))
+						sc.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, sc.job, tbl.GetID(), ts))
 				}
 			})
 			if err != nil {
@@ -532,7 +532,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
-			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main)
+			planDistribution, _ := localPlanner.getPlanDistribution(ctx, localPlanner.curPlan.main, notPostquery)
 			isLocal := !planDistribution.WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),

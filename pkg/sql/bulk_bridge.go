@@ -20,7 +20,7 @@ type bulkMergeFunc func(
 	execCtx JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	outputURI func(base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
@@ -35,8 +35,6 @@ type bulkIngestFunc func(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 ) error
 
-var registeredBulkIngest bulkIngestFunc
-
 // RegisterBulkMerge installs the distributed merge implementation so other
 // packages can invoke it without introducing an import cycle.
 func RegisterBulkMerge(fn bulkMergeFunc) {
@@ -45,7 +43,7 @@ func RegisterBulkMerge(fn bulkMergeFunc) {
 
 // RegisterBulkIngest installs the distributed ingest implementation.
 func RegisterBulkIngest(fn bulkIngestFunc) {
-	registeredBulkIngest = fn
+	// TODO(159374): remove ingest processor
 }
 
 func invokeBulkMerge(
@@ -53,7 +51,7 @@ func invokeBulkMerge(
 	execCtx JobExecContext,
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
-	outputURI func(base.SQLInstanceID) string,
+	genOutputURIAndRecordPrefix func(base.SQLInstanceID) (string, error),
 	iteration int,
 	maxIterations int,
 	writeTS *hlc.Timestamp,
@@ -61,17 +59,5 @@ func invokeBulkMerge(
 	if registeredBulkMerge == nil {
 		return nil, errors.AssertionFailedf("bulk merge implementation not registered")
 	}
-	return registeredBulkMerge(ctx, execCtx, ssts, spans, outputURI, iteration, maxIterations, writeTS)
-}
-
-func invokeBulkIngest(
-	ctx context.Context,
-	execCtx JobExecContext,
-	spans []roachpb.Span,
-	ssts []execinfrapb.BulkMergeSpec_SST,
-) error {
-	if registeredBulkIngest == nil {
-		return errors.AssertionFailedf("bulk ingest implementation not registered")
-	}
-	return registeredBulkIngest(ctx, execCtx, spans, ssts)
+	return registeredBulkMerge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, iteration, maxIterations, writeTS)
 }

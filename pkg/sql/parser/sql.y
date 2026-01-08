@@ -1036,7 +1036,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
-%token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
+%token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
@@ -4151,10 +4151,6 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
-	{
-		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
-	}
 | virtual_cluster_name '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
@@ -9148,10 +9144,6 @@ show_backup_options:
  | DEBUG_IDS
  {
  $$.val = &tree.ShowBackupOptions{DebugIDs: true}
- }
- | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
- {
- $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
  }
  | KMS '=' string_or_placeholder_opt_list
  {
@@ -18733,8 +18725,6 @@ unreserved_keyword:
 | INCLUDE_ALL_SECONDARY_TENANTS
 | INCLUDE_ALL_VIRTUAL_CLUSTERS
 | INCREMENT
-| INCREMENTAL
-| INCREMENTAL_LOCATION
 | INDEX
 | INDEXES
 | INHERITS
@@ -19288,8 +19278,6 @@ bare_label_keywords:
 | INCLUDE_ALL_VIRTUAL_CLUSTERS
 | INCLUDING
 | INCREMENT
-| INCREMENTAL
-| INCREMENTAL_LOCATION
 | INDEX
 | INDEXES
 | INDEX_AFTER_ORDER_BY_BEFORE_AT

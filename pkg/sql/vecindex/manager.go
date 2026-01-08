@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -179,7 +180,7 @@ func (m *Manager) getIndexOptions(config *vecpb.Config, readOnly bool) *cspann.I
 		BaseBeamSize:     int(config.BuildBeamSize),
 		// Hook up the StalledOpTimeout callback to the cluster setting.
 		StalledOpTimeout: func() time.Duration {
-			return StalledOpTimeoutSetting.Get(m.sv)
+			return vecsettings.StalledOpTimeoutSetting.Get(m.sv)
 		},
 		IsDeterministic: config.IsDeterministic,
 		ReadOnly:        readOnly,

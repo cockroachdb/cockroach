@@ -586,7 +586,7 @@ func exportStats(ctx context.Context, rd restoreDriver, restoreStats restoreStat
 }
 
 func waitForDownloadJob(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, rd restoreDriver,
 ) (time.Time, error) {
 	l.Printf(`Begin tracking online restore download phase completion`)
 	// Wait for the job to succeed.
@@ -625,6 +625,7 @@ func waitForDownloadJob(
 			} else if status == string(jobs.StateRunning) {
 				l.Printf("Download job still running")
 			} else {
+				rd.markFixtureWithFailure(ctx)
 				return downloadJobEndTimeLowerBound, errors.Newf("job unexpectedly found in %s state", status)
 			}
 		}
@@ -740,6 +741,7 @@ func executeTestRestorePhase(
 	restoreStartTime := timeutil.Now()
 	restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.fixture.DatabaseName()), opts)
 	if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
+		rd.markFixtureWithFailure(ctx)
 		return time.Time{}, time.Time{}, err
 	}
 	restoreEndTime := timeutil.Now()
@@ -795,7 +797,7 @@ func executeTestDownloadPhase(
 		defer workloadCancel()
 		if runOnline {
 			var err error
-			if downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, logger); err != nil {
+			if downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, logger, rd); err != nil {
 				return err
 			}
 			downloadTime := downloadEndTimeLowerBound.Sub(downloadStartTime)

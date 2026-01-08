@@ -627,8 +627,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 				// Check that the virtual computed column expression can be distributed.
 				// TODO(michae2): Add the ability to run CREATE STATISTICS locally if a
 				// local-only virtual computed column expression is needed.
-				if err := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); err != nil {
-					return nil, err
+				if blockers := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); blockers != 0 {
+					return nil, errors.Newf("cannot be executed with distsql: %s", blockers)
 				}
 				exprs[i] = virtComputedExprs[virtIdx]
 				virtIdx++

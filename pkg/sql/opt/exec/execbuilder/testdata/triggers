@@ -26,7 +26,6 @@ query T
 EXPLAIN INSERT INTO xy VALUES (1, 2);
 ----
 distribution: local
-vectorized: true
 ·
 • insert
 │ into: xy(x, y, rowid)
@@ -122,9 +121,9 @@ quality of service: regular
 │ columns: ()
 │ sql nodes: <hidden>
 │ regions: <hidden>
-│ actual row count: 0
 │ vectorized batch count: 0
 │ execution time: 0µs
+│ actual row count: 0
 │ estimated row count: 0 (missing stats)
 │ table: xy
 │ set: x, y
@@ -145,9 +144,9 @@ quality of service: regular
         │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 0
         │ vectorized batch count: 0
         │ execution time: 0µs
+        │ actual row count: 0
         │ estimated row count: 10 (missing stats)
         │ filter: f IS DISTINCT FROM NULL
         │
@@ -182,9 +181,9 @@ quality of service: regular
                     │ columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
                     │ sql nodes: <hidden>
                     │ regions: <hidden>
-                    │ actual row count: 0
                     │ vectorized batch count: 0
                     │ execution time: 0µs
+                    │ actual row count: 0
                     │ estimated row count: 10 (missing stats)
                     │ filter: y = 2
                     │
@@ -193,7 +192,6 @@ quality of service: regular
                           sql nodes: <hidden>
                           kv nodes: <hidden>
                           regions: <hidden>
-                          actual row count: 0
                           vectorized batch count: 0
                           KV time: 0µs
                           KV rows decoded: 0
@@ -203,6 +201,7 @@ quality of service: regular
                           estimated max memory allocated: 0 B
                           MVCC step count (ext/int): 0/0
                           MVCC seek count (ext/int): 0/0
+                          actual row count: 0
                           estimated row count: 1,000 (missing stats)
                           table: xy@xy_pkey
                           spans: FULL SCAN
@@ -223,7 +222,6 @@ query T
 EXPLAIN INSERT INTO xy VALUES (1, 2);
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -338,9 +336,9 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 0
 │   │ vectorized batch count: 0
 │   │ execution time: 0µs
+│   │ actual row count: 0
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -348,18 +346,18 @@ quality of service: regular
 │       │ columns: (rowid, x, y)
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 0
 │       │ vectorized batch count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ label: buffer 1
 │       │
 │       └── • filter
 │           │ columns: (rowid, x, y)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
-│           │ actual row count: 0
 │           │ vectorized batch count: 0
 │           │ execution time: 0µs
+│           │ actual row count: 0
 │           │ estimated row count: 10 (missing stats)
 │           │ filter: y = 2
 │           │
@@ -368,7 +366,6 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 kv nodes: <hidden>
 │                 regions: <hidden>
-│                 actual row count: 0
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV rows decoded: 0
@@ -378,6 +375,7 @@ quality of service: regular
 │                 estimated max memory allocated: 0 B
 │                 MVCC step count (ext/int): 0/0
 │                 MVCC seek count (ext/int): 0/0
+│                 actual row count: 0
 │                 estimated row count: 1,000 (missing stats)
 │                 table: xy@xy_pkey
 │                 spans: FULL SCAN
@@ -414,9 +412,9 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
 │   │ vectorized batch count: 0
 │   │ execution time: 0µs
+│   │ actual row count: 1
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │
@@ -424,18 +422,18 @@ quality of service: regular
 │       │ columns: (rowid, x, y)
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 1
 │       │ vectorized batch count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • filter
 │           │ columns: (rowid, x, y)
 │           │ sql nodes: <hidden>
 │           │ regions: <hidden>
-│           │ actual row count: 1
 │           │ vectorized batch count: 0
 │           │ execution time: 0µs
+│           │ actual row count: 1
 │           │ estimated row count: 10 (missing stats)
 │           │ filter: y = 2
 │           │
@@ -444,7 +442,6 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 kv nodes: <hidden>
 │                 regions: <hidden>
-│                 actual row count: 1
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV rows decoded: 1
@@ -454,6 +451,7 @@ quality of service: regular
 │                 estimated max memory allocated: 0 B
 │                 MVCC step count (ext/int): 0/0
 │                 MVCC seek count (ext/int): 0/0
+│                 actual row count: 1
 │                 estimated row count: 1,000 (missing stats)
 │                 table: xy@xy_pkey
 │                 spans: FULL SCAN
@@ -483,9 +481,9 @@ quality of service: regular
                       columns: (rowid, x, y)
                       sql nodes: <hidden>
                       regions: <hidden>
-                      actual row count: 1
                       vectorized batch count: 0
                       execution time: 0µs
+                      actual row count: 1
                       estimated row count: 1
                       label: buffer 1000000
 
@@ -689,9 +687,9 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 0
 │   │ vectorized batch count: 0
 │   │ execution time: 0µs
+│   │ actual row count: 0
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -700,9 +698,9 @@ quality of service: regular
 │       │ columns: (k, k_new)
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 0
 │       │ vectorized batch count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -715,7 +713,6 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 kv nodes: <hidden>
 │                 regions: <hidden>
-│                 actual row count: 0
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV rows decoded: 0
@@ -725,6 +722,7 @@ quality of service: regular
 │                 estimated max memory allocated: 0 B
 │                 MVCC step count (ext/int): 0/0
 │                 MVCC seek count (ext/int): 0/0
+│                 actual row count: 0
 │                 estimated row count: 1 (missing stats)
 │                 table: parent@parent_pkey
 │                 spans: /1/0
@@ -770,9 +768,9 @@ quality of service: regular
 │   │ columns: ()
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 1
 │   │ vectorized batch count: 0
 │   │ execution time: 0µs
+│   │ actual row count: 1
 │   │ estimated row count: 0 (missing stats)
 │   │ table: parent
 │   │ set: k
@@ -781,9 +779,9 @@ quality of service: regular
 │       │ columns: (k, k_new)
 │       │ sql nodes: <hidden>
 │       │ regions: <hidden>
-│       │ actual row count: 1
 │       │ vectorized batch count: 0
 │       │ execution time: 0µs
+│       │ actual row count: 1
 │       │ label: buffer 1
 │       │
 │       └── • render
@@ -796,7 +794,6 @@ quality of service: regular
 │                 sql nodes: <hidden>
 │                 kv nodes: <hidden>
 │                 regions: <hidden>
-│                 actual row count: 1
 │                 vectorized batch count: 0
 │                 KV time: 0µs
 │                 KV rows decoded: 1
@@ -806,6 +803,7 @@ quality of service: regular
 │                 estimated max memory allocated: 0 B
 │                 MVCC step count (ext/int): 0/0
 │                 MVCC seek count (ext/int): 0/0
+│                 actual row count: 1
 │                 estimated row count: 1 (missing stats)
 │                 table: parent@parent_pkey
 │                 spans: /1/0
@@ -821,9 +819,9 @@ quality of service: regular
         │   │ columns: ()
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
-        │   │ actual row count: 1
         │   │ vectorized batch count: 0
         │   │ execution time: 0µs
+        │   │ actual row count: 1
         │   │ estimated row count: 0 (missing stats)
         │   │ table: child
         │   │ set: fk
@@ -835,18 +833,18 @@ quality of service: regular
         │       │ columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
-        │       │ actual row count: 1
         │       │ vectorized batch count: 0
         │       │ execution time: 0µs
+        │       │ actual row count: 1
         │       │ label: buffer 1
         │       │
         │       └── • filter
         │           │ columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 1
         │           │ vectorized batch count: 0
         │           │ execution time: 0µs
+        │           │ actual row count: 1
         │           │ estimated row count: 10 (missing stats)
         │           │ filter: f IS DISTINCT FROM NULL
         │           │
@@ -884,10 +882,10 @@ quality of service: regular
         │                           │ columns: (k, fk, k, k_new)
         │                           │ sql nodes: <hidden>
         │                           │ regions: <hidden>
-        │                           │ actual row count: 1
         │                           │ vectorized batch count: 0
         │                           │ execution time: 0µs
         │                           │ estimated max memory allocated: 0 B
+        │                           │ actual row count: 1
         │                           │ estimated row count: 10 (missing stats)
         │                           │ equality: (fk) = (k)
         │                           │
@@ -896,7 +894,6 @@ quality of service: regular
         │                           │     sql nodes: <hidden>
         │                           │     kv nodes: <hidden>
         │                           │     regions: <hidden>
-        │                           │     actual row count: 1
         │                           │     vectorized batch count: 0
         │                           │     KV time: 0µs
         │                           │     KV rows decoded: 1
@@ -906,6 +903,7 @@ quality of service: regular
         │                           │     estimated max memory allocated: 0 B
         │                           │     MVCC step count (ext/int): 0/0
         │                           │     MVCC seek count (ext/int): 0/0
+        │                           │     actual row count: 1
         │                           │     estimated row count: 1,000 (missing stats)
         │                           │     table: child@child_pkey
         │                           │     spans: FULL SCAN
@@ -914,9 +912,9 @@ quality of service: regular
         │                               │ columns: (k, k_new)
         │                               │ sql nodes: <hidden>
         │                               │ regions: <hidden>
-        │                               │ actual row count: 1
         │                               │ vectorized batch count: 0
         │                               │ execution time: 0µs
+        │                               │ actual row count: 1
         │                               │ estimated row count: 1
         │                               │ filter: k IS DISTINCT FROM k_new
         │                               │
@@ -924,9 +922,9 @@ quality of service: regular
         │                                     columns: (k, k_new)
         │                                     sql nodes: <hidden>
         │                                     regions: <hidden>
-        │                                     actual row count: 1
         │                                     vectorized batch count: 0
         │                                     execution time: 0µs
+        │                                     actual row count: 1
         │                                     estimated row count: 1
         │                                     label: buffer 1000000
         │
@@ -936,16 +934,15 @@ quality of service: regular
         │       │ columns: ()
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
-        │       │ actual row count: 0
         │       │ vectorized batch count: 0
         │       │ execution time: 0µs
+        │       │ actual row count: 0
         │       │
         │       └── • lookup join (anti)
         │           │ columns: (fk_new)
         │           │ sql nodes: <hidden>
         │           │ kv nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 0
         │           │ vectorized batch count: 0
         │           │ KV time: 0µs
         │           │ KV rows decoded: 1
@@ -956,6 +953,7 @@ quality of service: regular
         │           │ estimated max memory allocated: 0 B
         │           │ MVCC step count (ext/int): 0/0
         │           │ MVCC seek count (ext/int): 0/0
+        │           │ actual row count: 0
         │           │ estimated row count: 0 (missing stats)
         │           │ table: parent@parent_pkey
         │           │ equality: (fk_new) = (k)
@@ -966,9 +964,9 @@ quality of service: regular
         │               │ columns: (fk_new)
         │               │ sql nodes: <hidden>
         │               │ regions: <hidden>
-        │               │ actual row count: 1
         │               │ vectorized batch count: 0
         │               │ execution time: 0µs
+        │               │ actual row count: 1
         │               │ estimated row count: 10 (missing stats)
         │               │ filter: fk_new IS NOT NULL
         │               │
@@ -979,9 +977,9 @@ quality of service: regular
         │                         columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
         │                         sql nodes: <hidden>
         │                         regions: <hidden>
-        │                         actual row count: 1
         │                         vectorized batch count: 0
         │                         execution time: 0µs
+        │                         actual row count: 1
         │                         estimated row count: 10 (missing stats)
         │                         label: buffer 1
         │
@@ -1014,9 +1012,9 @@ quality of service: regular
                               columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
                               sql nodes: <hidden>
                               regions: <hidden>
-                              actual row count: 1
                               vectorized batch count: 0
                               execution time: 0µs
+                              actual row count: 1
                               estimated row count: 1
                               label: buffer 1000000
 
@@ -1051,9 +1049,9 @@ quality of service: regular
 │     columns: ()
 │     sql nodes: <hidden>
 │     regions: <hidden>
-│     actual row count: 1
 │     vectorized batch count: 0
 │     execution time: 0µs
+│     actual row count: 1
 │     estimated row count: 0 (missing stats)
 │     from: parent
 │     spans: /2/0
@@ -1068,9 +1066,9 @@ quality of service: regular
         │   │ columns: ()
         │   │ sql nodes: <hidden>
         │   │ regions: <hidden>
-        │   │ actual row count: 1
         │   │ vectorized batch count: 0
         │   │ execution time: 0µs
+        │   │ actual row count: 1
         │   │ estimated row count: 0 (missing stats)
         │   │ from: child
         │   │
@@ -1081,18 +1079,18 @@ quality of service: regular
         │       │ columns: (k, fk, old, f, "check-rows")
         │       │ sql nodes: <hidden>
         │       │ regions: <hidden>
-        │       │ actual row count: 1
         │       │ vectorized batch count: 0
         │       │ execution time: 0µs
+        │       │ actual row count: 1
         │       │ label: buffer 1
         │       │
         │       └── • filter
         │           │ columns: (k, fk, old, f, "check-rows")
         │           │ sql nodes: <hidden>
         │           │ regions: <hidden>
-        │           │ actual row count: 1
         │           │ vectorized batch count: 0
         │           │ execution time: 0µs
+        │           │ actual row count: 1
         │           │ estimated row count: 10 (missing stats)
         │           │ filter: f IS DISTINCT FROM NULL
         │           │
@@ -1121,9 +1119,9 @@ quality of service: regular
         │                           │ columns: (k, fk)
         │                           │ sql nodes: <hidden>
         │                           │ regions: <hidden>
-        │                           │ actual row count: 1
         │                           │ vectorized batch count: 0
         │                           │ execution time: 0µs
+        │                           │ actual row count: 1
         │                           │ estimated row count: 10 (missing stats)
         │                           │ filter: fk = 2
         │                           │
@@ -1132,7 +1130,6 @@ quality of service: regular
         │                                 sql nodes: <hidden>
         │                                 kv nodes: <hidden>
         │                                 regions: <hidden>
-        │                                 actual row count: 1
         │                                 vectorized batch count: 0
         │                                 KV time: 0µs
         │                                 KV rows decoded: 1
@@ -1142,6 +1139,7 @@ quality of service: regular
         │                                 estimated max memory allocated: 0 B
         │                                 MVCC step count (ext/int): 0/0
         │                                 MVCC seek count (ext/int): 0/0
+        │                                 actual row count: 1
         │                                 estimated row count: 1,000 (missing stats)
         │                                 table: child@child_pkey
         │                                 spans: FULL SCAN
@@ -1171,9 +1169,9 @@ quality of service: regular
                               columns: (k, fk, old, f, "check-rows")
                               sql nodes: <hidden>
                               regions: <hidden>
-                              actual row count: 1
                               vectorized batch count: 0
                               execution time: 0µs
+                              actual row count: 1
                               estimated row count: 1
                               label: buffer 1000000
 

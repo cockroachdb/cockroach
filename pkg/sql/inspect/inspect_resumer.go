@@ -260,6 +260,8 @@ func (c *inspectResumer) setupProgressTracking(
 		c.job,
 		&execCfg.Settings.SV,
 		execCfg.InternalDB,
+		execCfg.Codec,
+		execCfg.ProtectedTimestampManager,
 	)
 	completedSpans, err := progressTracker.initTracker(ctx)
 	if err != nil {
@@ -267,7 +269,7 @@ func (c *inspectResumer) setupProgressTracking(
 	}
 
 	cleanup := func() {
-		progressTracker.terminateTracker()
+		progressTracker.terminateTracker(ctx)
 	}
 
 	return progressTracker, completedSpans, cleanup, nil

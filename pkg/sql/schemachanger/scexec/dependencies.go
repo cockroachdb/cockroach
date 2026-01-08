@@ -280,6 +280,11 @@ type BackfillProgress struct {
 	// SSTManifests captures SST metadata emitted by the distributed merge
 	// backfill pipeline.
 	SSTManifests []jobspb.IndexBackfillSSTManifest
+
+	// SSTStoragePrefixes identifies the external storage prefixes used to write
+	// distributed-merge SSTs for this backfill. These prefixes are used to clean
+	// up job-scoped files on completion or cancellation.
+	SSTStoragePrefixes []string
 }
 
 // Backfill corresponds to a definition of a backfill from a source
@@ -425,7 +430,7 @@ type ProtectedTimestampManager interface {
 	// function assumes the in-memory job is up to date with the persisted job
 	// record.
 	TryToProtectBeforeGC(
-		ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+		ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
 
 	// Protect adds a protected timestamp record for a historical transaction for

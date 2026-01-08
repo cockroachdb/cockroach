@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -277,7 +278,6 @@ func TestUnsplitRanges(t *testing.T) {
 	ctx := context.Background()
 	run := func(t *testing.T, tc testCase) {
 		var params base.TestServerArgs
-		params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(142388)
 		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 		params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,
@@ -285,9 +285,22 @@ func TestUnsplitRanges(t *testing.T) {
 
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 
-		srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+		srv, sqlDB, _ := serverutils.StartServer(t, params)
 		defer srv.Stopper().Stop(context.Background())
 		s := srv.ApplicationLayer()
+		// Use the application layer's DB for table data operations.
+		kvDB := s.DB()
+		// Use the system layer's DB for meta range operations (scanning meta
+		// ranges, checking sticky bits) since tenants cannot access meta ranges.
+		systemKVDB := srv.SystemLayer().DB()
+
+		// Grant the CanAdminUnsplit capability to the external tenant so the GC
+		// job can unsplit ranges.
+		if srv.DeploymentMode().IsExternal() {
+			require.NoError(t, srv.GrantTenantCapabilities(
+				ctx, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminUnsplit: "true"}))
+		}
 
 		// Speed up how long it takes for the zone config changes to propagate.
 		sqltestutils.SetShortRangeFeedIntervals(t, srv)
@@ -311,12 +324,12 @@ func TestUnsplitRanges(t *testing.T) {
 		indexSpan := tableDesc.IndexSpan(s.Codec(), idx.GetID())
 		tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
-		// Split the first range in the table.
-		splitKey := splitFirstRangeInSpan(ctx, t, kvDB, tableSpan)
-		// Verify there are manually split ranges.
-		require.True(t, rangeIsManuallySplit(ctx, t, kvDB, tableSpan, splitKey))
-		require.True(t, hasManuallySplitRangesInSpan(ctx, t, kvDB, tableSpan))
-		require.True(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), kvDB, tableSpan, idx.GetID()))
+		// Split the first range in the table using the system layer's DB.
+		splitKey := splitFirstRangeInSpan(ctx, t, systemKVDB, tableSpan)
+		// Verify there are manually split ranges using the system layer's DB.
+		require.True(t, rangeIsManuallySplit(ctx, t, systemKVDB, tableSpan, splitKey))
+		require.True(t, hasManuallySplitRangesInSpan(ctx, t, systemKVDB, tableSpan))
+		require.True(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), systemKVDB, tableSpan, idx.GetID()))
 
 		if _, err := sqlDB.Exec(tc.query); err != nil {
 			t.Fatal(err)
@@ -331,11 +344,11 @@ func TestUnsplitRanges(t *testing.T) {
 		// truncating table all remove index "foo".
 		tests.CheckKeyCount(t, kvDB, indexSpan, 0 /*numKeys*/)
 
-		require.Equal(t, tc.hasSplitOnKeyAfterGC, rangeIsManuallySplit(ctx, t, kvDB, tableSpan, splitKey))
-		require.Equal(t, tc.hasSplitOnTableAfterGC, hasManuallySplitRangesInSpan(ctx, t, kvDB, tableSpan))
+		require.Equal(t, tc.hasSplitOnKeyAfterGC, rangeIsManuallySplit(ctx, t, systemKVDB, tableSpan, splitKey))
+		require.Equal(t, tc.hasSplitOnTableAfterGC, hasManuallySplitRangesInSpan(ctx, t, systemKVDB, tableSpan))
 		// This should be always false since dropping index/table/database or
 		// truncating table all remove index "foo".
-		require.False(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), kvDB, tableSpan, idx.GetID()))
+		require.False(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), systemKVDB, tableSpan, idx.GetID()))
 	}
 
 	for _, tc := range testCases {

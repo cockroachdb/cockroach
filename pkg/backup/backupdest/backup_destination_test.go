@@ -359,7 +359,6 @@ func TestResolveBackupManifests(t *testing.T) {
 			username.RootUserName(),
 			false, /* includeSkipped */
 			true,  /* includeCompacted */
-			false, /* isCustomIncLocation */
 		)
 		defer mem.Shrink(ctx, memSize)
 		require.NoError(t, err)
@@ -386,7 +385,6 @@ func TestResolveBackupManifests(t *testing.T) {
 			username.RootUserName(),
 			false, /* includeSkipped */
 			true,  /* includeCompacted */
-			false, /* isCustomIncLocation */
 		)
 		defer mem.Shrink(ctx, memSize)
 		require.NoError(t, err)

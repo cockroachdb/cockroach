@@ -1,4 +1,5 @@
-test
+# Secondary tenants cannot modify named ranges, so skip the test in that mode.
+test skip-under-secondary-tenant=true
 ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
 ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
 ALTER RANGE meta CONFIGURE ZONE DISCARD;

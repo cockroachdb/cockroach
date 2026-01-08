@@ -98,7 +98,7 @@ tc_start_block "Copy binaries"
 export google_credentials="$gcs_credentials"
 log_into_gcloud
 for product in cockroach cockroach-sql; do
-  for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+  for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
       archive_suffix=tgz
       if [[ $platform == *"windows"* ]]; then 
           archive_suffix=zip
@@ -189,7 +189,7 @@ tc_start_block "Publish binaries and archive as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
   for product in cockroach cockroach-sql; do
-    for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+    for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
         archive_suffix=tgz
         if [[ $platform == *"windows"* ]]; then 
             archive_suffix=zip

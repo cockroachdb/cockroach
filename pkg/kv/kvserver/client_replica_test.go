@@ -6036,38 +6036,6 @@ func BenchmarkOptimisticEval(b *testing.B) {
 	}
 }
 
-// BenchmarkEmptyRebalance benchmarks the time it takes to add/remove replicas
-// of an empty range.
-func BenchmarkEmptyRebalance(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		b, 2, base.TestClusterArgs{ReplicationMode: base.ReplicationManual},
-	)
-	defer tc.Stopper().Stop(ctx)
-
-	scratchRange := tc.ScratchRange(b)
-
-	// Before actually starting the benchmark, we need to make sure that the raft
-	// group is able to add/remove voters. This is important because in leader
-	// leases, it takes a few seconds for store liveness heartbeats to start.
-	// We need store liveness heartbeats for two reasons: (1) By default,
-	// followers won't campaign unless they are supported by a quorum of peers,
-	// and (2) The leader won't be able to propose config changes unless the new
-	// config doesn't cause a regression in the LeadSupportUntil.
-	tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
-	tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
-
-	b.Run("add-remove", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
-			tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
-		}
-		b.StopTimer()
-	})
-}
-
 func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

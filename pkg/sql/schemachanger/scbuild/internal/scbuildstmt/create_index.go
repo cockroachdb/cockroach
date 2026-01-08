@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -69,7 +69,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	if n.Type == idxtype.VECTOR {
 		// Disable vector indexes by default in 25.2.
 		// TODO(andyk): Remove this check after 25.2.
-		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+		if err := vecsettings.CheckEnabled(&b.ClusterSettings().SV); err != nil {
 			panic(err)
 		}
 	}
@@ -412,7 +412,7 @@ func processColNodeType(
 		case types.PGVectorFamily:
 			// Create config for vector index, using the number of dimensions from
 			// the vector column.
-			cfg, err := vecindex.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
+			cfg, err := vecsettings.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
 			if err != nil {
 				panic(err)
 			}

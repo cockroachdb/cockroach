@@ -30,7 +30,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 	setRunning(zero)
 
-	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment)
+	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment, false, false)
 	handle.testingOverrideRunningTime = func() time.Duration {
 		overrideMu.Lock()
 		defer overrideMu.Unlock()
@@ -45,7 +45,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 	}
 
 	{ // Invoke once; we should see internal state primed for future iterations.
-		overLimit, difference := handle.OverLimit()
+		overLimit, difference := handle.IsOverLimitAndPossiblyYield()
 		expDifference := -allotment // we've not used anything, so we're at the difference is 0-allotment
 		require.False(t, overLimit)
 		require.Equal(t, expDifference, difference)
@@ -59,7 +59,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		setRunning(100 * time.Microsecond)
 		expDifference := -(99*time.Millisecond + 900*time.Microsecond) // difference is negative, since we're under our allotment
 
-		overLimit, difference := handle.OverLimit()
+		overLimit, difference := handle.IsOverLimitAndPossiblyYield()
 		require.False(t, overLimit)
 		require.Equal(t, expDifference, difference)
 		require.Equal(t, 0, handle.itersSinceLastCheck)
@@ -67,13 +67,13 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
 		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 
-		_, _ = handle.OverLimit()
+		_, _ = handle.IsOverLimitAndPossiblyYield()
 		require.Equal(t, 1, handle.itersSinceLastCheck) // see increase of +1
 		require.Equal(t, 2, handle.itersUntilCheck)
 		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
 		require.Equal(t, expDifference, handle.differenceWithAllottedAtLastCheck)
 
-		_, _ = handle.OverLimit()
+		_, _ = handle.IsOverLimitAndPossiblyYield()
 		require.Equal(t, 0, handle.itersSinceLastCheck) // see reset of value
 		require.Equal(t, 4, handle.itersUntilCheck)     // see doubling of value
 		require.Equal(t, 100*time.Microsecond, handle.runningTimeAtLastCheck)
@@ -88,7 +88,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		for {
 			internalIters++
 
-			overLimit, _ := handle.OverLimit()
+			overLimit, _ := handle.IsOverLimitAndPossiblyYield()
 			require.False(t, overLimit)
 			if expDifference != handle.differenceWithAllottedAtLastCheck {
 				continue
@@ -114,7 +114,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 			for {
 				internalIters++
 
-				overLimit, _ := handle.OverLimit()
+				overLimit, _ := handle.IsOverLimitAndPossiblyYield()
 				require.False(t, overLimit)
 				if handle.itersSinceLastCheck == 0 {
 					break
@@ -134,7 +134,7 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 
 	{ // We'll double our estimates again if we observe more iterations in 1ms of running time.
 		for i := 0; i < 4; i++ {
-			overLimit, _ := handle.OverLimit()
+			overLimit, _ := handle.IsOverLimitAndPossiblyYield()
 			require.False(t, overLimit)
 		}
 
@@ -146,11 +146,11 @@ func TestElasticCPUWorkHandle(t *testing.T) {
 		setRunning(allotment + 50*time.Microsecond)
 		expDifference := 50 * time.Microsecond // difference is finally positive, since we're over our allotment
 		for i := 0; i < 7; i++ {
-			overLimit, _ := handle.OverLimit()
+			overLimit, _ := handle.IsOverLimitAndPossiblyYield()
 			require.False(t, overLimit)
 		}
 
-		overLimit, difference := handle.OverLimit()
+		overLimit, difference := handle.IsOverLimitAndPossiblyYield()
 		require.True(t, overLimit)
 		require.Equal(t, expDifference, difference)
 	}
@@ -172,7 +172,7 @@ func TestElasticCPUWorkHandlePreWork(t *testing.T) {
 
 	setRunning(zero)
 
-	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment)
+	handle := newElasticCPUWorkHandle(roachpb.SystemTenantID, allotment, false, false)
 	handle.testingOverrideRunningTime = func() time.Duration {
 		overrideMu.Lock()
 		defer overrideMu.Unlock()
@@ -189,10 +189,10 @@ func TestElasticCPUWorkHandlePreWork(t *testing.T) {
 	// when the handle was initialized) to 70ms.
 	setRunning(70 * time.Millisecond)
 
-	// OverLimit() only considers time spent after doing pre-work in its boolean
+	// IsOverLimitAndPossiblyYield() only considers time spent after doing pre-work in its boolean
 	// return. Since our allotment was 100ms, of which we've used 70ms, we're
 	// not over limit.
-	overLimit, difference := handle.OverLimit()
+	overLimit, difference := handle.IsOverLimitAndPossiblyYield()
 	require.False(t, overLimit)
 	// That said, the difference it returns does include all pre-work. So +450ms
 	// doing pre-work, and -30ms from the unused allotment after the timer
@@ -202,7 +202,7 @@ func TestElasticCPUWorkHandlePreWork(t *testing.T) {
 	// Blow past the 100ms allotment after the timer started.
 	setRunning(150 * time.Millisecond)
 	// Since 150ms > 100ms, we're now over limit.
-	overLimit, difference = handle.OverLimit()
+	overLimit, difference = handle.IsOverLimitAndPossiblyYield()
 	require.True(t, overLimit)
 	// Pre-work is still counted in the difference we return. Also included is
 	// how much over the allotment we ran (+50ms).

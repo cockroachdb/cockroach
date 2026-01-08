@@ -50,10 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -877,133 +874,62 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	})
 }
 
-// TestReplicateQueueTracingOnError tests that an error or slowdown in
-// processing a replica results in traces being logged.
-func TestReplicateQueueTracingOnError(t *testing.T) {
+// TestReplicateQueueTracing is a simple test that verifies tracing works
+// through the replica change path by upreplicating a range with a tracing
+// context and checking that child spans are recorded.
+func TestReplicateQueueTracing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := log.ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	testutils.SetVModule(t, "replicate_queue=2")
+	defer log.Scope(t).Close(t)
 
-	// NB: This test injects a fake failure during replica rebalancing, and we use
-	// this `rejectSnapshots` variable as a flag to activate or deactivate that
-	// injected failure.
-	var rejectSnapshots int64
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		t, 4, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
-					if atomic.LoadInt64(&rejectSnapshots) == 1 {
-						return errors.Newf("boom")
-					}
-					return nil
-				},
-			}}},
-		},
-	)
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(ctx)
 
-	// Add a replica to the second and third nodes, and then decommission the
-	// second node. Since there are only 4 nodes in the cluster, the
-	// decommissioning replica must be rebalanced to the fourth node.
-	const decomNodeIdx = 1
-	const decomNodeID = 2
+	// Create scratch range on n1.
 	scratchKey := tc.ScratchRange(t)
-	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
-	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
-	adminSrv := tc.Server(decomNodeIdx)
-	adminClient := adminSrv.GetAdminClient(t)
-	_, err := adminClient.Decommission(
-		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{decomNodeID},
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		},
+
+	// Create tracing span for the upreplication.
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		ctx, tracer, "test-upreplication",
 	)
-	require.NoError(t, err)
 
-	// Activate the above testing knob to start rejecting future rebalances and
-	// then attempt to rebalance the decommissioning replica away. We expect a
-	// purgatory error to be returned here.
-	atomic.StoreInt64(&rejectSnapshots, 1)
-	store := tc.GetFirstStoreFromServer(t, 0)
-	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
-	require.NoError(t, err)
+	// Upreplicate from n1 to n2.
+	tc.AddVotersOrFatalCtx(traceCtx, t, scratchKey, tc.Target(1))
+	recording := finishAndGetRecording()
 
-	testStartTs := timeutil.Now()
-	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
-	processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
-		traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	// Sanity checks on the recording.
+	require.NotNil(t, recording)
+	require.GreaterOrEqual(t, recording.Len(), 1)
+
+	// Should find our root span.
+	_, found := recording.FindSpan("test-upreplication")
+	require.True(t, found)
+
+	// Should have child spans from the replica change operation.
+	require.Greater(t, len(recording), 1, "expected child spans from upreplication")
+
+	// Verify the trace contains expected replica change events.
+	traceStr := recording.String()
+	require.Regexp(t, `change replicas updated descriptor`, traceStr)
+
+	// The raw recording includes verbose operations that are filtered out by
+	// filterTracingSpans when logging in processOneChangeWithTracing.
+	require.Regexp(t, `operation:change-replica-get-desc`, traceStr)
+	require.Regexp(t, `operation:change-replica-update-desc`, traceStr)
+
+	// Test that filterTracingSpans correctly removes verbose spans.
+	filtered := kvserver.FilterTracingSpans(recording,
+		"change-replica-get-desc", "change-replica-update-desc",
 	)
-	recording := rec()
-	require.NoError(t, enqueueErr)
-	require.Error(t, processErr, "expected processing error")
-
-	// Flush logs and get log messages from replicate_queue.go since just
-	// before calling store.Enqueue(..).
-	log.FlushFiles()
-	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
-		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
-	require.NoError(t, err)
-
-	opName := "process replica"
-	errRegexp, err := regexp.Compile(`error processing replica:.*boom`)
-	require.NoError(t, err)
-	traceRegexp, err := regexp.Compile(`trace:.*`)
-	require.NoError(t, err)
-	opRegexp, err := regexp.Compile(fmt.Sprintf(`operation:%s`, opName))
-	require.NoError(t, err)
-
-	// Validate that the error is logged, so that we can use the log entry to
-	// validate the trace output.
-	foundEntry := false
-	var entry logpb.Entry
-	for _, entry = range entries {
-		if errRegexp.MatchString(entry.Message) {
-			foundEntry = true
-			break
-		}
-	}
-	require.True(t, foundEntry)
-
-	// Validate that the trace is included in the log message.
-	require.Regexp(t, traceRegexp, entry.Message)
-	require.Regexp(t, opRegexp, entry.Message)
-
-	// Validate that the logged trace filtered out the verbose execChangeReplicasTxn
-	// child span, as well as the verbose child spans tracing txn operations.
-	require.NotRegexp(t, `operation:change-replica-update-desc`, entry.Message)
-	require.NotRegexp(t, `operation:txn coordinator send`, entry.Message)
-	require.NotRegexp(t, `operation:log-range-event`, entry.Message)
-
-	// Validate that the logged trace includes the changes to the descriptor.
-	require.Regexp(t, `change replicas \(add.*remove.*\): existing descriptor`, entry.Message)
-
-	// Validate that the trace was logged with the correct tags for the replica.
-	require.Regexp(t, fmt.Sprintf("n%d", repl.NodeID()), entry.Tags)
-	require.Regexp(t, fmt.Sprintf("s%d", repl.StoreID()), entry.Tags)
-	require.Regexp(t, fmt.Sprintf("r%d/%d", repl.GetRangeID(), repl.ReplicaID()), entry.Tags)
-	require.Regexp(t, `replicate`, entry.Tags)
-
-	// Validate that the returned tracing span includes the operation, but also
-	// that the stringified trace was not logged to the span or its parent.
-	processRecSpan, foundSpan := recording.FindSpan(opName)
-	require.True(t, foundSpan)
-
-	foundParent := false
-	var parentRecSpan tracingpb.RecordedSpan
-	for _, parentRecSpan = range recording {
-		if parentRecSpan.SpanID == processRecSpan.ParentSpanID {
-			foundParent = true
-			break
-		}
-	}
-	require.True(t, foundParent)
-	spans := tracingpb.Recording{parentRecSpan, processRecSpan}
-	stringifiedSpans := spans.String()
-	require.NotRegexp(t, errRegexp, stringifiedSpans)
-	require.NotRegexp(t, traceRegexp, stringifiedSpans)
+	filteredStr := filtered.String()
+	// The expected message should still be present after filtering.
+	require.Regexp(t, `change replicas updated descriptor`, filteredStr)
+	// The verbose operations should be removed.
+	require.NotRegexp(t, `operation:change-replica-get-desc`, filteredStr)
+	require.NotRegexp(t, `operation:change-replica-update-desc`, filteredStr)
 }
 
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a

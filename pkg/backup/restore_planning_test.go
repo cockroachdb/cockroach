@@ -64,7 +64,6 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 
 		IntoDB:               tree.NewDString("test expr"),
 		NewDBName:            tree.NewDString("test expr"),
-		IncrementalStorage:   []tree.Expr{tree.NewDString("http://example.com")},
 		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
 		EncryptionPassphrase: tree.NewDString("test expr"),
 	}
@@ -89,7 +88,7 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 		"into_db",
 		"newDBName",
 		[]string{"http://example.com"},
-		[]string{"http://example.com"})
+	)
 	require.NoError(t, err)
 	ensureAllStructFieldsSet(output, "output")
 

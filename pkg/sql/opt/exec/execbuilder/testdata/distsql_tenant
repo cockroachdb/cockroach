@@ -7,7 +7,6 @@ query T
 EXPLAIN SELECT * FROM tbl1 WHERE a < 3 OR (a > 7 AND a < 9) OR a > 14
 ----
 distribution: full
-vectorized: true
 ·
 • scan
   missing stats
@@ -32,7 +31,6 @@ query T
 EXPLAIN SELECT v, w FROM tbl2 WHERE k <= 3
 ----
 distribution: full
-vectorized: true
 ·
 • scan
   missing stats

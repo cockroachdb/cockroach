@@ -1,0 +1,134 @@
+# LogicTest: 5node
+
+# Regression test for lazy reading of soft-limited scans.
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, FAMILY (a, b, c))
+
+statement ok
+INSERT INTO abc SELECT i, i % 10, repeat('c', 16384) FROM generate_series(0, 99) AS s(i)
+
+statement ok
+ALTER TABLE abc SPLIT AT SELECT i * 20 FROM generate_series(1, 4) AS s(i)
+
+retry
+statement ok
+ALTER TABLE abc EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], i * 20 FROM generate_series(0, 4) as s(i)
+
+# Verify data placement.
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE abc WITH DETAILS]
+ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/XX>  …/1/20        {1}       1
+…/1/20              …/1/40        {2}       2
+…/1/40              …/1/60        {3}       3
+…/1/60              …/1/80        {4}       4
+…/1/80              <after:/Max>  {5}       5
+
+statement ok
+ANALYZE abc
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM abc WHERE a >= 0 AND a < 100 ORDER BY a LIMIT 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
+regions: <hidden>
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  KV time: 0µs
+  KV rows decoded: 10
+  actual row count: 10
+  estimated row count: 10 (10% of the table; stats collected <hidden> ago)
+  table: abc@abc_pkey
+  spans: [/0 - /99]
+  limit: 10
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMktFq20wQhe__pxjmKgEFr_7elIVCG9ulpnYcZJNSWhNGq4mzWNKquyNsY_xYfYE-WVnJTtrSQPdCaM5-e-asRgcM30rUuBhPx8MlELzP5jOg3MCnD-NsDBcEX1ulXvEbUJfw7mb0pBhIlbqEeTYaZ3D9GQimk9lkCanCBGtX8A1VHFB_wRRXCTbeGQ7B-SgdOmBS7FCrBG3dtBLlVYLGeUZ9QLFSMmpcUl5yxlSwH0TjgoVs2dlSbt5Sbu6bDe8xwaEr26oOGggTXDQUXwfqapCqeG5qKyt9to93ELsHDXXal57X1kVeOEgvia1Yg_rxPZwQtw1QsHEFF_rJJ98LB_BMhYbXCq57dZ3dDsFQWYZnsiHrz-T_UZvdDYcQhBswrq0FLngnA1vLpQY1eAaYNy8BFe2g4sr5PVBZOkMSo_UpchLzyAFcK00rGiLfXeEspApXxwT78vTtg9CaUae_DGsyQq2Oyb_PK-PQuDrwb6N6qZP6o9NVelwlyMWa-58kuNYbvvXOdGxfzjujTig4SL-b9sWkPm8F8UxVH3-V4EPptve2QI3qtK7-8jgvjAdoHeLFFo9u29ku902M9UBl4ARntOERC_vK1jaINajFt3w8_vczAAD__xOuBa4=
+
+statement ok
+SET distsql_prevent_partitioning_soft_limited_scans = off
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM abc WHERE a >= 0 AND a < 100 AND b != 5 ORDER BY a LIMIT 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+rows decoded from KV: 60 (480 B, 120 KVs, 60 gRPC calls)
+DistSQL network usage: <hidden>
+regions: <hidden>
+·
+• limit
+│ count: 10
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 50
+    │ estimated row count: 90
+    │ filter: b != 5
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 60
+          actual row count: 60
+          estimated row count: 12 - 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: [/0 - /99]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsV9tu4zYQfe9XTOcpQWWIlC-xCSyQruNFjeaycIwtijZY0NKsV4gkqiRdxw38Wf2BflkhKfJa2ti1AhQIsNaDAQ6HwzlnzpD0I5o_IhR4O7ocDacg4d3k5grkzIdffhpNRnByIuH3BWNtegPsFH68voDS4gNn7PTJNoPv30D3FG4mF6MJvP0VJFyOr8ZT4AwdTFRA1zImg-I35Oighw620cEOOtjFOwdTrXwyRunM5TFfMA4eUDAHwyRd2Mx856CvNKF4RBvaiFDgVM4impAMSLvZRgFZGUb5NnLmn8uZ_zG9pxU6OFTRIk6MAOnADB28TWU2clnL9bKVP3-AbFMjIOHFUNM8VJmPJWMLkw1jEsD--ds8uailgYB8FVAggHuFdbayZECTDAQMevC2sM4n74fgyygyXzxTGerS08u4uPowHIKxlIKvFomFE3qwbpjYUwEsB1g4EN3vcojlA8QUK70CGUXKlzZLjeVZzKT1P5MBtbDpwgrI_HMIpYF7eLd2sBg-UW6snBMKvlWj8QUKtnYOL9O7MLKkSbvdao0Ku4BzL5ePEGJ8Pe2jg5dhHNpCO_RA_sKGKqmy_99Y2E4sXg1LdyeWLxCUDkhTUM3_nP-Ad-tnAF-rlkpdXpPkTZbXOf_f8bVr-Hi1WPzwnuIv6imPtdzOsamaNxVvUqdNU_VeZVP1Kli8wzXnvUhzHdZye0fNNdec16ROG82dvUrNnVWwtA_XXPtFmuuxlts_aq655tpN6rTRXP9Vaq5fwdI5XHOdF2muz1ouZ0fRNRddp0mhNqIbvErRDZq8vidkUpUYqiDZtROr7dTi2fuWgjkV72GjFtqn91r5uW8xvMkD5YaAjC1meTEYJ-WUsZpkvPnzsB2J743kVSLx7UjdeiRvf05NkmrvDdXZHYnXI3WawpN5VTAhu1T6HiJpKfFXGymV9qUMbVVkARnSoYzCv-TXCiyX5arT5FP4Z34KsK258igoJ_tFI5bTMRkj5xWP7qHa3qaoV6eou5ei3m6yvXqk3pHsGtlndYrO9lLU3012ux6pfyS7Rna_TtFg_4nEdrPd-eqY3H_ifot0D7Lr6VOklh_DAAWyp6_1zE_5YbZAzk12R95-Vsucr-kqzW64TzIy5OCVvKcLsqTjMAmNDX0UVi9ovf7u3wAAAP__qpTOfA==
+
+statement ok
+SET distsql_prevent_partitioning_soft_limited_scans = on
+
+query T
+EXPLAIN ANALYZE (DISTSQL) SELECT a FROM abc WHERE a >= 0 AND a < 100 AND b != 5 ORDER BY a LIMIT 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, reused
+rows decoded from KV: 12 (96 B, 24 KVs, 12 gRPC calls)
+regions: <hidden>
+·
+• limit
+│ count: 10
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 10
+    │ estimated row count: 90
+    │ filter: b != 5
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 12
+          actual row count: 12
+          estimated row count: 12 - 100 (100% of the table; stats collected <hidden> ago)
+          table: abc@abc_pkey
+          spans: [/0 - /99]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUt1q20wQvf-eYr65imGDV-4P7UIgje1Q0zgOikkprQmr1cRZImnV3RGxCX6svkCfrKxkt0lo0lYXgjl79sycPXOH4WuBCs_HJ-PhHDQcp7Mp6MzAx_fjdAx7exq-NFK-oAOQPXh3OoIdYiCRsrfFMvj_AF71YJaOxikcfQINJ5PpZA6JRIGVy-lUlxRQfcYEFwJr7wyF4HyE7lrCJF-hkgJtVTcc4YVA4zyhukO2XBAqnOusoJR0Tr4fhXNibYtWVmfmUGfmsr6hNQocuqIpq6BAC8hQ4HmtY9WX-_1ExqsfLiB2DQqqpCs9La2LJKbAHcS2JAXy-7ewpbjbADkZl1OuIBl0aLZmCuBJ5wrevoajDl2mZ0MwuijCL2atrd8xBy9R4PRiOITAVINxTcWwRyvu24p7CmTrsCMQ3TxFKPUKSiqdX4MuCmc0x9FkO0Wm2VxTANdw3bCCyG8t7IBkgIuNwK7cvnlgvSRUyb2QJiNUciP-PqdjWzB58v3kYUgdruBw0O6LUmpyOn-DAmdxmsPIPrGl5W5taEWmYeuqhzn82ZV80tXgkavkX1ylFGpXBXrg6alO8lGn_WSzEEj5krqVD67xhs68My23K2etUAvkFLg7TbpiUu2OAnvS5c9Q7islzyoNnlNaCLwq3O2lzVGh3H77v_ntPowX9DLEJzq_dret7HxdR4NXuggkcKpvaERMvrSVDWwNKvYNbTb__QgAAP__DIZi7A==
+
+statement ok
+RESET distsql_prevent_partitioning_soft_limited_scans

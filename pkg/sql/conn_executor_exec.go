@@ -2148,6 +2148,18 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	return nil, nil, nil
 }
 
+func (ex *connExecutor) stepReadSequence(ctx context.Context) error {
+	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
+	if prevSteppingMode == kv.SteppingEnabled {
+		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+			return err
+		}
+	} else {
+		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+	}
+	return nil
+}
+
 // handleAOST gets the AsOfSystemTime clause from the statement, and sets
 // the timestamps of the transaction accordingly.
 func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) error {
@@ -2416,13 +2428,8 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retEr
 	// write-write contention between transactions by inflating the contention
 	// footprint of each transaction (i.e. the duration measured in MVCC time that
 	// the transaction holds locks).
-	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
-	if prevSteppingMode == kv.SteppingEnabled {
-		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
-			return err
-		}
-	} else {
-		ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
+	if err := ex.stepReadSequence(ctx); err != nil {
+		return err
 	}
 
 	if err := ex.createJobs(ctx); err != nil {
@@ -2547,7 +2554,14 @@ func (ex *connExecutor) rollbackSQLTransaction(
 		isKVTxnOpen = ex.state.mu.txn.IsOpen()
 	}
 	if isKVTxnOpen {
-		if err := ex.state.mu.txn.Rollback(ctx); err != nil {
+		// Step the read sequence before rolling back because the read sequence
+		// may be in the span reverted by a savepoint.
+		err := ex.stepReadSequence(ctx)
+		err = errors.CombineErrors(err, ex.state.mu.txn.Rollback(ctx))
+		if err != nil {
+			if buildutil.CrdbTestBuild && errors.IsAssertionFailure(err) {
+				log.Dev.Fatalf(ctx, "txn rollback failed: %+v", err)
+			}
 			log.Dev.Warningf(ctx, "txn rollback failed: %s", err)
 		}
 	}
@@ -2879,7 +2893,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
-	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main)
+	distributePlan, blockers := planner.getPlanDistribution(ctx, planner.curPlan.main, notPostquery)
 	if afterGetPlanDistribution != nil {
 		afterGetPlanDistribution()
 	}
@@ -2927,7 +2941,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, blockers,
 	)
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
@@ -3379,7 +3393,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	res RestrictedCommandResult,
 	distribute DistributionType,
 	progressAtomic *uint64,
-	distSQLProhibitedErr error,
+	distSQLBlockers distSQLBlockers,
 ) (topLevelQueryStats, error) {
 	defer planner.curPlan.savePlanInfo()
 	recv := MakeDistSQLReceiver(
@@ -3404,7 +3418,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		evalCtx := planner.ExtendedEvalContext()
 		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
 		planCtx.setUpForMainQuery(ctx, planner, recv)
-		planCtx.distSQLProhibitedErr = distSQLProhibitedErr
+		planCtx.distSQLBlockers = distSQLBlockers
 
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
@@ -3781,7 +3795,7 @@ func (ex *connExecutor) runObserverStatement(
 func (ex *connExecutor) runShowSyntax(
 	ctx context.Context, stmt string, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ShowSyntaxColumns)
+	res.SetColumns(ctx, colinfo.ShowSyntaxColumns, false /* skipRowDescription */)
 	var commErr error
 	parser.RunShowSyntax(ctx, stmt,
 		func(ctx context.Context, field, msg string) {
@@ -3800,7 +3814,7 @@ func (ex *connExecutor) runShowSyntax(
 func (ex *connExecutor) runShowTransactionState(
 	ctx context.Context, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
+	res.SetColumns(ctx, colinfo.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}}, false /* skipRowDescription */)
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
@@ -3863,7 +3877,7 @@ func (ex *connExecutor) runShowTransferState(
 	for i := 0; i < len(colNames); i++ {
 		cols[i] = colinfo.ResultColumn{Name: colNames[i], Typ: types.String}
 	}
-	res.SetColumns(ctx, cols)
+	res.SetColumns(ctx, cols, false /* skipRowDescription */)
 
 	var sessionState, sessionRevivalToken tree.Datum
 	var row tree.Datums
@@ -3897,7 +3911,7 @@ func (ex *connExecutor) runShowTransferState(
 func (ex *connExecutor) runShowCompletions(
 	ctx context.Context, n *tree.ShowCompletions, res RestrictedCommandResult,
 ) error {
-	res.SetColumns(ctx, colinfo.ShowCompletionsColumns)
+	res.SetColumns(ctx, colinfo.ShowCompletionsColumns, false /* skipRowDescription */)
 	log.Dev.Warningf(ctx, "COMPLETION GENERATOR FOR: %+v", *n)
 	sd := ex.planner.SessionData()
 	override := sessiondata.InternalExecutorOverride{
@@ -3964,7 +3978,7 @@ func (ex *connExecutor) runShowLastQueryStatistics(
 	for i, n := range stmt.Columns {
 		resColumns[i] = colinfo.ResultColumn{Name: string(n), Typ: types.String}
 	}
-	res.SetColumns(ctx, resColumns)
+	res.SetColumns(ctx, resColumns, false /* skipRowDescription */)
 
 	phaseTimes := ex.statsCollector.PreviousPhaseTimes()
 

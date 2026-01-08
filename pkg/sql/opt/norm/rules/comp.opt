@@ -220,10 +220,8 @@
     (Function $args:* $private:(FunctionPrivate "timezone"))
     $right:(ConstValue) &
         (IsTimestampTZ $right) &
-        (Let ($ts $tsOk):(ScalarExprAt $args 1) $tsOk) &
-        (IsTimestamp $ts) &
-        ^(IsConstValueOrGroupOfConstValues $ts) &
-        (Let ($zone $zoneOk):(ScalarExprAt $args 0) $zoneOk)
+        (Let ($zone $ts $ok):(ScalarPair $args) $ok) &
+        (IsTimestamp $ts)
 )
 =>
 ((OpName) $ts (MakeTimeZoneFunction $zone $right))
@@ -248,10 +246,9 @@
     (Function $args:* $private:(FunctionPrivate "timezone"))
     $right:(ConstValue) &
         (IsTimestamp $right) &
-        (Let ($tz $tzOk):(ScalarExprAt $args 1) $tzOk) &
+        (Let ($zone $tz $ok):(ScalarPair $args) $ok) &
         (IsTimestampTZ $tz) &
-        ^(IsConstValueOrGroupOfConstValues $tz) &
-        (Let ($zone $zoneOk):(ScalarExprAt $args 0) $zoneOk)
+        ^(IsConstValueOrGroupOfConstValues $tz)
 )
 =>
 ((OpName) $tz (MakeTimeZoneFunction $zone $right))
@@ -296,3 +293,41 @@ $left
 )
 =>
 ((OpName) $input $collapsed)
+
+# ConvertLevenshteinToLevenshteinLessEqualLeft converts a comparison of an
+# integer and the result of a levenshtein function into a comparison with a
+# levenshtein_less_equal function.
+#
+#   levenshtein('foo', 'bar') < 5
+#   =>
+#   levenshtein_less_equal('foo', 'bar', 5) < 5
+#
+# levenshtein_less_equal is more efficient than levenshtein because it returns
+# early once the distance exceeds the given max distance.
+[ConvertLevenshteinToLevenshteinLessEqualLeft, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    (Function $args:* $private:(FunctionPrivate "levenshtein"))
+    $right:* &
+        (IsInt $right) &
+        (Let ($arg1 $arg2 $ok):(ScalarPair $args) $ok)
+)
+=>
+((OpName)
+    (MakeLevenshteinLessEqualFunction $arg1 $arg2 $right)
+    $right
+)
+
+# ConvertLevenshteinToLevenshteinLessEqualRight is the same as
+# ConvertLevenshteinToLevenshteinLessEqualLeft but matches comparisons with the
+# levenshtein function on the RHS.
+[ConvertLevenshteinToLevenshteinLessEqualRight, Normalize]
+(Eq | Ge | Gt | Le | Lt
+    $left:* & (IsInt $left)
+    (Function $args:* $private:(FunctionPrivate "levenshtein")) &
+        (Let ($arg1 $arg2 $ok):(ScalarPair $args) $ok)
+)
+=>
+((OpName)
+    $left
+    (MakeLevenshteinLessEqualFunction $arg1 $arg2 $left)
+)

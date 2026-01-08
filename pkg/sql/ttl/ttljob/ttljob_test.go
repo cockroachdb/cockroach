@@ -64,11 +64,7 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T,
-	testingKnobs *sql.TTLTestingKnobs,
-	testMultiTenant bool,
-	numNodes int,
-	runMinActiveVersion bool,
+	t *testing.T, testingKnobs *sql.TTLTestingKnobs, numNodes int, runMinActiveVersion bool,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -124,7 +120,6 @@ func newRowLevelTTLTestJobTestHelper(
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109391),
 			Settings:          makeSettings(),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
@@ -133,26 +128,9 @@ func newRowLevelTTLTestJobTestHelper(
 		},
 	})
 	th.testCluster = testCluster
-	ts := testCluster.Server(0)
-	// As `ALTER TABLE ... SPLIT AT ...` is not supported in multi-tenancy, we
-	// do not run those tests.
-	if testMultiTenant {
-		tenantServer, db := serverutils.StartTenant(
-			t, ts, base.TestTenantArgs{
-				Settings:     makeSettings(),
-				TenantID:     serverutils.TestTenantID(),
-				TestingKnobs: baseTestingKnobs,
-			},
-		)
-		th.sqlDB = sqlutils.MakeSQLRunner(db)
-		th.server = tenantServer
-	} else {
-		db := ts.SystemLayer().SQLConn(t)
-		th.sqlDB = sqlutils.MakeSQLRunner(db)
-		th.server = ts
-	}
-
-	th.kvDB = ts.DB()
+	th.server = testCluster.ApplicationLayer(0)
+	th.sqlDB = sqlutils.MakeSQLRunner(th.server.SQLConn(t))
+	th.kvDB = testCluster.Server(0).DB()
 
 	return th, func() {
 		testCluster.Stopper().Stop(context.Background())
@@ -336,7 +314,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			// Load completed spans from jobfrontier storage.
 			if expectedJobSpanCount > 0 {
 				ctx := context.Background()
-				internalDB := h.testCluster.ApplicationLayer(0).InternalDB().(isql.DB)
+				internalDB := h.server.InternalDB().(isql.DB)
 
 				var completedSpans []roachpb.Span
 				err := internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -416,9 +394,8 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
-				nil,  /* SQLTestingKnobs */
-				true, /* testMultiTenant */
-				1,    /* numNodes */
+				nil, /* SQLTestingKnobs */
+				1,   /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -481,7 +458,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 					PreDeleteChangeTableVersion: tc.preDeleteChangeTableVersion,
 					PreSelectStatement:          tc.preSelectStatement,
 				},
-				false, /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)
@@ -514,8 +490,7 @@ func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
 					// pre-select ALTER TYPE statement would hang forever.
 					PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
 				},
-				false, /* testMultiTenant */
-				1,     /* numNodes */
+				1, /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -574,7 +549,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				true,  /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)
@@ -633,7 +607,6 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 						ReturnStatsError:          true,
 						ExpectedNumSpanPartitions: numRanges,
 					},
-					false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
 					numNodes,
 					runAtMinClusterVersion,
 				)
@@ -805,7 +778,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		numExpiredRows       int
 		numNonExpiredRows    int
 		numSplits            int
-		forceNonMultiTenant  bool
 		expirationExpression string
 		addRow               func(th *rowLevelTTLTestJobTestHelper, t *testing.T, createTableStmt *tree.CreateTable, ts time.Time)
 	}
@@ -834,9 +806,8 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				`CREATE TABLE tbl2 (id INT PRIMARY KEY)`,
 				`ALTER TABLE tbl2 SPLIT AT VALUES (1)`,
 			},
-			numExpiredRows:      1001,
-			numNonExpiredRows:   5,
-			forceNonMultiTenant: true,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
 		},
 		{
 			desc: "one column pk with statistics",
@@ -1049,7 +1020,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
 				runAtMixedClusterVersion,
 			)
@@ -1152,7 +1122,6 @@ func TestRowLevelTTLCancelStats(t *testing.T) {
 			ReturnStatsError: true,
 			ExtraStatsQuery:  "SELECT pg_sleep(100)",
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1195,8 +1164,7 @@ func TestOutboundForeignKey(t *testing.T) {
 					AOSTDuration:     &zeroDuration,
 					ReturnStatsError: true,
 				},
-				false, /* testMultiTenant */
-				1,     /* numNodes */
+				1, /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -1227,7 +1195,6 @@ func TestInboundForeignKeyOnDeleteCascade(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1260,7 +1227,6 @@ func TestInboundForeignKeyOnDeleteRestrict(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1293,7 +1259,6 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1360,7 +1325,6 @@ func TestMakeTTLJobDescription(t *testing.T) {
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				false, /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)

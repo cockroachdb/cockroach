@@ -204,6 +204,15 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
+// UpdateStoresStatus implements the Allocator interface.
+func (a *allocatorState) UpdateStoresStatuses(
+	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cs.updateStoreStatuses(ctx, storeStatuses)
+}
+
 // AdjustPendingChangeDisposition implements the Allocator interface.
 func (a *allocatorState) AdjustPendingChangeDisposition(
 	ctx context.Context, change ExternalRangeChange, success bool,
@@ -698,8 +707,43 @@ func sortTargetCandidateSetAndPick(
 				cmp.Compare(a.StoreID, b.StoreID))
 		})
 	}
-	// Candidates are sorted by non-decreasing leasePreferenceIndex. Eliminate
-	// ones that have notMatchedLeasePreferenceIndex.
+	// Candidates are sorted by non-decreasing leasePreferenceIndex (lower is
+	// better). Eliminate ones that have notMatchedLeasePreferenceIndex (i.e.,
+	// candidates that don't match ANY lease preference). This filter only has an
+	// effect when the span config has lease preferences configured; otherwise all
+	// candidates have leasePreferenceIndex=0 (see matchedLeasePreferenceIndex).
+	//
+	// For lease transfers: This check is usually redundant because
+	// candidatesToMoveLease already filters candidates to those with
+	// leasePreferenceIndex <= the current leaseholder's index. However, if the
+	// current leaseholder matches NO preference (LPI =
+	// notMatchedLeasePreferenceIndex), then candidatesToMoveLease returns all
+	// voters (since all LPIs <= MaxInt32), and this filter becomes necessary to
+	// remove candidates that also match no preference.
+	//
+	// TODO(wenyihu6): Is this expected behavior? Another thought is that
+	// rebalancing should not need to improve lease preference satisfaction: we
+	// are here because the source is overloaded or wanting to shed leases for
+	// some reason. Doing that work without making the lease preference worse is
+	// sufficient. Improving the lease preference should be the job of the lease
+	// queue. If the current leaseholder matches no preference, perhaps we should
+	// allow transferring to any candidate (even those also matching no
+	// preference) rather than requiring candidates to match some preference.
+	//
+	// For replica transfers from the leaseholder: This is the only lease
+	// preference filtering applied. matchedLeasePreferenceIndex is called
+	// directly on candidates in rebalanceReplicas.
+	//
+	// Note: There's an asymmetry between lease transfers and replica transfers.
+	// Lease transfers enforce "don't make lease preference worse" (via
+	// candidatesToMoveLease filtering to LPI <= current). Replica transfers from
+	// the leaseholder only enforce "must match some preference" (via this
+	// filter), meaning a replica transfer could move the leaseholder's replica to
+	// a store with a worse lease preference (e.g., LPI=0 -> LPI=2). This is
+	// consistent with SMA behavior: SMA's rankedCandidateListForRebalancing (used
+	// by RebalanceTarget) doesn't consider lease preferences for replica
+	// transfers. The rationale is likely that the lease queue will fix any lease
+	// preference violations after the replica transfer completes.
 	j = 0
 	for _, cand := range cands.candidates {
 		if cand.leasePreferenceIndex == notMatchedLeasePreferenceIndex {
@@ -912,8 +956,10 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	}
 
 	sheddingSLS = cs.computeLoadSummary(ctx, loadSheddingStore, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
-	if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
-		// In this set of stores, this store no longer looks overloaded.
+	if sheddingSLS.sls <= loadNoChange {
+		// In this set of stores, this store no longer looks overloaded. Note that
+		// we don't consider nls here: if nls is high but sls is low, it means other
+		// stores on the node are causing node-level overload, not this store.
 		passObs.replicaShed(notOverloaded)
 		return candidateSet{}, sheddingSLS
 	}

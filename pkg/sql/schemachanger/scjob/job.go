@@ -11,8 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -54,7 +56,15 @@ func (n *newSchemaChangeResumer) DumpTraceAfterRun() bool {
 }
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
-	return n.run(ctx, execCtxI)
+	execCtx := execCtxI.(sql.JobExecContext)
+	err = n.run(ctx, execCtx)
+	if err != nil {
+		return err
+	}
+	// Cleanup temp storage on success. Otherwise, they may be needed for retry of
+	// the job. If the job failed, we attempt cleanup in OnFailOrCancel instead.
+	n.cleanupTempStorage(ctx, execCtx.ExecCfg())
+	return nil
 }
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(
@@ -76,7 +86,9 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
 		log.Dev.Warningf(ctx, "unable to revert protected timestamp %v", err)
 	}
-	return n.run(ctx, execCtx)
+	runErr := n.run(ctx, execCtx)
+	n.cleanupTempStorage(ctx, execCfg)
+	return runErr
 }
 
 // CollectProfile writes the current phase's explain output, captured earlier,
@@ -173,4 +185,38 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return jobs.MarkAsRetryJobError(err)
 	}
 	return nil
+}
+
+// cleanupTempStorage best-effort deletes job-scoped temporary files produced by
+// schema change backfills using the distributed merge pipeline. The storage
+// prefixes should omit the "/job/<job-id>/" suffix; this helper will scope
+// cleanup to the current job ID automatically.
+//
+// This should only be called once the job is finishing (successfully or after
+// cancellation), to avoid deleting files needed for retry.
+func (n *newSchemaChangeResumer) cleanupTempStorage(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) {
+	if execCfg == nil || execCfg.DistSQLSrv == nil || execCfg.DistSQLSrv.ExternalStorageFromURI == nil {
+		return
+	}
+	payload := n.job.Payload()
+	details := payload.GetNewSchemaChange()
+	if details == nil {
+		return
+	}
+	var prefixes []string
+	for _, bp := range details.BackfillProgress {
+		prefixes = append(prefixes, bp.SSTStoragePrefixes...)
+	}
+
+	cleaner := bulkutil.NewBulkJobCleaner(execCfg.DistSQLSrv.ExternalStorageFromURI, username.NodeUserName())
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Dev.Warningf(ctx, "job %d: closing bulk job cleaner: %v", n.job.ID(), err)
+		}
+	}()
+	if err := cleaner.CleanupJobDirectories(ctx, n.job.ID(), prefixes); err != nil {
+		log.Dev.Warningf(ctx, "job %d: cleaning up temporary SST files: %v", n.job.ID(), err)
+	}
 }
