@@ -113,12 +113,14 @@ func (t *tableDecoder) decodeEvent(
 	}
 
 	var prevRow tree.Datums
-	if event.PrevValue.RawBytes != nil {
+	if len(event.PrevValue.RawBytes) != 0 {
 		var prev roachpb.KeyValue
 		prev.Key = event.KeyValue.Key
 		prev.Value = event.PrevValue
 
-		decodedPrevRow, prevStatus, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.PrevValue.Timestamp, false)
+		// TODO(jeffswenson): it would be nice if decoded row has the Timestamp,
+		// but for some reason it is missing from the rangefeed.
+		decodedPrevRow, prevStatus, err := t.decoder.DecodeKV(ctx, prev, cdcevent.PrevRow, event.KeyValue.Value.Timestamp, false)
 		if err != nil {
 			return DecodedRow{}, cdcevent.Row{}, err
 		}
