@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/txnfeed",
+        "//pkg/crosscluster/logical/txnlock",
         "//pkg/crosscluster/logical/txnwriter",
         "//pkg/crosscluster/streamclient",
         "//pkg/jobs",
@@ -21,6 +22,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/span",
         "@com_github_cockroachdb_errors//:errors",
     ],
