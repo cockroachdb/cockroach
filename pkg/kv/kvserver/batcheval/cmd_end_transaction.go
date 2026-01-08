@@ -170,13 +170,6 @@ func declareKeysEndTxn(
 				})
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
-				})
-				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
-				})
-
-				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(rs.GetRangeID()),
 					EndKey: abortspan.MaxKey(rs.GetRangeID()),
 				})
@@ -1349,21 +1342,6 @@ func splitTriggerHelper(
 	// NB: the replicated post-split left hand keyspace is frozen at this point.
 	// Only the RHS can be mutated (and we do so to seed its state).
 
-	// Copy the last replica GC timestamp. This value is unreplicated,
-	// which is why the MVCC stats are set to nil on calls to
-	// MVCCPutProto.
-	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
-	}
-
-	if err := storage.MVCCPutProto(
-		ctx, spanset.DisableForbiddenSpanAssertions(batch),
-		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
-	}
-
 	// Compute the absolute stats for the (post-split) ranges. No more
 	// modifications to the left hand side are allowed after this line and any
 	// modifications to the right hand side are accounted for by updating the
@@ -1404,6 +1382,7 @@ func splitTriggerHelper(
 
 	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	var err error
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {

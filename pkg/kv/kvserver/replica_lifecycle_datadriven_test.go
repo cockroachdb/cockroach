@@ -330,6 +330,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				in := splitPreApplyInput{
 					destroyed:           destroyed,
 					rhsDesc:             split.RightDesc,
+					lhsRangeID:          split.LeftDesc.RangeID,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
