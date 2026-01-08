@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "jira-task_lib",
+    srcs = [
+        "config.go",
+        "create.go",
+        "create_cmd.go",
+        "http.go",
+        "main.go",
+        "sprint.go",
+        "sprints_cmd.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/.claude/skills/jira-internal-task/cmd/jira-task",
+    visibility = ["//visibility:private"],
+    deps = ["@com_github_spf13_cobra//:cobra"],
+)
+
+go_binary(
+    name = "jira-task",
+    embed = [":jira-task_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "jira-task_test",
+    srcs = [
+        "main_test.go",
+        "sprints_cmd_test.go",
+    ],
+    embed = [":jira-task_lib"],
+)
