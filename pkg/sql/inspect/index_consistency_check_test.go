@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -127,6 +128,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				GCJob: &sql.GCJobTestingKnobs{
 					SkipWaitingForMVCCGC: true,
 				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
 		},
 	})
@@ -556,7 +558,11 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 
 	issueLogger := &testIssueCollector{}
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(db)
 
