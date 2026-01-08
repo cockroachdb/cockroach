@@ -9,10 +9,12 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -145,6 +147,19 @@ func splitPreApply(
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 
+	// Similar to RaftTruncatedState above, historical split proposals may write
+	// LastReplicaGCTimestamp. Clear it from the state engine batch if present,
+	// since it's an unreplicated key that belongs in the log engine. The key is
+	// written below only if necessary (when we're initializing the RHS).
+	//
+	// TODO(#157897): remove this workaround when there are no historical
+	// proposals with LastReplicaGCTimestamp, e.g. after a below-raft migration.
+	if err := stateRW.ClearUnversioned(
+		keys.RangeLastReplicaGCTimestampKey(in.rhsDesc.RangeID),
+		storage.ClearOptions{}); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot clear LastReplicaGCTimestamp: %v", err)
+	}
+
 	if in.destroyed {
 		// The RHS replica has already been removed from the store. To apply the
 		// split, we must clear the user data the RHS would have inherited from the
@@ -190,6 +205,25 @@ func splitPreApply(
 	if err := rsl.SetClosedTimestamp(ctx, stateRW, in.initClosedTimestamp); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
+	// Set the initial LastReplicaGCTimestamp for the RHS. This is an unreplicated
+	// key written to the log engine.
+	//
+	//
+	// There are three options for the value of the timestamp:
+	// - copy from LHS's LastReplicaGCTimestamp: semantically wrong since the
+	// 		RHS is a new entity
+	// - zero timestamp: makes the replica immediately eligible for checking
+	// - current time: would delay the first GC queue check by ~12 hours
+	//
+	// Zero timestamp is chosen here because a newly created replica should be
+	// validated by the replica GC queue soon after creation, rather than waiting
+	// for the full check interval to elapse.
+	if err := storage.MVCCBlindPutProto(ctx, raftRW.WO,
+		keys.RangeLastReplicaGCTimestampKey(in.rhsDesc.RangeID),
+		hlc.Timestamp{}, &hlc.Timestamp{}, storage.MVCCWriteOptions{}); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot set LastReplicaGCTimestamp: %v", err)
+	}
+
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
