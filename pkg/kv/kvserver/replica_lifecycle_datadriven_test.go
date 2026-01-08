@@ -328,9 +328,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsRangeState.replica.ReplicaID > rhsReplDesc.ReplicaID
 
 				in := splitPreApplyInput{
-					destroyed:           destroyed,
-					rhsDesc:             split.RightDesc,
-					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+					destroyed:                 destroyed,
+					rhsDesc:                   split.RightDesc,
+					lhsRangeID:                split.LeftDesc.RangeID,
+					initClosedTimestamp:       hlc.Timestamp{WallTime: 100}, // dummy timestamp
+					lhsLastReplicaGCTimestamp: hlc.Timestamp{},              // dummy timestamp
 				}
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					// First, apply the stashed batch from split trigger

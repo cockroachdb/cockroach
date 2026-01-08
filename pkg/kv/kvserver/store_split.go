@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,9 +35,15 @@ type splitPreApplyInput struct {
 	destroyed bool
 	// rhsDesc is the descriptor for the post split RHS range.
 	rhsDesc roachpb.RangeDescriptor
+	// lhsRangeID is the range ID of the LHS (pre-split) range, used to read
+	// the LHS's LastReplicaGCTimestamp when initializing the RHS.
+	lhsRangeID roachpb.RangeID
 	// initClosedTimestamp is the initial closed timestamp that the RHS replica
 	// inherits from the pre-split range. Set iff destroyed is false.
 	initClosedTimestamp hlc.Timestamp
+	// lhsLastReplicaGCTimestamp is the LastReplicaGCTimestamp from the LHS
+	// replica, which will be copied to the RHS. Set iff destroyed is false.
+	lhsLastReplicaGCTimestamp hlc.Timestamp
 }
 
 // validateAndPrepareSplit performs invariant checks on the supplied
@@ -52,7 +59,8 @@ func validateAndPrepareSplit(
 	splitRightReplDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
-		return splitPreApplyInput{}, errors.AssertionFailedf("cannot process split on s%s which does not exist in the split: %+v",
+		return splitPreApplyInput{}, errors.AssertionFailedf(`cannot process 
+		split on s%s which does not exist in the split: %+v`,
 			r.StoreID(), split)
 	}
 
@@ -82,7 +90,11 @@ func validateAndPrepareSplit(
 			}
 		}
 
-		return splitPreApplyInput{destroyed: true, rhsDesc: split.RightDesc}, nil
+		return splitPreApplyInput{
+			destroyed:  true,
+			rhsDesc:    split.RightDesc,
+			lhsRangeID: split.LeftDesc.RangeID,
+		}, nil
 	}
 	// Sanity check the common case -- the RHS replica that exists should match
 	// the ReplicaID in the split trigger. In particular, it shouldn't older than
@@ -107,10 +119,22 @@ func validateAndPrepareSplit(
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 
+	// Read the LHS `LastReplicaGCTimestamp` to copy to the RHS. If we can't read
+	// it, fall back to zero timestamp. This should be rare and only happen if
+	// the LHS replica doesn't exist or has been removed. See the comment near
+	// the end of `splitPreApply()` for more details.
+	lhsLastReplicaGCTimestamp, err := r.GetLastReplicaGCTimestamp(ctx)
+	if err != nil {
+		// Fall back to zero timestamp if we can't read it.
+		lhsLastReplicaGCTimestamp = hlc.Timestamp{}
+	}
+
 	return splitPreApplyInput{
-		destroyed:           false,
-		rhsDesc:             split.RightDesc,
-		initClosedTimestamp: *initClosedTS,
+		destroyed:                 false,
+		rhsDesc:                   split.RightDesc,
+		lhsRangeID:                split.LeftDesc.RangeID,
+		initClosedTimestamp:       *initClosedTS,
+		lhsLastReplicaGCTimestamp: lhsLastReplicaGCTimestamp,
 	}, nil
 }
 
@@ -136,13 +160,38 @@ func splitPreApply(
 	// engine batch, so that it doesn't make it to the state engine.
 	//
 	// TODO(#152847): remove this workaround when there are no historical
-	// proposals with RaftTruncatedState, e.g. after a below-raft migration.
+	// proposals with `RaftTruncatedState`, e.g. after a below-raft migration.
 	if ts, err := rsl.LoadRaftTruncatedState(ctx, stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot load RaftTruncatedState: %v", err)
 	} else if ts == (kvserverpb.RaftTruncatedState{}) {
 		// Common case. Do nothing.
 	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
+	}
+
+	// Similar to `RaftTruncatedState` above, historical split proposals may write
+	// `LastReplicaGCTimestamp`. Clear it from the state engine batch if present,
+	// since it's an unreplicated key that belongs in the log engine. The key is
+	// written below only if necessary (when we're initializing the RHS).
+	//
+	// Note that if the RHS range is already present or being created concurrently
+	// on this Store, it doesn't have a LastReplicaGCTimestamp (which only
+	// initialized replicas can have), so this deletion will not conflict with or
+	// corrupt it.
+	//
+	// TODO(#157897): remove this workaround when there are no historical
+	// proposals with LastReplicaGCTimestamp, e.g. after a below-raft migration.
+	var lhsLastReplicaGCTimestamp hlc.Timestamp
+	if found, err := storage.MVCCGetProto(ctx, stateRW,
+		rsl.RangeLastReplicaGCTimestampKey(), hlc.Timestamp{}, &lhsLastReplicaGCTimestamp,
+		storage.MVCCGetOptions{}); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot load LastReplicaGCTimestamp: %v", err)
+	} else if !found {
+		// Common case. Do nothing.
+	} else if err := stateRW.ClearUnversioned(
+		rsl.RangeLastReplicaGCTimestampKey(),
+		storage.ClearOptions{}); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot clear LastReplicaGCTimestamp: %v", err)
 	}
 
 	if in.destroyed {
@@ -190,6 +239,31 @@ func splitPreApply(
 	if err := rsl.SetClosedTimestamp(ctx, stateRW, in.initClosedTimestamp); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
+	// Set the initial `LastReplicaGCTimestamp` for the RHS. This is an unreplicated
+	// key written to the log engine.
+	//
+	// `replicaGCShouldQueueImpl()` checks if the replica is eligible for GC.
+	// There are 3 options for the value of the timestamp as guided by
+	// `replicaGCShouldQueueImpl()`:
+	// - copy from LHS's `LastReplicaGCTimestamp`: inherits the parent's GC check
+	//      schedule
+	// - zero timestamp: makes the replica immediately eligible for checking
+	// - current time: would delay the first GC queue check by ~12 hours,
+	//
+	// We copy the LHS's `LastReplicaGCTimestamp` to match the old behaviour and
+	// avoid an influx of replica GC queue checks during bulk splits. This ensures
+	// that newly split ranges inherit the GC check schedule from their parent
+	// range, rather than being immediately eligible for checking (zero timestamp)
+	// or delayed by the full check interval (current time). The timestamp value
+	// was determined in `validateAndPrepareSplit()` and is stored in
+	// `in.lhsLastReplicaGCTimestamp`.
+	if err := storage.MVCCBlindPutProto(ctx, raftRW.WO,
+		rsl.RangeLastReplicaGCTimestampKey(),
+		hlc.Timestamp{}, &in.lhsLastReplicaGCTimestamp,
+		storage.MVCCWriteOptions{}); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot set LastReplicaGCTimestamp: %v", err)
+	}
+
 }
 
 // splitPostApply is the part of the split trigger which coordinates the actual
