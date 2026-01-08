@@ -10045,6 +10045,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: sys.gc.total.ns
+      exported_name: sys_gc_total_ns
+      description: Estimated total CPU time spent performing GC tasks
+      y_axis_label: CPU Time
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.go.allocbytes
       exported_name: sys_go_allocbytes
       description: Current bytes of memory allocated by go
@@ -10086,6 +10094,22 @@ layers:
       y_axis_label: Memory
       type: GAUGE
       unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: sys.go.heap.livebytes
+      exported_name: sys_go_heap_livebytes
+      description: Bytes of live heap objects marked by the previous GC
+      y_axis_label: Memory
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: sys.go.heap.objects
+      exported_name: sys_go_heap_objects
+      description: Number of live objects on the heap (live + unswept)
+      y_axis_label: Objects
+      type: GAUGE
+      unit: COUNT
       aggregation: AVG
       derivative: NONE
     - name: sys.go.limitbytes

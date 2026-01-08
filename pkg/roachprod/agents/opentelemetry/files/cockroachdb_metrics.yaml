@@ -2541,11 +2541,14 @@ sys_gc_count: sys.gc.count
 sys_gc_pause_ns: sys.gc.pause.ns
 sys_gc_pause_percent: sys.gc.pause.percent
 sys_gc_stop_ns: sys.gc.stop.ns
+sys_gc_total_ns: sys.gc.total.ns
 sys_go_allocbytes: sys.go.allocbytes
 sys_go_heap_allocbytes: sys.go.heap.allocbytes
 sys_go_heap_heapfragmentbytes: sys.go.heap.heapfragmentbytes
 sys_go_heap_heapreleasedbytes: sys.go.heap.heapreleasedbytes
 sys_go_heap_heapreservedbytes: sys.go.heap.heapreservedbytes
+sys_go_heap_livebytes: sys.go.heap.livebytes
+sys_go_heap_objects: sys.go.heap.objects
 sys_go_limitbytes: sys.go.limitbytes
 sys_go_pause_other_ns: sys.go.pause.other.ns
 sys_go_stack_systembytes: sys.go.stack.systembytes
