@@ -7,7 +7,7 @@ import cn from "classnames";
 import React from "react";
 
 import { Text, TextTypes } from "src/components";
-import "./input.styl";
+import "./input.scss";
 
 interface TextInputProps {
   onChange: (value: string) => void;

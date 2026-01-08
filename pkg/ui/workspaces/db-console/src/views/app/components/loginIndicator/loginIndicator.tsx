@@ -14,7 +14,7 @@ import Popover from "src/views/shared/components/popover";
 import UserAvatar from "src/views/shared/components/userAvatar";
 
 import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
-import "./loginIndicator.styl";
+import "./loginIndicator.scss";
 
 interface LoginIndicatorProps {
   loginState: LoginState;

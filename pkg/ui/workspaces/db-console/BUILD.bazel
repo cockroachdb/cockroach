@@ -2,7 +2,6 @@ load("@aspect_rules_jest//jest:defs.bzl", "jest_test")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//pkg/ui/workspaces/db-console:eslint/package_json.bzl", eslint_bin = "bin")
-load("@npm//pkg/ui/workspaces/db-console:stylint/package_json.bzl", stylint_bin = "bin")
 load("@npm//pkg/ui/workspaces/db-console:typescript/package_json.bzl", typescript_bin = "bin")
 load("@npm//pkg/ui/workspaces/db-console:webpack-cli/package_json.bzl", webpack_bin = "bin")
 
@@ -26,13 +25,10 @@ WEBPACK_DATA_COMMON = glob(
 WEBPACK_SRCS = [
     "babel.config.js",
     ".eslintrc.json",
-    ".stylintrc",
     "favicon.ico",
     "tsconfig.json",
     "webpack.config.js",
 ]
-
-WEBPACK_DATA_OSS = WEBPACK_DATA_COMMON
 
 WEBPACK_DATA_CCL = WEBPACK_DATA_COMMON + glob(["ccl/**"])
 
@@ -91,85 +87,20 @@ webpack_bin.webpack_cli(
         "db-console-ccl/assets/questionMap.svg",
     ],
     args = [
-        "--config webpack.config.js",
-        "--env.dist=ccl",
-        "--mode production",
-        "--env.output=./db-console-ccl",
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "dist=ccl",
+        "--mode",
+        "production",
+        "--env",
+        "output=./db-console-ccl",
     ],
     chdir = package_name(),
     env = {
         "NODE_OPTIONS": "--max-old-space-size=5000",
     },
     visibility = ["//visibility:public"],
-)
-
-webpack_bin.webpack_cli(
-    name = "db-console-oss",
-    srcs = WEBPACK_SRCS + WEBPACK_DATA_OSS + [
-        ":node_modules",
-    ],
-    outs = [
-        "db-console-oss/assets/Inconsolata-Regular.woff",
-        "db-console-oss/assets/Inconsolata-Regular.woff2",
-        "db-console-oss/assets/Lato-Bold.woff",
-        "db-console-oss/assets/Lato-Bold.woff2",
-        "db-console-oss/assets/Lato-Light.woff",
-        "db-console-oss/assets/Lato-Light.woff2",
-        "db-console-oss/assets/Lato-Medium.woff",
-        "db-console-oss/assets/Lato-Medium.woff2",
-        "db-console-oss/assets/Lato-Regular.woff",
-        "db-console-oss/assets/Lato-Regular.woff2",
-        "db-console-oss/assets/RobotoMono-Bold.woff",
-        "db-console-oss/assets/RobotoMono-Bold.woff2",
-        "db-console-oss/assets/RobotoMono-Medium.woff",
-        "db-console-oss/assets/RobotoMono-Medium.woff2",
-        "db-console-oss/assets/RobotoMono-Regular.woff",
-        "db-console-oss/assets/RobotoMono-Regular.woff2",
-        "db-console-oss/assets/SFMono-Semibold.woff",
-        "db-console-oss/assets/SFMono-Semibold.woff2",
-        "db-console-oss/assets/SourceSansPro-Bold.woff",
-        "db-console-oss/assets/SourceSansPro-Bold.woff2",
-        "db-console-oss/assets/SourceSansPro-Regular.woff",
-        "db-console-oss/assets/SourceSansPro-Regular.woff2",
-        "db-console-oss/assets/SourceSansPro-SemiBold.woff",
-        "db-console-oss/assets/SourceSansPro-SemiBold.woff2",
-        "db-console-oss/assets/bundle.js",
-        "db-console-oss/assets/email_signup_bg.png",
-        "db-console-oss/assets/favicon.ico",
-        "db-console-oss/assets/heroBannerLp.png",
-        "db-console-oss/assets/login-background.png",
-        "db-console-oss/assets/not-found.svg",
-    ],
-    args = [
-        "--config webpack.config.js",
-        "--env.dist=oss",
-        "--mode production",
-        "--env.output=./db-console-oss",
-    ],
-    chdir = package_name(),
-    env = {
-        "NODE_OPTIONS": "--max-old-space-size=5000",
-    },
-    visibility = ["//visibility:public"],
-)
-
-stylint_bin.stylint_test(
-    name = "stylint",
-    args = [
-        "-c .stylintrc",
-        "styl",
-    ],
-    chdir = package_name(),
-    copy_data_to_bin = False,
-    data = [
-        ".stylintrc",
-        "fonts",
-        ":node_modules",
-    ] + glob([
-        "fonts/**",
-        "src/**",
-        "styl/**",
-    ]),
 )
 
 eslint_bin.eslint_test(
@@ -214,7 +145,6 @@ test_suite(
     name = "lint",
     tests = [
         ":eslint",
-        ":stylint",
         ":typecheck",
     ],
 )

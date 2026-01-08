@@ -11,7 +11,7 @@ import { trustIcon } from "src/util/trust";
 import collapseIcon from "!!raw-loader!assets/collapse.svg";
 import expandIcon from "!!raw-loader!assets/expand.svg";
 
-import "./expandable.styl";
+import "./expandable.scss";
 
 const truncateLength = 50;
 

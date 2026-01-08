@@ -31,7 +31,7 @@ import {
   SummaryValue,
 } from "src/views/shared/components/summaryBar";
 
-import "./nodeOverview.styl";
+import "./nodeOverview.scss";
 
 import {
   LiveBytesTooltip,

@@ -7,7 +7,7 @@ import classnames from "classnames";
 import React from "react";
 import { OptionComponentProps } from "react-select";
 
-import "./metricOption.styl";
+import "./metricOption.scss";
 
 export const MetricOption = React.memo(
   (props: OptionComponentProps<string>) => {

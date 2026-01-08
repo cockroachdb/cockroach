@@ -25,7 +25,7 @@ import { nodeIDAttr } from "src/util/constants";
 import { INodeStatus } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
-import "./logs.styl";
+import "./logs.scss";
 
 type LogEntries = protos.cockroach.util.log.IEntry;
 

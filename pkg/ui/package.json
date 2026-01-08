@@ -8,8 +8,9 @@
     "pnpm": ">=8.6.10"
   },
   "pnpm": {
-    "neverBuiltDependencies": [
-      "contextify"
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "protobufjs"
     ],
     "packageExtensions": {
       "// meta": [
