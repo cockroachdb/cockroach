@@ -783,7 +783,7 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	dUnaccounted := dTotal - dSnap - dAppend - dApply - dPebble
 
 	{
-		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs, ",
+		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs",
 			dTotal.Seconds(), dAppend.Seconds(), dApply.Seconds())
 		if s.append.Sync {
 			var sync redact.SafeString
@@ -792,7 +792,7 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 			} else {
 				sync = "sync"
 			}
-			p.Printf("%s=%.2fs", sync, dPebble.Seconds())
+			p.Printf(", %s=%.2fs", sync, dPebble.Seconds())
 		}
 	}
 	if dSnap > 0 {
