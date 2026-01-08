@@ -1462,7 +1462,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// Explicitly mark with user errors for codes that we know
 				// cannot be retried.
 				if code := pgerror.GetPGCode(err); code == pgcode.FeatureNotSupported ||
-					code == pgcode.InvalidParameterValue {
+					code == pgcode.InvalidParameterValue ||
+					code == pgcode.InvalidTextRepresentation {
 					return scerrors.SchemaChangerUserError(err)
 				}
 				return err
