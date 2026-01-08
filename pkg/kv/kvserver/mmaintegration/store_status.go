@@ -25,15 +25,15 @@ import (
    - Suspect:          LastUnavailable was within last 5min (TimeAfterNodeSuspect).
    - Available:        None of the above; store is healthy.
 
-     | StorePool Status | MMA Health      | Lease Disposition | Replica Disposition | Rationale
-     |------------------|-----------------|-------------------|---------------------|------------------------------------------------------------------------------------------------|
-     | Dead             | HealthDead      | Shedding          | Shedding            | Store is gone: shed everything   (matches SMA)
-     | Decommissioning  | HealthOK        | Shedding          | Shedding            | Store is leaving cluster: shed everything   (SMA allows leases, MMA more aggressive)
-     | Unknown          | HealthUnknown   | Refusing          | Refusing            | State is unknown: don't add but don't remove either   (SMA sheds leases, MMA more conservative)
-     | Draining         | HealthOK        | Shedding          | Refusing            | Store is draining: shed leases, don't add new replicas   (matches SMA)
-     | Throttled        | HealthOK        | OK                | Refusing            | Store recently rejected snapshots: accept leases but not replicas   (matches SMA)
-     | Suspect          | HealthUnhealthy | Shedding          | Refusing            | Recently unavailable: shed leases for safety and don't accept replicas   (matches SMA)
-     | Available        | HealthOK        | OK                | OK                  | Healthy store: accept all   (matches SMA)
+    | StorePool Status | MMA Health      | Lease Disposition | Replica Disposition | Rationale
+    |------------------|-----------------|-------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------|
+    | Dead             | HealthDead      | Shedding          | Shedding            | Store is gone: shed everything   (matches SMA)
+    | Decommissioning  | HealthOK        | Refusing          | Shedding            | Store is leaving cluster: shed replicas (leases transfer with them) and refuse leases (SMA allows leases, MMA more aggressive)
+    | Unknown          | HealthUnknown   | Shedding          | Refusing            | State is unknown: don't shed replicas but shed leases since it is important for availability (matches SMA)
+    | Draining         | HealthOK        | Shedding          | Refusing            | Store is draining: shed leases, don't add new replicas   (matches SMA)
+    | Throttled        | HealthOK        | OK                | Refusing            | Store recently rejected snapshots: accept leases but not replicas   (matches SMA)
+    | Suspect          | HealthUnhealthy | Shedding          | Refusing            | Recently unavailable: shed leases for safety and don't accept replicas   (matches SMA)
+    | Available        | HealthOK        | OK                | OK                  | Healthy store: accept all (matches SMA)
 
  SMA Behavior Reference:
  Replica Shedding:
@@ -62,13 +62,13 @@ func translateStorePoolStatusToMMA(spStatus storepool.StoreStatus) mmaprototype.
 	case storepool.StoreStatusDecommissioning:
 		return mmaprototype.MakeStatus(
 			mmaprototype.HealthOK,
-			mmaprototype.LeaseDispositionShedding,
+			mmaprototype.LeaseDispositionRefusing,
 			mmaprototype.ReplicaDispositionShedding,
 		)
 	case storepool.StoreStatusUnknown:
 		return mmaprototype.MakeStatus(
 			mmaprototype.HealthUnknown,
-			mmaprototype.LeaseDispositionRefusing,
+			mmaprototype.LeaseDispositionShedding,
 			mmaprototype.ReplicaDispositionRefusing,
 		)
 	case storepool.StoreStatusDraining:
