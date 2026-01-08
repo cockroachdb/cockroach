@@ -530,11 +530,17 @@ func (c *coordinatorStreamUpdater) UpdateProgress(
 	if err != nil {
 		return errors.Wrap(err, "unable to marshal TTL processor progress")
 	}
+	// Since we're reusing completedSpansSinceLastUpdate between updates, we
+	// must make a copy to include into the progress (otherwise, there is a race
+	// between new completed spans being accumulated and the progress update
+	// metadata being serialized).
+	completedSpansCopy := make([]roachpb.Span, len(c.mu.completedSpansSinceLastUpdate))
+	copy(completedSpansCopy, c.mu.completedSpansSinceLastUpdate)
 	meta := &execinfrapb.ProducerMetadata{
 		BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
 			// The checkpointProgressTracker will treat CompletedSpans in this message
 			// to be the number of spans completed since the last message.
-			CompletedSpans:  c.mu.completedSpansSinceLastUpdate,
+			CompletedSpans:  completedSpansCopy,
 			ProgressDetails: *progressAny,
 			NodeID:          nodeID,
 			FlowID:          c.proc.FlowCtx.ID,
