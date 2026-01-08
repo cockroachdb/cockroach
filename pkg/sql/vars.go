@@ -4380,9 +4380,6 @@ var varGen = map[string]sessionVar{
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowUnsafeInternals), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			if defaultAllowUnsafeInternals.Get(sv) {
-				return "on"
-			}
 			return "off"
 		},
 	},
