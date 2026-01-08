@@ -1,0 +1,987 @@
+# LogicTest: local
+
+let $forecast
+SHOW CLUSTER SETTING sql.stats.forecasts.enabled;
+
+# To avoid test flake.
+statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
+CREATE TABLE canary_table (x int primary key, y int, FAMILY (x, y)) WITH (sql_stats_canary_window = '20s');
+INSERT INTO canary_table VALUES (1, 1);
+
+query TT
+SHOW CREATE TABLE canary_table
+----
+canary_table  CREATE TABLE public.canary_table (
+                x INT8 NOT NULL,
+                y INT8 NULL,
+                CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+                FAMILY fam_0_x_y (x, y)
+              ) WITH (sql_stats_canary_window = '20s');
+
+let $table_creation_ts
+SELECT now()
+
+statement ok
+ALTER TABLE canary_table SET (sql_stats_canary_window = '30s');
+
+query TT
+SHOW CREATE TABLE canary_table
+----
+canary_table  CREATE TABLE public.canary_table (
+                x INT8 NOT NULL,
+                y INT8 NULL,
+                CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+                FAMILY fam_0_x_y (x, y)
+              ) WITH (sql_stats_canary_window = '30s');
+
+query T
+SELECT create_statement FROM crdb_internal.create_statements AS OF SYSTEM TIME '$table_creation_ts' WHERE descriptor_name = 'canary_table';
+----
+CREATE TABLE public.canary_table (
+  x INT8 NOT NULL,
+  y INT8 NULL,
+  CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+  FAMILY fam_0_x_y (x, y)
+) WITH (sql_stats_canary_window = '20s')
+
+subtest canary_stats_with_query_cache
+
+# Test with stable stats, which should have the normal usage of query cache.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# The first execution should miss the query cache.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# The second execution should hit the query cache.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# Now we test the case where always use canary stats, which doesn't
+# interact with query cache at all.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+not using query cache
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+not using query cache
+
+# Switching back to using stable stats, and the same query should still be
+# able to hit the query cache.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0.0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# We should see the original cache is still there.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+subtest end
+
+subtest prepared_statements
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+
+statement ok
+PREPARE p1 AS SELECT * FROM canary_table WHERE x = $1;
+
+query II
+EXECUTE p1(1);
+----
+1  1
+
+# Test with prepared statement without placeholder.
+statement ok
+PREPARE p2 AS SELECT * FROM canary_table WHERE x = 1;
+
+query II
+EXECUTE p2;
+----
+1  1
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+subtest end
+
+subtest prepared_statements_with_query_cache
+
+statement ok
+DEALLOCATE ALL;
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+SET TRACING = "on", cluster;
+
+# We are using stable stats for every query, so the query cache should be used.
+statement ok
+PREPARE p1 AS SELECT * from canary_table;
+PREPARE p2 AS SELECT * from canary_table;
+PREPARE p3 AS SELECT * from canary_table WHERE x = $1;
+PREPARE p4 AS SELECT * from canary_table WHERE x = $1;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+query cache miss (prepare)
+query cache hit (prepare)
+query cache miss (prepare)
+query cache hit (prepare)
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p1;
+EXECUTE p2;
+EXECUTE p3(1);
+EXECUTE p3(1);
+EXECUTE p4(1);
+EXECUTE p4(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# We are using canary stats for all queries now, but we don't roll the dice
+# for prepared statement. I.e. the prepare stmt would still be cached,
+# and memo would still be built with stable stats and cached within the prepared
+# statement.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+# p5, p6 are based on the same queries as p1, p3 respectively, so they
+# should hit the query cache. p7 is a new query so it should see a query
+# cache miss, but itself would be cached. p8 is based on the same query as
+# p7, so it should hit the query cache.
+statement ok
+PREPARE p5 AS SELECT * from canary_table;
+PREPARE p6 AS SELECT * from canary_table WHERE x = $1;
+PREPARE p7 AS SELECT * from canary_table WHERE y = $1;
+PREPARE p8 AS SELECT * from canary_table WHERE y = $1;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+query cache hit (prepare)
+query cache hit (prepare)
+query cache miss (prepare)
+query cache hit (prepare)
+
+statement ok
+SET TRACING = "on", cluster;
+
+# For execution, we roll the dice for every one. Since we have canary_fraction=1.0,
+# all execution will not use the query cache nor the cached memo within
+# the prepared statement. Thus we should see "not using query cache" for all executions.
+statement ok
+EXECUTE p5;
+EXECUTE p5;
+EXECUTE p6(1);
+EXECUTE p6(1);
+EXECUTE p3(1);
+EXECUTE p3(1);
+EXECUTE p7(1);
+EXECUTE p7(1);
+EXECUTE p8(1);
+EXECUTE p8(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+not using query cache
+
+# We now switch back to the "everyone use stable stats" mode. At this moment
+# executing a prepared stmt that is created while canary_fration == 1.0 should
+# still be able to use the cached memo.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0';
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p7(1);
+EXECUTE p7(1);
+EXECUTE p8(1);
+EXECUTE p8(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+subtest end
+
+subtest simple_auto_stats_collection
+
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY) WITH (sql_stats_canary_window = '70s');
+
+# Only one stats.
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 10
+  }
+]'
+
+statement ok
+SET stats_as_of = '2000-01-01 00:00:30.000000'
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 10 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# Stable path should see stats missing.
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1 (missing stats)
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (missing stats)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# Re-initiate with multiple auto stats.
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 10,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:02:00.000000",
+    "distinct_count": 20,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 20
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:03:00.000000",
+    "distinct_count": 30,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 30
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:04:00.000000",
+    "distinct_count": 40,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 40
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "2000-01-01 00:05:00.000000",
+    "distinct_count": 55,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 55
+  }
+]'
+
+query TTTIB colnames
+SELECT created, statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY column_names, created DESC
+----
+created                        statistics_name  column_names  row_count  delay_delete
+2000-01-01 00:05:00 +0000 UTC  __auto__         {a}           55         false
+2000-01-01 00:04:00 +0000 UTC  __auto__         {a}           40         false
+2000-01-01 00:03:00 +0000 UTC  __auto__         {a}           30         false
+2000-01-01 00:02:00 +0000 UTC  __auto__         {a}           20         false
+2000-01-01 00:01:00 +0000 UTC  __auto__         {a}           10         false
+
+statement ok
+SET stats_as_of = '2000-01-01 00:05:10.000000'
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 55 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# Given the as of timestamp is '2000-01-01 00:05:10.000000' and the table canary
+# window is 70s, the latest stats is not promoted as a stable stats yet.
+# So for stable path, we will pick the second latest stats (row_count = 40)
+# for planning.
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 40 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET optimizer_use_forecasts = on
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = 'true'
+
+query TTTIB colnames
+SELECT created, statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH FORECAST] ORDER BY column_names, created DESC
+----
+created                        statistics_name  column_names  row_count  delay_delete
+2000-01-01 00:06:00 +0000 UTC  __forecast__     {a}           64         false
+2000-01-01 00:05:00 +0000 UTC  __auto__         {a}           55         false
+2000-01-01 00:04:00 +0000 UTC  __auto__         {a}           40         false
+2000-01-01 00:03:00 +0000 UTC  __auto__         {a}           30         false
+2000-01-01 00:02:00 +0000 UTC  __auto__         {a}           20         false
+2000-01-01 00:01:00 +0000 UTC  __auto__         {a}           10         false
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 64 (100% of the table; stats collected <hidden> ago; using stats forecast)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET canary_stats_mode = off
+
+# For the stable path, we are using the "old" forecast stats (row_count=50),
+# which is calculated based on the auto stats with row_count={10, 20, 30, 40}.
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 50 (100% of the table; stats collected <hidden> ago; using stats forecast)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+subtest end
+
+# For constrained_partial_stats, we test with the following operations:
+# 1. Inject 2 full stats with row_count = {9, 12}
+# 2. Push a partial stats, which makes a merged stats with row_count = 14
+# 3. Run COUNT(*). The stable plan should use row_count = 9, and the canary plan should use row_count = 14.
+# 4. Inject another partial stats, which makes a merged stats with row_count = 16.
+# 5. Run COUNT(*). The stable plan should use row_count = 9, and the canary plan should use row_count = 16.
+# 6. Push another full stats and another partial stats, making a new merged stats with row_count = 18.
+# 7. Run COUNT(*). The stable plan should use row_count = 16, and the canary plan should use row_count = 18.
+subtest constrained_partial_stats
+
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+
+# Inject initial full stats with histograms, so that the partial stats
+# that will be appended later can be merged with the latest one.
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-07 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:00:30.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 12
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:01:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTTIB colnames
+SELECT created, statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+created                        statistics_name  column_names  row_count  delay_delete
+1988-08-08 00:01:00 +0000 UTC  __merged__       {a}           14         false
+1988-08-08 00:01:00 +0000 UTC  partial          {a}           10         false
+1988-08-08 00:00:30 +0000 UTC  __auto__         {a}           12         false
+1988-08-07 00:00:00 +0000 UTC  __auto__         {a}           9          false
+
+statement ok
+SET stats_as_of = '1988-08-08 00:20:00.000000'
+
+# Set a large canary window so that the latest stats will never be promoted.
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '3600s');
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 14 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 9 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# We now push another partial stats, which should update the merged stats.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:02:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 12,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTTIB colnames
+SELECT created, statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+created                        statistics_name  column_names  row_count  delay_delete
+1988-08-08 00:02:00 +0000 UTC  __merged__       {a}           16         false
+1988-08-08 00:02:00 +0000 UTC  partial          {a}           12         false
+1988-08-08 00:01:00 +0000 UTC  partial          {a}           10         false
+1988-08-08 00:00:30 +0000 UTC  __auto__         {a}           12         false
+1988-08-07 00:00:00 +0000 UTC  __auto__         {a}           9          false
+
+# For the canary path, it should use the latest merged stats (row_count = 16).
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 16 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# For the stable path, it should use the second latest full stats (row_count = 9).
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 9 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+# We now push another full stats. The previous partial stats are not removed yet,
+# since we need them to construct the merged stats for the stable path.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[{
+    "avg_size": 1,
+    "columns": [
+     "a"
+    ],
+    "created_at": "1988-08-09 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "0"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "1"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "2"
+     }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 18
+}]'
+
+query TTTIB colnames
+SELECT created, statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+created                        statistics_name  column_names  row_count  delay_delete
+1988-08-09 00:00:00 +0000 UTC  __auto__         {a}           18         false
+1988-08-08 00:02:00 +0000 UTC  partial          {a}           12         true
+1988-08-08 00:01:00 +0000 UTC  partial          {a}           10         true
+1988-08-08 00:00:30 +0000 UTC  __auto__         {a}           12         false
+1988-08-07 00:00:00 +0000 UTC  __auto__         {a}           9          false
+
+statement ok
+SET stats_as_of = '1988-08-09 00:00:10.000000'
+
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 18 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET canary_stats_mode = off
+
+# For the stable path, we are using the previous __merged__ stats (with row_count = 16).
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 16 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+subtest end
+
+subtest time_travel_stats_limitation
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2024-01-01 10:00:00.000000",
+    "row_count": 1000,
+    "distinct_count": 1000,
+    "null_count": 0,
+    "avg_size": 8
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2024-01-02 10:00:00.000000",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "null_count": 0,
+    "avg_size": 8
+  }
+]'
+
+statement ok
+SET canary_stats_mode = off
+
+# Set stats_as_of to before the stable stats (2024-01-01 10:00:00.000000).
+statement ok
+SET stats_as_of = '2024-01-01 09:00:00'
+
+statement ok
+SET TRACING = on
+
+# Execute a query that will trigger stats lookup, we should see that stable
+# stats is used.
+query T
+EXPLAIN (VERBOSE) SELECT count(*) FROM t;
+----
+distribution: local
+vectorized: true
+·
+• group (scalar)
+│ columns: (count)
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      estimated row count: 1,000 (100% of the table; stats collected <hidden> ago)
+      table: t@t_pkey
+      spans: FULL SCAN
+
+statement ok
+SET TRACING = off
+
+query B
+SELECT count(*) > 0
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE 'time-travel stats limitation:%'
+----
+true
+
+subtest end
+
+statement ok
+SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecast;

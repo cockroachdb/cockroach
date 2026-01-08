@@ -120,6 +120,13 @@ func TestExecBuild_call_plpgsql(
 	runExecBuildLogicTest(t, "call_plpgsql")
 }
 
+func TestExecBuild_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "canary_stats")
+}
+
 func TestExecBuild_cascade(
 	t *testing.T,
 ) {
