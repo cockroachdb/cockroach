@@ -2219,14 +2219,24 @@ func (cs *clusterState) updateStoreStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
 	for storeID, storeStatus := range storeStatuses {
-		if _, ok := cs.stores[storeID]; !ok {
+		ss, ok := cs.stores[storeID]
+		if !ok {
 			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
 			// setStore when gossip arrives, and then subsequent status updates will
 			// take effect.
 			log.KvDistribution.Infof(ctx, "store %d not found in cluster state, skipping update", storeID)
 			continue
 		}
-		cs.stores[storeID].status = storeStatus
+		// Augment the replica disposition based on disk utilization.
+		// We use adjusted load (which includes pending changes) to account for
+		// in-flight replica additions that haven't completed yet.
+		ss.status = storeStatus
+		if ss.capacity[ByteSize] != UnknownCapacity && ss.capacity[ByteSize] > 0 {
+			diskUtil := float64(ss.adjusted.load[ByteSize]) / float64(ss.capacity[ByteSize])
+			if diskUtil > 0.9 {
+				ss.status.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionRefusing)
+			}
+		}
 	}
 }
 
