@@ -83,7 +83,7 @@ type YAMLOutput struct {
 
 var (
 	manPath            string
-	percentileSuffixes = []string{"-p99.999", "-p99.99", "-p99.9", "-p99", "-p90", "-p75", "-p50"}
+	percentileSuffixes = []string{"-p99.999", "-p99.99", "-p99.9", "-p99", "-p90", "-p75", "-p50", "-max"}
 )
 
 var genManCmd = &cobra.Command{
@@ -360,6 +360,7 @@ var genCmds = []*cobra.Command{
 	genSettingsListCmd,
 	genMetricListCmd,
 	genEncryptionKeyCmd,
+	genDashboardCmd,
 }
 
 func init() {
