@@ -1,0 +1,1903 @@
+dashboards:
+  - title: "Overview"
+    graphs:
+      - title: "SQL Queries Per Second"
+        tooltip: "A moving average of the number of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second."
+        axis:
+          label: "queries per second"
+        group_by_storage: false
+        metrics:
+          - name: "cr.node.sql.select.count"
+            title: "Selects"
+          - name: "cr.node.sql.update.count"
+            title: "Updates"
+          - name: "cr.node.sql.insert.count"
+            title: "Inserts"
+          - name: "cr.node.sql.delete.count"
+            title: "Deletes"
+          - name: "cr.node.sql.crud_query.count"
+            title: "Total Queries"
+
+      - title: "Service Latency: SQL Statements, 99th percentile"
+        tooltip: "Over the last minute, this node executed 99% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.service.latency-p99"
+            title: "Service Latency p99"
+
+      - title: "SQL Statement Contention"
+        tooltip: "A moving average of the number of SQL statements executed per second that experienced contention."
+        axis:
+          label: "Average number of queries per second"
+        group_by_storage: false
+        metrics:
+          - name: "cr.node.sql.distsql.contended_queries.count"
+            title: "Contention"
+
+      - title: "Replicas per Node"
+        tooltip: "The number of range replicas stored on this node. Ranges are subsets of your data, which are replicated to ensure survivability."
+        axis:
+          label: "replicas"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.replicas"
+            title: "Replicas"
+
+      - title: "Capacity"
+        tooltip: "Capacity graph showing storage metrics"
+        axis:
+          label: "capacity"
+          units: "Bytes"
+        group_by_storage: false
+        metrics:
+          - name: "cr.store.capacity"
+            title: "Max"
+          - name: "cr.store.capacity.available"
+            title: "Available"
+          - name: "cr.store.capacity.used"
+            title: "Used"
+
+  - title: "Hardware"
+    graphs:
+      - title: "CPU Percent"
+        tooltip: "CPU usage for the CRDB nodes"
+        axis:
+          label: "CPU"
+          units: "Percentage"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.cpu.combined.percent-normalized"
+            title: "CPU Usage"
+
+      - title: "Host CPU Percent"
+        tooltip: "Machine-wide CPU usage"
+        axis:
+          label: "CPU"
+          units: "Percentage"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.cpu.host.combined.percent-normalized"
+            title: "Host CPU Usage"
+
+      - title: "Memory Usage"
+        tooltip: "Memory in use"
+        axis:
+          label: "memory usage"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.rss"
+            title: "Memory"
+
+      - title: "Disk Read Bytes/s"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.disk.read.bytes"
+            title: "Disk Read"
+
+      - title: "Disk Write Bytes/s"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.disk.write.bytes"
+            title: "Disk Write"
+
+      - title: "Disk Read IOPS"
+        axis:
+          label: "IOPS"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.disk.read.count"
+            title: "Read IOPS"
+
+      - title: "Disk Write IOPS"
+        axis:
+          label: "IOPS"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.disk.write.count"
+            title: "Write IOPS"
+
+      - title: "Disk Ops In Progress"
+        axis:
+          label: "Ops"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.disk.iopsinprogress"
+            title: "Ops In Progress"
+
+      - title: "Available Disk Capacity"
+        axis:
+          label: "capacity"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.capacity.available"
+            title: "Available Capacity"
+
+  - title: "Runtime"
+    graphs:
+      - title: "Live Node Count"
+        tooltip: "The number of live nodes in the cluster."
+        axis:
+          label: "nodes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.liveness.livenodes"
+            title: "Live Nodes"
+
+      - title: "Memory Usage"
+        tooltip: "Memory in use by CockroachDB"
+        axis:
+          label: "memory usage"
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.sys.rss"
+            title: "Total memory (RSS)"
+          - name: "cr.node.sys.go.allocbytes"
+            title: "Go Allocated"
+          - name: "cr.node.sys.go.totalbytes"
+            title: "Go Total"
+          - name: "cr.node.sys.go.limitbytes"
+            title: "Go Limit"
+          - name: "cr.node.sys.cgo.allocbytes"
+            title: "CGo Allocated"
+          - name: "cr.node.sys.cgo.totalbytes"
+            title: "CGo Total"
+
+      - title: "Goroutine Count"
+        tooltip: "The number of Goroutines. This count should rise and fall based on load."
+        axis:
+          label: "goroutines"
+          units: "Count"
+        metrics:
+          - name: "cr.node.sys.goroutines"
+            title: "Goroutines"
+
+      - title: "Goroutine Scheduling Latency: 99th percentile"
+        tooltip: "P99 scheduling latency for goroutines"
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.go.scheduler_latency-p99"
+            title: "Scheduling Latency p99"
+
+      - title: "Runnable Goroutines per CPU"
+        tooltip: "The number of Goroutines waiting for CPU. This count should rise and fall based on load."
+        axis:
+          label: "goroutines"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.runnable.goroutines.per.cpu"
+            title: "Runnable Goroutines per CPU"
+
+      - title: "GC Runs"
+        tooltip: "The number of times that Go's garbage collector was invoked per second."
+        axis:
+          label: "runs"
+        metrics:
+          - name: "cr.node.sys.gc.count"
+            title: "GC Runs"
+
+      - title: "GC Pause Time"
+        tooltip: "The amount of processor time used by Go's garbage collector per second. During garbage collection, application code execution is paused."
+        axis:
+          label: "pause time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.sys.gc.pause.ns"
+            title: "GC Pause Time"
+
+      - title: "GC Stopping Time"
+        tooltip: "The time it takes from deciding to stop-the-world (gc related) until all Ps are stopped."
+        axis:
+          label: "pause time"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.gc.stop.ns"
+            title: "GC Stopping Time"
+
+      - title: "GC Assist Time"
+        tooltip: "Estimated total CPU time user goroutines spent performing GC tasks on processors."
+        axis:
+          label: "gc assist time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.sys.gc.assist.ns"
+            title: "GC Assist Time"
+
+      - title: "Non-GC Pause Time"
+        tooltip: "The stop-the-world pause time during non-gc process."
+        axis:
+          label: "pause time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.sys.go.pause.other.ns"
+            title: "Non-GC Pause Time"
+
+      - title: "Non-GC Stopping Time"
+        tooltip: "The time it takes from deciding to stop-the-world (non-gc-related) until all Ps are stopped."
+        axis:
+          label: "pause time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.sys.go.stop.other.ns"
+            title: "Non-GC Stopping Time"
+
+      - title: "CPU Time"
+        tooltip: "The amount of CPU time used by CockroachDB (User) and system-level operations (Sys)."
+        axis:
+          label: "cpu time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.sys.cpu.user.ns"
+            title: "User CPU Time"
+          - name: "cr.node.sys.cpu.sys.ns"
+            title: "Sys CPU Time"
+
+      - title: "Clock Offset"
+        tooltip: "Mean clock offset of each node against the rest of the cluster."
+        axis:
+          label: "offset"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.clock-offset.meannanos"
+            title: "Clock Offset"
+
+  - title: "Networking"
+    graphs:
+      - title: "Network Bytes Sent"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.net.send.bytes"
+            title: "Bytes Sent"
+
+      - title: "Network Bytes Received"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.net.recv.bytes"
+            title: "Bytes Received"
+
+      - title: "RPC Heartbeat Latency: 50th percentile"
+        tooltip: "Round-trip latency for recent successful outgoing heartbeats."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.round-trip-latency-p50"
+            title: "Latency p50"
+
+      - title: "RPC Heartbeat Latency: 99th percentile"
+        tooltip: "Round-trip latency for recent successful outgoing heartbeats."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.round-trip-latency-p99"
+            title: "Latency p99"
+
+      - title: "Unhealthy RPC Connections"
+        tooltip: "The number of outgoing connections on each node that are in an unhealthy state."
+        axis:
+          label: "connections"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.rpc.connection.unhealthy"
+            title: "Unhealthy Connections"
+
+      - title: "Network Packet Errors and Drops"
+        axis:
+          label: "packets"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.net.recv.err"
+            title: "Recv Errors"
+          - name: "cr.node.sys.host.net.recv.drop"
+            title: "Recv Drops"
+          - name: "cr.node.sys.host.net.send.err"
+            title: "Send Errors"
+          - name: "cr.node.sys.host.net.send.drop"
+            title: "Send Drops"
+
+      - title: "TCP Retransmits"
+        tooltip: "The number of TCP segments retransmitted. Some retransmissions are benign, but phase changes can be indicative of network congestion or overloaded peers."
+        axis:
+          label: "segments"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.host.net.send.tcp.retrans_segs"
+            title: "Retransmitted Segments"
+
+      - title: "Proxy requests"
+        tooltip: "The number of proxy attempts each gateway node is initiating."
+        axis:
+          label: "requests"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.distsender.rpc.proxy.sent"
+            title: "Proxy Requests"
+
+      - title: "Proxy request errors"
+        tooltip: "The number of proxy attempts which resulted in an error."
+        axis:
+          label: "errors"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.distsender.rpc.proxy.err"
+            title: "Proxy Errors"
+
+      - title: "Proxy forwards"
+        tooltip: "The number of proxy requests each server node is attempting to foward."
+        axis:
+          label: "requests"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.distsender.rpc.proxy.forward.sent"
+            title: "Proxy Forwards"
+
+      - title: "Proxy forward errors"
+        tooltip: "The number of proxy forward attempts which resulted in an error."
+        axis:
+          label: "errors"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.distsender.rpc.proxy.forward.err"
+            title: "Proxy Forward Errors"
+
+  - title: "SQL"
+    graphs:
+      - title: "Open SQL Sessions"
+        tooltip: "The total number of open SQL Sessions."
+        axis:
+          label: "connections"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.conns"
+            title: "Open Sessions"
+
+      - title: "SQL Connection Rate"
+        tooltip: "Rate of SQL connection attempts"
+        axis:
+          label: "connections per second"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.new_conns"
+            title: "Connection Rate"
+
+      - title: "Upgrades of SQL Transaction Isolation Level"
+        tooltip: "The total number of times a SQL transaction was upgraded to a stronger isolation level. If this metric is non-zero, then your application may be affected by the upcoming support of additional isolation levels."
+        axis:
+          label: "transactions"
+        metrics:
+          - name: "cr.node.sql.txn.upgraded_iso_level.count"
+            title: "Upgrades of Transaction Isolation Level"
+
+      - title: "Open SQL Transactions"
+        tooltip: "The total number of open SQL transactions."
+        axis:
+          label: "transactions"
+        metrics:
+          - name: "cr.node.sql.txns.open"
+            title: "Open Transactions"
+
+      - title: "Active SQL Statements"
+        tooltip: "The total number of running SQL statements."
+        axis:
+          label: "queries"
+        metrics:
+          - name: "cr.node.sql.statements.active"
+            title: "Active Statements"
+
+      - title: "SQL Byte Traffic"
+        tooltip: "The total amount of SQL client network traffic in bytes per second."
+        axis:
+          label: "byte traffic"
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.sql.bytesin"
+            title: "Bytes In"
+          - name: "cr.node.sql.bytesout"
+            title: "Bytes Out"
+
+      - title: "SQL Queries Per Second"
+        tooltip: "A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements, and the sum of all four, successfully executed per second."
+        axis:
+          label: "queries"
+        metrics:
+          - name: "cr.node.sql.select.count"
+            title: "Selects"
+          - name: "cr.node.sql.update.count"
+            title: "Updates"
+          - name: "cr.node.sql.insert.count"
+            title: "Inserts"
+          - name: "cr.node.sql.delete.count"
+            title: "Deletes"
+          - name: "cr.node.sql.crud_query.count"
+            title: "Total Queries"
+
+      - title: "SQL Queries Within Routines Per Second"
+        tooltip: "A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements executed within routines (user-defined functions and stored procedures)."
+        axis:
+          label: "queries within routines"
+        metrics:
+          - name: "cr.node.sql.routine.select.count"
+            title: "Selects"
+          - name: "cr.node.sql.routine.update.count"
+            title: "Updates"
+          - name: "cr.node.sql.routine.insert.count"
+            title: "Inserts"
+          - name: "cr.node.sql.routine.delete.count"
+            title: "Deletes"
+
+      - title: "SQL Statement Errors"
+        tooltip: "The number of statements which returned a planning, runtime, or client-side retry error."
+        axis:
+          label: "errors"
+        metrics:
+          - name: "cr.node.sql.failure.count"
+            title: "Errors"
+
+      - title: "SQL Statement Contention"
+        tooltip: "The total number of SQL statements that experienced contention."
+        axis:
+          label: "queries"
+        metrics:
+          - name: "cr.node.sql.distsql.contended_queries.count"
+            title: "Contention"
+
+      - title: "Full Table/Index Scans"
+        tooltip: "The total number of full table/index scans per second."
+        axis:
+          label: "full scans per second"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.full.scan.count"
+            title: "Full Scans"
+
+      - title: "Transaction Deadlocks"
+        tooltip: "The total number of transaction per second; typically, should be 0."
+        axis:
+          label: "transaction deadlocks per second"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.txnwaitqueue.deadlocks_total"
+            title: "Deadlocks"
+
+      - title: "Active Flows for Distributed SQL Statements"
+        tooltip: "The number of flows on each node contributing to currently running distributed SQL statements."
+        axis:
+          label: "flows"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.distsql.flows.active"
+            title: "Active Flows"
+
+      - title: "Failed SQL Connections"
+        tooltip: "The total number of failed SQL connection attempts."
+        axis:
+          label: "failed connections"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.conn.failures"
+            title: "Number of Failed SQL Connections"
+
+      - title: "Connection Latency: 99th percentile"
+        tooltip: "Over the last minute, this node established and authenticated 99% of connections within this time."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.conn.latency-p99"
+            title: "Connection Latency p99"
+
+      - title: "Connection Latency: 90th percentile"
+        tooltip: "Over the last minute, this node established and authenticated 90% of connections within this time."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.conn.latency-p90"
+            title: "Connection Latency p90"
+
+      - title: "Service Latency: SQL Statements, 99.99th percentile"
+        tooltip: "Over the last minute, this node executed 99.99% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.service.latency-p99.99"
+            title: "Service Latency p99.99"
+
+      - title: "Service Latency: SQL Statements, 99.9th percentile"
+        tooltip: "Over the last minute, this node executed 99.9% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.service.latency-p99.9"
+            title: "Service Latency p99.9"
+
+      - title: "Service Latency: SQL Statements, 99th percentile"
+        tooltip: "Over the last minute, this node executed 99% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.service.latency-p99"
+            title: "Service Latency p99"
+
+      - title: "Service Latency: SQL Statements, 90th percentile"
+        tooltip: "Over the last minute, this node executed 90% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.service.latency-p90"
+            title: "Service Latency p90"
+
+      - title: "KV Execution Latency: 99th percentile"
+        tooltip: "The 99th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.exec.latency-p99"
+            title: "KV Execution Latency p99"
+
+      - title: "KV Execution Latency: 90th percentile"
+        tooltip: "The 90th percentile of latency between query requests and responses over a 1 minute period. Values are displayed individually for each node."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.exec.latency-p90"
+            title: "KV Execution Latency p90"
+
+      - title: "Transactions"
+        tooltip: "The total number of transactions initiated, committed, rolled back, or aborted per second."
+        axis:
+          label: "transactions"
+        metrics:
+          - name: "cr.node.sql.txn.begin.count"
+            title: "Begin"
+          - name: "cr.node.sql.txn.commit.count"
+            title: "Commits"
+          - name: "cr.node.sql.txn.rollback.count"
+            title: "Rollbacks"
+          - name: "cr.node.sql.txn.abort.count"
+            title: "Aborts"
+
+      - title: "Transaction Restarts"
+        tooltip: "Transaction restarts broken down by reason."
+        axis:
+          label: "restarts"
+        metrics:
+          - name: "cr.node.txn.restarts.writetooold"
+            title: "Write Too Old"
+          - name: "cr.node.txn.restarts.serializable"
+            title: "Forwarded Timestamp (iso=serializable)"
+          - name: "cr.node.txn.restarts.asyncwritefailure"
+            title: "Async Consensus Failure"
+          - name: "cr.node.txn.restarts.readwithinuncertainty"
+            title: "Read Within Uncertainty Interval"
+          - name: "cr.node.txn.restarts.txnaborted"
+            title: "Aborted"
+          - name: "cr.node.txn.restarts.txnpush"
+            title: "Pushed"
+          - name: "cr.node.txn.restarts.unknown"
+            title: "Unknown"
+
+      - title: "Transaction Latency: 99th percentile"
+        tooltip: "Over the last minute, this node executed 99% of transactions within this time. This time does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.txn.latency-p99"
+            title: "Transaction Latency p99"
+
+      - title: "Transaction Latency: 90th percentile"
+        tooltip: "Over the last minute, this node executed 90% of transactions within this time. This time does not include network latency between the node and client."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.txn.latency-p90"
+            title: "Transaction Latency p90"
+
+      - title: "SQL Memory"
+        tooltip: "The current amount of allocated SQL memory. This amount is compared against the node's --max-sql-memory flag."
+        axis:
+          label: "allocated bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sql.mem.root.current"
+            title: "SQL Memory"
+
+      - title: "Schema Changes"
+        tooltip: "The total number of DDL statements per second."
+        axis:
+          label: "statements"
+        metrics:
+          - name: "cr.node.sql.ddl.count"
+            title: "DDL Statements"
+
+      - title: "Table Statistics Collections"
+        tooltip: "Details about table statistics collections."
+        axis:
+          label: "jobs"
+        metrics:
+          - name: "cr.node.jobs.auto_create_stats.currently_running"
+            title: "Auto Running"
+          - name: "cr.node.jobs.auto_create_partial_stats.currently_running"
+            title: "Auto Partial Running"
+          - name: "cr.node.jobs.create_stats.currently_running"
+            title: "Manual Running"
+          - name: "cr.node.jobs.auto_create_stats.currently_paused"
+            title: "Auto Paused"
+          - name: "cr.node.jobs.auto_create_partial_stats.currently_paused"
+            title: "Auto Partial Paused"
+          - name: "cr.node.jobs.auto_create_stats.resume_failed"
+            title: "Auto Failed"
+          - name: "cr.node.jobs.auto_create_partial_stats.resume_failed"
+            title: "Auto Partial Failed"
+
+      - title: "Statement Denials: Cluster Settings"
+        tooltip: "The total number of statements denied."
+        axis:
+          label: "statements"
+        metrics:
+          - name: "cr.node.sql.feature_flag_denial"
+            title: "Statements Denied"
+
+      - title: "Distributed Query Error Reruns"
+        tooltip: "The total number of times the distributed query errors were rerun as local."
+        axis:
+          label: "queries"
+        metrics:
+          - name: "cr.node.sql.distsql.dist_query_rerun_locally.count"
+            title: "Reruns"
+          - name: "cr.node.sql.distsql.dist_query_rerun_locally.failure_count"
+            title: "Failures"
+
+  - title: "Storage"
+    graphs:
+      - title: "Capacity"
+        tooltip: "Disk capacity metrics"
+        axis:
+          label: "capacity"
+          units: "Bytes"
+        metrics:
+          - name: "cr.store.capacity"
+            title: "Max"
+          - name: "cr.store.capacity.available"
+            title: "Available"
+          - name: "cr.store.capacity.used"
+            title: "Used"
+
+      - title: "Live Bytes"
+        tooltip: "Number of bytes of live data"
+        axis:
+          label: "live bytes"
+          units: "Bytes"
+        metrics:
+          - name: "cr.store.livebytes"
+            title: "Live"
+          - name: "cr.store.sysbytes"
+            title: "System"
+
+      - title: "WAL Fsync Latency"
+        tooltip: "The latency for fsyncs to the storage engine's write-ahead log."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.wal.fsync.latency-p99.9"
+            title: "p99.9"
+          - name: "cr.store.storage.wal.fsync.latency-p99.99"
+            title: "p99.99"
+          - name: "cr.store.storage.wal.fsync.latency-max"
+            title: "p100"
+
+      - title: "Log Commit Latency"
+        tooltip: "The latency for commits to the Raft Log. This is typically dominated by the latency of an fdatasync to the storage engine's write-ahead log."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.raft.process.logcommit.latency-p99.9"
+            title: "p99.9"
+          - name: "cr.store.raft.process.logcommit.latency-p99"
+            title: "p99"
+          - name: "cr.store.raft.process.logcommit.latency-p50"
+            title: "p50"
+
+      - title: "Command Commit Latency"
+        tooltip: "The latency for commits of Raft commands. This measures applying a batch to the storage engine (including writes to the write-ahead log), but no fsync."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.raft.process.commandcommit.latency-p99"
+            title: "p99"
+          - name: "cr.store.raft.process.commandcommit.latency-p50"
+            title: "p50"
+
+      - title: "Compaction Duration"
+        tooltip: "The cumulative time spent performing compactions."
+        axis:
+          label: "duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.compactions.duration"
+            title: "Compaction Duration"
+
+      - title: "Level Compaction Scores"
+        tooltip: "The compaction score for each level of the LSM tree. The storage engine prioritizes compactions out of levels with higher scores."
+        axis:
+          label: "score"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.l0-level-score"
+            title: "L0"
+          - name: "cr.store.storage.l1-level-score"
+            title: "L1"
+          - name: "cr.store.storage.l2-level-score"
+            title: "L2"
+          - name: "cr.store.storage.l3-level-score"
+            title: "L3"
+          - name: "cr.store.storage.l4-level-score"
+            title: "L4"
+          - name: "cr.store.storage.l5-level-score"
+            title: "L5"
+          - name: "cr.store.storage.l6-level-score"
+            title: "L6"
+
+      - title: "Read Amplification"
+        tooltip: "The average number of real read operations executed per logical read operation."
+        axis:
+          label: "factor"
+        metrics:
+          - name: "cr.store.rocksdb.read-amplification"
+            title: "Read Amplification"
+
+      - title: "File Counts"
+        tooltip: "The number of files in use by type."
+        axis:
+          label: "files"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rocksdb.num-sstables"
+            title: "sstables"
+          - name: "cr.store.storage.value_separation.blob_files.count"
+            title: "blob files"
+
+      - title: "L0 SSTable Count"
+        tooltip: "The number of L0 SSTables in use for each store."
+        axis:
+          label: "sstables"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.l0-num-files"
+            title: "L0 SSTable Count"
+
+      - title: "L0 SSTable Size"
+        tooltip: "The size of all L0 SSTables in use for each store."
+        axis:
+          label: "Size"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.l0-level-size"
+            title: "L0 SSTable Size"
+
+      - title: "Flushes"
+        tooltip: "Bytes written by memtable flushes."
+        axis:
+          label: "written bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rocksdb.flushed-bytes"
+            title: "Flushes"
+
+      - title: "WAL Bytes Written"
+        tooltip: "Bytes written to WAL files."
+        axis:
+          label: "written bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.wal.bytes_written"
+            title: "WAL Bytes Written"
+
+      - title: "Compactions"
+        tooltip: "Bytes written by compactions."
+        axis:
+          label: "written bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rocksdb.compacted-bytes-written"
+            title: "Compactions"
+
+      - title: "Ingestions"
+        tooltip: "Bytes written by sstable ingestions."
+        axis:
+          label: "written bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rocksdb.ingested-bytes"
+            title: "Ingestions"
+
+      - title: "Write Stalls"
+        tooltip: "The number of intentional write stalls per second. Write stalls are used to backpressure incoming writes during periods of heavy write traffic."
+        axis:
+          label: "count"
+        metrics:
+          - name: "cr.store.storage.write-stalls"
+            title: "Write Stalls"
+
+      - title: "Store Disk Write Bytes/s"
+        tooltip: "The number of bytes written to the store's disk per second (as reported by the OS)."
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.disk.write.bytes"
+            title: "Disk Write"
+
+      - title: "Store Disk Read Bytes/s"
+        tooltip: "The number of bytes read from the store's disk per second (as reported by the OS)."
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.disk.read.bytes"
+            title: "Disk Read"
+
+      - title: "File Descriptors"
+        tooltip: "The number of open file descriptors, compared with the file descriptor limit."
+        axis:
+          label: "descriptors"
+        metrics:
+          - name: "cr.node.sys.fd.open"
+            title: "Open"
+          - name: "cr.node.sys.fd.softlimit"
+            title: "Limit"
+
+      - title: "Time Series Writes"
+        tooltip: "The number of successfully written time series samples, and number of errors attempting to write time series, per second."
+        axis:
+          label: "count"
+        metrics:
+          - name: "cr.node.timeseries.write.samples"
+            title: "Samples Written"
+          - name: "cr.node.timeseries.write.errors"
+            title: "Errors"
+
+      - title: "Time Series Bytes Written"
+        tooltip: "The number of bytes written by the time series system per second. Note that this does not reflect the rate at which disk space is consumed by time series; the data is highly compressed on disk."
+        axis:
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.timeseries.write.bytes"
+            title: "Bytes Written"
+
+  - title: "Replication"
+    graphs:
+      - title: "Ranges"
+        tooltip: "Various details about the status of ranges."
+        axis:
+          label: "ranges"
+        metrics:
+          - name: "cr.store.ranges"
+            title: "Ranges"
+          - name: "cr.store.replicas.leaders"
+            title: "Leaders"
+          - name: "cr.store.replicas.leaseholders"
+            title: "Lease Holders"
+          - name: "cr.store.replicas.leaders_not_leaseholders"
+            title: "Leaders w/o Lease"
+          - name: "cr.store.ranges.unavailable"
+            title: "Unavailable"
+          - name: "cr.store.ranges.underreplicated"
+            title: "Under-replicated"
+          - name: "cr.store.ranges.overreplicated"
+            title: "Over-replicated"
+
+      - title: "Replicas per Node"
+        tooltip: "The number of replicas on each node."
+        axis:
+          label: "replicas"
+        metrics:
+          - name: "cr.store.replicas"
+            title: "Replicas"
+
+      - title: "Leaseholders per Node"
+        tooltip: "The number of leaseholder replicas on each node. A leaseholder replica is the one that receives and coordinates all read and write requests for its range."
+        axis:
+          label: "leaseholders"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.replicas.leaseholders"
+            title: "Leaseholders"
+
+      - title: "Lease Types"
+        tooltip: "Details about the types of leases in use by ranges in the system."
+        axis:
+          label: "leases"
+        metrics:
+          - name: "cr.store.leases.expiration"
+            title: "Expiration Leases"
+          - name: "cr.store.leases.epoch"
+            title: "Epoch Leases"
+          - name: "cr.store.leases.leader"
+            title: "Leader Leases"
+
+      - title: "Lease Preferences"
+        tooltip: "Details about the conformance of range lease preferences."
+        axis:
+          label: "ranges"
+        metrics:
+          - name: "cr.store.leases.preferences.violating"
+            title: "Lease Preferences Violating"
+          - name: "cr.store.leases.preferences.less-preferred"
+            title: "Lease Preferences Less Preferred"
+
+      - title: "Average Replica Queries per Node"
+        tooltip: "Moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Used for load-based rebalancing decisions."
+        axis:
+          label: "queries"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rebalancing.queriespersecond"
+            title: "Queries Per Second"
+
+      - title: "Average Replica CPU per Node"
+        tooltip: "Moving average of all replica CPU usage on each node per second. Used for load-based rebalancing decisions."
+        axis:
+          label: "CPU time"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.rebalancing.cpunanospersecond"
+            title: "CPU Time"
+
+      - title: "Logical Bytes per Node"
+        tooltip: "Logical bytes per node"
+        axis:
+          label: "logical store size"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.totalbytes"
+            title: "Logical Bytes"
+
+      - title: "Replica Quiescence"
+        axis:
+          label: "replicas"
+        metrics:
+          - name: "cr.store.replicas"
+            title: "Replicas"
+          - name: "cr.store.replicas.quiescent"
+            title: "Epoch Lease Quiescent"
+          - name: "cr.store.replicas.asleep"
+            title: "Leader Lease Quiescent"
+
+      - title: "Range Operations"
+        axis:
+          label: "ranges"
+        metrics:
+          - name: "cr.store.range.splits"
+            title: "Splits"
+          - name: "cr.store.range.merges"
+            title: "Merges"
+          - name: "cr.store.range.adds"
+            title: "Adds"
+          - name: "cr.store.range.removes"
+            title: "Removes"
+          - name: "cr.store.leases.transfers.success"
+            title: "Lease Transfers"
+          - name: "cr.store.rebalancing.lease.transfers"
+            title: "Load-based Lease Transfers"
+          - name: "cr.store.rebalancing.range.rebalances"
+            title: "Load-based Range Rebalances"
+
+      - title: "Snapshots"
+        axis:
+          label: "snapshots"
+        metrics:
+          - name: "cr.store.range.snapshots.generated"
+            title: "Generated"
+          - name: "cr.store.range.snapshots.applied-voter"
+            title: "Applied (Voters)"
+          - name: "cr.store.range.snapshots.applied-initial"
+            title: "Applied (Initial Upreplication)"
+          - name: "cr.store.range.snapshots.applied-non-voter"
+            title: "Applied (Non-Voters)"
+          - name: "cr.store.replicas.reserved"
+            title: "Reserved"
+
+      - title: "Snapshot Data Received"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.range.snapshots.rebalancing.rcvd-bytes"
+            title: "Rebalancing"
+          - name: "cr.store.range.snapshots.recovery.rcvd-bytes"
+            title: "Recovery"
+          - name: "cr.store.range.snapshots.upreplication.rcvd-bytes"
+            title: "Upreplication"
+
+      - title: "Receiver Snapshots Queued"
+        axis:
+          label: "snapshots"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.range.snapshots.recv-queue"
+            title: "Receiver Snapshots Queued"
+
+      - title: "Circuit Breaker Tripped Replicas"
+        axis:
+          label: "replicas"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.kv.replica_circuit_breaker.num_tripped_replicas"
+            title: "Circuit Breaker Tripped Replicas"
+
+      - title: "Replicate Queue Actions: Successes"
+        axis:
+          label: "replicas"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.replicate.addreplica.success"
+            title: "Replicas Added / Sec"
+          - name: "cr.store.queue.replicate.removereplica.success"
+            title: "Replicas Removed / Sec"
+          - name: "cr.store.queue.replicate.replacedeadreplica.success"
+            title: "Dead Replicas Replaced / Sec"
+          - name: "cr.store.queue.replicate.removedeadreplica.success"
+            title: "Dead Replicas Removed / Sec"
+          - name: "cr.store.queue.replicate.replacedecommissioningreplica.success"
+            title: "Decommissioning Replicas Replaced / Sec"
+          - name: "cr.store.queue.replicate.removedecommissioningreplica.success"
+            title: "Decommissioning Replicas Removed / Sec"
+
+      - title: "Replicate Queue Actions: Failures"
+        axis:
+          label: "replicas"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.replicate.addreplica.error"
+            title: "Replicas Added Errors / Sec"
+          - name: "cr.store.queue.replicate.removereplica.error"
+            title: "Replicas Removed Errors / Sec"
+          - name: "cr.store.queue.replicate.replacedeadreplica.error"
+            title: "Dead Replicas Replaced Errors / Sec"
+          - name: "cr.store.queue.replicate.removedeadreplica.error"
+            title: "Dead Replicas Removed Errors / Sec"
+          - name: "cr.store.queue.replicate.replacedecommissioningreplica.error"
+            title: "Decommissioning Replicas Replaced Errors / Sec"
+          - name: "cr.store.queue.replicate.removedecommissioningreplica.error"
+            title: "Decommissioning Replicas Removed Errors / Sec"
+
+      - title: "Decommissioning Errors"
+        axis:
+          label: "Replaced Errors / Sec"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.queue.replicate.replacedecommissioningreplica.error"
+            title: "Replaced Errors / Sec"
+
+  - title: "Distributed"
+    graphs:
+      - title: "Batches"
+        axis:
+          label: "batches"
+        metrics:
+          - name: "cr.node.distsender.batches"
+            title: "Batches"
+          - name: "cr.node.distsender.batches.partial"
+            title: "Partial Batches"
+
+      - title: "RPCs"
+        axis:
+          label: "rpcs"
+        metrics:
+          - name: "cr.node.distsender.rpc.sent"
+            title: "RPCs Sent"
+          - name: "cr.node.distsender.rpc.sent.local"
+            title: "Local Fast-path"
+
+      - title: "RPC Errors"
+        axis:
+          label: "errors"
+        metrics:
+          - name: "cr.node.distsender.rpc.sent.sendnexttimeout"
+            title: "RPC Timeouts"
+          - name: "cr.node.distsender.rpc.sent.nextreplicaerror"
+            title: "Replica Errors"
+          - name: "cr.node.distsender.errors.notleaseholder"
+            title: "Not Leaseholder Errors"
+
+      - title: "KV Transactions"
+        axis:
+          label: "transactions"
+        metrics:
+          - name: "cr.node.txn.commits"
+            title: "Committed"
+          - name: "cr.node.txn.commits1PC"
+            title: "Fast-path Committed"
+          - name: "cr.node.txn.aborts"
+            title: "Aborted"
+
+      - title: "KV Transaction Durations: 99th percentile"
+        tooltip: "The 99th percentile of transaction durations over a 1 minute period."
+        axis:
+          label: "transaction duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.txn.durations-p99"
+            title: "KV Transaction Duration p99"
+
+      - title: "KV Transaction Durations: 90th percentile"
+        tooltip: "The 90th percentile of transaction durations over a 1 minute period."
+        axis:
+          label: "transaction duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.txn.durations-p90"
+            title: "KV Transaction Duration p90"
+
+      - title: "Node Heartbeat Latency: 99th percentile"
+        tooltip: "The 99th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period."
+        axis:
+          label: "heartbeat latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.liveness.heartbeatlatency-p99"
+            title: "Heartbeat Latency p99"
+
+      - title: "Node Heartbeat Latency: 90th percentile"
+        tooltip: "The 90th percentile of latency to heartbeat a node's internal liveness record over a 1 minute period."
+        axis:
+          label: "heartbeat latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.liveness.heartbeatlatency-p90"
+            title: "Heartbeat Latency p90"
+
+  - title: "Queues"
+    graphs:
+      - title: "Queue Processing Failures"
+        axis:
+          label: "failures"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.gc.process.failure"
+            title: "GC"
+          - name: "cr.store.queue.replicagc.process.failure"
+            title: "Replica GC"
+          - name: "cr.store.queue.replicate.process.failure"
+            title: "Replication"
+          - name: "cr.store.queue.lease.process.failure"
+            title: "Lease"
+          - name: "cr.store.queue.split.process.failure"
+            title: "Split"
+          - name: "cr.store.queue.merge.process.failure"
+            title: "Merge"
+          - name: "cr.store.queue.consistency.process.failure"
+            title: "Consistency"
+          - name: "cr.store.queue.raftlog.process.failure"
+            title: "Raft Log"
+          - name: "cr.store.queue.raftsnapshot.process.failure"
+            title: "Raft Snapshot"
+          - name: "cr.store.queue.tsmaintenance.process.failure"
+            title: "Time Series Maintenance"
+
+      - title: "Queue Processing Times"
+        axis:
+          label: "processing time"
+          units: "Duration"
+        metrics:
+          - name: "cr.store.queue.gc.processingnanos"
+            title: "GC"
+          - name: "cr.store.queue.replicagc.processingnanos"
+            title: "Replica GC"
+          - name: "cr.store.queue.replicate.processingnanos"
+            title: "Replication"
+          - name: "cr.store.queue.lease.processingnanos"
+            title: "Lease"
+          - name: "cr.store.queue.split.processingnanos"
+            title: "Split"
+          - name: "cr.store.queue.merge.processingnanos"
+            title: "Merge"
+          - name: "cr.store.queue.consistency.processingnanos"
+            title: "Consistency"
+          - name: "cr.store.queue.raftlog.processingnanos"
+            title: "Raft Log"
+          - name: "cr.store.queue.raftsnapshot.processingnanos"
+            title: "Raft Snapshot"
+          - name: "cr.store.queue.tsmaintenance.processingnanos"
+            title: "Time Series Maintenance"
+
+      - title: "Replica GC Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.replicagc.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.replicagc.pending"
+            title: "Pending Actions"
+          - name: "cr.store.queue.replicagc.removereplica"
+            title: "Replicas Removed / sec"
+
+      - title: "Replication Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.replicate.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.replicate.pending"
+            title: "Pending Actions"
+          - name: "cr.store.queue.replicate.addreplica"
+            title: "Replicas Added / sec"
+          - name: "cr.store.queue.replicate.removereplica"
+            title: "Replicas Removed / sec"
+          - name: "cr.store.queue.replicate.removedeadreplica"
+            title: "Dead Replicas Removed / sec"
+          - name: "cr.store.queue.replicate.removelearnerreplica"
+            title: "Learner Replicas Removed / sec"
+          - name: "cr.store.queue.replicate.rebalancereplica"
+            title: "Replicas Rebalanced / sec"
+          - name: "cr.store.queue.replicate.transferlease"
+            title: "Leases Transferred / sec"
+          - name: "cr.store.queue.replicate.purgatory"
+            title: "Replicas in Purgatory"
+
+      - title: "Lease Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.lease.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.lease.pending"
+            title: "Pending Actions"
+          - name: "cr.store.queue.lease.purgatory"
+            title: "Replicas in  Purgatory"
+
+      - title: "Split Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.split.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.split.pending"
+            title: "Pending Actions"
+
+      - title: "Merge Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.merge.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.merge.pending"
+            title: "Pending Actions"
+
+      - title: "Raft Log Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.raftlog.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.raftlog.pending"
+            title: "Pending Actions"
+
+      - title: "Raft Snapshot Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.raftsnapshot.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.raftsnapshot.pending"
+            title: "Pending Actions"
+
+      - title: "Consistency Checker Queue"
+        tooltip: "The Consistency Checker Queue periodically checks that all replicas in a given range are consistent. For large clusters, the queue is always expected to have a pending backlog."
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.consistency.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.consistency.pending"
+            title: "Pending Actions"
+
+      - title: "Time Series Maintenance Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.tsmaintenance.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.tsmaintenance.pending"
+            title: "Pending Actions"
+
+      - title: "MVCC GC Queue"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.store.queue.gc.process.success"
+            title: "Successful Actions / sec"
+          - name: "cr.store.queue.gc.pending"
+            title: "Pending Actions"
+
+      - title: "Protected Timestamp Records"
+        tooltip: "Number of protected timestamp records (used by backups, changefeeds, etc. to prevent MVCC GC)"
+        axis:
+          label: "Records"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.spanconfig.kvsubscriber.protected_record_count"
+            title: "Protected Timestamp Records"
+
+  - title: "Slow Requests"
+    graphs:
+      - title: "Slow Raft Proposals"
+        axis:
+          label: "proposals"
+        metrics:
+          - name: "cr.store.requests.slow.raft"
+            title: "Slow Raft Proposals"
+
+      - title: "Slow DistSender RPCs"
+        axis:
+          label: "proposals"
+        metrics:
+          - name: "cr.node.requests.slow.distsender"
+            title: "Slow DistSender RPCs"
+
+      - title: "Slow Lease Acquisitions"
+        axis:
+          label: "lease acquisitions"
+        metrics:
+          - name: "cr.store.requests.slow.lease"
+            title: "Slow Lease Acquisitions"
+
+      - title: "Slow Latch Acquisitions"
+        axis:
+          label: "latch acquisitions"
+        metrics:
+          - name: "cr.store.requests.slow.latch"
+            title: "Slow Latch Acquisitions"
+
+  - title: "Changefeeds"
+    graphs:
+      - title: "Changefeed Status"
+        axis:
+          label: "count"
+          units: "Count"
+        metrics:
+          - name: "cr.node.jobs.changefeed.currently_running"
+            title: "Running"
+          - name: "cr.node.jobs.changefeed.currently_paused"
+            title: "Paused"
+          - name: "cr.node.jobs.changefeed.resume_failed"
+            title: "Failed"
+
+      - title: "Commit Latency"
+        tooltip: "The difference between an event's MVCC timestamp and the time it was acknowledged as received by the downstream sink."
+        axis:
+          label: "latency"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.changefeed.commit_latency-p99"
+            title: "99th Percentile"
+          - name: "cr.node.changefeed.commit_latency-p90"
+            title: "90th Percentile"
+          - name: "cr.node.changefeed.commit_latency-p50"
+            title: "50th Percentile"
+
+      - title: "Emitted Bytes"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.changefeed.emitted_bytes"
+            title: "Emitted Bytes"
+
+      - title: "Sink Counts"
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.node.changefeed.emitted_messages"
+            title: "Messages"
+          - name: "cr.node.changefeed.flushes"
+            title: "Flushes"
+
+      - title: "Max Checkpoint Lag"
+        tooltip: "The most any changefeed's persisted checkpoint is behind the present. Larger values indicate issues with successfully ingesting or emitting changes."
+        axis:
+          label: "time"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.changefeed.max_behind_nanos"
+            title: "Max Checkpoint Latency"
+
+      - title: "Changefeed Restarts"
+        tooltip: "The rate of transient non-fatal errors, such as temporary connectivity issues or a rolling upgrade."
+        axis:
+          label: "actions"
+          units: "Count"
+        metrics:
+          - name: "cr.node.changefeed.error_retries"
+            title: "Retryable Errors"
+
+      - title: "Oldest Protected Timestamp"
+        tooltip: "The oldest data that any changefeed is protecting from being able to be automatically garbage collected."
+        axis:
+          label: "time"
+          units: "DurationSeconds"
+        metrics:
+          - name: "cr.node.jobs.changefeed.protected_age_sec"
+            title: "Protected Timestamp Age"
+
+      - title: "Backfill Pending Ranges"
+        tooltip: "The number of ranges being backfilled (ex: due to an initial scan or schema change) that are yet to completely enter the Changefeed pipeline."
+        axis:
+          label: "count"
+          units: "Count"
+        metrics:
+          - name: "cr.node.changefeed.backfill_pending_ranges"
+            title: "Backfill Pending Ranges"
+
+      - title: "Schema Registry Registrations"
+        tooltip: "The rate of schema registration requests made by CockroachDB nodes to a configured schema registry endpoint."
+        axis:
+          label: "action"
+          units: "Count"
+        metrics:
+          - name: "cr.node.changefeed.schema_registry.registrations"
+            title: "Schema Registry Registrations"
+
+      - title: "Ranges in catchup mode"
+        tooltip: "Total number of ranges with an active rangefeed that are performing catchup scan"
+        axis:
+          label: "ranges"
+          units: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.distsender.rangefeed.catchup_ranges"
+            title: "Ranges"
+
+      - title: "RangeFeed catchup scans duration"
+        axis:
+          label: "duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.kv.rangefeed.catchup_scan_nanos"
+            title: "Catchup Scan Duration"
+
+  - title: "Overload"
+    graphs:
+      - title: "CPU Utilization"
+        tooltip: "CPU utilization of the CockroachDB process as measured by the host, displayed per node."
+        axis:
+          label: "CPU Utilization"
+          units: "Percentage"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.cpu.combined.percent-normalized"
+            title: "CPU Utilization"
+
+      - title: "KV Admission CPU Slots Exhausted Duration Per Second"
+        tooltip: "Relative time the node had exhausted slots for foreground (regular) CPU work per second of wall time, measured in microseconds/second. Increased slot exhausted duration indicates CPU resource exhaustion."
+        axis:
+          label: "Duration (micros/sec)"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.admission.granter.slots_exhausted_duration.kv"
+            title: "KV Admission CPU Slots Exhausted"
+
+      - title: "Admission Foreground IO Tokens Exhausted Duration Per Second"
+        tooltip: "Relative time the store had exhausted foreground (regular) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second."
+        axis:
+          label: "Duration (micros/sec)"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.admission.granter.io_tokens_exhausted_duration.kv"
+            title: "Foreground IO Tokens Exhausted"
+
+      - title: "Admission Background IO Tokens Exhausted Duration Per Second"
+        tooltip: "Relative time the store had exhausted background (elastic) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second."
+        axis:
+          label: "Duration (micros/sec)"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.admission.granter.elastic_io_tokens_exhausted_duration.kv"
+            title: "Background IO Tokens Exhausted"
+
+      - title: "IO Overload"
+        tooltip: "A derived score based on Admission Control's view of the store. Admission Control attempts to maintain a score of 0.5."
+        axis:
+          label: "Score"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.admission.io.overload"
+            title: "IO Overload Score"
+
+      - title: "Elastic CPU Tokens Exhausted Duration Per Second"
+        tooltip: "Relative time the node had exhausted tokens for background (elastic) CPU work per second of wall time, measured in microseconds/second."
+        axis:
+          label: "Duration (micros/sec)"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.admission.elastic_cpu.nanos_exhausted_duration"
+            title: "Elastic CPU Tokens Exhausted"
+
+      - title: "Admission Queueing Delay p99 – Foreground (Regular) CPU"
+        tooltip: "The 99th percentile latency of requests waiting in the various Admission Control CPU queues."
+        axis:
+          label: "Delay Duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.admission.wait_durations.kv-p99"
+            title: "KV"
+          - name: "cr.node.admission.wait_durations.sql-kv-response-p99"
+            title: "SQL-KV"
+          - name: "cr.node.admission.wait_durations.sql-sql-response-p99"
+            title: "SQL-SQL"
+
+      - title: "Admission Queueing Delay p99 – Foreground (Regular) Store"
+        tooltip: "The 99th percentile latency of requests waiting in the foreground (regular) Admission Control store queue."
+        axis:
+          label: "Write Delay Duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.admission.wait_durations.kv-stores-p99"
+            title: "KV"
+
+      - title: "Admission Queueing Delay p99 – Background (Elastic) Store"
+        tooltip: "The 99th percentile latency of requests waiting in the background (elastic) Admission Control store queue."
+        axis:
+          label: "Write Delay Duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.admission.wait_durations.elastic-stores-p99"
+            title: "elastic"
+
+      - title: "Admission Queueing Delay p99 – Background (Elastic) CPU"
+        tooltip: "The 99th percentile latency of requests waiting in the Admission Control elastic CPU queue."
+        axis:
+          label: "Delay Duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.admission.wait_durations.elastic-cpu-p99"
+            title: "Elastic CPU"
+
+      - title: "Admission Queueing Delay p99 – Replication Admission Control"
+        tooltip: "The 99th percentile latency of requests waiting in the Replication Admission Control queue. This metric is indicative of store overload on replicas."
+        axis:
+          label: "Flow Token Wait Duration"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.kvflowcontrol.eval_wait.regular.duration-p99"
+            title: "Regular"
+          - name: "cr.node.kvflowcontrol.eval_wait.elastic.duration-p99"
+            title: "Elastic"
+
+      - title: "Blocked Replication Streams"
+        tooltip: "Blocked replication streams per node in Replication Admission Control, separated by admission priority."
+        axis:
+          label: "Blocked Stream Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.kvflowcontrol.streams.eval.regular.blocked_count"
+            title: "Regular"
+          - name: "cr.node.kvflowcontrol.streams.eval.elastic.blocked_count"
+            title: "Elastic"
+
+      - title: "Replication Stream Send Queue Size"
+        tooltip: "Queued bytes to be sent across all replication streams on a node in Replication Admission Control."
+        axis:
+          label: "Size"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.kvflowcontrol.send_queue.bytes"
+            title: "Send Queue Size"
+
+      - title: "Elastic CPU Utilization"
+        tooltip: "CPU utilization by elastic work, compared to the limit set for elastic work."
+        axis:
+          label: "CPU Utilization"
+          units: "Percentage"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.admission.elastic_cpu.utilization"
+            title: "Utilization"
+          - name: "cr.node.admission.elastic_cpu.utilization_limit"
+            title: "Utilization Limit"
+
+      - title: "Goroutine Scheduling Latency: 99th percentile"
+        tooltip: "P99 scheduling latency for goroutines. A value above 1ms here indicates high load that causes background (elastic) CPU work to be throttled."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.go.scheduler_latency-p99"
+            title: "Scheduling Latency p99"
+
+      - title: "Goroutine Scheduling Latency: 99.9th percentile"
+        tooltip: "P99.9 scheduling latency for goroutines. A high value here can be indicative of high tail latency in various queries."
+        axis:
+          label: "latency"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.go.scheduler_latency-p99.9"
+            title: "Scheduling Latency p99.9"
+
+      - title: "Runnable Goroutines per CPU"
+        tooltip: "The number of Goroutines waiting per CPU. A value above the value set in admission.kv_slot_adjuster.overload_threshold is used by admission control to throttle regular CPU work."
+        axis:
+          label: "goroutines"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.sys.runnable.goroutines.per.cpu"
+            title: "Runnable Goroutines per CPU"
+
+      - title: "LSM L0 Sublevels"
+        tooltip: "Number of sublevels in L0 of the LSM. A sustained value above 10 typically indicates that the store is overloaded."
+        axis:
+          label: "Count"
+        group_by_storage: true
+        metrics:
+          - name: "cr.store.storage.l0-sublevels"
+            title: "L0 Sublevels"
+
+  - title: "TTL"
+    graphs:
+      - title: "Processing Rate"
+        axis:
+          label: "rows per second"
+          units: "Count"
+        metrics:
+          - name: "cr.node.jobs.row_level_ttl.rows_selected"
+            title: "rows selected"
+          - name: "cr.node.jobs.row_level_ttl.rows_deleted"
+            title: "rows deleted"
+
+      - title: "Estimated Rows"
+        axis:
+          label: "row count"
+          units: "Count"
+        metrics:
+          - name: "cr.node.jobs.row_level_ttl.total_rows"
+            title: "approximate number of rows"
+          - name: "cr.node.jobs.row_level_ttl.total_expired_rows"
+            title: "approximate number of expired rows"
+
+      - title: "Job Latency"
+        tooltip: "Latency of scanning and deleting within the job."
+        axis:
+          label: "latency"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.jobs.row_level_ttl.select_duration-p50"
+            title: "scan latency (p50)"
+          - name: "cr.node.jobs.row_level_ttl.delete_duration-p50"
+            title: "delete latency (p50)"
+          - name: "cr.node.jobs.row_level_ttl.select_duration-p75"
+            title: "scan latency (p75)"
+          - name: "cr.node.jobs.row_level_ttl.delete_duration-p75"
+            title: "delete latency (p75)"
+          - name: "cr.node.jobs.row_level_ttl.select_duration-p90"
+            title: "scan latency (p90)"
+          - name: "cr.node.jobs.row_level_ttl.delete_duration-p90"
+            title: "delete latency (p90)"
+          - name: "cr.node.jobs.row_level_ttl.select_duration-p99"
+            title: "scan latency (p99)"
+          - name: "cr.node.jobs.row_level_ttl.delete_duration-p99"
+            title: "delete latency (p99)"
+
+      - title: "Spans in Progress"
+        tooltip: "Number of active spans being processed by TTL."
+        axis:
+          label: "span count"
+          units: "Count"
+        metrics:
+          - name: "cr.node.jobs.row_level_ttl.num_active_spans"
+            title: "number of spans being processed"
+
+  - title: "Cross Cluster Replication"
+    graphs:
+      - title: "Replication Lag"
+        tooltip: "Replication lag between primary and standby cluster"
+        axis:
+          label: "duration"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.physical_replication.replicated_time_seconds"
+            title: "Replication Lag"
+
+      - title: "Logical Bytes"
+        tooltip: "Rate at which the logical bytes (sum of keys + values) are ingested by all replication jobs"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.physical_replication.logical_bytes"
+            title: "Logical Bytes"
+
+  - title: "Logical Data Replication"
+    graphs:
+      - title: "Replication Latency"
+        tooltip: "The difference in commit times between the source cluster and the destination cluster"
+        axis:
+          label: "latency"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.logical_replication.commit_latency-p50"
+            title: "p50"
+          - name: "cr.node.logical_replication.commit_latency-p99"
+            title: "p99"
+
+      - title: "Replication Lag"
+        tooltip: "The age of the oldest row on the source cluster that has yet to replicate to destination cluster"
+        axis:
+          label: "duration"
+          units: "Duration"
+        metrics:
+          - name: "cr.node.logical_replication.replicated_time_seconds"
+            title: "Replication Lag"
+
+      - title: "Row Updates Applied"
+        tooltip: "Rate at which row updates are applied by all logical replication jobs"
+        axis:
+          label: "updates"
+        metrics:
+          - name: "cr.node.logical_replication.events_ingested"
+            title: "Row Updates Applied"
+          - name: "cr.node.logical_replication.events_dlqed"
+            title: "Row Updates sent to DLQ"
+
+      - title: "Logical Bytes Received"
+        tooltip: "Rate at which the logical bytes (sum of keys + values) are received by all logical replication jobs"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.logical_replication.logical_bytes"
+            title: "Logical Bytes"
+
+      - title: "Row Application Processing Time: 50th percentile"
+        tooltip: "The 50th percentile in the time it takes to write a batch of row updates"
+        axis:
+          label: "processing time"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.logical_replication.batch_hist_nanos-p50"
+            title: "Processing Time p50"
+
+      - title: "Row Application Processing Time: 99th percentile"
+        tooltip: "The 99th percentile in the time it takes to write a batch of row updates"
+        axis:
+          label: "processing time"
+          units: "Duration"
+        group_by_storage: true
+        metrics:
+          - name: "cr.node.logical_replication.batch_hist_nanos-p99"
+            title: "Processing Time p99"
+
+      - title: "DLQ Causes"
+        tooltip: "Reasons events were sent to the DLQ"
+        axis:
+          label: "updates"
+        metrics:
+          - name: "cr.node.logical_replication.events_dlqed_age"
+            title: "Retry Duration Expired"
+          - name: "cr.node.logical_replication.events_dlqed_space"
+            title: "Retry Queue Full"
+          - name: "cr.node.logical_replication.events_dlqed_errtype"
+            title: "Non-retryable"
+
+      - title: "Retry Queue Size"
+        tooltip: "Total size of the retry queues across all processors in all LDR jobs"
+        axis:
+          label: "bytes"
+          units: "Bytes"
+        metrics:
+          - name: "cr.node.logical_replication.retry_queue_bytes"
+            title: "Retry Queue Size"
