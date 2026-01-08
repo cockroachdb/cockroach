@@ -365,6 +365,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsDestroyed:        rhsDestroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+					lhsLastReplicaGC:    hlc.Timestamp{},              // dummy timestamp
 				}
 				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {

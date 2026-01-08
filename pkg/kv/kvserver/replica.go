@@ -1815,8 +1815,9 @@ func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
 	return kvserverbase.ContainsKeyRange(r.Desc(), start, end)
 }
 
-// GetLastReplicaGCTimestamp reads the timestamp at which the replica was
-// last checked for removal by the replica gc queue.
+// GetLastReplicaGCTimestamp reads the timestamp at which the replica was last
+// checked for removal by the replica GC queue. Returns an empty timestamp if it
+// hasn't been set.
 func (r *Replica) GetLastReplicaGCTimestamp(ctx context.Context) (hlc.Timestamp, error) {
 	key := keys.RangeLastReplicaGCTimestampKey(r.RangeID)
 	var timestamp hlc.Timestamp

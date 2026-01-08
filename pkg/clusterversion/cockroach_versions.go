@@ -250,6 +250,11 @@ const (
 	// changefeeds no longer have span-level checkpoints.
 	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints
 
+	// V26_2_NoLastReplicaGCTimestampKeyOnEval is the version that stops writing
+	// LastReplicaGCTimestampKey to the state machine batch when evaluating
+	// commands. This unreplicated key is now written at apply time locally.
+	V26_2_NoLastReplicaGCTimestampKeyOnEval
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -319,6 +324,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_ChangefeedsStopWritingSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 24},
 
 	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 26},
+
+	V26_2_NoLastReplicaGCTimestampKeyOnEval: {Major: 26, Minor: 1, Internal: 28},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
