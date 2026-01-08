@@ -119,6 +119,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/jsonpath/eval",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/ltree",
         "//pkg/util/mon",
         "//pkg/util/pretty",

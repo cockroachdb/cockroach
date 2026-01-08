@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -12909,6 +12910,15 @@ var rewriteInlineHintsOverload = tree.Overload{
 		hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
 		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
 		if err != nil {
+			return nil, err
+		}
+
+		// Log the statement hint injection event.
+		if err := evalCtx.Planner.LogEvent(ctx, &eventpb.RewriteInlineHints{
+			StatementFingerprint: stmtFingerprint,
+			DonorSQL:             donorSQL,
+			HintID:               hintID,
+		}); err != nil {
 			return nil, err
 		}
 

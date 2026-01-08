@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1155,6 +1156,11 @@ func (p *planner) InsertStatementHint(
 // UsingHintInjection is part of the eval.Planner interface.
 func (p *planner) UsingHintInjection() bool {
 	return p.usingHintInjection
+}
+
+// LogEvent is part of the eval.Planner interface.
+func (p *planner) LogEvent(ctx context.Context, event interface{}) error {
+	return p.logEvent(ctx, 0 /* descID */, event.(logpb.EventPayload))
 }
 
 // GetHintIDs is part of the eval.Planner interface.
