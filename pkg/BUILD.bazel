@@ -2604,6 +2604,7 @@ GO_TARGETS = [
     "//pkg/sql/vecindex/vecstore:vecstore_test",
     "//pkg/sql/vecindex:vecindex",
     "//pkg/sql/vecindex:vecindex_test",
+    "//pkg/sql/vm:vm",
     "//pkg/sql/vtable:vtable",
     "//pkg/sql:sql",
     "//pkg/sql:sql_test",

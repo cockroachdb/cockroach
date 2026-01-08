@@ -774,7 +774,8 @@ message LocalOnlySessionData {
   // physical planner from partitioning scans with soft limits into multiple
   // TableReaders. When true, this matches the behavior for hard limits.
   bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
-
+  // SQLVMEnabled, when true, enables the experimental SQL VM.
+  bool sql_vm_enabled = 198 [(gogoproto.customname) = "SQLVMEnabled"];
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/vm"
 	"github.com/cockroachdb/errors"
 )
 

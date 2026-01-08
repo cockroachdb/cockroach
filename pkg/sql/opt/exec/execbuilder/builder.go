@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -59,6 +60,8 @@ type Builder struct {
 	factory          exec.Factory
 	optimizer        *xform.Optimizer
 	mem              *memo.Memo
+	compiler         Compiler
+	compiledExpr     exec.CompiledExprResult
 	catalog          cat.Catalog
 	e                opt.Expr
 	disableTelemetry bool
@@ -194,6 +197,18 @@ type Builder struct {
 	IndexesUsed
 }
 
+type Compiler interface {
+	Compile(*eval.Context, *opt.Metadata, opt.Expr) (vm.Program, bool)
+}
+
+func (b *Builder) GetCompiledExpr() exec.CompiledExprResult {
+	return b.compiledExpr
+}
+
+func (b *Builder) SetCompiledExpr(comp exec.CompiledExprResult) {
+	b.compiledExpr = comp
+}
+
 // IndexesUsed is a list of indexes used in a query.
 type IndexesUsed struct {
 	indexes []struct {
@@ -242,6 +257,7 @@ func New(
 	ctx context.Context,
 	factory exec.Factory,
 	optimizer *xform.Optimizer,
+	compiler Compiler,
 	mem *memo.Memo,
 	catalog cat.Catalog,
 	e opt.Expr,
@@ -253,6 +269,7 @@ func New(
 	b := &Builder{
 		factory:                factory,
 		optimizer:              optimizer,
+		compiler:               compiler,
 		mem:                    mem,
 		catalog:                catalog,
 		e:                      e,

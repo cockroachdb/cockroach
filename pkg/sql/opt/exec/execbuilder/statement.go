@@ -191,7 +191,7 @@ func (b *Builder) buildExplain(
 			ef := explain.NewFactory(&gf, b.semaCtx, b.evalCtx)
 
 			explainBld := New(
-				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input,
+				b.ctx, ef, b.optimizer, nil, b.mem, b.catalog, explainExpr.Input,
 				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true

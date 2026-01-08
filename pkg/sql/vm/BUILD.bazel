@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "vm",
+    srcs = [
+        "op.go",
+        "program.go",
+        "vm.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/vm",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/fetchpb",
+        "//pkg/sql/opt",
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/row",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/rowinfra",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/span",
+    ],
+)

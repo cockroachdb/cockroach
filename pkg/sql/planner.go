@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vm"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -211,6 +212,8 @@ type planner struct {
 	// NOTE: sessionMonitor is unset for queries that are not associated with a
 	// session (e.g. internal queries).
 	sessionMonitor *mon.BytesMonitor
+
+	vm vm.VM
 
 	// Corresponding Statement for this query.
 	stmt Statement

@@ -169,6 +169,9 @@ func getResultColumns(
 		}
 		return cols, nil
 
+	case vMNodeOp:
+		return args.(*vMNodeArgs).Columns, nil
+
 	case insertOp:
 		a := args.(*insertArgs)
 		return tableColumns(a.Table, a.ReturnCols), nil

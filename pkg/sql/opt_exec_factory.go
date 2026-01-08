@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -2003,6 +2004,15 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 		},
 		columns: cols,
 	}, nil
+}
+
+func (ef *execFactory) ConstructVMNode(
+	program vm.Program, columns colinfo.ResultColumns,
+) (exec.Node, error) {
+	n := ef.planner.VMNode()
+	n.p = program
+	n.columns = columns
+	return n, nil
 }
 
 // ConstructCreateTable is part of the exec.Factory interface.

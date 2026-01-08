@@ -34,6 +34,7 @@ func (g *execPlanGistGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/inverted\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/vm\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/errors\"\n")
 	g.w.unnest(")\n")
 

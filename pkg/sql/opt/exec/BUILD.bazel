@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "exec",
     srcs = [
+        "compiled_expr.go",
         "factory.go",
         ":gen-factory",  # keep
     ],
@@ -19,6 +20,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/sql/vm",
         "//pkg/util/intsets",
         "//pkg/util/optional",
     ],

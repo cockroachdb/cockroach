@@ -451,6 +451,7 @@ var nodeNames = [...]string{
 	valuesOp:               "", // This node does not have a fixed name.
 	vectorSearchOp:         "vector search",
 	vectorMutationSearchOp: "vector mutation search",
+	vMNodeOp:               "vm-node",
 	windowOp:               "window",
 	zigzagJoinOp:           "zigzag join",
 }
@@ -992,6 +993,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 				e.ob.Attr("suffix key cols", printColumnList(a.Input.Columns(), a.SuffixKeyCols))
 			}
 		}
+
+	case vMNodeOp:
+		ob.Attr("TODO", "_")
 
 	case insertOp:
 		a := n.args.(*insertArgs)

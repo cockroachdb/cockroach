@@ -1017,3 +1017,9 @@ define DeleteSwap {
     # processed through side-effecting expressions.
     AutoCommit bool
 }
+
+# VMNode TODO.
+define VMNode {
+    Program vm.Program
+    Columns colinfo.ResultColumns
+}
