@@ -302,6 +302,29 @@ func (re *rebalanceEnv) rebalanceStores(
 // positions are preserved, and we wouldn't accept a transfer that leaves the
 // target worse off than the source.
 //
+// Note on ill-disposed vs overloaded: Ill-disposed stores (Dead, Suspect,
+// Draining, Decommissioning, etc.) are excluded from means because they may
+// report unreliable load signals. In contrast, overloaded stores (high load but
+// otherwise healthy) are *always included* in means because they report
+// accurate load and are essential for computing a stable mean. This principle
+// also applies to the replicate and lease queue integration: even though those
+// queues work towards count-based convergence, overloaded stores' replica and
+// lease counts are still included when computing the count mean. This may
+// produce a less precise mean where we think we can move replicas/leases but no
+// good target exists, but it avoids the instability of excluding overloaded
+// stores: if excluded, the mean shifts, the store calms down, gets re-included,
+// and so on.
+//
+// TODO(mma): Revisit if we find cases where ill-disposed stores should be
+// included in the mean (e.g., suspect stores with valid load signals). It makes
+// sense to exclude them if their load signals are unreliable. But if a store
+// becomes suspect due to high load (but is otherwise healthy with reliable
+// signals), it should arguably not be marked ill-disposed. If excluded from
+// the mean, it creates thrashing: the mean shifts, the store calms down, gets
+// re-included, flares up again, and so on. Keeping it in the mean lets it shed
+// load via ordinary rebalancing paths. However, we cannot tell if a store's
+// load is high/low until we have computed the mean.
+//
 // **Post-means filtering** prevents some of the remaining candidates from being
 // chosen as targets for tactical reasons:
 //   - Stores that would be worse off than the source (relative to the mean
@@ -312,12 +335,6 @@ func (re *rebalanceEnv) rebalanceStores(
 //
 // NB: TestClusterState tests various scenarios and edge cases that demonstrate
 // filtering behavior and outcomes.
-//
-// TODO(tbg): The above describes the intended design. Lease transfers follow this
-// pattern (see retainReadyLeaseTargetStoresOnly). Replica transfers are still
-// being cleaned up: they currently compute means over all constraint-matching
-// stores and filter only afterward, which is not intentional.
-// Tracking issue: https://github.com/cockroachdb/cockroach/pull/158373
 func (re *rebalanceEnv) rebalanceStore(
 	ctx context.Context, store sheddingStore, localStoreID roachpb.StoreID,
 ) {
