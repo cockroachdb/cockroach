@@ -898,6 +898,109 @@ func TestConvertIndexSubdirToSubdir(t *testing.T) {
 	}
 }
 
+func TestFindLatestBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	execCfg := &sql.ExecutorConfig{Settings: st}
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	testcases := []struct {
+		name          string
+		collection    fakeBackupCollection
+		expectedTimes [2]int
+	}{
+		{
+			name: "single chain/full backup only",
+			collection: fakeBackupCollection{
+				chain(b(0, 2)),
+			},
+			expectedTimes: [2]int{0, 2},
+		},
+		{
+			name: "single chain/multiple backups",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6)),
+			},
+			expectedTimes: [2]int{4, 6},
+		},
+		{
+			name: "single chain/latest is compacted backup",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6), b(2, 8), b(6, 8)),
+			},
+			expectedTimes: [2]int{2, 8},
+		},
+		{
+			name: "multiple chains/latest is latest full",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4)),
+				chain(b(0, 6)),
+			},
+			expectedTimes: [2]int{0, 6},
+		},
+		{
+			name: "multiple chains/latest is latest incremental",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 8)),
+				chain(b(0, 6), b(6, 10)),
+			},
+			expectedTimes: [2]int{6, 10},
+		},
+		{
+			name: "multiple chains/latest in previous chain",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 8), b(8, 10)),
+				chain(b(0, 6)),
+			},
+			expectedTimes: [2]int{8, 10},
+		},
+		{
+			name: "multiple chains/full and inc tie",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 8)),
+				chain(b(0, 8)),
+			},
+			expectedTimes: [2]int{0, 8},
+		},
+	}
+
+	for idx, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			collectionURI := fmt.Sprintf("%s/%d", collectionURI, idx)
+			externalStorage, err := cloud.ExternalStorageFromURI(
+				ctx,
+				collectionURI,
+				base.ExternalIODirConfig{},
+				st,
+				blobs.TestBlobServiceClient(dir),
+				username.RootUserName(),
+				nil, /* db */
+				nil, /* limiters */
+				cloud.NilMetrics,
+			)
+			require.NoError(t, err)
+			makeExternalStorage := func(
+				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+			) (cloud.ExternalStorage, error) {
+				return externalStorage, nil
+			}
+
+			tc.collection.writeIndexes(t, ctx, execCfg, makeExternalStorage, collectionURI)
+			latest, err := FindLatestBackup(ctx, externalStorage)
+			require.NoError(t, err)
+			expectedStart := intToTimeWithNano(tc.expectedTimes[0])
+			expectedEnd := intToTimeWithNano(tc.expectedTimes[1])
+			require.Equal(t, expectedStart, latest.StartTime, "start time mismatch")
+			require.Equal(t, expectedEnd, latest.EndTime, "end time mismatch")
+		})
+	}
+}
+
 // intToTimeWithNano converts the integer time an easy to read hlc.Timestamp
 // (i.e. XX000000000XX). Note that the int is also added as nanoseconds to
 // stress backup's handling of nanosecond precision timestamps. We use ints to

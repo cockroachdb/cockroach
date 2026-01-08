@@ -147,7 +147,7 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 			// Because we delimit on `/` and the index subdir does not contain a
 			// trailing slash, we should only find one file as a result of this list.
 			// The error is just being returned defensively just in case.
-			return errors.New("found index")
+			return cloud.ErrListingDone
 		},
 	); err != nil && !indexExists {
 		return false, errors.Wrapf(err, "checking index exists in %s", subdir)
@@ -303,6 +303,74 @@ func ListRestorableBackups(
 type parsedIndex struct {
 	filePath     string // path to the index relative to the backup collection root
 	fullEnd, end time.Time
+}
+
+// FindLatestBackup finds the index of the latest backup taken in the
+// collection. This backup does not necessarily belong to the latest chain
+// (incrementals from an older chain may be taken during a full backup).
+// The provided store must be rooted at the default collection URI (the one that
+// contains the `metadata/` directory).
+//
+// NB: If a full and incremental have the same end time, the latest chain (i.e.
+// the full) is chosen. Compacted backups are chosen over non-compacted backups.
+func FindLatestBackup(
+	ctx context.Context, store cloud.ExternalStorage,
+) (backuppb.BackupIndexMetadata, error) {
+	var latestIdxFilepath string
+	var latestEnd time.Time
+	if err := store.List(
+		ctx,
+		backupbase.BackupIndexDirectoryPath,
+		cloud.ListOptions{},
+		func(file string) error {
+			_, startTime, endTime, err := parseTimesFromIndexFilepath(file)
+			if err != nil {
+				return err
+			}
+			if endTime.After(latestEnd) {
+				latestEnd = endTime
+				latestIdxFilepath = path.Join(
+					backupbase.BackupIndexDirectoryPath, file,
+				)
+			}
+			// Once we encounter an incremental backup, we know we have found the
+			// latest backup because:
+			// 1. Indexes within a chain are sorted in descending end time order.
+			// 2. No backup from an older chain can have an end time >= the incremental's end time.
+			if !startTime.IsZero() {
+				return cloud.ErrListingDone
+			}
+			return nil
+		},
+	); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+	if latestIdxFilepath == "" {
+		return backuppb.BackupIndexMetadata{}, errors.Newf("no backups found in collection")
+	}
+
+	reader, _, err := store.ReadFile(ctx, latestIdxFilepath, cloud.ReadOptions{})
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(
+			err, "reading index file %s", latestIdxFilepath,
+		)
+	}
+	defer besteffort.Error(ctx, "cleanup-latest-index-reader", func(ctx context.Context) error {
+		return reader.Close(ctx)
+	})
+	bytes, err := ioctx.ReadAll(ctx, reader)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(
+			err, "reading index file %s", latestIdxFilepath,
+		)
+	}
+	index := backuppb.BackupIndexMetadata{}
+	if err := protoutil.Unmarshal(bytes, &index); err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(
+			err, "unmarshalling index file %s", latestIdxFilepath,
+		)
+	}
+	return index, nil
 }
 
 // listIndexesWithinRange lists all index files whose end time falls within the
