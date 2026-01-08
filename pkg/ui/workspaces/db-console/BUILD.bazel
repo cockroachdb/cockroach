@@ -2,7 +2,6 @@ load("@aspect_rules_jest//jest:defs.bzl", "jest_test")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 load("@npm//pkg/ui/workspaces/db-console:eslint/package_json.bzl", eslint_bin = "bin")
-load("@npm//pkg/ui/workspaces/db-console:stylint/package_json.bzl", stylint_bin = "bin")
 load("@npm//pkg/ui/workspaces/db-console:typescript/package_json.bzl", typescript_bin = "bin")
 load("@npm//pkg/ui/workspaces/db-console:webpack-cli/package_json.bzl", webpack_bin = "bin")
 
@@ -26,7 +25,6 @@ WEBPACK_DATA_COMMON = glob(
 WEBPACK_SRCS = [
     "babel.config.js",
     ".eslintrc.json",
-    ".stylintrc",
     "favicon.ico",
     "tsconfig.json",
     "webpack.config.js",
@@ -91,10 +89,14 @@ webpack_bin.webpack_cli(
         "db-console-ccl/assets/questionMap.svg",
     ],
     args = [
-        "--config webpack.config.js",
-        "--env.dist=ccl",
-        "--mode production",
-        "--env.output=./db-console-ccl",
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "dist=ccl",
+        "--mode",
+        "production",
+        "--env",
+        "output=./db-console-ccl",
     ],
     chdir = package_name(),
     env = {
@@ -141,35 +143,20 @@ webpack_bin.webpack_cli(
         "db-console-oss/assets/not-found.svg",
     ],
     args = [
-        "--config webpack.config.js",
-        "--env.dist=oss",
-        "--mode production",
-        "--env.output=./db-console-oss",
+        "--config",
+        "webpack.config.js",
+        "--env",
+        "dist=oss",
+        "--mode",
+        "production",
+        "--env",
+        "output=./db-console-oss",
     ],
     chdir = package_name(),
     env = {
         "NODE_OPTIONS": "--max-old-space-size=5000",
     },
     visibility = ["//visibility:public"],
-)
-
-stylint_bin.stylint_test(
-    name = "stylint",
-    args = [
-        "-c .stylintrc",
-        "styl",
-    ],
-    chdir = package_name(),
-    copy_data_to_bin = False,
-    data = [
-        ".stylintrc",
-        "fonts",
-        ":node_modules",
-    ] + glob([
-        "fonts/**",
-        "src/**",
-        "styl/**",
-    ]),
 )
 
 eslint_bin.eslint_test(
@@ -214,7 +201,6 @@ test_suite(
     name = "lint",
     tests = [
         ":eslint",
-        ":stylint",
         ":typecheck",
     ],
 )

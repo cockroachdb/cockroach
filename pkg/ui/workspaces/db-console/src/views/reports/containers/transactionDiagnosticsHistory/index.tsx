@@ -32,7 +32,7 @@ import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
 import { transactionDiagnostics } from "src/util/docs";
 import { trustIcon } from "src/util/trust";
 
-import "./transactionDiagnosticsHistoryView.styl";
+import "./transactionDiagnosticsHistoryView.scss";
 
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";

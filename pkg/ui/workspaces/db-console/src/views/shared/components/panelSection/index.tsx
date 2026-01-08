@@ -5,7 +5,7 @@
 
 import React from "react";
 
-import "./panels.styl";
+import "./panels.scss";
 
 export class PanelSection extends React.Component {
   render() {

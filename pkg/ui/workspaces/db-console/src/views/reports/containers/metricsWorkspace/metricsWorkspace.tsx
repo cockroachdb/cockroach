@@ -30,7 +30,7 @@ import { DashboardConfig } from "./dashboardConfig";
 
 import type { TabsProps } from "antd";
 
-import "./metricsWorkspace.styl";
+import "./metricsWorkspace.scss";
 
 type Props = {
   timeScale: TimeScale;
@@ -165,6 +165,7 @@ const MetricsWorkspace = ({
               beforeUpload={handleLoadDashboard}
               capture="file"
               showUploadList={false}
+              hasControlInside={false}
             >
               <Button type="secondary">Load Dashboard</Button>
             </Upload>
