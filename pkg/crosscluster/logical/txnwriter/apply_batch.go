@@ -54,7 +54,9 @@ func (tw *TransactionWriter) ApplyBatch(
 	return results, nil
 }
 
-func (tw *TransactionWriter) refresh(ctx context.Context, transactions []ldrdecoder.Transaction) error {
+func (tw *TransactionWriter) refresh(
+	ctx context.Context, transactions []ldrdecoder.Transaction,
+) error {
 	type rowIndex struct {
 		txn int
 		row int
@@ -68,7 +70,7 @@ func (tw *TransactionWriter) refresh(ctx context.Context, transactions []ldrdeco
 	for txnIdx, transaction := range transactions {
 		for rowIdx, row := range transaction.WriteSet {
 			table := tables[row.TableID]
-			table.rows = append(table.rows, row.PrevRow)
+			table.rows = append(table.rows, row.Row)
 			table.indexes = append(table.indexes, rowIndex{txn: txnIdx, row: rowIdx})
 			tables[row.TableID] = table
 		}

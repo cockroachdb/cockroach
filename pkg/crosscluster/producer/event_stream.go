@@ -147,7 +147,9 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		rangefeed.WithOnSSTable(s.onSSTable),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 		rangefeed.WithFrontierQuantized(quantize.Get(&s.execCfg.Settings.SV)),
-		rangefeed.WithOnValues(s.onValues),
+		// onValues never sets the PrevValue, which is not correct for a catch up
+		// scans with a cursor.
+		//rangefeed.WithOnValues(s.onValues),
 		rangefeed.WithDiff(s.spec.WithDiff),
 		rangefeed.WithConsumerID(int64(s.streamID)),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),

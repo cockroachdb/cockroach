@@ -30,6 +30,7 @@ func (seb *streamEventBatcher) reset() {
 	seb.batch.DelRanges = seb.batch.DelRanges[:0]
 	seb.batch.SpanConfigs = seb.batch.SpanConfigs[:0]
 	seb.batch.SplitPoints = seb.batch.SplitPoints[:0]
+	seb.batch.DeprecatedKeyValues = seb.batch.DeprecatedKeyValues[:0]
 }
 
 func (seb *streamEventBatcher) addSST(sst kvpb.RangeFeedSSTable) {

@@ -72,5 +72,4 @@ func (ls *LockSynthesizer) sortInner(
 	status[row] = statusVisited
 	*output = append(*output, rows[row])
 	return nil
-
 }
