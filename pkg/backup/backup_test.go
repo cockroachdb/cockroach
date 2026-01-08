@@ -11171,11 +11171,11 @@ func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
 }
 
 func speedUpSpanConfigReconciliation(t *testing.T, sqlDB *sqlutils.SQLRunner) {
-	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '1s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '100ms'")
 }
 
 // TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
@@ -11250,11 +11250,32 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 		srv.DB(), codec, "test", "x")
 
+	// Wait for span config to be applied correctly.
+	checkSpanConfig := func() error {
+		kvSubscriber := srv.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+		conf, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(tableDesc.PrimaryIndexSpan(codec).Key))
+		if err != nil {
+			return err
+		}
+		if conf.NumReplicas != 1 {
+			return errors.Newf("expected num_replicas=1, got %d", conf.NumReplicas)
+		}
+		if len(conf.Constraints) != 1 {
+			return errors.Newf("expected 1 constraint, got %d", len(conf.Constraints))
+		}
+		if conf.Constraints[0].Constraints[0].String() != "+region=east3" {
+			return errors.Newf("expected constraint +region=east3, got %s", conf.Constraints[0].Constraints[0].String())
+		}
+		return nil
+	}
+
+	testutils.SucceedsWithin(t, checkSpanConfig, time.Second*45*5)
+
+	require.NoError(t, tc.WaitForFullReplication())
+
 	testutils.SucceedsWithin(t,
 		checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB())),
 		time.Second*45*5)
-
-	require.NoError(t, tc.WaitForFullReplication())
 
 	// Clear the range cache to ensure it's updated with all replica placement info.
 	for _, s := range tc.Servers {
