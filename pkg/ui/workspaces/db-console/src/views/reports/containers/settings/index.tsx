@@ -24,7 +24,7 @@ import { AdminUIState } from "src/redux/state";
 
 import { BackToAdvanceDebug } from "../util";
 
-import "./index.styl";
+import "./index.scss";
 
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;

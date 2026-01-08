@@ -30,7 +30,7 @@ import { DashboardConfig } from "./dashboardConfig";
 
 import type { TabsProps } from "antd";
 
-import "./metricsWorkspace.styl";
+import "./metricsWorkspace.scss";
 
 type Props = {
   timeScale: TimeScale;

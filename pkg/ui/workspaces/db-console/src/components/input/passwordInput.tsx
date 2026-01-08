@@ -10,7 +10,7 @@ import EyeOff from "assets/eye-off.svg";
 import Eye from "assets/eye.svg";
 
 import { Button } from "../button";
-import "./input.styl";
+import "./input.scss";
 
 interface PasswordInputProps {
   onChange: (value: string) => void;

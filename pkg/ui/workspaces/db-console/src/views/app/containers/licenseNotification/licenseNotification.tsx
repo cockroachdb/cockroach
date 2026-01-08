@@ -19,7 +19,7 @@ import {
 } from "src/redux/alerts";
 import { licensingFaqs } from "src/util/docs";
 
-import styles from "./licenseNotification.module.styl";
+import styles from "./licenseNotification.module.scss";
 
 const cn = classNames.bind(styles);
 
