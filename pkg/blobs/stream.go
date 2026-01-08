@@ -39,22 +39,24 @@ type streamReceiver interface {
 	Recv() (*blobspb.StreamChunk, error)
 }
 
-// nopSendAndClose creates a GetStreamClient that has a nop SendAndClose function.
-// This is needed as Blob_GetStreamClient does not have a Close() function, whereas
-// the other sender, Blob_PutStreamServer, does.
-type nopSendAndClose struct {
+// closeFuncSendAndClose creates a GetStreamClient that calls a close function
+// when SendAndClose is called. The close function is expected to cancel the context
+// and cause the stream to clean itself up.
+type closeFuncSendAndClose struct {
 	blobspb.RPCBlob_GetStreamClient
+	close func()
 }
 
-func (*nopSendAndClose) SendAndClose(*blobspb.StreamResponse) error {
+func (c *closeFuncSendAndClose) SendAndClose(*blobspb.StreamResponse) error {
+	c.close()
 	return nil
 }
 
 // newGetStreamReader creates an io.ReadCloser that uses gRPC's streaming API
 // to read chunks of data.
-func newGetStreamReader(client blobspb.RPCBlob_GetStreamClient) ioctx.ReadCloserCtx {
+func newGetStreamReader(client blobspb.RPCBlob_GetStreamClient, close func()) ioctx.ReadCloserCtx {
 	return &blobStreamReader{
-		stream: &nopSendAndClose{client},
+		stream: &closeFuncSendAndClose{client, close},
 	}
 }
 
