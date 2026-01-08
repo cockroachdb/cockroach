@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 	"storj.io/drpc"
 )
 
@@ -92,7 +93,11 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 
 	// With gateway metadata - should recover from panic
 	t.Run("with gateway metadata", func(t *testing.T) {
-		ctx := MarkDRPCGatewayRequest(context.Background())
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		// Create a context with the gateway metadata
+		ctx := metadata.NewIncomingContext(context.Background(), md)
 
 		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			panic("test panic")
@@ -123,7 +128,11 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 
 	// With gateway metadata but no panic - should pass through normally
 	t.Run("with gateway metadata no panic", func(t *testing.T) {
-		ctx := MarkDRPCGatewayRequest(context.Background())
+		// Create a context with the gateway metadata
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		ctx := metadata.NewIncomingContext(context.Background(), md)
 
 		expectedResp := "success"
 		expectedErr := errors.New("expected error")

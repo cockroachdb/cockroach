@@ -349,7 +349,11 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		},
 		// The reader's max buffer size defaults to 4mb, and if it is exceeded (such
 		// as happens with AddSSTable) the RPCs fail.
-		Manager: drpcmanager.Options{Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt}},
+		Manager: drpcmanager.Options{
+			Reader: drpcwire.ReaderOptions{MaximumBufferSize: math.MaxInt},
+			// Enable grpc compabitility for metadata
+			GRPCMetadataCompatMode: true,
+		},
 	})
 	d.Mux = mux
 

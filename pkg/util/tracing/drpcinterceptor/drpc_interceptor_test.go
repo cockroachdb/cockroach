@@ -26,6 +26,7 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcconn"
+	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
 )
@@ -318,7 +319,9 @@ func TestDRPCInterceptors(t *testing.T) {
 				[]drpcmux.StreamServerInterceptor{drpcinterceptor.StreamServerInterceptor(tr)},
 			)
 			require.NoError(t, registerTestServer(mux, impl))
-			srv := drpcserver.New(mux)
+			srv := drpcserver.NewWithOptions(mux, drpcserver.Options{
+				Manager: drpcmanager.Options{GRPCMetadataCompatMode: true},
+			})
 			ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
 			require.NoError(t, err)
 			ctx, cancel := context.WithCancel(bgCtx)
