@@ -211,8 +211,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":3]
-                     │              ├── variable: x:1
-                     │              └── variable: y:2
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -239,8 +239,8 @@ project
            │    │              │    │    └── tuple
            │    │              │    └── projections
            │    │              │         └── plus [as="?column?":3]
-           │    │              │              ├── variable: x:1
-           │    │              │              └── variable: y:2
+           │    │              │              ├── placeholder: $1
+           │    │              │              └── placeholder: $2
            │    │              └── const: 1
            │    └── const: 3
            ├── params: x:4 y:5
@@ -253,8 +253,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":6]
-                     │              ├── variable: x:4
-                     │              └── variable: y:5
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -279,8 +279,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":8]
-                     │              ├── variable: x:6
-                     │              └── variable: y:7
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -309,8 +309,8 @@ project
                                │    │    └── tuple
                                │    └── projections
                                │         └── plus [as="?column?":8]
-                               │              ├── variable: x:6
-                               │              └── variable: y:7
+                               │              ├── placeholder: $1
+                               │              └── placeholder: $2
                                └── const: 1
 
 build format=show-scalars
@@ -341,8 +341,8 @@ project
                      │    │              │    │    └── tuple
                      │    │              │    └── projections
                      │    │              │         └── plus [as="?column?":8]
-                     │    │              │              ├── variable: x:6
-                     │    │              │              └── variable: y:7
+                     │    │              │              ├── placeholder: $1
+                     │    │              │              └── placeholder: $2
                      │    │              └── const: 1
                      │    └── const: 3
                      ├── params: x:9 y:10
@@ -355,8 +355,8 @@ project
                                │    │    └── tuple
                                │    └── projections
                                │         └── plus [as="?column?":11]
-                               │              ├── variable: x:9
-                               │              └── variable: y:10
+                               │              ├── placeholder: $1
+                               │              └── placeholder: $2
                                └── const: 1
 
 exec-ddl
@@ -389,7 +389,7 @@ project
                      │         └── filters
                      │              └── eq
                      │                   ├── variable: a:2
-                     │                   └── variable: a_arg:1
+                     │                   └── placeholder: $1
                      └── const: 1
 
 build format=show-scalars
@@ -416,8 +416,8 @@ project
            │                   │    │    └── tuple
            │                   │    └── projections
            │                   │         └── plus [as="?column?":3]
-           │                   │              ├── variable: x:1
-           │                   │              └── variable: y:2
+           │                   │              ├── placeholder: $1
+           │                   │              └── placeholder: $2
            │                   └── const: 1
            ├── params: a_arg:4
            └── body
@@ -432,7 +432,7 @@ project
                      │         └── filters
                      │              └── eq
                      │                   ├── variable: a:5
-                     │                   └── variable: a_arg:4
+                     │                   └── placeholder: $1
                      └── const: 1
 
 build format=show-scalars
@@ -463,7 +463,7 @@ project
                                │         └── filters
                                │              └── eq
                                │                   ├── variable: a:7
-                               │                   └── variable: a_arg:6
+                               │                   └── placeholder: $1
                                └── const: 1
 
 exec-ddl
@@ -528,8 +528,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":3]
-                     │              ├── variable: x:1
-                     │              └── variable: y:2
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -556,8 +556,8 @@ project
            │    │              │    │    └── tuple
            │    │              │    └── projections
            │    │              │         └── plus [as="?column?":3]
-           │    │              │              ├── variable: x:1
-           │    │              │              └── variable: y:2
+           │    │              │              ├── placeholder: $1
+           │    │              │              └── placeholder: $2
            │    │              └── const: 1
            │    └── const: 3
            ├── params: x:4 y:5
@@ -570,8 +570,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":6]
-                     │              ├── variable: x:4
-                     │              └── variable: y:5
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -602,8 +602,8 @@ project
                      │    │              │    │    └── tuple
                      │    │              │    └── projections
                      │    │              │         └── plus [as="?column?":8]
-                     │    │              │              ├── variable: x:6
-                     │    │              │              └── variable: y:7
+                     │    │              │              ├── placeholder: $1
+                     │    │              │              └── placeholder: $2
                      │    │              └── const: 1
                      │    └── const: 3
                      ├── params: x:9 y:10
@@ -616,8 +616,8 @@ project
                                │    │    └── tuple
                                │    └── projections
                                │         └── plus [as="?column?":11]
-                               │              ├── variable: x:9
-                               │              └── variable: y:10
+                               │              ├── placeholder: $1
+                               │              └── placeholder: $2
                                └── const: 1
 
 assign-placeholders-build query-args=(33) format=show-scalars
@@ -646,8 +646,8 @@ project
  │                             │    │    └── tuple
  │                             │    └── projections
  │                             │         └── plus [as="?column?":8]
- │                             │              ├── variable: x:6
- │                             │              └── variable: y:7
+ │                             │              ├── placeholder: $1
+ │                             │              └── placeholder: $2
  │                             └── const: 1
  └── projections
       └── udf: add_num_args [as=add_num_args:12]
@@ -664,8 +664,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":11]
-                     │              ├── variable: x:9
-                     │              └── variable: y:10
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 # --------------------------------------------------
@@ -700,8 +700,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":3]
-                     │              ├── variable: arg1:1
-                     │              └── variable: arg2:2
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -728,8 +728,8 @@ project
            │    │              │    │    └── tuple
            │    │              │    └── projections
            │    │              │         └── plus [as="?column?":3]
-           │    │              │              ├── variable: arg1:1
-           │    │              │              └── variable: arg2:2
+           │    │              │              ├── placeholder: $1
+           │    │              │              └── placeholder: $2
            │    │              └── const: 1
            │    └── const: 3
            ├── params: arg1:4 arg2:5
@@ -742,8 +742,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":6]
-                     │              ├── variable: arg1:4
-                     │              └── variable: arg2:5
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 build format=show-scalars
@@ -774,8 +774,8 @@ project
                      │    │              │    │    └── tuple
                      │    │              │    └── projections
                      │    │              │         └── plus [as="?column?":8]
-                     │    │              │              ├── variable: arg1:6
-                     │    │              │              └── variable: arg2:7
+                     │    │              │              ├── placeholder: $1
+                     │    │              │              └── placeholder: $2
                      │    │              └── const: 1
                      │    └── const: 3
                      ├── params: arg1:9 arg2:10
@@ -788,8 +788,8 @@ project
                                │    │    └── tuple
                                │    └── projections
                                │         └── plus [as="?column?":11]
-                               │              ├── variable: arg1:9
-                               │              └── variable: arg2:10
+                               │              ├── placeholder: $1
+                               │              └── placeholder: $2
                                └── const: 1
 
 assign-placeholders-build query-args=(33) format=show-scalars
@@ -818,8 +818,8 @@ project
  │                             │    │    └── tuple
  │                             │    └── projections
  │                             │         └── plus [as="?column?":8]
- │                             │              ├── variable: arg1:6
- │                             │              └── variable: arg2:7
+ │                             │              ├── placeholder: $1
+ │                             │              └── placeholder: $2
  │                             └── const: 1
  └── projections
       └── udf: add_anon [as=add_anon:12]
@@ -836,8 +836,8 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── plus [as="?column?":11]
-                     │              ├── variable: arg1:9
-                     │              └── variable: arg2:10
+                     │              ├── placeholder: $1
+                     │              └── placeholder: $2
                      └── const: 1
 
 
@@ -880,7 +880,7 @@ project
                      │    │    │         └── filters
                      │    │    │              └── gt
                      │    │    │                   ├── variable: c:4
-                     │    │    │                   └── variable: i:1
+                     │    │    │                   └── placeholder: $1
                      │    │    └── const: 1
                      │    └── projections
                      │         └── tuple [as=column7:7]
@@ -926,7 +926,7 @@ project
                      │    │    │         └── filters
                      │    │    │              └── gt
                      │    │    │                   ├── variable: c:4
-                     │    │    │                   └── variable: i:1
+                     │    │    │                   └── placeholder: $1
                      │    │    └── const: 1
                      │    └── projections
                      │         └── tuple [as=column7:7]
@@ -968,7 +968,7 @@ project
                      │    │    └── tuple
                      │    └── projections
                      │         └── column-access: 1 [as=b:2]
-                     │              └── variable: i:1
+                     │              └── placeholder: $1
                      └── const: 1
 
 
@@ -1400,7 +1400,7 @@ project-set
                           └── filters
                                └── gt
                                     ├── variable: a:2
-                                    └── variable: i:1
+                                    └── placeholder: $1
 
 build format=show-scalars
 SELECT * FROM set_fn(1)
@@ -1424,7 +1424,7 @@ project-set
                           └── filters
                                └── gt
                                     ├── variable: a:2
-                                    └── variable: i:1
+                                    └── placeholder: $1
 
 build format=show-scalars
 SELECT a, set_fn(a) FROM abc
@@ -1450,7 +1450,7 @@ project
                                └── filters
                                     └── gt
                                          ├── variable: a:7
-                                         └── variable: i:6
+                                         └── placeholder: $1
 
 
 # --------------------------------------------------
@@ -1497,7 +1497,7 @@ project
                      │                   │    │    │    └── filters
                      │                   │    │    │         └── is-not
                      │                   │    │    │              ├── eq
-                     │                   │    │    │              │    ├── variable: i:1
+                     │                   │    │    │              │    ├── placeholder: $1
                      │                   │    │    │              │    └── variable: a:2
                      │                   │    │    │              └── false
                      │                   │    │    └── projections
@@ -1514,7 +1514,7 @@ project
                      │                             │    ├── and
                      │                             │    │    ├── variable: bool_or:8
                      │                             │    │    └── is-not
-                     │                             │    │         ├── variable: i:1
+                     │                             │    │         ├── placeholder: $1
                      │                             │    │         └── null
                      │                             │    └── true
                      │                             ├── when
@@ -1568,11 +1568,11 @@ project
                      │                        │    │    │    │         └── filters
                      │                        │    │    │    │              └── gt
                      │                        │    │    │    │                   ├── variable: b:3
-                     │                        │    │    │    │                   └── variable: i:1
+                     │                        │    │    │    │                   └── placeholder: $1
                      │                        │    │    │    └── filters
                      │                        │    │    │         └── is-not
                      │                        │    │    │              ├── ge
-                     │                        │    │    │              │    ├── variable: i:1
+                     │                        │    │    │              │    ├── placeholder: $1
                      │                        │    │    │              │    └── variable: a:2
                      │                        │    │    │              └── false
                      │                        │    │    └── projections
@@ -1589,7 +1589,7 @@ project
                      │                                  │    ├── and
                      │                                  │    │    ├── variable: bool_or:8
                      │                                  │    │    └── is-not
-                     │                                  │    │         ├── variable: i:1
+                     │                                  │    │         ├── placeholder: $1
                      │                                  │    │         └── null
                      │                                  │    └── true
                      │                                  ├── when
@@ -1648,8 +1648,8 @@ project
                      │                   │    │    │         └── is-not
                      │                   │    │    │              ├── eq
                      │                   │    │    │              │    ├── tuple
-                     │                   │    │    │              │    │    ├── variable: i:1
-                     │                   │    │    │              │    │    └── variable: j:2
+                     │                   │    │    │              │    │    ├── placeholder: $1
+                     │                   │    │    │              │    │    └── placeholder: $2
                      │                   │    │    │              │    └── variable: column8:8
                      │                   │    │    │              └── false
                      │                   │    │    └── projections
@@ -1666,8 +1666,8 @@ project
                      │                             │    │    ├── variable: bool_or:10
                      │                             │    │    └── is-tuple-not-null
                      │                             │    │         └── tuple
-                     │                             │    │              ├── variable: i:1
-                     │                             │    │              └── variable: j:2
+                     │                             │    │              ├── placeholder: $1
+                     │                             │    │              └── placeholder: $2
                      │                             │    └── true
                      │                             ├── when
                      │                             │    ├── is

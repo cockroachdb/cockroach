@@ -1569,7 +1569,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	}
 	b.addBarrierIfVolatile(inScope, scalar)
 	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
-	col.setParamOrd(ord)
+	col.setParamOrdLegacy(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1594,7 +1594,7 @@ func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, ord int, val ast
 	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
 	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
-	col.setParamOrd(ord)
+	col.setParamOrdLegacy(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1703,7 +1703,7 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
 		if !targetIsRecordVar {
 			// Setting the param ordinal will be handled in projectRecordVar below.
-			col.setParamOrd(targetOrds[j])
+			col.setParamOrdLegacy(targetOrds[j])
 		}
 	}
 	b.ob.constructProjectForScope(stmtScope, intoScope)
@@ -2204,7 +2204,7 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 	}
 	tuple := b.ob.factory.ConstructTuple(elems, typ)
 	col := b.ob.synthesizeColumn(recordScope, scopeColName(name), typ, nil /* expr */, tuple)
-	col.setParamOrd(ord)
+	col.setParamOrdLegacy(ord)
 	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
 	return recordScope
 }
@@ -2217,11 +2217,10 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
 	params := make(opt.ColList, 0, b.variableCount(len(b.blocks)))
 	addParam := func(name scopeColumnName, typ *types.T) {
-		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
-		paramOrd := len(params)
-		col.setParamOrd(paramOrd)
+		ord := len(params)
+		col := b.ob.synthesizeParameterColumn(s, name, typ, ord, nil /* scalar */)
 		params = append(params, col.id)
 	}
 	// Invariant: the variables of a child block always follow those of a parent
@@ -2574,7 +2573,7 @@ func (b *plpgsqlBuilder) projectTupleAsIntoTarget(inScope *scope, target []ast.V
 		)
 		scalar = b.coerceType(scalar, typ)
 		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
-		col.setParamOrd(ord)
+		col.setParamOrdLegacy(ord)
 	}
 	b.ob.constructProjectForScope(inScope, intoScope)
 	return intoScope

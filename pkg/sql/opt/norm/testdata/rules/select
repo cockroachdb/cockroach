@@ -758,6 +758,61 @@ project
  └── projections
       └── f:3 + 1.1 [as=r:9, outer=(3), immutable]
 
+# Regression test for #157840.
+exec-ddl
+CREATE PROCEDURE p157840(INT) LANGUAGE SQL AS $$
+    SELECT * FROM (
+        SELECT *, i/2
+        FROM a
+    )
+    WHERE i = $1
+$$
+----
+
+# With optimizer_build_routine_params_as_placeholders enabled, the filter on i
+# is pushed into the project.
+norm format=show-scalars set=(optimizer_build_routine_params_as_placeholders=true) expect=PushSelectIntoProject
+CALL p157840(10)
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ └── procedure: p157840
+      ├── args
+      │    └── const: 10
+      ├── params: arg1:1
+      └── body
+           ├── project
+           │    ├── columns: "?column?":9!null k:2!null i:3!null f:4 s:5 j:6
+           │    ├── has-placeholder
+           │    ├── key: (2)
+           │    ├── fd: ()-->(3,9), (2)-->(4-6)
+           │    ├── select
+           │    │    ├── columns: k:2!null i:3!null f:4 s:5 j:6
+           │    │    ├── has-placeholder
+           │    │    ├── key: (2)
+           │    │    ├── fd: ()-->(3), (2)-->(4-6)
+           │    │    ├── scan a
+           │    │    │    ├── columns: k:2!null i:3 f:4 s:5 j:6
+           │    │    │    ├── key: (2)
+           │    │    │    └── fd: (2)-->(3-6)
+           │    │    └── filters
+           │    │         └── eq [outer=(3), constraints=(/3: (/NULL - ]), fd=()-->(3)]
+           │    │              ├── variable: i:3
+           │    │              └── placeholder: $1
+           │    └── projections
+           │         └── div [as="?column?":9, outer=(3)]
+           │              ├── variable: i:3
+           │              └── const: 2
+           └── values
+                ├── columns: column1:10
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(10)
+                └── tuple
+                     └── null
+
+
 # --------------------------------------
 # PushSelectCondLeftIntoJoinLeftAndRight
 # --------------------------------------

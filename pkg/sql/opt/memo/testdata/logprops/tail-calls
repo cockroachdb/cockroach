@@ -468,7 +468,7 @@ values
                                                         │              └── const: '00000'
                                                         └── values
                                                              └── tuple
-                                                                  └── variable: x
+                                                                  └── placeholder: $1
 
 # Tail-call with an argument.
 exec-ddl
@@ -542,7 +542,7 @@ values
                                                                                       └── udf: nested_arg
                                                                                            ├── tail-call
                                                                                            ├── args
-                                                                                           │    └── variable: x
+                                                                                           │    └── placeholder: $1
                                                                                            ├── params: x
                                                                                            └── body
                                                                                                 └── values
@@ -653,7 +653,7 @@ values
                                │                                       └── udf: nested_arg
                                │                                            ├── tail-call
                                │                                            ├── args
-                               │                                            │    └── variable: x
+                               │                                            │    └── placeholder: $1
                                │                                            ├── params: x
                                │                                            └── body
                                │                                                 └── values
@@ -678,7 +678,7 @@ values
                                                                   └── udf: nested_arg
                                                                        ├── tail-call
                                                                        ├── args
-                                                                       │    └── variable: x
+                                                                       │    └── placeholder: $1
                                                                        ├── params: x
                                                                        └── body
                                                                             └── values
@@ -726,7 +726,7 @@ values
                                                    ├── true
                                                    ├── when
                                                    │    ├── lt
-                                                   │    │    ├── variable: i
+                                                   │    │    ├── placeholder: $1
                                                    │    │    └── const: 10
                                                    │    └── subquery
                                                    │         ├── tail-call
@@ -736,7 +736,7 @@ values
                                                    │                        ├── true
                                                    │                        ├── when
                                                    │                        │    ├── eq
-                                                   │                        │    │    ├── variable: i
+                                                   │                        │    │    ├── placeholder: $1
                                                    │                        │    │    └── const: 5
                                                    │                        │    └── udf: nested
                                                    │                        │         ├── tail-call
