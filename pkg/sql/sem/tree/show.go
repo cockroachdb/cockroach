@@ -100,7 +100,7 @@ type ShowBackup struct {
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
-	TimeRange    ShowAfterBefore
+	TimeRange    ShowBackupTimeFilter
 }
 
 // Format implements the NodeFormatter interface.
@@ -140,32 +140,32 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowAfterBefore represents the AFTER <expr> BEFORE <expr> option for
-// SHOW BACKUPS.
-type ShowAfterBefore struct {
-	After  Expr
-	Before Expr
+// ShowBackupTimeFilter represents the NEWER THAN <expr> OLDER THAN <expr>
+// option for SHOW BACKUPS.
+type ShowBackupTimeFilter struct {
+	NewerThan Expr
+	OlderThan Expr
 }
 
-var _ NodeFormatter = &ShowAfterBefore{}
+var _ NodeFormatter = &ShowBackupTimeFilter{}
 
-func (s *ShowAfterBefore) Format(ctx *FmtCtx) {
-	if s.After != nil {
-		ctx.WriteString("AFTER ")
-		ctx.FormatNode(s.After)
+func (s *ShowBackupTimeFilter) Format(ctx *FmtCtx) {
+	if s.NewerThan != nil {
+		ctx.WriteString("NEWER THAN ")
+		ctx.FormatNode(s.NewerThan)
 	}
 
-	if s.Before != nil {
-		if s.After != nil {
+	if s.OlderThan != nil {
+		if s.NewerThan != nil {
 			ctx.WriteString(" ")
 		}
-		ctx.WriteString("BEFORE ")
-		ctx.FormatNode(s.Before)
+		ctx.WriteString("OLDER THAN ")
+		ctx.FormatNode(s.OlderThan)
 	}
 }
 
-func (s *ShowAfterBefore) IsDefault() bool {
-	return s.After == nil && s.Before == nil
+func (s *ShowBackupTimeFilter) IsDefault() bool {
+	return s.NewerThan == nil && s.OlderThan == nil
 }
 
 type ShowBackupOptions struct {
