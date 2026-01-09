@@ -52,6 +52,10 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=1] applying replica change r4 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 4 on store 1
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=4, change=r4 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
+[mmaid=1] applying replica change r4 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true) to range 4 on store 2
+[mmaid=1] addPendingRangeChange: change_id=2, range_id=4, change=r4 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true)
 [mmaid=1] result(success): shedding r4 lease from s1 to s2 [change:r4=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:770ns/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:353ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.23) (src:2.53,target:0.00))
 [mmaid=1] considering lease-transfer r3 from s1: candidates are [2 3]
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
@@ -77,6 +81,10 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% [load=540 meanLoad=400 fractionUsed=54.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] can add load to n3s3: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.23(false))]
+[mmaid=1] applying replica change r3 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 3 on store 1
+[mmaid=1] addPendingRangeChange: change_id=3, range_id=3, change=r3 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
+[mmaid=1] applying replica change r3 type: AddLease target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=3 type=VOTER_FULL leaseholder=true) to range 3 on store 3
+[mmaid=1] addPendingRangeChange: change_id=4, range_id=3, change=r3 type: AddLease target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=3 type=VOTER_FULL leaseholder=true)
 [mmaid=1] result(success): shedding r3 lease from s1 to s3 [change:r3=[transfer_to=3 cids=3,4]] with resulting loads source:[cpu:540ns/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:353ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:400ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.46) (src:2.53,target:0.00))
 [mmaid=1] s1 has reached pending decrease threshold(0.46>=0.40) after 2 lease transfers
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
