@@ -774,7 +774,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 		return err
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := smither.Generate()
-		err := db.exec(t, ctx, s)
+		err := db.execWithTimeout(t, ctx, s, 125*time.Second)
 		if c := (*crasher)(nil); errors.As(err, &c) {
 			if err := db.exec(t, ctx, "USE defaultdb"); err != nil {
 				t.Fatalf("couldn't reconnect to db after crasher: %v", c)

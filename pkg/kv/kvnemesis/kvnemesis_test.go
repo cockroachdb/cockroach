@@ -514,6 +514,11 @@ func TestKVNemesisMultiNode_Partition_Safety(t *testing.T) {
 		testGeneratorConfig: func(cfg *GeneratorConfig) {
 			cfg.Ops.Fault.AddNetworkPartition = 1
 			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// This is the only operation that executes via SQL. As such, we suspect
+			// context cancellations are not always respected, resulting in the test
+			// hanging. The current suspect is lib/pq. See #160293.
+			// TODO(mira): Consider toggling global reads by editing the span config.
+			cfg.Ops.ChangeZone.ToggleGlobalReads = 0
 		},
 	})
 }

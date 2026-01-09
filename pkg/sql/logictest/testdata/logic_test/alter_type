@@ -774,3 +774,20 @@ statement ok
 ALTER TYPE typ_127147 DROP VALUE 'a';
 
 subtest end
+
+# Validate that invalid type conversions will return errors to users.
+subtest invalid_type_conversion
+
+statement ok
+CREATE TABLE invalid_table(id UUID PRIMARY KEY, s STRING);
+INSERT INTO invalid_table SELECT gen_random_uuid(), '{';
+
+skipif config local-legacy-schema-changer
+statement error pgcode 22P02 failed to construct index entries during backfill: could not parse JSON.*
+ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE JSONB USING s::JSONB; -- Attempt to convert string to json
+
+skipif config local-legacy-schema-changer
+statement error failed to construct index entries during backfill: could not parse "{" as type int: strconv.ParseInt: parsing "{": invalid syntax
+ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE INT USING s::INT; -- Attempt to convert string to int
+
+subtest end
