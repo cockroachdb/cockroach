@@ -8,6 +8,7 @@ package backupinfo
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -910,8 +911,11 @@ func TestFindLatestBackup(t *testing.T) {
 	defer dirCleanupFn()
 
 	testcases := []struct {
-		name          string
-		collection    fakeBackupCollection
+		name       string
+		collection fakeBackupCollection
+		// rootFullEnd is the end time of the full backup of the chain the latest
+		// backup is from.
+		rootFullEnd   int
 		expectedTimes [2]int
 	}{
 		{
@@ -919,6 +923,7 @@ func TestFindLatestBackup(t *testing.T) {
 			collection: fakeBackupCollection{
 				chain(b(0, 2)),
 			},
+			rootFullEnd:   2,
 			expectedTimes: [2]int{0, 2},
 		},
 		{
@@ -926,14 +931,16 @@ func TestFindLatestBackup(t *testing.T) {
 			collection: fakeBackupCollection{
 				chain(b(0, 2), b(2, 4), b(4, 6)),
 			},
+			rootFullEnd:   2,
 			expectedTimes: [2]int{4, 6},
 		},
 		{
-			name: "single chain/latest is compacted backup",
+			name: "single chain/choose non-compacted-backup",
 			collection: fakeBackupCollection{
 				chain(b(0, 2), b(2, 4), b(4, 6), b(2, 8), b(6, 8)),
 			},
-			expectedTimes: [2]int{2, 8},
+			rootFullEnd:   2,
+			expectedTimes: [2]int{6, 8},
 		},
 		{
 			name: "multiple chains/latest is latest full",
@@ -941,6 +948,7 @@ func TestFindLatestBackup(t *testing.T) {
 				chain(b(0, 2), b(2, 4)),
 				chain(b(0, 6)),
 			},
+			rootFullEnd:   6,
 			expectedTimes: [2]int{0, 6},
 		},
 		{
@@ -949,6 +957,7 @@ func TestFindLatestBackup(t *testing.T) {
 				chain(b(0, 2), b(2, 4), b(4, 8)),
 				chain(b(0, 6), b(6, 10)),
 			},
+			rootFullEnd:   6,
 			expectedTimes: [2]int{6, 10},
 		},
 		{
@@ -957,15 +966,26 @@ func TestFindLatestBackup(t *testing.T) {
 				chain(b(0, 2), b(2, 4), b(4, 8), b(8, 10)),
 				chain(b(0, 6)),
 			},
+			rootFullEnd:   2,
 			expectedTimes: [2]int{8, 10},
 		},
 		{
-			name: "multiple chains/full and inc tie",
+			name: "multiple chains/full and inc+compacted tie",
 			collection: fakeBackupCollection{
-				chain(b(0, 2), b(2, 4), b(4, 8)),
+				chain(b(0, 2), b(2, 4), b(2, 8), b(4, 8)),
 				chain(b(0, 8)),
 			},
+			rootFullEnd:   8,
 			expectedTimes: [2]int{0, 8},
+		},
+		{
+			name: "multiple chains/choose non-compacted-backup in older chain",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6), b(2, 10), b(6, 10)),
+				chain(b(0, 8)),
+			},
+			rootFullEnd:   2,
+			expectedTimes: [2]int{6, 10},
 		},
 	}
 
@@ -991,14 +1011,69 @@ func TestFindLatestBackup(t *testing.T) {
 			}
 
 			tc.collection.writeIndexes(t, ctx, execCfg, makeExternalStorage, collectionURI)
-			latest, err := FindLatestBackup(ctx, externalStorage)
+			latest, id, err := FindLatestBackup(ctx, externalStorage)
 			require.NoError(t, err)
 			expectedStart := intToTimeWithNano(tc.expectedTimes[0])
 			expectedEnd := intToTimeWithNano(tc.expectedTimes[1])
 			require.Equal(t, expectedStart, latest.StartTime, "start time mismatch")
 			require.Equal(t, expectedEnd, latest.EndTime, "end time mismatch")
+			fullEnd, _, err := DecodeBackupID(id)
+			require.NoError(t, err)
+			// We truncate the actual root end time to 10ms precision since that's the
+			// precision in the ID.
+			expectedFullEnd := intToTimeWithNano(tc.rootFullEnd).GoTime().Truncate(10 * time.Millisecond)
+			require.Equal(t, expectedFullEnd, fullEnd, "full backup end time mismatch")
 		})
 	}
+}
+
+func TestEncodeDecodeBackupID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We truncate to 10ms precision since that's the precision we use in the ID.
+	precision := 10 * time.Millisecond
+	fullEnd := time.Now().UTC().Truncate(precision)
+
+	t.Run("full backup ID", func(t *testing.T) {
+		endTime := fullEnd
+		id := encodeBackupID(fullEnd, endTime)
+		decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+		require.NoError(t, err)
+		require.Equal(t, fullEnd, decodedFullEnd)
+		require.Equal(t, endTime, decodedEnd)
+	})
+
+	t.Run("incremental backup ID", func(t *testing.T) {
+		// We test in increasing differences up to one week to stress test the
+		// XOR encoding.
+		var delta time.Duration
+		for i := 0; i < 8; i++ {
+			// This effectively adds one more random digit to the delta starting at
+			// the minimum precision.
+			delta += time.Duration(int(math.Pow10(i))*rand.Intn(10)) * precision
+			t.Run(fmt.Sprintf("delta=%s", delta), func(t *testing.T) {
+				endTime := fullEnd.Add(delta)
+				id := encodeBackupID(fullEnd, endTime)
+				decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+				require.NoError(t, err)
+				require.Equal(t, fullEnd, decodedFullEnd)
+				require.Equal(t, endTime, decodedEnd)
+			})
+		}
+	})
+
+	t.Run("invalid ID", func(t *testing.T) {
+		invalidIDs := map[string]string{
+			"empty":          "",
+			"invalid base64": "#!@($*%!)",
+		}
+		for name, id := range invalidIDs {
+			t.Run(name, func(t *testing.T) {
+				_, _, err := DecodeBackupID(id)
+				require.Error(t, err)
+			})
+		}
+	})
 }
 
 // intToTimeWithNano converts the integer time an easy to read hlc.Timestamp
