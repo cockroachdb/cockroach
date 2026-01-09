@@ -66,6 +66,9 @@ type kvRangefeedTest struct {
 	// latencyAssertions controls whether we should assert that the foreground
 	// latency was not impacted during the test.
 	latencyAssertions bool
+
+	// cpus is the number of vCPUs per CRDB node. Defaults to 8 if not set.
+	cpus int
 }
 
 const (
@@ -423,6 +426,9 @@ func registerKVRangefeed(r registry.Registry) {
 			catchUpInterval:           5 * time.Minute,
 			// TODO(ssd): Re-enable once we can make this more stable.
 			latencyAssertions: false,
+			// Use more CPUs to provide headroom for rangefeed event processing.
+			// See #157216.
+			cpus: 16,
 		},
 		// Underprovisioned sink
 		{
@@ -476,13 +482,17 @@ func registerKVRangefeed(r registry.Registry) {
 			opts.splits,
 			dist,
 		)
+		cpus := opts.cpus
+		if cpus == 0 {
+			cpus = 8 // default
+		}
 		r.Add(registry.TestSpec{
 			Name:      testName,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
 			Cluster: r.MakeClusterSpec(
 				4,
-				spec.CPU(8),
+				spec.CPU(cpus),
 				spec.WorkloadNode(),
 				spec.WorkloadNodeCPU(4),
 				spec.RandomizeVolumeType(),

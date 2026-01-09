@@ -5,12 +5,14 @@ created descriptor: r1:{a-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 create-replica range-id=1 initialized
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
 Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
 Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
 Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+log engine:
 Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
 
@@ -37,12 +39,14 @@ Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_appli
 create-replica range-id=2
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
 
 # apply-split applies the stashed batch and runs splitPreApply. It automatically
 # detects that the RHS replica exists and initializes it.
 apply-split range-id=1
 ----
+state engine:
 Put: 0,0 /Local/RangeID/2/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0,0
 Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): repl=(n2,s2):2 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
@@ -50,9 +54,10 @@ Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004
 Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
+log engine:
 Put: 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
-Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
 
 # Note the lease types for r1 and r2. r2 gets an expiration based lease.
 print-range-state
@@ -85,10 +90,12 @@ Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_appli
 create-replica range-id=3
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/3/u/RaftReplicaID (0x01698b757266747200): replica_id:1 
 
 apply-split range-id=1
 ----
+state engine:
 Put: 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698b75726c727400): 0,0
 Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): repl=(n1,s1):1 seq=0 start=0,0 type=LeaseEpoch epo=20 min-exp=0,0 pro=0,0 acq=Unspecified
@@ -96,9 +103,10 @@ Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0.000000004
 Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:196 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:196 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
+log engine:
 Put: 0,0 /Local/RangeID/3/u/RaftHardState (0x01698b757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/3/u/RaftTruncatedState (0x01698b757266747400): index:10 term:5 
-Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:196 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
 
 set-lease range-id=2 replica=3 lease-type=expiration
 ----
@@ -117,10 +125,12 @@ Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_appli
 create-replica range-id=4
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/4/u/RaftReplicaID (0x01698c757266747200): replica_id:1 
 
 apply-split range-id=2
 ----
+state engine:
 Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0,0
 Put: 0,0 /Local/Range"v"/QueueLastProcessed/"consistencyChecker" (0x016b12760001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): repl=(n3,s3):3 seq=0 start=0,0 type=LeaseExpiration exp=0.000000300,0 pro=0,0 acq=Unspecified
@@ -128,9 +138,10 @@ Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0.000000004
 Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698c727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:199 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:199 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
+log engine:
 Put: 0,0 /Local/RangeID/4/u/RaftHardState (0x01698c757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/4/u/RaftTruncatedState (0x01698c757266747400): index:10 term:5 
-Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:199 sys_count:5 > raft_closed_timestamp:<wall_time:100 > raft_applied_index_term:5 
 
 # Note the lease types for ranges r3 and r4.
 print-range-state sort-keys=true

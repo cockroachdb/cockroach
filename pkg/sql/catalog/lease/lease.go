@@ -1187,6 +1187,8 @@ func (m *Manager) completeBulkAcquisition(id descpb.ID) {
 // basis, where missing descriptors, dropped, adding, or validation errors will
 // be ignored.
 func (m *Manager) EnsureBatch(ctx context.Context, ids []descpb.ID) error {
+	ctx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
 	maxBatchSize := MaxBatchLeaseCount.Get(&m.storage.settings.SV)
 	idsToFetch := make([]descpb.ID, 0, min(len(ids), int(maxBatchSize)))
 	lastVersion := make([]descpb.DescriptorVersion, cap(idsToFetch))

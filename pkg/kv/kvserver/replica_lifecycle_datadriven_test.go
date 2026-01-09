@@ -171,19 +171,19 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 
 				var err error
-				output := tc.mutate(t, func(batch storage.Batch) {
+				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					if initialized {
 						require.NoError(t, kvstorage.WriteInitialRangeState(
-							ctx, batch, batch,
+							ctx, stateBatch, raftBatch,
 							rs.desc, repl.ReplicaID, rs.version,
 						))
 					} else {
 						err = kvstorage.CreateUninitializedReplica(
-							ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
+							ctx, kvstorage.WrapState(stateBatch), raftBatch, 1, /* StoreID */
 							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
 						)
 					}
-					tc.updateReplicaStateFromStorage(t, ctx, rs, batch, true /* justCreated */)
+					tc.updateReplicaStateFromStorage(t, ctx, rs, stateBatch, raftBatch, true /* justCreated */)
 				})
 				// CreateUninitializedReplica can return an error if the replica is
 				// already destroyed.
@@ -207,7 +207,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 
 				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetHardState(
-					ctx, tc.storage, rs.replica.hs,
+					ctx, tc.raftStorage, rs.replica.hs,
 				))
 				return fmt.Sprintf("HardState %+v", rs.replica.hs)
 
@@ -270,7 +270,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// generated for replication. Stash it away. This represents the
 				// raft log entry that will be applied as part of split
 				// application.
-				batch := tc.storage.NewBatch()
+				batch := tc.stateStorage.NewBatch()
 				rec := (&batcheval.MockEvalCtx{
 					ClusterSettings:        tc.st,
 					Desc:                   &desc,
@@ -332,16 +332,16 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
-				return tc.mutate(t, func(batch storage.Batch) {
+				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					// First, apply the stashed batch from split trigger
 					// evaluation.
-					require.NoError(t, batch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
+					require.NoError(t, stateBatch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
 					// Then run splitPreApply which does the apply-time tweaks.
-					splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
+					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
 					// If the RHS replica wasn't destroyed, it is now initialized.
 					// Update the in-memory state to reflect this.
 					if !destroyed {
-						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, batch, false /* justCreated */)
+						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, stateBatch, raftBatch, false /* justCreated */)
 					}
 				})
 
@@ -358,10 +358,14 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					destroyInfo.Keys = rs.desc.RSpan()
 				}
 
-				output := tc.mutate(t, func(batch storage.Batch) {
+				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
+					rw := kvstorage.ReadWriter{
+						State: kvstorage.WrapState(stateBatch),
+						Raft:  kvstorage.WrapRaft(raftBatch),
+					}
 					require.NoError(t, kvstorage.DestroyReplica(
 						ctx,
-						kvstorage.TODOReadWriter(batch),
+						rw,
 						destroyInfo,
 						rs.desc.NextReplicaID,
 					))
@@ -380,11 +384,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs.replica.lastIdx += kvpb.RaftIndex(numEntries)
 				term := rs.replica.hs.Term
 
-				return tc.mutate(t, func(batch storage.Batch) {
+				return tc.mutate(t, func(_, raftBatch storage.Batch) {
 					for i := 0; i < numEntries; i++ {
 						entryIndex := lastIndex + 1 + kvpb.RaftIndex(i)
 						require.NoError(t, storage.MVCCBlindPutProto(
-							ctx, batch,
+							ctx, raftBatch,
 							sl.RaftLogKey(entryIndex), hlc.Timestamp{},
 							&raftpb.Entry{Index: uint64(entryIndex), Term: term},
 							storage.MVCCWriteOptions{},
@@ -412,17 +416,17 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					return append(baseKey, strconv.Itoa(i)...)
 				}
 
-				return tc.mutate(t, func(batch storage.Batch) {
+				return tc.mutate(t, func(stateBatch, _ storage.Batch) {
 					// 1. User keys.
 					for i := 0; i < numUserKeys; i++ {
-						require.NoError(t, batch.PutMVCC(
+						require.NoError(t, stateBatch.PutMVCC(
 							storage.MVCCKey{Key: getUserKey(i), Timestamp: ts}, storage.MVCCValue{},
 						))
 					}
 					// 2. System keys.
 					for i := 0; i < numSystemKeys; i++ {
 						key := keys.TransactionKey(getUserKey(i), uuid.NamespaceDNS)
-						require.NoError(t, batch.PutMVCC(
+						require.NoError(t, stateBatch.PutMVCC(
 							storage.MVCCKey{Key: key, Timestamp: ts}, storage.MVCCValue{},
 						))
 					}
@@ -431,7 +435,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						ek, _ := storage.LockTableKey{
 							Key: getUserKey(i), Strength: lock.Intent, TxnUUID: uuid.UUID{},
 						}.ToEngineKey(nil)
-						require.NoError(t, batch.PutEngineKey(ek, nil))
+						require.NoError(t, stateBatch.PutEngineKey(ek, nil))
 					}
 				})
 
@@ -511,8 +515,11 @@ type testCtx struct {
 	nextRangeID roachpb.RangeID // monotonically-increasing rangeID
 	ranges      map[roachpb.RangeID]*rangeState
 	splits      map[roachpb.RangeID]pendingSplit
-	// The storage engine corresponds to a single store, (n1, s1).
-	storage storage.Engine
+	// The storage engines correspond to a single store, (n1, s1). The engines
+	// are logically separated into two -- one for the state machine, and one
+	// for Raft.
+	stateStorage storage.Engine
+	raftStorage  storage.Engine
 }
 
 // newTestCtx constructs and returns a new testCtx.
@@ -525,33 +532,57 @@ func newTestCtx() *testCtx {
 		clock:              clock,
 		rangeLeaseDuration: 99 * time.Nanosecond,
 
-		nextRangeID: 1,
-		ranges:      make(map[roachpb.RangeID]*rangeState),
-		splits:      make(map[roachpb.RangeID]pendingSplit),
-		storage:     storage.NewDefaultInMemForTesting(),
+		nextRangeID:  1,
+		ranges:       make(map[roachpb.RangeID]*rangeState),
+		splits:       make(map[roachpb.RangeID]pendingSplit),
+		stateStorage: storage.NewDefaultInMemForTesting(),
+		raftStorage:  storage.NewDefaultInMemForTesting(),
 	}
 }
 
-// close closes the test context's storage engine.
+// close closes the test context's storage engines.
 func (tc *testCtx) close() {
-	tc.storage.Close()
+	tc.stateStorage.Close()
+	tc.raftStorage.Close()
 }
 
-// mutate executes a write operation on a batch and commits it. All KVs written
-// as part of the batch are returned as a string for the benefit of the
-// datadriven test output.
-func (tc *testCtx) mutate(t *testing.T, write func(storage.Batch)) string {
-	batch := tc.storage.NewBatch()
-	defer batch.Close()
-	write(batch)
-	output, err := print.DecodeWriteBatch(batch.Repr())
+// mutate executes a write operation on both state and raft storage batches
+// and commits them. All KVs written as part of both batches are returned as a
+// string for the benefit of the datadriven test output, with explicit labels
+// for each engine.
+func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage.Batch)) string {
+	stateBatch := tc.stateStorage.NewBatch()
+	defer stateBatch.Close()
+	raftBatch := tc.raftStorage.NewBatch()
+	defer raftBatch.Close()
+
+	write(stateBatch, raftBatch)
+
+	stateOutput, err := print.DecodeWriteBatch(stateBatch.Repr())
 	require.NoError(t, err)
-	require.NoError(t, batch.Commit(false))
+	raftOutput, err := print.DecodeWriteBatch(raftBatch.Repr())
+	require.NoError(t, err)
+
+	require.NoError(t, raftBatch.Commit(false))
+	require.NoError(t, stateBatch.Commit(false))
+
 	// TODO(arul): There may be double new lines in the output (see tryTxn in
 	// debug_print.go) that we need to strip out for the benefit of the
 	// datadriven test driver. Until that TODO is addressed, we manually split
 	// things out here.
-	return strings.ReplaceAll(output, "\n\n", "\n")
+	stateOutput = strings.ReplaceAll(stateOutput, "\n\n", "\n")
+	raftOutput = strings.ReplaceAll(raftOutput, "\n\n", "\n")
+
+	var sb strings.Builder
+	if stateOutput != "" {
+		sb.WriteString("state engine:\n")
+		sb.WriteString(stateOutput)
+	}
+	if raftOutput != "" {
+		sb.WriteString("log engine:\n")
+		sb.WriteString(raftOutput)
+	}
+	return sb.String()
 }
 
 // createRangeDesc creates a new RangeDescriptor for the given keys span and list
@@ -617,18 +648,22 @@ func (tc *testCtx) mustGetRangeState(t *testing.T, rangeID roachpb.RangeID) *ran
 }
 
 func (tc *testCtx) updateReplicaStateFromStorage(
-	t *testing.T, ctx context.Context, rs *rangeState, batch storage.Batch, justCreated bool,
+	t *testing.T,
+	ctx context.Context,
+	rs *rangeState,
+	stateReader, raftReader storage.Reader,
+	justCreated bool,
 ) {
 	if justCreated {
 		// Sanity check that we're not overwriting an existing replica.
 		require.Nil(t, rs.replica)
 	}
 	sl := kvstorage.MakeStateLoader(rs.desc.RangeID)
-	hs, err := sl.LoadHardState(ctx, batch)
+	hs, err := sl.LoadHardState(ctx, raftReader)
 	require.NoError(t, err)
-	ts, err := sl.LoadRaftTruncatedState(ctx, batch)
+	ts, err := sl.LoadRaftTruncatedState(ctx, raftReader)
 	require.NoError(t, err)
-	replID, err := sl.LoadRaftReplicaID(ctx, batch)
+	replID, err := sl.LoadRaftReplicaID(ctx, stateReader)
 	require.NoError(t, err)
 	rs.replica = &replicaInfo{
 		FullReplicaID: roachpb.FullReplicaID{

@@ -1713,7 +1713,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 	if err != nil {
 		return nil, err
 	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
+	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName, false /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}
@@ -2251,21 +2251,21 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	destColumnExists, err := og.columnExistsOnTable(ctx, tx, tableName, destColumnName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
-		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
 	})
-	// The column may be referenced in a view or trigger, which can lead to a
-	// dependency error. This is particularly hard to detect in cases where renaming
-	// a column that is part of a hash-sharded primary key triggers a cascading rename
-	// of the crdb_internal shard column, which might be used indirectly by other objects.
-	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		// The column may be referenced in a view or trigger, which can lead to a
+		// dependency error. This is particularly hard to detect in cases where renaming
+		// a column that is part of a hash-sharded primary key triggers a cascading rename
+		// of the crdb_internal shard column, which might be used indirectly by other objects.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
+		// Duplicate name errors are potential because destination name conflicts
+		// can change after checking.
+		{code: pgcode.DuplicateColumn, condition: srcColumnName != destColumnName},
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
 		tableName.String(), srcColumnName.String(), destColumnName.String())
@@ -2307,15 +2307,15 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if err != nil {
 		return nil, err
 	}
-	destIndexExists, err := og.indexExists(ctx, tx, tableName, destIndexName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: !srcIndexExists},
-		{code: pgcode.DuplicateRelation, condition: destIndexExists && srcIndexName != destIndexName},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: srcIndexName != destIndexName},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER INDEX %s@"%s" RENAME TO "%s"`,
@@ -2350,18 +2350,17 @@ func (og *operationGenerator) renameSequence(ctx context.Context, tx pgx.Tx) (*o
 		return nil, err
 	}
 
-	destSequenceExists, err := og.sequenceExists(ctx, tx, destSequenceName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
 		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName)
@@ -2400,11 +2399,6 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	destTableExists, err := og.tableExists(ctx, tx, destTableName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false, /* includeFKs */
 		false /* skipSelfRef */)
 	if err != nil {
@@ -2416,9 +2410,13 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcTableExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName)
@@ -2451,11 +2449,6 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	destViewExists, err := og.viewExists(ctx, tx, destViewName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true, /* includeFKs */
 		false /* skipSelfRef */)
 	if err != nil {
@@ -2467,9 +2460,13 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcViewExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
@@ -2675,7 +2672,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
+	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name, true /* includeFKs */)
 	if err != nil {
 		return nil, err
 	}

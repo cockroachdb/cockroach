@@ -41,6 +41,12 @@ build:test --crdb_test
 
 # Basic settings.
 common --noenable_bzlmod
+# rules_ts 3.x requires explicit skipLibCheck configuration
+# honor_tsconfig means respect the tsconfig.json setting
+common --@aspect_rules_ts//ts:skipLibCheck=honor_tsconfig
+# rules_ts 3.x requires explicit transpiler selection
+# tsc means use TypeScript compiler for transpilation
+common --@aspect_rules_ts//ts:default_to_tsc_transpiler
 build --enable_platform_specific_config
 build --define gotags=bazel,gss
 build --experimental_proto_descriptor_sets_include_source_info
