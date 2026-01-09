@@ -44,7 +44,6 @@ type sampleEnvironmentCfg struct {
 	st                    *cluster.Settings
 	stopper               *stop.Stopper
 	minSampleInterval     time.Duration
-	goroutineDumpDirName  string
 	heapProfileDirName    string
 	cpuProfileDirName     string
 	executionTraceDirName string
@@ -76,7 +75,6 @@ func startSampleEnvironment(
 		st:                    srvCfg.Settings,
 		stopper:               stopper,
 		minSampleInterval:     metricsSampleInterval,
-		goroutineDumpDirName:  srvCfg.GoroutineDumpDirName,
 		heapProfileDirName:    srvCfg.HeapProfileDirName,
 		cpuProfileDirName:     srvCfg.CPUProfileDirName,
 		executionTraceDirName: srvCfg.ExecutionTraceDirName,
@@ -85,18 +83,6 @@ func startSampleEnvironment(
 		rootMemMonitor:        rootMemMonitor,
 		cgoMemTarget:          max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
-	// Immediately record summaries once on server startup.
-
-	// Initialize a goroutine dumper if we have an output directory specified and
-	// no pre-built dumper was provided.
-	if goroutineDumper == nil {
-		var err error
-		goroutineDumper, err = maybeNewGoroutineDumper(ctx, cfg.goroutineDumpDirName, cfg.st)
-		if err != nil {
-			return errors.Wrap(err, "starting goroutine dumper worker")
-		}
-	}
-
 	// Initialize a heap profiler if we have an output directory
 	// specified.
 	var heapProfiler *profiler.HeapProfiler
