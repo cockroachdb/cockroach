@@ -108,16 +108,11 @@ type encryptedFS struct {
 	streamCreator *FileCipherStreamCreator
 }
 
-// Create implements vfs.FS.Create.
-func (fs *encryptedFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
-	f, err := fs.FS.Create(name, category)
-	if err != nil {
-		return f, err
-	}
-	// NB: f.Close() must be called except in the case of a successful return.
+// registerNewEncryption creates new encryption settings and registers them
+// in the file registry. Returns the stream for encrypting file content.
+func (fs *encryptedFS) registerNewEncryption(name string) (FileStream, error) {
 	settings, stream, err := fs.streamCreator.CreateNew(context.TODO())
 	if err != nil {
-		_ = f.Close()
 		return nil, err
 	}
 	// Add an entry for the file to the pebble file registry if it is encrypted.
@@ -125,22 +120,39 @@ func (fs *encryptedFS) Create(name string, category vfs.DiskWriteCategory) (vfs.
 	// a file in the file registry implies that it is unencrypted.
 	if settings.EncryptionType == enginepb.EncryptionType_Plaintext {
 		if err := fs.fileRegistry.MaybeDeleteEntry(name); err != nil {
-			_ = f.Close()
 			return nil, err
 		}
 	} else {
 		fproto := &enginepb.FileEntry{}
 		fproto.EnvType = fs.streamCreator.envType
 		if fproto.EncryptionSettings, err = protoutil.Marshal(settings); err != nil {
-			_ = f.Close()
 			return nil, err
 		}
 		if err := fs.fileRegistry.SetFileEntry(name, fproto); err != nil {
-			_ = f.Close()
 			return nil, err
 		}
 	}
+	return stream, nil
+}
+
+// initEncryptedFile creates new encryption settings for a file and registers
+// it in the file registry. On error, f is closed.
+func (fs *encryptedFS) initEncryptedFile(f vfs.File, name string) (vfs.File, error) {
+	stream, err := fs.registerNewEncryption(name)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
 	return &encryptedFile{File: f, stream: stream}, nil
+}
+
+// Create implements vfs.FS.Create.
+func (fs *encryptedFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
+	f, err := fs.FS.Create(name, category)
+	if err != nil {
+		return f, err
+	}
+	return fs.initEncryptedFile(f, name)
 }
 
 // Link implements vfs.FS.Link.
@@ -221,21 +233,32 @@ func (fs *encryptedFS) Rename(oldname, newname string) error {
 	return fs.fileRegistry.MaybeDeleteEntry(oldname)
 }
 
-// ReuseForWrite implements vfs.FS.ReuseForWrite.
-//
-// We cannot change any of the key/iv/nonce and reuse the same file since RocksDB does not
-// like non-empty WAL files with zero readable entries. There is a todo in env_encryption.cc
-// to change this RocksDB behavior. We need to handle a user switching from Pebble to RocksDB,
-// so cannot generate WAL files that RocksDB will complain about.
+// ReuseForWrite implements vfs.FS.ReuseForWrite. The underlying file is
+// reused to avoid filesystem metadata updates, but new encryption settings
+// (nonce/counter) are generated to avoid CTR keystream reuse.
 func (fs *encryptedFS) ReuseForWrite(
 	oldname, newname string, category vfs.DiskWriteCategory,
 ) (vfs.File, error) {
-	// This is slower than simply calling Create(newname) since the Remove() and Create()
-	// will write and sync the file registry file twice. We can optimize this if needed.
-	if err := fs.Remove(oldname); err != nil {
+	// Register metadata for newname BEFORE the filesystem operation, following
+	// the same pattern as Rename. This ensures the file has metadata after the
+	// filesystem operation succeeds. If we crash between registering metadata
+	// and the filesystem operation, the dangling registry entry for newname is
+	// cleaned up on registry load.
+	stream, err := fs.registerNewEncryption(newname)
+	if err != nil {
 		return nil, err
 	}
-	return fs.Create(newname, category)
+	// Reuse the underlying file (avoids filesystem metadata updates).
+	f, err := fs.FS.ReuseForWrite(oldname, newname, category)
+	if err != nil {
+		return nil, err
+	}
+	// Delete old file's metadata.
+	if err := fs.fileRegistry.MaybeDeleteEntry(oldname); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return &encryptedFile{File: f, stream: stream}, nil
 }
 
 type encryptionStatsHandler struct {
