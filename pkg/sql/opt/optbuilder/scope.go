@@ -539,7 +539,9 @@ func (s *scope) colSet() opt.ColSet {
 func (s *scope) colSetWithExtraCols() opt.ColSet {
 	colSet := s.colSet()
 	for i := range s.extraCols {
-		colSet.Add(s.extraCols[i].id)
+		if s.extraCols[i].id != 0 {
+			colSet.Add(s.extraCols[i].id)
+		}
 	}
 	return colSet
 }
