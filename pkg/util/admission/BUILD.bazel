@@ -61,7 +61,6 @@ go_library(
 go_test(
     name = "admission_test",
     srcs = [
-        "cpu_time_token_estimation_test.go",
         "cpu_time_token_filler_test.go",
         "cpu_time_token_granter_test.go",
         "disk_bandwidth_test.go",

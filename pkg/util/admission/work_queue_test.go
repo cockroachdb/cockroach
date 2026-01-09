@@ -332,7 +332,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				return q.String()
 
 			case "gc-tenants-and-reset-used":
-				q.gcTenantsAndResetUsed()
+				q.gcTenantsResetUsedAndUpdateEstimators()
 				return q.String()
 
 			default:
@@ -375,7 +375,8 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 // to Admit and AdmittedWorkDone, in order to assert that AdmittedWorkDone
 // makes the right granter calls and the right changes to used. For
 // extensive testing of the WorkQueue, e.g. of fair-sharing, of queuing,
-// we rely on TestWorkQueueBasic.
+// we rely on TestWorkQueueBasic. Also, see TestCPUTimeTokenEstimation
+// for testing of CPU time token estimation.
 func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -417,6 +418,7 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 				st = cluster.MakeTestingClusterSettings()
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					KVWork, tg, st, metrics, opts).(*WorkQueue)
+				q.knobs.DisableCPUTimeTokenEstimation = true
 				tg.r = q
 				wrkMap.resetMap()
 				return ""
@@ -475,6 +477,155 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
+}
+
+// TestCPUTimeTokenEstimation tests estimation of the number of
+// CPU time tokens used by some work that calls Admit before it executes.
+// This is a test of the estimation logic *only*. See
+// TestCPUTimeTokenWorkQueue for a test of the CPU time work queue
+// itself.
+func TestCPUTimeTokenEstimation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	closeFn()
+	tg = &testGranter{buf: &buf}
+	// We want all calls to tryGet to return true. Thus all calls
+	// to Admit allow admission immediately.
+	tg.returnValueFromTryGet = true
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	timeSource = timeutil.NewManualTime(initialTime)
+	opts.timeSource = timeSource
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCTenantsAndResetUsed = true
+	st = cluster.MakeTestingClusterSettings()
+	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, tg, st, metrics, opts).(*WorkQueue)
+	tg.r = q
+	ctx := context.Background()
+
+	checkEstimation := func(resp AdmitResponse, expected time.Duration) {
+		require.InDelta(
+			t, expected.Nanoseconds(), resp.requestedCount, float64(time.Millisecond.Nanoseconds()),
+			"expected %v, got %v (tolerance 1ms)", time.Duration(expected.Nanoseconds()), time.Duration(resp.requestedCount))
+	}
+
+	// At init time, the estimators haven't seen any requests yet. They are
+	// hard-coded to return a single nanosecond token as an estimate in this
+	// case.
+	info1 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(1),
+	}
+	resp1, err := q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, time.Nanosecond)
+
+	// A bunch of work finishes. 3*100=300 pieces of work have
+	// finished in total. Every 3*10=30 pieces of work that finish,
+	// a call to update happens, and the exponentially-smoothed estimates
+	// are updated. This simulates 30 pieces of work finishing every 1s,
+	// for 10s total (see the ticker in initWorkQueue). The rest of the
+	// cases are structured in a similar fashion, and so we will not
+	// repeat this explanation.
+	//
+	// In this case, all work is for tenant 1. The mean is 100ms. So,
+	// after a number of calls to update updating the exponentially-
+	// smoothed estimates, we expect 100ms for future estimates (see
+	// next call to Admit down below).
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 100*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 50*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcTenantsResetUsedAndUpdateEstimators()
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 100*time.Millisecond)
+
+	// Tenant 2 is a new tenant. So the global estimator should be
+	// used. The global estimator has seen the same workload as
+	// tenant 1's estimator, so it should make the same estimate:
+	// 100ms.
+	info2 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(2),
+	}
+	resp2, err := q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 100*time.Millisecond)
+
+	// A bunch of work finishes for tenant 1 and tenant 2. The mean for
+	// the tenant 1 work is 200ms. The mean for the tenant 2 work is
+	// 300ms.
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 200*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 250*time.Millisecond)
+
+		q.AdmittedWorkDone(resp2, 300*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 250*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 350*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcTenantsResetUsedAndUpdateEstimators()
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 200*time.Millisecond)
+
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 300*time.Millisecond)
+
+	// Tenant 3 is a new tenant. So the global estimator should be
+	// used. Lately, the estimator has seen equal number of 200ms mean
+	// requests and 300ms mean requests. (200 + 300) / 2 = 500 / 2 =
+	// 250. So 250ms is the expected estimate for tenant 3 work.
+	info3 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(3),
+	}
+	resp3, err := q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
+
+	// This is a test of GC. If a call to update happens without any
+	// work happening during that interval, the tenant's estimator should be
+	// GCed. The first call to gcTenantsResetUsedAndUpdateEstimators resets
+	// the interval over which activity is checked. The second call GCes the
+	// per-tenant estimators. So tenant 1 & tenant 2 should use the global
+	// estimator, just like tenant 3.
+	q.gcTenantsResetUsedAndUpdateEstimators()
+	q.gcTenantsResetUsedAndUpdateEstimators()
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 250*time.Millisecond)
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 250*time.Millisecond)
+	resp3, err = q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
 }
 
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
@@ -560,7 +711,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsAndResetUsed()
+				q.gcTenantsResetUsedAndUpdateEstimators()
 			}
 		}
 	}()
