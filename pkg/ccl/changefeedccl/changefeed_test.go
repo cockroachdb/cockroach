@@ -10142,32 +10142,29 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (4, 'd'), (5, 'e'), (6, 'f')")
 
-				var actualMessages []string
-				g := ctxgroup.WithContext(context.Background())
-				g.Go(func() error {
-					for {
-						m, err := feed.Next()
-						if err != nil {
-							return err
-						}
-						if len(m.Resolved) > 0 {
-							continue
-						}
-						actualMessages = append(actualMessages, string(m.Value))
-					}
-				})
-				defer func(expectedPayload []string) {
+				defer func() {
 					closeFeed(t, feed)
 					sqlDB.Exec(t, `DROP TABLE foo`)
 					sqlDB.Exec(t, `DROP TABLE bar`)
-					_ = g.Wait()
-					require.Equal(t, len(expectedPayload), len(actualMessages))
-					sort.Strings(expectedPayload)
-					sort.Strings(actualMessages)
-					for i := range expectedPayload {
-						require.Equal(t, expectedPayload[i], actualMessages[i])
+				}()
+
+				err := withTimeout(feed, assertPayloadsTimeout(), func(ctx context.Context) error {
+					msgs, err := readNextMessages(ctx, feed, len(testData.expectedPayload))
+					if err != nil {
+						return err
 					}
-				}(testData.expectedPayload)
+					var actual []string
+					for _, m := range msgs {
+						actual = append(actual, string(m.Value))
+					}
+					sort.Strings(testData.expectedPayload)
+					sort.Strings(actual)
+					if !reflect.DeepEqual(testData.expectedPayload, actual) {
+						return errors.Newf("mismatch")
+					}
+					return nil
+				})
+				require.NoError(t, err)
 
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
 				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
