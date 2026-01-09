@@ -1854,10 +1854,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "ff0f66a8ccaf093a150c3a72c98565ba159d9ac190cd8cc24eabe52726658cf3",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251218181515-92a8576e35e5",
+        sha256 = "b1228480890ec553fe0b5e4baf47affd7f13e4869bc0152afa854dd11540ecaf",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260108165545-07100ef184ce",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251218181515-92a8576e35e5.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260108165545-07100ef184ce.zip",
         ],
     )
     go_repository(
@@ -1894,10 +1894,10 @@ def go_deps():
         name = "com_github_cockroachdb_swiss",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/swiss",
-        sha256 = "e21566a2feb40f000ade8c9c6a0a9901908e3f3fc1ac3870df6f33c9bfb5d3e1",
-        strip_prefix = "github.com/cockroachdb/swiss@v0.0.0-20250624142022-d6e517c1d961",
+        sha256 = "81043ecbfafb62676c7dd06c74c3a83259844e0d07a066183de66de90a06d513",
+        strip_prefix = "github.com/cockroachdb/swiss@v0.0.0-20251224182025-b0f6560f979b",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/swiss/com_github_cockroachdb_swiss-v0.0.0-20250624142022-d6e517c1d961.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/swiss/com_github_cockroachdb_swiss-v0.0.0-20251224182025-b0f6560f979b.zip",
         ],
     )
     go_repository(
@@ -7597,20 +7597,30 @@ def go_deps():
         name = "com_github_raduberinde_axisds",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/RaduBerinde/axisds",
-        sha256 = "e943d3ac26630cf9e337483450ad9db7f43b6a0372a79d5a691aad8c3c92f9e3",
-        strip_prefix = "github.com/RaduBerinde/axisds@v0.0.0-20250419182453-5135a0650657",
+        sha256 = "13560b33fdd1fd0c4a4c629220a3ea87539ed460b93184cba6db6de57aa48eb5",
+        strip_prefix = "github.com/RaduBerinde/axisds@v0.0.0-20260105221726-1be486564c85",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/com_github_raduberinde_axisds-v0.0.0-20250419182453-5135a0650657.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/com_github_raduberinde_axisds-v0.0.0-20260105221726-1be486564c85.zip",
         ],
     )
     go_repository(
         name = "com_github_raduberinde_btreemap",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/RaduBerinde/btreemap",
-        sha256 = "81b6e0391c0bceadab0bc56184a7ed25dfe81daaa04916900f66b55f34590f6b",
-        strip_prefix = "github.com/RaduBerinde/btreemap@v0.0.0-20250419174037-3d62b7205d54",
+        sha256 = "e800dd79338292e138b03c055087bee2149249e33d5a1aae105b2c65cb8906ab",
+        strip_prefix = "github.com/RaduBerinde/btreemap@v0.0.0-20260105202824-d3184786f603",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/btreemap/com_github_raduberinde_btreemap-v0.0.0-20250419174037-3d62b7205d54.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/btreemap/com_github_raduberinde_btreemap-v0.0.0-20260105202824-d3184786f603.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_raduberinde_tdigest",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/RaduBerinde/tdigest",
+        sha256 = "d1997b11907e64b16e3b5333969ac60b4d435dfa080235aef233ac60225257d1",
+        strip_prefix = "github.com/RaduBerinde/tdigest@v0.0.0-20251022152254-90e030c3a314",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/tdigest/com_github_raduberinde_tdigest-v0.0.0-20251022152254-90e030c3a314.zip",
         ],
     )
     go_repository(
