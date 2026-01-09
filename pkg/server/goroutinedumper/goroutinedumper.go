@@ -29,6 +29,10 @@ const (
 	timeFormat          = "2006-01-02T15_04_05.000"
 )
 
+func dumpFilename(now time.Time, reason string, goroutines int) string {
+	return fmt.Sprintf("%s.%s.%s.%09d", goroutineDumpPrefix, now.Format(timeFormat), reason, goroutines)
+}
+
 var (
 	numGoroutinesThreshold = settings.RegisterIntSetting(
 		settings.ApplicationLevel,
@@ -99,14 +103,7 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 	for _, h := range gd.heuristics {
 		if h.isTrue(gd) {
 			now := gd.currentTime()
-			filename := fmt.Sprintf(
-				"%s.%s.%s.%09d",
-				goroutineDumpPrefix,
-				now.Format(timeFormat),
-				h.name,
-				goroutines,
-			)
-			path := gd.store.GetFullPath(filename)
+			path := gd.store.GetFullPath(dumpFilename(now, h.name, int(goroutines)))
 			if err := gd.takeGoroutineDump(path); err != nil {
 				log.Dev.Warningf(ctx, "error dumping goroutines: %s", err)
 				continue
@@ -137,13 +134,7 @@ func (gd *GoroutineDumper) DumpNow(
 		return false, nil
 	}
 
-	filename := fmt.Sprintf(
-		"%s.%s.%s.%09d",
-		goroutineDumpPrefix,
-		now.Format(timeFormat),
-		"on_demand",
-		runtime.NumGoroutine(),
-	)
+	filename := dumpFilename(now, "on_demand", runtime.NumGoroutine())
 	log.Ops.Infof(ctx, "taking on-demand goroutine dump: %s [%s]", reason, filename)
 	path := gd.store.GetFullPath(filename)
 	if err := gd.takeGoroutineDump(path); err != nil {
