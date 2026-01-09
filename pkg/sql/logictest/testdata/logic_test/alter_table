@@ -5669,3 +5669,41 @@ statement ok
 ALTER TABLE t_alter_pk_with_inverted ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
 
 subtest end
+
+# Regression test for #160436: NOT NULL validation errors containing strings
+# that match IsClosedConnection patterns (like "EOF", "is closing",
+# "use of closed connection", etc.) should not be incorrectly classified as
+# retriable connection errors.
+subtest regression_160436_not_null_validation_error_patterns
+
+statement ok
+CREATE TABLE t160436_patterns (
+    i INT PRIMARY KEY,
+    j INT,
+    pattern_eof STRING,
+    pattern_is_closing STRING,
+    pattern_tls_closed STRING,
+    pattern_network_closed STRING,
+    pattern_closed_pipe STRING,
+    pattern_node_unavailable STRING
+);
+
+statement ok
+INSERT INTO t160436_patterns VALUES (
+    1,
+    NULL,
+    '{"IYUH31EOF": 0.123}',
+    'the connection is closing now',
+    'error: tls: use of closed connection',
+    'use of closed network connection detected',
+    'io: read/write on closed pipe',
+    'the node unavailable for requests'
+);
+
+statement error validation of column "j" NOT NULL failed on row:
+ALTER TABLE t160436_patterns ALTER COLUMN j SET NOT NULL;
+
+statement ok
+DROP TABLE t160436_patterns;
+
+subtest end

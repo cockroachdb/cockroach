@@ -342,11 +342,11 @@ func runBackfiller(
 			pgCode == pgcode.NotNullViolation ||
 			pgCode == pgcode.IntegrityConstraintViolation {
 			deps.Telemetry().IncrementSchemaChangeErrorType("constraint_violation")
-		} else {
-			// We ran into an  uncategorized schema change error.
-			deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
+			return scerrors.SchemaChangerUserError(err)
 		}
-		return scerrors.SchemaChangerUserError(err)
+		// We ran into an  uncategorized schema change error.
+		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
+		return err
 	}
 	if err := tracker.FlushFractionCompleted(ctx); err != nil {
 		return err

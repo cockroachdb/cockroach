@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -2804,9 +2805,9 @@ func validateCheckInTxn(
 					if err != nil {
 						return err
 					}
-					return newNotNullViolationErr(notNullCol.GetName(), tableDesc.AccessibleColumns(), violatingRow)
+					return scerrors.SchemaChangerUserError(newNotNullViolationErr(notNullCol.GetName(), tableDesc.AccessibleColumns(), violatingRow))
 				} else {
-					return newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow)
+					return scerrors.SchemaChangerUserError(newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow))
 				}
 			}
 			return nil
