@@ -109,6 +109,18 @@ var (
 		Unit:        metric.Unit_BYTES,
 		Visibility:  metric.Metadata_SUPPORT,
 	}
+	metaGoHeapObjects = metric.Metadata{
+		Name:        "sys.go.heap.objects",
+		Help:        "Number of live objects on the heap (live + unswept)",
+		Measurement: "Objects",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaGoHeapLiveBytes = metric.Metadata{
+		Name:        "sys.go.heap.livebytes",
+		Help:        "Bytes of live heap objects marked by the previous GC",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaCgoAllocBytes = metric.Metadata{
 		Name:        "sys.cgo.allocbytes",
 		Help:        "Current bytes of memory allocated by cgo",
@@ -153,6 +165,12 @@ var (
 	metaGCAssistNS = metric.Metadata{
 		Name:        "sys.gc.assist.ns",
 		Help:        "Estimated total CPU time user goroutines spent to assist the GC process",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaGCTotalNS = metric.Metadata{
+		Name:        "sys.gc.total.ns",
+		Help:        "Estimated total CPU time spent performing GC tasks",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -549,6 +567,9 @@ const runtimeMetricGCStopTotal = "/sched/pauses/stopping/gc:seconds"
 // Compare only with other /cpu/classes metrics.
 const runtimeMetricGCAssist = "/cpu/classes/gc/mark/assist:cpu-seconds"
 
+// Estimated total CPU time spent performing GC tasks.
+const runtimeMetricGCTotal = "/cpu/classes/gc/total:cpu-seconds"
+
 // Distribution of individual non-GC-related stop-the-world
 // pause latencies. This is the time from deciding to stop the
 // world until the world is started again. Some of this time
@@ -617,8 +638,16 @@ const runtimeMetricGoLimit = "/gc/gomemlimit:bytes"
 // Count of all completed GC cycles.
 const runtimeMetricGCCount = "/gc/cycles/total:gc-cycles"
 
+// Number of objects, live and unswept, occupying heap memory.
+const runtimeMetricHeapObjects = "/gc/heap/objects:objects"
+
+// Heap memory occupied by live objects that were marked by the
+// previous GC.
+const runtimeMetricHeapLiveBytes = "/gc/heap/live:bytes"
+
 var runtimeMetrics = []string{
 	runtimeMetricGCAssist,
+	runtimeMetricGCTotal,
 	runtimeMetricGoTotal,
 	runtimeMetricHeapAlloc,
 	runtimeMetricGoLimit,
@@ -629,6 +658,8 @@ var runtimeMetrics = []string{
 	runtimeMetricMemStackOSBytes,
 	runtimeMetricCumulativeAlloc,
 	runtimeMetricGCCount,
+	runtimeMetricHeapObjects,
+	runtimeMetricHeapLiveBytes,
 	runtimeMetricGCPauseTotal,
 	runtimeMetricNonGCPauseTotal,
 	runtimeMetricGCStopTotal,
@@ -804,6 +835,8 @@ type RuntimeStatSampler struct {
 	GoHeapReservedBytes      *metric.Gauge
 	GoHeapReleasedBytes      *metric.Gauge
 	GoTotalAllocBytes        *metric.Counter
+	GoHeapObjects            *metric.Gauge
+	GoHeapLiveBytes          *metric.Gauge
 	CgoAllocBytes            *metric.Gauge
 	CgoTotalBytes            *metric.Gauge
 	GcCount                  *metric.Counter
@@ -813,6 +846,7 @@ type RuntimeStatSampler struct {
 	NonGcStopNS              *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
 	GcAssistNS               *metric.Counter
+	GcTotalNS                *metric.Counter
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Counter
 	CPUUserPercent         *metric.GaugeFloat64
@@ -906,6 +940,8 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GoHeapReservedBytes:      metric.NewGauge(metaGoHeapReservedBytes),
 		GoHeapReleasedBytes:      metric.NewGauge(metaGoHeapReleasedBytes),
 		GoTotalAllocBytes:        metric.NewCounter(metaGoTotalAllocBytes),
+		GoHeapObjects:            metric.NewGauge(metaGoHeapObjects),
+		GoHeapLiveBytes:          metric.NewGauge(metaGoHeapLiveBytes),
 		CgoAllocBytes:            metric.NewGauge(metaCgoAllocBytes),
 		CgoTotalBytes:            metric.NewGauge(metaCgoTotalBytes),
 		GcCount:                  metric.NewCounter(metaGCCount),
@@ -913,6 +949,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcStopNS:                 metric.NewGauge(metaGCStopNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
 		GcAssistNS:               metric.NewCounter(metaGCAssistNS),
+		GcTotalNS:                metric.NewCounter(metaGCTotalNS),
 		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
 		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
 
@@ -1206,6 +1243,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.GoHeapReservedBytes.Update(int64(heapReservedBytes))
 	rsr.GoHeapReleasedBytes.Update(int64(heapReleasedBytes))
 	rsr.GoTotalAllocBytes.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricCumulativeAlloc)))
+	rsr.GoHeapObjects.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricHeapObjects)))
+	rsr.GoHeapLiveBytes.Update(int64(rsr.goRuntimeSampler.uint64(runtimeMetricHeapLiveBytes)))
 	rsr.CgoCalls.Update(numCgoCall)
 	rsr.Goroutines.Update(int64(numGoroutine))
 	rsr.RunnableGoroutinesPerCPU.Update(runnableAvg)
@@ -1216,6 +1255,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.GcStopNS.Update(gcStopTotalNs)
 	rsr.GcPausePercent.Update(gcPauseRatio)
 	rsr.GcAssistNS.Update(gcAssistNS)
+	rsr.GcTotalNS.Update(int64(rsr.goRuntimeSampler.float64(runtimeMetricGCTotal) * 1e9))
 	rsr.NonGcPauseNS.Update(nonGcPauseTotalNs)
 	rsr.NonGcStopNS.Update(nonGcStopTotalNs)
 
