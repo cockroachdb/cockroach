@@ -723,9 +723,11 @@ func TestLargeCopy(t *testing.T) {
 	rows := rng.Intn(2000) + 1
 	cr := &copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows}
 
+	atomicCopy := true
 	if rng.Float64() < 0.5 {
 		_, err = sqlDB.Exec("SET copy_from_atomic_enabled = false")
 		require.NoError(t, err)
+		atomicCopy = false
 	}
 
 	// In 50% cases change the primary key concurrently with the COPY.
@@ -734,14 +736,16 @@ func TestLargeCopy(t *testing.T) {
 		if err == nil {
 			return true
 		}
+		if atomicCopy && strings.Contains(err.Error(), "restart transaction") {
+			// We can only retry txn errors with non-atomic COPY.
+			return true
+		}
 		if !doAlterPK {
 			return false
 		}
 		// We might hit a duplicate key error when changing the primary key
 		// (which seems somewhat expected), so we'll ignore such an error.
 		return strings.Contains(err.Error(), "duplicate key") ||
-			// We might be forced to restart - also seems somewhat expected.
-			strings.Contains(err.Error(), "restart transaction") ||
 			// TODO(yuzefovich): occasionally we get this error, and it's not
 			// clear why. Look into this.
 			strings.Contains(err.Error(), "cannot disable pipelining on a running transaction")
@@ -761,6 +765,9 @@ func TestLargeCopy(t *testing.T) {
 	} else {
 		close(alterPKCh)
 	}
+	// TODO(yuzefovich): if we have atomic COPY and get a txn retry error, we
+	// could consider explicitly reruning the COPY command a few times rather
+	// than just ignoring the error.
 	numrows, copyErr := conn.GetDriverConn().CopyFrom(ctx, cr, "COPY lineitem FROM STDIN WITH CSV;")
 	alterErr := <-alterPKCh
 	if !ignoreErr(copyErr) {
