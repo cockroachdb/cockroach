@@ -349,10 +349,51 @@ func TestOIDCAuthorization_TokenPaths(t *testing.T) {
 
 // TestOIDCAuthorization_UserinfoPaths exercises the fallback that fetches the
 // groups list from the provider's /userinfo endpoint when the ID token and
-// access token contain no usable claim.
+// access token contain no usable claim. Initialization of the test server is
+// done only once to avoid flakes related to test server reinitialization.
 func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	app := s.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER `+testUser)
+	sqlDB.Exec(t, `CREATE ROLE `+roleOwners)
+	sqlDB.Exec(t, `CREATE ROLE `+roleUsers)
+	sqlDB.Exec(t, `CREATE ROLE `+roleAuditors)
+
+	rpc := app.NewClientRPCContext(ctx, username.TestUserName())
+	cl, err := rpc.GetHTTPClient()
+	require.NoError(t, err)
+	cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// Create an RSA key pair for signing and verifying tokens.
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	jwkKey, err := jwk.FromRaw(privateKey)
+	require.NoError(t, err)
+	_ = jwkKey.Set(jwk.KeyIDKey, "test-key-id")
+	_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256)
+
+	// The public key is what the verifier will use.
+	publicKey, err := jwk.PublicKeyOf(jwkKey)
+	require.NoError(t, err)
+	jwks := jwk.NewSet()
+	_ = jwks.AddKey(publicKey)
+
+	// Set the common oidc cluster settings
+	st := s.ClusterSettings()
+	OIDCClientID.Override(ctx, &st.SV, "client")
+	OIDCClientSecret.Override(ctx, &st.SV, "secret")
+	OIDCClaimJSONKey.Override(ctx, &st.SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@.*$")
+	OIDCEnabled.Override(ctx, &st.SV, true)
+	OIDCAuthZEnabled.Override(ctx, &st.SV, true)
+	OIDCAuthGroupClaim.Override(ctx, &st.SV, "groups")
+	OIDCAuthUserinfoGroupKey.Override(ctx, &st.SV, "groups")
 
 	type tc struct {
 		name           string
@@ -455,21 +496,6 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-
-			// Create an RSA key pair for signing and verifying tokens.
-			privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-			require.NoError(t, err)
-			jwkKey, err := jwk.FromRaw(privateKey)
-			require.NoError(t, err)
-			_ = jwkKey.Set(jwk.KeyIDKey, "test-key-id")
-			_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256)
-
-			// The public key is what the verifier will use.
-			publicKey, err := jwk.PublicKeyOf(jwkKey)
-			require.NoError(t, err)
-			jwks := jwk.NewSet()
-			_ = jwks.AddKey(publicKey)
 
 			var ts *httptest.Server
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -506,31 +532,8 @@ func TestOIDCAuthorization_UserinfoPaths(t *testing.T) {
 			ts = httptest.NewServer(handler)
 			defer ts.Close()
 
-			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
-			app := s.ApplicationLayer()
-			sqlDB := sqlutils.MakeSQLRunner(db)
-			sqlDB.Exec(t, `CREATE USER `+testUser)
-			sqlDB.Exec(t, `CREATE ROLE `+roleOwners)
-			sqlDB.Exec(t, `CREATE ROLE `+roleUsers)
-			sqlDB.Exec(t, `CREATE ROLE `+roleAuditors)
-
-			st := s.ClusterSettings()
 			OIDCProviderURL.Override(ctx, &st.SV, ts.URL)
-			OIDCClientID.Override(ctx, &st.SV, "client")
-			OIDCClientSecret.Override(ctx, &st.SV, "secret")
 			OIDCRedirectURL.Override(ctx, &st.SV, ts.URL+"/callback")
-			OIDCClaimJSONKey.Override(ctx, &st.SV, "email")
-			OIDCPrincipalRegex.Override(ctx, &st.SV, "^([^@]+)@.*$")
-			OIDCEnabled.Override(ctx, &st.SV, true)
-			OIDCAuthZEnabled.Override(ctx, &st.SV, true)
-			OIDCAuthGroupClaim.Override(ctx, &st.SV, "groups")
-			OIDCAuthUserinfoGroupKey.Override(ctx, &st.SV, "groups")
-
-			rpc := app.NewClientRPCContext(ctx, username.TestUserName())
-			cl, err := rpc.GetHTTPClient()
-			require.NoError(t, err)
-			cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 			resp, err := cl.Get(app.AdminURL().WithPath("/oidc/v1/login").String())
 			require.NoError(t, err)
