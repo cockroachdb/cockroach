@@ -1265,7 +1265,7 @@ func splitRangeKeySSTAtKey(
 			// NB: We don't call Next() here because the
 			// split key is exclusive already.
 			last = append(last[:0], rangeKeys.Bounds.EndKey...)
-			for _, rk := range rangeKeys.AsRangeKeys() {
+			for rk := range rangeKeys.All() {
 				if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 					return nil, nil, err
 				}
@@ -1300,7 +1300,7 @@ func splitRangeKeySSTAtKey(
 		}
 		last = append(last[:0], rangeKeys.Bounds.EndKey...)
 		last.Next()
-		for _, rk := range rangeKeys.AsRangeKeys() {
+		for rk := range rangeKeys.All() {
 			if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 				return nil, nil, err
 			}

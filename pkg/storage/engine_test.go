@@ -2668,7 +2668,7 @@ func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
 		if !ok {
 			break
 		}
-		for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+		for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 			rangeKeys = append(rangeKeys, rkv.Clone())
 		}
 	}
@@ -2730,7 +2730,7 @@ func scanIter(t *testing.T, iter SimpleMVCCIterator) []interface{} {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
-				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+				for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					keys = append(keys, rkv.Clone())
 				}
 				prevRangeStart = bounds.Key.Clone()
