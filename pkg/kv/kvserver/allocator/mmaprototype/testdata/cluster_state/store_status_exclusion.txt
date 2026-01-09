@@ -196,6 +196,10 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
 [mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=1] applying replica change r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 1 on store 1
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
+[mmaid=1] applying replica change r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true) to range 1 on store 2
+[mmaid=1] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true)
 [mmaid=1] result(success): shedding r1 lease from s1 to s2 [change:r1=[transfer_to=2 cids=1,2]] with resulting loads source:[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] target:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] (means: [cpu:550ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (frac_pending: (src:0.00,target:0.00) (src:0.00,target:0.00))
 [mmaid=1] skipping replica transfers for s1 to try more leases next time
 [mmaid=1] rebalancing pass shed: {s1}

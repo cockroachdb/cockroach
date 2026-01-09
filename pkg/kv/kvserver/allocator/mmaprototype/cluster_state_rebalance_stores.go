@@ -173,7 +173,7 @@ func (re *rebalanceEnv) rebalanceStores(
 	// example).
 	clusterMeans := re.meansMemo.getMeans(nil)
 	var sheddingStores []sheddingStore
-	log.KvDistribution.Infof(ctx,
+	log.KvDistribution.VEventf(ctx, 2,
 		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
@@ -201,10 +201,10 @@ func (re *rebalanceEnv) rebalanceStores(
 			if ss.overloadEndTime != (time.Time{}) {
 				if re.now.Sub(ss.overloadEndTime) > overloadGracePeriod {
 					ss.overloadStartTime = re.now
-					log.KvDistribution.Infof(ctx, "overload-start s%v (%v) - grace period expired", storeID, sls)
+					log.KvDistribution.VEventf(ctx, 2, "overload-start s%v (%v) - grace period expired", storeID, sls)
 				} else {
 					// Else, extend the previous overload interval.
-					log.KvDistribution.Infof(ctx, "overload-continued s%v (%v) - within grace period", storeID, sls)
+					log.KvDistribution.VEventf(ctx, 2, "overload-continued s%v (%v) - within grace period", storeID, sls)
 				}
 				ss.overloadEndTime = time.Time{}
 			}
@@ -222,7 +222,7 @@ func (re *rebalanceEnv) rebalanceStores(
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
 			// loadNoChange, since a store can hover at the border of the two.
-			log.KvDistribution.Infof(ctx, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
+			log.KvDistribution.VEventf(ctx, 2, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
 			ss.overloadEndTime = re.now
 		}
 	}
@@ -247,9 +247,9 @@ func (re *rebalanceEnv) rebalanceStores(
 	})
 
 	if log.V(2) {
-		log.KvDistribution.Info(ctx, "sorted shedding stores:")
+		log.KvDistribution.VEventf(ctx, 2, "sorted shedding stores:")
 		for _, store := range sheddingStores {
-			log.KvDistribution.Infof(ctx, "  (s%d: %s)", store.StoreID, store.sls)
+			log.KvDistribution.VEventf(ctx, 2, "  (s%d: %s)", store.StoreID, store.sls)
 		}
 	}
 
@@ -321,7 +321,7 @@ func (re *rebalanceEnv) rebalanceStores(
 func (re *rebalanceEnv) rebalanceStore(
 	ctx context.Context, store sheddingStore, localStoreID roachpb.StoreID,
 ) {
-	log.KvDistribution.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
+	log.KvDistribution.VEventf(ctx, 2, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
 		store.StoreID, store.nls, store.sls, store.worstDim)
 	ss := re.stores[store.StoreID]
 
@@ -340,10 +340,10 @@ func (re *rebalanceEnv) rebalanceStore(
 				}
 				_, _ = fmt.Fprintf(&b, " r%d:%v", rangeID, load)
 			}
-			log.KvDistribution.Infof(ctx, "top-K[%s] ranges for s%d with lease on local s%d:%s",
+			log.KvDistribution.VEventf(ctx, 2, "top-K[%s] ranges for s%d with lease on local s%d:%s",
 				topKRanges.dim, store.StoreID, localStoreID, redact.SafeString(b.String()))
 		} else {
-			log.KvDistribution.Infof(ctx, "no top-K[%s] ranges found for s%d with lease on local s%d",
+			log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
 				topKRanges.dim, store.StoreID, localStoreID)
 		}
 	}
@@ -470,7 +470,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 			continue
 		}
-		re.ensureAnalyzedConstraints(rstate)
+		re.ensureAnalyzedConstraints(ctx, rstate)
 		if rstate.constraints == nil {
 			if rangeSkippedDueToFailedConstraintsShouldLog() {
 				log.KvDistribution.Warningf(ctx,
@@ -605,19 +605,19 @@ func (re *rebalanceEnv) rebalanceReplicas(
 				"add=%v==remove_target=%v range_id=%v candidates=%v",
 				addTarget, removeTarget, rangeID, cands.candidates))
 		}
-		replicaChanges := makeRebalanceReplicaChanges(
+		replicaChanges := makeRebalanceReplicaChanges(ctx,
 			rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
 		rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
 		if err = re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
 			panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
 				replicaChanges, rangeID))
 		}
-		re.addPendingRangeChange(rangeChange)
+		re.addPendingRangeChange(ctx, rangeChange)
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, localStoreID, rangeChange))
 		re.rangeMoveCount++
 		re.passObs.replicaShed(shedSuccess)
-		log.KvDistribution.VEventf(ctx, 2,
+		log.KvDistribution.Infof(ctx,
 			"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
 			rangeID, removeTarget.StoreID, addTarget.StoreID, &re.changes[len(re.changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 	}
@@ -688,7 +688,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 			continue
 		}
-		re.ensureAnalyzedConstraints(rstate)
+		re.ensureAnalyzedConstraints(ctx, rstate)
 		if rstate.constraints == nil {
 			if rangeSkippedDueToFailedConstraintsShouldLog() {
 				log.KvDistribution.Warningf(ctx,
@@ -794,8 +794,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, re.rng,
 			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.leaseShed)
 		if targetStoreID == 0 {
-			log.KvDistribution.Infof(
-				ctx,
+			log.KvDistribution.VEventf(
+				ctx, 2,
 				"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
 				ss.NodeID, ss.StoreID, rangeID)
 			continue
@@ -830,7 +830,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if err := re.preCheckOnApplyReplicaChanges(leaseChange); err != nil {
 			panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 		}
-		re.addPendingRangeChange(leaseChange)
+		re.addPendingRangeChange(ctx, leaseChange)
 		re.changes = append(re.changes,
 			MakeExternalRangeChange(originMMARebalance, store.StoreID, leaseChange))
 		re.passObs.leaseShed(shedSuccess)

@@ -579,16 +579,17 @@ func TestClusterState(t *testing.T) {
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
 							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
-							rebalanceChanges := makeRebalanceReplicaChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
+							rebalanceChanges := makeRebalanceReplicaChanges(
+								ctx, rangeID, rState.replicas, rState.load, addTarget, removeTarget)
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
 					rangeChange := MakePendingRangeChange(rangeID, changes)
-					cs.addPendingRangeChange(rangeChange)
+					cs.addPendingRangeChange(ctx, rangeChange)
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
-					cs.gcPendingChanges(cs.ts.Now())
+					cs.gcPendingChanges(ctx, cs.ts.Now())
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
@@ -600,10 +601,10 @@ func TestClusterState(t *testing.T) {
 					for _, id := range changeIDsInt {
 						if expectPanic {
 							require.Panics(t, func() {
-								cs.undoPendingChange(id)
+								cs.undoPendingChange(ctx, id)
 							})
 						} else {
-							cs.undoPendingChange(id)
+							cs.undoPendingChange(ctx, id)
 						}
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
