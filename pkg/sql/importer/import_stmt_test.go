@@ -5505,7 +5505,18 @@ func TestUDTChangeDuringImport(t *testing.T) {
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Store: &kvserver.StoreTestingKnobs{
-							TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+							TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
+								for _, ru := range br.Responses {
+									switch ru.GetInner().(type) {
+									case *kvpb.AddSSTableResponse:
+										select {
+										case <-allowResponse:
+										case <-ctx.Done():
+										}
+									}
+								}
+								return nil
+							},
 							TestingRequestFilter: func(ctx context.Context, br *kvpb.BatchRequest) *kvpb.Error {
 								for _, ru := range br.Requests {
 									switch ru.GetInner().(type) {

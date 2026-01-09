@@ -4747,8 +4747,17 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 		}),
 
-	"crdb_internal.datums_to_bytes":           datumsToBytes,
-	"information_schema.crdb_datums_to_bytes": datumsToBytes,
+	"crdb_internal.datums_to_bytes": makeBuiltin(
+		tree.FunctionProperties{
+			Category:             builtinconstants.CategorySystemInfo,
+			Undocumented:         true,
+			CompositeInsensitive: true,
+		}, datumsToBytesOverload),
+	"information_schema.crdb_datums_to_bytes": makeBuiltin(
+		tree.FunctionProperties{
+			Category:             builtinconstants.CategorySystemInfo,
+			CompositeInsensitive: true,
+		}, datumsToBytesOverload),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
@@ -12866,36 +12875,29 @@ func ExprSliceToStrSlice(exprs []tree.Expr) []string {
 	})
 }
 
-var datumsToBytes = makeBuiltin(
-	tree.FunctionProperties{
-		Category:             builtinconstants.CategorySystemInfo,
-		Undocumented:         true,
-		CompositeInsensitive: true,
-	},
-	tree.Overload{
-		// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
-		Info: "Converts datums into key-encoded bytes. " +
-			"Supports NULLs and all data types which may be used in index keys",
-		Types:      tree.VariadicType{VarType: types.Any},
-		ReturnType: tree.FixedReturnType(types.Bytes),
-		Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-			var out []byte
-			for i, arg := range args {
-				var err error
-				out, err = keyside.Encode(out, arg, encoding.Ascending)
-				if err != nil {
-					return nil, pgerror.Newf(
-						pgcode.DatatypeMismatch,
-						"illegal argument %d of type %s",
-						i, arg.ResolvedType(),
-					)
-				}
+var datumsToBytesOverload = tree.Overload{
+	// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
+	Info: "Converts datums into key-encoded bytes. " +
+		"Supports NULLs and all data types which may be used in index keys",
+	Types:      tree.VariadicType{VarType: types.Any},
+	ReturnType: tree.FixedReturnType(types.Bytes),
+	Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+		var out []byte
+		for i, arg := range args {
+			var err error
+			out, err = keyside.Encode(out, arg, encoding.Ascending)
+			if err != nil {
+				return nil, pgerror.Newf(
+					pgcode.DatatypeMismatch,
+					"illegal argument %d of type %s",
+					i, arg.ResolvedType(),
+				)
 			}
-			return tree.NewDBytes(tree.DBytes(out)), nil
-		},
-		Volatility:        volatility.Immutable,
-		CalledOnNullInput: true,
+		}
+		return tree.NewDBytes(tree.DBytes(out)), nil
 	},
-)
+	Volatility:        volatility.Immutable,
+	CalledOnNullInput: true,
+}
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
