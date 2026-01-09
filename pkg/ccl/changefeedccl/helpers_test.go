@@ -115,7 +115,7 @@ func readNextMessages(
 	lastMessage := timeutil.Now()
 	for len(actual) < numMessages {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, errors.Wrapf(ctx.Err(), "got %d of %d expected changefeed messages", len(actual), numMessages)
 		}
 		if log.V(1) {
 			log.Changefeed.Infof(context.Background(), "about to read a message (%d out of %d)", len(actual), numMessages)
@@ -131,7 +131,7 @@ func readNextMessages(
 		}
 		lastMessage = timeutil.Now()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "got %d of %d expected changefeed messages", len(actual), numMessages)
 		}
 		if m == nil {
 			return nil, errors.AssertionFailedf(`expected message`)
