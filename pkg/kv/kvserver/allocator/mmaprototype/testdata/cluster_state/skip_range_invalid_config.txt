@@ -70,7 +70,9 @@ rebalance-stores store-id=1
 [mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r1:[cpu:50ns/s, write-bandwidth:50 B/s, byte-size:50 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first
+[mmaid=1] no span config due to normalization error, skipping constraint analysis
 [mmaid=1] skipping r1: no constraints analyzed (conf=<nil> replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok])
 [mmaid=1] attempting to shed replicas next
+[mmaid=1] no span config due to normalization error, skipping constraint analysis
 [mmaid=1] skipping r1: no constraints analyzed (conf=<nil> replicas=[s1:replica-id=1 type=VOTER_FULL leaseholder=true lease disposition:ok])
 pending(0)
