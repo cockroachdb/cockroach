@@ -13,12 +13,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/redact"
 )
+
+var allowUnsafeSetting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.override.allow_unsafe_internals.enabled",
+	"overrides the allow_unsafe_internals session variable behavior"+
+		" as a failsafe in case of emergencies. This setting should not be"+
+		" externally visible.",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
+	settings.Sensitive)
 
 // The accessedLogLimiter is used to limit the rate of logging unsafe internal access
 // events. It is set to allow ten events per second.
@@ -53,6 +63,11 @@ func CheckInternalsAccess(
 	allowUnsafe := sd.AllowUnsafeInternals
 	if override != nil && override() != nil {
 		allowUnsafe = *override()
+	}
+
+	// If the cluster setting override is set, allow without logging.
+	if allowUnsafeSetting.Get(sv) {
+		return nil
 	}
 
 	// If the querier is internal, we should allow it.
