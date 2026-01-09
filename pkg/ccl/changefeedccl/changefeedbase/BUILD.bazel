@@ -41,6 +41,7 @@ go_test(
     ],
     embed = [":changefeedbase"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl",
         "//pkg/jobs",
         "//pkg/kv/kvpb",
