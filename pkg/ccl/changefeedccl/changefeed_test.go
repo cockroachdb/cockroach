@@ -10132,6 +10132,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
 				sqlDB.Exec(t, "CREATE TABLE bar (id INT PRIMARY KEY, name STRING)")
+				defer sqlDB.Exec(t, "DROP TABLE foo")
+				defer sqlDB.Exec(t, "DROP TABLE bar")
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (1, 'a'), (2, 'b'), (3, 'c')")
@@ -10139,36 +10141,26 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo,bar`, [][]string{{`9`}})
 
 				feed := feed(t, f, testData.changefeedStmt)
+				defer closeFeed(t, feed)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (4, 'd'), (5, 'e'), (6, 'f')")
 
-				var actualMessages []string
-				g := ctxgroup.WithContext(context.Background())
-				g.Go(func() error {
-					for {
-						m, err := feed.Next()
-						if err != nil {
-							return err
-						}
-						if len(m.Resolved) > 0 {
-							continue
-						}
-						actualMessages = append(actualMessages, string(m.Value))
+				err := withTimeout(feed, assertPayloadsTimeout(), func(ctx context.Context) error {
+					msgs, err := readNextMessages(ctx, feed, len(testData.expectedPayload))
+					if err != nil {
+						return err
 					}
+					actual := make([]string, 0, len(testData.expectedPayload))
+					for _, m := range msgs {
+						actual = append(actual, string(m.Value))
+					}
+					sort.Strings(testData.expectedPayload)
+					sort.Strings(actual)
+					require.Equal(t, testData.expectedPayload, actual)
+					return nil
 				})
-				defer func(expectedPayload []string) {
-					closeFeed(t, feed)
-					sqlDB.Exec(t, `DROP TABLE foo`)
-					sqlDB.Exec(t, `DROP TABLE bar`)
-					_ = g.Wait()
-					require.Equal(t, len(expectedPayload), len(actualMessages))
-					sort.Strings(expectedPayload)
-					sort.Strings(actualMessages)
-					for i := range expectedPayload {
-						require.Equal(t, expectedPayload[i], actualMessages[i])
-					}
-				}(testData.expectedPayload)
+				require.NoError(t, err)
 
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
 				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
