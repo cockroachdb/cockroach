@@ -103,10 +103,14 @@ type indexConsistencyCheck struct {
 
 	// lastQueryPlaceholders stores the placeholder values used in lastQuery.
 	lastQueryPlaceholders []interface{}
+
+	// rowCount stores the number of rows processed by the check.
+	rowCount uint64
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
 var _ inspectCheckApplicability = (*indexConsistencyCheck)(nil)
+var _ inspectCheckRowCount = (*indexConsistencyCheck)(nil)
 
 // Started implements the inspectCheck interface.
 func (c *indexConsistencyCheck) Started() bool {
@@ -258,7 +262,8 @@ func (c *indexConsistencyCheck) Start(
 			log.Dev.Infof(ctx, "skipping hash precheck for index %s: column type not compatible with datums_to_bytes",
 				c.secIndex.GetName())
 		} else {
-			match, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
+			match, rowCount, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
+			c.rowCount = uint64(rowCount)
 			if hashErr != nil {
 				if isQueryConstructionError(hashErr) {
 					// If hashing fails and the error stems from query construction,
@@ -439,6 +444,11 @@ func (c *indexConsistencyCheck) Close(context.Context) error {
 		}
 	}
 	return nil
+}
+
+// Rows implements the inspectCheckRowCount interface.
+func (c *indexConsistencyCheck) RowCount() uint64 {
+	return c.rowCount
 }
 
 // loadCatalogInfo loads the table descriptor and validates the specified
@@ -773,20 +783,21 @@ type hashResult struct {
 
 // hashesMatch performs a fast comparison of primary and secondary indexes by
 // computing row counts and hash values. Returns true if both indexes have
-// identical row counts and hash values, indicating no corruption.
+// identical row counts and hash values, indicating no corruption. Returns the
+// row count from the primary index.
 func (c *indexConsistencyCheck) hashesMatch(
 	ctx context.Context, columnNames []string, predicate string, queryArgs []interface{},
-) (bool, error) {
+) (match bool, rowCount int64, err error) {
 	primary, err := c.computeHashAndRowCount(ctx, c.priIndex, columnNames, predicate, queryArgs)
 	if err != nil {
-		return false, errors.Wrapf(err, "computing hash for primary index %s", c.priIndex.GetName())
+		return false, 0, errors.Wrapf(err, "computing hash for primary index %s", c.priIndex.GetName())
 	}
 	secondary, err := c.computeHashAndRowCount(ctx, c.secIndex, columnNames, predicate, queryArgs)
 	if err != nil {
-		return false, errors.Wrapf(err, "computing hash for secondary index %s", c.secIndex.GetName())
+		return false, primary.rowCount, errors.Wrapf(err, "computing hash for secondary index %s", c.secIndex.GetName())
 	}
 	// Hashes match only if both row count and hash value are identical.
-	return primary.rowCount == secondary.rowCount && primary.hash == secondary.hash, nil
+	return primary.rowCount == secondary.rowCount && primary.hash == secondary.hash, primary.rowCount, nil
 }
 
 // computeHashAndRowCount executes a hash query for the specified index and

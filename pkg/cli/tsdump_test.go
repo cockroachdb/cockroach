@@ -23,7 +23,6 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -298,6 +297,10 @@ sql.query.count
 		metricsListFile, err := os.CreateTemp("", "metrics_list_mutual_exclusion_*.txt")
 		require.NoError(t, err)
 		defer func() {
+			// Reset flags to prevent pollution of subsequent tests
+			debugTimeSeriesDumpOpts.nonVerbose = false
+			debugTimeSeriesDumpOpts.metricsListFile = ""
+			debugTimeSeriesDumpOpts.format = tsDumpRaw
 			require.NoError(t, os.Remove(metricsListFile.Name()))
 		}()
 
@@ -439,7 +442,6 @@ func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
 func TestTSDumpRawGenerationWithEmbeddedMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "test too slow under race")
 
 	c := NewCLITest(TestCLIParams{})
 	defer c.Cleanup()
