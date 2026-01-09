@@ -91,9 +91,6 @@ type GoroutineDumper struct {
 // GoroutineDumper is true.
 // At most one dump is taken in a call of this function.
 func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, goroutines int64) {
-	gd.mu.Lock()
-	defer gd.mu.Unlock()
-
 	gd.goroutines = goroutines
 	if gd.goroutinesThreshold != numGoroutinesThreshold.Get(&st.SV) {
 		gd.goroutinesThreshold = numGoroutinesThreshold.Get(&st.SV)
@@ -125,12 +122,17 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 func (gd *GoroutineDumper) DumpNow(
 	ctx context.Context, reason redact.RedactableString,
 ) (didDump bool, _ error) {
-	gd.mu.Lock()
-	defer gd.mu.Unlock()
-
 	minInterval := onDemandMinInterval.Get(&gd.st.SV)
 	now := gd.currentTime()
-	if minInterval > 0 && now.Sub(gd.mu.lastOnDemandDumpTime) < minInterval {
+
+	gd.mu.Lock()
+	rateLimited := minInterval > 0 && now.Sub(gd.mu.lastOnDemandDumpTime) < minInterval
+	if !rateLimited {
+		gd.mu.lastOnDemandDumpTime = now
+	}
+	gd.mu.Unlock()
+
+	if rateLimited {
 		log.Ops.VEventfDepth(ctx, 1, 1, "on-demand goroutine dump suppressed by rate limit: %s", reason)
 		return false, nil
 	}
@@ -148,7 +150,6 @@ func (gd *GoroutineDumper) DumpNow(
 		return false, err
 	}
 
-	gd.mu.lastOnDemandDumpTime = now
 	gd.gcDumps(ctx, now)
 	return true, nil
 }
