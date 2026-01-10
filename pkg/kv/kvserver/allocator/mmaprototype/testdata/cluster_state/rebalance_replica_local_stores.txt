@@ -142,7 +142,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 tick seconds=5
 ----
@@ -171,7 +171,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=160 node-adjusted-cpu=168 seq=2
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:168ns/s, write-bandwidth:168 B/s, byte-size:168 B] node-reported-cpu=160 node-adjusted-cpu=168 seq=3
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Store load msg from s2 at time 16s, which is 11s after the enactment of
 # change 1. So the change is no longer needed for load adjustment.
@@ -194,7 +194,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 
 # Advance time, but not enough to GC change 2.
 tick seconds=10
