@@ -662,8 +662,27 @@ func loadSummaryForDimension(
 }
 
 // highDiskSpaceUtilization checks if disk utilization >= the given threshold.
-// This is called in updateStoreStatuses to augment store dispositions based on
-// disk utilization thresholds (refusing at 0.925, shedding at 0.95 by default).
+// This is called in three places:
+//
+//  1. updateStoreStatuses (both thresholds):
+//     Sets store dispositions based on disk utilization:
+//     - >= diskUtilShedThreshold (0.95): ReplicaDispositionShedding
+//     - >= diskUtilRefuseThreshold (0.925): ReplicaDispositionRefusing
+//
+//  2. canShedAndAddLoad (threshold: diskUtilRefuseThreshold, 0.925):
+//     Validates post-transfer state by checking if the target would exceed
+//     the refuse threshold after receiving the replica. Uses post-transfer
+//     load (adjusted + delta) to ensure we don't send replicas to stores
+//     that would become too full.
+//
+//  3. topK dimension selection (threshold: diskUtilShedThreshold, 0.95):
+//     Determines whether to prioritize ByteSize dimension when selecting
+//     ranges to shed. Only switches to ByteSize priority when disk is
+//     critically full (>= 95%), not at the lower refuse threshold.
+//
+// Note: Dispositions don't indicate *why* they're set (refusing could be due
+// to disk or other reasons), so callers needing explicit disk checks (like
+// canShedAndAddLoad and topK) call this function directly.
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold float64) bool {
 	if capacity == UnknownCapacity || capacity == 0 {
 		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")

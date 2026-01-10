@@ -60,7 +60,7 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
 [mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
-[mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=overloadSlow bytes=overloadSlow node=overloadSlow high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=overloadSlow bytes=overloadSlow node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
