@@ -1295,8 +1295,8 @@ type clusterState struct {
 	mmaid int // a counter for rebalanceStores calls, for logging
 
 	// Disk utilization thresholds from cluster settings. These are set via
-	// setDiskUtilThresholds and can be used by updateStoreStatuses and other
-	// disk utilization checks.
+	// SetDiskUtilThresholds and used by updateStoreStatuses and
+	// computeLoadSummary.
 	//
 	// Note: SMA uses these thresholds differently:
 	// - 0.925 (RebalanceToThreshold): for rebalancing targets
@@ -1322,6 +1322,10 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
+		// Disk utilization thresholds default to 0. We don't plumb cluster
+		// settings here to avoid coupling MMA to settings at construction.
+		// Callers (e.g., newMMAStoreRebalancer) call SetDiskUtilThresholds
+		// after construction to set proper values from cluster settings.
 	}
 	cs.meansMemo = newMeansMemo(cs, cs.constraintMatcher)
 	return cs
@@ -1687,7 +1691,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else {
 			topk.dim = WriteBandwidth
 		}
-		if sls.highDiskSpaceUtilization {
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
 			// If disk space is running out, shedding bytes becomes the top priority.
 			topk.dim = ByteSize
 		} else if sls.sls > loadNoChange {
@@ -2384,9 +2388,12 @@ func (cs *clusterState) canShedAndAddLoad(
 			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 		}
 	}()
-	if targetSLS.highDiskSpaceUtilization {
+	// Check if the target would have high disk utilization after the transfer.
+	// We compute this using the post-transfer load (current + delta).
+	postTransferByteSize := targetSS.adjusted.load[ByteSize] + deltaToAdd[ByteSize]
+	if highDiskSpaceUtilization(postTransferByteSize, targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold) {
 		if populateFailureReason {
-			failureReason.WriteString("targetSLS.highDiskSpaceUtilization")
+			failureReason.WriteString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}
 		return false
 	}
@@ -2584,7 +2591,6 @@ func computeLoadSummary(
 	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	sls := loadLow
-	var highDiskSpaceUtil bool
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
@@ -2595,21 +2601,13 @@ func computeLoadSummary(
 			worstDim = LoadDimension(i)
 		}
 		dimSummary[i] = ls
-		switch LoadDimension(i) {
-		case ByteSize:
-			// Use hardcoded 0.9 threshold for backward compatibility.
-			// TODO(tbg): remove highDiskSpaceUtilization field from storeLoadSummary.
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i], 0.9)
-		}
 	}
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
-		worstDim:   worstDim,
-		sls:        sls,
-		nls:        nls,
-		dimSummary: dimSummary,
-		// TODO(tbg): remove highDiskSpaceUtilization.
-		highDiskSpaceUtilization:   highDiskSpaceUtil,
+		worstDim:                   worstDim,
+		sls:                        sls,
+		nls:                        nls,
+		dimSummary:                 dimSummary,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,

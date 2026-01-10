@@ -521,6 +521,7 @@ func TestClusterState(t *testing.T) {
 					// Calls updateStoreStatuses for the specified stores (or all stores
 					// if none specified). This triggers the disk utilization check which
 					// augments the replica disposition based on current adjusted load.
+					// Thresholds must be set via set-disk-thresholds first.
 					storeIDs, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, d, "store-ids")
 					if len(storeIDs) == 0 {
 						// Default to all stores.

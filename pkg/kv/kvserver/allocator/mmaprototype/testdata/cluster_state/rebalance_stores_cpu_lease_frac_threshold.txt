@@ -14,7 +14,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
-[mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -51,7 +51,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 75% and >1.5x meanUtil [load=770 meanLoad=400 fractionUsed=77.00% meanUtil=40.00% capacity=1000]
-[mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))]
 [mmaid=1] applying replica change r4 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 4 on store 1
 [mmaid=1] addPendingRangeChange: change_id=1, range_id=4, change=r4 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
 [mmaid=1] applying replica change r4 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true) to range 4 on store 2
@@ -70,7 +70,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
-[mmaid=1] candidate store 2 was discarded due to (nls=false overloadDim=false pending_thresh=true): sls=(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=2.53,0.00(false))
+[mmaid=1] candidate store 2 was discarded due to (nls=false overloadDim=false pending_thresh=true): sls=(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=2.53,0.00(false))
 [mmaid=1] sortTargetCandidateSetAndPick: candidates: s3(SLS:loadNormal, overloadedDimLoadSummary:loadLow), overloadedDim:CPURate, picked s3
 [mmaid=1] load summary for dim=CPURate (s3): loadLow, reason: load is >10% below mean [load=353 meanLoad=400 fractionUsed=35.30% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -80,7 +80,7 @@ rebalance-stores store-id=1 fraction-pending-decrease-threshold=0.4
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% [load=540 meanLoad=400 fractionUsed=54.00% meanUtil=40.00% capacity=1000]
-[mmaid=1] can add load to n3s3: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow high_disk=false frac_pending=0.00,0.23(false))]
+[mmaid=1] can add load to n3s3: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=0.00,0.23(false))]
 [mmaid=1] applying replica change r3 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 3 on store 1
 [mmaid=1] addPendingRangeChange: change_id=3, range_id=3, change=r3 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
 [mmaid=1] applying replica change r3 type: AddLease target store n3,s3 (replica-id=3 type=VOTER_FULL)->(replica-id=3 type=VOTER_FULL leaseholder=true) to range 3 on store 3
