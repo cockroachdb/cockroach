@@ -1293,6 +1293,23 @@ type clusterState struct {
 	meansMemo *meansMemo
 
 	mmaid int // a counter for rebalanceStores calls, for logging
+
+	// Disk utilization thresholds from cluster settings. These are set via
+	// SetDiskUtilThresholds to determine the store disposition.
+	//
+	// SMA uses these thresholds:
+	// - 0.925 (rebalance_to_max_disk_utilization_threshold): for rebalancing
+	// targets
+	// - 0.95 (max_disk_utilization_threshold): for allocation targets (e.g.
+	// under-replicated ranges) AND for shedding decisions
+	//
+	// TODO(mma): If MMA ever handles allocation of necessary replicas, we'd need
+	// to add max_disk_utilization_threshold for allocation targets.
+	//
+	// Stores >= this threshold will refuse new replicas.
+	diskUtilRefuseThreshold float64
+	// Stores >= this threshold will actively shed replicas.
+	diskUtilShedThreshold float64
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
@@ -2211,6 +2228,13 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 		cs.stores[sal.StoreID].storeAttributesAndLocalityWithNodeTier = sal
 		cs.constraintMatcher.setStore(sal)
 	}
+}
+
+// setDiskUtilThresholds configures the disk utilization thresholds used
+// to augment store dispositions.
+func (cs *clusterState) setDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	cs.diskUtilRefuseThreshold = refuseThreshold
+	cs.diskUtilShedThreshold = shedThreshold
 }
 
 // updateStoreStatuses updates each known store's health and disposition from storeStatuses.

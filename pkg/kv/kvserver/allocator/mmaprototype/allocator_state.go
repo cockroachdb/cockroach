@@ -204,7 +204,14 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
-// UpdateStoresStatus implements the Allocator interface.
+// SetDiskUtilThresholds implements the Allocator interface.
+func (a *allocatorState) SetDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cs.setDiskUtilThresholds(refuseThreshold, shedThreshold)
+}
+
+// UpdateStoresStatuses implements the Allocator interface.
 func (a *allocatorState) UpdateStoresStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
