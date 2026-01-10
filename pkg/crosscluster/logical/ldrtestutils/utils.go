@@ -17,6 +17,36 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ApplyLowLatencyReplicationSettings applies cluster settings that reduce latency
+// for logical replication testing. This should be called on the system layer runner
+// to configure system-level settings, and on application layer runners to configure
+// application-level settings.
+func ApplyLowLatencyReplicationSettings(t *testing.T, sysRunner, appRunner *sqlutils.SQLRunner) {
+	// System-level settings that affect rangefeed and closed timestamp behavior
+	systemSettings := []string{
+		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
+	}
+
+	// Application-level settings for logical replication
+	appSettings := []string{
+		"SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'",
+		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
+		"SET CLUSTER SETTING logical_replication.consumer.heartbeat_frequency = '1s'",
+		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
+	}
+
+	for _, s := range systemSettings {
+		sysRunner.Exec(t, s)
+	}
+
+	for _, s := range appSettings {
+		appRunner.Exec(t, s)
+	}
+}
+
 // WaitUntilReplicatedTime waits for a logical replication job to reach the target replicated time.
 // The test will fail immediately if the job enters a paused or failed state.
 func WaitUntilReplicatedTime(
