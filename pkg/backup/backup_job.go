@@ -982,11 +982,20 @@ func includeTableSpans(table *descpb.TableDescriptor) bool {
 	return table.IsPhysicalTable()
 }
 
-// forEachPublicIndexTableSpan constructs a span for each public index of the
-// provided table and runs the given function on each of them. The added map is
-// used to track duplicates. Duplicate indexes are not passed to the provided
-// function.
-func forEachPublicIndexTableSpan(
+// forEachIndexTableSpan constructs a span for each index of the provided table
+// (including indexes in mutations) and runs the given function on each of them.
+// The added map is used to track duplicates. Duplicate indexes are not passed
+// to the provided function.
+//
+// This includes:
+// - The primary index
+// - Public secondary indexes
+// - Indexes in mutations (both ADD and DROP directions)
+//
+// Including mutation indexes ensures that data written to indexes being built
+// (e.g., during CREATE INDEX) is captured incrementally by backup, rather than
+// requiring a large catch-up when the index becomes public.
+func forEachIndexTableSpan(
 	table *descpb.TableDescriptor,
 	added map[tableAndIndex]bool,
 	codec keys.SQLCodec,
@@ -996,7 +1005,7 @@ func forEachPublicIndexTableSpan(
 		return
 	}
 
-	table.ForEachPublicIndex(func(idx *descpb.IndexDescriptor) {
+	addIndex := func(idx *descpb.IndexDescriptor) {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.ID}
 		if added[key] {
 			return
@@ -1004,7 +1013,17 @@ func forEachPublicIndexTableSpan(
 		added[key] = true
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, table.GetID(), idx.ID))
 		f(roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()})
-	})
+	}
+
+	// Public indexes (primary + secondary).
+	table.ForEachPublicIndex(addIndex)
+
+	// Indexes in mutations (adding or dropping).
+	for i := range table.Mutations {
+		if idx := table.Mutations[i].GetIndex(); idx != nil {
+			addIndex(idx)
+		}
+	}
 }
 
 // spansForAllTableIndexes returns non-overlapping spans for every index and
@@ -1026,7 +1045,7 @@ func spansForAllTableIndexes(
 	}
 
 	for _, table := range tables {
-		forEachPublicIndexTableSpan(table.TableDesc(), added, execCfg.Codec, insertSpan)
+		forEachIndexTableSpan(table.TableDesc(), added, execCfg.Codec, insertSpan)
 	}
 
 	// If there are desc revisions, ensure that we also add any index spans
@@ -1039,7 +1058,7 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		rawTbl, _, _, _, _ := descpb.GetDescriptors(rev.Desc)
 		if rawTbl != nil && rawTbl.Public() {
-			forEachPublicIndexTableSpan(rawTbl, added, execCfg.Codec, insertSpan)
+			forEachIndexTableSpan(rawTbl, added, execCfg.Codec, insertSpan)
 		}
 	}
 

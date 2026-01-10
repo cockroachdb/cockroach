@@ -110,6 +110,8 @@ const (
 	alterTableRenameColumn            // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	alterTableSetColumnDefault        // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
 	alterTableSetColumnNotNull        // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
+	alterTableSetStorageParams        // ALTER TABLE <table> SET (<storage_param>=<val>)
+	alterTableResetStorageParams      // ALTER TABLE <table> RESET <storage_param>
 
 	// ALTER TYPE ...
 
@@ -169,11 +171,9 @@ const (
 	// alterTableOwner
 	// alterTablePartitionByTable
 	// alterTableRenameConstraint        // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
-	// alterTableResetStorageParams
 	// alterTableSetAudit
 	// alterTableSetOnUpdate
 	// alterTableSetSchema
-	// alterTableSetStorageParams
 	// alterTableSetVisible
 	// alterTableValidateConstraint
 	// alterType
@@ -244,6 +244,8 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableRenameColumn:            (*operationGenerator).renameColumn,
 	alterTableSetColumnDefault:        (*operationGenerator).setColumnDefault,
 	alterTableSetColumnNotNull:        (*operationGenerator).setColumnNotNull,
+	alterTableSetStorageParams:        (*operationGenerator).setTableStorageParam,
+	alterTableResetStorageParams:      (*operationGenerator).resetTableStorageParam,
 	alterTypeDropValue:                (*operationGenerator).alterTypeDropValue,
 	commentOn:                         (*operationGenerator).commentOn,
 	createFunction:                    (*operationGenerator).createFunction,
@@ -303,6 +305,8 @@ var opWeights = []int{
 	alterTableRenameColumn:            1,
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
+	alterTableSetStorageParams:        1,
+	alterTableResetStorageParams:      1,
 	alterTypeDropValue:                1,
 	commentOn:                         1,
 	createFunction:                    1,
@@ -349,6 +353,8 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableDropColumn:              clusterversion.MinSupported,
 	alterTableDropConstraint:          clusterversion.MinSupported,
 	alterTableSetColumnNotNull:        clusterversion.MinSupported,
+	alterTableSetStorageParams:        clusterversion.V26_1,
+	alterTableResetStorageParams:      clusterversion.V26_1,
 	alterTableDropNotNull:             clusterversion.V25_3,
 	alterTableRLS:                     clusterversion.V25_2,
 	alterTypeDropValue:                clusterversion.MinSupported,

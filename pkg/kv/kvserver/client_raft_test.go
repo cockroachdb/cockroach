@@ -6256,7 +6256,7 @@ func TestStoreMetricsOnIncomingOutgoingMsg(t *testing.T) {
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg := kvserver.TestStoreConfig(clock)
 	var stopper *stop.Stopper
-	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
+	stopper, _, _, cfg.StorePool, _, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 1 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)

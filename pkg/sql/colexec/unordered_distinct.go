@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -90,12 +91,16 @@ func (op *UnorderedDistinct) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (op *UnorderedDistinct) Next() coldata.Batch {
+func (op *UnorderedDistinct) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		op.lastInputBatch = op.Input.Next()
+		var meta *execinfrapb.ProducerMetadata
+		op.lastInputBatch, meta = op.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		op.LastInputBatchOrigLen = op.lastInputBatch.Length()
 		if op.LastInputBatchOrigLen == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		// DistinctBuild call might result in an OOM error after lastInputBatch
 		// is updated in-place to include only the new distinct tuples. If an
@@ -110,7 +115,7 @@ func (op *UnorderedDistinct) Next() coldata.Batch {
 			// will emit all of them as the output. Note that the selection
 			// vector on batch is set in such a manner that only the distinct
 			// tuples are selected, so we can just emit batch directly.
-			return op.lastInputBatch
+			return op.lastInputBatch, nil
 		}
 	}
 }

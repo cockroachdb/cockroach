@@ -100,9 +100,9 @@ func TestCreateRegressionPostRequestBasic(t *testing.T) {
 	require.Contains(t, req.Message, "25.5%")
 	require.Contains(t, req.Message, "v24.1.0 -> master")
 
-	// Verify dashboard links are included (entire line is a link)
+	// Verify dashboard links are included (entire line is a link with checkbox)
 	require.Contains(t, req.Message, "https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan&package=pkg/sql")
-	require.Contains(t, req.Message, "[pkg/sql→BenchmarkScan (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/")
+	require.Contains(t, req.Message, "- [ ] [pkg/sql→BenchmarkScan (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/")
 }
 
 func TestCreateRegressionPostRequestMultiple(t *testing.T) {
@@ -186,9 +186,9 @@ func TestCreateRegressionPostRequestFormat(t *testing.T) {
 		"(ns/op): +1.2ms (25.5%)",
 		"BenchmarkInsert/batch=100",
 		"(B/op): +5.0KB (30.0%)",
-		// Verify entire line is a markdown link
-		"[pkg/sql/exec→BenchmarkScan/rows=1000 (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan/rows=1000&amp;package=pkg/sql/exec)",
-		"[pkg/sql/exec→BenchmarkInsert/batch=100 (B/op): +5.0KB (30.0%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkInsert/batch=100&amp;package=pkg/sql/exec)",
+		// Verify entire line is a markdown checklist item with link
+		"- [ ] [pkg/sql/exec→BenchmarkScan/rows=1000 (ns/op): +1.2ms (25.5%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkScan/rows=1000&amp;package=pkg/sql/exec)",
+		"- [ ] [pkg/sql/exec→BenchmarkInsert/batch=100 (B/op): +5.0KB (30.0%)](https://microbench.testeng.crdb.io/dashboard/?benchmark=BenchmarkInsert/batch=100&amp;package=pkg/sql/exec)",
 	}
 
 	for _, expected := range expectedElements {

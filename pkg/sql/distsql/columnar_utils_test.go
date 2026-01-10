@@ -198,11 +198,16 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 			colOpRows = append(colOpRows, printRowForChecking(rowColOp))
 		}
 		if metaColOp != nil {
-			if metaColOp.Err == nil {
+			if metaColOp.RowNum != nil {
+				// In test builds, the invariantsChecker can inject RowNum
+				// metadata in arbitrary Operator chains, so we'll just silently
+				// swallow it.
+			} else if metaColOp.Err == nil {
 				return errors.Errorf("unexpectedly columnar operator returned "+
 					"non-error meta\n%+v", metaColOp)
+			} else {
+				colOpMetas = append(colOpMetas, *metaColOp)
 			}
-			colOpMetas = append(colOpMetas, *metaColOp)
 		}
 
 		if rowProc == nil && metaProc == nil &&

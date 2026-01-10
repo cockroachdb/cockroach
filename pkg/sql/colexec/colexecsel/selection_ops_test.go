@@ -186,7 +186,7 @@ func runSelOpBenchmarks(
 			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
 				b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
 				for i := 0; i < b.N; i++ {
-					op.Next()
+					colexecop.NextNoMeta(op)
 				}
 			})
 		}

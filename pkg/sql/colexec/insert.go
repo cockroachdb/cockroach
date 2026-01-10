@@ -124,9 +124,11 @@ func (v *vectorInserter) getPartialIndexMap(b coldata.Batch) map[catid.IndexID][
 	return partialIndexColMap
 }
 
-func (v *vectorInserter) Next() coldata.Batch {
-	ctx := v.Ctx
-	b := v.Input.Next()
+func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := v.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if b.Length() == 0 {
 		if !v.statsRefresherNotified {
 			// We've just exhausted the input, so let's notify the stats
@@ -137,11 +139,11 @@ func (v *vectorInserter) Next() coldata.Batch {
 			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.Ctx, v.desc, v.rowsWritten)
 			v.statsRefresherNotified = true
 		}
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	if !v.checkOrds.Empty() {
-		if err := v.checkMutationInput(ctx, b); err != nil {
+		if err := v.checkMutationInput(v.Ctx, b); err != nil {
 			colexecerror.ExpectedError(err)
 		}
 	}
@@ -150,7 +152,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 	kvba := row.KVBatchAdapter{}
 	var p row.Putter = &kvba
 	if v.flowCtx.TraceKV {
-		p = &row.TracePutter{Putter: p, Ctx: ctx}
+		p = &row.TracePutter{Putter: p, Ctx: v.Ctx}
 	}
 	// In the future we could sort across multiple goroutines, not worth it yet,
 	// time here is minimal compared to time spent executing batch.
@@ -173,9 +175,9 @@ func (v *vectorInserter) Next() coldata.Batch {
 	start := 0
 	for start < b.Length() {
 		kvba.Batch = v.flowCtx.Txn.NewBatch()
-		if err := enc.PrepareBatch(ctx, p, start, end); err != nil {
+		if err := enc.PrepareBatch(v.Ctx, p, start, end); err != nil {
 			if errors.Is(err, colenc.ErrOverMemLimit) {
-				log.VEventf(ctx, 2, "vector insert memory limit err %d, numrows: %d", start, end)
+				log.VEventf(v.Ctx, 2, "vector insert memory limit err %d, numrows: %d", start, end)
 				end /= 2
 				// If one row blows out memory limit, just do one row at a time.
 				if end <= start {
@@ -196,16 +198,16 @@ func (v *vectorInserter) Next() coldata.Batch {
 		// get a fresh deadline before committing.
 		autoCommit := v.autoCommit && end == b.Length() &&
 			!v.flowCtx.Txn.DeadlineLikelySufficient()
-		log.VEventf(ctx, 2, "copy running batch, autocommit: %v, numrows: %d", autoCommit, end-start)
+		log.VEventf(v.Ctx, 2, "copy running batch, autocommit: %v, numrows: %d", autoCommit, end-start)
 		var err error
 		if autoCommit {
-			err = v.flowCtx.Txn.CommitInBatch(ctx, kvba.Batch)
+			err = v.flowCtx.Txn.CommitInBatch(v.Ctx, kvba.Batch)
 		} else {
-			err = v.flowCtx.Txn.Run(ctx, kvba.Batch)
+			err = v.flowCtx.Txn.Run(v.Ctx, kvba.Batch)
 		}
 		if err != nil {
 			colexecerror.ExpectedError(row.ConvertBatchError(
-				ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
+				v.Ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
 			))
 		}
 		numRows := end - start
@@ -222,7 +224,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 
 	v.rowsWritten += b.Length()
 
-	return v.retBatch
+	return v.retBatch, nil
 }
 
 func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch) error {

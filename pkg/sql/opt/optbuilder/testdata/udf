@@ -1905,3 +1905,67 @@ values
                                └── tuple
                                     ├── variable: c:18
                                     └── variable: child.p:19
+
+# Regression test for #160473. An uncorrelated IN-subquery should not be built
+# as a complicated expression with a ConstructGroupByAny.
+exec-ddl
+CREATE TABLE t160473 (
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b),
+  FAMILY (a, b, c)
+)
+----
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f160473() RETURNS INT LANGUAGE SQL AS $$
+  SELECT c FROM t160473 WHERE a = 33 AND b IN (SELECT unnest(ARRAY[44, 55]::INT[]))
+$$
+----
+
+# The norm directive is necessary to simplify the unnest project-set into a
+# values expression, allowing the complicated ConstructGroupByAny to be avoided.
+norm format=show-scalars
+SELECT f160473()
+----
+values
+ ├── columns: f160473:8
+ └── tuple
+      └── udf: f160473
+           └── body
+                └── project
+                     ├── columns: c:3
+                     └── limit
+                          ├── columns: a:1!null b:2!null c:3
+                          ├── select
+                          │    ├── columns: a:1!null b:2!null c:3
+                          │    ├── scan t160473
+                          │    │    └── columns: a:1 b:2 c:3
+                          │    └── filters
+                          │         ├── eq
+                          │         │    ├── variable: a:1
+                          │         │    └── const: 33
+                          │         └── in
+                          │              ├── variable: b:2
+                          │              └── tuple
+                          │                   ├── const: 44
+                          │                   └── const: 55
+                          └── const: 1
+
+exec-ddl
+CREATE OR REPLACE FUNCTION f160473() RETURNS INT LANGUAGE SQL AS $$
+  SELECT c FROM t160473 WHERE a = 33 AND b IN (SELECT unnest(ARRAY[]::INT[]))
+$$
+----
+
+norm format=show-scalars
+SELECT f160473()
+----
+values
+ ├── columns: f160473:8
+ └── tuple
+      └── udf: f160473
+           └── body
+                └── values
+                     └── columns: c:3!null

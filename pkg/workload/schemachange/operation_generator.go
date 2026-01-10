@@ -5750,3 +5750,305 @@ func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*op
 	}
 	return op, nil
 }
+
+// setTableStorageParam picks a random table and a random storage parameter,
+// then attempts to set them. When setting TTL parameters, it sets either
+// ttl_expire_after or ttl_expiration_expression plus one other TTL parameter.
+func (og *operationGenerator) setTableStorageParam(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s SET (fillfactor=100)`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+
+	// Randomly decide whether to set TTL parameters or a single non-TTL parameter
+	param, value, isValid, err := og.randStorageParam()
+	if err != nil {
+		return nil, err
+	}
+
+	if isTTLParam(param) {
+		// Set TTL parameters: one base param (expire_after or expiration_expression)
+		// plus one additional TTL param
+		baseParam, baseValue, err := og.randTTLExpirationParam(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
+		stmt.sql = fmt.Sprintf(`ALTER TABLE %s SET (%s=%s, %s=%s)`,
+			tableName.String(), baseParam, baseValue, param, value)
+	} else {
+		// Set a single non-TTL parameter
+		stmt.sql = fmt.Sprintf(`ALTER TABLE %s SET (%s=%s)`,
+			tableName.String(), param, value)
+	}
+
+	if !isValid {
+		stmt.expectedExecErrors.add(pgcode.InvalidParameterValue)
+	} else if isSchemaLockedParam(param) {
+		// set schema_locked cannot be combined with other operations
+		// and will return an error if it does.
+		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	}
+
+	return stmt, nil
+}
+
+// resetTableStorageParam picks a random table and a random storage parameter,
+// then attempts to reset the param.
+func (og *operationGenerator) resetTableStorageParam(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s RESET (fillfactor)`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+
+	// Randomly decide whether to set TTL parameters or a single non-TTL parameter
+	param, _, _, err := og.randStorageParam()
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset a storage parameter
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RESET (%s)`,
+		tableName.String(), param)
+
+	if isSchemaLockedParam(param) {
+		// reset schema_locked cannot be combined with other operations
+		// and will return an error if it does.
+		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	}
+
+	return stmt, nil
+}
+
+// randBoolString returns a random boolean value as a string
+func (og *operationGenerator) randBoolString() string {
+	boolVals := []string{"true", "false", "'on'", "'off'", "1", "0"}
+	return boolVals[og.randIntn(len(boolVals))]
+}
+
+// randIntervalString returns a random interval string
+func (og *operationGenerator) randIntervalString() string {
+	intervals := []string{
+		"'10 minutes'",
+		"'1 hour'",
+		"'30 days'",
+		"'1 day'",
+		"'7 days'",
+		"'00:10:00'",
+		"'24:00:00'",
+	}
+	return intervals[og.randIntn(len(intervals))]
+}
+
+// randCronString returns a random cron expression string
+func (og *operationGenerator) randCronString() string {
+	crons := []string{
+		"'@daily'",
+		"'@weekly'",
+		"'@hourly'",
+		"'0 0 * * *'",
+		"'0 */6 * * *'",
+		"'*/15 * * * *'",
+	}
+	return crons[og.randIntn(len(crons))]
+}
+
+// randTTLExpirationParam returns either ttl_expire_after or ttl_expiration_expression
+// with a random value. One of the two must be set to enable TTL on a table.
+// If a table has a column with timestamp type, use it as the ttl_expiration_expression.
+// Otherwise, set ttl_expire_after to a random value.
+func (og *operationGenerator) randTTLExpirationParam(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (string, string, error) {
+	// Get a column with timestamp type if exists
+	timestampCol, err := og.findTimestampColumn(ctx, tx, tableName)
+	if err != nil {
+		return "", "", err
+	}
+	// If table has a timestamp column, use it to define ttl_expiration_expression,
+	// otherwise, use ttl_expire_after
+	if timestampCol != "" {
+		return "ttl_expiration_expression", timestampCol, nil
+	}
+	return "ttl_expire_after", og.randIntervalString(), nil
+}
+
+// findTimestampColumn finds a column with timestamp type in the given table.
+// Returns the column name, or an empty string if no timestamp column exists.
+func (og *operationGenerator) findTimestampColumn(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (string, error) {
+	colInfo, err := og.getTableColumns(ctx, tx, tableName, false)
+	if err != nil {
+		return "", err
+	}
+
+	for _, col := range colInfo {
+		if col.typ.Family() == types.TimestampTZFamily {
+			return col.name.String(), nil
+		}
+	}
+	return "", nil
+}
+
+// randStorageParam returns a random storage parameter (excluding the ttl base params)
+func (og *operationGenerator) randStorageParam() (string, string, bool, error) {
+	params := []struct {
+		name     string
+		valueGen func() string
+	}{
+		{
+			name:     "fillfactor",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(100)) },
+		},
+		{
+			name:     "autovacuum_enabled",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl",
+			valueGen: func() string { return "true" },
+		},
+		{
+			name:     "ttl_select_batch_size",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_delete_batch_size",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_select_rate_limit",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_delete_rate_limit",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_label_metrics",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl_job_cron",
+			valueGen: func() string { return og.randCronString() },
+		},
+		{
+			name:     "ttl_pause",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl_row_stats_poll_interval",
+			valueGen: func() string { return og.randIntervalString() },
+		},
+		{
+			name:     "ttl_disable_changefeed_replication",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "exclude_data_from_backup",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoStatsMinStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     catpb.AutoStatsFractionStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%f", og.randFloat64()) },
+		},
+		{
+			name:     catpb.AutoPartialStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoFullStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoPartialStatsMinStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     catpb.AutoPartialStatsFractionStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%f", og.randFloat64()) },
+		},
+		{
+			name:     "sql_stats_forecasts_enabled",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "sql_stats_histogram_samples_count",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "sql_stats_histogram_buckets_count",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(1000)) },
+		},
+		{
+			name:     "schema_locked",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.CanaryStatsWindowSettingName,
+			valueGen: func() string { return og.randIntervalString() },
+		},
+	}
+
+	// Select a random parameter
+	randParam := params[og.randIntn(len(params))]
+	if og.produceError() {
+		return randParam.name, "INVALID_VAL", false, nil
+	}
+	return randParam.name, randParam.valueGen(), true, nil
+}
+
+// isTTLParam returns true if this is a TTL storage parameter.
+func isTTLParam(key string) bool {
+	return strings.HasPrefix(key, "ttl")
+}
+
+func isSchemaLockedParam(key string) bool {
+	return key == "schema_locked"
+}

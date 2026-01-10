@@ -41,15 +41,15 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "multinode clusters are slow under race")
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
 
 	var params base.TestClusterArgs
-	params.ServerArgs.DefaultDRPCOption = base.TestDRPCDisabled
 
 	tc, _, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t,
 		backuptestutils.MultiNode, backuptestutils.WithParams(params))
 	defer cleanupFn()
 
-	ctx := context.Background()
 	execCfg := tc.Server(0).ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 
 	externalStorageFromURI := execCfg.DistSQLSrv.ExternalStorageFromURI

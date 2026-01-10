@@ -250,10 +250,10 @@ func createRegressionPostRequest(
 		dashboardLink := generateDashboardLink(reg.benchmarkName)
 		if dashboardLink == "" {
 			// If we can't generate a link, skip the link but still show the regression
-			sb.WriteString(fmt.Sprintf("- %s (%s): %s (%.1f%%)\n",
+			sb.WriteString(fmt.Sprintf("- [ ] %s (%s): %s (%.1f%%)\n",
 				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange))
 		} else {
-			sb.WriteString(fmt.Sprintf("- [%s (%s): %s (%.1f%%)](%s)\n",
+			sb.WriteString(fmt.Sprintf("- [ ] [%s (%s): %s (%.1f%%)](%s)\n",
 				reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange, dashboardLink))
 		}
 	}

@@ -78,7 +78,7 @@ function refresh_ssh_config() {
 }
 
 function update_firewall() {
-	MY_IP="$(dig +short myip.opendns.com @resolver1.opendns.com)"
+	MY_IP="$(dig +short -4 myip.opendns.com @resolver1.opendns.com)"
 	RULE="$(whoami)-home-ssh-rule"
 	gcloud compute firewall-rules delete --quiet "$RULE" || true
 	gcloud compute firewall-rules create --quiet "$RULE" \

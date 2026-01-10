@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -42,12 +43,15 @@ type defaultCmp_KINDSelOp struct {
 var _ colexecop.Operator = &defaultCmp_KINDSelOp{}
 var _ execreleasable.Releasable = &defaultCmp_KINDSelOp{}
 
-func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
+func (d *defaultCmp_KINDSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := d.Input.Next()
+		batch, meta := d.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		// {{if .HasConst}}
@@ -89,7 +93,7 @@ func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }

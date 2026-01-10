@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -52,11 +53,14 @@ type rowNumberNoPartitionOp struct {
 
 var _ colexecop.Operator = &rowNumberNoPartitionOp{}
 
-func (r *rowNumberNoPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *rowNumberNoPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	rowNumberVec := batch.ColVec(r.outputColIdx)
@@ -75,7 +79,7 @@ func (r *rowNumberNoPartitionOp) Next() coldata.Batch {
 			rowNumberCol[i] = r.rowNumber
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type rowNumberWithPartitionOp struct {
@@ -84,11 +88,14 @@ type rowNumberWithPartitionOp struct {
 
 var _ colexecop.Operator = &rowNumberWithPartitionOp{}
 
-func (r *rowNumberWithPartitionOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *rowNumberWithPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -116,5 +123,5 @@ func (r *rowNumberWithPartitionOp) Next() coldata.Batch {
 			rowNumberCol[i] = r.rowNumber
 		}
 	}
-	return batch
+	return batch, nil
 }

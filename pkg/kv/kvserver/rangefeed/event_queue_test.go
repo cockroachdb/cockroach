@@ -352,13 +352,16 @@ func BenchmarkEventQueueMPSC(b *testing.B) {
 	producerCount := 10
 	bufSize := 64
 	runBench := func(b *testing.B, q queue) {
+		// Pre-allocate dest outside the benchmark loop to avoid polluting the
+		// allocation profile. This is safe because g.Wait() ensures the consumer
+		// goroutine completes before the next iteration starts.
+		dest := make([]sharedMuxEvent, 0, bufSize)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			g := ctxgroup.WithContext(ctx)
 			g.GoCtx(func(ctx context.Context) error {
 				expectedEventCount := eventsPerWorker * producerCount
 				eventCount := 0
-				dest := make([]sharedMuxEvent, 0, bufSize)
 				for {
 					dest = q.popFrontInto(dest[:0], bufSize)
 					if len(dest) > 0 {

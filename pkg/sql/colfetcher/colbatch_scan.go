@@ -236,7 +236,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 }
 
 // Next is part of the colexecop.Operator interface.
-func (s *ColBatchScan) Next() coldata.Batch {
+func (s *ColBatchScan) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	bat, err := s.cf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -247,7 +247,7 @@ func (s *ColBatchScan) Next() coldata.Batch {
 	s.mu.Lock()
 	s.mu.rowsRead += int64(bat.Length())
 	s.mu.Unlock()
-	return bat
+	return bat, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.

@@ -402,8 +402,8 @@ func RunTestsWithOrderedCols(
 		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
 		for {
-			originalBatch := originalOp.Next()
-			batchWithNulls := opWithNulls.Next()
+			originalBatch := colexecop.NextNoMeta(originalOp)
+			batchWithNulls := colexecop.NextNoMeta(opWithNulls)
 			if originalBatch.Length() != batchWithNulls.Length() {
 				foundDifference = true
 				break
@@ -562,7 +562,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			// batch).
 			lessThanTwoBatches := true
 			if err = colexecerror.CatchVectorizedRuntimeError(func() {
-				b := op.Next()
+				b := colexecop.NextNoMeta(op)
 				if b.Length() == 0 {
 					return
 				}
@@ -581,7 +581,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 						}
 					}
 				}
-				b = op.Next()
+				b = colexecop.NextNoMeta(op)
 				if b.Length() == 0 {
 					return
 				}
@@ -631,7 +631,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}
 		if err = colexecerror.CatchVectorizedRuntimeError(func() {
 			op.Init(ctx)
-			for b := op.Next(); b.Length() > 0; b = op.Next() {
+			for b := colexecop.NextNoMeta(op); b.Length() > 0; b = colexecop.NextNoMeta(op) {
 			}
 		}); err != nil {
 			errorHandler(err)
@@ -906,9 +906,9 @@ func (s *opTestInput) Init(context.Context) {
 	}
 }
 
-func (s *opTestInput) Next() coldata.Batch {
+func (s *opTestInput) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if len(s.tuples) == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
@@ -1060,7 +1060,7 @@ func (s *opTestInput) Next() coldata.Batch {
 	}
 
 	s.batch.SetLength(batchSize)
-	return s.batch
+	return s.batch, nil
 }
 
 func (s *opTestInput) Reset(context.Context) {
@@ -1142,7 +1142,7 @@ func (s *opFixedSelTestInput) Init(context.Context) {
 
 }
 
-func (s *opFixedSelTestInput) Next() coldata.Batch {
+func (s *opFixedSelTestInput) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var batchSize int
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -1166,7 +1166,7 @@ func (s *opFixedSelTestInput) Next() coldata.Batch {
 		}
 	} else {
 		if s.idx == len(s.sel) {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		batchSize = s.batchSize
 		if len(s.sel)-s.idx < batchSize {
@@ -1178,7 +1178,7 @@ func (s *opFixedSelTestInput) Next() coldata.Batch {
 	}
 	s.batch.SetLength(batchSize)
 	s.idx += batchSize
-	return s.batch
+	return s.batch, nil
 }
 
 func (s *opFixedSelTestInput) Reset(context.Context) {
@@ -1258,7 +1258,7 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 func (r *OpTestOutput) next() Tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
-		r.batch = r.Input.Next()
+		r.batch = colexecop.NextNoMeta(r.Input)
 		if r.batch.Length() == 0 {
 			return nil
 		}
@@ -1340,12 +1340,12 @@ func (r *OpTestOutput) VerifyPartialOrder() error {
 				// Get actual batch.
 				if r.batch == nil || r.curIdx >= r.batch.Length() {
 					// Get a fresh batch.
-					r.batch = r.Input.Next()
+					r.batch = colexecop.NextNoMeta(r.Input)
 					if r.batch.Length() == 0 {
 						break
 					}
 					distincterInput.SetBatch(r.batch)
-					distincter.Next()
+					colexecop.NextNoMeta(distincter)
 					r.curIdx = 0
 				}
 				if distinctOutput[r.curIdx] && len(actual) > 0 {
@@ -1557,12 +1557,12 @@ func (f *FiniteBatchSource) Init(ctx context.Context) {
 }
 
 // Next implements the Operator interface.
-func (f *FiniteBatchSource) Next() coldata.Batch {
+func (f *FiniteBatchSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if f.usableCount > 0 {
 		f.usableCount--
 		return f.repeatableBatch.Next()
 	}
-	return coldata.ZeroBatch
+	return coldata.ZeroBatch, nil
 }
 
 // Reset resets FiniteBatchSource to return the same batch usableCount number of
@@ -1602,10 +1602,10 @@ func (f *finiteChunksSource) Init(ctx context.Context) {
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next() coldata.Batch {
+func (f *finiteChunksSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if f.usableCount > 0 {
 		f.usableCount--
-		batch := f.repeatableBatch.Next()
+		batch := colexecop.NextNoMeta(f.repeatableBatch)
 		if f.matchLen > 0 && f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
@@ -1630,9 +1630,9 @@ func (f *finiteChunksSource) Next() coldata.Batch {
 				f.adjustment[i] += lastValue - firstValue + 1
 			}
 		}
-		return batch
+		return batch, nil
 	}
-	return coldata.ZeroBatch
+	return coldata.ZeroBatch, nil
 }
 
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
@@ -1671,9 +1671,9 @@ func (c *chunkingBatchSource) Init(context.Context) {
 	}
 }
 
-func (c *chunkingBatchSource) Next() coldata.Batch {
+func (c *chunkingBatchSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if c.curIdx >= c.len {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	// Explicitly set to false since this could be modified by the downstream
 	// operators. This is sufficient because both the vectors and the nulls are
@@ -1693,7 +1693,7 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 	}
 	c.batch.SetLength(lastIdx - c.curIdx)
 	c.curIdx = lastIdx
-	return c.batch
+	return c.batch, nil
 }
 
 func (c *chunkingBatchSource) Reset(context.Context) {

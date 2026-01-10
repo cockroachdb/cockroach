@@ -30,6 +30,46 @@ type MockNodeLiveness struct {
 	nodes             map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 }
 
+// MockStoreLiveness is a testing construct to mock what store liveness status a
+// store pool observes for a given store.
+type MockStoreLiveness struct {
+	syncutil.Mutex
+	isUnreachable            bool
+	lastSupportWithdrawnTime hlc.ClockTimestamp
+}
+
+// NewMockStoreLiveness constructs a MockStoreLiveness, for testing purposes.
+func NewMockStoreLiveness() *MockStoreLiveness {
+	return &MockStoreLiveness{
+		isUnreachable:            false,
+		lastSupportWithdrawnTime: hlc.ClockTimestamp{},
+	}
+}
+
+// SetIsUnreachable sets whether the store is unreachable or not.
+func (m *MockStoreLiveness) SetIsUnreachable(isUnreachable bool) {
+	m.Lock()
+	defer m.Unlock()
+	m.isUnreachable = isUnreachable
+}
+
+// SetLastSupportWithdrawnTime sets the last support withdrawn timestamp.
+func (m *MockStoreLiveness) SetLastSupportWithdrawnTime(ts hlc.ClockTimestamp) {
+	m.Lock()
+	defer m.Unlock()
+	m.lastSupportWithdrawnTime = ts
+}
+
+// StoreLivenessFunc is the method that can be injected as part of store pool
+// construction to mock out store liveness, in tests.
+func (m *MockStoreLiveness) StoreLivenessFunc(
+	roachpb.NodeID, roachpb.StoreID,
+) (bool, hlc.ClockTimestamp) {
+	m.Lock()
+	defer m.Unlock()
+	return m.isUnreachable, m.lastSupportWithdrawnTime
+}
+
 // NewMockNodeLiveness constructs a MockNodeLiveness, for testing purposes.
 func NewMockNodeLiveness(defaultNodeStatus livenesspb.NodeLivenessStatus) *MockNodeLiveness {
 	return &MockNodeLiveness{
@@ -67,7 +107,14 @@ func CreateTestStorePool(
 	deterministic bool,
 	nodeCount NodeCountFunc,
 	defaultNodeStatus livenesspb.NodeLivenessStatus,
-) (*stop.Stopper, *gossip.Gossip, *timeutil.ManualTime, *StorePool, *MockNodeLiveness) {
+) (
+	*stop.Stopper,
+	*gossip.Gossip,
+	*timeutil.ManualTime,
+	*StorePool,
+	*MockNodeLiveness,
+	*MockStoreLiveness,
+) {
 	stopper := stop.NewStopper()
 	// Pick a random date that is "realistic" and far enough away from 0.
 	mc := timeutil.NewManualTime(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC))
@@ -75,6 +122,7 @@ func CreateTestStorePool(
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
+	msl := NewMockStoreLiveness()
 
 	liveness.TimeUntilNodeDead.Override(ctx, &st.SV, timeUntilNodeDeadValue)
 	storePool := NewStorePool(
@@ -84,7 +132,8 @@ func CreateTestStorePool(
 		clock,
 		nodeCount,
 		mnl.NodeLivenessFunc,
+		msl.StoreLivenessFunc,
 		deterministic,
 	)
-	return stopper, g, mc, storePool, mnl
+	return stopper, g, mc, storePool, mnl, msl
 }

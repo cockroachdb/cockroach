@@ -3,9 +3,9 @@
 echo
 ----
 dead: health=Dead, lease=Shedding, replica=Shedding
-unknown: health=Unknown, lease=Refusing, replica=Refusing
+unknown: health=Unknown, lease=Shedding, replica=Refusing
 throttled: health=OK, lease=OK, replica=Refusing
 available: health=OK, lease=OK, replica=OK
-decommissioning: health=OK, lease=Shedding, replica=Shedding
+decommissioning: health=OK, lease=Refusing, replica=Shedding
 suspect: health=Unhealthy, lease=Shedding, replica=Refusing
 draining: health=OK, lease=Shedding, replica=Refusing

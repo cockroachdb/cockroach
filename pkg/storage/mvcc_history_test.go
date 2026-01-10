@@ -200,23 +200,6 @@ func TestMVCCHistories(t *testing.T) {
 
 	ctx := context.Background()
 
-	// intentInterleavingIter doesn't allow iterating from the local to the global
-	// keyspace, so we have to process these key spans separately.
-	spans := []roachpb.Span{
-		{Key: keys.MinKey, EndKey: roachpb.LocalMax},
-		{Key: keys.LocalMax, EndKey: roachpb.KeyMax},
-	}
-	// lockTableSpan returns the span of the lock table that corresponds to the
-	// given span.
-	lockTableSpan := func(s roachpb.Span) roachpb.Span {
-		k, _ := keys.LockTableSingleKey(s.Key, nil)
-		ek, _ := keys.LockTableSingleKey(s.EndKey, nil)
-		return roachpb.Span{Key: k, EndKey: ek}
-	}
-
-	// Timestamp for MVCC stats calculations, in nanoseconds.
-	const statsTS = 100e9
-
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "mvcc_histories"), func(t *testing.T, path string) {
 		st := cluster.MakeTestingClusterSettings()
 
@@ -224,14 +207,18 @@ func TestMVCCHistories(t *testing.T) {
 			skip.UnderRace(t)
 		}
 
-		if strings.Contains(path, "_disable_local_timestamps") {
+		flags := evalFlags{
+			disableLocalTimestamps: strings.Contains(path, "_disable_local_timestamps"),
+			noMetamorphicIter:      strings.Contains(path, "_nometamorphiciter"),
+			separateEngineBlocks:   separateEngineBlocks && !strings.Contains(path, "_disable_separate_engine_blocks"),
+		}
+		if flags.disableLocalTimestamps {
 			storage.LocalTimestampsEnabled.Override(ctx, &st.SV, false)
 		}
 
-		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
 		storageConfigOpts := []storage.ConfigOption{
 			storage.CacheSize(1 << 20 /* 1 MiB */),
-			storage.If(separateEngineBlocks && !disableSeparateEngineBlocks, storage.BlockSize(1)),
+			storage.If(flags.separateEngineBlocks, storage.BlockSize(1)),
 			storage.DiskWriteStatsCollector(vfs.NewDiskWriteStatsCollector()),
 		}
 
@@ -240,114 +227,8 @@ func TestMVCCHistories(t *testing.T) {
 		require.NoError(t, err)
 		defer engine.Close()
 
-		reportDataEntries := func(buf *redact.StringBuilder) error {
-			var hasData bool
-
-			for _, span := range spans {
-				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
-					fs.UnknownReadCategory,
-					func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
-						hasData = true
-						buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
-						for i, version := range rangeKeys.Versions {
-							val, err := storage.DecodeMVCCValue(version.Value)
-							require.NoError(t, err)
-							if i > 0 {
-								buf.Printf(" ")
-							}
-							buf.Printf("%s=%s", version.Timestamp, val)
-						}
-						buf.Printf("]\n")
-						return nil
-					})
-				if err != nil {
-					return err
-				}
-
-				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-					fs.UnknownReadCategory,
-					func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-						hasData = true
-						if r.Key.Timestamp.IsEmpty() {
-							// Meta is at timestamp zero.
-							meta := enginepb.MVCCMetadata{}
-							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-								buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
-							} else {
-								buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
-							}
-						} else {
-							val, err := storage.DecodeMVCCValue(r.Value)
-							if err != nil {
-								buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
-							} else {
-								buf.Printf("data: %v -> %s\n", r.Key, val)
-							}
-						}
-						return nil
-					})
-			}
-
-			if !hasData {
-				buf.SafeString("<no data>\n")
-			}
-			return err
-		}
-
-		// reportLockTable outputs the contents of the lock table.
-		reportLockTable := func(e *evalCtx, buf *redact.StringBuilder) error {
-			// Replicated locks.
-			ltStart := keys.LocalRangeLockTablePrefix
-			ltEnd := keys.LocalRangeLockTablePrefix.PrefixEnd()
-			iter, err := engine.NewEngineIterator(context.Background(), storage.IterOptions{UpperBound: ltEnd})
-			if err != nil {
-				return err
-			}
-			defer iter.Close()
-
-			var meta enginepb.MVCCMetadata
-			for valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = iter.NextEngineKey() {
-				if err != nil {
-					return err
-				} else if !valid {
-					break
-				}
-				eKey, err := iter.EngineKey()
-				if err != nil {
-					return err
-				}
-				ltKey, err := eKey.ToLockTableKey()
-				if err != nil {
-					return errors.Wrapf(err, "decoding LockTable key: %v", eKey)
-				}
-				if ltKey.Strength == lock.Intent {
-					// Ignore intents, which are reported by reportDataEntries.
-					continue
-				}
-				// Unmarshal.
-				v, err := iter.UnsafeValue()
-				if err != nil {
-					return err
-				}
-				if err := protoutil.Unmarshal(v, &meta); err != nil {
-					return errors.Wrapf(err, "unmarshaling mvcc meta: %v", ltKey)
-				}
-				buf.Printf("lock (%s): %v/%s -> %+v\n",
-					lock.Replicated, ltKey.Key, ltKey.Strength, &meta)
-			}
-
-			// Unreplicated locks.
-			if len(e.unreplLocks) > 0 {
-				for _, k := range slices.Sorted(maps.Keys(e.unreplLocks)) {
-					info := e.unreplLocks[k]
-					buf.Printf("lock (%s): %v/%s -> %+v\n",
-						lock.Unreplicated, k, info.str, info.txn)
-				}
-			}
-			return nil
-		}
-
 		e := newEvalCtx(ctx, engine)
+		e.flags = flags
 		defer func() {
 			require.NoError(t, engine.Compact(ctx))
 			m := engine.GetMetrics().Metrics
@@ -361,9 +242,6 @@ func TestMVCCHistories(t *testing.T) {
 			}
 		}()
 		defer e.close()
-		if strings.Contains(path, "_nometamorphiciter") {
-			e.noMetamorphicIter = true
-		}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// We'll be overriding cmd/cmdargs below, because the
@@ -394,338 +272,462 @@ func TestMVCCHistories(t *testing.T) {
 				}
 				return d.Expected
 			case "run":
-				// Syntax: run [trace] [error]
-				// (other words - in particular "ok" - are accepted but ignored)
-				//
-				// "run" executes a script of zero or more operations from
-				// the commands library defined below.
-				// It stops upon the first error encountered, if any.
-				//
-				// Options:
-				// - trace: emit intermediate results after each operation.
-				// - stats: emit MVCC statistics for each operation and at the end.
-				// - log-ops: emit any MVCC Logical operations at the end.
-				// - error: expect an error to occur. The specific error type/ message
-				//   to expect is spelled out in the expected output.
-				//
-				trace := e.hasArg("trace")
-				stats := e.hasArg("stats")
-				logOps := e.hasArg("log-ops")
-				expectError := e.hasArg("error")
-
-				// buf will accumulate the actual output, which the
-				// datadriven driver will use to compare to the expected
-				// output.
-				var buf redact.StringBuilder
-				e.results.buf = &buf
-				e.results.traceClearKey = trace
-
-				e.logOps = logOps
-				e.opLog = nil
-
-				// We reset the stats such that they accumulate for all commands
-				// in a single test.
-				e.ms = &enginepb.MVCCStats{}
-
-				// foundErr remembers which error was last encountered while
-				// executing the script under "run".
-				var foundErr error
-
-				// pos is the original <file>:<lineno> prefix computed by
-				// datadriven. It points to the top "run" command itself.
-				// We are editing d.Pos in-place below by extending `pos` upon
-				// each new line of the script.
-				pos := d.Pos
-
-				// dataChange indicates whether some command in the script
-				// has modified the stored data. When this becomes true, the
-				// current content of storage is printed in the results
-				// buffer at the end.
-				dataChange := false
-				// txnChange indicates whether some command has modified
-				// a transaction object. When set, the last modified txn
-				// object is reported in the result buffer at the end.
-				txnChange := false
-				// locksChange indicates whether some command has modified
-				// the lock table. When set, the lock table is reported in
-				// the result buffer at the end.
-				locksChange := false
-
-				reportResults := func(printTxn, printData, printLocks bool) {
-					if printTxn && e.results.txn != nil {
-						buf.Printf("txn: %v\n", e.results.txn)
-					}
-					if printData {
-						err := reportDataEntries(&buf)
-						if err != nil {
-							if foundErr == nil {
-								// Handle the error below.
-								foundErr = err
-							} else {
-								buf.Printf("error reading data: (%T:) %v\n", err, err)
-							}
-						}
-						for i, sst := range e.ssts {
-							err = storageutils.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
-							if err != nil {
-								if foundErr == nil {
-									// Handle the error below.
-									foundErr = err
-								} else {
-									buf.Printf("error reading SST data: (%T:) %v\n", err, err)
-								}
-							}
-						}
-					}
-					if printLocks {
-						err = reportLockTable(e, &buf)
-						if err != nil {
-							if foundErr == nil {
-								// Handle the error below.
-								foundErr = err
-							} else {
-								buf.Printf("error reading locks: (%T:) %v\n", err, err)
-							}
-						}
-					}
-					if logOps {
-						prettyPrintOp := func(op enginepb.MVCCLogicalOp) string {
-							switch t := op.GetValue().(type) {
-							case *enginepb.MVCCWriteValueOp:
-								return fmt.Sprintf("write_value: key=%s, ts=%s", roachpb.Key(t.Key), t.Timestamp)
-							case *enginepb.MVCCDeleteRangeOp:
-								return fmt.Sprintf("delete_range: startKey=%s endKey=%s ts=%s", roachpb.Key(t.StartKey), roachpb.Key(t.EndKey), t.Timestamp)
-							default:
-								return fmt.Sprintf("%T", t)
-							}
-						}
-						for _, op := range e.opLog {
-							buf.Printf("logical op: %s\n", prettyPrintOp(op))
-						}
-					}
-				}
-
-				// sharedCmdArgs is updated by "with" pseudo-commands,
-				// to pre-populate common arguments for the following
-				// indented commands.
-				var sharedCmdArgs []datadriven.CmdArg
-
-				// The lines of the script under "run".
-				lines := strings.Split(d.Input, "\n")
-				for i, line := range lines {
-					if short := strings.TrimSpace(line); short == "" || strings.HasPrefix(short, "#") {
-						// Comment or empty line. Do nothing.
-						continue
-					}
-
-					// Compute a line prefix, to clarify error message. We
-					// prefix a newline character because some text editor do
-					// not know how to jump to the location of an error if
-					// there are multiple file:line prefixes on the same line.
-					d.Pos = fmt.Sprintf("\n%s: (+%d)", pos, i+1)
-
-					// Trace the execution in testing.T, to clarify where we
-					// are in case an error occurs.
-					log.Dev.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
-
-					// Decompose the current script line.
-					var err error
-					d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
-					if err != nil {
-						e.t.Fatalf("%s: %v", d.Pos, err)
-					}
-
-					// Expand "with" commands:
-					//   with t=A
-					//       txn_begin
-					//       resolve_intent k=a
-					// is equivalent to:
-					//   txn_begin      t=A
-					//   resolve_intent k=a t=A
-					isIndented := strings.TrimLeft(line, " \t") != line
-					if d.Cmd == "with" {
-						if !isIndented {
-							// Reset shared args.
-							sharedCmdArgs = d.CmdArgs
-						} else {
-							// Prefix shared args. We use prefix so that the
-							// innermost "with" can override/shadow the outermost
-							// "with".
-							sharedCmdArgs = append(d.CmdArgs, sharedCmdArgs...)
-						}
-						continue
-					} else if isIndented {
-						// line is indented. Inherit arguments.
-						if len(sharedCmdArgs) == 0 {
-							// sanity check.
-							e.Fatalf("indented command without prior 'with': %s", line)
-						}
-						// We prepend the args that are provided on the command
-						// itself so it's possible to override those provided
-						// via "with".
-						d.CmdArgs = append(d.CmdArgs, sharedCmdArgs...)
-					} else {
-						// line is not indented. Clear shared arguments.
-						sharedCmdArgs = nil
-					}
-
-					cmd := e.getCmd()
-					txnChangeForCmd := cmd.typ&typTxnUpdate != 0
-					dataChangeForCmd := cmd.typ&typDataUpdate != 0
-					locksChangeForCmd := cmd.typ&typLocksUpdate != 0
-					txnChange = txnChange || txnChangeForCmd
-					dataChange = dataChange || dataChangeForCmd
-					locksChange = locksChange || locksChangeForCmd
-					statsForCmd := stats && (dataChangeForCmd || locksChangeForCmd)
-
-					if trace || statsForCmd {
-						// If tracing is also requested by the datadriven input,
-						// we'll trace the statement in the actual results too.
-						buf.Printf(">> %s", d.Cmd)
-						for i := range d.CmdArgs {
-							buf.Printf(" %s", &d.CmdArgs[i])
-						}
-						_ = buf.WriteByte('\n')
-					}
-
-					// Record the engine and evaluated stats before the command, so
-					// that we can compare the deltas.
-					var msEngineBefore enginepb.MVCCStats
-					if stats {
-						for _, span := range spans {
-							ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
-							require.NoError(t, err)
-							msEngineBefore.Add(ms)
-
-							lockSpan := lockTableSpan(span)
-							lockMs, err := storage.ComputeStats(
-								ctx, e.engine, fs.UnknownReadCategory,
-								lockSpan.Key, lockSpan.EndKey, statsTS)
-							require.NoError(t, err)
-							msEngineBefore.Add(lockMs)
-						}
-					}
-					msEvalBefore := *e.ms
-
-					// Run the command.
-					foundErr = cmd.fn(e)
-
-					if separateEngineBlocks && !disableSeparateEngineBlocks && dataChange {
-						require.NoError(t, e.engine.Flush())
-					}
-
-					if trace {
-						// If tracing is enabled, we report the intermediate results
-						// after each individual step in the script.
-						// This may modify foundErr too.
-						reportResults(txnChangeForCmd, dataChangeForCmd, dataChangeForCmd)
-					}
-
-					if statsForCmd {
-						// If stats are enabled, emit evaluated stats returned by the
-						// command, and compare them with the real computed stats diff.
-						var msEngineDiff enginepb.MVCCStats
-						for _, span := range spans {
-							ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
-							require.NoError(t, err)
-							msEngineDiff.Add(ms)
-
-							lockSpan := lockTableSpan(span)
-							lockMs, err := storage.ComputeStats(
-								ctx, e.engine, fs.UnknownReadCategory,
-								lockSpan.Key, lockSpan.EndKey, statsTS)
-							require.NoError(t, err)
-							msEngineDiff.Add(lockMs)
-						}
-						msEngineDiff.Subtract(msEngineBefore)
-
-						msEvalDiff := *e.ms
-						msEvalDiff.Subtract(msEvalBefore)
-						msEvalDiff.AgeTo(msEngineDiff.LastUpdateNanos)
-						buf.Printf("stats: %s\n", formatStats(msEvalDiff, true))
-
-						if msEvalDiff != msEngineDiff {
-							e.t.Errorf("MVCC stats mismatch for %q at %s\nReturned: %s\nExpected: %s",
-								d.Cmd, d.Pos, formatStats(msEvalDiff, true), formatStats(msEngineDiff, true))
-						}
-					}
-
-					if foundErr != nil {
-						// An error occurred. Stop the script prematurely.
-						break
-					}
-				}
-				// End of script.
-
-				// Check for any deferred iterator errors.
-				if foundErr == nil {
-					foundErr = e.iterErr()
-				}
-
-				// Flush any unfinished SSTs.
-				if foundErr == nil {
-					foundErr = e.finishSST()
-				} else {
-					e.closeSST()
-				}
-
-				if !trace {
-					// If we were not tracing, no results were printed yet. Do it now.
-					if txnChange || dataChange || locksChange {
-						buf.SafeString(">> at end:\n")
-					}
-					reportResults(txnChange, dataChange, locksChange)
-				}
-
-				// Calculate and output final stats if requested and the data changed.
-				if stats && (dataChange || locksChange) {
-					var msFinal enginepb.MVCCStats
-					for _, span := range spans {
-						ms, err := storage.ComputeStats(ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
-						require.NoError(t, err)
-						msFinal.Add(ms)
-
-						lockSpan := lockTableSpan(span)
-						lockMs, err := storage.ComputeStats(
-							ctx, e.engine, fs.UnknownReadCategory,
-							lockSpan.Key, lockSpan.EndKey, statsTS)
-						require.NoError(t, err)
-						msFinal.Add(lockMs)
-					}
-					buf.Printf("stats: %s\n", formatStats(msFinal, false))
-				}
-
-				signalError := e.t.Errorf
-				if txnChange || dataChange || locksChange {
-					// We can't recover from an error and continue
-					// to proceed further tests, because the state
-					// may have changed from what the test may be expecting.
-					signalError = e.t.Fatalf
-				}
-
-				// Check for errors.
-				if foundErr == nil && expectError {
-					signalError("%s: expected error, got success", d.Pos)
-					return d.Expected
-				} else if foundErr != nil {
-					if expectError {
-						buf.Printf("error: (%T:) %v\n", foundErr, foundErr)
-					} else /* !expectError */ {
-						signalError("%s: expected success, found: (%T:) %v", d.Pos, foundErr, foundErr)
-						return d.Expected
-					}
-				}
-
-				// We're done. Report the actual results and errors to the
-				// datadriven executor.
-				return buf.String()
-
+				return e.executeRunCmd(d)
 			default:
 				e.t.Errorf("%s: unknown command: %s", d.Pos, d.Cmd)
 				return d.Expected
 			}
 		})
 	})
+}
+
+// Syntax: run [trace] [error]
+// (other words - in particular "ok" - are accepted but ignored)
+//
+// "run" executes a script of zero or more operations from
+// the commands library defined below.
+// It stops upon the first error encountered, if any.
+//
+// Options:
+//   - trace: emit intermediate results after each operation.
+//   - stats: emit MVCC statistics for each operation and at the end.
+//   - log-ops: emit any MVCC Logical operations at the end.
+//   - error: expect an error to occur. The specific error type/ message
+//     to expect is spelled out in the expected output.
+func (e *evalCtx) executeRunCmd(d *datadriven.TestData) string {
+	// Timestamp for MVCC stats calculations, in nanoseconds.
+	const statsTS = 100e9
+
+	// intentInterleavingIter doesn't allow iterating from the local to the
+	// global keyspace, so we have to process these key spans separately.
+	spans := []roachpb.Span{
+		{Key: keys.MinKey, EndKey: roachpb.LocalMax},
+		{Key: keys.LocalMax, EndKey: roachpb.KeyMax},
+	}
+	// lockTableSpan returns the span of the lock table that corresponds to the
+	// given span.
+	lockTableSpan := func(s roachpb.Span) roachpb.Span {
+		k, _ := keys.LockTableSingleKey(s.Key, nil)
+		ek, _ := keys.LockTableSingleKey(s.EndKey, nil)
+		return roachpb.Span{Key: k, EndKey: ek}
+	}
+
+	trace := e.hasArg("trace")
+	stats := e.hasArg("stats")
+	logOps := e.hasArg("log-ops")
+	expectError := e.hasArg("error")
+
+	// buf will accumulate the actual output, which the
+	// datadriven driver will use to compare to the expected
+	// output.
+	var buf redact.StringBuilder
+	e.results.buf = &buf
+	e.results.traceClearKey = trace
+
+	e.logOps = logOps
+	e.opLog = nil
+
+	// We reset the stats such that they accumulate for all commands
+	// in a single test.
+	e.ms = &enginepb.MVCCStats{}
+
+	// foundErr remembers which error was last encountered while
+	// executing the script under "run".
+	var foundErr error
+
+	// pos is the original <file>:<lineno> prefix computed by
+	// datadriven. It points to the top "run" command itself.
+	// We are editing d.Pos in-place below by extending `pos` upon
+	// each new line of the script.
+	pos := d.Pos
+
+	// dataChange indicates whether some command in the script
+	// has modified the stored data. When this becomes true, the
+	// current content of storage is printed in the results
+	// buffer at the end.
+	dataChange := false
+	// txnChange indicates whether some command has modified
+	// a transaction object. When set, the last modified txn
+	// object is reported in the result buffer at the end.
+	txnChange := false
+	// locksChange indicates whether some command has modified
+	// the lock table. When set, the lock table is reported in
+	// the result buffer at the end.
+	locksChange := false
+
+	reportResults := func(printTxn, printData, printLocks bool) {
+		if printTxn && e.results.txn != nil {
+			buf.Printf("txn: %v\n", e.results.txn)
+		}
+		if printData {
+			if err := e.reportDataEntries(spans, &buf); err != nil {
+				if foundErr == nil {
+					// Handle the error below.
+					foundErr = err
+				} else {
+					buf.Printf("error reading data: (%T:) %v\n", err, err)
+				}
+			}
+			for i, sst := range e.ssts {
+				err := storageutils.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
+				if err != nil {
+					if foundErr == nil {
+						// Handle the error below.
+						foundErr = err
+					} else {
+						buf.Printf("error reading SST data: (%T:) %v\n", err, err)
+					}
+				}
+			}
+		}
+		if printLocks {
+			if err := e.reportLockTable(&buf); err != nil {
+				if foundErr == nil {
+					// Handle the error below.
+					foundErr = err
+				} else {
+					buf.Printf("error reading locks: (%T:) %v\n", err, err)
+				}
+			}
+		}
+		if logOps {
+			prettyPrintOp := func(op enginepb.MVCCLogicalOp) string {
+				switch t := op.GetValue().(type) {
+				case *enginepb.MVCCWriteValueOp:
+					return fmt.Sprintf("write_value: key=%s, ts=%s", roachpb.Key(t.Key), t.Timestamp)
+				case *enginepb.MVCCDeleteRangeOp:
+					return fmt.Sprintf("delete_range: startKey=%s endKey=%s ts=%s", roachpb.Key(t.StartKey), roachpb.Key(t.EndKey), t.Timestamp)
+				default:
+					return fmt.Sprintf("%T", t)
+				}
+			}
+			for _, op := range e.opLog {
+				buf.Printf("logical op: %s\n", prettyPrintOp(op))
+			}
+		}
+	}
+
+	// sharedCmdArgs is updated by "with" pseudo-commands,
+	// to pre-populate common arguments for the following
+	// indented commands.
+	var sharedCmdArgs []datadriven.CmdArg
+
+	// The lines of the script under "run".
+	lines := strings.Split(d.Input, "\n")
+	for i, line := range lines {
+		if short := strings.TrimSpace(line); short == "" || strings.HasPrefix(short, "#") {
+			// Comment or empty line. Do nothing.
+			continue
+		}
+
+		// Compute a line prefix, to clarify error message. We
+		// prefix a newline character because some text editor do
+		// not know how to jump to the location of an error if
+		// there are multiple file:line prefixes on the same line.
+		d.Pos = fmt.Sprintf("\n%s: (+%d)", pos, i+1)
+
+		// Trace the execution in testing.T, to clarify where we
+		// are in case an error occurs.
+		log.Dev.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
+
+		// Decompose the current script line.
+		var err error
+		d.Cmd, d.CmdArgs, err = datadriven.ParseLine(line)
+		if err != nil {
+			e.t.Fatalf("%s: %v", d.Pos, err)
+		}
+
+		// Expand "with" commands:
+		//   with t=A
+		//       txn_begin
+		//       resolve_intent k=a
+		// is equivalent to:
+		//   txn_begin      t=A
+		//   resolve_intent k=a t=A
+		isIndented := strings.TrimLeft(line, " \t") != line
+		if d.Cmd == "with" {
+			if !isIndented {
+				// Reset shared args.
+				sharedCmdArgs = d.CmdArgs
+			} else {
+				// Prefix shared args. We use prefix so that the
+				// innermost "with" can override/shadow the outermost
+				// "with".
+				sharedCmdArgs = append(d.CmdArgs, sharedCmdArgs...)
+			}
+			continue
+		} else if isIndented {
+			// line is indented. Inherit arguments.
+			if len(sharedCmdArgs) == 0 {
+				// sanity check.
+				e.Fatalf("indented command without prior 'with': %s", line)
+			}
+			// We prepend the args that are provided on the command
+			// itself so it's possible to override those provided
+			// via "with".
+			d.CmdArgs = append(d.CmdArgs, sharedCmdArgs...)
+		} else {
+			// line is not indented. Clear shared arguments.
+			sharedCmdArgs = nil
+		}
+
+		cmd := e.getCmd()
+		txnChangeForCmd := cmd.typ&typTxnUpdate != 0
+		dataChangeForCmd := cmd.typ&typDataUpdate != 0
+		locksChangeForCmd := cmd.typ&typLocksUpdate != 0
+		txnChange = txnChange || txnChangeForCmd
+		dataChange = dataChange || dataChangeForCmd
+		locksChange = locksChange || locksChangeForCmd
+		statsForCmd := stats && (dataChangeForCmd || locksChangeForCmd)
+
+		if trace || statsForCmd {
+			// If tracing is also requested by the datadriven input,
+			// we'll trace the statement in the actual results too.
+			buf.Printf(">> %s", d.Cmd)
+			for i := range d.CmdArgs {
+				buf.Printf(" %s", &d.CmdArgs[i])
+			}
+			_ = buf.WriteByte('\n')
+		}
+
+		// Record the engine and evaluated stats before the command, so
+		// that we can compare the deltas.
+		var msEngineBefore enginepb.MVCCStats
+		if stats {
+			for _, span := range spans {
+				ms, err := storage.ComputeStats(e.ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
+				require.NoError(e.t, err)
+				msEngineBefore.Add(ms)
+
+				lockSpan := lockTableSpan(span)
+				lockMs, err := storage.ComputeStats(
+					e.ctx, e.engine, fs.UnknownReadCategory,
+					lockSpan.Key, lockSpan.EndKey, statsTS)
+				require.NoError(e.t, err)
+				msEngineBefore.Add(lockMs)
+			}
+		}
+		msEvalBefore := *e.ms
+
+		// Run the command.
+		foundErr = cmd.fn(e)
+
+		if e.flags.separateEngineBlocks && dataChange {
+			require.NoError(e.t, e.engine.Flush())
+		}
+
+		if trace {
+			// If tracing is enabled, we report the intermediate results
+			// after each individual step in the script.
+			// This may modify foundErr too.
+			reportResults(txnChangeForCmd, dataChangeForCmd, dataChangeForCmd)
+		}
+
+		if statsForCmd {
+			// If stats are enabled, emit evaluated stats returned by the
+			// command, and compare them with the real computed stats diff.
+			var msEngineDiff enginepb.MVCCStats
+			for _, span := range spans {
+				ms, err := storage.ComputeStats(e.ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
+				require.NoError(e.t, err)
+				msEngineDiff.Add(ms)
+
+				lockSpan := lockTableSpan(span)
+				lockMs, err := storage.ComputeStats(
+					e.ctx, e.engine, fs.UnknownReadCategory,
+					lockSpan.Key, lockSpan.EndKey, statsTS)
+				require.NoError(e.t, err)
+				msEngineDiff.Add(lockMs)
+			}
+			msEngineDiff.Subtract(msEngineBefore)
+
+			msEvalDiff := *e.ms
+			msEvalDiff.Subtract(msEvalBefore)
+			msEvalDiff.AgeTo(msEngineDiff.LastUpdateNanos)
+			buf.Printf("stats: %s\n", formatStats(msEvalDiff, true))
+
+			if msEvalDiff != msEngineDiff {
+				e.t.Errorf("MVCC stats mismatch for %q at %s\nReturned: %s\nExpected: %s",
+					d.Cmd, d.Pos, formatStats(msEvalDiff, true), formatStats(msEngineDiff, true))
+			}
+		}
+
+		if foundErr != nil {
+			// An error occurred. Stop the script prematurely.
+			break
+		}
+	}
+	// End of script.
+
+	// Check for any deferred iterator errors.
+	if foundErr == nil {
+		foundErr = e.iterErr()
+	}
+
+	// Flush any unfinished SSTs.
+	if foundErr == nil {
+		foundErr = e.finishSST()
+	} else {
+		e.closeSST()
+	}
+
+	if !trace {
+		// If we were not tracing, no results were printed yet. Do it now.
+		if txnChange || dataChange || locksChange {
+			buf.SafeString(">> at end:\n")
+		}
+		reportResults(txnChange, dataChange, locksChange)
+	}
+
+	// Calculate and output final stats if requested and the data changed.
+	if stats && (dataChange || locksChange) {
+		var msFinal enginepb.MVCCStats
+		for _, span := range spans {
+			ms, err := storage.ComputeStats(e.ctx, e.engine, fs.UnknownReadCategory, span.Key, span.EndKey, statsTS)
+			require.NoError(e.t, err)
+			msFinal.Add(ms)
+
+			lockSpan := lockTableSpan(span)
+			lockMs, err := storage.ComputeStats(
+				e.ctx, e.engine, fs.UnknownReadCategory,
+				lockSpan.Key, lockSpan.EndKey, statsTS)
+			require.NoError(e.t, err)
+			msFinal.Add(lockMs)
+		}
+		buf.Printf("stats: %s\n", formatStats(msFinal, false))
+	}
+
+	signalError := e.t.Errorf
+	if txnChange || dataChange || locksChange {
+		// We can't recover from an error and continue
+		// to proceed further tests, because the state
+		// may have changed from what the test may be expecting.
+		signalError = e.t.Fatalf
+	}
+
+	// Check for errors.
+	if foundErr == nil && expectError {
+		signalError("%s: expected error, got success", d.Pos)
+		return d.Expected
+	} else if foundErr != nil {
+		if expectError {
+			buf.Printf("error: (%T:) %v\n", foundErr, foundErr)
+		} else /* !expectError */ {
+			signalError("%s: expected success, found: (%T:) %v", d.Pos, foundErr, foundErr)
+			return d.Expected
+		}
+	}
+
+	// We're done. Report the actual results and errors to the
+	// datadriven executor.
+	return buf.String()
+}
+
+func (e *evalCtx) reportDataEntries(spans []roachpb.Span, buf *redact.StringBuilder) error {
+	var hasData bool
+	var err error
+	for _, span := range spans {
+		err = e.engine.MVCCIterate(e.ctx, span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
+			fs.UnknownReadCategory,
+			func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
+				hasData = true
+				buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
+				for i, version := range rangeKeys.Versions {
+					val, err := storage.DecodeMVCCValue(version.Value)
+					require.NoError(e.t, err)
+					if i > 0 {
+						buf.Printf(" ")
+					}
+					buf.Printf("%s=%s", version.Timestamp, val)
+				}
+				buf.Printf("]\n")
+				return nil
+			})
+		if err != nil {
+			return err
+		}
+
+		err = e.engine.MVCCIterate(e.ctx, span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			fs.UnknownReadCategory,
+			func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				hasData = true
+				if r.Key.Timestamp.IsEmpty() {
+					// Meta is at timestamp zero.
+					meta := enginepb.MVCCMetadata{}
+					if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+						buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+					} else {
+						buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
+					}
+				} else {
+					val, err := storage.DecodeMVCCValue(r.Value)
+					if err != nil {
+						buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+					} else {
+						buf.Printf("data: %v -> %s\n", r.Key, val)
+					}
+				}
+				return nil
+			})
+	}
+
+	if !hasData {
+		buf.SafeString("<no data>\n")
+	}
+	return err
+}
+
+// reportLockTable outputs the contents of the lock table.
+func (e *evalCtx) reportLockTable(buf *redact.StringBuilder) error {
+	// Replicated locks.
+	ltStart := keys.LocalRangeLockTablePrefix
+	ltEnd := keys.LocalRangeLockTablePrefix.PrefixEnd()
+	iter, err := e.engine.NewEngineIterator(e.ctx, storage.IterOptions{UpperBound: ltEnd})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+
+	var meta enginepb.MVCCMetadata
+	for valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); ; valid, err = iter.NextEngineKey() {
+		if err != nil {
+			return err
+		} else if !valid {
+			break
+		}
+		eKey, err := iter.EngineKey()
+		if err != nil {
+			return err
+		}
+		ltKey, err := eKey.ToLockTableKey()
+		if err != nil {
+			return errors.Wrapf(err, "decoding LockTable key: %v", eKey)
+		}
+		if ltKey.Strength == lock.Intent {
+			// Ignore intents, which are reported by reportDataEntries.
+			continue
+		}
+		// Unmarshal.
+		v, err := iter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		if err := protoutil.Unmarshal(v, &meta); err != nil {
+			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", ltKey)
+		}
+		buf.Printf("lock (%s): %v/%s -> %+v\n",
+			lock.Replicated, ltKey.Key, ltKey.Strength, &meta)
+	}
+
+	// Unreplicated locks.
+	if len(e.unreplLocks) > 0 {
+		for _, k := range slices.Sorted(maps.Keys(e.unreplLocks)) {
+			info := e.unreplLocks[k]
+			buf.Printf("lock (%s): %v/%s -> %+v\n",
+				lock.Unreplicated, k, info.str, info.txn)
+		}
+	}
+	return nil
 }
 
 // getCmd retrieves the cmd entry for the current script line.
@@ -2363,6 +2365,12 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	return s
 }
 
+type evalFlags struct {
+	disableLocalTimestamps bool // disable local timestamps
+	noMetamorphicIter      bool // never instantiate metamorphicIterator
+	separateEngineBlocks   bool // use tiny blocks so each key is in its own data block
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -2371,21 +2379,21 @@ type evalCtx struct {
 		txn           *roachpb.Transaction
 		traceClearKey bool
 	}
-	ctx               context.Context
-	st                *cluster.Settings
-	engine            storage.Engine
-	noMetamorphicIter bool // never instantiate metamorphicIterator
-	iter              storage.SimpleMVCCIterator
-	iterRangeKeys     storage.MVCCRangeKeyStack
-	t                 *testing.T
-	td                *datadriven.TestData
-	txns              map[string]*roachpb.Transaction
-	txnCounter        uint32
-	unreplLocks       map[string]unreplicatedLockInfo
-	ms                *enginepb.MVCCStats
-	sstWriter         *storage.SSTWriter
-	sstFile           *storage.MemObject
-	ssts              [][]byte
+	ctx           context.Context
+	st            *cluster.Settings
+	engine        storage.Engine
+	flags         evalFlags
+	iter          storage.SimpleMVCCIterator
+	iterRangeKeys storage.MVCCRangeKeyStack
+	t             *testing.T
+	td            *datadriven.TestData
+	txns          map[string]*roachpb.Transaction
+	txnCounter    uint32
+	unreplLocks   map[string]unreplicatedLockInfo
+	ms            *enginepb.MVCCStats
+	sstWriter     *storage.SSTWriter
+	sstFile       *storage.MemObject
+	ssts          [][]byte
 
 	logOps bool
 	opLog  []enginepb.MVCCLogicalOp
@@ -2409,7 +2417,7 @@ func (e *evalCtx) close() {
 }
 
 func (e *evalCtx) metamorphicIterSeed() int64 {
-	if e.noMetamorphicIter {
+	if e.flags.noMetamorphicIter {
 		return 0
 	}
 	return int64(metamorphicIteratorSeed)
