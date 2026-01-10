@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -53,6 +54,9 @@ type mmaStoreRebalancer struct {
 func newMMAStoreRebalancer(
 	s *Store, mma mmaprototype.Allocator, st *cluster.Settings,
 ) *mmaStoreRebalancer {
+	// Initialize disk utilization thresholds from cluster settings.
+	opts := allocatorimpl.MakeDiskCapacityOptions(&st.SV)
+	mma.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
 	return &mmaStoreRebalancer{
 		store: (*mmaStore)(s),
 		mma:   mma,
@@ -125,6 +129,8 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 // rebalance may return true if errors happen in the process and fail to apply
 // the changes successfully.
 func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) bool {
+	opts := allocatorimpl.MakeDiskCapacityOptions(&m.st.SV)
+	m.mma.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
 	m.mma.UpdateStoresStatuses(ctx, m.as.GetMMAStoreStatuses())
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
