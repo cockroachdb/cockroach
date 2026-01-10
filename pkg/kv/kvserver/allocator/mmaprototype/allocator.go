@@ -68,6 +68,9 @@ type Allocator interface {
 
 	// UpdateStoresStatuses updates the health and disposition for the stores in
 	// storeStatuses. Stores unknown to the allocator are ignored with logging.
+	//
+	// The replica disposition is augmented based on disk utilization using
+	// thresholds set via SetDiskUtilThresholds.
 	UpdateStoresStatuses(ctx context.Context, storeStatuses map[roachpb.StoreID]Status)
 
 	// Methods related to making changes.
