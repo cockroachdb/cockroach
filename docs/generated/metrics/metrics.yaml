@@ -6617,38 +6617,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kv.protectedts.reconciliation.errors
-      exported_name: kv_protectedts_reconciliation_errors
-      description: number of errors encountered during reconciliation runs on this node
-      y_axis_label: Count
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kv.protectedts.reconciliation.num_runs
-      exported_name: kv_protectedts_reconciliation_num_runs
-      description: number of successful reconciliation runs on this node
-      y_axis_label: Count
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kv.protectedts.reconciliation.records_processed
-      exported_name: kv_protectedts_reconciliation_records_processed
-      description: number of records processed without error during reconciliation on this node
-      y_axis_label: Count
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: kv.protectedts.reconciliation.records_removed
-      exported_name: kv_protectedts_reconciliation_records_removed
-      description: number of records removed during reconciliation runs on this node
-      y_axis_label: Count
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.protectedts.get_record.failed
       exported_name: kv_protectedts_get_record_failed
       description: number of failed GetRecord operations (ErrNotExists, parsing errors, or execution errors)
@@ -6677,6 +6645,38 @@ layers:
       exported_name: kv_protectedts_protect_success
       description: number of successful Protect operations creating protected timestamp records
       y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.reconciliation.errors
+      exported_name: kv_protectedts_reconciliation_errors
+      description: number of errors encountered during reconciliation runs on this node
+      y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.reconciliation.num_runs
+      exported_name: kv_protectedts_reconciliation_num_runs
+      description: number of successful reconciliation runs on this node
+      y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.reconciliation.records_processed
+      exported_name: kv_protectedts_reconciliation_records_processed
+      description: number of records processed without error during reconciliation on this node
+      y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.reconciliation.records_removed
+      exported_name: kv_protectedts_reconciliation_records_removed
+      description: number of records removed during reconciliation runs on this node
+      y_axis_label: Count
       type: COUNTER
       unit: COUNT
       aggregation: AVG
