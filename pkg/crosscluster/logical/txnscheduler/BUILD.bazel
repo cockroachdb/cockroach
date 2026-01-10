@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnscheduler",
+    srcs = [
+        "lock_list.go",
+        "scheduler.go",
+        "transaction.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnscheduler",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/hlc"],
+)
+
+go_test(
+    name = "txnscheduler_test",
+    srcs = [
+        "scheduler_benchmark_test.go",
+        "scheduler_test.go",
+    ],
+    embed = [":txnscheduler"],
+    deps = [
+        "//pkg/util/hlc",
+        "@com_github_stretchr_testify//require",
+    ],
+)
