@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -52,11 +53,7 @@ func TestStorageMetricsProtect(t *testing.T) {
 			Timestamp: hlc.Timestamp{WallTime: 1},
 			MetaType:  "test",
 			Meta:      []byte("test"),
-			Target: &ptpb.Target{
-				Union: &ptpb.Target_SchemaObjects{
-					SchemaObjects: &ptpb.SchemaObjectsTarget{IDs: []uint32{1}},
-				},
-			},
+			Target: ptpb.MakeSchemaObjectsTarget(descpb.IDs{1}),
 		}
 		return manager.WithTxn(txn).Protect(ctx, rec)
 	})
@@ -74,11 +71,7 @@ func TestStorageMetricsProtect(t *testing.T) {
 			Timestamp: hlc.Timestamp{WallTime: 2},
 			MetaType:  "test",
 			Meta:      []byte("test"),
-			Target: &ptpb.Target{
-				Union: &ptpb.Target_SchemaObjects{
-					SchemaObjects: &ptpb.SchemaObjectsTarget{IDs: []uint32{1}},
-				},
-			},
+			Target: ptpb.MakeSchemaObjectsTarget(descpb.IDs{1}),
 		}
 		return manager.WithTxn(txn).Protect(ctx, rec)
 	})
@@ -108,11 +101,7 @@ func TestStorageMetricsRelease(t *testing.T) {
 			Timestamp: hlc.Timestamp{WallTime: 1},
 			MetaType:  "test",
 			Meta:      []byte("test"),
-			Target: &ptpb.Target{
-				Union: &ptpb.Target_SchemaObjects{
-					SchemaObjects: &ptpb.SchemaObjectsTarget{IDs: []uint32{1}},
-				},
-			},
+			Target: ptpb.MakeSchemaObjectsTarget(descpb.IDs{1}),
 		}
 		return manager.WithTxn(txn).Protect(ctx, rec)
 	})
@@ -162,11 +151,7 @@ func TestStorageMetricsGetRecord(t *testing.T) {
 			Timestamp: hlc.Timestamp{WallTime: 1},
 			MetaType:  "test",
 			Meta:      []byte("test"),
-			Target: &ptpb.Target{
-				Union: &ptpb.Target_SchemaObjects{
-					SchemaObjects: &ptpb.SchemaObjectsTarget{IDs: []uint32{1}},
-				},
-			},
+			Target: ptpb.MakeSchemaObjectsTarget(descpb.IDs{1}),
 		}
 		return manager.WithTxn(txn).Protect(ctx, rec)
 	})
