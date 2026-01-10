@@ -2413,7 +2413,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 // whether a store has disk capacity for additional replicas; or whether the
 // disk is over capacity and should shed replicas.
 func (a *Allocator) DiskOptions() DiskCapacityOptions {
-	return makeDiskCapacityOptions(&a.st.SV)
+	return MakeDiskCapacityOptions(&a.st.SV)
 }
 
 // IOOverloadOptions returns the store IO overload options. It is used to
