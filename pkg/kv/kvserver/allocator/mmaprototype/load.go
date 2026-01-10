@@ -662,7 +662,7 @@ func loadSummaryForDimension(
 }
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
-	if capacity == UnknownCapacity {
+	if capacity == UnknownCapacity || capacity == 0 {
 		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
 		return false
 	}
