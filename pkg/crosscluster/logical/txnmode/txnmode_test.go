@@ -39,9 +39,9 @@ func TestTxnModeSmoketest(t *testing.T) {
 	s := srv.ApplicationLayer()
 	runner := sqlutils.MakeSQLRunner(conn)
 
-	// Enable rangefeed on the system layer
+	// Configure low latency replication settings
 	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-	sysRunner.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
 
 	// Create source and destination databases
 	runner.Exec(t, "CREATE DATABASE source_db")
@@ -110,9 +110,9 @@ func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
 	s := srv.ApplicationLayer()
 	runner := sqlutils.MakeSQLRunner(conn)
 
-	// Enable rangefeed on the system layer
+	// Configure low latency replication settings
 	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-	sysRunner.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
 
 	// Create source and destination databases
 	runner.Exec(t, "CREATE DATABASE source_db")

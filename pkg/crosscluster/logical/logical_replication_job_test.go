@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
@@ -68,19 +69,6 @@ import (
 )
 
 var (
-	testClusterSystemSettings = []string{
-		"SET CLUSTER SETTING kv.rangefeed.enabled = true",
-		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'",
-		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'",
-	}
-	testClusterSettings = []string{
-		"SET CLUSTER SETTING physical_replication.producer.timestamp_granularity = '0s'",
-		"SET CLUSTER SETTING physical_replication.producer.min_checkpoint_frequency='100ms'",
-		"SET CLUSTER SETTING logical_replication.consumer.heartbeat_frequency = '1s'",
-		"SET CLUSTER SETTING logical_replication.consumer.job_checkpoint_frequency = '100ms'",
-	}
-
 	testClusterBaseClusterArgs = base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
@@ -1608,13 +1596,7 @@ func setupServerWithNumDBs(
 	}
 
 	sysDB := sqlutils.MakeSQLRunner(server.SystemLayer(0).SQLConn(t))
-	for _, s := range testClusterSystemSettings {
-		sysDB.Exec(t, s)
-	}
-
-	for _, s := range testClusterSettings {
-		runners[0].Exec(t, s)
-	}
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysDB, runners[0])
 
 	for i := range numDBs {
 		createBasicTable(t, runners[i], "tab")
