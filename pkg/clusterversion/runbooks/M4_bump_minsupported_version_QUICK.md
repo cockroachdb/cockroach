@@ -382,3 +382,49 @@ Before creating PR, verify these files were updated:
 | Duplicate statement errors | Manually review files with `onlyif` - see full runbook |
 
 **Full troubleshooting:** See main runbook section "Common Errors and Solutions"
+
+---
+
+## Third PR: Prefix Old Version Gates with TODO_Delete_
+
+After both MinSupported bump PRs are merged, create a third PR to mark obsolete version gates.
+
+### What to Do
+
+Prefix all non-permanent version keys below MinSupported with `TODO_Delete_`:
+
+**Example:**
+```go
+// Before:
+V25_2_Start
+V25_3_AddEventLogColumnAndIndex
+
+// After:
+TODO_Delete_V25_2_Start
+TODO_Delete_V25_3_AddEventLogColumnAndIndex
+```
+
+**Rules:**
+- Prefix if: `Internal != 0` AND version value `< MinSupported`
+- Do NOT prefix: Final release keys (e.g., `V25_2`, `V25_3`)
+- Do NOT prefix: Bootstrap keys (`Major: 0, Minor: 0`)
+
+### Files to Update
+
+1. `pkg/clusterversion/cockroach_versions.go` - Add prefix to key names and versionTable
+2. Update all references: `git grep V25_2_Start` and replace with `TODO_Delete_V25_2_Start`
+3. Update test files that use these keys
+
+**Example PR:** #160852
+
+### After Merging: Create Cleanup Issues
+
+Create GitHub issues for teams to remove the TODO_Delete_ gates:
+
+1. Find original PRs: `git log -S "V25_3_GateName"`
+2. Determine team ownership from PR approvals (use GraphQL API)
+3. Create one issue per team with their gates listed
+
+**Example issues:** #160856, #160857, #160858, #160859, #160860, #160861
+
+**Full details:** See main runbook "Post-Commit: Create Cleanup Issues for Teams"

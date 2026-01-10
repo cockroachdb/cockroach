@@ -88,7 +88,7 @@ func TestEventLogTableMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V25_3_AddEventLogColumnAndIndex,
+		clusterversion.TODO_Delete_V25_3_AddEventLogColumnAndIndex,
 		nil,   /* done */
 		false, /* expectError */
 	)

@@ -75,7 +75,7 @@ func TestStatsTablesAutostatsFunctionMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V25_4_SystemStatsTablesAutostatsFraction,
+		clusterversion.TODO_Delete_V25_4_SystemStatsTablesAutostatsFraction,
 		nil,   /* done */
 		false, /* expectError */
 	)

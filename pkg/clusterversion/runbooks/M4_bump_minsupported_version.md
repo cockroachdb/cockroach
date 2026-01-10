@@ -1193,24 +1193,126 @@ Before creating the PR:
 - [ ] Version tests pass: `./dev test pkg/clusterversion`
 - [ ] Git grep shows no remaining unprefixed references to old internal keys
 
-### Post-Commit: File Cleanup Issues
+### Post-Commit: Create Cleanup Issues for Teams
 
-After this PR is merged, create GitHub issues for cleaning up TODO_Delete_ version gates:
+After this PR is merged, create GitHub issues for teams to clean up their TODO_Delete_ version gates.
 
-**Tasks:**
-1. Search for all uses of TODO_Delete_ version keys
-2. Create issues assigned to relevant teams (based on package ownership)
-3. Document that these version checks can be removed since the old versions are now always active
+**When to do this:** Immediately after the TODO_Delete_ prefix PR is merged.
+
+#### Step 1: Determine Team Ownership
+
+For each prefixed gate, identify which team owns it by finding the original PR and checking who approved it:
+
+**Find the original PR for each gate:**
+```bash
+# For each gate, find the commit that added it
+git log -S "V25_3_AddEventLogColumnAndIndex" --oneline --all pkg/clusterversion/cockroach_versions.go | grep -v tmp | head -1
+
+# Get the PR number from the commit
+gh pr list --repo cockroachdb/cockroach --search "<commit_sha>" --state merged --json number
+```
+
+**Determine the approving team:**
+```bash
+# Use GraphQL to find who approved on behalf of which team
+gh api graphql -f query="{
+  repository(owner: \"cockroachdb\", name: \"cockroach\") {
+    pullRequest(number: XXXXX) {
+      reviews(first: 20) {
+        nodes {
+          author { login }
+          state
+          onBehalfOf(first: 5) {
+            nodes {
+              ... on Team {
+                slug
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}" --jq '.data.repository.pullRequest.reviews.nodes[] | select(.state == "APPROVED" and (.onBehalfOf.nodes | length > 0))'
+```
+
+**Map team to T-label using TEAMS.yaml:**
+```bash
+# Example: cockroachdb/obs-prs maps to T-observability
+grep -A 3 "cockroachdb/obs-prs:" TEAMS.yaml
+```
+
+**Fallback for PRs without explicit team approvals:**
+- Check the approver's known team affiliation
+- Use the PR title/content to infer the owning team
+- Check which teams were requested as reviewers
+
+#### Step 2: Create Issues for Each Team
+
+Create one issue per team with all their gates listed.
+
+**Issue Template:**
+```markdown
+## Clean up TODO_Delete_ version gates
+
+As part of the M.4 MinSupported bump task (PR #XXXXX), version gates below MinSupported (V25_4) were prefixed with `TODO_Delete_`. These gates are now obsolete and should be removed.
+
+## Gates to Remove
+
+The following gates were assigned to T-TEAM for cleanup:
+
+| Gate | Original PR | Description |
+|------|-------------|-------------|
+| `TODO_Delete_V25_X_GateName` | [#XXXXX](link) | Brief description |
+
+## What to Do
+
+These version gates were part of migrations that are now guaranteed to have run on all clusters (since MinSupported > these versions).
+
+For each gate:
+1. Search for usages: `git grep TODO_Delete_V25_X_GateName`
+2. Remove the version gate constant and all associated conditional logic
+3. The new behavior should be unconditional
+
+See the original PRs linked above for context on what each gate was protecting.
+
+## Background
+
+Reference PR: https://github.com/cockroachdb/cockroach/pull/XXXXX
+
+You can remove these gates incrementally across multiple PRs or all at once, whichever is more convenient for your team.
+```
+
+**Create the issues:**
+```bash
+gh issue create --repo cockroachdb/cockroach \
+  --title "clusterversion: clean up TODO_Delete_ version gates (T-TEAM)" \
+  --label "T-TEAM" \
+  --body "<paste template above>"
+```
+
+#### Step 3: Track Created Issues
+
+Keep a record of which issues were created for which teams (e.g., in a tracking document or the PR description).
+
+### Example PRs and Issues
+
+**Example TODO_Delete_ prefix PR:**
+- #160852 - Prefix version gates below V25_4
+
+**Example cleanup issues created:**
+- #160856 - T-observability (4 gates)
+- #160857 - T-dev-inf (2 gates)
+- #160858 - T-sql-foundations (2 gates)
+- #160859 - T-kv (1 gate)
+- #160860 - T-storage (1 gate)
+- #160861 - T-sql-queries (1 gate)
 
 ### Notes
 
-- **This is optional:** Some teams prefer to skip this step and directly remove obsolete code
-- **Timing:** Can be done immediately after MinSupported bump PRs or later
-- **Follow-up:** Create issues for teams to remove the TODO_Delete_ code and simplify related logic
-
-### Example PRs
-
-- TBD (this is a new pattern introduced in the runbook)
+- This step is **recommended** to distribute cleanup work to the teams that own the code
+- Teams can tackle cleanup incrementally or all at once
+- Each team knows the context of their gates from the original PRs
 
 ---
 

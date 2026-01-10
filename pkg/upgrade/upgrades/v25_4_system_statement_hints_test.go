@@ -45,7 +45,7 @@ func TestStatementHintsTable(t *testing.T) {
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
 	_, err := sqlDB.Exec("SELECT * FROM system.statement_hints")
 	require.Error(t, err, "system.statement_hints should not exist")
-	upgrades.Upgrade(t, sqlDB, clusterversion.V25_4_AddSystemStatementHintsTable, nil, false)
+	upgrades.Upgrade(t, sqlDB, clusterversion.TODO_Delete_V25_4_AddSystemStatementHintsTable, nil, false)
 	_, err = sqlDB.Exec("SELECT * FROM system.statement_hints")
 	require.NoError(t, err, "system.statement_hints should exist")
 }
