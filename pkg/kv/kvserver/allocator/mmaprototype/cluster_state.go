@@ -2239,6 +2239,8 @@ func (cs *clusterState) setDiskUtilThresholds(refuseThreshold, shedThreshold flo
 
 // updateStoreStatuses updates each known store's health and disposition from storeStatuses.
 // Stores unknown in mma yet but are known to store pool are ignored with logging.
+// The replica disposition is augmented based on disk utilization using thresholds
+// set via setDiskUtilThresholds.
 func (cs *clusterState) updateStoreStatuses(
 	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
 ) {
@@ -2254,13 +2256,16 @@ func (cs *clusterState) updateStoreStatuses(
 		// Augment the replica disposition based on disk utilization.
 		// We use adjusted load (which includes pending changes) to account for
 		// in-flight replica additions that haven't completed yet.
-		ss.status = storeStatus
-		if ss.capacity[ByteSize] != UnknownCapacity && ss.capacity[ByteSize] > 0 {
-			diskUtil := float64(ss.adjusted.load[ByteSize]) / float64(ss.capacity[ByteSize])
-			if diskUtil > 0.9 {
-				ss.status.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionRefusing)
-			}
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionShedding)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Shedding due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilShedThreshold*100)
+		} else if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilRefuseThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionRefusing)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Refusing due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilRefuseThreshold*100)
 		}
+		cs.stores[storeID].status = storeStatus
 	}
 }
 
@@ -2592,7 +2597,9 @@ func computeLoadSummary(
 		dimSummary[i] = ls
 		switch LoadDimension(i) {
 		case ByteSize:
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
+			// Use hardcoded 0.9 threshold for backward compatibility.
+			// TODO(tbg): remove highDiskSpaceUtilization field from storeLoadSummary.
+			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i], 0.9)
 		}
 	}
 	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)

@@ -661,13 +661,16 @@ func loadSummaryForDimension(
 	return min(summaryUpperBound, summ)
 }
 
-func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
+// highDiskSpaceUtilization checks if disk utilization >= the given threshold.
+// This is called in updateStoreStatuses to augment store dispositions based on
+// disk utilization thresholds (refusing at 0.925, shedding at 0.95 by default).
+func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold float64) bool {
 	if capacity == UnknownCapacity || capacity == 0 {
 		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
 		return false
 	}
 	fractionUsed := float64(load) / float64(capacity)
-	return fractionUsed > 0.9
+	return fractionUsed >= threshold
 }
 
 const loadMultiplierForAddition = 1.1

@@ -355,6 +355,9 @@ func TestClusterState(t *testing.T) {
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
+			// Set default disk utilization thresholds for tests (matches original MMA behavior).
+			cs.diskUtilRefuseThreshold = 0.9
+			cs.diskUtilShedThreshold = 0.9
 			tr := tracing.NewTracer()
 			tr.SetRedactable(true)
 			defer tr.Close()
