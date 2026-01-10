@@ -115,7 +115,7 @@ func subBenchmarkValues(
 					b.Fatal(err)
 				}
 				op.Init(ctx)
-				for batch := op.Next(); batch.Length() > 0; batch = op.Next() {
+				for batch := colexecop.NextNoMeta(op); batch.Length() > 0; batch = colexecop.NextNoMeta(op) {
 				}
 			}
 		})

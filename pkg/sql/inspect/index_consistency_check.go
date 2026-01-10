@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -79,7 +80,7 @@ const (
 type indexConsistencyCheck struct {
 	indexConsistencyCheckApplicability
 
-	flowCtx *execinfra.FlowCtx
+	execCfg *sql.ExecutorConfig
 	indexID descpb.IndexID
 	// tableVersion is the descriptor version recorded when the check was planned.
 	// It is used to detect concurrent schema changes for non-AS OF inspections.
@@ -255,7 +256,7 @@ func (c *indexConsistencyCheck) Start(
 		}
 	}
 
-	if indexConsistencyHashEnabled.Get(&c.flowCtx.Cfg.Settings.SV) && len(allColNames) > 0 {
+	if indexConsistencyHashEnabled.Get(&c.execCfg.Settings.SV) && len(allColNames) > 0 {
 		// The hash precheck uses crdb_internal.datums_to_bytes, which depends on
 		// keyside.Encode. Skip if any column type isn’t encodable (i.e. TSQUERY, etc.).
 		if !allColumnsDatumsToBytesCompatible(c.columns) {
@@ -298,8 +299,8 @@ func (c *indexConsistencyCheck) Start(
 	c.lastQueryPlaceholders = queryArgs
 
 	// Execute the query with AS OF SYSTEM TIME embedded in the SQL
-	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
-	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
+	qos := getInspectQoS(&c.execCfg.Settings.SV)
+	it, err := c.execCfg.DistSQLSrv.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),
@@ -456,7 +457,7 @@ func (c *indexConsistencyCheck) RowCount() uint64 {
 // eligible for consistency checking. If the index is valid, it stores the
 // descriptor and index metadata in the indexConsistencyCheck struct.
 func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
-	return c.flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+	return c.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		if !c.asOf.IsEmpty() {
 			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
 				return err
@@ -812,8 +813,8 @@ func (c *indexConsistencyCheck) computeHashAndRowCount(
 	query := buildIndexHashQuery(c.tableDesc.GetID(), index, columnNames, predicate)
 	queryWithAsOf := fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", query, c.asOf.AsOfSystemTime())
 
-	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
-	row, err := c.flowCtx.Cfg.DB.Executor().QueryRowEx(
+	qos := getInspectQoS(&c.execCfg.Settings.SV)
+	row, err := c.execCfg.DistSQLSrv.DB.Executor().QueryRowEx(
 		ctx, "inspect-index-consistency-hash", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),

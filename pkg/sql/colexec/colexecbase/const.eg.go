@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -165,11 +166,14 @@ type constBoolOp struct {
 	constVal  bool
 }
 
-func (c constBoolOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bool()
@@ -193,7 +197,7 @@ func (c constBoolOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constBytesOp struct {
@@ -204,11 +208,14 @@ type constBytesOp struct {
 	constVal  []byte
 }
 
-func (c constBytesOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Bytes()
@@ -231,7 +238,7 @@ func (c constBytesOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constDecimalOp struct {
@@ -242,11 +249,14 @@ type constDecimalOp struct {
 	constVal  apd.Decimal
 }
 
-func (c constDecimalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Decimal()
@@ -270,7 +280,7 @@ func (c constDecimalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constInt16Op struct {
@@ -281,11 +291,14 @@ type constInt16Op struct {
 	constVal  int16
 }
 
-func (c constInt16Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int16()
@@ -309,7 +322,7 @@ func (c constInt16Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constInt32Op struct {
@@ -320,11 +333,14 @@ type constInt32Op struct {
 	constVal  int32
 }
 
-func (c constInt32Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int32()
@@ -348,7 +364,7 @@ func (c constInt32Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constInt64Op struct {
@@ -359,11 +375,14 @@ type constInt64Op struct {
 	constVal  int64
 }
 
-func (c constInt64Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Int64()
@@ -387,7 +406,7 @@ func (c constInt64Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constFloat64Op struct {
@@ -398,11 +417,14 @@ type constFloat64Op struct {
 	constVal  float64
 }
 
-func (c constFloat64Op) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Float64()
@@ -426,7 +448,7 @@ func (c constFloat64Op) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constTimestampOp struct {
@@ -437,11 +459,14 @@ type constTimestampOp struct {
 	constVal  time.Time
 }
 
-func (c constTimestampOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Timestamp()
@@ -465,7 +490,7 @@ func (c constTimestampOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constIntervalOp struct {
@@ -476,11 +501,14 @@ type constIntervalOp struct {
 	constVal  duration.Duration
 }
 
-func (c constIntervalOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Interval()
@@ -504,7 +532,7 @@ func (c constIntervalOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constJSONOp struct {
@@ -515,11 +543,14 @@ type constJSONOp struct {
 	constVal  json.JSON
 }
 
-func (c constJSONOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.JSON()
@@ -542,7 +573,7 @@ func (c constJSONOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 type constDatumOp struct {
@@ -553,11 +584,14 @@ type constDatumOp struct {
 	constVal  interface{}
 }
 
-func (c constDatumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.Datum()
@@ -580,7 +614,7 @@ func (c constDatumOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // NewConstNullOp creates a new operator that produces a constant NULL value at
@@ -602,13 +636,16 @@ type constNullOp struct {
 
 var _ colexecop.Operator = &constNullOp{}
 
-func (c constNullOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constNullOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	batch.ColVec(c.outputIdx).Nulls().SetNulls()
-	return batch
+	return batch, nil
 }

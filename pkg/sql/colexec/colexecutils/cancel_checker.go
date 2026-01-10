@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
@@ -49,7 +50,7 @@ func (c *CancelChecker) Init(ctx context.Context) {
 }
 
 // Next is part of colexecop.Operator interface.
-func (c *CancelChecker) Next() coldata.Batch {
+func (c *CancelChecker) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	c.CheckEveryCall()
 	return c.Input.Next()
 }

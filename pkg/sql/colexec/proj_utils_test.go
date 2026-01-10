@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -92,15 +93,27 @@ func assertProjOpAgainstRowByRow(
 	var da tree.DatumAlloc
 	materializer.Start(ctx)
 	for _, expectedDatum := range expectedOutput {
-		actualRow, meta := materializer.Next()
-		require.Nil(t, meta)
+		var actualRow rowenc.EncDatumRow
+		for actualRow == nil {
+			var meta *execinfrapb.ProducerMetadata
+			actualRow, meta = materializer.Next()
+			if meta != nil {
+				require.NotNil(t, meta.RowNum)
+			}
+		}
 		require.Equal(t, 1, len(actualRow))
 		cmp, err := expectedDatum.Compare(ctx, outputType, &da, evalCtx, &actualRow[0])
 		require.NoError(t, err)
 		require.Equal(t, 0, cmp)
 	}
-	// The materializer must have been fully exhausted now.
-	row, meta := materializer.Next()
-	require.Nil(t, row)
-	require.Nil(t, meta)
+	// The materializer must have been fully exhausted now (modulo injected
+	// metadata).
+	for {
+		row, meta := materializer.Next()
+		require.Nil(t, row)
+		if meta == nil {
+			break
+		}
+		require.NotNil(t, meta.RowNum)
+	}
 }

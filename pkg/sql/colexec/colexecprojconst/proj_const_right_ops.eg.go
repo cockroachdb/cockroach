@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -45,6 +46,7 @@ var (
 	_ json.JSON
 	_ = coldataext.CompareDatum
 	_ = encoding.UnsafeConvertStringToBytes
+	_ *execinfrapb.ProducerMetadata
 )
 
 type projBitandInt16Int16ConstOp struct {
@@ -52,11 +54,14 @@ type projBitandInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -118,7 +123,7 @@ func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt16Int32ConstOp struct {
@@ -126,11 +131,14 @@ type projBitandInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -192,7 +200,7 @@ func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt16Int64ConstOp struct {
@@ -200,11 +208,14 @@ type projBitandInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -266,7 +277,7 @@ func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt32Int16ConstOp struct {
@@ -274,11 +285,14 @@ type projBitandInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -340,7 +354,7 @@ func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt32Int32ConstOp struct {
@@ -348,11 +362,14 @@ type projBitandInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -414,7 +431,7 @@ func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt32Int64ConstOp struct {
@@ -422,11 +439,14 @@ type projBitandInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -488,7 +508,7 @@ func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt64Int16ConstOp struct {
@@ -496,11 +516,14 @@ type projBitandInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -562,7 +585,7 @@ func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt64Int32ConstOp struct {
@@ -570,11 +593,14 @@ type projBitandInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -636,7 +662,7 @@ func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandInt64Int64ConstOp struct {
@@ -644,11 +670,14 @@ type projBitandInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitandInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -710,7 +739,7 @@ func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitandDatumDatumConstOp struct {
@@ -719,13 +748,16 @@ type projBitandDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
+func (p projBitandDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -821,7 +853,7 @@ func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt16Int16ConstOp struct {
@@ -829,11 +861,14 @@ type projBitorInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -895,7 +930,7 @@ func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt16Int32ConstOp struct {
@@ -903,11 +938,14 @@ type projBitorInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -969,7 +1007,7 @@ func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt16Int64ConstOp struct {
@@ -977,11 +1015,14 @@ type projBitorInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -1043,7 +1084,7 @@ func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt32Int16ConstOp struct {
@@ -1051,11 +1092,14 @@ type projBitorInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -1117,7 +1161,7 @@ func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt32Int32ConstOp struct {
@@ -1125,11 +1169,14 @@ type projBitorInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -1191,7 +1238,7 @@ func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt32Int64ConstOp struct {
@@ -1199,11 +1246,14 @@ type projBitorInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -1265,7 +1315,7 @@ func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt64Int16ConstOp struct {
@@ -1273,11 +1323,14 @@ type projBitorInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -1339,7 +1392,7 @@ func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt64Int32ConstOp struct {
@@ -1347,11 +1400,14 @@ type projBitorInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -1413,7 +1469,7 @@ func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorInt64Int64ConstOp struct {
@@ -1421,11 +1477,14 @@ type projBitorInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitorInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -1487,7 +1546,7 @@ func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitorDatumDatumConstOp struct {
@@ -1496,13 +1555,16 @@ type projBitorDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
+func (p projBitorDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -1598,7 +1660,7 @@ func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt16Int16ConstOp struct {
@@ -1606,11 +1668,14 @@ type projBitxorInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -1672,7 +1737,7 @@ func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt16Int32ConstOp struct {
@@ -1680,11 +1745,14 @@ type projBitxorInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -1746,7 +1814,7 @@ func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt16Int64ConstOp struct {
@@ -1754,11 +1822,14 @@ type projBitxorInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -1820,7 +1891,7 @@ func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt32Int16ConstOp struct {
@@ -1828,11 +1899,14 @@ type projBitxorInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -1894,7 +1968,7 @@ func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt32Int32ConstOp struct {
@@ -1902,11 +1976,14 @@ type projBitxorInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -1968,7 +2045,7 @@ func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt32Int64ConstOp struct {
@@ -1976,11 +2053,14 @@ type projBitxorInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -2042,7 +2122,7 @@ func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt64Int16ConstOp struct {
@@ -2050,11 +2130,14 @@ type projBitxorInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -2116,7 +2199,7 @@ func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt64Int32ConstOp struct {
@@ -2124,11 +2207,14 @@ type projBitxorInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -2190,7 +2276,7 @@ func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorInt64Int64ConstOp struct {
@@ -2198,11 +2284,14 @@ type projBitxorInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projBitxorInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -2264,7 +2353,7 @@ func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projBitxorDatumDatumConstOp struct {
@@ -2273,13 +2362,16 @@ type projBitxorDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
+func (p projBitxorDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -2375,7 +2467,7 @@ func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDecimalInt16ConstOp struct {
@@ -2383,11 +2475,14 @@ type projPlusDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -2477,7 +2572,7 @@ func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDecimalInt32ConstOp struct {
@@ -2485,11 +2580,14 @@ type projPlusDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -2579,7 +2677,7 @@ func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDecimalInt64ConstOp struct {
@@ -2587,11 +2685,14 @@ type projPlusDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -2681,7 +2782,7 @@ func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDecimalDecimalConstOp struct {
@@ -2689,11 +2790,14 @@ type projPlusDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -2783,7 +2887,7 @@ func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt16Int16ConstOp struct {
@@ -2791,11 +2895,14 @@ type projPlusInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -2881,7 +2988,7 @@ func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt16Int32ConstOp struct {
@@ -2889,11 +2996,14 @@ type projPlusInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -2979,7 +3089,7 @@ func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt16Int64ConstOp struct {
@@ -2987,11 +3097,14 @@ type projPlusInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -3077,7 +3190,7 @@ func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt16DecimalConstOp struct {
@@ -3085,11 +3198,14 @@ type projPlusInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -3187,7 +3303,7 @@ func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt16DatumConstOp struct {
@@ -3196,13 +3312,16 @@ type projPlusInt16DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
+func (p projPlusInt16DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -3306,7 +3425,7 @@ func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt32Int16ConstOp struct {
@@ -3314,11 +3433,14 @@ type projPlusInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -3404,7 +3526,7 @@ func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt32Int32ConstOp struct {
@@ -3412,11 +3534,14 @@ type projPlusInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -3502,7 +3627,7 @@ func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt32Int64ConstOp struct {
@@ -3510,11 +3635,14 @@ type projPlusInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -3600,7 +3728,7 @@ func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt32DecimalConstOp struct {
@@ -3608,11 +3736,14 @@ type projPlusInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -3710,7 +3841,7 @@ func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt32DatumConstOp struct {
@@ -3719,13 +3850,16 @@ type projPlusInt32DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
+func (p projPlusInt32DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -3829,7 +3963,7 @@ func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt64Int16ConstOp struct {
@@ -3837,11 +3971,14 @@ type projPlusInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -3927,7 +4064,7 @@ func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt64Int32ConstOp struct {
@@ -3935,11 +4072,14 @@ type projPlusInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -4025,7 +4165,7 @@ func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt64Int64ConstOp struct {
@@ -4033,11 +4173,14 @@ type projPlusInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -4123,7 +4266,7 @@ func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt64DecimalConstOp struct {
@@ -4131,11 +4274,14 @@ type projPlusInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -4233,7 +4379,7 @@ func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusInt64DatumConstOp struct {
@@ -4242,13 +4388,16 @@ type projPlusInt64DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
+func (p projPlusInt64DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -4352,7 +4501,7 @@ func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusFloat64Float64ConstOp struct {
@@ -4360,11 +4509,14 @@ type projPlusFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -4438,7 +4590,7 @@ func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusTimestampIntervalConstOp struct {
@@ -4446,11 +4598,14 @@ type projPlusTimestampIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusTimestampIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -4524,7 +4679,7 @@ func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusIntervalTimestampConstOp struct {
@@ -4532,11 +4687,14 @@ type projPlusIntervalTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusIntervalTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -4610,7 +4768,7 @@ func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusIntervalIntervalConstOp struct {
@@ -4618,11 +4776,14 @@ type projPlusIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPlusIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -4676,7 +4837,7 @@ func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusIntervalDatumConstOp struct {
@@ -4685,13 +4846,16 @@ type projPlusIntervalDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
+func (p projPlusIntervalDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -4795,7 +4959,7 @@ func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDatumIntervalConstOp struct {
@@ -4804,13 +4968,16 @@ type projPlusDatumIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
+func (p projPlusDatumIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -4916,7 +5083,7 @@ func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDatumInt16ConstOp struct {
@@ -4925,13 +5092,16 @@ type projPlusDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
+func (p projPlusDatumInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -5037,7 +5207,7 @@ func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDatumInt32ConstOp struct {
@@ -5046,13 +5216,16 @@ type projPlusDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
+func (p projPlusDatumInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -5158,7 +5331,7 @@ func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPlusDatumInt64ConstOp struct {
@@ -5167,13 +5340,16 @@ type projPlusDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
+func (p projPlusDatumInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -5279,7 +5455,7 @@ func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDecimalInt16ConstOp struct {
@@ -5287,11 +5463,14 @@ type projMinusDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -5381,7 +5560,7 @@ func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDecimalInt32ConstOp struct {
@@ -5389,11 +5568,14 @@ type projMinusDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -5483,7 +5665,7 @@ func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDecimalInt64ConstOp struct {
@@ -5491,11 +5673,14 @@ type projMinusDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -5585,7 +5770,7 @@ func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDecimalDecimalConstOp struct {
@@ -5593,11 +5778,14 @@ type projMinusDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -5687,7 +5875,7 @@ func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt16Int16ConstOp struct {
@@ -5695,11 +5883,14 @@ type projMinusInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -5785,7 +5976,7 @@ func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt16Int32ConstOp struct {
@@ -5793,11 +5984,14 @@ type projMinusInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -5883,7 +6077,7 @@ func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt16Int64ConstOp struct {
@@ -5891,11 +6085,14 @@ type projMinusInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -5981,7 +6178,7 @@ func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt16DecimalConstOp struct {
@@ -5989,11 +6186,14 @@ type projMinusInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -6091,7 +6291,7 @@ func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt16DatumConstOp struct {
@@ -6100,13 +6300,16 @@ type projMinusInt16DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
+func (p projMinusInt16DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -6210,7 +6413,7 @@ func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt32Int16ConstOp struct {
@@ -6218,11 +6421,14 @@ type projMinusInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -6308,7 +6514,7 @@ func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt32Int32ConstOp struct {
@@ -6316,11 +6522,14 @@ type projMinusInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -6406,7 +6615,7 @@ func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt32Int64ConstOp struct {
@@ -6414,11 +6623,14 @@ type projMinusInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -6504,7 +6716,7 @@ func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt32DecimalConstOp struct {
@@ -6512,11 +6724,14 @@ type projMinusInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -6614,7 +6829,7 @@ func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt32DatumConstOp struct {
@@ -6623,13 +6838,16 @@ type projMinusInt32DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
+func (p projMinusInt32DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -6733,7 +6951,7 @@ func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt64Int16ConstOp struct {
@@ -6741,11 +6959,14 @@ type projMinusInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -6831,7 +7052,7 @@ func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt64Int32ConstOp struct {
@@ -6839,11 +7060,14 @@ type projMinusInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -6929,7 +7153,7 @@ func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt64Int64ConstOp struct {
@@ -6937,11 +7161,14 @@ type projMinusInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -7027,7 +7254,7 @@ func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt64DecimalConstOp struct {
@@ -7035,11 +7262,14 @@ type projMinusInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -7137,7 +7367,7 @@ func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusInt64DatumConstOp struct {
@@ -7146,13 +7376,16 @@ type projMinusInt64DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
+func (p projMinusInt64DatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -7256,7 +7489,7 @@ func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusFloat64Float64ConstOp struct {
@@ -7264,11 +7497,14 @@ type projMinusFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -7342,7 +7578,7 @@ func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusTimestampTimestampConstOp struct {
@@ -7350,11 +7586,14 @@ type projMinusTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -7420,7 +7659,7 @@ func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusTimestampIntervalConstOp struct {
@@ -7428,11 +7667,14 @@ type projMinusTimestampIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusTimestampIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -7506,7 +7748,7 @@ func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusIntervalIntervalConstOp struct {
@@ -7514,11 +7756,14 @@ type projMinusIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -7572,7 +7817,7 @@ func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusIntervalDatumConstOp struct {
@@ -7581,13 +7826,16 @@ type projMinusIntervalDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
+func (p projMinusIntervalDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -7691,7 +7939,7 @@ func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusJSONBytesConstOp struct {
@@ -7699,11 +7947,14 @@ type projMinusJSONBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusJSONBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -7791,7 +8042,7 @@ func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusJSONInt16ConstOp struct {
@@ -7799,11 +8050,14 @@ type projMinusJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusJSONInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -7877,7 +8131,7 @@ func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusJSONInt32ConstOp struct {
@@ -7885,11 +8139,14 @@ type projMinusJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusJSONInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -7963,7 +8220,7 @@ func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusJSONInt64ConstOp struct {
@@ -7971,11 +8228,14 @@ type projMinusJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMinusJSONInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -8049,7 +8309,7 @@ func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumDatumConstOp struct {
@@ -8058,13 +8318,16 @@ type projMinusDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
+func (p projMinusDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8160,7 +8423,7 @@ func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumIntervalConstOp struct {
@@ -8169,13 +8432,16 @@ type projMinusDatumIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
+func (p projMinusDatumIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8281,7 +8547,7 @@ func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumBytesConstOp struct {
@@ -8290,13 +8556,16 @@ type projMinusDatumBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
+func (p projMinusDatumBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8400,7 +8669,7 @@ func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumInt16ConstOp struct {
@@ -8409,13 +8678,16 @@ type projMinusDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
+func (p projMinusDatumInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8521,7 +8793,7 @@ func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumInt32ConstOp struct {
@@ -8530,13 +8802,16 @@ type projMinusDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
+func (p projMinusDatumInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8642,7 +8917,7 @@ func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMinusDatumInt64ConstOp struct {
@@ -8651,13 +8926,16 @@ type projMinusDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
+func (p projMinusDatumInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -8763,7 +9041,7 @@ func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultDecimalInt16ConstOp struct {
@@ -8771,11 +9049,14 @@ type projMultDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -8865,7 +9146,7 @@ func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultDecimalInt32ConstOp struct {
@@ -8873,11 +9154,14 @@ type projMultDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -8967,7 +9251,7 @@ func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultDecimalInt64ConstOp struct {
@@ -8975,11 +9259,14 @@ type projMultDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -9069,7 +9356,7 @@ func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultDecimalDecimalConstOp struct {
@@ -9077,11 +9364,14 @@ type projMultDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -9171,7 +9461,7 @@ func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultDecimalIntervalConstOp struct {
@@ -9179,11 +9469,14 @@ type projMultDecimalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultDecimalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -9257,7 +9550,7 @@ func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt16Int16ConstOp struct {
@@ -9265,11 +9558,14 @@ type projMultInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -9387,7 +9683,7 @@ func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt16Int32ConstOp struct {
@@ -9395,11 +9691,14 @@ type projMultInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -9517,7 +9816,7 @@ func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt16Int64ConstOp struct {
@@ -9525,11 +9824,14 @@ type projMultInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -9647,7 +9949,7 @@ func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt16DecimalConstOp struct {
@@ -9655,11 +9957,14 @@ type projMultInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -9757,7 +10062,7 @@ func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt16IntervalConstOp struct {
@@ -9765,11 +10070,14 @@ type projMultInt16IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt16IntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -9823,7 +10131,7 @@ func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt32Int16ConstOp struct {
@@ -9831,11 +10139,14 @@ type projMultInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -9953,7 +10264,7 @@ func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt32Int32ConstOp struct {
@@ -9961,11 +10272,14 @@ type projMultInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -10083,7 +10397,7 @@ func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt32Int64ConstOp struct {
@@ -10091,11 +10405,14 @@ type projMultInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -10213,7 +10530,7 @@ func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt32DecimalConstOp struct {
@@ -10221,11 +10538,14 @@ type projMultInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -10323,7 +10643,7 @@ func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt32IntervalConstOp struct {
@@ -10331,11 +10651,14 @@ type projMultInt32IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt32IntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -10389,7 +10712,7 @@ func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt64Int16ConstOp struct {
@@ -10397,11 +10720,14 @@ type projMultInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -10519,7 +10845,7 @@ func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt64Int32ConstOp struct {
@@ -10527,11 +10853,14 @@ type projMultInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -10649,7 +10978,7 @@ func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt64Int64ConstOp struct {
@@ -10657,11 +10986,14 @@ type projMultInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -10779,7 +11111,7 @@ func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt64DecimalConstOp struct {
@@ -10787,11 +11119,14 @@ type projMultInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -10889,7 +11224,7 @@ func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultInt64IntervalConstOp struct {
@@ -10897,11 +11232,14 @@ type projMultInt64IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultInt64IntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -10955,7 +11293,7 @@ func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultFloat64Float64ConstOp struct {
@@ -10963,11 +11301,14 @@ type projMultFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -11041,7 +11382,7 @@ func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultFloat64IntervalConstOp struct {
@@ -11049,11 +11390,14 @@ type projMultFloat64IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultFloat64IntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -11107,7 +11451,7 @@ func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultIntervalInt16ConstOp struct {
@@ -11115,11 +11459,14 @@ type projMultIntervalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultIntervalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -11173,7 +11520,7 @@ func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultIntervalInt32ConstOp struct {
@@ -11181,11 +11528,14 @@ type projMultIntervalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultIntervalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -11239,7 +11589,7 @@ func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultIntervalInt64ConstOp struct {
@@ -11247,11 +11597,14 @@ type projMultIntervalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultIntervalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -11305,7 +11658,7 @@ func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultIntervalFloat64ConstOp struct {
@@ -11313,11 +11666,14 @@ type projMultIntervalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultIntervalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -11371,7 +11727,7 @@ func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projMultIntervalDecimalConstOp struct {
@@ -11379,11 +11735,14 @@ type projMultIntervalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projMultIntervalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -11457,7 +11816,7 @@ func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivDecimalInt16ConstOp struct {
@@ -11465,11 +11824,14 @@ type projDivDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -11575,7 +11937,7 @@ func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivDecimalInt32ConstOp struct {
@@ -11583,11 +11945,14 @@ type projDivDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -11693,7 +12058,7 @@ func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivDecimalInt64ConstOp struct {
@@ -11701,11 +12066,14 @@ type projDivDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -11811,7 +12179,7 @@ func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivDecimalDecimalConstOp struct {
@@ -11819,11 +12187,14 @@ type projDivDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -11945,7 +12316,7 @@ func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt16Int16ConstOp struct {
@@ -11953,11 +12324,14 @@ type projDivInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -12059,7 +12433,7 @@ func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt16Int32ConstOp struct {
@@ -12067,11 +12441,14 @@ type projDivInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -12173,7 +12550,7 @@ func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt16Int64ConstOp struct {
@@ -12181,11 +12558,14 @@ type projDivInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -12287,7 +12667,7 @@ func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt16DecimalConstOp struct {
@@ -12295,11 +12675,14 @@ type projDivInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -12429,7 +12812,7 @@ func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt32Int16ConstOp struct {
@@ -12437,11 +12820,14 @@ type projDivInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -12543,7 +12929,7 @@ func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt32Int32ConstOp struct {
@@ -12551,11 +12937,14 @@ type projDivInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -12657,7 +13046,7 @@ func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt32Int64ConstOp struct {
@@ -12665,11 +13054,14 @@ type projDivInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -12771,7 +13163,7 @@ func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt32DecimalConstOp struct {
@@ -12779,11 +13171,14 @@ type projDivInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -12913,7 +13308,7 @@ func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt64Int16ConstOp struct {
@@ -12921,11 +13316,14 @@ type projDivInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -13027,7 +13425,7 @@ func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt64Int32ConstOp struct {
@@ -13035,11 +13433,14 @@ type projDivInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -13141,7 +13542,7 @@ func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt64Int64ConstOp struct {
@@ -13149,11 +13550,14 @@ type projDivInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -13255,7 +13659,7 @@ func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivInt64DecimalConstOp struct {
@@ -13263,11 +13667,14 @@ type projDivInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -13397,7 +13804,7 @@ func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivFloat64Float64ConstOp struct {
@@ -13405,11 +13812,14 @@ type projDivFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -13499,7 +13909,7 @@ func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivIntervalInt16ConstOp struct {
@@ -13507,11 +13917,14 @@ type projDivIntervalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivIntervalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -13581,7 +13994,7 @@ func (p projDivIntervalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivIntervalInt32ConstOp struct {
@@ -13589,11 +14002,14 @@ type projDivIntervalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivIntervalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -13663,7 +14079,7 @@ func (p projDivIntervalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivIntervalInt64ConstOp struct {
@@ -13671,11 +14087,14 @@ type projDivIntervalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivIntervalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -13745,7 +14164,7 @@ func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projDivIntervalFloat64ConstOp struct {
@@ -13753,11 +14172,14 @@ type projDivIntervalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projDivIntervalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -13827,7 +14249,7 @@ func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivDecimalInt16ConstOp struct {
@@ -13835,11 +14257,14 @@ type projFloorDivDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -13945,7 +14370,7 @@ func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivDecimalInt32ConstOp struct {
@@ -13953,11 +14378,14 @@ type projFloorDivDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -14063,7 +14491,7 @@ func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivDecimalInt64ConstOp struct {
@@ -14071,11 +14499,14 @@ type projFloorDivDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -14181,7 +14612,7 @@ func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivDecimalDecimalConstOp struct {
@@ -14189,11 +14620,14 @@ type projFloorDivDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -14315,7 +14749,7 @@ func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt16Int16ConstOp struct {
@@ -14323,11 +14757,14 @@ type projFloorDivInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -14409,7 +14846,7 @@ func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt16Int32ConstOp struct {
@@ -14417,11 +14854,14 @@ type projFloorDivInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -14503,7 +14943,7 @@ func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt16Int64ConstOp struct {
@@ -14511,11 +14951,14 @@ type projFloorDivInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -14597,7 +15040,7 @@ func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt16DecimalConstOp struct {
@@ -14605,11 +15048,14 @@ type projFloorDivInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -14739,7 +15185,7 @@ func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt32Int16ConstOp struct {
@@ -14747,11 +15193,14 @@ type projFloorDivInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -14833,7 +15282,7 @@ func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt32Int32ConstOp struct {
@@ -14841,11 +15290,14 @@ type projFloorDivInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -14927,7 +15379,7 @@ func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt32Int64ConstOp struct {
@@ -14935,11 +15387,14 @@ type projFloorDivInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -15021,7 +15476,7 @@ func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt32DecimalConstOp struct {
@@ -15029,11 +15484,14 @@ type projFloorDivInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -15163,7 +15621,7 @@ func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt64Int16ConstOp struct {
@@ -15171,11 +15629,14 @@ type projFloorDivInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -15257,7 +15718,7 @@ func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt64Int32ConstOp struct {
@@ -15265,11 +15726,14 @@ type projFloorDivInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -15351,7 +15815,7 @@ func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt64Int64ConstOp struct {
@@ -15359,11 +15823,14 @@ type projFloorDivInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -15445,7 +15912,7 @@ func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivInt64DecimalConstOp struct {
@@ -15453,11 +15920,14 @@ type projFloorDivInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -15587,7 +16057,7 @@ func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projFloorDivFloat64Float64ConstOp struct {
@@ -15595,11 +16065,14 @@ type projFloorDivFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projFloorDivFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -15689,7 +16162,7 @@ func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModDecimalInt16ConstOp struct {
@@ -15697,11 +16170,14 @@ type projModDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -15807,7 +16283,7 @@ func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModDecimalInt32ConstOp struct {
@@ -15815,11 +16291,14 @@ type projModDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -15925,7 +16404,7 @@ func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModDecimalInt64ConstOp struct {
@@ -15933,11 +16412,14 @@ type projModDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -16043,7 +16525,7 @@ func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModDecimalDecimalConstOp struct {
@@ -16051,11 +16533,14 @@ type projModDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -16161,7 +16646,7 @@ func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt16Int16ConstOp struct {
@@ -16169,11 +16654,14 @@ type projModInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -16255,7 +16743,7 @@ func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt16Int32ConstOp struct {
@@ -16263,11 +16751,14 @@ type projModInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -16349,7 +16840,7 @@ func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt16Int64ConstOp struct {
@@ -16357,11 +16848,14 @@ type projModInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -16443,7 +16937,7 @@ func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt16DecimalConstOp struct {
@@ -16451,11 +16945,14 @@ type projModInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -16569,7 +17066,7 @@ func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt32Int16ConstOp struct {
@@ -16577,11 +17074,14 @@ type projModInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -16663,7 +17163,7 @@ func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt32Int32ConstOp struct {
@@ -16671,11 +17171,14 @@ type projModInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -16757,7 +17260,7 @@ func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt32Int64ConstOp struct {
@@ -16765,11 +17268,14 @@ type projModInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -16851,7 +17357,7 @@ func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt32DecimalConstOp struct {
@@ -16859,11 +17365,14 @@ type projModInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -16977,7 +17486,7 @@ func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt64Int16ConstOp struct {
@@ -16985,11 +17494,14 @@ type projModInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -17071,7 +17583,7 @@ func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt64Int32ConstOp struct {
@@ -17079,11 +17591,14 @@ type projModInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -17165,7 +17680,7 @@ func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt64Int64ConstOp struct {
@@ -17173,11 +17688,14 @@ type projModInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -17259,7 +17777,7 @@ func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModInt64DecimalConstOp struct {
@@ -17267,11 +17785,14 @@ type projModInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -17385,7 +17906,7 @@ func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projModFloat64Float64ConstOp struct {
@@ -17393,11 +17914,14 @@ type projModFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projModFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -17487,7 +18011,7 @@ func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowDecimalInt16ConstOp struct {
@@ -17495,11 +18019,14 @@ type projPowDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -17589,7 +18116,7 @@ func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowDecimalInt32ConstOp struct {
@@ -17597,11 +18124,14 @@ type projPowDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -17691,7 +18221,7 @@ func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowDecimalInt64ConstOp struct {
@@ -17699,11 +18229,14 @@ type projPowDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -17793,7 +18326,7 @@ func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowDecimalDecimalConstOp struct {
@@ -17801,11 +18334,14 @@ type projPowDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -17895,7 +18431,7 @@ func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt16Int16ConstOp struct {
@@ -17903,11 +18439,14 @@ type projPowInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -18017,7 +18556,7 @@ func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt16Int32ConstOp struct {
@@ -18025,11 +18564,14 @@ type projPowInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -18139,7 +18681,7 @@ func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt16Int64ConstOp struct {
@@ -18147,11 +18689,14 @@ type projPowInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -18261,7 +18806,7 @@ func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt16DecimalConstOp struct {
@@ -18269,11 +18814,14 @@ type projPowInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -18371,7 +18919,7 @@ func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt32Int16ConstOp struct {
@@ -18379,11 +18927,14 @@ type projPowInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -18493,7 +19044,7 @@ func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt32Int32ConstOp struct {
@@ -18501,11 +19052,14 @@ type projPowInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -18615,7 +19169,7 @@ func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt32Int64ConstOp struct {
@@ -18623,11 +19177,14 @@ type projPowInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -18737,7 +19294,7 @@ func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt32DecimalConstOp struct {
@@ -18745,11 +19302,14 @@ type projPowInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -18847,7 +19407,7 @@ func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt64Int16ConstOp struct {
@@ -18855,11 +19415,14 @@ type projPowInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -18969,7 +19532,7 @@ func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt64Int32ConstOp struct {
@@ -18977,11 +19540,14 @@ type projPowInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -19091,7 +19657,7 @@ func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt64Int64ConstOp struct {
@@ -19099,11 +19665,14 @@ type projPowInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -19213,7 +19782,7 @@ func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowInt64DecimalConstOp struct {
@@ -19221,11 +19790,14 @@ type projPowInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -19323,7 +19895,7 @@ func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projPowFloat64Float64ConstOp struct {
@@ -19331,11 +19903,14 @@ type projPowFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projPowFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -19409,7 +19984,7 @@ func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projConcatBytesBytesConstOp struct {
@@ -19417,11 +19992,14 @@ type projConcatBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projConcatBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -19501,7 +20079,7 @@ func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projConcatJSONJSONConstOp struct {
@@ -19509,11 +20087,14 @@ type projConcatJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projConcatJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -19589,7 +20170,7 @@ func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projConcatDatumDatumConstOp struct {
@@ -19598,13 +20179,16 @@ type projConcatDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
+func (p projConcatDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -19700,7 +20284,7 @@ func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt16Int16ConstOp struct {
@@ -19708,11 +20292,14 @@ type projLShiftInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -19798,7 +20385,7 @@ func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt16Int32ConstOp struct {
@@ -19806,11 +20393,14 @@ type projLShiftInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -19896,7 +20486,7 @@ func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt16Int64ConstOp struct {
@@ -19904,11 +20494,14 @@ type projLShiftInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -19994,7 +20587,7 @@ func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt32Int16ConstOp struct {
@@ -20002,11 +20595,14 @@ type projLShiftInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -20092,7 +20688,7 @@ func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt32Int32ConstOp struct {
@@ -20100,11 +20696,14 @@ type projLShiftInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -20190,7 +20789,7 @@ func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt32Int64ConstOp struct {
@@ -20198,11 +20797,14 @@ type projLShiftInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -20288,7 +20890,7 @@ func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt64Int16ConstOp struct {
@@ -20296,11 +20898,14 @@ type projLShiftInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -20386,7 +20991,7 @@ func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt64Int32ConstOp struct {
@@ -20394,11 +20999,14 @@ type projLShiftInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -20484,7 +21092,7 @@ func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftInt64Int64ConstOp struct {
@@ -20492,11 +21100,14 @@ type projLShiftInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLShiftInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -20582,7 +21193,7 @@ func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftDatumInt16ConstOp struct {
@@ -20591,13 +21202,16 @@ type projLShiftDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
+func (p projLShiftDatumInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -20703,7 +21317,7 @@ func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftDatumInt32ConstOp struct {
@@ -20712,13 +21326,16 @@ type projLShiftDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
+func (p projLShiftDatumInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -20824,7 +21441,7 @@ func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLShiftDatumInt64ConstOp struct {
@@ -20833,13 +21450,16 @@ type projLShiftDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
+func (p projLShiftDatumInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -20945,7 +21565,7 @@ func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt16Int16ConstOp struct {
@@ -20953,11 +21573,14 @@ type projRShiftInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -21043,7 +21666,7 @@ func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt16Int32ConstOp struct {
@@ -21051,11 +21674,14 @@ type projRShiftInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -21141,7 +21767,7 @@ func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt16Int64ConstOp struct {
@@ -21149,11 +21775,14 @@ type projRShiftInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -21239,7 +21868,7 @@ func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt32Int16ConstOp struct {
@@ -21247,11 +21876,14 @@ type projRShiftInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -21337,7 +21969,7 @@ func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt32Int32ConstOp struct {
@@ -21345,11 +21977,14 @@ type projRShiftInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -21435,7 +22070,7 @@ func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt32Int64ConstOp struct {
@@ -21443,11 +22078,14 @@ type projRShiftInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -21533,7 +22171,7 @@ func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt64Int16ConstOp struct {
@@ -21541,11 +22179,14 @@ type projRShiftInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -21631,7 +22272,7 @@ func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt64Int32ConstOp struct {
@@ -21639,11 +22280,14 @@ type projRShiftInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -21729,7 +22373,7 @@ func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftInt64Int64ConstOp struct {
@@ -21737,11 +22381,14 @@ type projRShiftInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projRShiftInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -21827,7 +22474,7 @@ func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftDatumInt16ConstOp struct {
@@ -21836,13 +22483,16 @@ type projRShiftDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
+func (p projRShiftDatumInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -21948,7 +22598,7 @@ func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftDatumInt32ConstOp struct {
@@ -21957,13 +22607,16 @@ type projRShiftDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
+func (p projRShiftDatumInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -22069,7 +22722,7 @@ func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projRShiftDatumInt64ConstOp struct {
@@ -22078,13 +22731,16 @@ type projRShiftDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
+func (p projRShiftDatumInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	_overloadHelper := p.BinaryOverloadHelper
 	_ctx := p.Ctx
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -22190,7 +22846,7 @@ func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchValJSONBytesConstOp struct {
@@ -22198,11 +22854,14 @@ type projJSONFetchValJSONBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchValJSONBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22302,7 +22961,7 @@ func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchValJSONInt16ConstOp struct {
@@ -22310,11 +22969,14 @@ type projJSONFetchValJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchValJSONInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22404,7 +23066,7 @@ func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchValJSONInt32ConstOp struct {
@@ -22412,11 +23074,14 @@ type projJSONFetchValJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchValJSONInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22506,7 +23171,7 @@ func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchValJSONInt64ConstOp struct {
@@ -22514,11 +23179,14 @@ type projJSONFetchValJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchValJSONInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22608,7 +23276,7 @@ func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchTextJSONBytesConstOp struct {
@@ -22616,11 +23284,14 @@ type projJSONFetchTextJSONBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchTextJSONBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22756,7 +23427,7 @@ func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchTextJSONInt16ConstOp struct {
@@ -22764,11 +23435,14 @@ type projJSONFetchTextJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchTextJSONInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -22894,7 +23568,7 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchTextJSONInt32ConstOp struct {
@@ -22902,11 +23576,14 @@ type projJSONFetchTextJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchTextJSONInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -23032,7 +23709,7 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchTextJSONInt64ConstOp struct {
@@ -23040,11 +23717,14 @@ type projJSONFetchTextJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchTextJSONInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -23170,7 +23850,7 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchValPathJSONDatumConstOp struct {
@@ -23178,11 +23858,14 @@ type projJSONFetchValPathJSONDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchValPathJSONDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -23270,7 +23953,7 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projJSONFetchTextPathJSONDatumConstOp struct {
@@ -23278,11 +23961,14 @@ type projJSONFetchTextPathJSONDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projJSONFetchTextPathJSONDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -23410,7 +24096,7 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQBoolBoolConstOp struct {
@@ -23418,11 +24104,14 @@ type projEQBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projEQBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -23532,7 +24221,7 @@ func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQBytesBytesConstOp struct {
@@ -23540,11 +24229,14 @@ type projEQBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projEQBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -23620,7 +24312,7 @@ func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDecimalInt16ConstOp struct {
@@ -23628,11 +24320,14 @@ type projEQDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -23734,7 +24429,7 @@ func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDecimalInt32ConstOp struct {
@@ -23742,11 +24437,14 @@ type projEQDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -23848,7 +24546,7 @@ func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDecimalInt64ConstOp struct {
@@ -23856,11 +24554,14 @@ type projEQDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -23962,7 +24663,7 @@ func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDecimalFloat64ConstOp struct {
@@ -23970,11 +24671,14 @@ type projEQDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -24084,7 +24788,7 @@ func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDecimalDecimalConstOp struct {
@@ -24092,11 +24796,14 @@ type projEQDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -24174,7 +24881,7 @@ func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt16Int16ConstOp struct {
@@ -24182,11 +24889,14 @@ type projEQInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -24308,7 +25018,7 @@ func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt16Int32ConstOp struct {
@@ -24316,11 +25026,14 @@ type projEQInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -24442,7 +25155,7 @@ func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt16Int64ConstOp struct {
@@ -24450,11 +25163,14 @@ type projEQInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -24576,7 +25292,7 @@ func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt16Float64ConstOp struct {
@@ -24584,11 +25300,14 @@ type projEQInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -24742,7 +25461,7 @@ func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt16DecimalConstOp struct {
@@ -24750,11 +25469,14 @@ type projEQInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -24856,7 +25578,7 @@ func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt32Int16ConstOp struct {
@@ -24864,11 +25586,14 @@ type projEQInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -24990,7 +25715,7 @@ func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt32Int32ConstOp struct {
@@ -24998,11 +25723,14 @@ type projEQInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -25124,7 +25852,7 @@ func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt32Int64ConstOp struct {
@@ -25132,11 +25860,14 @@ type projEQInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -25258,7 +25989,7 @@ func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt32Float64ConstOp struct {
@@ -25266,11 +25997,14 @@ type projEQInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -25424,7 +26158,7 @@ func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt32DecimalConstOp struct {
@@ -25432,11 +26166,14 @@ type projEQInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -25538,7 +26275,7 @@ func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt64Int16ConstOp struct {
@@ -25546,11 +26283,14 @@ type projEQInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -25672,7 +26412,7 @@ func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt64Int32ConstOp struct {
@@ -25680,11 +26420,14 @@ type projEQInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -25806,7 +26549,7 @@ func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt64Int64ConstOp struct {
@@ -25814,11 +26557,14 @@ type projEQInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -25940,7 +26686,7 @@ func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt64Float64ConstOp struct {
@@ -25948,11 +26694,14 @@ type projEQInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -26106,7 +26855,7 @@ func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQInt64DecimalConstOp struct {
@@ -26114,11 +26863,14 @@ type projEQInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -26220,7 +26972,7 @@ func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQFloat64Int16ConstOp struct {
@@ -26228,11 +26980,14 @@ type projEQFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -26386,7 +27141,7 @@ func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQFloat64Int32ConstOp struct {
@@ -26394,11 +27149,14 @@ type projEQFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -26552,7 +27310,7 @@ func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQFloat64Int64ConstOp struct {
@@ -26560,11 +27318,14 @@ type projEQFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -26718,7 +27479,7 @@ func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQFloat64Float64ConstOp struct {
@@ -26726,11 +27487,14 @@ type projEQFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -26884,7 +27648,7 @@ func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQFloat64DecimalConstOp struct {
@@ -26892,11 +27656,14 @@ type projEQFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -27006,7 +27773,7 @@ func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQTimestampTimestampConstOp struct {
@@ -27014,11 +27781,14 @@ type projEQTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -27124,7 +27894,7 @@ func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQIntervalIntervalConstOp struct {
@@ -27132,11 +27902,14 @@ type projEQIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -27214,7 +27987,7 @@ func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQJSONJSONConstOp struct {
@@ -27222,11 +27995,14 @@ type projEQJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projEQJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -27326,7 +28102,7 @@ func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projEQDatumDatumConstOp struct {
@@ -27334,11 +28110,14 @@ type projEQDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projEQDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projEQDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -27430,7 +28209,7 @@ func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEBoolBoolConstOp struct {
@@ -27438,11 +28217,14 @@ type projNEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projNEBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -27552,7 +28334,7 @@ func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEBytesBytesConstOp struct {
@@ -27560,11 +28342,14 @@ type projNEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projNEBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -27640,7 +28425,7 @@ func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDecimalInt16ConstOp struct {
@@ -27648,11 +28433,14 @@ type projNEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -27754,7 +28542,7 @@ func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDecimalInt32ConstOp struct {
@@ -27762,11 +28550,14 @@ type projNEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -27868,7 +28659,7 @@ func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDecimalInt64ConstOp struct {
@@ -27876,11 +28667,14 @@ type projNEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -27982,7 +28776,7 @@ func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDecimalFloat64ConstOp struct {
@@ -27990,11 +28784,14 @@ type projNEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -28104,7 +28901,7 @@ func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDecimalDecimalConstOp struct {
@@ -28112,11 +28909,14 @@ type projNEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -28194,7 +28994,7 @@ func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt16Int16ConstOp struct {
@@ -28202,11 +29002,14 @@ type projNEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -28328,7 +29131,7 @@ func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt16Int32ConstOp struct {
@@ -28336,11 +29139,14 @@ type projNEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -28462,7 +29268,7 @@ func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt16Int64ConstOp struct {
@@ -28470,11 +29276,14 @@ type projNEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -28596,7 +29405,7 @@ func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt16Float64ConstOp struct {
@@ -28604,11 +29413,14 @@ type projNEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -28762,7 +29574,7 @@ func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt16DecimalConstOp struct {
@@ -28770,11 +29582,14 @@ type projNEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -28876,7 +29691,7 @@ func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt32Int16ConstOp struct {
@@ -28884,11 +29699,14 @@ type projNEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -29010,7 +29828,7 @@ func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt32Int32ConstOp struct {
@@ -29018,11 +29836,14 @@ type projNEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -29144,7 +29965,7 @@ func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt32Int64ConstOp struct {
@@ -29152,11 +29973,14 @@ type projNEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -29278,7 +30102,7 @@ func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt32Float64ConstOp struct {
@@ -29286,11 +30110,14 @@ type projNEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -29444,7 +30271,7 @@ func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt32DecimalConstOp struct {
@@ -29452,11 +30279,14 @@ type projNEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -29558,7 +30388,7 @@ func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt64Int16ConstOp struct {
@@ -29566,11 +30396,14 @@ type projNEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -29692,7 +30525,7 @@ func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt64Int32ConstOp struct {
@@ -29700,11 +30533,14 @@ type projNEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -29826,7 +30662,7 @@ func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt64Int64ConstOp struct {
@@ -29834,11 +30670,14 @@ type projNEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -29960,7 +30799,7 @@ func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt64Float64ConstOp struct {
@@ -29968,11 +30807,14 @@ type projNEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -30126,7 +30968,7 @@ func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEInt64DecimalConstOp struct {
@@ -30134,11 +30976,14 @@ type projNEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -30240,7 +31085,7 @@ func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEFloat64Int16ConstOp struct {
@@ -30248,11 +31093,14 @@ type projNEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -30406,7 +31254,7 @@ func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEFloat64Int32ConstOp struct {
@@ -30414,11 +31262,14 @@ type projNEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -30572,7 +31423,7 @@ func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEFloat64Int64ConstOp struct {
@@ -30580,11 +31431,14 @@ type projNEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -30738,7 +31592,7 @@ func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEFloat64Float64ConstOp struct {
@@ -30746,11 +31600,14 @@ type projNEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -30904,7 +31761,7 @@ func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEFloat64DecimalConstOp struct {
@@ -30912,11 +31769,14 @@ type projNEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -31026,7 +31886,7 @@ func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNETimestampTimestampConstOp struct {
@@ -31034,11 +31894,14 @@ type projNETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -31144,7 +32007,7 @@ func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEIntervalIntervalConstOp struct {
@@ -31152,11 +32015,14 @@ type projNEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -31234,7 +32100,7 @@ func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEJSONJSONConstOp struct {
@@ -31242,11 +32108,14 @@ type projNEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projNEJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -31346,7 +32215,7 @@ func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projNEDatumDatumConstOp struct {
@@ -31354,11 +32223,14 @@ type projNEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projNEDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projNEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -31450,7 +32322,7 @@ func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTBoolBoolConstOp struct {
@@ -31458,11 +32330,14 @@ type projLTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projLTBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -31572,7 +32447,7 @@ func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTBytesBytesConstOp struct {
@@ -31580,11 +32455,14 @@ type projLTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projLTBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -31660,7 +32538,7 @@ func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDecimalInt16ConstOp struct {
@@ -31668,11 +32546,14 @@ type projLTDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -31774,7 +32655,7 @@ func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDecimalInt32ConstOp struct {
@@ -31782,11 +32663,14 @@ type projLTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -31888,7 +32772,7 @@ func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDecimalInt64ConstOp struct {
@@ -31896,11 +32780,14 @@ type projLTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -32002,7 +32889,7 @@ func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDecimalFloat64ConstOp struct {
@@ -32010,11 +32897,14 @@ type projLTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -32124,7 +33014,7 @@ func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDecimalDecimalConstOp struct {
@@ -32132,11 +33022,14 @@ type projLTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -32214,7 +33107,7 @@ func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt16Int16ConstOp struct {
@@ -32222,11 +33115,14 @@ type projLTInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -32348,7 +33244,7 @@ func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt16Int32ConstOp struct {
@@ -32356,11 +33252,14 @@ type projLTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -32482,7 +33381,7 @@ func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt16Int64ConstOp struct {
@@ -32490,11 +33389,14 @@ type projLTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -32616,7 +33518,7 @@ func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt16Float64ConstOp struct {
@@ -32624,11 +33526,14 @@ type projLTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -32782,7 +33687,7 @@ func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt16DecimalConstOp struct {
@@ -32790,11 +33695,14 @@ type projLTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -32896,7 +33804,7 @@ func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt32Int16ConstOp struct {
@@ -32904,11 +33812,14 @@ type projLTInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -33030,7 +33941,7 @@ func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt32Int32ConstOp struct {
@@ -33038,11 +33949,14 @@ type projLTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -33164,7 +34078,7 @@ func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt32Int64ConstOp struct {
@@ -33172,11 +34086,14 @@ type projLTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -33298,7 +34215,7 @@ func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt32Float64ConstOp struct {
@@ -33306,11 +34223,14 @@ type projLTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -33464,7 +34384,7 @@ func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt32DecimalConstOp struct {
@@ -33472,11 +34392,14 @@ type projLTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -33578,7 +34501,7 @@ func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt64Int16ConstOp struct {
@@ -33586,11 +34509,14 @@ type projLTInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -33712,7 +34638,7 @@ func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt64Int32ConstOp struct {
@@ -33720,11 +34646,14 @@ type projLTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -33846,7 +34775,7 @@ func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt64Int64ConstOp struct {
@@ -33854,11 +34783,14 @@ type projLTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -33980,7 +34912,7 @@ func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt64Float64ConstOp struct {
@@ -33988,11 +34920,14 @@ type projLTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -34146,7 +35081,7 @@ func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTInt64DecimalConstOp struct {
@@ -34154,11 +35089,14 @@ type projLTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -34260,7 +35198,7 @@ func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTFloat64Int16ConstOp struct {
@@ -34268,11 +35206,14 @@ type projLTFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -34426,7 +35367,7 @@ func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTFloat64Int32ConstOp struct {
@@ -34434,11 +35375,14 @@ type projLTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -34592,7 +35536,7 @@ func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTFloat64Int64ConstOp struct {
@@ -34600,11 +35544,14 @@ type projLTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -34758,7 +35705,7 @@ func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTFloat64Float64ConstOp struct {
@@ -34766,11 +35713,14 @@ type projLTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -34924,7 +35874,7 @@ func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTFloat64DecimalConstOp struct {
@@ -34932,11 +35882,14 @@ type projLTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -35046,7 +35999,7 @@ func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTTimestampTimestampConstOp struct {
@@ -35054,11 +36007,14 @@ type projLTTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -35164,7 +36120,7 @@ func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTIntervalIntervalConstOp struct {
@@ -35172,11 +36128,14 @@ type projLTIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -35254,7 +36213,7 @@ func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTJSONJSONConstOp struct {
@@ -35262,11 +36221,14 @@ type projLTJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projLTJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -35366,7 +36328,7 @@ func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLTDatumDatumConstOp struct {
@@ -35374,11 +36336,14 @@ type projLTDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projLTDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLTDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -35470,7 +36435,7 @@ func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEBoolBoolConstOp struct {
@@ -35478,11 +36443,14 @@ type projLEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projLEBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -35592,7 +36560,7 @@ func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEBytesBytesConstOp struct {
@@ -35600,11 +36568,14 @@ type projLEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projLEBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -35680,7 +36651,7 @@ func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDecimalInt16ConstOp struct {
@@ -35688,11 +36659,14 @@ type projLEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -35794,7 +36768,7 @@ func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDecimalInt32ConstOp struct {
@@ -35802,11 +36776,14 @@ type projLEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -35908,7 +36885,7 @@ func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDecimalInt64ConstOp struct {
@@ -35916,11 +36893,14 @@ type projLEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -36022,7 +37002,7 @@ func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDecimalFloat64ConstOp struct {
@@ -36030,11 +37010,14 @@ type projLEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -36144,7 +37127,7 @@ func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDecimalDecimalConstOp struct {
@@ -36152,11 +37135,14 @@ type projLEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -36234,7 +37220,7 @@ func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt16Int16ConstOp struct {
@@ -36242,11 +37228,14 @@ type projLEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -36368,7 +37357,7 @@ func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt16Int32ConstOp struct {
@@ -36376,11 +37365,14 @@ type projLEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -36502,7 +37494,7 @@ func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt16Int64ConstOp struct {
@@ -36510,11 +37502,14 @@ type projLEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -36636,7 +37631,7 @@ func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt16Float64ConstOp struct {
@@ -36644,11 +37639,14 @@ type projLEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -36802,7 +37800,7 @@ func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt16DecimalConstOp struct {
@@ -36810,11 +37808,14 @@ type projLEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -36916,7 +37917,7 @@ func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt32Int16ConstOp struct {
@@ -36924,11 +37925,14 @@ type projLEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -37050,7 +38054,7 @@ func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt32Int32ConstOp struct {
@@ -37058,11 +38062,14 @@ type projLEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -37184,7 +38191,7 @@ func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt32Int64ConstOp struct {
@@ -37192,11 +38199,14 @@ type projLEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -37318,7 +38328,7 @@ func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt32Float64ConstOp struct {
@@ -37326,11 +38336,14 @@ type projLEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -37484,7 +38497,7 @@ func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt32DecimalConstOp struct {
@@ -37492,11 +38505,14 @@ type projLEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -37598,7 +38614,7 @@ func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt64Int16ConstOp struct {
@@ -37606,11 +38622,14 @@ type projLEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -37732,7 +38751,7 @@ func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt64Int32ConstOp struct {
@@ -37740,11 +38759,14 @@ type projLEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -37866,7 +38888,7 @@ func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt64Int64ConstOp struct {
@@ -37874,11 +38896,14 @@ type projLEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -38000,7 +39025,7 @@ func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt64Float64ConstOp struct {
@@ -38008,11 +39033,14 @@ type projLEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -38166,7 +39194,7 @@ func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEInt64DecimalConstOp struct {
@@ -38174,11 +39202,14 @@ type projLEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -38280,7 +39311,7 @@ func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEFloat64Int16ConstOp struct {
@@ -38288,11 +39319,14 @@ type projLEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -38446,7 +39480,7 @@ func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEFloat64Int32ConstOp struct {
@@ -38454,11 +39488,14 @@ type projLEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -38612,7 +39649,7 @@ func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEFloat64Int64ConstOp struct {
@@ -38620,11 +39657,14 @@ type projLEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -38778,7 +39818,7 @@ func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEFloat64Float64ConstOp struct {
@@ -38786,11 +39826,14 @@ type projLEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -38944,7 +39987,7 @@ func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEFloat64DecimalConstOp struct {
@@ -38952,11 +39995,14 @@ type projLEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -39066,7 +40112,7 @@ func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLETimestampTimestampConstOp struct {
@@ -39074,11 +40120,14 @@ type projLETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -39184,7 +40233,7 @@ func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEIntervalIntervalConstOp struct {
@@ -39192,11 +40241,14 @@ type projLEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -39274,7 +40326,7 @@ func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEJSONJSONConstOp struct {
@@ -39282,11 +40334,14 @@ type projLEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projLEJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -39386,7 +40441,7 @@ func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projLEDatumDatumConstOp struct {
@@ -39394,11 +40449,14 @@ type projLEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projLEDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projLEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -39490,7 +40548,7 @@ func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTBoolBoolConstOp struct {
@@ -39498,11 +40556,14 @@ type projGTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projGTBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -39612,7 +40673,7 @@ func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTBytesBytesConstOp struct {
@@ -39620,11 +40681,14 @@ type projGTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projGTBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -39700,7 +40764,7 @@ func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDecimalInt16ConstOp struct {
@@ -39708,11 +40772,14 @@ type projGTDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -39814,7 +40881,7 @@ func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDecimalInt32ConstOp struct {
@@ -39822,11 +40889,14 @@ type projGTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -39928,7 +40998,7 @@ func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDecimalInt64ConstOp struct {
@@ -39936,11 +41006,14 @@ type projGTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -40042,7 +41115,7 @@ func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDecimalFloat64ConstOp struct {
@@ -40050,11 +41123,14 @@ type projGTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -40164,7 +41240,7 @@ func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDecimalDecimalConstOp struct {
@@ -40172,11 +41248,14 @@ type projGTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -40254,7 +41333,7 @@ func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt16Int16ConstOp struct {
@@ -40262,11 +41341,14 @@ type projGTInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -40388,7 +41470,7 @@ func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt16Int32ConstOp struct {
@@ -40396,11 +41478,14 @@ type projGTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -40522,7 +41607,7 @@ func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt16Int64ConstOp struct {
@@ -40530,11 +41615,14 @@ type projGTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -40656,7 +41744,7 @@ func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt16Float64ConstOp struct {
@@ -40664,11 +41752,14 @@ type projGTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -40822,7 +41913,7 @@ func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt16DecimalConstOp struct {
@@ -40830,11 +41921,14 @@ type projGTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -40936,7 +42030,7 @@ func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt32Int16ConstOp struct {
@@ -40944,11 +42038,14 @@ type projGTInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -41070,7 +42167,7 @@ func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt32Int32ConstOp struct {
@@ -41078,11 +42175,14 @@ type projGTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -41204,7 +42304,7 @@ func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt32Int64ConstOp struct {
@@ -41212,11 +42312,14 @@ type projGTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -41338,7 +42441,7 @@ func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt32Float64ConstOp struct {
@@ -41346,11 +42449,14 @@ type projGTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -41504,7 +42610,7 @@ func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt32DecimalConstOp struct {
@@ -41512,11 +42618,14 @@ type projGTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -41618,7 +42727,7 @@ func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt64Int16ConstOp struct {
@@ -41626,11 +42735,14 @@ type projGTInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -41752,7 +42864,7 @@ func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt64Int32ConstOp struct {
@@ -41760,11 +42872,14 @@ type projGTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -41886,7 +43001,7 @@ func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt64Int64ConstOp struct {
@@ -41894,11 +43009,14 @@ type projGTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -42020,7 +43138,7 @@ func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt64Float64ConstOp struct {
@@ -42028,11 +43146,14 @@ type projGTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -42186,7 +43307,7 @@ func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTInt64DecimalConstOp struct {
@@ -42194,11 +43315,14 @@ type projGTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -42300,7 +43424,7 @@ func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTFloat64Int16ConstOp struct {
@@ -42308,11 +43432,14 @@ type projGTFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -42466,7 +43593,7 @@ func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTFloat64Int32ConstOp struct {
@@ -42474,11 +43601,14 @@ type projGTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -42632,7 +43762,7 @@ func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTFloat64Int64ConstOp struct {
@@ -42640,11 +43770,14 @@ type projGTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -42798,7 +43931,7 @@ func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTFloat64Float64ConstOp struct {
@@ -42806,11 +43939,14 @@ type projGTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -42964,7 +44100,7 @@ func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTFloat64DecimalConstOp struct {
@@ -42972,11 +44108,14 @@ type projGTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -43086,7 +44225,7 @@ func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTTimestampTimestampConstOp struct {
@@ -43094,11 +44233,14 @@ type projGTTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTTimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -43204,7 +44346,7 @@ func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTIntervalIntervalConstOp struct {
@@ -43212,11 +44354,14 @@ type projGTIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -43294,7 +44439,7 @@ func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTJSONJSONConstOp struct {
@@ -43302,11 +44447,14 @@ type projGTJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projGTJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -43406,7 +44554,7 @@ func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGTDatumDatumConstOp struct {
@@ -43414,11 +44562,14 @@ type projGTDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projGTDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGTDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -43510,7 +44661,7 @@ func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEBoolBoolConstOp struct {
@@ -43518,11 +44669,14 @@ type projGEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projGEBoolBoolConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEBoolBoolConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Bools
@@ -43632,7 +44786,7 @@ func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEBytesBytesConstOp struct {
@@ -43640,11 +44794,14 @@ type projGEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projGEBytesBytesConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEBytesBytesConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.Bytes
@@ -43720,7 +44877,7 @@ func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDecimalInt16ConstOp struct {
@@ -43728,11 +44885,14 @@ type projGEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDecimalInt16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -43834,7 +44994,7 @@ func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDecimalInt32ConstOp struct {
@@ -43842,11 +45002,14 @@ type projGEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDecimalInt32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -43948,7 +45111,7 @@ func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDecimalInt64ConstOp struct {
@@ -43956,11 +45119,14 @@ type projGEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDecimalInt64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -44062,7 +45228,7 @@ func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDecimalFloat64ConstOp struct {
@@ -44070,11 +45236,14 @@ type projGEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDecimalFloat64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -44184,7 +45353,7 @@ func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDecimalDecimalConstOp struct {
@@ -44192,11 +45361,14 @@ type projGEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDecimalDecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Decimals
@@ -44274,7 +45446,7 @@ func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt16Int16ConstOp struct {
@@ -44282,11 +45454,14 @@ type projGEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt16Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -44408,7 +45583,7 @@ func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt16Int32ConstOp struct {
@@ -44416,11 +45591,14 @@ type projGEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt16Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -44542,7 +45720,7 @@ func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt16Int64ConstOp struct {
@@ -44550,11 +45728,14 @@ type projGEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt16Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -44676,7 +45857,7 @@ func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt16Float64ConstOp struct {
@@ -44684,11 +45865,14 @@ type projGEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt16Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -44842,7 +46026,7 @@ func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt16DecimalConstOp struct {
@@ -44850,11 +46034,14 @@ type projGEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt16DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int16s
@@ -44956,7 +46143,7 @@ func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt32Int16ConstOp struct {
@@ -44964,11 +46151,14 @@ type projGEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt32Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -45090,7 +46280,7 @@ func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt32Int32ConstOp struct {
@@ -45098,11 +46288,14 @@ type projGEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt32Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -45224,7 +46417,7 @@ func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt32Int64ConstOp struct {
@@ -45232,11 +46425,14 @@ type projGEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt32Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -45358,7 +46554,7 @@ func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt32Float64ConstOp struct {
@@ -45366,11 +46562,14 @@ type projGEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt32Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -45524,7 +46723,7 @@ func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt32DecimalConstOp struct {
@@ -45532,11 +46731,14 @@ type projGEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt32DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int32s
@@ -45638,7 +46840,7 @@ func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt64Int16ConstOp struct {
@@ -45646,11 +46848,14 @@ type projGEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -45772,7 +46977,7 @@ func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt64Int32ConstOp struct {
@@ -45780,11 +46985,14 @@ type projGEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -45906,7 +47114,7 @@ func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt64Int64ConstOp struct {
@@ -45914,11 +47122,14 @@ type projGEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -46040,7 +47251,7 @@ func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt64Float64ConstOp struct {
@@ -46048,11 +47259,14 @@ type projGEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -46206,7 +47420,7 @@ func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEInt64DecimalConstOp struct {
@@ -46214,11 +47428,14 @@ type projGEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEInt64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Int64s
@@ -46320,7 +47537,7 @@ func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEFloat64Int16ConstOp struct {
@@ -46328,11 +47545,14 @@ type projGEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEFloat64Int16ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -46486,7 +47706,7 @@ func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEFloat64Int32ConstOp struct {
@@ -46494,11 +47714,14 @@ type projGEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEFloat64Int32ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -46652,7 +47875,7 @@ func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEFloat64Int64ConstOp struct {
@@ -46660,11 +47883,14 @@ type projGEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEFloat64Int64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -46818,7 +48044,7 @@ func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEFloat64Float64ConstOp struct {
@@ -46826,11 +48052,14 @@ type projGEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEFloat64Float64ConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -46984,7 +48213,7 @@ func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEFloat64DecimalConstOp struct {
@@ -46992,11 +48221,14 @@ type projGEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEFloat64DecimalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Float64s
@@ -47106,7 +48338,7 @@ func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGETimestampTimestampConstOp struct {
@@ -47114,11 +48346,14 @@ type projGETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGETimestampTimestampConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Times
@@ -47224,7 +48459,7 @@ func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEIntervalIntervalConstOp struct {
@@ -47232,11 +48467,14 @@ type projGEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEIntervalIntervalConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.Durations
@@ -47314,7 +48552,7 @@ func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEJSONJSONConstOp struct {
@@ -47322,11 +48560,14 @@ type projGEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projGEJSONJSONConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEJSONJSONConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col *coldata.JSONs
@@ -47426,7 +48667,7 @@ func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type projGEDatumDatumConstOp struct {
@@ -47434,11 +48675,14 @@ type projGEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projGEDatumDatumConstOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p projGEDatumDatumConstOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col coldata.DatumVec
@@ -47530,7 +48774,7 @@ func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // GetProjectionRConstOperator returns the appropriate constant
