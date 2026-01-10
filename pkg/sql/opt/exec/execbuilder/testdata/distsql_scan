@@ -31,6 +31,10 @@ start_key           end_key       replicas  lease_holder
 statement ok
 ANALYZE abc
 
+# Clear the stat cache so that the new statistic is guaranteed to be used.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 query T
 EXPLAIN ANALYZE (DISTSQL) SELECT a FROM abc WHERE a >= 0 AND a < 100 ORDER BY a LIMIT 10
 ----
