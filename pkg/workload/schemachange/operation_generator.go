@@ -5801,7 +5801,11 @@ func (og *operationGenerator) setTableStorageParam(
 	}
 
 	if !isValid {
+		// Depending on the type of the parameter, different error codes are
+		// returned, so we add all possible ones.
 		stmt.expectedExecErrors.add(pgcode.InvalidParameterValue)
+		stmt.expectedExecErrors.add(pgcode.InvalidTextRepresentation)
+		stmt.expectedExecErrors.add(pgcode.InvalidDatetimeFormat)
 	} else if isSchemaLockedParam(param) {
 		// set schema_locked cannot be combined with other operations
 		// and will return an error if it does.
@@ -5859,7 +5863,7 @@ func (og *operationGenerator) resetTableStorageParam(
 
 // randBoolString returns a random boolean value as a string
 func (og *operationGenerator) randBoolString() string {
-	boolVals := []string{"true", "false", "'on'", "'off'", "1", "0"}
+	boolVals := []string{"true", "false", "'on'", "'off'", "'1'", "'0'"}
 	return boolVals[og.randIntn(len(boolVals))]
 }
 
@@ -5929,7 +5933,12 @@ func (og *operationGenerator) findTimestampColumn(
 }
 
 // randStorageParam returns a random storage parameter (excluding the ttl base params)
-func (og *operationGenerator) randStorageParam() (string, string, bool, error) {
+func (og *operationGenerator) randStorageParam() (
+	param string,
+	value string,
+	isValid bool,
+	_ error,
+) {
 	params := []struct {
 		name     string
 		valueGen func() string
