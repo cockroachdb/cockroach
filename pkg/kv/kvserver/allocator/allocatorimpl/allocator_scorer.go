@@ -756,7 +756,8 @@ type DiskCapacityOptions struct {
 	ShedAndBlockAllThreshold float64
 }
 
-func makeDiskCapacityOptions(sv *settings.Values) DiskCapacityOptions {
+// MakeDiskCapacityOptions creates DiskCapacityOptions from cluster settings.
+func MakeDiskCapacityOptions(sv *settings.Values) DiskCapacityOptions {
 	return DiskCapacityOptions{
 		RebalanceToThreshold:     rebalanceToMaxDiskUtilizationThreshold.Get(sv),
 		ShedAndBlockAllThreshold: maxDiskUtilizationThreshold.Get(sv),
