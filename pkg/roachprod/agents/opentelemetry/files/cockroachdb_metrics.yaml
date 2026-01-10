@@ -1166,8 +1166,6 @@ kv_prober_write_latency_sum: kv.prober.write.latency.sum
 kv_prober_write_quarantine_oldest_duration: kv.prober.write.quarantine.oldest_duration
 kv_protectedts_get_record_failed: kv.protectedts.get_record.failed
 kv_protectedts_get_record_success: kv.protectedts.get_record.success
-kv_protectedts_mark_verified_failed: kv.protectedts.mark_verified.failed
-kv_protectedts_mark_verified_success: kv.protectedts.mark_verified.success
 kv_protectedts_protect_failed: kv.protectedts.protect.failed
 kv_protectedts_protect_success: kv.protectedts.protect.success
 kv_protectedts_reconciliation_errors: kv.protectedts.reconciliation.errors
