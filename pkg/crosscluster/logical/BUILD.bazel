@@ -149,6 +149,7 @@ go_test(
         "//pkg/crosscluster",
         "//pkg/crosscluster/ldrrandgen",
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/ldrtestutils",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/crosscluster/replicationtestutils",
         "//pkg/crosscluster/streamclient",
