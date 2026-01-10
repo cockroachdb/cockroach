@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,11 +33,6 @@ func TestStorageMetricsProtect(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-
-	// Enable pts storage with database.
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms'")
-
 	manager := ptstorage.New(s.ClusterSettings(), nil)
 	metrics := manager.Metrics()
 
