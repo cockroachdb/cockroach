@@ -28,8 +28,8 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
-        "@com_github_cockroachdb_pebble//bloom",
         "@com_github_cockroachdb_pebble//objstorage/objstorageprovider",
+        "@com_github_cockroachdb_pebble//sstable/tablefilters/bloom",
         "@com_github_cockroachdb_pebble//vfs",
     ],
 )

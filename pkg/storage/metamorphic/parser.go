@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/sstable/tablefilters/bloom"
 )
 
 // parseOutputPreamble reads the commented preamble of an output.meta file,
