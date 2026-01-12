@@ -1239,7 +1239,6 @@ func TestResolveBackupIDtoIndex(t *testing.T) {
 	})
 }
 
-
 // intToTime converts the integer time to an easy-to-read hlc.Timestamp
 // (i.e. XX000000000). We use ints to more easily write times for test cases.
 func intToTime(t int) hlc.Timestamp {
