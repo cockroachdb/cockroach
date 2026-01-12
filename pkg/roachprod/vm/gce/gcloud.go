@@ -1586,11 +1586,12 @@ func (p *Provider) computeInstanceArgs(
 	if opts.SSDOpts.UseLocalSSD && !providerOpts.machineTypeSupportsLocalSSD() {
 		return nil, cleanUpFn, errors.Errorf("local SSDs are not supported with %s instance types, use --local-ssd=false", providerOpts.MachineType)
 	}
+	// TODO(radu): this is pretty hacky.
+	if providerOpts.MinCPUPlatform == "Intel Ice Lake" && !strings.HasPrefix(strings.ToLower(providerOpts.MachineType), "n2-") {
+		l.Printf("WARNING: --gce-min-cpu-platform: Intel Ice Lake is only useful for N2 machines; ignoring")
+		providerOpts.MinCPUPlatform = ""
+	}
 	if providerOpts.useArmAMI() {
-		if providerOpts.MinCPUPlatform != "" {
-			l.Printf("WARNING: --gce-min-cpu-platform is ignored for ARM64 instances")
-			providerOpts.MinCPUPlatform = ""
-		}
 		// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
