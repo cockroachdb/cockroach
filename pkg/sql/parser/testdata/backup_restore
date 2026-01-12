@@ -132,56 +132,56 @@ SHOW BACKUPS IN $1 -- literals removed
 SHOW BACKUPS IN $1 -- identifiers removed
 
 parse
-SHOW BACKUPS IN 'bar' AFTER '1'
+SHOW BACKUPS IN 'bar' NEWER THAN '1'
 ----
-SHOW BACKUPS IN '*****' AFTER '1' -- normalized!
-SHOW BACKUPS IN ('*****') AFTER ('1') -- fully parenthesized
-SHOW BACKUPS IN '_' AFTER '_' -- literals removed
-SHOW BACKUPS IN '*****' AFTER '1' -- identifiers removed
-SHOW BACKUPS IN 'bar' AFTER '1' -- passwords exposed
+SHOW BACKUPS IN '*****' NEWER THAN '1' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' -- passwords exposed
 
 parse
-SHOW BACKUPS IN 'bar' BEFORE '1'
+SHOW BACKUPS IN 'bar' OLDER THAN '1'
 ----
-SHOW BACKUPS IN '*****' BEFORE '1' -- normalized!
-SHOW BACKUPS IN ('*****') BEFORE ('1') -- fully parenthesized
-SHOW BACKUPS IN '_' BEFORE '_' -- literals removed
-SHOW BACKUPS IN '*****' BEFORE '1' -- identifiers removed
-SHOW BACKUPS IN 'bar' BEFORE '1' -- passwords exposed
+SHOW BACKUPS IN '*****' OLDER THAN '1' -- normalized!
+SHOW BACKUPS IN ('*****') OLDER THAN ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' OLDER THAN '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' OLDER THAN '1' -- passwords exposed
 
 parse
-SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2'
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2'
 ----
-SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- normalized!
-SHOW BACKUPS IN ('*****') AFTER ('1') BEFORE ('2') -- fully parenthesized
-SHOW BACKUPS IN '_' AFTER '_' BEFORE '_' -- literals removed
-SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- identifiers removed
-SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2' -- passwords exposed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' -- passwords exposed
 
 parse
-SHOW BACKUPS IN 'bar' BEFORE '2' AFTER '1'
+SHOW BACKUPS IN 'bar' OLDER THAN '2' NEWER THAN '1'
 ----
-SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- normalized!
-SHOW BACKUPS IN ('*****') AFTER ('1') BEFORE ('2') -- fully parenthesized
-SHOW BACKUPS IN '_' AFTER '_' BEFORE '_' -- literals removed
-SHOW BACKUPS IN '*****' AFTER '1' BEFORE '2' -- identifiers removed
-SHOW BACKUPS IN 'bar' AFTER '1' BEFORE '2' -- passwords exposed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' -- passwords exposed
 
 parse
-SHOW BACKUPS IN $1 AFTER $2 BEFORE $3
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3
 ----
-SHOW BACKUPS IN $1 AFTER $2 BEFORE $3
-SHOW BACKUPS IN ($1) AFTER ($2) BEFORE ($3) -- fully parenthesized
-SHOW BACKUPS IN $1 AFTER $1 BEFORE $1 -- literals removed
-SHOW BACKUPS IN $1 AFTER $2 BEFORE $3 -- identifiers removed
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3
+SHOW BACKUPS IN ($1) NEWER THAN ($2) OLDER THAN ($3) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 -- identifiers removed
 
 parse
-SHOW BACKUPS IN $1 BEFORE $2 AFTER $3
+SHOW BACKUPS IN $1 OLDER THAN $2 NEWER THAN $3
 ----
-SHOW BACKUPS IN $1 AFTER $3 BEFORE $2 -- normalized!
-SHOW BACKUPS IN ($1) AFTER ($3) BEFORE ($2) -- fully parenthesized
-SHOW BACKUPS IN $1 AFTER $1 BEFORE $1 -- literals removed
-SHOW BACKUPS IN $1 AFTER $3 BEFORE $2 -- identifiers removed
+SHOW BACKUPS IN $1 NEWER THAN $3 OLDER THAN $2 -- normalized!
+SHOW BACKUPS IN ($1) NEWER THAN ($3) OLDER THAN ($2) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $3 OLDER THAN $2 -- identifiers removed
 
 
 parse

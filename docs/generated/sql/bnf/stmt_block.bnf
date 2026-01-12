@@ -865,7 +865,7 @@ use_stmt ::=
 	'USE' var_value
 
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list opt_show_after_before_clause
+	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list opt_show_backup_time_filter_clause
 	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 
@@ -1360,6 +1360,7 @@ unreserved_keyword ::=
 	| 'NAN'
 	| 'NEVER'
 	| 'NEW'
+	| 'NEWER'
 	| 'NEW_DB_NAME'
 	| 'NEW_KMS'
 	| 'NEXT'
@@ -1393,6 +1394,7 @@ unreserved_keyword ::=
 	| 'OFF'
 	| 'OIDS'
 	| 'OLD'
+	| 'OLDER'
 	| 'OLD_KMS'
 	| 'OPERATOR'
 	| 'OPT'
@@ -1564,6 +1566,7 @@ unreserved_keyword ::=
 	| 'TENANTS'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
+	| 'THAN'
 	| 'TIES'
 	| 'TRACE'
 	| 'TRACING'
@@ -2208,11 +2211,11 @@ var_value ::=
 	a_expr
 	| extra_var_value
 
-opt_show_after_before_clause ::=
-	'AFTER' a_expr
-	| 'BEFORE' a_expr
-	| 'AFTER' a_expr 'BEFORE' a_expr
-	| 'BEFORE' a_expr 'AFTER' a_expr
+opt_show_backup_time_filter_clause ::=
+	'NEWER' 'THAN' a_expr
+	| 'OLDER' 'THAN' a_expr
+	| 'NEWER' 'THAN' a_expr 'OLDER' 'THAN' a_expr
+	| 'OLDER' 'THAN' a_expr 'NEWER' 'THAN' a_expr
 	| 
 
 show_backup_details ::=
@@ -4337,6 +4340,7 @@ bare_label_keywords ::=
 	| 'NATURAL'
 	| 'NEVER'
 	| 'NEW'
+	| 'NEWER'
 	| 'NEW_DB_NAME'
 	| 'NEW_KMS'
 	| 'NEXT'
@@ -4374,6 +4378,7 @@ bare_label_keywords ::=
 	| 'OFF'
 	| 'OIDS'
 	| 'OLD'
+	| 'OLDER'
 	| 'OLD_KMS'
 	| 'ONLY'
 	| 'OPERATOR'
@@ -4567,6 +4572,7 @@ bare_label_keywords ::=
 	| 'TENANT_NAME'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
+	| 'THAN'
 	| 'THEN'
 	| 'THROTTLING'
 	| 'TIES'
