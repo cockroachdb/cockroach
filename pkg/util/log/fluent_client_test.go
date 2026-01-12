@@ -63,8 +63,7 @@ func TestFluentClient(t *testing.T) {
 	require.NoError(t, cfg.Validate(&sc.logDir))
 
 	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	require.NoError(t, err)
 	defer cleanup()
 
@@ -89,7 +88,7 @@ func TestFluentClient(t *testing.T) {
 	msg, err := json.Marshal(info)
 	require.NoError(t, err)
 
-	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":72,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"logtest.ops","v":"v999.0.0"}`
+	const expected = `{"c":1,"f":"util/log/fluent_client_test.go","g":222,"l":71,"message":"hello world","n":1,"r":1,"s":1,"sev":"I","t":"XXX","tag":"logtest.ops","v":"v999.0.0"}`
 	require.Equal(t, expected, string(msg))
 }
 

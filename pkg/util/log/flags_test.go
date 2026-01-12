@@ -62,8 +62,7 @@ func TestAppliedConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			TestingResetActive()
-			cleanup, err := ApplyConfig(h.Config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+			cleanup, err := ApplyConfigForReconfig(h.Config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,4 +73,53 @@ func TestAppliedConfig(t *testing.T) {
 			actual = strings.ReplaceAll(actual, sc.logDir, "TMPDIR")
 			return actual
 		})
+}
+
+func TestApplyConfigRaceCondition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// This test demonstrates the race condition that exists when using
+	// TestingResetActive() followed by ApplyConfig(). If any logging
+	// happens between these two calls, ApplyConfig() will panic.
+	t.Run("demonstrate panic with old pattern", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic from ApplyConfig when logging is active, but got none")
+			} else {
+				t.Logf("got expected panic: %v", r)
+			}
+		}()
+
+		sc := ScopeWithoutShowLogs(t)
+		defer sc.Close(t)
+
+		cfg := logconfig.DefaultConfig()
+		if err := cfg.Validate(&sc.logDir); err != nil {
+			t.Fatal(err)
+		}
+		TestingResetActive()
+		setActive()
+
+		// Applying the configuration after setting active should panic.
+		_, _ = ApplyConfig(cfg, nil, nil)
+	})
+
+	// This test demonstrates that ApplyConfigForReconfig() can be called
+	// even when logging is already active, without panicking.
+	t.Run("demonstrate reconfiguring multiple times without panic", func(t *testing.T) {
+		sc := ScopeWithoutShowLogs(t)
+		defer sc.Close(t)
+
+		cfg := logconfig.DefaultConfig()
+		if err := cfg.Validate(&sc.logDir); err != nil {
+			t.Fatal(err)
+		}
+		setActive()
+		// Using ApplyConfigForReconfig should succeed, despite logging being active.
+		cleanup, err := ApplyConfigForReconfig(cfg, nil, nil)
+		if err != nil {
+			t.Fatalf("ApplyConfigForReconfig failed: %v", err)
+		}
+		cleanup()
+	})
 }
