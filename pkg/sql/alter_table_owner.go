@@ -75,13 +75,13 @@ func (p *planner) AlterTableOwner(ctx context.Context, n *tree.AlterTableOwner) 
 	}, nil
 }
 
-func (n *alterTableOwnerNode) startExec(params runParams) error {
+func (n *alterTableOwnerNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(
 		tree.GetTableType(n.n.IsSequence, n.n.IsView, n.n.IsMaterialized),
 		n.n.TelemetryName(),
 	))
-	ctx := params.ctx
-	p := params.p
+	ctx := params.Ctx
+	p := params.P.(*planner)
 	tableDesc := n.desc
 	newOwner := n.owner
 	oldOwner := n.desc.GetPrivileges().Owner()

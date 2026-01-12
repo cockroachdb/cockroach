@@ -23,7 +23,7 @@ func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 	return &scrubNode{}, nil
 }
 
-func (n *scrubNode) startExec(params runParams) error { return nil }
+func (n *scrubNode) StartExec(params runParams) error { return nil }
 
 func (n *scrubNode) Next(params runParams) (bool, error) { return false, nil }
 

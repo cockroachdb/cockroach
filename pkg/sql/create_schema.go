@@ -34,8 +34,8 @@ type createSchemaNode struct {
 	n *tree.CreateSchema
 }
 
-func (n *createSchemaNode) startExec(params runParams) error {
-	return params.p.createUserDefinedSchema(params, n.n)
+func (n *createSchemaNode) StartExec(params runParams) error {
+	return params.P.(*planner).createUserDefinedSchema(params, n.n)
 }
 
 // CreateUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
@@ -163,7 +163,7 @@ func CreateSchemaDescriptorWithPrivileges(
 
 func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema) error {
 	if err := checkSchemaChangeEnabled(
-		params.ctx,
+		params.Ctx,
 		p.ExecCfg(),
 		"CREATE SCHEMA",
 	); err != nil {
@@ -182,7 +182,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		dbName = n.Schema.Catalog()
 	}
 
-	db, err := p.Descriptors().MutableByName(p.txn).Database(params.ctx, dbName)
+	db, err := p.Descriptors().MutableByName(p.txn).Database(params.Ctx, dbName)
 	if err != nil {
 		return err
 	}
@@ -192,12 +192,12 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return pgerror.New(pgcode.InvalidObjectDefinition, "cannot create schemas in the system database")
 	}
 
-	if err := p.CheckPrivilege(params.ctx, db, privilege.CREATE); err != nil {
+	if err := p.CheckPrivilege(params.Ctx, db, privilege.CREATE); err != nil {
 		return err
 	}
 
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(
-		params.ctx, params.SessionData(), n, p.InternalSQLTxn(),
+		params.Ctx, params.SessionData(), n, p.InternalSQLTxn(),
 		p.extendedEvalCtx.DescIDGenerator, db, true, /* allocateID */
 	)
 	if err != nil {
@@ -214,7 +214,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	db.AddSchemaToDatabase(desc.Name, descpb.DatabaseDescriptor_SchemaInfo{ID: desc.ID})
 
 	if err := p.writeNonDropDatabaseChange(
-		params.ctx, db,
+		params.Ctx, db,
 		fmt.Sprintf("updating parent database %s for %s", db.GetName(), tree.AsStringWithFQNames(n, params.Ann())),
 	); err != nil {
 		return err
@@ -222,19 +222,19 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 
 	// Finally create the schema on disk.
 	if err := p.createDescriptor(
-		params.ctx,
+		params.Ctx,
 		desc,
 		tree.AsStringWithFQNames(n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, desc)
+	qualifiedSchemaName, err := p.getQualifiedSchemaName(params.Ctx, desc)
 	if err != nil {
 		return err
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		desc.GetID(),
 		&eventpb.CreateSchema{
 			SchemaName: qualifiedSchemaName.String(),

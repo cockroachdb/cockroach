@@ -119,7 +119,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 	defer cleanup()
 
 	planner := hook.(sql.PlanHookState)
-	currentClusterID := planner.ExtendedEvalContext().ClusterID
+	currentClusterID := planner.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID
 	currentDetails := sj.ScheduleDetails()
 
 	// If the current cluster ID is different than the schedule's cluster ID,
@@ -139,7 +139,7 @@ func (e *scheduledBackupExecutor) executeBackup(
 
 	if knobs, ok := cfg.TestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.OverrideAsOfClause != nil {
-			knobs.OverrideAsOfClause(&backupStmt.AsOf, hook.(sql.PlanHookState).ExtendedEvalContext().StmtTimestamp)
+			knobs.OverrideAsOfClause(&backupStmt.AsOf, hook.(sql.PlanHookState).ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp)
 		}
 	}
 

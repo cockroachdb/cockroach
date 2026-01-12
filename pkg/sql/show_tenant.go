@@ -98,16 +98,16 @@ func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
 	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGEVIRTUALCLUSTER)
 }
 
-func (n *showTenantNode) startExec(params runParams) error {
-	n.statementTime = params.extendedEvalCtx.GetStmtTimestamp()
+func (n *showTenantNode) StartExec(params runParams) error {
+	n.statementTime = params.ExtendedEvalCtx.(*ExtendedEvalContext).GetStmtTimestamp().(time.Time)
 	if _, ok := n.tenantSpec.(tenantSpecAll); ok {
-		ids, err := GetAllNonDropTenantIDs(params.ctx, params.p.InternalSQLTxn(), params.p.ExecCfg().Settings)
+		ids, err := GetAllNonDropTenantIDs(params.Ctx, params.P.(*planner).InternalSQLTxn(), params.P.(*planner).ExecCfg().Settings)
 		if err != nil {
 			return err
 		}
 		n.tenantIds = ids
 	} else {
-		tenantRecord, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+		tenantRecord, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 		if err != nil {
 			return err
 		}
@@ -143,24 +143,24 @@ func (n *showTenantNode) getTenantValues(
 	} else {
 		switch values.tenantInfo.DataState {
 		case mtinfopb.DataStateAdd:
-			mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
+			mgr, err := params.P.(*planner).EvalContext().StreamManagerFactory.GetStreamIngestManager(params.Ctx)
 			if err != nil {
 				return nil, err
 			}
-			stats, status, err := mgr.GetReplicationStatsAndStatus(params.ctx, jobId)
+			stats, status, err := mgr.GetReplicationStatsAndStatus(params.Ctx, jobId)
 			values.dataState = status
 			if err != nil {
-				log.Dev.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
+				log.Dev.Warningf(params.Ctx, "replication stats unavailable for tenant %q and job %d: %v",
 					tenantInfo.Name, jobId, err)
 			} else if n.withReplication {
 				values.replicationInfo = stats
 
 				if stats != nil && stats.IngestionDetails != nil && stats.IngestionDetails.ProtectedTimestampRecordID != nil {
-					ptp := params.p.execCfg.ProtectedTimestampProvider.WithTxn(params.p.InternalSQLTxn())
-					record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
+					ptp := params.P.(*planner).execCfg.ProtectedTimestampProvider.WithTxn(params.P.(*planner).InternalSQLTxn())
+					record, err := ptp.GetRecord(params.Ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 					if err != nil {
 						// Protected timestamp might not be set yet, no need to fail.
-						log.Dev.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
+						log.Dev.Warningf(params.Ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
 							tenantInfo.Name, jobId, err)
 					} else {
 						values.protectedTimestamp = record.Timestamp
@@ -183,7 +183,7 @@ func (n *showTenantNode) Next(params runParams) (bool, error) {
 	}
 
 	if n.initTenantValues {
-		tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.InternalSQLTxn(), n.tenantIds[n.tenantIDIndex], params.p.ExecCfg().Settings)
+		tenantInfo, err := GetTenantRecordByID(params.Ctx, params.P.(*planner).InternalSQLTxn(), n.tenantIds[n.tenantIDIndex], params.P.(*planner).ExecCfg().Settings)
 		if err != nil {
 			return false, err
 		}

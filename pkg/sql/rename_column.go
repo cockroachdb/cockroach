@@ -65,12 +65,12 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 // and expects to see its own writes.
 func (n *renameColumnNode) ReadingOwnWrites() {}
 
-func (n *renameColumnNode) startExec(params runParams) error {
-	p := params.p
-	ctx := params.ctx
+func (n *renameColumnNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	ctx := params.Ctx
 	tableDesc := n.tableDesc
 
-	descChanged, err := params.p.renameColumn(params.ctx, tableDesc, n.n.Name, n.n.NewName)
+	descChanged, err := p.renameColumn(params.Ctx, tableDesc, n.n.Name, n.n.NewName)
 	if err != nil {
 		return err
 	}

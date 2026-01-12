@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -16,13 +16,13 @@ import (
 
 // limitNode represents a node that limits the number of rows
 // returned or only return them past a given number (offset).
-type limitNode struct {
+type LimitNode struct {
 	singleInputPlanNode
-	countExpr  tree.TypedExpr
-	offsetExpr tree.TypedExpr
+	CountExpr  tree.TypedExpr
+	OffsetExpr tree.TypedExpr
 }
 
-func (n *limitNode) startExec(params runParams) error {
+func (n *limitNode) StartExec(params runParams) error {
 	panic("limitNode cannot be run in local mode")
 }
 
@@ -35,12 +35,12 @@ func (n *limitNode) Values() tree.Datums {
 }
 
 func (n *limitNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
-// evalLimit evaluates the Count and Offset fields. If Count is missing, the
+// EvalLimit evaluates the Count and Offset fields. If Count is missing, the
 // value is MaxInt64. If Offset is missing, the value is 0
-func evalLimit(
+func EvalLimit(
 	ctx context.Context, evalCtx *eval.Context, countExpr, offsetExpr tree.TypedExpr,
 ) (count, offset int64, err error) {
 	count = math.MaxInt64
@@ -77,3 +77,8 @@ func evalLimit(
 	}
 	return count, offset, nil
 }
+
+
+
+// Lowercase alias
+type limitNode = LimitNode

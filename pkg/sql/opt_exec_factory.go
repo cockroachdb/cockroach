@@ -72,7 +72,7 @@ func (ef *execFactory) ConstructValues(
 		return &unaryNode{}, nil
 	}
 	if len(rows) == 0 {
-		return &zeroNode{columns: cols}, nil
+		return &zeroNode{Columns: cols}, nil
 	}
 	return &valuesNode{
 		columns:          cols,
@@ -89,7 +89,7 @@ func (ef *execFactory) ConstructLiteralValues(
 		return &unaryNode{}, nil
 	}
 	if rows.NumRows() == 0 {
-		return &zeroNode{columns: cols}, nil
+		return &zeroNode{Columns: cols}, nil
 	}
 	switch t := rows.(type) {
 	case *rowcontainer.RowContainer:
@@ -212,11 +212,11 @@ func (ef *execFactory) ConstructFilter(
 ) (exec.Node, error) {
 	p := n.(planNode)
 	f := &filterNode{
-		singleInputPlanNode: singleInputPlanNode{p},
-		columns:             planColumns(p),
+		Columns: planColumns(p),
 	}
-	f.filter = filter
-	f.reqOrdering = ReqOrdering(reqOrdering)
+	f.Source = p
+	f.Filter = filter
+	f.ReqOrdering = ReqOrdering(reqOrdering)
 	return f, nil
 }
 
@@ -231,17 +231,17 @@ func (ef *execFactory) ConstructInvertedFilter(
 	inputCols := planColumns(n.(planNode))
 	columns := make(colinfo.ResultColumns, len(inputCols))
 	copy(columns, inputCols)
-	n = &invertedFilterNode{
-		singleInputPlanNode: singleInputPlanNode{n.(planNode)},
-		columns:             columns,
-		invertedFilterPlanningInfo: invertedFilterPlanningInfo{
-			expression:      invFilter,
-			preFiltererExpr: preFiltererExpr,
-			preFiltererType: preFiltererType,
-			invColumn:       int(invColumn),
+	invNode := &invertedFilterNode{
+		InvertedFilterPlanningInfo: invertedFilterPlanningInfo{
+			Expression:      invFilter,
+			PreFiltererExpr: preFiltererExpr,
+			PreFiltererType: preFiltererType,
+			InvColumn:       int(invColumn),
 		},
 	}
-	return n, nil
+	invNode.Source = n.(planNode)
+	invNode.Columns = columns
+	return invNode, nil
 }
 
 // ConstructSimpleProject is part of the exec.Factory interface.
@@ -256,18 +256,18 @@ func constructSimpleProjectForPlanNode(
 ) (exec.Node, error) {
 	// If the top node is already a renderNode, we can just rearrange the columns
 	// as an optimization if each render expression is projected exactly once.
-	if r, ok := n.(*renderNode); ok && canRearrangeRenders(cols, r.render) {
-		oldCols, oldRenders := r.columns, r.render
-		r.columns = make(colinfo.ResultColumns, len(cols))
-		r.render = make([]tree.TypedExpr, len(cols))
+	if r, ok := n.(*renderNode); ok && canRearrangeRenders(cols, r.Render) {
+		oldCols, oldRenders := r.Columns, r.Render
+		r.Columns = make(colinfo.ResultColumns, len(cols))
+		r.Render = make([]tree.TypedExpr, len(cols))
 		for i, ord := range cols {
-			r.columns[i] = oldCols[ord]
+			r.Columns[i] = oldCols[ord]
 			if colNames != nil {
-				r.columns[i].Name = colNames[i]
+				r.Columns[i].Name = colNames[i]
 			}
-			r.render[i] = oldRenders[ord]
+			r.Render[i] = oldRenders[ord]
 		}
-		r.reqOrdering = ReqOrdering(reqOrdering)
+		r.ReqOrdering = ReqOrdering(reqOrdering)
 		return r, nil
 	}
 	inputCols := planColumns(n)
@@ -357,7 +357,7 @@ func (ef *execFactory) ConstructSerializingProject(
 			// mean time it seems acceptable given that the method is called
 			// only for the root node.
 			if r, ok := n.(*renderNode); ok {
-				r.serialize = true
+				r.Serialize = true
 			}
 			return n, nil
 		}
@@ -368,7 +368,7 @@ func (ef *execFactory) ConstructSerializingProject(
 	}
 	switch r := res.(type) {
 	case *renderNode:
-		r.serialize = true
+		r.Serialize = true
 	default:
 		return nil, errors.AssertionFailedf("unexpected planNode type %T in ConstructSerializingProject", res)
 	}
@@ -488,13 +488,13 @@ func (ef *execFactory) ConstructScalarGroupBy(
 	var inputCols colinfo.ResultColumns
 	var groupCols []exec.NodeColumnOrdinal
 	n := &groupNode{
-		singleInputPlanNode:    singleInputPlanNode{input.(planNode)},
-		funcs:                  make([]*aggregateFuncHolder, 0, len(aggregations)),
-		columns:                getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		isScalar:               true,
-		estimatedRowCount:      1,
-		estimatedInputRowCount: estimatedInputRowCount,
+		Funcs:                  make([]*aggregateFuncHolder, 0, len(aggregations)),
+		Columns:                getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
+		IsScalar:               true,
+		EstimatedRowCount:      1,
+		EstimatedInputRowCount: estimatedInputRowCount,
 	}
+	n.Source = input.(planNode)
 	if err := ef.addAggregations(n, aggregations); err != nil {
 		return nil, err
 	}
@@ -517,17 +517,17 @@ func (ef *execFactory) ConstructGroupBy(
 	// TODO(harding): Use groupingOrder to determine when to use a hash
 	// aggregator.
 	n := &groupNode{
-		singleInputPlanNode:    singleInputPlanNode{inputPlan},
-		funcs:                  make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
-		columns:                getResultColumnsForGroupBy(inputCols, groupCols, aggregations),
-		groupCols:              groupCols,
-		groupColOrdering:       groupColOrdering,
-		isScalar:               false,
-		reqOrdering:            ReqOrdering(reqOrdering),
-		estimatedRowCount:      estimatedRowCount,
-		estimatedInputRowCount: estimatedInputRowCount,
+		Funcs:                  make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		GroupCols:              groupCols,
+		GroupColOrdering:       groupColOrdering,
+		IsScalar:               false,
+		ReqOrdering:            ReqOrdering(reqOrdering),
+		EstimatedRowCount:      estimatedRowCount,
+		EstimatedInputRowCount: estimatedInputRowCount,
 	}
-	for _, col := range n.groupCols {
+	n.Source = inputPlan
+	n.Columns = getResultColumnsForGroupBy(inputCols, groupCols, aggregations)
+	for _, col := range n.GroupCols {
 		// TODO(radu): only generate the grouping columns we actually need.
 		f := newAggregateFuncHolder(
 			builtins.AnyNotNull,
@@ -536,7 +536,7 @@ func (ef *execFactory) ConstructGroupBy(
 			false, /* isDistinct */
 			false, /* distsqlBlocklist */
 		)
-		n.funcs = append(n.funcs, f)
+		n.Funcs = append(n.Funcs, f)
 	}
 	if err := ef.addAggregations(n, aggregations); err != nil {
 		return nil, err
@@ -555,9 +555,9 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			agg.Distinct,
 			agg.DistsqlBlocklist,
 		)
-		f.filterRenderIdx = int(agg.Filter)
+		f.FilterRenderIdx = int(agg.Filter)
 
-		n.funcs = append(n.funcs, f)
+		n.Funcs = append(n.Funcs, f)
 	}
 	return nil
 }
@@ -570,14 +570,15 @@ func (ef *execFactory) ConstructDistinct(
 	nullsAreDistinct bool,
 	errorOnDup string,
 ) (exec.Node, error) {
-	return &distinctNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		distinctOnColIdxs:   distinctCols,
-		columnsInOrder:      orderedCols,
-		reqOrdering:         ReqOrdering(reqOrdering),
-		nullsAreDistinct:    nullsAreDistinct,
-		errorOnDup:          errorOnDup,
-	}, nil
+	dn := &distinctNode{
+		DistinctOnColIdxs: distinctCols,
+		ColumnsInOrder:    orderedCols,
+		ReqOrdering:       ReqOrdering(reqOrdering),
+		NullsAreDistinct:  nullsAreDistinct,
+		ErrorOnDup:        errorOnDup,
+	}
+	dn.Source = input.(planNode)
+	return dn, nil
 }
 
 // ConstructHashSetOp is part of the exec.Factory interface.
@@ -643,12 +644,13 @@ func (ef *execFactory) ConstructSort(
 	alreadyOrderedPrefix int,
 	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
-	return &sortNode{
-		singleInputPlanNode:    singleInputPlanNode{input.(planNode)},
-		ordering:               colinfo.ColumnOrdering(ordering),
-		alreadyOrderedPrefix:   alreadyOrderedPrefix,
-		estimatedInputRowCount: estimatedInputRowCount,
-	}, nil
+	sn := &sortNode{
+		Ordering:               colinfo.ColumnOrdering(ordering),
+		AlreadyOrderedPrefix:   alreadyOrderedPrefix,
+		EstimatedInputRowCount: estimatedInputRowCount,
+	}
+	sn.Source = input.(planNode)
+	return sn, nil
 }
 
 // ConstructOrdinality is part of the exec.Factory interface.
@@ -661,10 +663,11 @@ func (ef *execFactory) ConstructOrdinality(input exec.Node, colName string) (exe
 		Name: colName,
 		Typ:  types.Int,
 	}
-	return &ordinalityNode{
-		singleInputPlanNode: singleInputPlanNode{plan},
-		columns:             cols,
-	}, nil
+	on := &ordinalityNode{
+		Columns: cols,
+	}
+	on.Source = plan
+	return on, nil
 }
 
 // ConstructIndexJoin is part of the exec.Factory interface.
@@ -694,8 +697,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	n := &indexJoinNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		columns:             fetch.columns,
+		columns: fetch.columns,
 		indexJoinPlanningInfo: indexJoinPlanningInfo{
 			fetch:       fetch,
 			keyCols:     keyCols,
@@ -704,6 +706,7 @@ func (ef *execFactory) ConstructIndexJoin(
 			parallelize: parallelize,
 		},
 	}
+	n.Source = input.(planNode)
 
 	return n, nil
 }
@@ -880,7 +883,6 @@ func (ef *execFactory) ConstructInvertedJoin(
 	fetch.lockingDurability = descpb.ToScanLockingDurability(locking.Durability)
 
 	n := &invertedJoinNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
 		invertedJoinPlanningInfo: invertedJoinPlanningInfo{
 			fetch:                     fetch,
 			joinType:                  joinType,
@@ -890,6 +892,7 @@ func (ef *execFactory) ConstructInvertedJoin(
 			reqOrdering:               ReqOrdering(reqOrdering),
 		},
 	}
+	n.Source = input.(planNode)
 	if onCond != nil && onCond != tree.DBoolTrue {
 		n.onExpr = onCond
 	}
@@ -1041,15 +1044,16 @@ func (ef *execFactory) ConstructLimit(
 	// only applying a limit, update the existing node. This is useful because
 	// Limit and Offset are separate operators which result in separate calls to
 	// this function.
-	if l, ok := plan.(*limitNode); ok && l.countExpr == nil && offset == nil {
-		l.countExpr = limit
+	if l, ok := plan.(*limitNode); ok && l.CountExpr == nil && offset == nil {
+		l.CountExpr = limit
 		return l, nil
 	}
-	return &limitNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		countExpr:           limit,
-		offsetExpr:          offset,
-	}, nil
+	ln := &limitNode{
+		CountExpr:  limit,
+		OffsetExpr: offset,
+	}
+	ln.Source = input.(planNode)
+	return ln, nil
 }
 
 // ConstructTopK is part of the exec.Factory interface.
@@ -1060,21 +1064,23 @@ func (ef *execFactory) ConstructTopK(
 	alreadyOrderedPrefix int,
 	estimatedInputRowCount uint64,
 ) (exec.Node, error) {
-	return &topKNode{
-		singleInputPlanNode:    singleInputPlanNode{input.(planNode)},
-		k:                      k,
-		ordering:               colinfo.ColumnOrdering(ordering),
-		alreadyOrderedPrefix:   alreadyOrderedPrefix,
-		estimatedInputRowCount: estimatedInputRowCount,
-	}, nil
+	tkn := &topKNode{
+		K:                      k,
+		Ordering:               colinfo.ColumnOrdering(ordering),
+		AlreadyOrderedPrefix:   alreadyOrderedPrefix,
+		EstimatedInputRowCount: estimatedInputRowCount,
+	}
+	tkn.Source = input.(planNode)
+	return tkn, nil
 }
 
 // ConstructMax1Row is part of the exec.Factory interface.
 func (ef *execFactory) ConstructMax1Row(input exec.Node, errorText string) (exec.Node, error) {
-	return &max1RowNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		errorText:           errorText,
-	}, nil
+	m := &max1RowNode{
+		ErrorText: errorText,
+	}
+	m.Source = input.(planNode)
+	return m, nil
 }
 
 // ConstructBuffer is part of the exec.Factory interface.
@@ -1117,15 +1123,16 @@ func (ef *execFactory) ConstructProjectSet(
 	p := n.(planNode)
 	cols := planColumns(p)
 	allCols := append(cols, zipCols...)
-	return &projectSetNode{
-		singleInputPlanNode: singleInputPlanNode{p},
-		projectSetPlanningInfo: projectSetPlanningInfo{
-			columns:         allCols,
-			numColsInSource: len(cols),
-			exprs:           exprs,
-			numColsPerGen:   numColsPerGen,
+	psn := &projectSetNode{
+		ProjectSetPlanningInfo: projectSetPlanningInfo{
+			Columns:         allCols,
+			NumColsInSource: len(cols),
+			Exprs:           exprs,
+			NumColsPerGen:   numColsPerGen,
 		},
-	}, nil
+	}
+	psn.Source = p
+	return psn, nil
 }
 
 // ConstructWindow is part of the exec.Factory interface.
@@ -1135,31 +1142,31 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		partitionIdxs[i] = uint32(idx)
 	}
 	p := &windowNode{
-		singleInputPlanNode: singleInputPlanNode{root.(planNode)},
-		columns:             wi.Cols,
-		windowPlanningInfo: windowPlanningInfo{
-			partitionIdxs:  partitionIdxs,
-			columnOrdering: wi.Ordering,
+		Columns: wi.Cols,
+		WindowPlanningInfo: windowPlanningInfo{
+			PartitionIdxs:  partitionIdxs,
+			ColumnOrdering: wi.Ordering,
 		},
 	}
+	p.Source = root.(planNode)
 
-	p.funcs = make([]*windowFuncHolder, len(wi.Exprs))
+	p.Funcs = make([]*windowFuncHolder, len(wi.Exprs))
 	for i := range wi.Exprs {
 		argsIdxs := make([]uint32, len(wi.ArgIdxs[i]))
 		for j := range argsIdxs {
 			argsIdxs[j] = uint32(wi.ArgIdxs[i][j])
 		}
 
-		p.funcs[i] = &windowFuncHolder{
-			expr:         wi.Exprs[i],
-			args:         wi.Exprs[i].Exprs,
-			argsIdxs:     argsIdxs,
-			filterColIdx: wi.FilterIdxs[i],
-			outputColIdx: wi.OutputIdxs[i],
-			frame:        wi.Exprs[i].WindowDef.Frame,
+		p.Funcs[i] = &windowFuncHolder{
+			Expr:         wi.Exprs[i],
+			Args:         wi.Exprs[i].Exprs,
+			ArgsIdxs:     argsIdxs,
+			FilterColIdx: wi.FilterIdxs[i],
+			OutputColIdx: wi.OutputIdxs[i],
+			Frame:        wi.Exprs[i].WindowDef.Frame,
 		}
 		if len(wi.Ordering) == 0 {
-			frame := p.funcs[i].frame
+			frame := p.Funcs[i].Frame
 			if frame.Mode == treewindow.RANGE && frame.Bounds.HasOffset() {
 				// Execution requires a single column to order by when there is
 				// a RANGE mode frame with at least one 'offset' bound.
@@ -1330,12 +1337,13 @@ func (ef *execFactory) ConstructShowTrace(typ tree.ShowTraceType, compact bool) 
 	// Ensure the messages are sorted in age order, so that the user
 	// does not get confused.
 	ageColIdx := colinfo.GetTraceAgeColumnIdx(compact)
-	node = &sortNode{
-		singleInputPlanNode: singleInputPlanNode{node},
-		ordering: colinfo.ColumnOrdering{
+	sn := &sortNode{
+		Ordering: colinfo.ColumnOrdering{
 			colinfo.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
 	}
+	sn.Source = node
+	node = sn
 
 	if typ == tree.ShowTraceReplica {
 		node = &showTraceReplicaNode{
@@ -1509,7 +1517,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	}
 
 	if len(rows) == 0 {
-		return &zeroNode{columns: ins.columns}, nil
+		return &zeroNode{Columns: ins.columns}, nil
 	}
 
 	if autoCommit {
@@ -1955,14 +1963,14 @@ func (ef *execFactory) ConstructVectorSearch(
 	}
 	ef.recordIndexRead(tabDesc, idx)
 	return &vectorSearchNode{
-		vectorSearchPlanningInfo: vectorSearchPlanningInfo{
-			table:               tabDesc,
-			index:               idx,
-			prefixKeys:          prefixKeys,
-			queryVector:         queryVector,
-			targetNeighborCount: targetNeighborCount,
-			cols:                cols,
-			columns:             resultCols,
+		VectorSearchPlanningInfo: vectorSearchPlanningInfo{
+			Table:               tabDesc,
+			Index:               idx,
+			PrefixKeys:          prefixKeys,
+			QueryVector:         queryVector,
+			TargetNeighborCount: targetNeighborCount,
+			Cols:                cols,
+			Columns:             resultCols,
 		},
 	}, nil
 }
@@ -1991,18 +1999,19 @@ func (ef *execFactory) ConstructVectorMutationSearch(
 	tabDesc := table.(*optTable).desc
 	idx := index.(*optIndex).idx
 	ef.recordIndexRead(tabDesc, idx)
-	return &vectorMutationSearchNode{
-		singleInputPlanNode: singleInputPlanNode{input: inputPlan},
-		vectorMutationSearchPlanningInfo: vectorMutationSearchPlanningInfo{
-			table:          tabDesc,
-			index:          idx,
-			prefixKeyCols:  prefixKeyCols,
-			queryVectorCol: queryVectorCol,
-			suffixKeyCols:  suffixKeyCols,
-			isIndexPut:     isIndexPut,
+	vmsn := &vectorMutationSearchNode{
+		VectorMutationSearchPlanningInfo: vectorMutationSearchPlanningInfo{
+			Table:          tabDesc,
+			Index:          idx,
+			PrefixKeyCols:  prefixKeyCols,
+			QueryVectorCol: queryVectorCol,
+			SuffixKeyCols:  suffixKeyCols,
+			IsIndexPut:     isIndexPut,
 		},
-		columns: cols,
-	}, nil
+	}
+	vmsn.Source = inputPlan
+	vmsn.Columns = cols
+	return vmsn, nil
 }
 
 // ConstructCreateTable is part of the exec.Factory interface.
@@ -2190,10 +2199,11 @@ func (ef *execFactory) ConstructSaveTable(
 func (ef *execFactory) ConstructErrorIfRows(
 	input exec.Node, mkErr exec.MkErrFn,
 ) (exec.Node, error) {
-	return &errorIfRowsNode{
-		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
-		mkErr:               mkErr,
-	}, nil
+	n := &errorIfRowsNode{
+		MkErr: mkErr,
+	}
+	n.Source = input.(planNode)
+	return n, nil
 }
 
 // ConstructOpaque is part of the exec.Factory interface.
@@ -2454,10 +2464,10 @@ type renderBuilder struct {
 func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 	p := n.(planNode)
 	rb.r = &renderNode{
-		singleInputPlanNode: singleInputPlanNode{p},
-		columns:             planColumns(p),
+		Columns: planColumns(p),
 	}
-	rb.r.reqOrdering = ReqOrdering(reqOrdering)
+	rb.r.Source = p
+	rb.r.ReqOrdering = ReqOrdering(reqOrdering)
 	rb.res = rb.r
 }
 
@@ -2465,8 +2475,8 @@ func (rb *renderBuilder) init(n exec.Node, reqOrdering exec.OutputOrdering) {
 // expressions, and columns is the list of information about the expressions,
 // including their names, types, and so on. They must be the same length.
 func (rb *renderBuilder) setOutput(exprs tree.TypedExprs, columns colinfo.ResultColumns) {
-	rb.r.render = exprs
-	rb.r.columns = columns
+	rb.r.Render = exprs
+	rb.r.Columns = columns
 }
 
 // makeColList returns a list of table column interfaces. Columns are

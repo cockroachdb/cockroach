@@ -75,7 +75,7 @@ var _ planNode = (*explainDDLNode)(nil)
 var explainNotPossibleError = pgerror.New(pgcode.FeatureNotSupported,
 	"cannot explain a statement which is not supported by the declarative schema changer")
 
-func (n *explainDDLNode) startExec(params runParams) error {
+func (n *explainDDLNode) StartExec(params runParams) error {
 	// TODO(postamar): better error messages for each error case
 	scNode, ok := n.plan.main.planNode.(*schemaChangePlanNode)
 	if !ok {
@@ -90,8 +90,8 @@ func (n *explainDDLNode) startExec(params runParams) error {
 			return explainNotPossibleError
 		}
 	}
-	return n.setExplainValues(params.ctx, params.ExecCfg().Settings,
-		scNode.plannedState, &params.p.ExtendedEvalContext().SchemaChangerState.memAcc)
+	return n.setExplainValues(params.Ctx, params.ExecCfg().(*ExecutorConfig).Settings,
+		scNode.plannedState, &params.P.(*planner).ExtendedEvalContext().(*ExtendedEvalContext).SchemaChangerState.memAcc)
 }
 
 func (n *explainDDLNode) setExplainValues(

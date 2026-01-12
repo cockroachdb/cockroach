@@ -1113,7 +1113,7 @@ func getNumOnlineRestoreLinkWorkers(ctx context.Context, execCtx sql.JobExecCont
 	}
 	// All nodes are used in a restore
 	_, sqlInstanceIDs, err := execCtx.ExecCfg().DistSQLPlanner.SetupAllNodesPlanning(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+		ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCtx.ExecCfg(),
 	)
 	if err != nil {
 		return 0, err

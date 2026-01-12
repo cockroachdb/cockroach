@@ -44,7 +44,7 @@ type explainPlanNodeRun struct {
 	results *valuesNode
 }
 
-func (e *explainPlanNode) startExec(params runParams) error {
+func (e *explainPlanNode) StartExec(params runParams) error {
 	ob := explain.NewOutputBuilder(e.flags)
 	plan := e.plan.WrappedPlan.(*planComponents)
 
@@ -58,15 +58,15 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// Note that we delay adding the annotation about the distribution until
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
-		distribution, _ := params.p.getPlanDistribution(params.ctx, plan.main, notPostquery)
+		distribution, _ := params.P.(*planner).getPlanDistribution(params.Ctx, plan.main, notPostquery)
 
-		outerSubqueries := params.p.curPlan.subqueryPlans
-		distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
+		outerSubqueries := params.P.(*planner).curPlan.subqueryPlans
+		distSQLPlanner := params.ExtendedEvalCtx.(*ExtendedEvalContext).DistSQLPlanner
 		planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, plan.subqueryPlans, distribution)
 		defer func() {
 			planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 		}()
-		physicalPlan, cleanup, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, plan.main)
+		physicalPlan, cleanup, err := newPhysPlanForExplainPurposes(params.Ctx, planCtx, distSQLPlanner, plan.main)
 		defer cleanup()
 		var diagramURL url.URL
 		var diagramJSON string
@@ -83,7 +83,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		} else {
 			// There might be an issue making the physical plan, but that should not
 			// cause an error or panic, so swallow the error. See #40677 for example.
-			finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
+			finalizePlanWithRowCount(params.Ctx, planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
 			flows, flowsCleanup := physicalPlan.GenerateFlowSpecs()
 			defer flowsCleanup(flows)
@@ -106,9 +106,9 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			if e.options.Mode == tree.ExplainDistSQL {
 				flags := execinfrapb.DiagramFlags{
 					ShowInputTypes:    e.options.Flags[tree.ExplainFlagTypes],
-					MakeDeterministic: e.flags.Deflake.HasAny(explain.DeflakeAll) || params.p.execCfg.TestingKnobs.DeterministicExplain,
+					MakeDeterministic: e.flags.Deflake.HasAny(explain.DeflakeAll) || params.P.(*planner).execCfg.TestingKnobs.DeterministicExplain,
 				}
-				diagram, err := execinfrapb.GeneratePlanDiagram(params.p.stmt.String(), flows, flags)
+				diagram, err := execinfrapb.GeneratePlanDiagram(params.P.(*planner).stmt.String(), flows, flags)
 				if err != nil {
 					return err
 				}
@@ -120,9 +120,9 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 
-		if len(params.p.stmt.Hints) > 0 {
+		if len(params.P.(*planner).stmt.Hints) > 0 {
 			var hintCount uint64
-			for _, hint := range params.p.stmt.Hints {
+			for _, hint := range params.P.(*planner).stmt.Hints {
 				if hint.Enabled && hint.Err == nil {
 					hintCount += 1
 				}
@@ -144,7 +144,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// since we're in the middle of the execution of the
 			// explainPlanNode.
 			const createPostQueryPlanIfMissing = true
-			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan, createPostQueryPlanIfMissing); err != nil {
+			if err := emitExplain(params.Ctx, ob, params.EvalContext(), params.P.(*planner).ExecCfg().Codec, e.plan, createPostQueryPlanIfMissing); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
@@ -154,7 +154,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 	}
 	// Add index recommendations to output, if they exist.
-	if recs := params.p.instrumentation.explainIndexRecs; recs != nil {
+	if recs := params.P.(*planner).instrumentation.explainIndexRecs; recs != nil {
 		// First add empty row.
 		rows = append(rows, "")
 		rows = append(rows, fmt.Sprintf("index recommendations: %d", len(recs)))
@@ -176,11 +176,11 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			rows = append(rows, fmt.Sprintf("   SQL command%s: %s", plural, recs[i].SQL))
 		}
 	}
-	v := params.p.newContainerValuesNode(colinfo.ExplainPlanColumns, len(rows))
+	v := params.P.(*planner).newContainerValuesNode(colinfo.ExplainPlanColumns, len(rows))
 	datums := make([]tree.DString, len(rows))
 	for i, row := range rows {
 		datums[i] = tree.DString(row)
-		if _, err := v.rows.AddRow(params.ctx, tree.Datums{&datums[i]}); err != nil {
+		if _, err := v.rows.AddRow(params.Ctx, tree.Datums{&datums[i]}); err != nil {
 			return err
 		}
 	}

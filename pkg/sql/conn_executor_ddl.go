@@ -115,7 +115,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.InternalSQLTxn(),
 		ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
-		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		ex.planner.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 		scs.jobID,
 		scs.stmts,
 	)

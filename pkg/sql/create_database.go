@@ -158,18 +158,18 @@ func (p *planner) CanCreateDatabase(ctx context.Context) error {
 	return nil
 }
 
-func (n *createDatabaseNode) startExec(params runParams) error {
+func (n *createDatabaseNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("database"))
 
-	desc, created, err := params.p.createDatabase(
-		params.ctx, n.n, tree.AsStringWithFQNames(n.n, params.Ann()))
+	desc, created, err := params.P.(*planner).createDatabase(
+		params.Ctx, n.n, tree.AsStringWithFQNames(n.n, params.Ann()))
 	if err != nil {
 		return err
 	}
 	if created {
 		// Log Create Database event. This is an auditable log event and is
 		// recorded in the same transaction as the table descriptor update.
-		if err := params.p.logEvent(params.ctx, desc.GetID(),
+		if err := params.P.(*planner).logEvent(params.Ctx, desc.GetID(),
 			&eventpb.CreateDatabase{
 				DatabaseName: n.n.Name.String(),
 			}); err != nil {

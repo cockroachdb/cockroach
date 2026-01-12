@@ -173,22 +173,22 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, tableDesc)
+	tn, err := params.P.(*planner).getQualifiedTableName(params.Ctx, tableDesc)
 	if err != nil {
 		return nil, err
 	}
 
 	// Replace expression index elements with hidden virtual computed columns.
 	// The virtual columns are added as mutation columns to tableDesc.
-	activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	activeVersion := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
 	if err := replaceExpressionElemsWithVirtualCols(
-		params.ctx,
+		params.Ctx,
 		tableDesc,
 		tn,
 		columns,
 		n.Type,
 		false, /* isNewTable */
-		params.p.SemaCtx(),
+		params.P.(*planner).SemaCtx(),
 		activeVersion,
 	); err != nil {
 		return nil, err
@@ -208,7 +208,7 @@ func makeIndexDescriptor(
 		return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name)
 	}
 
-	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Type, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)); err != nil {
+	if err := checkIndexColumns(tableDesc, columns, n.Storing, n.Type, params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +245,7 @@ func makeIndexDescriptor(
 			return nil, err
 		}
 		if err := populateInvertedIndexDescriptor(
-			params.ctx, params.ExecCfg().Settings, column, &indexDesc, invCol); err != nil {
+			params.Ctx, params.ExecCfg().(*ExecutorConfig).Settings, column, &indexDesc, invCol); err != nil {
 			return nil, err
 		}
 	}
@@ -263,7 +263,7 @@ func makeIndexDescriptor(
 			return nil, err
 		}
 		indexDesc.VecConfig, err = vecsettings.MakeVecConfig(
-			params.ctx, params.EvalContext(), column.GetType(), vecCol.OpClass)
+			params.Ctx, params.EvalContext(), column.GetType(), vecCol.OpClass)
 		if err != nil {
 			return nil, err
 		}
@@ -277,9 +277,9 @@ func makeIndexDescriptor(
 		}
 
 		shardCol, newColumns, err := setupShardedIndex(
-			params.ctx,
+			params.Ctx,
 			params.EvalContext(),
-			&params.p.semaCtx,
+			&params.P.(*planner).semaCtx,
 			columns,
 			n.Sharded.ShardBuckets,
 			tableDesc,
@@ -290,8 +290,8 @@ func makeIndexDescriptor(
 			return nil, err
 		}
 		columns = newColumns
-		if err := params.p.maybeSetupConstraintForShard(
-			params.ctx, tableDesc, shardCol, indexDesc.Sharded.ShardBuckets,
+		if err := params.P.(*planner).maybeSetupConstraintForShard(
+			params.Ctx, tableDesc, shardCol, indexDesc.Sharded.ShardBuckets,
 		); err != nil {
 			return nil, err
 		}
@@ -299,8 +299,8 @@ func makeIndexDescriptor(
 
 	if n.Predicate != nil {
 		expr, err := schemaexpr.ValidatePartialIndexPredicate(
-			params.ctx, tableDesc, n.Predicate, &n.Table, params.p.SemaCtx(),
-			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+			params.Ctx, tableDesc, n.Predicate, &n.Table, params.P.(*planner).SemaCtx(),
+			params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -313,8 +313,8 @@ func makeIndexDescriptor(
 	}
 
 	if err := storageparam.Set(
-		params.ctx,
-		params.p.SemaCtx(),
+		params.Ctx,
+		params.P.(*planner).SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,
 		&indexstorageparam.Setter{IndexDesc: &indexDesc},
@@ -730,7 +730,7 @@ func maybeCreateAndAddShardCol(
 	return catalog.MustFindColumnByName(desc, shardColDesc.Name)
 }
 
-func (n *createIndexNode) startExec(params runParams) error {
+func (n *createIndexNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
 	foundIndex := catalog.FindIndexByName(n.tableDesc, string(n.n.Name))
 	if foundIndex != nil {
@@ -744,8 +744,8 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.Concurrently {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are created concurrently"),
 		)
 	}
@@ -757,8 +757,8 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if n.n.PartitionByIndex == nil &&
 		n.tableDesc.GetPrimaryIndex().PartitioningColumnCount() > 0 &&
 		!n.tableDesc.IsPartitionAllBy() {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			errors.WithHint(
 				pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
 				"Consider modifying the index such that it is also partitioned.",
@@ -788,8 +788,8 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
-	*indexDesc, err = params.p.configureIndexDescForNewIndexPartitioning(
-		params.ctx,
+	*indexDesc, err = params.P.(*planner).configureIndexDescForNewIndexPartitioning(
+		params.Ctx,
 		n.tableDesc,
 		*indexDesc,
 		n.n.PartitionByIndex,
@@ -812,13 +812,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 	); err != nil {
 		return err
 	}
-	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+	version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+	if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 		return err
 	}
 
-	if err := params.p.configureZoneConfigForNewIndexPartitioning(
-		params.ctx,
+	if err := params.P.(*planner).configureZoneConfigForNewIndexPartitioning(
+		params.Ctx,
 		n.tableDesc,
 		*indexDesc,
 	); err != nil {
@@ -831,14 +831,14 @@ func (n *createIndexNode) startExec(params runParams) error {
 	indexName := index.Name
 
 	mutationID := n.tableDesc.ClusterVersion().NextMutationID
-	if err := params.p.writeSchemaChange(
-		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
 	// Add all newly created type back references.
-	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+	if err := params.P.(*planner).addBackRefsFromAllTypesInTable(params.Ctx, n.tableDesc); err != nil {
 		return err
 	}
 
@@ -846,15 +846,15 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// expression and for any index with a partial predicate.
 	for _, m := range n.tableDesc.GetMutations() {
 		if col := m.GetColumn(); col != nil && m.Direction == descpb.DescriptorMutation_ADD {
-			if err := params.p.maybeUpdateFunctionReferencesForColumn(
-				params.ctx, n.tableDesc, col,
+			if err := params.P.(*planner).maybeUpdateFunctionReferencesForColumn(
+				params.Ctx, n.tableDesc, col,
 			); err != nil {
 				return err
 			}
 		}
 		if idx := m.GetIndex(); idx != nil && m.Direction == descpb.DescriptorMutation_ADD {
-			if err := params.p.maybeAddFunctionReferencesForIndex(
-				params.ctx, n.tableDesc, idx,
+			if err := params.P.(*planner).maybeAddFunctionReferencesForIndex(
+				params.Ctx, n.tableDesc, idx,
 			); err != nil {
 				return err
 			}
@@ -864,7 +864,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	// Record index creation in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.CreateIndex{
 			TableName:  n.n.Table.FQString(),

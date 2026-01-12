@@ -49,9 +49,9 @@ func (p *planner) alterJobOwner(ctx context.Context, n *tree.AlterJobOwner) (pla
 	}, nil
 }
 
-func (n *alterJobOwnerNode) startExec(params runParams) error {
-	ctx := params.ctx
-	p := params.p
+func (n *alterJobOwnerNode) StartExec(params runParams) error {
+	ctx := params.Ctx
+	p := params.P.(*planner)
 	newOwner := n.owner
 
 	exprEval := p.ExprEvaluator("ALTER JOB OWNER")
@@ -61,7 +61,7 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 	}
 	jobID := jobspb.JobID(jobIDInt)
 
-	cur, err := params.ExecCfg().InternalDB.Executor().QueryRowEx(
+	cur, err := params.ExecCfg().(*ExecutorConfig).InternalDB.Executor().QueryRowEx(
 		ctx, "get-job-owner", p.txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT owner FROM system.jobs WHERE id = $1`, jobID,
 	)
@@ -74,11 +74,11 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 
 	currentOwner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(cur[0])))
 
-	if err := n.checkOwnership(ctx, params.p, currentOwner, false); err != nil {
+	if err := n.checkOwnership(ctx, params.P.(*planner), currentOwner, false); err != nil {
 		return err
 	}
 
-	if err := n.checkOwnership(ctx, params.p, newOwner, true); err != nil {
+	if err := n.checkOwnership(ctx, params.P.(*planner), newOwner, true); err != nil {
 		return err
 	}
 
@@ -86,7 +86,7 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if _, err = params.ExecCfg().InternalDB.Executor().ExecEx(
+	if _, err = params.ExecCfg().(*ExecutorConfig).InternalDB.Executor().ExecEx(
 		ctx, "set-job-owner", p.txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.jobs SET owner = $2 WHERE id = $1`, jobID, newOwner.Normalized(),
 	); err != nil {
@@ -96,7 +96,7 @@ func (n *alterJobOwnerNode) startExec(params runParams) error {
 	// Update the legacy payload's copy as well since there are still some paths
 	// which read it.
 	// TODO(dt): remove this when we drop the field from the legacy payload.
-	legacyJob, err := params.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
+	legacyJob, err := params.ExecCfg().(*ExecutorConfig).JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 	if err != nil {
 		return err
 	}

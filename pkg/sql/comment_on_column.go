@@ -49,19 +49,19 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 	return &commentOnColumnNode{n: n, tableDesc: tableDesc}, nil
 }
 
-func (n *commentOnColumnNode) startExec(params runParams) error {
+func (n *commentOnColumnNode) StartExec(params runParams) error {
 	col, err := catalog.MustFindColumnByTreeName(n.tableDesc, n.n.ColumnItem.ColumnName)
 	if err != nil {
 		return err
 	}
 
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(
-			params.ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType,
+		err = params.P.(*planner).deleteComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType,
 		)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), catalogkeys.ColumnCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -73,12 +73,12 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+	tn, err := params.P.(*planner).getQualifiedTableName(params.Ctx, n.tableDesc)
 	if err != nil {
 		return err
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.GetID(),
 		&eventpb.CommentOnColumn{
 			TableName:   tn.FQString(),

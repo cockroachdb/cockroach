@@ -297,7 +297,7 @@ func (r *replicationStreamManagerImpl) buildReplicationStreamSpec(
 	)
 
 	planCtx := dsp.NewPlanningCtxWithOracle(
-		ctx, jobExecCtx.ExtendedEvalContext(), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
+		ctx, jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), nil /* planner */, nil /* txn */, sql.FullDistribution, oracle, []roachpb.Locality{}, sql.NoStrictLocalityFiltering,
 	)
 
 	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, targetSpans, sql.PartitionSpansBoundDefault)

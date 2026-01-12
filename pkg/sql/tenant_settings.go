@@ -92,7 +92,7 @@ func (p *planner) AlterTenantSetClusterSetting(
 	return &node, nil
 }
 
-func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
+func (n *alterTenantSetClusterSettingNode) StartExec(params runParams) error {
 	var tenantID uint64
 	if _, ok := n.tenantSpec.(tenantSpecAll); ok {
 		// Processing for TENANT ALL.
@@ -103,7 +103,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		// Case for TENANT <tenant_id>. We'll check that the provided
 		// tenant ID is non zero and refers to a tenant that exists in
 		// system.tenants.
-		rec, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+		rec, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 		if err != nil {
 			return err
 		}
@@ -120,8 +120,8 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 	if n.value == nil {
 		// TODO(radu,knz): DEFAULT might be confusing, we really want to say "NO OVERRIDE"
 		reportedValue = "DEFAULT"
-		if _, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx, "reset-tenant-setting", params.p.Txn(),
+		if _, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx, "reset-tenant-setting", params.P.(*planner).Txn(),
 			sessiondata.NodeUserSessionDataOverride,
 			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.setting.InternalKey(),
 		); err != nil {
@@ -129,16 +129,16 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		}
 	} else {
 		reportedValue = tree.AsStringWithFlags(n.value, tree.FmtBareStrings)
-		value, err := eval.Expr(params.ctx, params.p.EvalContext(), n.value)
+		value, err := eval.Expr(params.Ctx, params.P.(*planner).EvalContext(), n.value)
 		if err != nil {
 			return err
 		}
-		encoded, err := toSettingString(params.ctx, n.st, n.setting, value)
+		encoded, err := toSettingString(params.Ctx, n.st, n.setting, value)
 		if err != nil {
 			return err
 		}
-		if _, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx, "update-tenant-setting", params.p.Txn(),
+		if _, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx, "update-tenant-setting", params.P.(*planner).Txn(),
 			sessiondata.NodeUserSessionDataOverride,
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
 			tenantID, n.setting.InternalKey(), encoded, n.setting.Typ(),
@@ -148,8 +148,8 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 	}
 
 	// Finally, log the event.
-	return params.p.logEvent(
-		params.ctx,
+	return params.P.(*planner).logEvent(
+		params.Ctx,
 		0, /* no target */
 		&eventpb.SetTenantClusterSetting{
 			SettingName: string(n.name),

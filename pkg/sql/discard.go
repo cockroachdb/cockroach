@@ -30,46 +30,46 @@ type discardNode struct {
 func (n *discardNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *discardNode) Values() tree.Datums            { return nil }
 func (n *discardNode) Close(_ context.Context)        {}
-func (n *discardNode) startExec(params runParams) error {
+func (n *discardNode) StartExec(params runParams) error {
 	switch n.mode {
 	case tree.DiscardModeAll:
-		if !params.p.autoCommit {
+		if !params.P.(*planner).autoCommit {
 			return pgerror.New(pgcode.ActiveSQLTransaction,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
 		// SET SESSION AUTHORIZATION DEFAULT
-		if err := params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser()); err != nil {
+		if err := params.P.(*planner).setRole(params.Ctx, false /* local */, params.P.(*planner).SessionData().SessionUser()); err != nil {
 			return err
 		}
 
 		// RESET ALL
-		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
+		if err := params.P.(*planner).resetAllSessionVars(params.Ctx); err != nil {
 			return err
 		}
 
 		// DEALLOCATE ALL
-		params.p.preparedStatements.DeleteAll(params.ctx)
+		params.P.(*planner).preparedStatements.DeleteAll(params.Ctx)
 
 		// DISCARD SEQUENCES
-		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+		params.P.(*planner).sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
 			m.Data.SequenceState = sessiondata.NewSequenceState()
 			m.InitSequenceCache()
 		})
 
 		// DISCARD TEMP
-		err := deleteTempTables(params.ctx, params.p)
+		err := deleteTempTables(params.Ctx, params.P.(*planner))
 		if err != nil {
 			return err
 		}
 
 	case tree.DiscardModeSequences:
-		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+		params.P.(*planner).sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
 			m.Data.SequenceState = sessiondata.NewSequenceState()
 			m.InitSequenceCache()
 		})
 	case tree.DiscardModeTemp:
-		err := deleteTempTables(params.ctx, params.p)
+		err := deleteTempTables(params.Ctx, params.P.(*planner))
 		if err != nil {
 			return err
 		}

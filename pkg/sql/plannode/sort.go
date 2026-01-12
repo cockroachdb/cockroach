@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -14,18 +14,18 @@ import (
 
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
-type sortNode struct {
+type SortNode struct {
 	singleInputPlanNode
-	ordering colinfo.ColumnOrdering
+	Ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
-	// the prefix ordering[:alreadyOrderedPrefix].
-	alreadyOrderedPrefix int
-	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// the prefix Ordering[:alreadyOrderedPrefix].
+	AlreadyOrderedPrefix int
+	// EstimatedInputRowCount, when set, is the estimated number of rows that
 	// this sortNode will read from its input.
-	estimatedInputRowCount uint64
+	EstimatedInputRowCount uint64
 }
 
-func (n *sortNode) startExec(runParams) error {
+func (n *sortNode) StartExec(runParams) error {
 	panic("sortNode cannot be run in local mode")
 }
 
@@ -38,5 +38,10 @@ func (n *sortNode) Values() tree.Datums {
 }
 
 func (n *sortNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
+
+
+
+// Lowercase alias
+type sortNode = SortNode

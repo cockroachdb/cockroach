@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "planbase",
+    srcs = [
+        "extended_eval_context.go",
+        "planner_accessor.go",
+        "run_params.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/planbase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+    ],
+)

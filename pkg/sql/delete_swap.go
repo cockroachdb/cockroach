@@ -36,15 +36,15 @@ type deleteSwapNode struct {
 
 var _ mutationPlanNode = &deleteSwapNode{}
 
-func (d *deleteSwapNode) startExec(params runParams) error {
+func (d *deleteSwapNode) StartExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	d.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	d.run.mustValidateOldPKValues = true
 
 	d.run.init(params, d.columns)
 
-	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := d.run.td.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -68,17 +68,17 @@ func (d *deleteSwapNode) processBatch(params runParams) error {
 	// of input, to ensure the savepoint rollback below has the correct SQL
 	// semantics.
 
-	if err := params.p.cancelChecker.Check(); err != nil {
+	if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 		return err
 	}
 
-	next, err := d.input.Next(params)
+	next, err := d.Source.Next(params)
 	if next {
-		if err := d.run.processSourceRow(params, d.input.Values()); err != nil {
+		if err := d.run.processSourceRow(params, d.Source.Values()); err != nil {
 			return err
 		}
 		// Verify that there was only a single row of input.
-		next, err = d.input.Next(params)
+		next, err = d.Source.Next(params)
 		if next {
 			return errors.AssertionFailedf("expected only 1 row as input to delete swap")
 		}
@@ -91,21 +91,21 @@ func (d *deleteSwapNode) processBatch(params runParams) error {
 	// batch. If the row does not actually exist, the write to the primary index
 	// will fail with ConditionFailedError, but writes to some secondary indexes
 	// might succeed. We use a savepoint here to undo those writes.
-	sp, err := d.run.td.createSavepoint(params.ctx)
+	sp, err := d.run.td.createSavepoint(params.Ctx)
 	if err != nil {
 		return err
 	}
 
-	d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-	if err := d.run.td.finalize(params.ctx); err != nil {
+	d.run.td.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+	if err := d.run.td.finalize(params.Ctx); err != nil {
 		// If this was a ConditionFailedError, it means the row did not exist in the
 		// primary index. We must roll back to the savepoint above to undo writes to
 		// all secondary indexes.
 		if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
 			// Reset the table writer so that it looks like there were no rows to
 			// delete.
-			d.run.reset(params.ctx)
-			if err := d.run.td.rollbackToSavepoint(params.ctx, sp); err != nil {
+			d.run.reset(params.Ctx)
+			if err := d.run.td.rollbackToSavepoint(params.Ctx, sp); err != nil {
 				return err
 			}
 			return nil
@@ -114,36 +114,36 @@ func (d *deleteSwapNode) processBatch(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
+	params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 
 	return nil
 }
 
 func (d *deleteSwapNode) Close(ctx context.Context) {
-	d.input.Close(ctx)
+	d.Source.Close(ctx)
 	d.run.close(ctx)
 	*d = deleteSwapNode{}
 	deleteSwapNodePool.Put(d)
 }
 
-func (d *deleteSwapNode) rowsWritten() int64 {
+func (d *deleteSwapNode) RowsWritten() int64 {
 	return d.run.rowsAffected()
 }
 
-func (d *deleteSwapNode) indexRowsWritten() int64 {
+func (d *deleteSwapNode) IndexRowsWritten() int64 {
 	return d.run.td.indexRowsWritten
 }
 
-func (d *deleteSwapNode) indexBytesWritten() int64 {
+func (d *deleteSwapNode) IndexBytesWritten() int64 {
 	// No bytes counted as written for a deletion.
 	return 0
 }
 
-func (d *deleteSwapNode) returnsRowsAffected() bool {
+func (d *deleteSwapNode) ReturnsRowsAffected() bool {
 	return !d.run.rowsNeeded
 }
 
-func (d *deleteSwapNode) kvCPUTime() int64 {
+func (d *deleteSwapNode) KvCPUTime() int64 {
 	return d.run.td.kvCPUTime
 }
 

@@ -97,13 +97,13 @@ func (p *planner) AlterTableSetSchema(
 	}, nil
 }
 
-func (n *alterTableSetSchemaNode) startExec(params runParams) error {
+func (n *alterTableSetSchemaNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra(
 		tree.GetTableType(n.n.IsSequence, n.n.IsView, n.n.IsMaterialized),
 		n.n.TelemetryName(),
 	))
-	ctx := params.ctx
-	p := params.p
+	ctx := params.Ctx
+	p := params.P.(*planner)
 	tableDesc := n.tableDesc
 	oldNameKey := descpb.NameInfo{
 		ParentID:       tableDesc.GetParentID(),

@@ -37,7 +37,7 @@ func (n *createExtensionNode) unimplementedExtensionError(issue int) error {
 	)
 }
 
-func (n *createExtensionNode) startExec(params runParams) error {
+func (n *createExtensionNode) StartExec(params runParams) error {
 	switch n.CreateExtension.Name {
 	case "postgis",
 		"pg_trgm",

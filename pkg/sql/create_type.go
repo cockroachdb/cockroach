@@ -79,11 +79,11 @@ func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode,
 	}, nil
 }
 
-func (n *createTypeNode) startExec(params runParams) error {
+func (n *createTypeNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("type"))
 	// Check if a type with the same name exists already.
-	g := params.p.Descriptors().ByName(params.p.Txn()).MaybeGet()
-	_, typ, err := descs.PrefixAndType(params.ctx, g, n.typeName)
+	g := params.P.(*planner).Descriptors().ByName(params.P.(*planner).Txn()).MaybeGet()
+	_, typ, err := descs.PrefixAndType(params.Ctx, g, n.typeName)
 	if err != nil {
 		return err
 	}
@@ -96,14 +96,14 @@ func (n *createTypeNode) startExec(params runParams) error {
 	// (pgcode.DuplicateRelation) of getCreateTableParams. However, there isn't
 	// a pgcode for duplicate types, only the more general pgcode.DuplicateObject.
 	if typ != nil && n.n.IfNotExists {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("type %q already exists, skipping", n.typeName),
 		)
 		return nil
 	}
 
-	return params.p.createUserDefinedType(params, n)
+	return params.P.(*planner).createUserDefinedType(params, n)
 }
 
 func resolveNewTypeName(
@@ -311,17 +311,17 @@ func (p *planner) createArrayType(
 
 func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) error {
 	// Generate a stable ID for the new type.
-	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
+	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.Ctx)
 	if err != nil {
 		return err
 	}
 	switch n.n.Variety {
 	case tree.Enum:
-		return params.p.createEnumWithID(
-			params.ctx, params.EvalContext(), id, n.n.EnumLabels, n.dbDesc, n.typeName, EnumTypeUserDefined,
+		return params.P.(*planner).createEnumWithID(
+			params.Ctx, params.EvalContext(), id, n.n.EnumLabels, n.dbDesc, n.typeName, EnumTypeUserDefined,
 		)
 	case tree.Composite:
-		return params.p.createCompositeWithID(
+		return params.P.(*planner).createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,
 		)
 	}
@@ -424,7 +424,7 @@ func createCompositeTypeDesc(
 				"composite type definition contains duplicate label %q", value)
 		}
 		elts[i].ElementLabel = string(value.Label)
-		typ, err := tree.ResolveType(params.ctx, value.Type, params.p.semaCtx.TypeResolver)
+		typ, err := tree.ResolveType(params.Ctx, value.Type, params.P.(*planner).semaCtx.TypeResolver)
 		if err != nil {
 			return nil, err
 		}
@@ -435,7 +435,7 @@ func createCompositeTypeDesc(
 			// TODO(#144910): this is unsupported for now, out of caution.
 			return nil, jsonpathInCompositeErr
 		}
-		if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ); err != nil {
+		if err = tree.CheckUnsupportedType(params.Ctx, &params.P.(*planner).semaCtx, typ); err != nil {
 			return nil, err
 		}
 		if typ.UserDefined() {
@@ -508,7 +508,7 @@ func (p *planner) createCompositeWithID(
 	typeName *tree.TypeName,
 ) error {
 	// Generate a key in the namespace table and a new id for this type.
-	schema, err := getCreateTypeParams(params.ctx, p, typeName, dbDesc)
+	schema, err := getCreateTypeParams(params.Ctx, p, typeName, dbDesc)
 	if err != nil {
 		return err
 	}
@@ -518,11 +518,11 @@ func (p *planner) createCompositeWithID(
 		return err
 	}
 
-	if err := p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema); err != nil {
+	if err := p.finishCreateType(params.Ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema); err != nil {
 		return err
 	}
 	// Install back references to types used by this type.
-	if err := p.addBackRefsFromAllTypesInType(params.ctx, typeDesc); err != nil {
+	if err := p.addBackRefsFromAllTypesInType(params.Ctx, typeDesc); err != nil {
 		return err
 	}
 	return nil

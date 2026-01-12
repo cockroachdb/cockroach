@@ -51,7 +51,7 @@ func (p *planner) CommentOnConstraint(
 
 }
 
-func (n *commentOnConstraintNode) startExec(params runParams) error {
+func (n *commentOnConstraintNode) StartExec(params runParams) error {
 	constraintName := string(n.n.Constraint)
 	constraint := catalog.FindConstraintByName(n.tableDesc, constraintName)
 	if constraint == nil {
@@ -60,12 +60,12 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 
 	var err error
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(
-			params.ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType,
+		err = params.P.(*planner).deleteComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType,
 		)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(constraint.GetConstraintID()), catalogkeys.ConstraintCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -77,10 +77,10 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.GetID(),
 		&eventpb.CommentOnConstraint{
-			TableName:      params.p.ResolvedName(n.n.Table).FQString(),
+			TableName:      params.P.(*planner).ResolvedName(n.n.Table).FQString(),
 			ConstraintName: n.n.Constraint.String(),
 			Comment:        comment,
 			NullComment:    n.n.Comment == nil,

@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -32,7 +33,7 @@ type recursiveCTENode struct {
 
 	// forwarder allows propagating the ProducerMetadata towards the
 	// DistSQLReceiver.
-	forwarder metadataForwarder
+	forwarder plannode.MetadataForwarder
 
 	genIterationFn exec.RecursiveCTEIterationFn
 	// iterationCount tracks the number of invocations of genIterationFn.
@@ -66,17 +67,17 @@ type recursiveCTERun struct {
 	err error
 }
 
-func (n *recursiveCTENode) startExec(params runParams) error {
-	n.typs = planTypes(n.input)
-	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
+func (n *recursiveCTENode) StartExec(params runParams) error {
+	n.typs = planTypes(n.Source)
+	n.workingRows.Init(params.Ctx, n.typs, params.ExtendedEvalCtx.(*ExtendedEvalContext), "cte" /* opName */)
 	if n.deduplicate {
-		n.allRows.InitWithDedup(params.ctx, n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
+		n.allRows.InitWithDedup(params.Ctx, n.typs, params.ExtendedEvalCtx.(*ExtendedEvalContext), "cte-all" /* opName */)
 	}
 	return nil
 }
 
 func (n *recursiveCTENode) Next(params runParams) (bool, error) {
-	if err := params.p.cancelChecker.Check(); err != nil {
+	if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 		return false, err
 	}
 
@@ -85,18 +86,18 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		// at a time and returned them in the same fashion, but that would require
 		// special-case behavior).
 		for {
-			ok, err := n.input.Next(params)
+			ok, err := n.Source.Next(params)
 			if err != nil {
 				return false, err
 			}
 			if !ok {
 				break
 			}
-			if err := n.AddRow(params.ctx, n.input.Values()); err != nil {
+			if err := n.AddRow(params.Ctx, n.Source.Values()); err != nil {
 				return false, err
 			}
 		}
-		n.iterator = newRowContainerIterator(params.ctx, n.workingRows)
+		n.iterator = newRowContainerIterator(params.Ctx, n.workingRows)
 		n.initialDone = true
 	}
 
@@ -125,30 +126,30 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	n.iterator.Close()
 	n.iterator = nil
 	lastWorkingRows := n.workingRows
-	defer lastWorkingRows.Close(params.ctx)
+	defer lastWorkingRows.Close(params.Ctx)
 
 	n.workingRows = rowContainerHelper{}
-	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
+	n.workingRows.Init(params.Ctx, n.typs, params.ExtendedEvalCtx.(*ExtendedEvalContext), "cte" /* opName */)
 
 	// Set up a bufferNode that can be used as a reference for a scanBufferNode.
 	buf := &bufferNode{
 		// The plan here is only useful for planColumns, so it's ok to always use
 		// the initial plan.
-		singleInputPlanNode: singleInputPlanNode{n.input},
+		singleInputPlanNode: singleInputPlanNode{n.Source},
 		typs:                n.typs,
 		rows:                lastWorkingRows,
 		label:               n.label,
 	}
 
 	// Create a separate tracing span that will be used when planning and
-	// running this iteration. Note that we'll still use the "outer" params.ctx
+	// running this iteration. Note that we'll still use the "outer" params.Ctx
 	// when accessing rows in the container.
 	n.iterationCount++
 	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
-	planAndRunCtx, sp := tracing.ChildSpan(params.ctx, opName)
+	planAndRunCtx, sp := tracing.ChildSpan(params.Ctx, opName)
 	defer sp.Finish()
 
-	newPlan, err := n.genIterationFn(planAndRunCtx, newExecFactory(planAndRunCtx, params.p), buf)
+	newPlan, err := n.genIterationFn(planAndRunCtx, newExecFactory(planAndRunCtx, params.P.(*planner)), buf)
 	if err != nil {
 		return false, err
 	}
@@ -161,7 +162,7 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	}
 	forwardInnerQueryStats(n.forwarder, queryStats)
 
-	n.iterator = newRowContainerIterator(params.ctx, n.workingRows)
+	n.iterator = newRowContainerIterator(params.Ctx, n.workingRows)
 	n.currentRow, err = n.iterator.Next()
 	if err != nil {
 		return false, err
@@ -174,7 +175,7 @@ func (n *recursiveCTENode) Values() tree.Datums {
 }
 
 func (n *recursiveCTENode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 	if n.deduplicate {
 		n.allRows.Close(ctx)
 	}

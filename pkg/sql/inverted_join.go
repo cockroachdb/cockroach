@@ -53,7 +53,7 @@ type invertedJoinPlanningInfo struct {
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
-func (ij *invertedJoinNode) startExec(params runParams) error {
+func (ij *invertedJoinNode) StartExec(params runParams) error {
 	panic("invertedJoinNode cannot be run in local mode")
 }
 
@@ -66,5 +66,5 @@ func (ij *invertedJoinNode) Values() tree.Datums {
 }
 
 func (ij *invertedJoinNode) Close(ctx context.Context) {
-	ij.input.Close(ctx)
+	ij.Source.Close(ctx)
 }

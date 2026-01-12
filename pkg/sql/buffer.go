@@ -30,26 +30,26 @@ type bufferNode struct {
 	label string
 }
 
-func (n *bufferNode) startExec(params runParams) error {
-	n.typs = planTypes(n.input)
-	n.rows.Init(params.ctx, n.typs, params.extendedEvalCtx,
+func (n *bufferNode) StartExec(params runParams) error {
+	n.typs = planTypes(n.Source)
+	n.rows.Init(params.Ctx, n.typs, params.ExtendedEvalCtx.(*ExtendedEvalContext),
 		redact.SafeString(redact.Sprint(n.label).Redact()))
 	return nil
 }
 
 func (n *bufferNode) Next(params runParams) (bool, error) {
-	if err := params.p.cancelChecker.Check(); err != nil {
+	if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 		return false, err
 	}
-	ok, err := n.input.Next(params)
+	ok, err := n.Source.Next(params)
 	if err != nil {
 		return false, err
 	}
 	if !ok {
 		return false, nil
 	}
-	n.currentRow = n.input.Values()
-	if err = n.rows.AddRow(params.ctx, n.currentRow); err != nil {
+	n.currentRow = n.Source.Values()
+	if err = n.rows.AddRow(params.Ctx, n.currentRow); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -60,7 +60,7 @@ func (n *bufferNode) Values() tree.Datums {
 }
 
 func (n *bufferNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 	n.rows.Close(ctx)
 }
 
@@ -91,12 +91,12 @@ func (n *scanBufferNode) makeConcurrencySafe(mu *syncutil.Mutex) {
 	n.mu = mu
 }
 
-func (n *scanBufferNode) startExec(params runParams) error {
+func (n *scanBufferNode) StartExec(params runParams) error {
 	if n.mu != nil {
 		n.mu.Lock()
 		defer n.mu.Unlock()
 	}
-	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows)
+	n.iterator = newRowContainerIterator(params.Ctx, n.buffer.rows)
 	return nil
 }
 

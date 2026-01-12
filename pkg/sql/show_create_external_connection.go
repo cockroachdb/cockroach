@@ -31,18 +31,18 @@ func getConnectionNames(
 ) ([]string, error) {
 	var rows []tree.Datums
 	if connectionLabel != nil {
-		name, err := params.p.ExprEvaluator(externalConnectionOp).String(
-			params.ctx, connectionLabel,
+		name, err := params.P.(*planner).ExprEvaluator(externalConnectionOp).String(
+			params.Ctx, connectionLabel,
 		)
 		if err != nil {
 			return nil, err
 		}
 		rows = append(rows, tree.Datums{tree.NewDString(name)})
 	} else {
-		datums, _, err := params.p.InternalSQLTxn().QueryBufferedExWithCols(
-			params.ctx,
+		datums, _, err := params.P.(*planner).InternalSQLTxn().QueryBufferedExWithCols(
+			params.Ctx,
 			"load-external-connections",
-			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+			params.P.(*planner).Txn(), sessiondata.NodeUserSessionDataOverride,
 			"SELECT connection_name FROM system.external_connections")
 		if err != nil {
 			return nil, err
@@ -59,8 +59,8 @@ func getConnectionNames(
 			ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 				ConnectionName: name,
 			}
-			hasPriv, err := params.p.HasPrivilege(params.ctx, ecPrivilege,
-				privilege.USAGE, params.p.User())
+			hasPriv, err := params.P.(*planner).HasPrivilege(params.Ctx, ecPrivilege,
+				privilege.USAGE, params.P.(*planner).User())
 			if err != nil {
 				return nil, err
 			}
@@ -84,7 +84,7 @@ func loadExternalConnections(
 	var connections []externalconn.ExternalConnection
 	for _, name := range connectionNames {
 		connection, err := externalconn.LoadExternalConnection(
-			params.ctx, name, params.p.InternalSQLTxn(),
+			params.Ctx, name, params.P.(*planner).InternalSQLTxn(),
 		)
 		if err != nil {
 			return nil, err
@@ -145,7 +145,7 @@ func (p *planner) ShowCreateExternalConnection(
 		name:    name,
 		columns: showCreateExternalConnectionColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
+			params := runParams{Ctx: ctx, P: p, ExtendedEvalCtx: &p.extendedEvalCtx}
 			connectionNames, err := getConnectionNames(params, n.ConnectionLabel, false)
 			if err != nil {
 				return nil, err

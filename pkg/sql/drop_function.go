@@ -100,9 +100,9 @@ func (p *planner) DropFunction(ctx context.Context, n *tree.DropRoutine) (ret pl
 	return dropNode, nil
 }
 
-func (n *dropFunctionNode) startExec(params runParams) error {
+func (n *dropFunctionNode) StartExec(params runParams) error {
 	for _, fnMutable := range n.toDrop {
-		if err := params.p.dropFunctionImpl(params.ctx, fnMutable, n.dropBehavior); err != nil {
+		if err := params.P.(*planner).dropFunctionImpl(params.Ctx, fnMutable, n.dropBehavior); err != nil {
 			return err
 		}
 	}

@@ -1068,7 +1068,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) (retErr error) {
 // schema change jobs, but it's unnatural for the job API and we should rethink
 // it.
 func (sc *SchemaChanger) handlePermanentSchemaChangeError(
-	ctx context.Context, err error, evalCtx *extendedEvalContext,
+	ctx context.Context, err error, evalCtx *ExtendedEvalContext,
 ) error {
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
@@ -2914,7 +2914,7 @@ func (sc *SchemaChanger) txn(ctx context.Context, f func(context.Context, descs.
 	}, isql.WithPriority(admissionpb.BulkNormalPri))
 }
 
-// createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
+// createSchemaChangeEvalCtx creates an ExtendedEvalContext() to be used for backfills.
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlocklist.
@@ -2927,8 +2927,8 @@ func createSchemaChangeEvalCtx(
 	sd *sessiondata.SessionData,
 	ts hlc.Timestamp,
 	descriptors *descs.Collection,
-) extendedEvalContext {
-	evalCtx := extendedEvalContext{
+) ExtendedEvalContext {
+	evalCtx := ExtendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
 		// because it sets "enabled: false" and thus none of the
 		// other fields are used.
@@ -3137,7 +3137,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// not set zone configurations, so there's nothing to do for them.
 			if len(details.DroppedTables) == 0 {
 				zoneKeyPrefix := config.MakeZoneKeyPrefix(p.ExecCfg().Codec, dbID)
-				if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+				if p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled() {
 					log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 				}
 				// Delete the zone config entry for this database.
@@ -3224,7 +3224,7 @@ func (r schemaChangeResumer) OnFailOrCancel(
 	}
 	scErr := errors.DecodeError(ctx, *r.job.Payload().FinalResumeError)
 
-	if rollbackErr := sc.handlePermanentSchemaChangeError(ctx, scErr, p.ExtendedEvalContext()); rollbackErr != nil {
+	if rollbackErr := sc.handlePermanentSchemaChangeError(ctx, scErr, p.ExtendedEvalContext().(*ExtendedEvalContext)); rollbackErr != nil {
 		switch {
 		case errors.Is(rollbackErr, catalog.ErrDescriptorNotFound):
 			// If the table descriptor for the ID can't be found, we assume that

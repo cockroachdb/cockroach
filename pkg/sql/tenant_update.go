@@ -193,7 +193,7 @@ func (p *planner) setTenantService(
 		return err
 	}
 
-	if !p.extendedEvalCtx.TxnIsSingleStmt {
+	if !p.extendedEvalCtx.TxnIsSingleStmt() {
 		return errors.Errorf("ALTER VIRTUAL CLUSTER SERVICE cannot be used inside a multi-statement transaction")
 	}
 

@@ -34,7 +34,7 @@ type relocateRun struct {
 	lastRangeStartKey []byte
 }
 
-func (n *relocateNode) startExec(runParams) error {
+func (n *relocateNode) StartExec(runParams) error {
 	return nil
 }
 
@@ -42,17 +42,17 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
 	// TODO(radu): perform multiple relocations in parallel.
 
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.Source.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
 	// First column is the relocation string or target leaseholder; the rest of
 	// the columns indicate the table/index row.
-	data := n.input.Values()
+	data := n.Source.Values()
 
 	var relocationTargets []roachpb.ReplicationTarget
 	var leaseStoreID roachpb.StoreID
-	execCfg := params.ExecCfg()
+	execCfg := params.ExecCfg().(*ExecutorConfig)
 	if n.subjectReplicas == tree.RelocateLease {
 		if !data[0].ResolvedType().Equivalent(types.Int) {
 			return false, errors.Errorf(
@@ -109,7 +109,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 		Key:    rKey.AsRawKey(),
 		EndKey: rKey.PrefixEnd().AsRawKey(),
 	}
-	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.ctx, span)
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.Ctx, span)
 	if err != nil {
 		return false, err
 	}
@@ -122,11 +122,11 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	switch n.subjectReplicas {
 	case tree.RelocateLease:
-		err = execCfg.DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID)
+		err = execCfg.DB.AdminTransferLease(params.Ctx, rowKey, leaseStoreID)
 	case tree.RelocateNonVoters:
 		existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
 		err = execCfg.DB.AdminRelocateRange(
-			params.ctx,
+			params.Ctx,
 			rowKey,
 			existingVoters,
 			relocationTargets,
@@ -135,7 +135,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	case tree.RelocateVoters:
 		existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 		err = execCfg.DB.AdminRelocateRange(
-			params.ctx,
+			params.Ctx,
 			rowKey,
 			relocationTargets,
 			existingNonVoters,
@@ -159,5 +159,5 @@ func (n *relocateNode) Values() tree.Datums {
 }
 
 func (n *relocateNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

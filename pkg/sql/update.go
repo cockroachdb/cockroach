@@ -77,7 +77,7 @@ type updateRun struct {
 }
 
 func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+	if ots := params.ExtendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 
@@ -85,7 +85,7 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 		return
 	}
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		params.P.(*planner).Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))
@@ -94,13 +94,13 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 }
 
-func (u *updateNode) startExec(params runParams) error {
+func (u *updateNode) StartExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	u.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	u.run.init(params, u.columns)
 
-	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := u.run.tu.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -127,12 +127,12 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 	// Consume/accumulate the rows for this batch.
 	lastBatch = false
 	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
+		if err = params.P.(*planner).cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
 		// Advance one individual row.
-		if next, err := u.input.Next(params); !next {
+		if next, err := u.Source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -142,7 +142,7 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 
 		// Process the update for the current input row, potentially
 		// accumulating the result row for later.
-		if err = u.run.processSourceRow(params, u.input.Values()); err != nil {
+		if err = u.run.processSourceRow(params, u.Source.Values()); err != nil {
 			return false, err
 		}
 
@@ -157,19 +157,19 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err = u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = u.run.tu.flushAndStartNewBatch(params.Ctx); err != nil {
 				return false, err
 			}
 		}
 	}
 
 	if lastBatch {
-		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = u.run.tu.finalize(params.ctx); err != nil {
+		u.run.tu.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+		if err = u.run.tu.finalize(params.Ctx); err != nil {
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
+		params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
@@ -209,7 +209,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			params.Ctx, params.EvalContext(), &params.P.(*planner).semaCtx, params.P.(*planner).SessionData(),
 			r.tu.tableDesc(), r.checkOrds, sourceVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -246,7 +246,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		params.Ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	)
 	if err != nil {
 		return err
@@ -283,33 +283,33 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 		r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
 	}
 
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(params.Ctx, r.resultRowBuffer)
 }
 
 func (u *updateNode) Close(ctx context.Context) {
-	u.input.Close(ctx)
+	u.Source.Close(ctx)
 	u.run.close(ctx)
 	*u = updateNode{}
 	updateNodePool.Put(u)
 }
 
-func (u *updateNode) rowsWritten() int64 {
+func (u *updateNode) RowsWritten() int64 {
 	return u.run.rowsAffected()
 }
 
-func (u *updateNode) indexRowsWritten() int64 {
+func (u *updateNode) IndexRowsWritten() int64 {
 	return u.run.tu.indexRowsWritten
 }
 
-func (u *updateNode) indexBytesWritten() int64 {
+func (u *updateNode) IndexBytesWritten() int64 {
 	return u.run.tu.indexBytesWritten
 }
 
-func (u *updateNode) returnsRowsAffected() bool {
+func (u *updateNode) ReturnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
 
-func (u *updateNode) kvCPUTime() int64 {
+func (u *updateNode) KvCPUTime() int64 {
 	return u.run.tu.kvCPUTime
 }
 

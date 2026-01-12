@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -15,38 +15,38 @@ import (
 
 // A groupNode implements the planNode interface and handles the grouping logic.
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
-type groupNode struct {
+type GroupNode struct {
 	singleInputPlanNode
 
 	// The schema for this groupNode.
-	columns colinfo.ResultColumns
+	Columns colinfo.ResultColumns
 
 	// Indices of the group by columns in the source plan.
-	groupCols []exec.NodeColumnOrdinal
+	GroupCols []exec.NodeColumnOrdinal
 
 	// Set when we have an input ordering on (a subset of) grouping columns. Only
-	// column indices in groupCols can appear in this ordering.
-	groupColOrdering colinfo.ColumnOrdering
+	// column indices in GroupCols can appear in this ordering.
+	GroupColOrdering colinfo.ColumnOrdering
 
-	// isScalar is set for "scalar groupby", where we want a result
+	// IsScalar is set for "scalar groupby", where we want a result
 	// even if there are no input rows, e.g. SELECT MIN(x) FROM t.
-	isScalar bool
+	IsScalar bool
 
-	// funcs contains the information about all aggregate functions.
-	funcs []*aggregateFuncHolder
+	// Funcs contains the information about all aggregate functions.
+	Funcs []*aggregateFuncHolder
 
-	reqOrdering ReqOrdering
+	ReqOrdering ReqOrdering
 
-	// estimatedRowCount, when set, is the estimated number of rows that this
+	// EstimatedRowCount, when set, is the estimated number of rows that this
 	// groupNode will output.
-	estimatedRowCount uint64
+	EstimatedRowCount uint64
 
 	// estimatedInputRowCount, when set, is the estimated number of rows that
 	// this groupNode will read from its input.
-	estimatedInputRowCount uint64
+	EstimatedInputRowCount uint64
 }
 
-func (n *groupNode) startExec(params runParams) error {
+func (n *groupNode) StartExec(params runParams) error {
 	panic("groupNode cannot be run in local mode")
 }
 
@@ -59,27 +59,27 @@ func (n *groupNode) Values() tree.Datums {
 }
 
 func (n *groupNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
 type aggregateFuncHolder struct {
 	// Name of the aggregate function.
-	funcName string
+	FuncName string
 	// The argument of the function is a single value produced by the renderNode
 	// underneath. If the function has no argument (COUNT_ROWS), it is empty.
-	argRenderIdxs []exec.NodeColumnOrdinal
+	ArgRenderIdxs []exec.NodeColumnOrdinal
 	// If there is a filter, the result is a single value produced by the
 	// renderNode underneath. If there is no filter, it is set to
 	// tree.NoColumnIdx.
-	filterRenderIdx int
-	// arguments are constant expressions that can be optionally passed into an
+	FilterRenderIdx int
+	// Arguments are constant expressions that can be optionally passed into an
 	// aggregator.
-	arguments tree.Datums
-	// isDistinct indicates whether only distinct values are aggregated.
-	isDistinct bool
-	// distsqlBlocklist is set when this function cannot be evaluated in
+	Arguments tree.Datums
+	// IsDistinct indicates whether only distinct values are aggregated.
+	IsDistinct bool
+	// DistsqlBlocklist is set when this function cannot be evaluated in
 	// distributed fashion.
-	distsqlBlocklist bool
+	DistsqlBlocklist bool
 }
 
 // newAggregateFuncHolder creates an aggregateFuncHolder.
@@ -94,19 +94,37 @@ func newAggregateFuncHolder(
 	argRenderIdxs []exec.NodeColumnOrdinal,
 	arguments tree.Datums,
 	isDistinct bool,
-	distsqlBlocklist bool,
+	DistsqlBlocklist bool,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		funcName:         funcName,
-		argRenderIdxs:    argRenderIdxs,
-		filterRenderIdx:  tree.NoColumnIdx,
-		arguments:        arguments,
-		isDistinct:       isDistinct,
-		distsqlBlocklist: distsqlBlocklist,
+		FuncName:         funcName,
+		ArgRenderIdxs:    argRenderIdxs,
+		FilterRenderIdx:  tree.NoColumnIdx,
+		Arguments:        arguments,
+		IsDistinct:       isDistinct,
+		DistsqlBlocklist: DistsqlBlocklist,
 	}
 	return res
 }
 
-func (a *aggregateFuncHolder) hasFilter() bool {
-	return a.filterRenderIdx != tree.NoColumnIdx
+func (a *aggregateFuncHolder) HasFilter() bool {
+	return a.FilterRenderIdx != tree.NoColumnIdx
 }
+
+
+
+// Exported aliases for use outside the package
+type AggregateFuncHolder = aggregateFuncHolder
+
+func NewAggregateFuncHolder(
+	funcName string,
+	argRenderIdxs []exec.NodeColumnOrdinal,
+	arguments tree.Datums,
+	isDistinct bool,
+	DistsqlBlocklist bool,
+) *aggregateFuncHolder {
+	return newAggregateFuncHolder(funcName, argRenderIdxs, arguments, isDistinct, DistsqlBlocklist)
+}
+
+// Lowercase alias
+type groupNode = GroupNode

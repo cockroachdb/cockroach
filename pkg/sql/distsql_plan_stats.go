@@ -783,7 +783,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
-	extEvalCtx *extendedEvalContext,
+	extEvalCtx *ExtendedEvalContext,
 	planCtx *PlanningCtx,
 	semaCtx *tree.SemaContext,
 	txn *kv.Txn,

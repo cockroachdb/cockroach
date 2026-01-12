@@ -1425,7 +1425,7 @@ func createImportingDescriptors(
 							txn,
 							p.ExecCfg(),
 							!details.SkipLocalitiesCheck,
-							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+							p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing.KVTracingEnabled(),
 						); err != nil {
 							return err
 						}
@@ -1560,7 +1560,7 @@ func createImportingDescriptors(
 							ctx,
 							txn,
 							p.ExecCfg(),
-							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+							p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing.KVTracingEnabled(),
 							regionConfig,
 							mutTable,
 							sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -2093,7 +2093,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		log.Dev.Infof(ctx, "finished restoring the validate data bundle")
 	}
 
-	_, sqlInstanceIDs, err := p.DistSQLPlanner().SetupAllNodesPlanning(ctx, p.ExtendedEvalContext(), p.ExecCfg())
+	_, sqlInstanceIDs, err := p.DistSQLPlanner().SetupAllNodesPlanning(ctx, p.ExtendedEvalContext().(*sql.ExtendedEvalContext), p.ExecCfg())
 	if err != nil {
 		return err
 	}

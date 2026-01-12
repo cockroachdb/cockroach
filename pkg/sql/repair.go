@@ -528,7 +528,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		b := p.txn.NewBatch()
 		entry := repairNameEntry{NameInfo: nameInfo, id: descID}
 		if err := p.Descriptors().UpsertNamespaceEntryToBatch(
-			ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), &entry, b,
+			ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), &entry, b,
 		); err != nil {
 			return errors.Wrap(err, "failed to upsert entry")
 		}

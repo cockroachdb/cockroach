@@ -163,7 +163,7 @@ func alterReplicationJobHook(
 			"only the system tenant can alter tenant")
 	}
 
-	evalCtx := &p.ExtendedEvalContext().Context
+	evalCtx := &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context
 	var cutoverTime hlc.Timestamp
 	if alterTenantStmt.Cutover != nil {
 		if !alterTenantStmt.Cutover.Latest {
@@ -400,7 +400,7 @@ func alterTenantRestartReplication(
 		return err
 	}
 
-	dstID := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().ClusterID, dstTenantID)
+	dstID := fmt.Sprintf("%s:%s", p.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID, dstTenantID)
 	resumeTS, err := pickReplicationResume(ctx, srcID, srcReplicatedFrom, srcActivatedAt, dstID, tenInfo.PreviousSourceTenant)
 	if err != nil {
 		return err

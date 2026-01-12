@@ -158,7 +158,7 @@ func maybeShowCursorAgeWarning(
 	if !opts.HasStartCursor() || st == changefeedbase.OnlyInitialScan {
 		return nil
 	}
-	statementTS := p.ExtendedEvalContext().GetStmtTimestamp().UnixNano()
+	statementTS := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp.UnixNano()
 	cursorTS, err := evalCursor(ctx, p, hlc.Timestamp{WallTime: statementTS}, opts.GetCursor())
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func changefeedPlanHook(
 			// changes on the relevant descriptors (including, potentially,
 			// system.role_membership, if the privileges to access the table were
 			// granted via an inherited role).
-			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
+			p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
 			shouldMigrate := log.ShouldMigrateEvent(p.ExecCfg().SV())
@@ -524,7 +524,7 @@ func coreChangefeed(
 	targets changefeedbase.Targets,
 ) error {
 	localState := &cachedState{progress: progress}
-	p.ExtendedEvalContext().ChangefeedState = localState
+	p.ExtendedEvalContext().(*sql.ExtendedEvalContext).ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
@@ -617,7 +617,7 @@ func createChangefeedJobRecord(
 	}
 
 	statementTime := hlc.Timestamp{
-		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+		WallTime: p.ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp.UnixNano(),
 	}
 	var initialHighWater hlc.Timestamp
 
@@ -648,7 +648,7 @@ func createChangefeedJobRecord(
 
 	if opts.HasEndTime() {
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(opts.GetEndTime())}
-		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context, asof.OptionAllowFutureTimestamp)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context, asof.OptionAllowFutureTimestamp)
 		if err != nil {
 			return nil, changefeedbase.Targets{}, err
 		}
@@ -1630,7 +1630,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	progress := b.job.Progress()
 	description := b.job.Payload().Description
 
-	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
+	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID); err != nil {
 		return err
 	}
 
@@ -1790,7 +1790,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	// the up-to-date checkpoint and node health information in case
 	// changefeed encounters transient error.
 	localState := &cachedState{progress: initialProgress}
-	jobExec.ExtendedEvalContext().ChangefeedState = localState
+	jobExec.ExtendedEvalContext().(*sql.ExtendedEvalContext).ChangefeedState = localState
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
 	resolvedDest, err := resolveDest(ctx, execCfg, details.SinkURI)

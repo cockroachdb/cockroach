@@ -135,7 +135,7 @@ func (n *scanNode) IndexedVarResolvedType(idx int) *types.T {
 	return n.columns[idx].Typ
 }
 
-func (n *scanNode) startExec(params runParams) error {
+func (n *scanNode) StartExec(params runParams) error {
 	panic("scanNode can't be run in local mode")
 }
 

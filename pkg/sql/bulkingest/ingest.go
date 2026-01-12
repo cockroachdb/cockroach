@@ -48,11 +48,11 @@ func IngestFiles(
 		execCtx.ExecCfg().RangeDescriptorCache, /* rangeCache */
 		nil,                                    /* txn - the flow does not read or write the database */
 		nil,                                    /* clockUpdater */
-		execCtx.ExtendedEvalContext().Tracing,
+		execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 	)
 	defer recv.Release()
 
-	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+	evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 	execCtx.DistSQLPlanner().Run(
 		ctx, planCtx, nil, plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
 	)

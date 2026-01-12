@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 // filterNode implements a filtering stage. It is intended to be used
 // during plan optimizations in order to avoid instantiating a fully
 // blown selectTopNode/renderNode pair.
-type filterNode struct {
+type FilterNode struct {
 	singleInputPlanNode
-	columns     colinfo.ResultColumns
-	filter      tree.TypedExpr
-	reqOrdering ReqOrdering
+	Columns     colinfo.ResultColumns
+	Filter      tree.TypedExpr
+	ReqOrdering ReqOrdering
 }
 
 // filterNode implements eval.IndexedVarContainer
@@ -29,15 +29,15 @@ var _ eval.IndexedVarContainer = &filterNode{}
 
 // IndexedVarEval implements the eval.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarEval(idx int) (tree.Datum, error) {
-	return f.input.Values()[idx], nil
+	return f.Source.Values()[idx], nil
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (f *filterNode) IndexedVarResolvedType(idx int) *types.T {
-	return f.columns[idx].Typ
+	return f.Columns[idx].Typ
 }
 
-func (f *filterNode) startExec(runParams) error {
+func (f *filterNode) StartExec(runParams) error {
 	return nil
 }
 
@@ -50,4 +50,9 @@ func (f *filterNode) Values() tree.Datums {
 	panic("filterNode cannot be run in local mode")
 }
 
-func (f *filterNode) Close(ctx context.Context) { f.input.Close(ctx) }
+func (f *filterNode) Close(ctx context.Context) { f.Source.Close(ctx) }
+
+
+
+// Lowercase alias
+type filterNode = FilterNode

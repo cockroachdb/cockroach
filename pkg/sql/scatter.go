@@ -131,12 +131,12 @@ type scatterRun struct {
 	ranges   []roachpb.Span
 }
 
-func (n *scatterNode) startExec(params runParams) error {
+func (n *scatterNode) StartExec(params runParams) error {
 	req := &kvpb.AdminScatterRequest{
 		RequestHeader:   kvpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 		RandomizeLeases: true,
 	}
-	res, pErr := kv.SendWrapped(params.ctx, params.ExecCfg().DB.NonTransactionalSender(), req)
+	res, pErr := kv.SendWrapped(params.Ctx, params.ExecCfg().(*ExecutorConfig).DB.NonTransactionalSender(), req)
 	if pErr != nil {
 		return pErr.GoError()
 	}

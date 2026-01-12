@@ -61,7 +61,7 @@ func newInspectRun(
 	var run inspectRun
 
 	avoidLeased := false
-	if aost := p.ExtendedEvalContext().AsOfSystemTime; aost != nil {
+	if aost := p.ExtendedEvalContext().GetAsOfSystemTime(); aost != nil {
 		avoidLeased = true
 	}
 
@@ -171,7 +171,7 @@ func inspectPlanHook(
 		return nil, nil, false, nil
 	}
 
-	if !p.ExtendedEvalContext().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+	if !p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Settings.Version.IsActive(ctx, clusterversion.V25_4) {
 		return nil, nil, false, pgerror.Newf(pgcode.FeatureNotSupported, "INSPECT requires the cluster to be upgraded to v25.4")
 	}
 
@@ -192,7 +192,7 @@ func inspectPlanHook(
 
 	detached := inspectStmt.Options.IsDetached()
 
-	if !detached && !p.ExtendedEvalContext().TxnIsSingleStmt {
+	if !detached && !p.ExtendedEvalContext().TxnIsSingleStmt() {
 		return nil, nil, false, pgerror.Newf(pgcode.InvalidTransactionState,
 			"cannot run within a multi-statement transaction")
 	}
@@ -202,7 +202,7 @@ func inspectPlanHook(
 		return nil, nil, false, err
 	}
 
-	if detached && !p.ExtendedEvalContext().TxnImplicit {
+	if detached && !p.ExtendedEvalContext().(*sql.ExtendedEvalContext).TxnImplicit {
 		fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
 			jr := makeInspectJobRecord(tree.AsString(stmt), jobID, run.checks, run.asOfTimestamp)

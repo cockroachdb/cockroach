@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/planbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -16,179 +17,57 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
 )
 
-// runParams is a struct containing all parameters passed to planNode.Next() and
-// startPlan.
-type runParams struct {
-	// context.Context for this method call.
-	ctx context.Context
+// Type alias for runParams - the actual definition is in planbase to break circular dependencies
+type runParams = planbase.RunParams
 
-	// extendedEvalCtx groups fields useful for this execution.
-	// Used during local execution and distsql physical planning.
-	extendedEvalCtx *extendedEvalContext
+// Type alias for planNode - the actual definition is in plannode package
+type planNode = plannode.PlanNode
 
-	// planner associated with this execution. Only used during local
-	// execution.
-	p *planner
-}
+// Type alias for helper structs
+type zeroInputPlanNode = plannode.ZeroInputPlanNode
+type singleInputPlanNode = plannode.SingleInputPlanNode
 
-// EvalContext() gives convenient access to the runParam's EvalContext().
-func (r *runParams) EvalContext() *eval.Context {
-	return &r.extendedEvalCtx.Context
-}
+// Type alias for related interfaces
+type mutationPlanNode = plannode.MutationPlanNode
+type planNodeReadingOwnWrites = plannode.PlanNodeReadingOwnWrites
 
-// SessionData gives convenient access to the runParam's SessionData.
-func (r *runParams) SessionData() *sessiondata.SessionData {
-	return r.extendedEvalCtx.SessionData()
-}
+// Type aliases for node types that were successfully moved to plannode
+type renderNode = plannode.RenderNode
+type distinctNode = plannode.DistinctNode
+type filterNode = plannode.FilterNode
+type limitNode = plannode.LimitNode
+type sortNode = plannode.SortNode
+type groupNode = plannode.GroupNode
+type windowNode = plannode.WindowNode
+type topKNode = plannode.TopKNode
+type ordinalityNode = plannode.OrdinalityNode
+type unaryNode = plannode.UnaryNode
+type zeroNode = plannode.ZeroNode
+type errorIfRowsNode = plannode.ErrorIfRowsNode
+type invertedFilterNode = plannode.InvertedFilterNode
+type projectSetNode = plannode.ProjectSetNode
+type max1RowNode = plannode.Max1RowNode
+type rowSourceToPlanNode = plannode.RowSourceToPlanNode
+type vectorSearchNode = plannode.VectorSearchNode
+type vectorMutationSearchNode = plannode.VectorMutationSearchNode
+type invertedFilterPlanningInfo = plannode.InvertedFilterPlanningInfo
+type vectorSearchPlanningInfo = plannode.VectorSearchPlanningInfo
+type vectorMutationSearchPlanningInfo = plannode.VectorMutationSearchPlanningInfo
+type projectSetPlanningInfo = plannode.ProjectSetPlanningInfo
+type windowPlanningInfo = plannode.WindowPlanningInfo
+type windowFuncHolder = plannode.WindowFuncHolder
+type aggregateFuncHolder = plannode.AggregateFuncHolder
 
-// ExecCfg gives convenient access to the runParam's ExecutorConfig.
-func (r *runParams) ExecCfg() *ExecutorConfig {
-	return r.extendedEvalCtx.ExecCfg
-}
+// Function aliases for constructor functions
+var newZeroNode = plannode.NewZeroNode
+var newAggregateFuncHolder = plannode.NewAggregateFuncHolder
 
-// Ann is a shortcut for the Annotations from the eval context.
-func (r *runParams) Ann() *tree.Annotations {
-	return r.extendedEvalCtx.Context.Annotations
-}
-
-// planNode defines the interface for executing a query or portion of a query.
-//
-// The following methods apply to planNodes and contain special cases
-// for each type; they thus need to be extended when adding/removing
-// planNode instances:
-// - planVisitor.visit()           (walk.go)
-// - planNodeNames                 (walk.go)
-// - setLimitHint()                (limit_hint.go)
-// - planColumns()                 (plan_columns.go)
-type planNode interface {
-	startExec(params runParams) error
-
-	// Next performs one unit of work, returning false if an error is
-	// encountered or if there is no more work to do. For statements
-	// that return a result set, the Values() method will return one row
-	// of results each time that Next() returns true.
-	//
-	// Available after startPlan(). It is illegal to call Next() after it returns
-	// false.
-	Next(params runParams) (bool, error)
-
-	// Values returns the values at the current row. The result is only valid
-	// until the next call to Next().
-	//
-	// Available after Next().
-	Values() tree.Datums
-
-	// Close terminates the planNode execution and releases its resources.
-	// This method should be called if the node has been used in any way (any
-	// methods on it have been called) after it was constructed. Note that this
-	// doesn't imply that startExec() has been necessarily called.
-	//
-	// This method must not be called during execution - the planNode
-	// tree must remain "live" and readable via walk() even after
-	// execution completes.
-	//
-	// The node must not be used again after this method is called. Some nodes put
-	// themselves back into memory pools on Close.
-	Close(ctx context.Context)
-
-	InputCount() int
-	Input(i int) (planNode, error)
-	SetInput(i int, p planNode) error
-}
-
-// zeroInputPlanNode is embedded in planNode implementations that have no input
-// planNode. It implements the InputCount, Input, and SetInput methods of
-// planNode.
-type zeroInputPlanNode struct{}
-
-func (zeroInputPlanNode) InputCount() int { return 0 }
-
-func (zeroInputPlanNode) Input(i int) (planNode, error) {
-	return nil, errors.AssertionFailedf("node has no inputs")
-}
-
-func (zeroInputPlanNode) SetInput(i int, p planNode) error {
-	return errors.AssertionFailedf("node has no inputs")
-}
-
-// singleInputPlanNode is embedded in planNode implementations that have a
-// single input planNode. It implements the InputCount, Input, and SetInput
-// methods of planNode.
-type singleInputPlanNode struct {
-	input planNode
-}
-
-func (n *singleInputPlanNode) InputCount() int { return 1 }
-
-func (n *singleInputPlanNode) Input(i int) (planNode, error) {
-	if i == 0 {
-		return n.input, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
-	if i == 0 {
-		n.input = p
-		return nil
-	}
-	return errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-// mutationPlanNode is a specification of planNode for mutations operations
-// (those that insert/update/detele/etc rows).
-type mutationPlanNode interface {
-	planNode
-
-	// rowsWritten returns the number of table rows modified by this planNode.
-	// It does not include rows written to secondary indexes. It should only be
-	// called once Next returns false.
-	rowsWritten() int64
-
-	// indexRowsWritten returns the number of primary and secondary index rows
-	// modified by this planNode. It is always >= rowsWritten. It should only be
-	// called once Next returns false.
-	indexRowsWritten() int64
-
-	// indexBytesWritten returns the number of primary and secondary index bytes
-	// modified by this planNode. It should only be called once Next returns
-	// false.
-	indexBytesWritten() int64
-
-	// returnsRowsAffected indicates that the planNode returns the number of
-	// rows affected by the mutation, rather than the rows themselves.
-	returnsRowsAffected() bool
-
-	// kvCPUTime returns the cumulative CPU time (in nanoseconds) that KV reported
-	// in BatchResponse headers during the execution of this mutation. It should
-	// only be called once Next returns false.
-	kvCPUTime() int64
-}
-
-// planNodeReadingOwnWrites can be implemented by planNodes which do
-// not use the standard SQL principle of reading at the snapshot
-// established at the start of the transaction. It requests that
-// the top-level (shared) `startExec` function disable stepping
-// mode for the duration of the node's `startExec()` call.
-//
-// This done e.g. for most DDL statements that perform multiple KV
-// operations on descriptors, expecting to read their own writes.
-//
-// Note that only `startExec()` runs with the modified stepping mode,
-// not the `Next()` methods. This interface (and the idea of
-// temporarily disabling stepping mode) is neither sensical nor
-// applicable to planNodes whose execution is interleaved with
-// that of others.
-type planNodeReadingOwnWrites interface {
-	// ReadingOwnWrites is a marker interface.
-	ReadingOwnWrites()
-}
+// Old definitions removed - now using type aliases to plannode package types above
 
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterIndexVisibleNode{}
@@ -523,39 +402,39 @@ func (p *planTop) savePlanInfo() {
 	)
 }
 
-// startExec calls startExec() on each planNode using a depth-first, post-order
+// startExec calls StartExec() on each planNode using a depth-first, post-order
 // traversal. The subqueries, if any, are also started.
 //
 // If the planNode also implements the nodeReadingOwnWrites interface,
 // the txn is temporarily reconfigured to use read-your-own-writes for
 // the duration of the call to startExec. This is used e.g. by
 // DDL statements.
-func startExec(params runParams, plan planNode) error {
+func StartExec(params runParams, plan planNode) error {
 	switch plan.(type) {
 	case *explainVecNode, *explainDDLNode:
 		// Do not recurse: we're not starting the plan if we just show its
 		// structure with EXPLAIN.
 	case *showTraceNode:
 		// showTrace needs to override the params struct, and does so in its
-		// startExec() method.
+		// StartExec() method.
 	default:
 		// Start children nodes first. This ensures that subqueries and
-		// sub-plans are started before startExec() is called.
+		// sub-plans are started before StartExec() is called.
 		for i, n := 0, plan.InputCount(); i < n; i++ {
 			child, err := plan.Input(i)
 			if err != nil {
 				return err
 			}
-			if err := startExec(params, child); err != nil {
+			if err := StartExec(params, child); err != nil {
 				return err
 			}
 		}
 	}
 	if _, ok := plan.(planNodeReadingOwnWrites); ok {
-		prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingDisabled)
-		defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
+		prevMode := params.P.(*planner).Txn().ConfigureStepping(params.Ctx, kv.SteppingDisabled)
+		defer func() { _ = params.P.(*planner).Txn().ConfigureStepping(params.Ctx, prevMode) }()
 	}
-	return plan.startExec(params)
+	return plan.StartExec(params)
 }
 
 func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planNode, error) {

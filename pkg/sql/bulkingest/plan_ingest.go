@@ -26,7 +26,7 @@ func planIngest(
 	}
 
 	planCtx, sqlInstanceIDs, err := execCtx.DistSQLPlanner().SetupAllNodesPlanning(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+		ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCtx.ExecCfg(),
 	)
 	if err != nil {
 		return nil, nil, err

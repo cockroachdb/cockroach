@@ -69,25 +69,25 @@ func (p *planner) AlterDatabaseOwner(
 	return &alterDatabaseOwnerNode{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
+func (n *alterDatabaseOwnerNode) StartExec(params runParams) error {
 	newOwner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.Owner,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.Owner,
 	)
 	if err != nil {
 		return err
 	}
 	oldOwner := n.desc.GetPrivileges().Owner()
 
-	if err := params.p.checkCanAlterToNewOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.P.(*planner).checkCanAlterToNewOwner(params.Ctx, n.desc, newOwner); err != nil {
 		return err
 	}
 
 	// To alter the owner, the user also has to have CREATEDB privilege.
-	if err := params.p.CheckGlobalPrivilegeOrRoleOption(params.ctx, privilege.CREATEDB); err != nil {
+	if err := params.P.(*planner).CheckGlobalPrivilegeOrRoleOption(params.Ctx, privilege.CREATEDB); err != nil {
 		return err
 	}
 
-	if err := params.p.setNewDatabaseOwner(params.ctx, n.desc, newOwner); err != nil {
+	if err := params.P.(*planner).setNewDatabaseOwner(params.Ctx, n.desc, newOwner); err != nil {
 		return err
 	}
 
@@ -96,8 +96,8 @@ func (n *alterDatabaseOwnerNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -212,9 +212,9 @@ func (p *planner) validateExistingZoneCfg(ctx context.Context, id descpb.ID) err
 	return zc.ZoneConfigProto().Validate()
 }
 
-func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
-	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
-		params.ctx,
+func (n *alterDatabaseAddRegionNode) StartExec(params runParams) error {
+	if err := params.P.(*planner).validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		params.Ctx,
 		n.desc,
 	); err != nil {
 		return err
@@ -222,8 +222,8 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 
 	telemetry.Inc(sqltelemetry.AlterDatabaseAddRegionCounter)
 
-	if err := params.p.checkRegionIsCurrentlyActive(
-		params.ctx,
+	if err := params.P.(*planner).checkRegionIsCurrentlyActive(
+		params.Ctx,
 		catpb.RegionName(n.n.Region),
 		n.desc.ID == keys.SystemDatabaseID,
 	); err != nil {
@@ -233,18 +233,18 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// Validate if the existing zone config of this descriptor is sane,
 	// since otherwise, any modifications for multi-region could fail during
 	// the job phase.
-	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+	if err := params.P.(*planner).validateExistingZoneCfg(params.Ctx, n.desc.ID); err != nil {
 		return err
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
 
 	placement, err := GetMultiRegionEnumAddValuePlacementCCL(
-		params.p.ExecCfg(),
+		params.P.(*planner).ExecCfg(),
 		typeDesc,
 		n.n.Region,
 	)
@@ -255,16 +255,16 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// Add the new region value to the enum. This function adds the value to the enum and
 	// persists the new value to the supplied type descriptor.
 	jobDesc := fmt.Sprintf("Adding new region value %q to %q", tree.EnumValue(n.n.Region), tree.RegionEnum)
-	if err := params.p.addEnumValue(
-		params.ctx,
+	if err := params.P.(*planner).addEnumValue(
+		params.Ctx,
 		typeDesc,
 		&placement,
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
 			if n.n.IfNotExists {
-				params.p.BufferClientNotice(
-					params.ctx,
+				params.P.(*planner).BufferClientNotice(
+					params.Ctx,
 					pgnotice.Newf("region %q already exists; skipping", n.n.Region),
 				)
 				return nil
@@ -281,26 +281,26 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 	// Once more than one region exists on the system database, we will
 	// force it into region survival mode.
 	if n.desc.GetID() == keys.SystemDatabaseID {
-		if err := params.p.setSystemDatabaseSurvival(params.ctx); err != nil {
+		if err := params.P.(*planner).setSystemDatabaseSurvival(params.Ctx); err != nil {
 			return err
 		}
 
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("Rolling restart is recommended after adding a region to system database in order to propagate region information."),
 		)
 	}
 
 	// Validate the type descriptor after the changes. We have to do this explicitly here, because
 	// we're using an internal call to addEnumValue above which doesn't perform validation.
-	if err := validateDescriptor(params.ctx, params.p, typeDesc); err != nil {
+	if err := validateDescriptor(params.Ctx, params.P.(*planner), typeDesc); err != nil {
 		return err
 	}
 
 	// Log Alter Database Add Region event. This is an auditable log event and is
 	// recorded in the same transaction as the database descriptor, type
 	// descriptor, and zone configuration updates.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabaseAddRegion{
 			DatabaseName: n.desc.GetName(),
@@ -768,7 +768,7 @@ func removeLocalityConfigFromAllTablesInDB(
 	return p.Txn().Run(ctx, b)
 }
 
-func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
+func (n *alterDatabaseDropRegionNode) StartExec(params runParams) error {
 	if n.n == nil {
 		return nil
 	}
@@ -776,11 +776,11 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 	// Validate if the existing zone config of this descriptor is sane,
 	// since otherwise, any modifications for multi-region could fail during
 	// the job phase.
-	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+	if err := params.P.(*planner).validateExistingZoneCfg(params.Ctx, n.desc.ID); err != nil {
 		return err
 	}
 
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -796,8 +796,8 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 
 	if len(physicalRegionRep) == 0 {
 		if n.n.IfExists {
-			params.p.BufferClientNotice(
-				params.ctx,
+			params.P.(*planner).BufferClientNotice(
+				params.Ctx,
 				pgnotice.Newf("region %q is not defined on the database; skipping", n.n.Region),
 			)
 			return nil
@@ -814,20 +814,20 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 	// in that region. Then we must clean out all the rows from system tables that
 	// reference the region.
 	if n.desc.GetID() == keys.SystemDatabaseID {
-		if err := params.p.checkCanDropSystemDatabaseRegion(params.ctx, catpb.RegionName(n.n.Region)); err != nil {
+		if err := params.P.(*planner).checkCanDropSystemDatabaseRegion(params.Ctx, catpb.RegionName(n.n.Region)); err != nil {
 			return err
 		}
 
 		// For the region_liveness table, we can just safely remove the reference
 		// (if any) of the dropping region from the table.
-		if _, err := params.p.ExecEx(params.ctx, "remove-region-liveness-ref",
+		if _, err := params.P.(*planner).ExecEx(params.Ctx, "remove-region-liveness-ref",
 			sessiondata.NodeUserSessionDataOverride, `DELETE FROM system.region_liveness
 			        WHERE crdb_region = $1`, n.n.Region); err != nil {
 			return err
 		}
 
 		if err := regionliveness.CleanupSystemTableForRegion(
-			params.ctx, params.p.execCfg.Codec, string(physicalRegionRep), params.p.txn,
+			params.Ctx, params.P.(*planner).execCfg.Codec, string(physicalRegionRep), params.P.(*planner).txn,
 		); err != nil {
 			return err
 		}
@@ -837,24 +837,24 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.AlterDatabaseDropPrimaryRegionCounter)
 		for _, desc := range n.toDrop {
 			jobDesc := fmt.Sprintf("drop multi-region enum with ID %d", desc.ID)
-			err := params.p.dropTypeImpl(params.ctx, desc, jobDesc, true /* queueJob */)
+			err := params.P.(*planner).dropTypeImpl(params.Ctx, desc, jobDesc, true /* queueJob */)
 			if err != nil {
 				return err
 			}
 		}
 
-		err = removeLocalityConfigFromAllTablesInDB(params.ctx, params.p, n.desc)
+		err = removeLocalityConfigFromAllTablesInDB(params.Ctx, params.P.(*planner), n.desc)
 		if err != nil {
 			return errors.Wrap(err, "error removing locality configs from tables")
 		}
 
 		n.desc.UnsetMultiRegionConfig()
 		if err := discardMultiRegionFieldsForDatabaseZoneConfig(
-			params.ctx,
+			params.Ctx,
 			n.desc.ID,
-			params.p.InternalSQLTxn(),
-			params.p.execCfg,
-			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+			params.P.(*planner).InternalSQLTxn(),
+			params.P.(*planner).execCfg,
+			params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 		); err != nil {
 			return err
 		}
@@ -866,13 +866,13 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		// TABLE table is explicitly homed in that region or a row in a REGIONAL BY
 		// ROW table is homed in that region. The type schema changer is responsible
 		// for all the requisite validation.
-		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
+		if err := params.P.(*planner).dropEnumValue(params.Ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
 			return err
 		}
 	}
 
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -881,7 +881,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 
 	// Log Alter Database Drop Region event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabaseDropRegion{
 			DatabaseName: n.desc.GetName(),
@@ -929,7 +929,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	telemetry.Inc(sqltelemetry.SwitchPrimaryRegionCounter)
 	// First check if the new primary region has been added to the database. If not, return
 	// an error, as it must be added before it can be used as a primary region.
-	prevRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	prevRegionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors())
 	if err != nil {
 		return err
 	}
@@ -959,7 +959,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -969,8 +969,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	// To update the primary region we need to modify the database descriptor,
 	// update the multi-region enum, and write a new zone configuration.
 	n.desc.RegionConfig.PrimaryRegion = catpb.RegionName(n.n.PrimaryRegion)
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -979,12 +979,12 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 
 	// Update the primary region in the type descriptor, and write it back out.
 	typeDesc.RegionConfig.PrimaryRegion = catpb.RegionName(n.n.PrimaryRegion)
-	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+	if err := params.P.(*planner).writeTypeDesc(params.Ctx, typeDesc); err != nil {
 		return err
 	}
 
 	updatedRegionConfig, err := SynthesizeRegionConfig(
-		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+		params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors(),
 	)
 	if err != nil {
 		return err
@@ -992,17 +992,17 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 
 	// Validate the final zone config at the end of the transaction, since
 	// we will not be validating localities right now.
-	*params.extendedEvalCtx.validateDbZoneConfig = true
+	*params.ExtendedEvalCtx.ValidateDbZoneConfig() = true
 
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
+		params.Ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).execCfg,
 		false, /*validateLocalities*/
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1022,7 +1022,7 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 			oldSuperRegionMsg = fmt.Sprintf("\nthe old primary region %s is a member of super region %s", oldPrimaryRegion, superRegionOfOldPrimaryRegion)
 		}
 
-		if !params.p.SessionData().OverrideAlterPrimaryRegionInSuperRegion {
+		if !params.P.(*planner).SessionData().OverrideAlterPrimaryRegionInSuperRegion {
 			return errors.WithTelemetry(
 				errors.WithHint(errors.Newf("moving the primary region into or "+
 					"out of a super region could have undesirable data placement "+
@@ -1034,11 +1034,11 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	}
 
 	if isNewPrimaryRegionMemberOfASuperRegion {
-		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are now part of the super region %s", superRegionOfNewPrimaryRegion))
+		params.P.(*planner).BufferClientNotice(params.Ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are now part of the super region %s", superRegionOfNewPrimaryRegion))
 	}
 
 	if isOldPrimaryRegionMemberOfASuperRegion {
-		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are no longer part of the super region %s", superRegionOfOldPrimaryRegion))
+		params.P.(*planner).BufferClientNotice(params.Ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are no longer part of the super region %s", superRegionOfOldPrimaryRegion))
 	}
 
 	// If the old or new primary region is a member of a super region, we also
@@ -1054,8 +1054,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	// If there are super regions defined on the database, we may have to update
 	// the zone config for regional tables.
 	if updatedRegionConfig.IsPlacementRestricted() || isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
-		if err := params.p.refreshZoneConfigsForTables(
-			params.ctx,
+		if err := params.P.(*planner).refreshZoneConfigsForTables(
+			params.Ctx,
 			n.desc,
 			opts,
 		); err != nil {
@@ -1154,8 +1154,8 @@ func checkCanConvertTableToMultiRegion(
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
 	telemetry.Inc(sqltelemetry.SetInitialPrimaryRegionCounter)
 	// Create the region config structure to be added to the database descriptor.
-	regionConfig, err := params.p.maybeInitializeMultiRegionMetadata(
-		params.ctx,
+	regionConfig, err := params.P.(*planner).maybeInitializeMultiRegionMetadata(
+		params.Ctx,
 		tree.SurvivalGoalDefault,
 		n.n.PrimaryRegion,
 		[]tree.Name{n.n.PrimaryRegion},
@@ -1167,8 +1167,8 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	}
 
 	// Check we are writing valid zone configurations.
-	if err := params.p.validateAllMultiRegionZoneConfigsInDatabase(
-		params.ctx,
+	if err := params.P.(*planner).validateAllMultiRegionZoneConfigsInDatabase(
+		params.Ctx,
 		n.desc,
 		&zoneConfigForMultiRegionValidatorSetInitialRegion{},
 	); err != nil {
@@ -1181,8 +1181,8 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	}
 
 	if err := addDefaultLocalityConfigToAllTables(
-		params.ctx,
-		params.p,
+		params.Ctx,
+		params.P.(*planner),
 		n.desc,
 		regionConfig.RegionEnumID(),
 	); err != nil {
@@ -1190,8 +1190,8 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	}
 
 	// Write the modified database descriptor.
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -1200,7 +1200,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 
 	// Initialize that multi-region database by creating the multi-region enum
 	// and the database-level zone configuration.
-	err = params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
+	err = params.P.(*planner).maybeInitializeMultiRegionDatabase(params.Ctx, n.desc, regionConfig)
 	if err != nil {
 		// Hijack the error if an object called `crdb_internal_regions` already
 		// exists in the database and return a suitable hint.
@@ -1217,19 +1217,19 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	// If this is the system database, we need to do some additional magic to
 	// reconfigure the various tables and set the correct localities.
 	if n.desc.GetID() == keys.SystemDatabaseID {
-		if err := params.p.optimizeSystemDatabase(params.ctx); err != nil {
+		if err := params.P.(*planner).optimizeSystemDatabase(params.Ctx); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
+func (n *alterDatabasePrimaryRegionNode) StartExec(params runParams) error {
 
 	// Validate if the existing zone config of this descriptor is sane,
 	// since otherwise, any modifications for multi-region could fail during
 	// the job phase.
-	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+	if err := params.P.(*planner).validateExistingZoneCfg(params.Ctx, n.desc.ID); err != nil {
 		return err
 	}
 
@@ -1251,8 +1251,8 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
-			params.ctx,
+		if err := params.P.(*planner).validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+			params.Ctx,
 			n.desc,
 		); err != nil {
 			return err
@@ -1267,7 +1267,7 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 	// Log Alter Database Primary Region event. This is an auditable log event and
 	// is recorded in the same transaction as the database descriptor, and zone
 	// configuration updates.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabasePrimaryRegion{
 			DatabaseName:      n.desc.GetName(),
@@ -1309,9 +1309,9 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 	return &alterDatabaseSurvivalGoalNode{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
-	return params.p.alterDatabaseSurvivalGoal(
-		params.ctx, n.desc, n.n.SurvivalGoal, tree.AsStringWithFQNames(n.n, params.Ann()),
+func (n *alterDatabaseSurvivalGoalNode) StartExec(params runParams) error {
+	return params.P.(*planner).alterDatabaseSurvivalGoal(
+		params.Ctx, n.desc, n.n.SurvivalGoal, tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }
 
@@ -1460,7 +1460,7 @@ func (p *planner) AlterDatabasePlacement(
 	return &alterDatabasePlacementNode{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabasePlacementNode) startExec(params runParams) error {
+func (n *alterDatabasePlacementNode) StartExec(params runParams) error {
 	// If the database is not a multi-region database, the survival goal cannot be changed.
 	if !n.desc.IsMultiRegion() {
 		return errors.WithHintf(
@@ -1482,8 +1482,8 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 		)
 	}
 
-	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
-		params.ctx,
+	if err := params.P.(*planner).validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		params.Ctx,
 		n.desc,
 	); err != nil {
 		return err
@@ -1502,31 +1502,31 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 	}
 	n.desc.SetPlacement(newPlacement)
 
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors())
 	if err != nil {
 		return err
 	}
 
 	// Validate the final zone config at the end of the transaction, since
 	// we will not be validating localities right now.
-	*params.extendedEvalCtx.validateDbZoneConfig = true
+	*params.ExtendedEvalCtx.ValidateDbZoneConfig() = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
+		params.Ctx,
 		n.desc.ID,
 		regionConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).execCfg,
 		false, /* validateLocalities */
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -1540,8 +1540,8 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 	// -> DEFAULT), we need to refresh the zone configuration of all GLOBAL
 	// table's inside the database to either carry a bespoke configuration or go
 	// back to inheriting it from the database.
-	if err := params.p.refreshZoneConfigsForTables(
-		params.ctx,
+	if err := params.P.(*planner).refreshZoneConfigsForTables(
+		params.Ctx,
 		n.desc,
 		WithOnlyGlobalTables,
 	); err != nil {
@@ -1551,7 +1551,7 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 	// Log Alter Placement Goal event. This is an auditable log event and
 	// is recorded in the same transaction as the database descriptor, and zone
 	// configuration updates.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.desc.GetID(),
 		&eventpb.AlterDatabasePlacement{
 			DatabaseName: n.desc.GetName(),
@@ -1606,7 +1606,7 @@ func (p *planner) AlterDatabaseAddSuperRegion(
 	return &alterDatabaseAddSuperRegion{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
+func (n *alterDatabaseAddSuperRegion) StartExec(params runParams) error {
 	// If the database is not a multi-region database, a super region cannot
 	// be added.
 	if !n.desc.IsMultiRegion() {
@@ -1622,7 +1622,7 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 
 	// Check if the primary and secondary regions are members of this super region.
 	regionConfig, err := SynthesizeRegionConfig(
-		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+		params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors(),
 	)
 	if err != nil {
 		return err
@@ -1641,11 +1641,11 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typeID)
 	if err != nil {
 		return err
 	}
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return params.P.(*planner).addSuperRegion(params.Ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 }
 
 // addSuperRegion adds the super region in sorted order based on the
@@ -1701,7 +1701,7 @@ func (p *planner) AlterDatabaseDropSuperRegion(
 	return &alterDatabaseDropSuperRegion{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
+func (n *alterDatabaseDropSuperRegion) StartExec(params runParams) error {
 	// If the database is not a multi-region database, there should not be any
 	// super regions.
 	if !n.desc.IsMultiRegion() {
@@ -1719,7 +1719,7 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -1730,13 +1730,13 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 		return errors.Newf("super region %s not found", n.n.SuperRegionName)
 	}
 
-	if err := params.p.writeTypeSchemaChange(params.ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
+	if err := params.P.(*planner).writeTypeSchemaChange(params.Ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
 		return err
 	}
 
 	// Update all regional and regional by row tables.
-	if err := params.p.refreshZoneConfigsForTables(
-		params.ctx,
+	if err := params.P.(*planner).refreshZoneConfigsForTables(
+		params.Ctx,
 		n.desc,
 	); err != nil {
 		return err
@@ -1828,7 +1828,7 @@ func (p *planner) AlterDatabaseAlterSuperRegion(
 	return &alterDatabaseAlterSuperRegion{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
+func (n *alterDatabaseAlterSuperRegion) StartExec(params runParams) error {
 	// If the database is not a multi-region database, a super region cannot
 	// be added.
 	if !n.desc.IsMultiRegion() {
@@ -1846,14 +1846,14 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typeID)
 	if err != nil {
 		return err
 	}
 
 	// Check that the secondary region isn't being dropped from this super region.
 	regionConfig, err := SynthesizeRegionConfig(
-		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+		params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors(),
 	)
 	if err != nil {
 		return err
@@ -1876,7 +1876,7 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 	}
 
 	// Validate that adding the super region with the new regions is valid.
-	return params.p.addSuperRegion(params.ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
+	return params.P.(*planner).addSuperRegion(params.Ctx, n.desc, typeDesc, n.n.Regions, n.n.SuperRegionName, tree.AsStringWithFQNames(n.n, params.Ann()))
 
 }
 
@@ -1988,7 +1988,7 @@ func (p *planner) AlterDatabaseSecondaryRegion(
 	return &alterDatabaseSecondaryRegion{n: n, desc: dbDesc}, nil
 }
 
-func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
+func (n *alterDatabaseSecondaryRegion) StartExec(params runParams) error {
 	if !n.desc.IsMultiRegion() {
 		return errors.WithHintf(
 			pgerror.New(pgcode.InvalidDatabaseDefinition,
@@ -2003,12 +2003,12 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	// Validate if the existing zone config of this descriptor is sane,
 	// since otherwise, any modifications for multi-region could fail during
 	// the job phase.
-	if err := params.p.validateExistingZoneCfg(params.ctx, n.desc.ID); err != nil {
+	if err := params.P.(*planner).validateExistingZoneCfg(params.Ctx, n.desc.ID); err != nil {
 		return err
 	}
 
 	// Verify that the secondary region is part of the region list.
-	prevRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	prevRegionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors())
 	if err != nil {
 		return err
 	}
@@ -2053,7 +2053,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	}
 
 	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
 		return err
 	}
@@ -2061,8 +2061,8 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	// To update the secondary region we need to modify the database descriptor,
 	// update the multi-region enum, and write a new zone configuration.
 	n.desc.RegionConfig.SecondaryRegion = catpb.RegionName(n.n.SecondaryRegion)
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -2071,12 +2071,12 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 
 	// Update the secondary region in the type descriptor, and write it back out.
 	typeDesc.RegionConfig.SecondaryRegion = catpb.RegionName(n.n.SecondaryRegion)
-	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+	if err := params.P.(*planner).writeTypeDesc(params.Ctx, typeDesc); err != nil {
 		return err
 	}
 
 	updatedRegionConfig, err := SynthesizeRegionConfig(
-		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+		params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors(),
 	)
 	if err != nil {
 		return err
@@ -2084,23 +2084,23 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 
 	// Validate the final zone config at the end of the transaction, since
 	// we will not be validating localities right now.
-	*params.extendedEvalCtx.validateDbZoneConfig = true
+	*params.ExtendedEvalCtx.ValidateDbZoneConfig() = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
+		params.Ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).execCfg,
 		false, /* validateLocalities */
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
 
 	// Update all regional and regional by row tables.
-	return params.p.refreshZoneConfigsForTables(
-		params.ctx,
+	return params.P.(*planner).refreshZoneConfigsForTables(
+		params.Ctx,
 		n.desc,
 	)
 }
@@ -2136,7 +2136,7 @@ func (p *planner) AlterDatabaseDropSecondaryRegion(
 
 }
 
-func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
+func (n *alterDatabaseDropSecondaryRegion) StartExec(params runParams) error {
 	if !n.desc.IsMultiRegion() {
 		return errors.WithHintf(
 			pgerror.New(pgcode.InvalidDatabaseDefinition,
@@ -2150,8 +2150,8 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 
 	if n.desc.RegionConfig.SecondaryRegion == "" {
 		if n.n.IfExists {
-			params.p.BufferClientNotice(
-				params.ctx,
+			params.P.(*planner).BufferClientNotice(
+				params.Ctx,
 				pgnotice.Newf("No secondary region is defined on the database; skipping"),
 			)
 			return nil
@@ -2165,14 +2165,14 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typeID)
 	if err != nil {
 		return err
 	}
 
 	n.desc.RegionConfig.SecondaryRegion = ""
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -2181,12 +2181,12 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 
 	// Update the secondary region in the type descriptor, and write it back out.
 	typeDesc.RegionConfig.SecondaryRegion = ""
-	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
+	if err := params.P.(*planner).writeTypeDesc(params.Ctx, typeDesc); err != nil {
 		return err
 	}
 
 	updatedRegionConfig, err := SynthesizeRegionConfig(
-		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+		params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors(),
 	)
 	if err != nil {
 		return err
@@ -2194,23 +2194,23 @@ func (n *alterDatabaseDropSecondaryRegion) startExec(params runParams) error {
 
 	// Validate the final zone config at the end of the transaction, since
 	// we will not be validating localities right now.
-	*params.extendedEvalCtx.validateDbZoneConfig = true
+	*params.ExtendedEvalCtx.ValidateDbZoneConfig() = true
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
+		params.Ctx,
 		n.desc.ID,
 		updatedRegionConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).execCfg,
 		false, /* validateLocalities */
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
 
 	// Update all regional and regional by row tables.
-	if err := params.p.refreshZoneConfigsForTables(
-		params.ctx,
+	if err := params.P.(*planner).refreshZoneConfigsForTables(
+		params.Ctx,
 		n.desc,
 	); err != nil {
 		return err
@@ -2313,7 +2313,7 @@ func (p *planner) AlterDatabaseSetZoneConfigExtension(
 	}, nil
 }
 
-func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) error {
+func (n *alterDatabaseSetZoneConfigExtensionNode) StartExec(params runParams) error {
 	// Verify that the database is a multi-region database.
 	if !n.desc.IsMultiRegion() {
 		return errors.WithHintf(
@@ -2344,7 +2344,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	if err != nil {
 		return err
 	}
-	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typeID)
+	typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typeID)
 	if err != nil {
 		return err
 	}
@@ -2374,8 +2374,8 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	}
 
 	currentZone := zonepb.NewZoneConfig()
-	if currentZoneConfigWithRaw, err := params.p.Descriptors().GetZoneConfig(
-		params.ctx, params.p.Txn(), n.desc.ID,
+	if currentZoneConfigWithRaw, err := params.P.(*planner).Descriptors().GetZoneConfig(
+		params.Ctx, params.P.(*planner).Txn(), n.desc.ID,
 	); err != nil {
 		return err
 	} else if currentZoneConfigWithRaw != nil {
@@ -2444,7 +2444,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 
 		if err := validateZoneAttrsAndLocalities(
-			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), currentZone, newZone,
+			params.Ctx, params.P.(*planner).InternalSQLTxn().Regions(), params.P.(*planner).ExecCfg(), currentZone, newZone,
 		); err != nil {
 			return err
 		}
@@ -2466,13 +2466,13 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 	}
 
-	if err := params.p.writeTypeSchemaChange(
-		params.ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeTypeSchemaChange(
+		params.Ctx, typeDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	updatedRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	updatedRegionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, n.desc.ID, params.P.(*planner).Descriptors())
 	if err != nil {
 		return err
 	}
@@ -2489,15 +2489,15 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, currentZone, true, /* validateLocalities */
+		params.Ctx, params.P.(*planner).InternalSQLTxn().Regions(), params.ExecCfg().(*ExecutorConfig), updatedRegionConfig, currentZone, true, /* validateLocalities */
 	)
 	if err != nil {
 		return err
 	}
 
 	// Validate and update all tables' zone configurations.
-	if err := params.p.refreshZoneConfigsForTablesWithValidation(
-		params.ctx,
+	if err := params.P.(*planner).refreshZoneConfigsForTablesWithValidation(
+		params.Ctx,
 		n.desc,
 	); err != nil {
 		return err
@@ -2505,12 +2505,12 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Apply the zone config extension to the database.
 	if err := applyZoneConfigForMultiRegionDatabase(
-		params.ctx,
+		params.Ctx,
 		n.desc.ID,
 		dbZoneConfig,
-		params.p.InternalSQLTxn(),
-		params.p.execCfg,
-		params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).execCfg,
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 	); err != nil {
 		return err
 	}
@@ -2527,7 +2527,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	} else {
 		info = &eventpb.AlterDatabaseSetZoneConfigExtension{CommonZoneConfigDetails: eventDetails}
 	}
-	if err := params.p.logEvent(params.ctx, n.desc.ID, info); err != nil {
+	if err := params.P.(*planner).logEvent(params.Ctx, n.desc.ID, info); err != nil {
 		return err
 	}
 

@@ -68,7 +68,7 @@ type deleteRun struct {
 }
 
 func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+	if ots := params.ExtendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 
@@ -77,7 +77,7 @@ func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		params.P.(*planner).Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))
@@ -86,13 +86,13 @@ func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 }
 
-func (d *deleteNode) startExec(params runParams) error {
+func (d *deleteNode) StartExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	d.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	d.run.init(params, d.columns)
 
-	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := d.run.td.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -119,12 +119,12 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 	// Consume/accumulate the rows for this batch.
 	lastBatch = false
 	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
+		if err = params.P.(*planner).cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
 		// Advance one individual row.
-		if next, err := d.input.Next(params); !next {
+		if next, err := d.Source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -134,7 +134,7 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 
 		// Process the deletion of the current input row,
 		// potentially accumulating the result row for later.
-		if err = d.run.processSourceRow(params, d.input.Values()); err != nil {
+		if err = d.run.processSourceRow(params, d.Source.Values()); err != nil {
 			return false, err
 		}
 
@@ -149,19 +149,19 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err = d.run.td.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = d.run.td.flushAndStartNewBatch(params.Ctx); err != nil {
 				return false, err
 			}
 		}
 	}
 
 	if lastBatch {
-		d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = d.run.td.finalize(params.ctx); err != nil {
+		d.run.td.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+		if err = d.run.td.finalize(params.Ctx); err != nil {
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
+		params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
@@ -195,7 +195,7 @@ func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the deletion in the KV batch.
 	if err := r.td.row(
-		params.ctx, deleteVals, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		params.Ctx, deleteVals, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	); err != nil {
 		return err
 	}
@@ -237,34 +237,34 @@ func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 		}
 
 	}
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(params.Ctx, r.resultRowBuffer)
 }
 
 func (d *deleteNode) Close(ctx context.Context) {
-	d.input.Close(ctx)
+	d.Source.Close(ctx)
 	d.run.close(ctx)
 	*d = deleteNode{}
 	deleteNodePool.Put(d)
 }
 
-func (d *deleteNode) rowsWritten() int64 {
+func (d *deleteNode) RowsWritten() int64 {
 	return d.run.rowsAffected()
 }
 
-func (d *deleteNode) indexRowsWritten() int64 {
+func (d *deleteNode) IndexRowsWritten() int64 {
 	return d.run.td.indexRowsWritten
 }
 
-func (d *deleteNode) indexBytesWritten() int64 {
+func (d *deleteNode) IndexBytesWritten() int64 {
 	// No bytes counted as written for a deletion.
 	return 0
 }
 
-func (d *deleteNode) returnsRowsAffected() bool {
+func (d *deleteNode) ReturnsRowsAffected() bool {
 	return !d.run.rowsNeeded
 }
 
-func (d *deleteNode) kvCPUTime() int64 {
+func (d *deleteNode) KvCPUTime() int64 {
 	return d.run.td.kvCPUTime
 }
 

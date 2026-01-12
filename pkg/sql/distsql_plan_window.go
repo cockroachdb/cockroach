@@ -30,18 +30,18 @@ func createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
 	ordCols []execinfrapb.Ordering_Column,
 ) (execinfrapb.WindowerSpec_WindowFn, *types.T, error) {
-	for _, argIdx := range funcInProgress.argsIdxs {
+	for _, argIdx := range funcInProgress.ArgsIdxs {
 		if argIdx >= uint32(len(plan.GetResultTypes())) {
 			return execinfrapb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", argIdx)
 		}
 	}
 	// Figure out which built-in to compute.
-	funcSpec, err := rowexec.CreateWindowerSpecFunc(funcInProgress.expr.Func.String())
+	funcSpec, err := rowexec.CreateWindowerSpecFunc(funcInProgress.Expr.Func.String())
 	if err != nil {
 		return execinfrapb.WindowerSpec_WindowFn{}, nil, err
 	}
-	argTypes := make([]*types.T, len(funcInProgress.argsIdxs))
-	for i, argIdx := range funcInProgress.argsIdxs {
+	argTypes := make([]*types.T, len(funcInProgress.ArgsIdxs))
+	for i, argIdx := range funcInProgress.ArgsIdxs {
 		argTypes[i] = plan.GetResultTypes()[argIdx]
 	}
 	_, outputType, err := execagg.GetWindowFunctionInfo(funcSpec, argTypes...)
@@ -50,15 +50,15 @@ func createWindowFnSpec(
 	}
 	funcInProgressSpec := execinfrapb.WindowerSpec_WindowFn{
 		Func:         funcSpec,
-		ArgsIdxs:     funcInProgress.argsIdxs,
+		ArgsIdxs:     funcInProgress.ArgsIdxs,
 		Ordering:     execinfrapb.Ordering{Columns: ordCols},
-		FilterColIdx: int32(funcInProgress.filterColIdx),
-		OutputColIdx: uint32(funcInProgress.outputColIdx),
+		FilterColIdx: int32(funcInProgress.FilterColIdx),
+		OutputColIdx: uint32(funcInProgress.OutputColIdx),
 	}
-	if funcInProgress.frame != nil {
+	if funcInProgress.Frame != nil {
 		// funcInProgress has a custom window frame.
 		frameSpec := &execinfrapb.WindowerSpec_Frame{}
-		if err := initFrameFromAST(ctx, frameSpec, funcInProgress.frame, planCtx.EvalContext()); err != nil {
+		if err := initFrameFromAST(ctx, frameSpec, funcInProgress.Frame, planCtx.EvalContext()); err != nil {
 			return execinfrapb.WindowerSpec_WindowFn{}, outputType, err
 		}
 		funcInProgressSpec.Frame = frameSpec

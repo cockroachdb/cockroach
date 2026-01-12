@@ -132,16 +132,16 @@ func (p *planner) canDropTypeDesc(
 	return nil
 }
 
-func (n *dropTypeNode) startExec(params runParams) error {
+func (n *dropTypeNode) StartExec(params runParams) error {
 	for _, typeDesc := range n.toDrop {
 		typeFQName, err := getTypeNameFromTypeDescriptor(
-			oneAtATimeSchemaResolver{params.ctx, params.p},
+			oneAtATimeSchemaResolver{params.Ctx, params.P.(*planner)},
 			typeDesc,
 		)
 		if err != nil {
 			return err
 		}
-		err = params.p.dropTypeImpl(params.ctx, typeDesc, "dropping type "+typeFQName.FQString(), true /* queueJob */)
+		err = params.P.(*planner).dropTypeImpl(params.Ctx, typeDesc, "dropping type "+typeFQName.FQString(), true /* queueJob */)
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func (n *dropTypeNode) startExec(params runParams) error {
 			TypeName: typeFQName.FQString(),
 		}
 		// Log a Drop Type event.
-		if err := params.p.logEvent(params.ctx, typeDesc.ID, event); err != nil {
+		if err := params.P.(*planner).logEvent(params.Ctx, typeDesc.ID, event); err != nil {
 			return err
 		}
 	}
@@ -306,7 +306,7 @@ func (p *planner) dropTypeImpl(
 	// Also, changes made here do not affect schema change jobs created in this
 	// transaction with no mutation ID; they remain in the cache, and will be
 	// updated when writing the job record to drop the table.
-	delete(p.ExtendedEvalContext().jobs.uniqueToCreate, typeDesc.ID)
+	delete(p.ExtendedEvalContext().GetJobs().(*txnJobsCollection).uniqueToCreate, typeDesc.ID)
 
 	if err := p.removeBackRefsFromAllTypesInType(ctx, typeDesc); err != nil {
 		return err

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -14,17 +14,17 @@ import (
 
 // errorIfRowsNode wraps another planNode and returns an error if the wrapped
 // node produces any rows.
-type errorIfRowsNode struct {
+type ErrorIfRowsNode struct {
 	singleInputPlanNode
 
-	// mkErr creates the error message, given the values of the first row
+	// MkErr creates the error message, given the values of the first row
 	// produced.
-	mkErr exec.MkErrFn
+	MkErr exec.MkErrFn
 
 	nexted bool
 }
 
-func (n *errorIfRowsNode) startExec(params runParams) error {
+func (n *errorIfRowsNode) StartExec(params runParams) error {
 	return nil
 }
 
@@ -34,12 +34,12 @@ func (n *errorIfRowsNode) Next(params runParams) (bool, error) {
 	}
 	n.nexted = true
 
-	ok, err := n.input.Next(params)
+	ok, err := n.Source.Next(params)
 	if err != nil {
 		return false, err
 	}
 	if ok {
-		return false, n.mkErr(n.input.Values())
+		return false, n.MkErr(n.Source.Values())
 	}
 	return false, nil
 }
@@ -49,5 +49,9 @@ func (n *errorIfRowsNode) Values() tree.Datums {
 }
 
 func (n *errorIfRowsNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
+
+
+// Lowercase alias
+type errorIfRowsNode = ErrorIfRowsNode

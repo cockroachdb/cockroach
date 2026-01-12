@@ -300,7 +300,7 @@ func startDistChangefeed(
 			execCtx.ExecCfg().RangeDescriptorCache,
 			noTxn,
 			nil, /* clockUpdater */
-			execCtx.ExtendedEvalContext().Tracing,
+			execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 		)
 		defer recv.Release()
 
@@ -328,7 +328,7 @@ func startDistChangefeed(
 		// DistSQL flow being cleaned up.
 		planCtx.OverridePlannerMon = execCfg.DistSQLSrv.ChangefeedMonitor
 		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+		evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 		// p is the physical plan, recv is the DistSQLReceiver.
 		dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, finishedSetupFn)
 		return resultRows.Err()
@@ -411,15 +411,15 @@ func makePlan(
 
 		evalCtx := execCtx.ExtendedEvalContext()
 		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
-		if useBulkOracle.Get(&evalCtx.Settings.SV) {
+		if useBulkOracle.Get(&evalCtx.(*sql.ExtendedEvalContext).Settings.SV) {
 			log.Changefeed.Infof(ctx, "using bulk oracle for DistSQL planning")
 			var err error
-			oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), sql.SingleLocalityFilter(locFilter))
+			oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(dsp.ReplicaOracleConfig(evalCtx.(*sql.ExtendedEvalContext).Locality), sql.SingleLocalityFilter(locFilter))
 			if err != nil {
 				return nil, nil, err
 			}
 		}
-		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
+		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), nil, /* planner */
 			blankTxn, sql.DistributionType(distMode), oracle, sql.SingleLocalityFilter(locFilter), sql.NoStrictLocalityFiltering)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans, sql.PartitionSpansBoundDefault)
 		if err != nil {

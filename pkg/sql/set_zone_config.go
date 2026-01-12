@@ -237,7 +237,7 @@ func evaluateYAMLConfig(expr tree.TypedExpr, params runParams) (string, bool, er
 	var yamlConfig string
 	deleteZone := false
 	if expr != nil {
-		datum, err := eval.Expr(params.ctx, params.EvalContext(), expr)
+		datum, err := eval.Expr(params.Ctx, params.EvalContext(), expr)
 		if err != nil {
 			return "", false, err
 		}
@@ -287,7 +287,7 @@ func evaluateZoneOptions(
 				optionsStr = append(optionsStr, fmt.Sprintf("%s = COPY FROM PARENT", name))
 				continue
 			}
-			datum, err := eval.Expr(params.ctx, params.EvalContext(), expr)
+			datum, err := eval.Expr(params.Ctx, params.EvalContext(), expr)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -297,7 +297,7 @@ func evaluateZoneOptions(
 			}
 			opt := zone.SupportedZoneConfigOptions[*name]
 			if opt.CheckAllowed != nil {
-				if err := opt.CheckAllowed(params.ctx, params.ExecCfg().Settings, datum); err != nil {
+				if err := opt.CheckAllowed(params.Ctx, params.ExecCfg().(*ExecutorConfig).Settings, datum); err != nil {
 					return nil, nil, nil, err
 				}
 			}
@@ -309,7 +309,7 @@ func evaluateZoneOptions(
 	return optionsStr, copyFromParentList, setters, nil
 }
 
-func (n *setZoneConfigNode) startExec(params runParams) error {
+func (n *setZoneConfigNode) StartExec(params runParams) error {
 	yamlConfig, deleteZone, err := evaluateYAMLConfig(n.yamlConfig, params)
 	if err != nil {
 		return err
@@ -328,7 +328,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// resolve the table descriptor. If the specifier is for a database
 	// or range, this is a no-op and a nil pointer is returned as
 	// descriptor.
-	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
+	table, err := params.P.(*planner).resolveTableForZone(params.Ctx, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = params.p.checkSchemaChangeIsAllowed(params.ctx, table, n.stmt); err != nil {
+	if err = params.P.(*planner).checkSchemaChangeIsAllowed(params.Ctx, table, n.stmt); err != nil {
 		return err
 	}
 
@@ -400,7 +400,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// resolveZone determines the ID of the target object of the zone
 		// specifier. This ought to succeed regardless of whether there is
 		// already a zone config for the target object.
-		targetID, err := resolveZone(params.ctx, params.p.txn, params.p.Descriptors(), &zs, params.ExecCfg().Settings.Version)
+		targetID, err := resolveZone(params.Ctx, params.P.(*planner).txn, params.P.(*planner).Descriptors(), &zs, params.ExecCfg().(*ExecutorConfig).Settings.Version)
 		if err != nil {
 			return err
 		}
@@ -417,7 +417,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		// Secondary tenants are not allowed to set zone configurations on any named
 		// zones other than RANGE DEFAULT.
-		if !params.p.execCfg.Codec.ForSystemTenant() {
+		if !params.P.(*planner).execCfg.Codec.ForSystemTenant() {
 			zoneName, found := zonepb.NamedZonesByID[uint32(targetID)]
 			if found && zoneName != zonepb.DefaultZoneName {
 				return pgerror.Newf(
@@ -442,7 +442,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Retrieve the partial zone configuration
-		partialZoneWithRaw, err := params.p.Descriptors().GetZoneConfig(params.ctx, params.p.Txn(), targetID)
+		partialZoneWithRaw, err := params.P.(*planner).Descriptors().GetZoneConfig(params.Ctx, params.P.(*planner).Txn(), targetID)
 		if err != nil {
 			return err
 		}
@@ -474,7 +474,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// These zones are only used for validations. The merged zone will
 		// not be written.
 		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
-			params.ctx, params.p.txn, params.p.Descriptors(), targetID, index, partition, n.setDefault,
+			params.Ctx, params.P.(*planner).txn, params.P.(*planner).Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
 		if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
@@ -485,7 +485,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// ranges (liveness, meta, etc.), and did not have a zone config
 			// already.
 			completeZone = protoutil.Clone(
-				params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
+				params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).DefaultZoneConfig).(*zonepb.ZoneConfig)
 		} else if err != nil {
 			return err
 		}
@@ -500,14 +500,14 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We need to inherit zone configuration information from the correct zone,
 		// not completeZone.
 		{
-			zcHelper := descs.AsZoneConfigHydrationHelper(params.p.Descriptors())
+			zcHelper := descs.AsZoneConfigHydrationHelper(params.P.(*planner).Descriptors())
 			if index == nil {
 				// If we are operating on a zone, get all fields that the zone would
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
 				if err := completeZoneConfig(
-					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
+					params.Ctx, &zoneInheritedFields, params.P.(*planner).Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
 				}
@@ -517,7 +517,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
 				if err := completeZoneConfig(
-					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
+					params.Ctx, &zoneInheritedFields, params.P.(*planner).Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
 				}
@@ -580,7 +580,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			// memory default value.
 			if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
 				finalZone = *protoutil.Clone(
-					params.extendedEvalCtx.ExecCfg.DefaultZoneConfig).(*zonepb.ZoneConfig)
+					params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).DefaultZoneConfig).(*zonepb.ZoneConfig)
 			} else if n.setDefault {
 				finalZone = *zonepb.NewZoneConfig()
 			}
@@ -630,8 +630,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 
 			currentZone := zonepb.NewZoneConfig()
-			if currentZoneConfigWithRaw, err := params.p.Descriptors().GetZoneConfig(
-				params.ctx, params.p.Txn(), targetID,
+			if currentZoneConfigWithRaw, err := params.P.(*planner).Descriptors().GetZoneConfig(
+				params.Ctx, params.P.(*planner).Txn(), targetID,
 			); err != nil {
 				return err
 			} else if currentZoneConfigWithRaw != nil {
@@ -639,7 +639,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			}
 
 			if err := validateZoneAttrsAndLocalities(
-				params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), currentZone, &newZone,
+				params.Ctx, params.P.(*planner).InternalSQLTxn().Regions(), params.P.(*planner).ExecCfg(), currentZone, &newZone,
 			); err != nil {
 				return err
 			}
@@ -667,7 +667,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// here to complete the missing fields. The reason is because we don't know
 				// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
 				// And if it is a placeholder, we use getZoneConfigRaw to create one.
-				completeZoneWithRaw, err := params.p.Descriptors().GetZoneConfig(params.ctx, params.p.Txn(), targetID)
+				completeZoneWithRaw, err := params.P.(*planner).Descriptors().GetZoneConfig(params.Ctx, params.P.(*planner).Txn(), targetID)
 				if err != nil {
 					return err
 				}
@@ -736,20 +736,20 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 		// Write the partial zone configuration.
 		hasNewSubzones := !deleteZone && index != nil
-		execConfig := params.extendedEvalCtx.ExecCfg
+		execConfig := params.ExtendedEvalCtx.(*ExtendedEvalContext).ExecCfg
 		zoneToWrite := partialZone
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
 		err = writeZoneConfig(
-			params.ctx,
-			params.p.InternalSQLTxn(),
+			params.Ctx,
+			params.P.(*planner).InternalSQLTxn(),
 			targetID,
 			table,
 			zoneToWrite,
 			partialZoneWithRaw.GetRawBytesInStorage(),
 			execConfig,
 			hasNewSubzones,
-			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+			params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 		)
 		if err != nil {
 			return err
@@ -768,7 +768,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			info = &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
 				ResolvedOldConfig: oldZone.String()}
 		}
-		return params.p.logEvent(params.ctx, targetID, info)
+		return params.P.(*planner).logEvent(params.Ctx, targetID, info)
 	}
 	for _, zs := range specifiers {
 		// Note(solon): Currently the zone configurations are applied serially for

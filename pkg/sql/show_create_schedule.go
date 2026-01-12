@@ -32,7 +32,7 @@ const (
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
-	env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(params.ExecCfg().(*ExecutorConfig).JobsKnobs())
 	var schedules []*jobs.ScheduledJob
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
@@ -43,10 +43,10 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 			return nil, err
 		}
 
-		datums, columns, err := params.p.InternalSQLTxn().QueryRowExWithCols(
-			params.ctx,
+		datums, columns, err := params.P.(*planner).InternalSQLTxn().QueryRowExWithCols(
+			params.Ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+			params.P.(*planner).Txn(), sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = $1", env.ScheduledJobsTableName()),
 			tree.NewDInt(tree.DInt(sjID)))
 		if err != nil {
@@ -55,10 +55,10 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		rows = append(rows, datums)
 		cols = columns
 	} else {
-		datums, columns, err := params.p.InternalSQLTxn().QueryBufferedExWithCols(
-			params.ctx,
+		datums, columns, err := params.P.(*planner).InternalSQLTxn().QueryBufferedExWithCols(
+			params.Ctx,
 			"load-schedules",
-			params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+			params.P.(*planner).Txn(), sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf("SELECT * FROM %s", env.ScheduledJobsTableName()))
 		if err != nil {
 			return nil, err
@@ -92,7 +92,7 @@ func (p *planner) ShowCreateSchedule(
 		columns: showCreateScheduleColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
 			scheduledJobs, err := loadSchedules(
-				runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}, n)
+				runParams{Ctx: ctx, P: p, ExtendedEvalCtx: &p.extendedEvalCtx}, n)
 			if err != nil {
 				return nil, err
 			}

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/sql/planbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -22,7 +23,7 @@ import (
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
 // without allowing casting directly to a planner. Eventually it would be nice
 // if we could implement the API entirely without a planner however the only
-// implementation of extendedEvalContext is very tied to a planner.
+// implementation of ExtendedEvalContext is very tied to a planner.
 type plannerJobExecContext struct {
 	p *planner
 }
@@ -48,7 +49,7 @@ func MakeJobExecContext(
 }
 
 func (e *plannerJobExecContext) SemaCtx() *tree.SemaContext { return e.p.SemaCtx() }
-func (e *plannerJobExecContext) ExtendedEvalContext() *extendedEvalContext {
+func (e *plannerJobExecContext) ExtendedEvalContext() planbase.ExtendedEvalContextI {
 	return e.p.ExtendedEvalContext()
 }
 func (e *plannerJobExecContext) SessionData() *sessiondata.SessionData {
@@ -83,7 +84,7 @@ func (e *plannerJobExecContext) SpanStatsConsumer() keyvisualizer.SpanStatsConsu
 // close over/expect a txn so use it with caution).
 type JobExecContext interface {
 	SemaCtx() *tree.SemaContext
-	ExtendedEvalContext() *extendedEvalContext
+	ExtendedEvalContext() planbase.ExtendedEvalContextI
 	SessionData() *sessiondata.SessionData
 	SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig

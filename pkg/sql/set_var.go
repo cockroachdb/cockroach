@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/planbase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -119,19 +120,19 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	return &setVarNode{name: name, local: n.Local, v: v, typedValues: typedValues}, nil
 }
 
-func (n *setVarNode) startExec(params runParams) error {
+func (n *setVarNode) StartExec(params runParams) error {
 	var strVal string
 
 	if _, ok := DummyVars[n.name]; ok {
 		telemetry.Inc(sqltelemetry.DummySessionVarValueCounter(n.name))
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.NewWithSeverityf("WARNING", "setting session var %q is a no-op", n.name),
 		)
 	}
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
-			d, err := eval.Expr(params.ctx, params.EvalContext(), v)
+			d, err := eval.Expr(params.Ctx, params.EvalContext(), v)
 			if err != nil {
 				return err
 			}
@@ -139,10 +140,10 @@ func (n *setVarNode) startExec(params runParams) error {
 		}
 		var err error
 		if n.v.GetStringVal != nil {
-			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
+			strVal, err = n.v.GetStringVal(params.Ctx, params.ExtendedEvalCtx, n.typedValues, params.P.(*planner).Txn())
 		} else {
 			// No string converter defined, use the default one.
-			strVal, err = getStringVal(params.ctx, params.EvalContext(), n.name, n.typedValues)
+			strVal, err = getStringVal(params.Ctx, params.EvalContext(), n.name, n.typedValues)
 		}
 		if err != nil {
 			return err
@@ -152,11 +153,11 @@ func (n *setVarNode) startExec(params runParams) error {
 		_, strVal = getSessionVarDefaultString(
 			n.name,
 			n.v,
-			params.p.sessionDataMutatorIterator.SessionDataMutatorBase,
+			params.P.(*planner).sessionDataMutatorIterator.SessionDataMutatorBase,
 		)
 	}
 
-	return params.p.SetSessionVar(params.ctx, n.name, strVal, n.local)
+	return params.P.(*planner).SetSessionVar(params.Ctx, n.name, strVal, n.local)
 }
 
 // applyOnSessionDataMutators applies the given function on the relevant
@@ -239,8 +240,8 @@ func (p *planner) resetAllSessionVars(ctx context.Context) error {
 	return nil
 }
 
-func (n *resetAllNode) startExec(params runParams) error {
-	return params.p.resetAllSessionVars(params.ctx)
+func (n *resetAllNode) StartExec(params runParams) error {
+	return params.P.(*planner).resetAllSessionVars(params.Ctx)
 }
 
 func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
@@ -275,19 +276,20 @@ func getFloatVal(
 }
 
 func timeZoneVarGetStringVal(
-	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, _ *kv.Txn,
+	ctx context.Context, evalCtx planbase.ExtendedEvalContextI, values []tree.TypedExpr, _ *kv.Txn,
 ) (string, error) {
 	if len(values) != 1 {
 		return "", newSingleArgVarError("timezone")
 	}
-	d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+	extEvalCtx := evalCtx.(*ExtendedEvalContext)
+	d, err := eval.Expr(ctx, &extEvalCtx.Context, values[0])
 	if err != nil {
 		return "", err
 	}
 
 	var loc *time.Location
 	var offset int64
-	switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+	switch v := eval.UnwrapDatum(ctx, &extEvalCtx.Context, d).(type) {
 	case *tree.DString:
 		location := string(*v)
 		loc, err = timeutil.TimeZoneStringToLocation(
@@ -347,20 +349,21 @@ func timeZoneVarSet(_ context.Context, m sessionmutator.SessionDataMutator, s st
 func makeTimeoutVarGetter(
 	varName string,
 ) func(
-	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
+	ctx context.Context, evalCtx planbase.ExtendedEvalContextI, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
 	return func(
-		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
+		ctx context.Context, evalCtx planbase.ExtendedEvalContextI, values []tree.TypedExpr, txn *kv.Txn,
 	) (string, error) {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		extEvalCtx := evalCtx.(*ExtendedEvalContext)
+		d, err := eval.Expr(ctx, &extEvalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
 
 		var timeout time.Duration
-		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		switch v := eval.UnwrapDatum(ctx, &extEvalCtx.Context, d).(type) {
 		case *tree.DString:
 			return string(*v), nil
 		case *tree.DInterval:
@@ -536,19 +539,20 @@ func newCannotChangeParameterError(varName string) error {
 func makeByteSizeVarGetter(
 	varName string,
 ) func(
-	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
+	ctx context.Context, evalCtx planbase.ExtendedEvalContextI, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
 	return func(
-		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
+		ctx context.Context, evalCtx planbase.ExtendedEvalContextI, values []tree.TypedExpr, txn *kv.Txn,
 	) (string, error) {
 		if len(values) != 1 {
 			return "", newSingleArgVarError(varName)
 		}
-		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		extEvalCtx := evalCtx.(*ExtendedEvalContext)
+		d, err := eval.Expr(ctx, &extEvalCtx.Context, values[0])
 		if err != nil {
 			return "", err
 		}
 
-		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		switch v := eval.UnwrapDatum(ctx, &extEvalCtx.Context, d).(type) {
 		case *tree.DString:
 			return string(*v), nil
 		case *tree.DInt:

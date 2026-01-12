@@ -32,7 +32,7 @@ func (p *planner) addColumnImpl(
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, params.SessionData())
 	}
 
-	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
+	toType, err := tree.ResolveType(params.Ctx, d.Type, params.P.(*planner).semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
 	}
@@ -44,19 +44,19 @@ func (p *planner) addColumnImpl(
 		)
 	}
 
-	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.ctx, desc); err != nil {
+	if err := p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.Ctx, desc); err != nil {
 		return err
 	}
 
 	var colOwnedSeqDesc *tabledesc.Mutable
-	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, tn)
+	newDef, seqPrefix, seqName, seqOpts, err := params.P.(*planner).processSerialLikeInColumnDef(params.Ctx, d, tn)
 	if err != nil {
 		return err
 	}
 	if seqName != nil {
 		colOwnedSeqDesc, err = doCreateSequence(
-			params.ctx,
-			params.p,
+			params.Ctx,
+			params.P.(*planner),
 			params.SessionData(),
 			seqPrefix.Database,
 			seqPrefix.Schema,
@@ -71,7 +71,7 @@ func (p *planner) addColumnImpl(
 	}
 	d = newDef
 
-	cdd, err := tabledesc.MakeColumnDefDescs(params.ctx, d, &params.p.semaCtx, params.EvalContext(), tree.ColumnDefaultExprInAddColumn)
+	cdd, err := tabledesc.MakeColumnDefDescs(params.Ctx, d, &params.P.(*planner).semaCtx, params.EvalContext(), tree.ColumnDefaultExprInAddColumn)
 	if err != nil {
 		return err
 	}
@@ -82,8 +82,8 @@ func (p *planner) addColumnImpl(
 	// Ensure all new indexes are partitioned appropriately.
 	if idx != nil {
 		if n.tableDesc.IsLocalityRegionalByRow() {
-			if err := params.p.checkNoRegionChangeUnderway(
-				params.ctx,
+			if err := params.P.(*planner).checkNoRegionChangeUnderway(
+				params.Ctx,
 				n.tableDesc.GetParentID(),
 				"add a UNIQUE COLUMN on a REGIONAL BY ROW table",
 			); err != nil {
@@ -92,7 +92,7 @@ func (p *planner) addColumnImpl(
 		}
 
 		*idx, err = p.configureIndexDescForNewIndexPartitioning(
-			params.ctx,
+			params.Ctx,
 			desc,
 			*idx,
 			nil, /* PartitionByIndex */
@@ -105,8 +105,8 @@ func (p *planner) addColumnImpl(
 	// We're checking to see if a user is trying add a non-nullable column without a default to a
 	// non empty table by scanning the primary index span with a limit of 1 to see if any key exists.
 	if !col.Nullable && (col.DefaultExpr == nil && !col.IsComputed()) {
-		span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().Codec)
-		kvs, err := params.p.txn.Scan(params.ctx, span.Key, span.EndKey, 1)
+		span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().(*ExecutorConfig).Codec)
+		kvs, err := params.P.(*planner).txn.Scan(params.Ctx, span.Key, span.EndKey, 1)
 		if err != nil {
 			return err
 		}
@@ -138,8 +138,8 @@ func (p *planner) addColumnImpl(
 
 	if d.IsComputed() {
 		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-			params.ctx, n.tableDesc, d, tn, tree.ComputedColumnExprContext(d.IsVirtual()), params.p.SemaCtx(),
-			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+			params.Ctx, n.tableDesc, d, tn, tree.ComputedColumnExprContext(d.IsVirtual()), params.P.(*planner).SemaCtx(),
+			params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx),
 		)
 		if err != nil {
 			return err
@@ -157,12 +157,12 @@ func (p *planner) addColumnImpl(
 
 	// We need to allocate new ID for the created column in order to correctly
 	// assign sequence ownership and function dependencies.
-	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+	version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+	if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 		return err
 	}
 
-	if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, n.tableDesc, col); err != nil {
+	if err := params.P.(*planner).maybeUpdateFunctionReferencesForColumn(params.Ctx, n.tableDesc, col); err != nil {
 		return err
 	}
 
@@ -170,7 +170,7 @@ func (p *planner) addColumnImpl(
 	// sequence, add references between its descriptor and this column descriptor.
 	if err := cdd.ForEachTypedExpr(func(expr tree.TypedExpr, colExprKind tabledesc.ColExprKind) error {
 		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx, params.ExecCfg().Settings, params.p, n.tableDesc, col, expr, nil, colExprKind,
+			params.Ctx, params.ExecCfg().(*ExecutorConfig).Settings, params.P.(*planner), n.tableDesc, col, expr, nil, colExprKind,
 		)
 		if err != nil {
 			return err
@@ -185,8 +185,8 @@ func (p *planner) addColumnImpl(
 					return err
 				}
 			}
-			if err := params.p.writeSchemaChange(
-				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+			if err := params.P.(*planner).writeSchemaChange(
+				params.Ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 			); err != nil {
 				return err
 			}
@@ -202,7 +202,7 @@ func (p *planner) addColumnImpl(
 		// Configure zone configuration if required. This must happen after
 		// all the IDs have been allocated.
 		if err := p.configureZoneConfigForNewIndexPartitioning(
-			params.ctx,
+			params.Ctx,
 			n.tableDesc,
 			*idx,
 		); err != nil {

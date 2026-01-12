@@ -103,9 +103,9 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 // and expects to see its own writes.
 func (n *renameDatabaseNode) ReadingOwnWrites() {}
 
-func (n *renameDatabaseNode) startExec(params runParams) error {
-	p := params.p
-	ctx := params.ctx
+func (n *renameDatabaseNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	ctx := params.Ctx
 	dbDesc := n.dbDesc
 
 	// Check if any other tables depend on tables in the database.
@@ -114,12 +114,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	// Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
 	// See #34416.
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.Txn(), dbDesc)
 	if err != nil {
 		return err
 	}
 	for _, schema := range schemas {
-		sc, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, schema)
+		sc, err := p.Descriptors().ByName(p.Txn()).Get().Schema(ctx, dbDesc, schema)
 		if err != nil {
 			return err
 		}

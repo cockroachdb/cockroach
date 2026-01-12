@@ -99,7 +99,7 @@ func failDropIndexIfSafeUpdates(params runParams) error {
 // and expects to see its own writes.
 func (n *dropIndexNode) ReadingOwnWrites() {}
 
-func (n *dropIndexNode) startExec(params runParams) error {
+func (n *dropIndexNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("index"))
 
 	if err := failDropIndexIfSafeUpdates(params); err != nil {
@@ -107,19 +107,19 @@ func (n *dropIndexNode) startExec(params runParams) error {
 	}
 
 	if n.n.Concurrently {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as all indexes are dropped concurrently"),
 		)
 	}
 
-	ctx := params.ctx
+	ctx := params.Ctx
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		_, tableDesc, err := params.p.ResolveMutableTableDescriptor(
+		_, tableDesc, err := params.P.(*planner).ResolveMutableTableDescriptor(
 			ctx, index.tn, true /*required*/, tree.ResolveRequireTableOrViewDesc)
 		if sqlerrors.IsUndefinedRelationError(err) {
 			// Somehow the descriptor we had during planning is not there
@@ -175,7 +175,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				if col.IsExpressionIndexColumn() && !keyColumnOfOtherIndex(col.GetID()) {
 					n.queueDropColumn(tableDesc, col)
 					if col.NumUsesFunctions() > 0 {
-						if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, col.ColumnDesc()); err != nil {
+						if err := params.P.(*planner).removeColumnBackReferenceInFunctions(params.Ctx, tableDesc, col.ColumnDesc()); err != nil {
 							return err
 						}
 					}
@@ -186,7 +186,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		// CAUTION: After dropIndexByName returns, idx will be a pointer to a
 		// different index than the one being dropped.
-		if err := params.p.dropIndexByName(
+		if err := params.P.(*planner).dropIndexByName(
 			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
@@ -209,7 +209,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 					}
 					columnsDropped = columnsDropped || ok
 				} else {
-					params.p.BufferClientNotice(
+					params.P.(*planner).BufferClientNotice(
 						ctx,
 						pgnotice.Newf("The accompanying shard column %q is a physical column and dropping it can be "+
 							"expensive, so, we dropped the index %q but skipped dropping %q. Issue another "+
@@ -303,13 +303,13 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 // finalizeDropColumn finalizes the dropping of one or more columns. It should
 // only be called if queueDropColumn has been called at least once.
 func (n *dropIndexNode) finalizeDropColumn(params runParams, tableDesc *tabledesc.Mutable) error {
-	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-	if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
+	version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+	if err := tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion().NextMutationID
-	if err := params.p.writeSchemaChange(
-		params.ctx, tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}

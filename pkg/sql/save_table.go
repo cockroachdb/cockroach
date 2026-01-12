@@ -47,12 +47,12 @@ func (p *planner) makeSaveTable(
 	}
 }
 
-func (n *saveTableNode) startExec(params runParams) error {
+func (n *saveTableNode) StartExec(params runParams) error {
 	create := &tree.CreateTable{
 		Table: n.target,
 	}
 
-	cols := planColumns(n.input)
+	cols := planColumns(n.Source)
 	if len(n.colNames) != len(cols) {
 		return errors.AssertionFailedf(
 			"number of column names (%d) does not match number of columns (%d)",
@@ -68,9 +68,9 @@ func (n *saveTableNode) startExec(params runParams) error {
 		create.Defs = append(create.Defs, def)
 	}
 
-	_, err := params.p.ExtendedEvalContext().ExecCfg.InternalDB.
+	_, err := params.P.(*planner).ExtendedEvalContext().GetExecCfg().(*ExecutorConfig).InternalDB.
 		Executor().Exec(
-		params.ctx,
+		params.Ctx,
 		"create save table",
 		nil, /* txn */
 		create.String(),
@@ -82,9 +82,9 @@ func (n *saveTableNode) startExec(params runParams) error {
 func (n *saveTableNode) issue(params runParams) error {
 	if v := &n.run.vals; len(v.Rows) > 0 {
 		stmt := fmt.Sprintf("INSERT INTO %s %s", n.target.String(), v.String())
-		if _, err := params.p.ExtendedEvalContext().ExecCfg.InternalDB.
+		if _, err := params.P.(*planner).ExtendedEvalContext().GetExecCfg().(*ExecutorConfig).InternalDB.
 			Executor().Exec(
-			params.ctx,
+			params.Ctx,
 			"insert into save table",
 			nil, /* txn */
 			stmt,
@@ -98,7 +98,7 @@ func (n *saveTableNode) issue(params runParams) error {
 
 // Next is part of the planNode interface.
 func (n *saveTableNode) Next(params runParams) (bool, error) {
-	res, err := n.input.Next(params)
+	res, err := n.Source.Next(params)
 	if err != nil {
 		return res, err
 	}
@@ -107,7 +107,7 @@ func (n *saveTableNode) Next(params runParams) (bool, error) {
 		err := n.issue(params)
 		return false, err
 	}
-	row := n.input.Values()
+	row := n.Source.Values()
 	exprs := make(tree.Exprs, len(row))
 	for i := range row {
 		exprs[i] = row[i]
@@ -123,10 +123,10 @@ func (n *saveTableNode) Next(params runParams) (bool, error) {
 
 // Values is part of the planNode interface.
 func (n *saveTableNode) Values() tree.Datums {
-	return n.input.Values()
+	return n.Source.Values()
 }
 
 // Close is part of the planNode interface.
 func (n *saveTableNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

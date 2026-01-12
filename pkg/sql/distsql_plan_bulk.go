@@ -21,7 +21,7 @@ import (
 // SetupAllNodesPlanning creates a planCtx and sets up the planCtx.nodeStatuses
 // map for all nodes. It returns all nodes that can be used for planning.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
-	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+	ctx context.Context, evalCtx *ExtendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	return dsp.SetupAllNodesPlanningWithOracle(
 		ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser, []roachpb.Locality{}, NoStrictLocalityFiltering,
@@ -35,7 +35,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 // by subsequent physical planning such as PartitionSpans.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
 	localityFilters []roachpb.Locality,
@@ -65,7 +65,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 // non-empty.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
 	localityFilters []roachpb.Locality,
@@ -112,7 +112,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 // non-empty.
 func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
 	localityFilters []roachpb.Locality,

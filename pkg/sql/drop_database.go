@@ -57,12 +57,12 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	if db, err := p.Descriptors().ByName(p.txn).MaybeGet().Database(ctx, string(n.Name)); err != nil {
+	if db, err := p.Descriptors().ByName(p.Txn()).MaybeGet().Database(ctx, string(n.Name)); err != nil {
 		return nil, err
 	} else if db == nil && n.IfExists {
 		return newZeroNode(nil /* columns */), nil
 	}
-	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
+	dbDesc, err := p.Descriptors().MutableByName(p.Txn()).Database(ctx, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, dbDesc)
+	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.Txn(), dbDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		res, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, dbDesc, schema)
+		res, err := p.Descriptors().ByName(p.Txn()).Get().Schema(ctx, dbDesc, schema)
 		if err != nil {
 			return nil, err
 		}
@@ -115,11 +115,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}, nil
 }
 
-func (n *dropDatabaseNode) startExec(params runParams) error {
+func (n *dropDatabaseNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("database"))
 
-	ctx := params.ctx
-	p := params.p
+	ctx := params.Ctx
+	p := params.P
 
 	// Exit early with an error if the schema is undergoing a declarative schema
 	// change.
@@ -128,7 +128,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	// Drop all of the collected objects.
-	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
+	if err := n.d.dropAllCollectedObjects(ctx, p.(*planner)); err != nil {
 		return err
 	}
 
@@ -138,38 +138,38 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		switch schemaToDelete.SchemaKind() {
 		case catalog.SchemaPublic:
 			b := p.Txn().NewBatch()
-			if err := p.Descriptors().DeleteDescriptorlessPublicSchemaToBatch(
-				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, b,
+			if err := p.(*planner).Descriptors().DeleteDescriptorlessPublicSchemaToBatch(
+				ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), n.dbDesc, b,
 			); err != nil {
 				return err
 			}
-			if err := p.txn.Run(ctx, b); err != nil {
+			if err := p.Txn().Run(ctx, b); err != nil {
 				return err
 			}
 		case catalog.SchemaTemporary:
 			b := p.Txn().NewBatch()
-			if err := p.Descriptors().DeleteTempSchemaToBatch(
-				ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), n.dbDesc, schemaToDelete.GetName(), b,
+			if err := p.(*planner).Descriptors().DeleteTempSchemaToBatch(
+				ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), n.dbDesc, schemaToDelete.GetName(), b,
 			); err != nil {
 				return err
 			}
-			if err := p.txn.Run(ctx, b); err != nil {
+			if err := p.Txn().Run(ctx, b); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, schemaToDelete.GetID())
+			mutDesc, err := p.(*planner).Descriptors().MutableByID(p.Txn()).Schema(ctx, schemaToDelete.GetID())
 			if err != nil {
 				return err
 			}
-			if err := params.p.dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
+			if err := params.P.(*planner).dropSchemaImpl(ctx, n.dbDesc, mutDesc); err != nil {
 				return err
 			}
 			schemasIDsToDelete = append(schemasIDsToDelete, schemaToDelete.GetID())
 		}
 	}
 
-	if err := p.createDropDatabaseJob(
+	if err := p.(*planner).createDropDatabaseJob(
 		ctx,
 		n.dbDesc.GetID(),
 		schemasIDsToDelete,
@@ -182,28 +182,28 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	n.dbDesc.SetDropped()
-	b := p.txn.NewBatch()
-	if err := p.dropNamespaceEntry(ctx, b, n.dbDesc); err != nil {
+	b := p.Txn().NewBatch()
+	if err := p.(*planner).dropNamespaceEntry(ctx, b, n.dbDesc); err != nil {
 		return err
 	}
 
 	// Note that a job was already queued above.
-	if err := p.writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
+	if err := p.(*planner).writeDatabaseChangeToBatch(ctx, n.dbDesc, b); err != nil {
 		return err
 	}
-	if err := p.txn.Run(ctx, b); err != nil {
+	if err := p.Txn().Run(ctx, b); err != nil {
 		return err
 	}
 
 	metadataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
-		p.InternalSQLTxn(),
-		p.Descriptors(),
-		&p.ExecCfg().Settings.SV,
+		p.(*planner).InternalSQLTxn(),
+		p.(*planner).Descriptors(),
+		&p.(*planner).ExecCfg().Settings.SV,
 		p.SessionData(),
-		p.ExecCfg().Settings,
-		p.ExecCfg().JobsKnobs(),
-		p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.(*planner).ExecCfg().Settings,
+		p.(*planner).ExecCfg().JobsKnobs(),
+		p.(*planner).ExecCfg().NodeInfo.LogicalClusterID(),
 	)
 
 	err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
@@ -211,7 +211,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.deleteComment(
+	if err := p.(*planner).deleteComment(
 		ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
 	); err != nil {
 		return err
@@ -219,7 +219,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	// Log Drop Database event. This is an auditable log event and is recorded
 	// in the same transaction as the table descriptor update.
-	return p.logEvent(ctx,
+	return p.(*planner).logEvent(ctx,
 		n.dbDesc.GetID(),
 		&eventpb.DropDatabase{
 			DatabaseName:         n.n.Name.String(),
@@ -289,7 +289,7 @@ func (p *planner) accumulateOwnedSequences(
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
-			ownedSeqDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, seqID)
+			ownedSeqDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, seqID)
 			if err != nil {
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
@@ -320,7 +320,7 @@ func (p *planner) accumulateCascadingViews(
 ) error {
 	visited[desc.ID] = struct{}{}
 	for _, ref := range desc.DependedOnBy {
-		desc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, ref.ID)
+		desc, err := p.Descriptors().MutableByID(p.Txn()).Desc(ctx, ref.ID)
 		if err != nil {
 			return err
 		}

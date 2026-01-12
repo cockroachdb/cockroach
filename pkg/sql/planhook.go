@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
+	"github.com/cockroachdb/cockroach/pkg/sql/planbase"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -90,7 +91,7 @@ var planHooks []planHook
 type PlanHookState interface {
 	resolver.SchemaResolver
 	SemaCtx() *tree.SemaContext
-	ExtendedEvalContext() *extendedEvalContext
+	ExtendedEvalContext() planbase.ExtendedEvalContextI
 	SessionData() *sessiondata.SessionData
 	SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
@@ -180,11 +181,11 @@ func newHookFnNode(
 	return &hookFnNode{name: name, f: fn, header: header, stopper: stopper}
 }
 
-func (f *hookFnNode) startExec(params runParams) error {
+func (f *hookFnNode) StartExec(params runParams) error {
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
 	if err := f.stopper.RunAsyncTaskEx(
-		params.ctx,
+		params.Ctx,
 		stop.TaskOpts{
 			TaskName: f.name,
 			SpanOpt:  stop.ChildSpan,
@@ -208,8 +209,8 @@ func (f *hookFnNode) startExec(params runParams) error {
 
 func (f *hookFnNode) Next(params runParams) (bool, error) {
 	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
+	case <-params.Ctx.Done():
+		return false, params.Ctx.Err()
 	case err := <-f.run.errCh:
 		return false, err
 	case f.run.row = <-f.run.resultsCh:

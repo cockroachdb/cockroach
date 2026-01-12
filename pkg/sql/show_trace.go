@@ -39,12 +39,13 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 	// Ensure the messages are sorted in age order, so that the user
 	// does not get confused.
 	ageColIdx := colinfo.GetTraceAgeColumnIdx(n.Compact)
-	node = &sortNode{
-		singleInputPlanNode: singleInputPlanNode{node},
-		ordering: colinfo.ColumnOrdering{
+	sn := &sortNode{
+		Ordering: colinfo.ColumnOrdering{
 			colinfo.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
 	}
+	sn.Source = node
+	node = sn
 
 	if n.TraceType == tree.ShowTraceReplica {
 		node = &showTraceReplicaNode{
@@ -81,10 +82,10 @@ type traceRun struct {
 	curRow     int
 }
 
-func (n *showTraceNode) startExec(params runParams) error {
+func (n *showTraceNode) StartExec(params runParams) error {
 	// Get all the data upfront and process the traces. Subsequent
 	// invocations of Next() will merely return the results.
-	traceRows, err := params.extendedEvalCtx.Tracing.getSessionTrace()
+	traceRows, err := params.ExtendedEvalCtx.GetTracing().(*SessionTracing).getSessionTrace()
 	if err != nil {
 		return err
 	}

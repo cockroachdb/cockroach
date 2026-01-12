@@ -188,7 +188,7 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 	defer cleanup()
 
 	planner := hook.(sql.PlanHookState)
-	currentClusterID := planner.ExtendedEvalContext().ClusterID
+	currentClusterID := planner.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID
 	currentDetails := sj.ScheduleDetails()
 
 	// If the current cluster ID is different than the schedule's cluster ID,
@@ -411,7 +411,7 @@ func dryRunCreateChangefeed(
 	scheduleID jobspb.ScheduleID,
 	createChangefeedNode *tree.CreateChangefeed,
 ) error {
-	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
+	sp, err := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Txn.CreateSavepoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -431,7 +431,7 @@ func dryRunCreateChangefeed(
 		return invokeCreateChangefeed(ctx, changefeedFn)
 	}()
 
-	if rollbackErr := p.ExtendedEvalContext().Txn.RollbackToSavepoint(ctx, sp); rollbackErr != nil {
+	if rollbackErr := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Txn.RollbackToSavepoint(ctx, sp); rollbackErr != nil {
 		if err != nil {
 			return errors.CombineErrors(rollbackErr, err)
 		}
@@ -615,7 +615,7 @@ func doCreateChangefeedSchedule(
 		}
 	}
 
-	evalCtx := &p.ExtendedEvalContext().Context
+	evalCtx := &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context
 	firstRun, err := getFirstRunOpt(evalCtx, spec.scheduleOpts)
 	if err != nil {
 		return err

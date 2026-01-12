@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -76,7 +77,7 @@ func newDistSQLSpecExecFactory(
 		distribute = FullDistribution
 	}
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)
+	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx.(*ExtendedEvalContext), e.planner, e.planner.txn, distribute)
 	return e
 }
 
@@ -447,10 +448,10 @@ func (e *distSQLSpecExecFactory) ConstructInvertedFilter(
 	}
 	planCtx := e.getPlanCtx(recommendation)
 	planInfo := &invertedFilterPlanningInfo{
-		expression:      invFilter,
-		preFiltererExpr: preFiltererExpr,
-		preFiltererType: preFiltererType,
-		invColumn:       int(invColumn),
+		Expression:      invFilter,
+		PreFiltererExpr: preFiltererExpr,
+		PreFiltererType: preFiltererType,
+		InvColumn:       int(invColumn),
 	}
 	if err := e.dsp.planInvertedFilter(e.ctx, planCtx, planInfo, physPlan); err != nil {
 		return nil, err
@@ -1171,7 +1172,7 @@ func (e *distSQLSpecExecFactory) ConstructLimit(
 	// Note that we pass in nil slice for exprs because we will evaluate both
 	// expressions below, locally.
 	recommendation := e.checkExprsAndMaybeMergeLastStage(nil /* exprs */, physPlan)
-	count, offset, err := evalLimit(e.ctx, e.planner.EvalContext(), limitExpr, offsetExpr)
+	count, offset, err := plannode.EvalLimit(e.ctx, e.planner.EvalContext(), limitExpr, offsetExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,10 +1223,10 @@ func (e *distSQLSpecExecFactory) ConstructProjectSet(
 		// cannotDistribute as the recommendation.
 		e.getPlanCtx(cannotDistribute),
 		&projectSetPlanningInfo{
-			columns:         cols,
-			numColsInSource: len(plan.physPlan.ResultColumns),
-			exprs:           exprs,
-			numColsPerGen:   numColsPerGen,
+			Columns:         cols,
+			NumColsInSource: len(plan.physPlan.ResultColumns),
+			Exprs:           exprs,
+			NumColsPerGen:   numColsPerGen,
 		},
 		nil, /* finalizeLastStageCb */
 	)
@@ -1256,22 +1257,22 @@ func (e *distSQLSpecExecFactory) ConstructWindow(
 	}
 
 	planInfo := windowPlanningInfo{
-		funcs:          make([]*windowFuncHolder, len(window.Exprs)),
-		partitionIdxs:  partitionIdxs,
-		columnOrdering: window.Ordering,
+		Funcs:          make([]*windowFuncHolder, len(window.Exprs)),
+		PartitionIdxs:  partitionIdxs,
+		ColumnOrdering: window.Ordering,
 	}
 	for windowFnSpecIdx := range window.Exprs {
 		argsIdxs := make([]uint32, len(window.ArgIdxs[windowFnSpecIdx]))
 		for i := range argsIdxs {
 			argsIdxs[i] = uint32(window.ArgIdxs[windowFnSpecIdx][i])
 		}
-		planInfo.funcs[windowFnSpecIdx] = &windowFuncHolder{
-			expr:         window.Exprs[windowFnSpecIdx],
-			args:         window.Exprs[windowFnSpecIdx].Exprs,
-			argsIdxs:     argsIdxs,
-			filterColIdx: window.FilterIdxs[windowFnSpecIdx],
-			outputColIdx: window.OutputIdxs[windowFnSpecIdx],
-			frame:        window.Exprs[windowFnSpecIdx].WindowDef.Frame,
+		planInfo.Funcs[windowFnSpecIdx] = &windowFuncHolder{
+			Expr:         window.Exprs[windowFnSpecIdx],
+			Args:         window.Exprs[windowFnSpecIdx].Exprs,
+			ArgsIdxs:     argsIdxs,
+			FilterColIdx: window.FilterIdxs[windowFnSpecIdx],
+			OutputColIdx: window.OutputIdxs[windowFnSpecIdx],
+			Frame:        window.Exprs[windowFnSpecIdx].WindowDef.Frame,
 		}
 	}
 
@@ -1526,13 +1527,13 @@ func (e *distSQLSpecExecFactory) ConstructVectorSearch(
 	}
 	// TODO(yuzefovich): record the index usage when applicable.
 	planInfo := &vectorSearchPlanningInfo{
-		table:               tabDesc,
-		index:               indexDesc,
-		prefixKeys:          prefixKeys,
-		queryVector:         queryVector,
-		targetNeighborCount: targetNeighborCount,
-		cols:                cols,
-		columns:             resultCols,
+		Table:               tabDesc,
+		Index:               indexDesc,
+		PrefixKeys:          prefixKeys,
+		QueryVector:         queryVector,
+		TargetNeighborCount: targetNeighborCount,
+		Cols:                cols,
+		Columns:             resultCols,
 	}
 	// Don't allow distribution for vector search operators, for now.
 	planCtx := e.getPlanCtx(cannotDistribute)
@@ -1565,12 +1566,12 @@ func (e *distSQLSpecExecFactory) ConstructVectorMutationSearch(
 	}
 	// TODO(yuzefovich): record the index usage when applicable.
 	planInfo := &vectorMutationSearchPlanningInfo{
-		table:          table.(*optTable).desc,
-		index:          index.(*optIndex).idx,
-		prefixKeyCols:  prefixKeyCols,
-		queryVectorCol: queryVectorCol,
-		suffixKeyCols:  suffixKeyCols,
-		isIndexPut:     isIndexPut,
+		Table:          table.(*optTable).desc,
+		Index:          index.(*optIndex).idx,
+		PrefixKeyCols:  prefixKeyCols,
+		QueryVectorCol: queryVectorCol,
+		SuffixKeyCols:  suffixKeyCols,
+		IsIndexPut:     isIndexPut,
 	}
 	// Don't allow distribution for vector search operators, for now.
 	planCtx := e.getPlanCtx(cannotDistribute)

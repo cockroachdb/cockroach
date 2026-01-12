@@ -237,37 +237,37 @@ func checkSupportForPlanNode(
 		return shouldDistribute, 0
 
 	case *distinctNode:
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		return checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *exportNode:
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		return checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *filterNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
-		blockers.addMultiple(checkExprForDistSQL(n.filter, distSQLVisitor))
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
+		blockers.addMultiple(checkExprForDistSQL(n.Filter, distSQLVisitor))
 		return rec, blockers
 
 	case *groupNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
-		for _, agg := range n.funcs {
-			if agg.distsqlBlocklist {
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
+		for _, agg := range n.Funcs {
+			if agg.DistsqlBlocklist {
 				blockers.addSingle(aggDistSQLBlocklist)
 			}
 		}
 		// Don't force distribution if we expect to process small number of
 		// rows.
 		aggRec := canDistribute
-		if n.estimatedInputRowCount == 0 {
+		if n.EstimatedInputRowCount == 0 {
 			log.VEventf(ctx, 2, "aggregation (no stats) recommends plan distribution")
 			aggRec = shouldDistribute
-		} else if n.estimatedInputRowCount >= sd.DistributeGroupByRowCountThreshold {
+		} else if n.EstimatedInputRowCount >= sd.DistributeGroupByRowCountThreshold {
 			log.VEventf(ctx, 2, "large aggregation recommends plan distribution")
 			aggRec = shouldDistribute
 		}
 		return rec.compose(aggRec), blockers
 
 	case *indexJoinNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Index joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
@@ -282,8 +282,8 @@ func checkSupportForPlanNode(
 		return rec, blockers
 
 	case *invertedFilterNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
-		blockers.addMultiple(checkExprForDistSQL(n.preFiltererExpr, distSQLVisitor))
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
+		blockers.addMultiple(checkExprForDistSQL(n.PreFiltererExpr, distSQLVisitor))
 		// When filtering is a union of inverted spans, it is distributable: place
 		// an inverted filterer on each node, which produce the primary keys in
 		// arbitrary order, and de-duplicate the PKs at the next stage.
@@ -303,7 +303,7 @@ func checkSupportForPlanNode(
 		// the inverted column as the original type (e.g. for geospatial, tries to
 		// decode the int cell-id as a geometry) which obviously fails -- this is
 		// related to #50659. Fix this in the distSQLSpecExecFactory.
-		if n.expression.Left != nil || n.expression.Right != nil {
+		if n.Expression.Left != nil || n.Expression.Right != nil {
 			blockers.addSingle(invertedFilterProhibited)
 		}
 		// TODO(yuzefovich): we might want to be smarter about this and don't force
@@ -312,7 +312,7 @@ func checkSupportForPlanNode(
 		return rec.compose(shouldDistribute), blockers
 
 	case *invertedJoinNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		if n.fetch.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Inverted joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
@@ -352,10 +352,10 @@ func checkSupportForPlanNode(
 		// Note that we don't need to check whether we support distribution of
 		// n.countExpr or n.offsetExpr because those expressions are evaluated
 		// locally, during the physical planning.
-		return checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		return checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 
 	case *lookupJoinNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		if n.remoteLookupExpr != nil || n.remoteOnlyLookups {
 			// This is a locality optimized join.
 			blockers.addSingle(localityOptimizedOpProhibited)
@@ -381,22 +381,22 @@ func checkSupportForPlanNode(
 		return rec.compose(canDistribute), blockers
 
 	case *ordinalityNode:
-		_, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		_, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		// WITH ORDINALITY never gets distributed so that the gateway node can
 		// always number each row in order.
 		blockers.addSingle(ordinalityProhibited)
 		return cannotDistribute, blockers
 
 	case *projectSetNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
-		for i := range n.exprs {
-			blockers.addMultiple(checkExprForDistSQL(n.exprs[i], distSQLVisitor))
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
+		for i := range n.Exprs {
+			blockers.addMultiple(checkExprForDistSQL(n.Exprs[i], distSQLVisitor))
 		}
 		return rec, blockers
 
 	case *renderNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
-		for _, e := range n.render {
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
+		for _, e := range n.Render {
 			blockers.addMultiple(checkExprForDistSQL(e, distSQLVisitor))
 		}
 		return rec, blockers
@@ -444,28 +444,28 @@ func checkSupportForPlanNode(
 		return rec, blockers
 
 	case *sortNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		// Don't force distribution if we expect to process small number of
 		// rows.
 		sortRec := canDistribute
-		if n.estimatedInputRowCount == 0 {
+		if n.EstimatedInputRowCount == 0 {
 			log.VEventf(ctx, 2, "sort (no stats) recommends plan distribution")
 			sortRec = shouldDistribute
-		} else if n.estimatedInputRowCount >= sd.DistributeSortRowCountThreshold {
+		} else if n.EstimatedInputRowCount >= sd.DistributeSortRowCountThreshold {
 			log.VEventf(ctx, 2, "large sort recommends plan distribution")
 			sortRec = shouldDistribute
 		}
 		return rec.compose(sortRec), blockers
 
 	case *topKNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		// Don't force distribution if we expect to process small number of
 		// rows.
 		topKRec := canDistribute
-		if n.estimatedInputRowCount == 0 {
+		if n.EstimatedInputRowCount == 0 {
 			log.VEventf(ctx, 2, "top k (no stats) recommends plan distribution")
 			topKRec = shouldDistribute
-		} else if n.estimatedInputRowCount >= sd.DistributeSortRowCountThreshold {
+		} else if n.EstimatedInputRowCount >= sd.DistributeSortRowCountThreshold {
 			log.VEventf(ctx, 2, "large top k recommends plan distribution")
 			topKRec = shouldDistribute
 		}
@@ -499,7 +499,7 @@ func checkSupportForPlanNode(
 		// Don't allow distribution for vector search operators, for now.
 		// TODO(yuzefovich): if we start distributing plans with these nodes,
 		// we'll need to ensure to collect LeafTxnFinalInfo metadata.
-		_, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		_, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		blockers.addSingle(vectorSearchProhibited)
 		return cannotDistribute, blockers
 
@@ -510,9 +510,9 @@ func checkSupportForPlanNode(
 		return cannotDistribute, distSQLBlockers(vectorSearchProhibited)
 
 	case *windowNode:
-		rec, blockers := checkSupportForPlanNode(ctx, n.input, distSQLVisitor, sd, txnHasBufferedWrites)
+		rec, blockers := checkSupportForPlanNode(ctx, n.Source, distSQLVisitor, sd, txnHasBufferedWrites)
 		windowRec := canDistribute
-		if len(n.partitionIdxs) > 0 {
+		if len(n.PartitionIdxs) > 0 {
 			// If the window has a PARTITION BY clause, then we should distribute the
 			// execution.
 			// TODO(yuzefovich): we might want to be smarter about this and don't

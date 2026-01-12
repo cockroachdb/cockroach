@@ -67,15 +67,15 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	}, nil
 }
 
-func (n *commentOnSchemaNode) startExec(params runParams) error {
+func (n *commentOnSchemaNode) StartExec(params runParams) error {
 	var err error
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(
-			params.ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType,
+		err = params.P.(*planner).deleteComment(
+			params.Ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType,
 		)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.schemaDesc.GetID(), 0 /* subID */, catalogkeys.SchemaCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -87,8 +87,8 @@ func (n *commentOnSchemaNode) startExec(params runParams) error {
 		scComment = *n.n.Comment
 	}
 
-	return params.p.logEvent(
-		params.ctx,
+	return params.P.(*planner).logEvent(
+		params.Ctx,
 		n.schemaDesc.GetID(),
 		&eventpb.CommentOnSchema{
 			SchemaName:  n.n.Name.String(),

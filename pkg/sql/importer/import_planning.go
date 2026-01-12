@@ -209,7 +209,7 @@ func importJobDescription(
 		stmt.Options = append(stmt.Options, opt)
 	}
 	sort.Slice(stmt.Options, func(i, j int) bool { return stmt.Options[i].Key < stmt.Options[j].Key })
-	ann := p.ExtendedEvalContext().Annotations
+	ann := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Annotations
 	return tree.AsStringWithFlags(
 		&stmt, tree.FmtAlwaysQualifyNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
 	), nil
@@ -370,7 +370,7 @@ func importPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, importStmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnIsSingleStmt || isDetached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt() || isDetached) {
 			return errors.Errorf("IMPORT cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 

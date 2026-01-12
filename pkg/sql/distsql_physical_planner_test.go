@@ -1577,7 +1577,7 @@ func TestPartitionSpans(t *testing.T) {
 				}),
 			}
 			planCtx := dsp.NewPlanningCtxWithOracle(
-				ctx, &extendedEvalContext{Context: *evalCtx}, nil, /* planner */
+				ctx, &ExtendedEvalContext{Context: *evalCtx}, nil, /* planner */
 				nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, NoStrictLocalityFiltering,
 			)
 			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
@@ -1650,7 +1650,7 @@ func TestPartitionSpans(t *testing.T) {
 					}),
 				}
 				planCtxStrict := dsp.NewPlanningCtxWithOracle(
-					ctxLoc, &extendedEvalContext{Context: *evalCtxLoc}, nil, /* planner */
+					ctxLoc, &ExtendedEvalContext{Context: *evalCtxLoc}, nil, /* planner */
 					nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, true, /* strictFiltering */
 				)
 				planCtxStrict.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
@@ -1850,7 +1850,7 @@ func TestShouldPickGatewayNode(t *testing.T) {
 			}),
 		}
 		mockPlanCtx := &PlanningCtx{
-			ExtendedEvalCtx: &extendedEvalContext{
+			ExtendedEvalCtx: &ExtendedEvalContext{
 				Context: *evalCtx,
 			},
 		}
@@ -1942,7 +1942,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	// This test is specific to gossip-based planning.
 	useGossipPlanning.Override(ctx, &st.SV, true)
 	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
+		ctx, &ExtendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
 		nil /* planner */, nil /* txn */, FullDistribution,
 	)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)
@@ -2094,88 +2094,129 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &distinctNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &filterNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// filterNode might be handled via wrapping a row-execution
 			// processor, so we safely prohibit the parallelization.
 			prohibitParallelization: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				funcs:               []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
-			}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &groupNode{
+					Funcs: []*aggregateFuncHolder{{FilterRenderIdx: tree.NoColumnIdx}},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// Non-filtering aggregation is supported.
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				funcs:               []*aggregateFuncHolder{{filterRenderIdx: 0}}},
-			}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &groupNode{
+					Funcs: []*aggregateFuncHolder{{FilterRenderIdx: 0}},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// Filtering aggregation is not natively supported.
 			prohibitParallelization: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				funcs: []*aggregateFuncHolder{
-					{filterRenderIdx: 0},
-					{filterRenderIdx: tree.NoColumnIdx},
-				}},
-			}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &groupNode{
+					Funcs: []*aggregateFuncHolder{
+						{FilterRenderIdx: 0},
+						{FilterRenderIdx: tree.NoColumnIdx},
+					},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// Filtering aggregation is not natively supported.
 			prohibitParallelization: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				indexJoinPlanningInfo: indexJoinPlanningInfo{
-					fetch: fetchPlanningInfo{desc: makeTableDesc()},
-				},
-			}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &indexJoinNode{
+					indexJoinPlanningInfo: indexJoinPlanningInfo{
+						fetch: fetchPlanningInfo{desc: makeTableDesc()},
+					},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &limitNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &ordinalityNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
-			}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &renderNode{
+					Render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				render:              []tree.TypedExpr{&tree.IsNullExpr{}},
-			}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &renderNode{
+					Render: []tree.TypedExpr{&tree.IsNullExpr{}},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
 			// prohibit the parallelization for all non-IndexedVar expressions).
 			prohibitParallelization: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
-				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}, &tree.IsNullExpr{}},
-			}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &renderNode{
+					Render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}, &tree.IsNullExpr{}},
+				}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
 			// prohibit the parallelization for all non-IndexedVar expressions).
 			prohibitParallelization: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &sortNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			hasScanNodeToParallelize: true,
 		},
 		{
@@ -2191,7 +2232,11 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: false,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: func() planNode {
+				n := &windowNode{}
+				n.Source = scanToParallelize
+				return n
+			}()}},
 			// windowNode is not fully supported by the vectorized.
 			prohibitParallelization: true,
 		},

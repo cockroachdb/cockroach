@@ -22,7 +22,7 @@ type setSessionAuthorizationDefaultNode struct {
 func (n *setSessionAuthorizationDefaultNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setSessionAuthorizationDefaultNode) Values() tree.Datums            { return nil }
 func (n *setSessionAuthorizationDefaultNode) Close(_ context.Context)        {}
-func (n *setSessionAuthorizationDefaultNode) startExec(params runParams) error {
+func (n *setSessionAuthorizationDefaultNode) StartExec(params runParams) error {
 	// This is currently the same as `SET ROLE = DEFAULT`, which means that it
 	// only changes the "current user." In Postgres, `SET SESSION AUTHORIZATION`
 	// also changes the "session user," but since the session user cannot be
@@ -31,5 +31,5 @@ func (n *setSessionAuthorizationDefaultNode) startExec(params runParams) error {
 	// NOTE: If in the future we do allow the session user to be modified, we
 	// should still track the original logged-user, and use that for the audit
 	// logs written by event_log.
-	return params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser())
+	return params.P.(*planner).setRole(params.Ctx, false /* local */, params.P.(*planner).SessionData().SessionUser())
 }

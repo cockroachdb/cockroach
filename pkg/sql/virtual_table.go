@@ -180,7 +180,7 @@ func (p *planner) newVirtualTableNode(
 	}
 }
 
-func (n *virtualTableNode) startExec(runParams) error {
+func (n *virtualTableNode) StartExec(runParams) error {
 	return nil
 }
 
@@ -258,11 +258,11 @@ var _ planNode = &vTableLookupJoinNode{}
 var _ rowPusher = &vTableLookupJoinNode{}
 
 // startExec implements the planNode interface.
-func (v *vTableLookupJoinNode) startExec(params runParams) error {
-	v.run.keyCtx = constraint.KeyContext{Ctx: params.ctx, EvalCtx: params.EvalContext()}
+func (v *vTableLookupJoinNode) StartExec(params runParams) error {
+	v.run.keyCtx = constraint.KeyContext{Ctx: params.Ctx, EvalCtx: params.EvalContext()}
 	if v.joinType == descpb.InnerJoin || v.joinType == descpb.LeftOuterJoin {
 		v.run.rows = rowcontainer.NewRowContainer(
-			params.p.Mon().MakeBoundAccount(),
+			params.P.(*planner).Mon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(v.columns),
 		)
 	} else if v.joinType != descpb.LeftSemiJoin && v.joinType != descpb.LeftAntiJoin {
@@ -270,7 +270,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	}
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	db, err := params.p.byNameGetterBuilder().Get().Database(params.ctx, v.dbName)
+	db, err := params.P.(*planner).byNameGetterBuilder().Get().Database(params.Ctx, v.dbName)
 	if err != nil {
 		return err
 	}
@@ -287,16 +287,16 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		// Check if there are any rows left to emit from the last input row.
 		if v.run.rows != nil && v.run.rows.Len() > 0 {
 			copy(v.run.row, v.run.rows.At(0))
-			v.run.rows.PopFirst(params.ctx)
+			v.run.rows.PopFirst(params.Ctx)
 			return true, nil
 		}
 
 		// Lookup more rows from the virtual table.
-		ok, err := v.input.Next(params)
+		ok, err := v.Source.Next(params)
 		if !ok || err != nil {
 			return ok, err
 		}
-		inputRow := v.input.Values()
+		inputRow := v.Source.Values()
 		var span constraint.Span
 		datum := inputRow[v.eqCol]
 		// Generate an index constraint from the equality column of the input.
@@ -307,7 +307,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 
 		// Create the generation function for the index constraint.
 		genFunc := v.virtualTableEntry.makeConstrainedRowsGenerator(
-			params.p, v.db, v.index,
+			params.P.(*planner), v.db, v.index,
 			v.run.indexKeyDatums,
 			catalog.ColumnIDToOrdinalMap(v.table.PublicColumns()),
 			&idxConstraint,
@@ -318,7 +318,7 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 		v.run.matched = false
 		// Finally, we're ready to do the lookup. This invocation will push all of
 		// the looked-up rows into v.run.rows.
-		if err := genFunc(params.ctx, v); err != nil {
+		if err := genFunc(params.Ctx, v); err != nil {
 			return false, err
 		}
 		switch v.joinType {
@@ -363,7 +363,7 @@ func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 	}
 	// Run the predicate and exit if we don't match, or if there was an error.
 	if ok, err := v.pred.eval(
-		v.run.params.ctx,
+		v.run.params.Ctx,
 		v.run.params.EvalContext(),
 		v.run.row[:len(v.inputCols)],
 		v.run.row[len(v.inputCols):],
@@ -376,7 +376,7 @@ func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 		// anti joins we only care to know whether there was a match or not.
 		return nil
 	}
-	_, err := v.run.rows.AddRow(v.run.params.ctx, v.run.row)
+	_, err := v.run.rows.AddRow(v.run.params.Ctx, v.run.row)
 	return err
 }
 
@@ -387,7 +387,7 @@ func (v *vTableLookupJoinNode) Values() tree.Datums {
 
 // Close implements the planNode interface.
 func (v *vTableLookupJoinNode) Close(ctx context.Context) {
-	v.input.Close(ctx)
+	v.Source.Close(ctx)
 	if v.run.rows != nil {
 		v.run.rows.Close(ctx)
 	}

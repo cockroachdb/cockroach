@@ -173,12 +173,12 @@ type fetchNode struct {
 	fetchMoveNodeBase
 }
 
-func (f *fetchNode) startExec(_ runParams) error {
+func (f *fetchNode) StartExec(_ runParams) error {
 	return f.startInternal()
 }
 
 func (f *fetchNode) Next(params runParams) (bool, error) {
-	return f.nextInternal(params.ctx)
+	return f.nextInternal(params.Ctx)
 }
 
 func (f *fetchNode) Values() tree.Datums {
@@ -194,13 +194,13 @@ type moveNode struct {
 	rowsAffectedOutputHelper
 }
 
-func (m *moveNode) startExec(params runParams) error {
+func (m *moveNode) StartExec(params runParams) error {
 	if err := m.startInternal(); err != nil {
 		return err
 	}
 	// Execute the move to completion, keeping track of the affected row count.
 	for {
-		next, err := m.nextInternal(params.ctx)
+		next, err := m.nextInternal(params.Ctx)
 		if !next || err != nil {
 			return err
 		}

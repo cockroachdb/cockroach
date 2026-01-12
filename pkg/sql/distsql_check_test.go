@@ -56,62 +56,67 @@ func TestDistSQLBlockers(t *testing.T) {
 			makePlan: func() planNode {
 				subquery := &tree.Subquery{}
 				subquery.SetType(types.Oid)
-				return &renderNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-					render: []tree.TypedExpr{
+				rn := &renderNode{
+					Render: []tree.TypedExpr{
 						&tree.RoutineExpr{},
 						subquery,
 					},
 				}
+				rn.Source = &zeroNode{}
+				return rn
 			},
 		},
 		{
 			expected: distSQLBlockers(oidProhibited),
 			makePlan: func() planNode {
-				return &renderNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-					render:              []tree.TypedExpr{&tree.DOid{}},
+				rn := &renderNode{
+					Render: []tree.TypedExpr{&tree.DOid{}},
 				}
+				rn.Source = &zeroNode{}
+				return rn
 			},
 		},
 		{
 			expected: distSQLBlockers(arrayOfUntypedTuplesProhibited),
 			makePlan: func() planNode {
-				return &renderNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-					render: []tree.TypedExpr{
+				rn := &renderNode{
+					Render: []tree.TypedExpr{
 						&tree.DArray{ParamTyp: types.AnyTuple, Array: tree.Datums{}},
 					},
 				}
+				rn.Source = &zeroNode{}
+				return rn
 			},
 		},
 		{
 			expected: distSQLBlockers(untypedTupleProhibited),
 			makePlan: func() planNode {
-				return &renderNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-					render:              []tree.TypedExpr{tree.NewDTuple(types.AnyTuple)},
+				rn := &renderNode{
+					Render: []tree.TypedExpr{tree.NewDTuple(types.AnyTuple)},
 				}
+				rn.Source = &zeroNode{}
+				return rn
 			},
 		},
 		{
 			expected: distSQLBlockers(funcDistSQLBlocklist | jsonpathProhibited),
 			makePlan: func() planNode {
-				return &renderNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-					render: []tree.TypedExpr{
+				rn := &renderNode{
+					Render: []tree.TypedExpr{
 						funcExpr,
 						&tree.DJsonpath{},
 					},
 				}
+				rn.Source = &zeroNode{}
+				return rn
 			},
 		},
 		{
 			expected: distSQLBlockers(unsupportedPlanNode | ordinalityProhibited),
 			makePlan: func() planNode {
-				return &ordinalityNode{
-					singleInputPlanNode: singleInputPlanNode{input: &scanBufferNode{}},
-				}
+				node := &ordinalityNode{}
+				node.Source = &scanBufferNode{}
+				return node
 			},
 		},
 		{
@@ -119,9 +124,8 @@ func TestDistSQLBlockers(t *testing.T) {
 			makePlan: func() planNode {
 				input := &scanNode{}
 				input.fetchPlanningInfo.catalogCols = []catalog.Column{mvccCol}
-				node := &indexJoinNode{
-					singleInputPlanNode: singleInputPlanNode{input: input},
-				}
+				node := &indexJoinNode{}
+				node.Source = input
 				node.fetch.lockingStrength = descpb.ScanLockingStrength_FOR_UPDATE
 				return node
 			},
@@ -131,9 +135,8 @@ func TestDistSQLBlockers(t *testing.T) {
 			name:     "mvcc col without buffered writes",
 			expected: 0,
 			makePlan: func() planNode {
-				node := &indexJoinNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-				}
+				node := &indexJoinNode{}
+				node.Source = &zeroNode{}
 				node.fetch.catalogCols = []catalog.Column{mvccCol}
 				return node
 			},
@@ -144,13 +147,14 @@ func TestDistSQLBlockers(t *testing.T) {
 				spanExpr := &inverted.SpanExpression{
 					Left: &inverted.SpanExpression{},
 				}
-				return &invertedFilterNode{
-					singleInputPlanNode: singleInputPlanNode{input: &scanBufferNode{}},
-					invertedFilterPlanningInfo: invertedFilterPlanningInfo{
-						expression:      spanExpr,
-						preFiltererExpr: funcExpr,
+				node := &invertedFilterNode{
+					InvertedFilterPlanningInfo: invertedFilterPlanningInfo{
+						Expression:      spanExpr,
+						PreFiltererExpr: funcExpr,
 					},
 				}
+				node.Source = &scanBufferNode{}
+				return node
 			},
 		},
 		{
@@ -162,22 +166,20 @@ func TestDistSQLBlockers(t *testing.T) {
 		{
 			expected: distSQLBlockers(localityOptimizedOpProhibited | unsupportedPlanNode | systemColumnsAndBufferedWritesProhibited),
 			makePlan: func() planNode {
-				return &bufferNode{
-					singleInputPlanNode: singleInputPlanNode{
-						input: &lookupJoinNode{
-							singleInputPlanNode: singleInputPlanNode{
-								input: &scanNode{
-									fetchPlanningInfo: fetchPlanningInfo{
-										catalogCols: []catalog.Column{mvccCol},
-									},
-								},
-							},
-							lookupJoinPlanningInfo: lookupJoinPlanningInfo{
-								remoteOnlyLookups: true,
-							},
-						},
+				scanInput := &scanNode{
+					fetchPlanningInfo: fetchPlanningInfo{
+						catalogCols: []catalog.Column{mvccCol},
 					},
 				}
+				ljNode := &lookupJoinNode{
+					lookupJoinPlanningInfo: lookupJoinPlanningInfo{
+						remoteOnlyLookups: true,
+					},
+				}
+				ljNode.Source = scanInput
+				bufNode := &bufferNode{}
+				bufNode.Source = ljNode
+				return bufNode
 			},
 			txnBufferedWrites: true,
 		},
@@ -196,9 +198,9 @@ func TestDistSQLBlockers(t *testing.T) {
 		{
 			expected: distSQLBlockers(vectorSearchProhibited),
 			makePlan: func() planNode {
-				return &vectorMutationSearchNode{
-					singleInputPlanNode: singleInputPlanNode{input: &zeroNode{}},
-				}
+				node := &vectorMutationSearchNode{}
+				node.Source = &zeroNode{}
+				return node
 			},
 		},
 	} {

@@ -137,7 +137,7 @@ func getSetOpResultColumns(
 	return unionColumns, nil
 }
 
-func (n *unionNode) startExec(params runParams) error {
+func (n *unionNode) StartExec(params runParams) error {
 	panic("unionNode cannot be run in local mode")
 }
 

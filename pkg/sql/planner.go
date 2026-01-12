@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/planbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -62,9 +63,9 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// extendedEvalContext extends eval.Context with fields that are needed for
+// ExtendedEvalContext extends eval.Context with fields that are needed for
 // distsql planning.
-type extendedEvalContext struct {
+type ExtendedEvalContext struct {
 	eval.Context
 
 	// SessionID for this connection.
@@ -118,8 +119,87 @@ type extendedEvalContext struct {
 	validateDbZoneConfig *bool
 }
 
+// Ensure ExtendedEvalContext implements planbase.ExtendedEvalContextI
+var _ planbase.ExtendedEvalContextI = (*ExtendedEvalContext)(nil)
+
+// EvalContext returns the underlying eval.Context.
+func (evalCtx *ExtendedEvalContext) EvalContext() *eval.Context {
+	return &evalCtx.Context
+}
+
+// GetExecCfg returns the executor configuration as interface{}.
+// Note: Named GetExecCfg (not ExecCfg) to avoid collision with the ExecCfg field
+func (evalCtx *ExtendedEvalContext) GetExecCfg() interface{} {
+	return evalCtx.ExecCfg
+}
+
+// TxnIsSingleStmt returns whether the transaction is a single statement.
+func (evalCtx *ExtendedEvalContext) TxnIsSingleStmt() bool {
+	return evalCtx.Context.TxnIsSingleStmt
+}
+
+// GetTracing returns the tracing interface.
+func (evalCtx *ExtendedEvalContext) GetTracing() interface{} {
+	return evalCtx.Tracing
+}
+
+// ValidateDbZoneConfig returns the pointer to the validateDbZoneConfig flag.
+func (evalCtx *ExtendedEvalContext) ValidateDbZoneConfig() *bool {
+	return evalCtx.validateDbZoneConfig
+}
+
+// GetTxnModesSetter returns the transaction modes setter.
+func (evalCtx *ExtendedEvalContext) GetTxnModesSetter() interface{} {
+	return evalCtx.TxnModesSetter
+}
+
+// GetSettings returns the cluster settings.
+func (evalCtx *ExtendedEvalContext) GetSettings() interface{} {
+	return evalCtx.Settings
+}
+
+// GetSQLStatusServer returns the SQL status server.
+func (evalCtx *ExtendedEvalContext) GetSQLStatusServer() interface{} {
+	return evalCtx.SQLStatusServer
+}
+
+// GetStmtTimestamp returns the statement timestamp.
+func (evalCtx *ExtendedEvalContext) GetStmtTimestamp() interface{} {
+	return evalCtx.StmtTimestamp
+}
+
+// GetSessionID returns the session ID.
+func (evalCtx *ExtendedEvalContext) GetSessionID() interface{} {
+	return evalCtx.SessionID
+}
+
+// GetJobs returns the jobs collection.
+func (evalCtx *ExtendedEvalContext) GetJobs() interface{} {
+	return evalCtx.jobs
+}
+
+// GetAsOfSystemTime returns the AS OF SYSTEM TIME timestamp.
+func (evalCtx *ExtendedEvalContext) GetAsOfSystemTime() interface{} {
+	return &evalCtx.AsOfSystemTime
+}
+
+// SetTxnTimestamp sets the transaction timestamp.
+func (evalCtx *ExtendedEvalContext) SetTxnTimestamp(ts interface{}) {
+	evalCtx.Context.SetTxnTimestamp(ts.(time.Time))
+}
+
+// GetDescIDGenerator returns the descriptor ID generator.
+func (evalCtx *ExtendedEvalContext) GetDescIDGenerator() interface{} {
+	return evalCtx.DescIDGenerator
+}
+
+// GetTestingKnobs returns the testing knobs.
+func (evalCtx *ExtendedEvalContext) GetTestingKnobs() interface{} {
+	return evalCtx.TestingKnobs
+}
+
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
-func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
+func (evalCtx *ExtendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.ExecCfg = execCfg
 	evalCtx.Settings = execCfg.Settings
 	evalCtx.Codec = execCfg.Codec
@@ -147,7 +227,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 }
 
 // copy returns a deep copy of ctx.
-func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
+func (evalCtx *ExtendedEvalContext) copy() *ExtendedEvalContext {
 	cpy := *evalCtx
 	cpy.Context = *evalCtx.Context.Copy()
 	return &cpy
@@ -155,8 +235,8 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 
 // QueueJob creates a new job from record and queues it for execution after
 // the transaction commits.
-func (evalCtx *extendedEvalContext) QueueJob(record *jobs.Record) jobspb.JobID {
-	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
+func (evalCtx *ExtendedEvalContext) QueueJob(record *jobs.Record) jobspb.JobID {
+	jobID := evalCtx.GetExecCfg().(*ExecutorConfig).JobRegistry.MakeJobID()
 	record.JobID = jobID
 	evalCtx.jobs.addNonUniqueJobToCreate(record)
 	return jobID
@@ -228,7 +308,7 @@ type planner struct {
 
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
-	extendedEvalCtx extendedEvalContext
+	extendedEvalCtx ExtendedEvalContext
 
 	// sessionDataMutatorIterator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
@@ -534,7 +614,7 @@ func internalExtendedEvalCtx(
 	txnTimestamp time.Time,
 	stmtTimestamp time.Time,
 	execCfg *ExecutorConfig,
-) extendedEvalContext {
+) ExtendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
@@ -561,7 +641,7 @@ func internalExtendedEvalCtx(
 			localSqlStatsProvider = &sslocal.SQLStats{}
 		}
 	}
-	ret := extendedEvalContext{
+	ret := ExtendedEvalContext{
 		Context: eval.Context{
 			Txn:                            txn,
 			SessionDataStack:               sds,
@@ -595,12 +675,15 @@ func (p *planner) SemaCtx() *tree.SemaContext {
 	return &p.semaCtx
 }
 
+// Ensure planner implements planbase.PlannerAccessor
+var _ planbase.PlannerAccessor = (*planner)(nil)
+
 // Note: if the context will be modified, use ExtendedEvalContextCopy instead.
-func (p *planner) ExtendedEvalContext() *extendedEvalContext {
+func (p *planner) ExtendedEvalContext() planbase.ExtendedEvalContextI {
 	return &p.extendedEvalCtx
 }
 
-func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
+func (p *planner) ExtendedEvalContextCopy() *ExtendedEvalContext {
 	return p.extendedEvalCtx.copy()
 }
 
@@ -710,7 +793,7 @@ func (p *planner) User() username.SQLUsername {
 
 // TemporarySchemaName implements scbuildstmt.TemporarySchemaProvider.
 func (p *planner) TemporarySchemaName() string {
-	return temporarySchemaName(p.ExtendedEvalContext().SessionID)
+	return temporarySchemaName(p.ExtendedEvalContext().(*ExtendedEvalContext).SessionID)
 }
 
 // NodesStatusServer implements scbuildstmt.NodesStatusInfo.
@@ -837,7 +920,7 @@ func (p *planner) SessionDataMutatorIterator() *sessionmutator.SessionDataMutato
 
 // Ann is a shortcut for the Annotations from the eval context.
 func (p *planner) Ann() *tree.Annotations {
-	return p.ExtendedEvalContext().Context.Annotations
+	return p.ExtendedEvalContext().(*ExtendedEvalContext).Context.Annotations
 }
 
 // ExecutorConfig implements Planner interface.
@@ -1016,12 +1099,12 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), &p.schemaResolver, p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), &p.schemaResolver, p.InternalSQLTxn(), p.ExtendedEvalContext().(*ExtendedEvalContext).SessionID)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
+	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().(*ExtendedEvalContext).SessionID)
 }
 
 // SpanStats returns a stats for the given span of keys.
@@ -1072,7 +1155,7 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 		return
 	}
 	p.SemaCtx().Annotations = tree.MakeAnnotations(numAnnotations)
-	p.ExtendedEvalContext().Annotations = &p.SemaCtx().Annotations
+	p.ExtendedEvalContext().(*ExtendedEvalContext).Annotations = &p.SemaCtx().Annotations
 }
 
 // Optimizer is part of the eval.Planner interface.

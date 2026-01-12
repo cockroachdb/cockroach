@@ -50,7 +50,7 @@ func (p *planner) RefreshMaterializedView(
 	return &refreshMaterializedViewNode{n: n}, nil
 }
 
-func (n *refreshMaterializedViewNode) startExec(params runParams) error {
+func (n *refreshMaterializedViewNode) StartExec(params runParams) error {
 	// We refresh a materialized view by creating a new set of indexes to write
 	// the result of the view query into. The existing set of indexes will remain
 	// present and readable so that reads of the view during the refresh operation
@@ -58,7 +58,7 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	// results of the view query into the new set of indexes, and then change the
 	// set of indexes over to the new set of indexes atomically.
 
-	if !params.p.extendedEvalCtx.TxnIsSingleStmt {
+	if !params.P.(*planner).extendedEvalCtx.TxnIsSingleStmt() {
 		return pgerror.Newf(pgcode.InvalidTransactionState, "cannot refresh view in a multi-statement transaction")
 	}
 
@@ -66,13 +66,13 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Inform the user that CONCURRENTLY is not needed.
 	if n.n.Concurrently {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("CONCURRENTLY is not required as views are refreshed concurrently"),
 		)
 	}
 
-	_, desc, err := params.p.ResolveMutableTableDescriptorEx(params.ctx, n.n.Name, true /* required */, tree.ResolveRequireViewDesc)
+	_, desc, err := params.P.(*planner).ResolveMutableTableDescriptorEx(params.Ctx, n.n.Name, true /* required */, tree.ResolveRequireViewDesc)
 	if err != nil {
 		return err
 	}
@@ -111,27 +111,27 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 	refreshProto := &descpb.MaterializedViewRefresh{
 		NewPrimaryIndex: newPrimaryIndex,
 		NewIndexes:      newIndexes,
-		AsOf:            params.p.Txn().ReadTimestamp(),
+		AsOf:            params.P.(*planner).Txn().ReadTimestamp(),
 		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
 	}
-	if asOf := params.p.EvalContext().AsOfSystemTime; asOf != nil && asOf.ForBackfill {
-		refreshProto.AsOf = params.p.EvalContext().AsOfSystemTime.Timestamp
+	if asOf := params.P.(*planner).EvalContext().AsOfSystemTime; asOf != nil && asOf.ForBackfill {
+		refreshProto.AsOf = params.P.(*planner).EvalContext().AsOfSystemTime.Timestamp
 	} else {
-		refreshProto.AsOf = params.p.Txn().ReadTimestamp()
+		refreshProto.AsOf = params.P.(*planner).Txn().ReadTimestamp()
 	}
 	desc.AddMaterializedViewRefreshMutation(refreshProto)
 
 	// Log the refresh materialized view event.
-	if err := params.p.logEvent(params.ctx,
+	if err := params.P.(*planner).logEvent(params.Ctx,
 		desc.ID,
 		&eventpb.RefreshMaterializedView{
-			ViewName: params.p.ResolvedName(n.n.Name).FQString(),
+			ViewName: params.P.(*planner).ResolvedName(n.n.Name).FQString(),
 		}); err != nil {
 		return err
 	}
 
-	return params.p.writeSchemaChange(
-		params.ctx,
+	return params.P.(*planner).writeSchemaChange(
+		params.Ctx,
 		desc,
 		desc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(n.n, params.Ann()),

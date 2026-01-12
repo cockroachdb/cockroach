@@ -169,7 +169,7 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 	}, nil
 }
 
-func (n *GrantRoleNode) startExec(params runParams) error {
+func (n *GrantRoleNode) StartExec(params runParams) error {
 	var rowsAffected int
 
 	// Add memberships. Existing memberships are allowed.
@@ -188,8 +188,8 @@ ON CONFLICT ("role", "member")`
 
 	for _, r := range n.roles {
 		for _, m := range n.members {
-			memberStmtRowsAffected, err := params.p.InternalSQLTxn().ExecEx(
-				params.ctx, "grant-role", params.p.Txn(),
+			memberStmtRowsAffected, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+				params.Ctx, "grant-role", params.P.(*planner).Txn(),
 				sessiondata.NodeUserSessionDataOverride,
 				memberStmt,
 				r.Normalized(),
@@ -205,7 +205,7 @@ ON CONFLICT ("role", "member")`
 
 	// We need to bump the table version to trigger a refresh if anything changed.
 	if rowsAffected > 0 {
-		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).BumpRoleMembershipTableVersion(params.Ctx); err != nil {
 			return err
 		}
 	}
@@ -220,7 +220,7 @@ ON CONFLICT ("role", "member")`
 		return strings
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		0, /* no target */
 		&eventpb.GrantRole{GranteeRoles: sqlUsernameToStrings(n.roles), Members: sqlUsernameToStrings(n.members)})
 }

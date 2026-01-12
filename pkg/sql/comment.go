@@ -18,7 +18,7 @@ func (p *planner) updateComment(
 	b := p.Txn().NewBatch()
 	if err := p.descCollection.WriteCommentToBatch(
 		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 		b,
 		catalogkeys.MakeCommentKey(uint32(objID), subID, cmtType),
 		cmt,
@@ -34,7 +34,7 @@ func (p *planner) deleteComment(
 	b := p.Txn().NewBatch()
 	if err := p.descCollection.DeleteCommentInBatch(
 		ctx,
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 		b,
 		catalogkeys.MakeCommentKey(uint32(objID), subID, cmtType),
 	); err != nil {

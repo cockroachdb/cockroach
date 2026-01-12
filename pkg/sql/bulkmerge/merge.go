@@ -50,7 +50,7 @@ func Merge(
 		execCfg.RangeDescriptorCache,
 		nil,
 		nil,
-		execCtx.ExtendedEvalContext().Tracing)
+		execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing)
 	defer sqlReciever.Release()
 
 	execCtx.DistSQLPlanner().Run(
@@ -59,7 +59,7 @@ func Merge(
 		nil,
 		plan,
 		sqlReciever,
-		&execCtx.ExtendedEvalContext().Context,
+		&execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context,
 		nil,
 	)
 

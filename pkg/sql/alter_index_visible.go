@@ -75,7 +75,7 @@ func (p *planner) AlterIndexVisible(
 
 func (n *alterIndexVisibleNode) ReadingOwnWrites() {}
 
-func (n *alterIndexVisibleNode) startExec(params runParams) error {
+func (n *alterIndexVisibleNode) StartExec(params runParams) error {
 	if n.n.Invisibility.Value != 0.0 && n.index.Primary() {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "primary index cannot be invisible")
 	}
@@ -84,8 +84,8 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 	// behind the scene.
 	if n.n.Invisibility.Value != 0.0 {
 		if notVisibleIndexNotice := tabledesc.ValidateNotVisibleIndex(n.index, n.tableDesc); notVisibleIndexNotice != nil {
-			params.p.BufferClientNotice(
-				params.ctx,
+			params.P.(*planner).BufferClientNotice(
+				params.Ctx,
 				notVisibleIndexNotice,
 			)
 		}
@@ -99,17 +99,17 @@ func (n *alterIndexVisibleNode) startExec(params runParams) error {
 	n.index.IndexDesc().NotVisible = n.n.Invisibility.Value != 0.0
 	n.index.IndexDesc().Invisibility = n.n.Invisibility.Value
 
-	if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
+	if err := validateDescriptor(params.Ctx, params.P.(*planner), n.tableDesc); err != nil {
 		return err
 	}
 
-	if err := params.p.writeSchemaChange(
-		params.ctx, n.tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, n.tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterIndexVisible{
 			TableName:    n.n.Index.Table.FQString(),

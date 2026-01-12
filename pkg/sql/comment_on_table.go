@@ -50,13 +50,13 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 	}, nil
 }
 
-func (n *commentOnTableNode) startExec(params runParams) error {
+func (n *commentOnTableNode) StartExec(params runParams) error {
 	var err error
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(params.ctx, n.tableDesc.GetID(), 0 /* subID */, catalogkeys.TableCommentType)
+		err = params.P.(*planner).deleteComment(params.Ctx, n.tableDesc.GetID(), 0 /* subID */, catalogkeys.TableCommentType)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.tableDesc.GetID(), 0 /* subID */, catalogkeys.TableCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.tableDesc.GetID(), 0 /* subID */, catalogkeys.TableCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -67,10 +67,10 @@ func (n *commentOnTableNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		comment = *n.n.Comment
 	}
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.GetID(),
 		&eventpb.CommentOnTable{
-			TableName:   params.p.ResolvedName(n.n.Table).FQString(),
+			TableName:   params.P.(*planner).ResolvedName(n.n.Table).FQString(),
 			Comment:     comment,
 			NullComment: n.n.Comment == nil,
 		})

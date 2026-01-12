@@ -28,8 +28,8 @@ func (p *planner) CreateTenantNode(ctx context.Context, n *tree.CreateTenant) (p
 	}, nil
 }
 
-func (n *createTenantNode) startExec(params runParams) error {
-	tid, tenantName, err := n.tenantSpec.getTenantParameters(params.ctx, params.p)
+func (n *createTenantNode) StartExec(params runParams) error {
+	tid, tenantName, err := n.tenantSpec.getTenantParameters(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (n *createTenantNode) startExec(params runParams) error {
 		ctcfg.ID = &tenantID
 	}
 	ctcfg.IfNotExists = n.ifNotExists
-	_, err = params.p.createTenantInternal(params.ctx, ctcfg)
+	_, err = params.P.(*planner).createTenantInternal(params.Ctx, ctcfg)
 	return err
 }
 

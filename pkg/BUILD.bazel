@@ -2352,6 +2352,8 @@ GO_TARGETS = [
     "//pkg/sql/physicalplan/replicaoracle:replicaoracle_test",
     "//pkg/sql/physicalplan:physicalplan",
     "//pkg/sql/physicalplan:physicalplan_test",
+    "//pkg/sql/planbase:planbase",
+    "//pkg/sql/plannode:plannode",
     "//pkg/sql/plpgsql/parser/lexbase:lexbase",
     "//pkg/sql/plpgsql/parser:parser",
     "//pkg/sql/plpgsql/parser:parser_test",

@@ -100,17 +100,17 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	return &reassignOwnedByNode{n: n, normalizedOldRoles: normalizedOldRoles}, nil
 }
 
-func (n *reassignOwnedByNode) startExec(params runParams) error {
+func (n *reassignOwnedByNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.CreateReassignOwnedByCounter())
 
-	all, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
+	all, err := params.P.(*planner).Descriptors().GetAllDescriptors(params.Ctx, params.P.(*planner).txn)
 	if err != nil {
 		return err
 	}
 
 	// Filter for all objects in current database.
-	currentDatabase := params.p.CurrentDatabase()
-	currentDbDesc, err := params.p.Descriptors().MutableByName(params.p.txn).Database(params.ctx, currentDatabase)
+	currentDatabase := params.P.(*planner).CurrentDatabase()
+	currentDbDesc, err := params.P.(*planner).Descriptors().MutableByName(params.P.(*planner).txn).Database(params.Ctx, currentDatabase)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		// There should only be one database (current).
 		for _, dbID := range lCtx.dbIDs {
 			dbDesc := lCtx.dbDescs[dbID]
-			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, dbDesc)
+			owner, err := params.P.(*planner).getOwnerOfPrivilegeObject(params.Ctx, dbDesc)
 			if err != nil {
 				return err
 			}
@@ -134,7 +134,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 		for _, schemaID := range lCtx.schemaIDs {
 			schemaDesc := lCtx.schemaDescs[schemaID]
-			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, schemaDesc)
+			owner, err := params.P.(*planner).getOwnerOfPrivilegeObject(params.Ctx, schemaDesc)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 
 		for _, tbID := range lCtx.tbIDs {
 			tbDesc := lCtx.tbDescs[tbID]
-			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, tbDesc)
+			owner, err := params.P.(*planner).getOwnerOfPrivilegeObject(params.Ctx, tbDesc)
 			if err != nil {
 				return err
 			}
@@ -164,7 +164,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 		for _, typID := range lCtx.typIDs {
 			typDesc := lCtx.typDescs[typID]
-			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, typDesc)
+			owner, err := params.P.(*planner).getOwnerOfPrivilegeObject(params.Ctx, typDesc)
 			if err != nil {
 				return err
 			}
@@ -176,7 +176,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 		}
 		for _, fnID := range lCtx.fnIDs {
 			fnDesc := lCtx.fnDescs[fnID]
-			owner, err := params.p.getOwnerOfPrivilegeObject(params.ctx, fnDesc)
+			owner, err := params.P.(*planner).getOwnerOfPrivilegeObject(params.Ctx, fnDesc)
 			if err != nil {
 				return err
 			}
@@ -193,7 +193,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	dbDesc catalog.DatabaseDescriptor, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, dbDesc.GetID())
+	mutableDbDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Desc(params.Ctx, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -201,18 +201,18 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 		return nil
 	}
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
 	}
-	if err := params.p.setNewDatabaseOwner(params.ctx, mutableDbDesc, owner); err != nil {
+	if err := params.P.(*planner).setNewDatabaseOwner(params.Ctx, mutableDbDesc, owner); err != nil {
 		return err
 	}
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx,
 		mutableDbDesc.(*dbdesc.Mutable),
-		tree.AsStringWithFQNames(n.n, params.p.Ann()),
+		tree.AsStringWithFQNames(n.n, params.P.(*planner).Ann()),
 	); err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 func (n *reassignOwnedByNode) reassignSchemaOwner(
 	schemaDesc catalog.SchemaDescriptor, dbDesc *dbdesc.Mutable, params runParams,
 ) error {
-	mutableSchemaDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, schemaDesc.GetID())
+	mutableSchemaDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Desc(params.Ctx, schemaDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -230,18 +230,18 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 		return nil
 	}
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
 	}
-	if err := params.p.setNewSchemaOwner(
-		params.ctx, dbDesc, mutableSchemaDesc.(*schemadesc.Mutable), owner); err != nil {
+	if err := params.P.(*planner).setNewSchemaOwner(
+		params.Ctx, dbDesc, mutableSchemaDesc.(*schemadesc.Mutable), owner); err != nil {
 		return err
 	}
-	if err := params.p.writeSchemaDescChange(params.ctx,
+	if err := params.P.(*planner).writeSchemaDescChange(params.Ctx,
 		mutableSchemaDesc.(*schemadesc.Mutable),
-		tree.AsStringWithFQNames(n.n, params.p.Ann()),
+		tree.AsStringWithFQNames(n.n, params.P.(*planner).Ann()),
 	); err != nil {
 		return err
 	}
@@ -251,30 +251,30 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 func (n *reassignOwnedByNode) reassignTableOwner(
 	tbDesc catalog.TableDescriptor, params runParams,
 ) error {
-	mutableTbDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, tbDesc.GetID())
+	mutableTbDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Desc(params.Ctx, tbDesc.GetID())
 	if err != nil {
 		return err
 	}
 	if mutableTbDesc.Dropped() {
 		return nil
 	}
-	tableName, err := params.p.getQualifiedTableName(params.ctx, tbDesc)
+	tableName, err := params.P.(*planner).getQualifiedTableName(params.Ctx, tbDesc)
 	if err != nil {
 		return err
 	}
 
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
 	}
-	if err := params.p.setNewTableOwner(
-		params.ctx, mutableTbDesc.(*tabledesc.Mutable), *tableName, owner); err != nil {
+	if err := params.P.(*planner).setNewTableOwner(
+		params.Ctx, mutableTbDesc.(*tabledesc.Mutable), *tableName, owner); err != nil {
 		return err
 	}
-	if err := params.p.writeSchemaChange(
-		params.ctx, mutableTbDesc.(*tabledesc.Mutable), descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, mutableTbDesc.(*tabledesc.Mutable), descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
@@ -284,45 +284,45 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 func (n *reassignOwnedByNode) reassignTypeOwner(
 	typDesc catalog.NonAliasTypeDescriptor, params runParams,
 ) error {
-	mutableTypDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, typDesc.GetID())
+	mutableTypDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Desc(params.Ctx, typDesc.GetID())
 	if err != nil {
 		return err
 	}
 	if mutableTypDesc.Dropped() {
 		return nil
 	}
-	arrayDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typDesc.GetArrayTypeID())
+	arrayDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, typDesc.GetArrayTypeID())
 	if err != nil {
 		return err
 	}
 
-	typeName, err := params.p.getQualifiedTypeName(params.ctx, mutableTypDesc.(*typedesc.Mutable))
+	typeName, err := params.P.(*planner).getQualifiedTypeName(params.Ctx, mutableTypDesc.(*typedesc.Mutable))
 	if err != nil {
 		return err
 	}
-	arrayTypeName, err := params.p.getQualifiedTypeName(params.ctx, arrayDesc)
+	arrayTypeName, err := params.P.(*planner).getQualifiedTypeName(params.Ctx, arrayDesc)
 	if err != nil {
 		return err
 	}
 
 	owner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
 	}
-	if err := params.p.setNewTypeOwner(
-		params.ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, *typeName,
+	if err := params.P.(*planner).setNewTypeOwner(
+		params.Ctx, mutableTypDesc.(*typedesc.Mutable), arrayDesc, *typeName,
 		*arrayTypeName, owner); err != nil {
 		return err
 	}
-	if err := params.p.writeTypeSchemaChange(
-		params.ctx, mutableTypDesc.(*typedesc.Mutable), tree.AsStringWithFQNames(n.n, params.p.Ann()),
+	if err := params.P.(*planner).writeTypeSchemaChange(
+		params.Ctx, mutableTypDesc.(*typedesc.Mutable), tree.AsStringWithFQNames(n.n, params.P.(*planner).Ann()),
 	); err != nil {
 		return err
 	}
-	if err := params.p.writeTypeSchemaChange(
-		params.ctx, arrayDesc, tree.AsStringWithFQNames(n.n, params.p.Ann()),
+	if err := params.P.(*planner).writeTypeSchemaChange(
+		params.Ctx, arrayDesc, tree.AsStringWithFQNames(n.n, params.P.(*planner).Ann()),
 	); err != nil {
 		return err
 	}
@@ -332,7 +332,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 func (n *reassignOwnedByNode) reassignFunctionOwner(
 	fnDesc catalog.FunctionDescriptor, params runParams,
 ) error {
-	mutableDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Function(params.ctx, fnDesc.GetID())
+	mutableDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Function(params.Ctx, fnDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -340,13 +340,13 @@ func (n *reassignOwnedByNode) reassignFunctionOwner(
 		return nil
 	}
 	newOwner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
 	if err != nil {
 		return err
 	}
 	mutableDesc.GetPrivileges().SetOwner(newOwner)
-	return params.p.writeFuncSchemaChange(params.ctx, mutableDesc)
+	return params.P.(*planner).writeFuncSchemaChange(params.Ctx, mutableDesc)
 }
 
 func (n *reassignOwnedByNode) Next(runParams) (bool, error) { return false, nil }

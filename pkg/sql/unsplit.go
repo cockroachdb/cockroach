@@ -29,23 +29,23 @@ type unsplitRun struct {
 	lastUnsplitKey []byte
 }
 
-func (n *unsplitNode) startExec(runParams) error {
+func (n *unsplitNode) StartExec(runParams) error {
 	return nil
 }
 
 func (n *unsplitNode) Next(params runParams) (bool, error) {
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.Source.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
-	row := n.input.Values()
-	rowKey, err := getRowKey(params.ExecCfg().Codec, n.tableDesc, n.index, row)
+	row := n.Source.Values()
+	rowKey, err := getRowKey(params.ExecCfg().(*ExecutorConfig).Codec, n.tableDesc, n.index, row)
 	if err != nil {
 		return false, err
 	}
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
-		ctx := params.p.EvalContext().FmtCtx(tree.FmtSimple)
+	if err := params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).DB.AdminUnsplit(params.Ctx, rowKey); err != nil {
+		ctx := params.P.(*planner).EvalContext().FmtCtx(tree.FmtSimple)
 		row.Format(ctx)
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", ctx)
 	}
@@ -63,7 +63,7 @@ func (n *unsplitNode) Values() tree.Datums {
 }
 
 func (n *unsplitNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
 type unsplitAllNode struct {
@@ -81,7 +81,7 @@ type unsplitAllRun struct {
 	lastUnsplitKey []byte
 }
 
-func (n *unsplitAllNode) startExec(params runParams) error {
+func (n *unsplitAllNode) StartExec(params runParams) error {
 	// Use the internal executor to retrieve the split keys.
 	const statement = `SELECT r.start_key
 FROM crdb_internal.ranges_no_leases r,
@@ -93,8 +93,8 @@ WHERE s.descriptor_id = $1
   AND r.start_key >= s.start_key -- only consider split points inside the table keyspace.
   AND split_enforced_until IS NOT NULL`
 
-	it, err := params.p.InternalSQLTxn().QueryIteratorEx(
-		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
+	it, err := params.P.(*planner).InternalSQLTxn().QueryIteratorEx(
+		params.Ctx, "split points query", params.P.(*planner).txn, sessiondata.NoSessionDataOverride,
 		statement,
 		n.tableDesc.GetID(),
 		n.index.GetID(),
@@ -103,7 +103,7 @@ WHERE s.descriptor_id = $1
 		return err
 	}
 	var ok bool
-	for ok, err = it.Next(params.ctx); ok; ok, err = it.Next(params.ctx) {
+	for ok, err = it.Next(params.Ctx); ok; ok, err = it.Next(params.Ctx) {
 		n.run.keys = append(n.run.keys, []byte(*(it.Cur()[0].(*tree.DBytes))))
 	}
 	return err
@@ -116,7 +116,7 @@ func (n *unsplitAllNode) Next(params runParams) (bool, error) {
 	rowKey := n.run.keys[0]
 	n.run.keys = n.run.keys[1:]
 
-	if err := params.extendedEvalCtx.ExecCfg.DB.AdminUnsplit(params.ctx, rowKey); err != nil {
+	if err := params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).DB.AdminUnsplit(params.Ctx, rowKey); err != nil {
 		return false, errors.Wrapf(err, "could not UNSPLIT AT %s", keys.PrettyPrint(nil /* valDirs */, rowKey))
 	}
 

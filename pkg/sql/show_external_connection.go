@@ -43,7 +43,7 @@ func (p *planner) ShowExternalConnection(
 		name:    name,
 		columns: showExternalConnectionsColumns,
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			params := runParams{ctx: ctx, p: p, extendedEvalCtx: &p.extendedEvalCtx}
+			params := runParams{Ctx: ctx, P: p, ExtendedEvalCtx: &p.extendedEvalCtx}
 			connectionNames, err := getConnectionNames(params, n.ConnectionLabel,
 				true /* checkUsagePrivilege */)
 			if err != nil {

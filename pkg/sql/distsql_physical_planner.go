@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -397,7 +398,7 @@ func (p *spanPartitionState) update(
 // PlanningCtx contains data used and updated throughout the planning process of
 // a single query.
 type PlanningCtx struct {
-	ExtendedEvalCtx *extendedEvalContext
+	ExtendedEvalCtx *ExtendedEvalContext
 
 	// localityFilters indicate that the sqlInstance resolver should attempt to
 	// map the passed in kv node to a sql instance that matches any of the
@@ -2046,7 +2047,7 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 		return err
 	}
 	finalizeLastStageCb := planCtx.associateWithPlanNode(n)
-	if n.serialize {
+	if n.Serialize {
 		// We need to serialize the physical plan by forcing all streams to be
 		// merged into one on the gateway node. However, it is beneficial to
 		// apply the rendering (or the projection) before merging streams in
@@ -2060,10 +2061,10 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 			p.EnsureSingleStreamOnGateway(ctx, finalizeLastStageCb)
 		}
 	}
-	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
-	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, newColMap)
+	newColMap := identityMap(p.PlanToStreamColMap, len(n.Render))
+	newMergeOrdering := dsp.convertOrdering(n.ReqOrdering, newColMap)
 	err = p.AddRendering(
-		ctx, n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering, finalizeLastStageCb,
+		ctx, n.Render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering, finalizeLastStageCb,
 	)
 	if err != nil {
 		return err
@@ -2138,27 +2139,27 @@ type aggregatorPlanningInfo struct {
 func (dsp *DistSQLPlanner) addAggregators(
 	ctx context.Context, planCtx *PlanningCtx, p *PhysicalPlan, n *groupNode,
 ) error {
-	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(n.funcs))
-	argumentsColumnTypes := make([][]*types.T, len(n.funcs))
-	for i, fholder := range n.funcs {
-		funcIdx, err := execinfrapb.GetAggregateFuncIdx(fholder.funcName)
+	aggregations := make([]execinfrapb.AggregatorSpec_Aggregation, len(n.Funcs))
+	argumentsColumnTypes := make([][]*types.T, len(n.Funcs))
+	for i, fholder := range n.Funcs {
+		funcIdx, err := execinfrapb.GetAggregateFuncIdx(fholder.FuncName)
 		if err != nil {
 			return err
 		}
 		aggregations[i].Func = execinfrapb.AggregatorSpec_Func(funcIdx)
-		aggregations[i].Distinct = fholder.isDistinct
-		for _, renderIdx := range fholder.argRenderIdxs {
+		aggregations[i].Distinct = fholder.IsDistinct
+		for _, renderIdx := range fholder.ArgRenderIdxs {
 			aggregations[i].ColIdx = append(aggregations[i].ColIdx, uint32(p.PlanToStreamColMap[renderIdx]))
 		}
-		if fholder.hasFilter() {
-			col := uint32(p.PlanToStreamColMap[fholder.filterRenderIdx])
+		if fholder.HasFilter() {
+			col := uint32(p.PlanToStreamColMap[fholder.FilterRenderIdx])
 			aggregations[i].FilterColIdx = &col
 		}
-		aggregations[i].Arguments = make([]execinfrapb.Expression, len(fholder.arguments))
-		argumentsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
+		aggregations[i].Arguments = make([]execinfrapb.Expression, len(fholder.Arguments))
+		argumentsColumnTypes[i] = make([]*types.T, len(fholder.Arguments))
 		var ef physicalplan.ExprFactory
 		ef.Init(ctx, planCtx, nil /* indexVarMap */)
-		for j, argument := range fholder.arguments {
+		for j, argument := range fholder.Arguments {
 			var err error
 			aggregations[i].Arguments[j], err = ef.Make(argument)
 			if err != nil {
@@ -2171,12 +2172,12 @@ func (dsp *DistSQLPlanner) addAggregators(
 	return dsp.planAggregators(ctx, planCtx, p, &aggregatorPlanningInfo{
 		aggregations:         aggregations,
 		argumentsColumnTypes: argumentsColumnTypes,
-		isScalar:             n.isScalar,
-		groupCols:            n.groupCols,
-		groupColOrdering:     n.groupColOrdering,
-		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.input), p.PlanToStreamColMap),
-		reqOrdering:          n.reqOrdering,
-		estimatedRowCount:    n.estimatedRowCount,
+		isScalar:             n.IsScalar,
+		groupCols:            n.GroupCols,
+		groupColOrdering:     n.GroupColOrdering,
+		inputMergeOrdering:   dsp.convertOrdering(planReqOrdering(n.Source), p.PlanToStreamColMap),
+		reqOrdering:          n.ReqOrdering,
+		estimatedRowCount:    n.EstimatedRowCount,
 		finalizeLastStageCb:  planCtx.associateWithPlanNode(n),
 	})
 }
@@ -2838,7 +2839,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	ctx context.Context, planCtx *PlanningCtx, n *indexJoinNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -2944,7 +2945,7 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	ctx context.Context, planCtx *PlanningCtx, n *lookupJoinNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -3107,7 +3108,7 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 	ctx context.Context, planCtx *PlanningCtx, n *invertedJoinNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -3328,12 +3329,12 @@ func (dsp *DistSQLPlanner) planZigzagJoin(
 func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	ctx context.Context, planCtx *PlanningCtx, n *invertedFilterNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
-	n.finalizeLastStageCb = planCtx.associateWithPlanNode(n)
-	if err = dsp.planInvertedFilter(ctx, planCtx, &n.invertedFilterPlanningInfo, plan); err != nil {
+	n.FinalizeLastStageCb = planCtx.associateWithPlanNode(n)
+	if err = dsp.planInvertedFilter(ctx, planCtx, &n.InvertedFilterPlanningInfo, plan); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -3343,15 +3344,15 @@ func (dsp *DistSQLPlanner) planInvertedFilter(
 	ctx context.Context, planCtx *PlanningCtx, n *invertedFilterPlanningInfo, plan *PhysicalPlan,
 ) (err error) {
 	invertedFiltererSpec := &execinfrapb.InvertedFiltererSpec{
-		InvertedColIdx: uint32(n.invColumn),
-		InvertedExpr:   *n.expression.ToProto(),
+		InvertedColIdx: uint32(n.InvColumn),
+		InvertedExpr:   *n.Expression.ToProto(),
 	}
-	if n.preFiltererExpr != nil {
+	if n.PreFiltererExpr != nil {
 		invertedFiltererSpec.PreFiltererSpec = &execinfrapb.InvertedFiltererSpec_PreFiltererSpec{
-			Type: n.preFiltererType,
+			Type: n.PreFiltererType,
 		}
 		if invertedFiltererSpec.PreFiltererSpec.Expression, err = physicalplan.MakeExpression(
-			ctx, n.preFiltererExpr, planCtx, nil,
+			ctx, n.PreFiltererExpr, planCtx, nil,
 		); err != nil {
 			return err
 		}
@@ -3371,12 +3372,12 @@ func (dsp *DistSQLPlanner) planInvertedFilter(
 		lastSQLInstanceID := plan.Processors[plan.ResultRouters[0]].SQLInstanceID
 		plan.AddSingleGroupStage(
 			ctx, lastSQLInstanceID, execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
-			execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), n.finalizeLastStageCb,
+			execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), n.FinalizeLastStageCb,
 		)
 		return nil
 	}
 	// Must be distributable.
-	distributable := n.expression.Left == nil && n.expression.Right == nil
+	distributable := n.Expression.Left == nil && n.Expression.Right == nil
 	if !distributable {
 		return errors.Errorf("expected distributable inverted filterer")
 	}
@@ -3384,7 +3385,7 @@ func (dsp *DistSQLPlanner) planInvertedFilter(
 	// Instantiate one inverted filterer for every stream.
 	plan.AddNoGroupingStage(
 		execinfrapb.ProcessorCoreUnion{InvertedFilterer: invertedFiltererSpec},
-		execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), reqOrdering, n.finalizeLastStageCb,
+		execinfrapb.PostProcessSpec{}, plan.GetResultTypes(), reqOrdering, n.FinalizeLastStageCb,
 	)
 	// De-duplicate the PKs. Note that the inverted filterer output includes
 	// the inverted column always set to NULL, so we exclude it from the
@@ -3392,7 +3393,7 @@ func (dsp *DistSQLPlanner) planInvertedFilter(
 	inputResultCols := plan.GetResultTypes()
 	distinctColumns := make([]uint32, 0, len(inputResultCols)-1)
 	for i := 0; i < len(inputResultCols); i++ {
-		if i == n.invColumn {
+		if i == n.InvColumn {
 			continue
 		}
 		distinctColumns = append(distinctColumns, uint32(i))
@@ -3411,7 +3412,7 @@ func (dsp *DistSQLPlanner) planInvertedFilter(
 		},
 		execinfrapb.PostProcessSpec{},
 		plan.GetResultTypes(),
-		n.finalizeLastStageCb,
+		n.FinalizeLastStageCb,
 	)
 	return nil
 }
@@ -3630,17 +3631,17 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForExport(ctx, planCtx, n)
 
 	case *filterNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
 
-		if err = plan.AddFilter(ctx, n.filter, planCtx, plan.PlanToStreamColMap, planCtx.associateWithPlanNode(n)); err != nil {
+		if err = plan.AddFilter(ctx, n.Filter, planCtx, plan.PlanToStreamColMap, planCtx.associateWithPlanNode(n)); err != nil {
 			return nil, err
 		}
 
 	case *groupNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -3669,12 +3670,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForJoin(ctx, planCtx, n)
 
 	case *limitNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
 		var count, offset int64
-		if count, offset, err = evalLimit(ctx, planCtx.EvalContext(), n.countExpr, n.offsetExpr); err != nil {
+		if count, offset, err = plannode.EvalLimit(ctx, planCtx.EvalContext(), n.CountExpr, n.OffsetExpr); err != nil {
 			return nil, err
 		}
 		if err := plan.AddLimit(ctx, count, offset, planCtx, planCtx.associateWithPlanNode(n)); err != nil {
@@ -3691,7 +3692,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createPlanForProjectSet(ctx, planCtx, n)
 
 	case *renderNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -3704,23 +3705,23 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		plan, err = dsp.createTableReaders(ctx, planCtx, n)
 
 	case *sortNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
 
-		dsp.addSorters(ctx, plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */, planCtx.associateWithPlanNode(n))
+		dsp.addSorters(ctx, plan, n.Ordering, n.AlreadyOrderedPrefix, 0 /* limit */, planCtx.associateWithPlanNode(n))
 
 	case *topKNode:
-		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 		if err != nil {
 			return nil, err
 		}
 
-		if n.k <= 0 {
+		if n.K <= 0 {
 			return nil, errors.New("negative or zero value for LIMIT")
 		}
-		dsp.addSorters(ctx, plan, n.ordering, n.alreadyOrderedPrefix, n.k, planCtx.associateWithPlanNode(n))
+		dsp.addSorters(ctx, plan, n.Ordering, n.AlreadyOrderedPrefix, n.K, planCtx.associateWithPlanNode(n))
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)
@@ -3853,8 +3854,8 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	wrapper, err := newPlanNodeToRowSource(
 		n,
 		runParams{
-			extendedEvalCtx: &evalCtx,
-			p:               planCtx.planner,
+			ExtendedEvalCtx: &evalCtx,
+			P:               planCtx.planner,
 		},
 		firstNotWrapped,
 	)
@@ -4064,16 +4065,16 @@ func (dsp *DistSQLPlanner) createDistinctSpec(
 func (dsp *DistSQLPlanner) createPlanForDistinct(
 	ctx context.Context, planCtx *PlanningCtx, n *distinctNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
 	spec := dsp.createDistinctSpec(
-		convertFastIntSetToUint32Slice(n.distinctOnColIdxs),
-		convertFastIntSetToUint32Slice(n.columnsInOrder),
-		n.nullsAreDistinct,
-		n.errorOnDup,
-		dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
+		convertFastIntSetToUint32Slice(n.DistinctOnColIdxs),
+		convertFastIntSetToUint32Slice(n.ColumnsInOrder),
+		n.NullsAreDistinct,
+		n.ErrorOnDup,
+		dsp.convertOrdering(n.ReqOrdering, plan.PlanToStreamColMap),
 	)
 	dsp.addDistinctProcessors(ctx, plan, spec, planCtx.associateWithPlanNode(n))
 	return plan, nil
@@ -4108,8 +4109,8 @@ func (dsp *DistSQLPlanner) createPlanForVectorSearch(
 	planCtx *PlanningCtx, n *vectorSearchNode,
 ) (*PhysicalPlan, error) {
 	p := planCtx.NewPhysicalPlan()
-	n.finalizeLastStageCb = planCtx.associateWithPlanNode(n)
-	if err := dsp.planVectorSearch(planCtx, &n.vectorSearchPlanningInfo, p); err != nil {
+	n.FinalizeLastStageCb = planCtx.associateWithPlanNode(n)
+	if err := dsp.planVectorSearch(planCtx, &n.VectorSearchPlanningInfo, p); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -4119,28 +4120,28 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 	planCtx *PlanningCtx, planInfo *vectorSearchPlanningInfo, p *PhysicalPlan,
 ) error {
 	var queryVector vector.T
-	switch t := planInfo.queryVector.(type) {
+	switch t := planInfo.QueryVector.(type) {
 	case *tree.DPGVector:
 		queryVector = t.T
 	default:
 		return errors.AssertionFailedf("unexpected query vector type: %T", t)
 	}
 
-	colTypes := getTypesFromResultColumns(planInfo.columns)
+	colTypes := getTypesFromResultColumns(planInfo.Columns)
 	spec := &execinfrapb.VectorSearchSpec{
-		PrefixKeys:          planInfo.prefixKeys,
+		PrefixKeys:          planInfo.PrefixKeys,
 		QueryVector:         queryVector,
-		TargetNeighborCount: planInfo.targetNeighborCount,
+		TargetNeighborCount: planInfo.TargetNeighborCount,
 	}
-	fetchCols := make([]descpb.ColumnID, len(planInfo.cols))
-	for i, col := range planInfo.cols {
+	fetchCols := make([]descpb.ColumnID, len(planInfo.Cols))
+	for i, col := range planInfo.Cols {
 		fetchCols[i] = col.GetID()
 	}
 	if err := rowenc.InitIndexFetchSpec(
 		&spec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
-		planInfo.table,
-		planInfo.index,
+		planInfo.Table,
+		planInfo.Index,
 		fetchCols,
 	); err != nil {
 		return err
@@ -4149,9 +4150,9 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 	if err := vecstore.InitGetFullVectorsFetchSpec(
 		&spec.GetFullVectorsFetchSpec,
 		planCtx.EvalContext(),
-		planInfo.table,
-		planInfo.index,
-		planInfo.table.GetPrimaryIndex(),
+		planInfo.Table,
+		planInfo.Index,
+		planInfo.Table.GetPrimaryIndex(),
 	); err != nil {
 		return err
 	}
@@ -4163,7 +4164,7 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 	}}
 	p.AddNoInputStage(
 		corePlacement, execinfrapb.PostProcessSpec{}, colTypes,
-		execinfrapb.Ordering{}, planInfo.finalizeLastStageCb,
+		execinfrapb.Ordering{}, planInfo.FinalizeLastStageCb,
 	)
 	p.PlanToStreamColMap = identityMap(make([]int, len(colTypes)), len(colTypes))
 	return nil
@@ -4172,12 +4173,12 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 func (dsp *DistSQLPlanner) createPlanForVectorMutationSearch(
 	ctx context.Context, planCtx *PlanningCtx, n *vectorMutationSearchNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
-	n.finalizeLastStageCb = planCtx.associateWithPlanNode(n)
-	if err = dsp.planVectorMutationSearch(planCtx, &n.vectorMutationSearchPlanningInfo, plan); err != nil {
+	n.FinalizeLastStageCb = planCtx.associateWithPlanNode(n)
+	if err = dsp.planVectorMutationSearch(planCtx, &n.VectorMutationSearchPlanningInfo, plan); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -4191,30 +4192,30 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 	inputTypes := p.GetResultTypes()
 	outputTypes := append(inputTypes, types.Int)
 	p.PlanToStreamColMap = append(p.PlanToStreamColMap, len(inputTypes))
-	if planInfo.isIndexPut {
+	if planInfo.IsIndexPut {
 		outputTypes = append(outputTypes, types.Bytes)
 		p.PlanToStreamColMap = append(p.PlanToStreamColMap, len(inputTypes)+1)
 	}
 	// Retrieve the prefix and suffix index columns.
-	prefixKeyColumnOrdinals := make([]uint32, len(planInfo.prefixKeyCols))
-	for i, col := range planInfo.prefixKeyCols {
+	prefixKeyColumnOrdinals := make([]uint32, len(planInfo.PrefixKeyCols))
+	for i, col := range planInfo.PrefixKeyCols {
 		prefixKeyColumnOrdinals[i] = uint32(p.PlanToStreamColMap[col])
 	}
-	suffixKeyColumnOrdinals := make([]uint32, len(planInfo.suffixKeyCols))
-	for i, col := range planInfo.suffixKeyCols {
+	suffixKeyColumnOrdinals := make([]uint32, len(planInfo.SuffixKeyCols))
+	for i, col := range planInfo.SuffixKeyCols {
 		suffixKeyColumnOrdinals[i] = uint32(p.PlanToStreamColMap[col])
 	}
-	keyAndSuffixCols := planInfo.table.IndexFetchSpecKeyAndSuffixColumns(planInfo.index)
+	keyAndSuffixCols := planInfo.Table.IndexFetchSpecKeyAndSuffixColumns(planInfo.Index)
 	// Prefix cols do not include the vector column, which is the last key column.
-	prefixKeyCols := keyAndSuffixCols[:planInfo.index.NumKeyColumns()-1]
-	suffixKeyCols := keyAndSuffixCols[planInfo.index.NumKeyColumns():]
+	prefixKeyCols := keyAndSuffixCols[:planInfo.Index.NumKeyColumns()-1]
+	suffixKeyCols := keyAndSuffixCols[planInfo.Index.NumKeyColumns():]
 	spec := &execinfrapb.VectorMutationSearchSpec{
 		PrefixKeyColumnOrdinals:  prefixKeyColumnOrdinals,
 		PrefixKeyColumns:         prefixKeyCols,
-		QueryVectorColumnOrdinal: uint32(p.PlanToStreamColMap[planInfo.queryVectorCol]),
+		QueryVectorColumnOrdinal: uint32(p.PlanToStreamColMap[planInfo.QueryVectorCol]),
 		SuffixKeyColumnOrdinals:  suffixKeyColumnOrdinals,
 		SuffixKeyColumns:         suffixKeyCols,
-		IsIndexPut:               planInfo.isIndexPut,
+		IsIndexPut:               planInfo.IsIndexPut,
 	}
 	// VectorMutationSearch operators materialize partition and quantized-vec
 	// columns rather than fetching from the table, so leave fetchCols empty.
@@ -4222,8 +4223,8 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 	if err := rowenc.InitIndexFetchSpec(
 		&spec.FetchSpec,
 		planCtx.ExtendedEvalCtx.Codec,
-		planInfo.table,
-		planInfo.index,
+		planInfo.Table,
+		planInfo.Index,
 		fetchCols,
 	); err != nil {
 		return err
@@ -4232,9 +4233,9 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 	if err := vecstore.InitGetFullVectorsFetchSpec(
 		&spec.GetFullVectorsFetchSpec,
 		planCtx.EvalContext(),
-		planInfo.table,
-		planInfo.index,
-		planInfo.table.GetPrimaryIndex(),
+		planInfo.Table,
+		planInfo.Index,
+		planInfo.Table.GetPrimaryIndex(),
 	); err != nil {
 		return err
 	}
@@ -4244,7 +4245,7 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 	pSpec := execinfrapb.ProcessorCoreUnion{VectorMutationSearch: spec}
 	p.AddNoGroupingStage(
 		pSpec, execinfrapb.PostProcessSpec{}, outputTypes,
-		execinfrapb.Ordering{}, planInfo.finalizeLastStageCb,
+		execinfrapb.Ordering{}, planInfo.FinalizeLastStageCb,
 	)
 	return nil
 }
@@ -4252,7 +4253,7 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 func (dsp *DistSQLPlanner) createPlanForOrdinality(
 	ctx context.Context, planCtx *PlanningCtx, n *ordinalityNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -4278,26 +4279,26 @@ func createProjectSetSpec(
 	ctx context.Context, planCtx *PlanningCtx, n *projectSetPlanningInfo, indexVarMap []int,
 ) (*execinfrapb.ProjectSetSpec, error) {
 	spec := execinfrapb.ProjectSetSpec{
-		Exprs:                 make([]execinfrapb.Expression, len(n.exprs)),
-		GeneratedColumns:      make([]*types.T, len(n.columns)-n.numColsInSource),
-		GeneratedColumnLabels: make([]string, len(n.columns)-n.numColsInSource),
-		NumColsPerGen:         make([]uint32, len(n.exprs)),
+		Exprs:                 make([]execinfrapb.Expression, len(n.Exprs)),
+		GeneratedColumns:      make([]*types.T, len(n.Columns)-n.NumColsInSource),
+		GeneratedColumnLabels: make([]string, len(n.Columns)-n.NumColsInSource),
+		NumColsPerGen:         make([]uint32, len(n.Exprs)),
 	}
 	var ef physicalplan.ExprFactory
 	ef.Init(ctx, planCtx, indexVarMap)
 	// TODO(mgartner): Consider using ef.IndexedVarsHint here.
-	for i, expr := range n.exprs {
+	for i, expr := range n.Exprs {
 		var err error
 		spec.Exprs[i], err = ef.Make(expr)
 		if err != nil {
 			return nil, err
 		}
 	}
-	for i, col := range n.columns[n.numColsInSource:] {
+	for i, col := range n.Columns[n.NumColsInSource:] {
 		spec.GeneratedColumns[i] = col.Typ
 		spec.GeneratedColumnLabels[i] = col.Name
 	}
-	for i, n := range n.numColsPerGen {
+	for i, n := range n.NumColsPerGen {
 		spec.NumColsPerGen[i] = uint32(n)
 	}
 	return &spec, nil
@@ -4306,11 +4307,11 @@ func createProjectSetSpec(
 func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	ctx context.Context, planCtx *PlanningCtx, n *projectSetNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
-	err = dsp.addProjectSet(ctx, plan, planCtx, &n.projectSetPlanningInfo, planCtx.associateWithPlanNode(n))
+	err = dsp.addProjectSet(ctx, plan, planCtx, &n.ProjectSetPlanningInfo, planCtx.associateWithPlanNode(n))
 	return plan, err
 }
 
@@ -4666,11 +4667,11 @@ func (dsp *DistSQLPlanner) planSetOp(
 func (dsp *DistSQLPlanner) createPlanForWindow(
 	ctx context.Context, planCtx *PlanningCtx, n *windowNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
-	if len(n.funcs) == 0 {
+	if len(n.Funcs) == 0 {
 		// If we don't have any window functions to compute, then all input
 		// columns are simply passed-through, so we don't need to plan the
 		// windower. This shouldn't really happen since the optimizer should
@@ -4679,8 +4680,8 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		return plan, nil
 	}
 
-	n.finalizeLastStageCb = planCtx.associateWithPlanNode(n)
-	if err = dsp.planWindow(ctx, planCtx, &n.windowPlanningInfo, plan); err != nil {
+	n.FinalizeLastStageCb = planCtx.associateWithPlanNode(n)
+	if err = dsp.planWindow(ctx, planCtx, &n.WindowPlanningInfo, plan); err != nil {
 		return nil, err
 	}
 	return plan, nil
@@ -4695,12 +4696,12 @@ func (dsp *DistSQLPlanner) planWindow(
 	// append output columns for each window function processed at the current
 	// stage.
 	windowerSpec := execinfrapb.WindowerSpec{
-		PartitionBy: planInfo.partitionIdxs,
-		WindowFns:   make([]execinfrapb.WindowerSpec_WindowFn, len(planInfo.funcs)),
+		PartitionBy: planInfo.PartitionIdxs,
+		WindowFns:   make([]execinfrapb.WindowerSpec_WindowFn, len(planInfo.Funcs)),
 	}
 
-	ordCols := make([]execinfrapb.Ordering_Column, 0, len(planInfo.columnOrdering))
-	for _, column := range planInfo.columnOrdering {
+	ordCols := make([]execinfrapb.Ordering_Column, 0, len(planInfo.ColumnOrdering))
+	for _, column := range planInfo.ColumnOrdering {
 		ordCols = append(ordCols, execinfrapb.Ordering_Column{
 			ColIdx: uint32(column.ColIdx),
 			// We need this -1 because encoding.Direction has extra value "_"
@@ -4709,20 +4710,20 @@ func (dsp *DistSQLPlanner) planWindow(
 		})
 	}
 
-	newResultTypes := make([]*types.T, len(p.GetResultTypes())+len(planInfo.funcs))
+	newResultTypes := make([]*types.T, len(p.GetResultTypes())+len(planInfo.Funcs))
 	copy(newResultTypes, p.GetResultTypes())
-	for windowFnSpecIdx, windowFn := range planInfo.funcs {
+	for windowFnSpecIdx, windowFn := range planInfo.Funcs {
 		windowFnSpec, outputType, err := createWindowFnSpec(ctx, planCtx, p, windowFn, ordCols)
 		if err != nil {
 			return err
 		}
-		newResultTypes[windowFn.outputColIdx] = outputType
+		newResultTypes[windowFn.OutputColIdx] = outputType
 		windowerSpec.WindowFns[windowFnSpecIdx] = windowFnSpec
 	}
 
 	// Get all sqlInstanceIDs from the previous stage.
 	sqlInstanceIDs := getSQLInstanceIDsOfRouters(p.ResultRouters, p.Processors)
-	if len(planInfo.partitionIdxs) == 0 || len(sqlInstanceIDs) == 1 {
+	if len(planInfo.PartitionIdxs) == 0 || len(sqlInstanceIDs) == 1 {
 		// No PARTITION BY or we have a single node. Use a single windower. If
 		// the previous stage was all on a single node, put the windower there.
 		// Otherwise, bring the results back on this node.
@@ -4736,7 +4737,7 @@ func (dsp *DistSQLPlanner) planWindow(
 			execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},
 			execinfrapb.PostProcessSpec{},
 			newResultTypes,
-			planInfo.finalizeLastStageCb,
+			planInfo.FinalizeLastStageCb,
 		)
 	} else {
 		// Set up the output routers from the previous stage. We use hash
@@ -4745,7 +4746,7 @@ func (dsp *DistSQLPlanner) planWindow(
 		for _, resultProc := range p.ResultRouters {
 			p.Processors[resultProc].Spec.Output[0] = execinfrapb.OutputRouterSpec{
 				Type:        execinfrapb.OutputRouterSpec_BY_HASH,
-				HashColumns: planInfo.partitionIdxs,
+				HashColumns: planInfo.PartitionIdxs,
 			}
 		}
 		// We have multiple streams, so we definitely have a processor planned
@@ -4789,8 +4790,8 @@ func (dsp *DistSQLPlanner) planWindow(
 			p.ResultRouters = append(p.ResultRouters, pIdx)
 		}
 	}
-	if planInfo.finalizeLastStageCb != nil {
-		planInfo.finalizeLastStageCb(&p.PhysicalPlan)
+	if planInfo.FinalizeLastStageCb != nil {
+		planInfo.FinalizeLastStageCb(&p.PhysicalPlan)
 	}
 
 	// We definitely added new columns, so we need to update PlanToStreamColMap.
@@ -4808,7 +4809,7 @@ func (dsp *DistSQLPlanner) planWindow(
 func (dsp *DistSQLPlanner) createPlanForExport(
 	ctx context.Context, planCtx *PlanningCtx, n *exportNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -4901,8 +4902,8 @@ func checkScanParallelizationIfLocal(
 			// Do not recurse.
 			return
 		case *groupNode:
-			for _, f := range n.funcs {
-				if f.hasFilter() {
+			for _, f := range n.Funcs {
+				if f.HasFilter() {
 					prohibitParallelization = true
 					// Do not recurse.
 					return
@@ -4913,7 +4914,7 @@ func checkScanParallelizationIfLocal(
 		case *renderNode:
 			// Only support projections since render expressions might be
 			// handled via a wrapped row-by-row processor.
-			for _, e := range n.render {
+			for _, e := range n.Render {
 				if _, isIVar := e.(*tree.IndexedVar); !isIVar {
 					prohibitParallelization = true
 					// Do not recurse.
@@ -4966,7 +4967,7 @@ func checkScanParallelizationIfLocal(
 // left nil.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	planner *planner,
 	txn *kv.Txn,
 	distributionType DistributionType,
@@ -4980,7 +4981,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 // replica choice oracle as well.
 func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	planner *planner,
 	txn *kv.Txn,
 	distributionType DistributionType,
@@ -5175,7 +5176,7 @@ func finalizePlanWithRowCount(
 func (dsp *DistSQLPlanner) createPlanForInsert(
 	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
 ) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.Source)
 	if err != nil {
 		return nil, err
 	}

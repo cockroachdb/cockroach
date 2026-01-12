@@ -773,7 +773,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
 			WHERE "partialPredicate" IS NULL
 			ORDER BY "tableID", "createdAt" DESC, "rowCount" DESC`,
 			statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
-		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
+		statRows, err := p.ExtendedEvalContext().GetExecCfg().(*ExecutorConfig).InternalDB.Executor().QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
 			sessiondata.NodeUserSessionDataOverride,
 			query)
@@ -1856,7 +1856,7 @@ CREATE TABLE crdb_internal.session_trace (
   age         INTERVAL NOT NULL    -- The age of this message relative to the beginning of the trace.
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		rows, err := p.ExtendedEvalContext().Tracing.getSessionTrace()
+		rows, err := p.ExtendedEvalContext().GetTracing().(*SessionTracing).getSessionTrace()
 		if err != nil {
 			return err
 		}
@@ -6056,7 +6056,7 @@ SELECT id, status, payload, progress FROM "".crdb_internal.system_jobs
 	if err := it.Close(); err != nil {
 		return nil, err
 	}
-	if err := p.ExtendedEvalContext().jobs.forEachToCreate(func(record *jobs.Record) error {
+	if err := p.ExtendedEvalContext().GetJobs().(*txnJobsCollection).forEachToCreate(func(record *jobs.Record) error {
 		progressBytes, payloadBytes, err := getPayloadAndProgressFromJobsRecord(p, record)
 		if err != nil {
 			return err

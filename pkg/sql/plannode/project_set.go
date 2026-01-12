@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -26,35 +26,35 @@ import (
 // produces all the rows produced by zip(a, b, c, ...) with the values
 // of R prefixed. Formally, this performs a lateral cross join of R
 // with zip(a,b,c).
-type projectSetNode struct {
+type ProjectSetNode struct {
 	singleInputPlanNode
-	projectSetPlanningInfo
+	ProjectSetPlanningInfo
 }
 
 // projectSetPlanningInfo is a helper struct that is extracted from
 // projectSetNode to be reused during physical planning.
-type projectSetPlanningInfo struct {
-	// columns contains all the columns from the source, and then
+type ProjectSetPlanningInfo struct {
+	// Columns contains all the columns from the source, and then
 	// the columns from the generators.
-	columns colinfo.ResultColumns
+	Columns colinfo.ResultColumns
 
-	// numColsInSource is the number of columns in the source plan, i.e.
+	// NumColsInSource is the number of columns in the source plan, i.e.
 	// the number of columns at the beginning of rowBuffer that do not
 	// contain SRF results.
-	numColsInSource int
+	NumColsInSource int
 
-	// exprs are the constant-folded, type checked expressions specified
+	// Exprs are the constant-folded, type checked expressions specified
 	// in the ROWS FROM syntax. This can contain many kinds of expressions
 	// (anything that is "function-like" including COALESCE, NULLIF) not just
 	// SRFs.
-	exprs tree.TypedExprs
+	Exprs tree.TypedExprs
 
-	// numColsPerGen indicates how many columns are produced by
-	// each entry in `exprs`.
-	numColsPerGen []int
+	// NumColsPerGen indicates how many columns are produced by
+	// each entry in `Exprs`.
+	NumColsPerGen []int
 }
 
-func (n *projectSetNode) startExec(runParams) error {
+func (n *projectSetNode) StartExec(runParams) error {
 	panic("projectSetNode can't be run in local mode")
 }
 
@@ -67,5 +67,12 @@ func (n *projectSetNode) Values() tree.Datums {
 }
 
 func (n *projectSetNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
+
+
+// Lowercase alias
+type projectSetNode = ProjectSetNode
+
+// Lowercase alias
+type projectSetPlanningInfo = ProjectSetPlanningInfo

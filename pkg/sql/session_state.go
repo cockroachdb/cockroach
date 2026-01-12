@@ -115,8 +115,8 @@ func serializeSessionState(
 func (p *planner) DeserializeSessionState(
 	ctx context.Context, state *tree.DBytes,
 ) (*tree.DBool, error) {
-	evalCtx := p.ExtendedEvalContext()
-	if !evalCtx.TxnIsSingleStmt {
+	evalCtx := p.ExtendedEvalContext().(*ExtendedEvalContext)
+	if !evalCtx.TxnIsSingleStmt() {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
 			"cannot deserialize a session whilst inside a multi-statement transaction",
@@ -160,11 +160,12 @@ func (p *planner) DeserializeSessionState(
 			parserStmt = stmts[0]
 		}
 		// len(stmts) == 0 results in a nil (empty) statement.
-		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
+		execCfg := evalCtx.GetExecCfg().(*ExecutorConfig)
+		id := clusterunique.GenerateID(execCfg.Clock.Now(), execCfg.NodeInfo.NodeID.SQLInstanceID())
 		stmt := makeStatement(
 			ctx, parserStmt, id,
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)),
-			evalCtx.ExecCfg.StatementHintsCache,
+			execCfg.StatementHintsCache,
 		)
 
 		var placeholderTypes tree.PlaceholderTypes

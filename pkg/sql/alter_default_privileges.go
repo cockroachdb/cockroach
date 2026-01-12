@@ -97,7 +97,7 @@ func (p *planner) alterDefaultPrivileges(
 	}, err
 }
 
-func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
+func (n *alterDefaultPrivilegesNode) StartExec(params runParams) error {
 	targetRoles, err := decodeusername.FromRoleSpecList(
 		params.SessionData(), username.PurposeValidation, n.n.Roles,
 	)
@@ -106,10 +106,10 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	if len(targetRoles) == 0 {
-		targetRoles = append(targetRoles, params.p.User())
+		targetRoles = append(targetRoles, params.P.(*planner).User())
 	}
 
-	if err := params.p.validateRoles(params.ctx, targetRoles, false /* isPublicValid */); err != nil {
+	if err := params.P.(*planner).validateRoles(params.Ctx, targetRoles, false /* isPublicValid */); err != nil {
 		return err
 	}
 
@@ -125,18 +125,18 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 	}
 
 	granteeSQLUsernames, err := decodeusername.FromRoleSpecList(
-		params.p.SessionData(), username.PurposeValidation, grantees,
+		params.P.(*planner).SessionData(), username.PurposeValidation, grantees,
 	)
 	if err != nil {
 		return err
 	}
 
-	if err := params.p.preChangePrivilegesValidation(params.ctx, granteeSQLUsernames, grantOption, n.n.IsGrant); err != nil {
+	if err := params.P.(*planner).preChangePrivilegesValidation(params.Ctx, granteeSQLUsernames, grantOption, n.n.IsGrant); err != nil {
 		return err
 	}
 
 	var hasAdmin bool
-	if hasAdmin, err = params.p.HasAdminRole(params.ctx); err != nil {
+	if hasAdmin, err = params.P.(*planner).HasAdminRole(params.Ctx); err != nil {
 		return err
 	}
 	if n.n.ForAllRoles {
@@ -148,8 +148,8 @@ func (n *alterDefaultPrivilegesNode) startExec(params runParams) error {
 		// You can change default privileges only for objects that will be created
 		// by yourself or by roles that you are a member of.
 		for _, targetRole := range targetRoles {
-			if targetRole != params.p.User() && !hasAdmin {
-				memberOf, err := params.p.MemberOfWithAdminOption(params.ctx, params.p.User())
+			if targetRole != params.P.(*planner).User() && !hasAdmin {
+				memberOf, err := params.P.(*planner).MemberOfWithAdminOption(params.Ctx, params.P.(*planner).User())
 				if err != nil {
 					return err
 				}
@@ -248,15 +248,15 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 
 			events = append(events, &event)
 
-			if err := params.p.writeSchemaDescChange(
-				params.ctx, schemaDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+			if err := params.P.(*planner).writeSchemaDescChange(
+				params.Ctx, schemaDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
 			); err != nil {
 				return err
 			}
 		}
 	}
 
-	return params.p.logEvents(params.ctx, events...)
+	return params.P.(*planner).logEvents(params.Ctx, events...)
 }
 
 func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
@@ -332,11 +332,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 		events = append(events, &event)
 	}
 
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx, n.dbDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeNonDropDatabaseChange(
+		params.Ctx, n.dbDesc, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
-	return params.p.logEvents(params.ctx, events...)
+	return params.P.(*planner).logEvents(params.Ctx, events...)
 }

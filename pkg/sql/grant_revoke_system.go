@@ -35,13 +35,13 @@ type changeNonDescriptorBackedPrivilegesNode struct {
 // and expects to see its own writes.
 func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
-func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
-	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
+func (n *changeNonDescriptorBackedPrivilegesNode) StartExec(params runParams) error {
+	if err := params.P.(*planner).preChangePrivilegesValidation(params.Ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
 
 	// Get the privilege path for this grant.
-	systemPrivilegeObjects, err := n.makeSystemPrivilegeObject(params.ctx, params.p)
+	systemPrivilegeObjects, err := n.makeSystemPrivilegeObject(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
@@ -49,12 +49,12 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if err := catprivilege.ValidateSyntheticPrivilegeObject(systemPrivilegeObject); err != nil {
 			return err
 		}
-		syntheticPrivDesc, err := params.p.getMutablePrivilegeDescriptor(params.ctx, systemPrivilegeObject)
+		syntheticPrivDesc, err := params.P.(*planner).getMutablePrivilegeDescriptor(params.Ctx, systemPrivilegeObject)
 		if err != nil {
 			return err
 		}
 
-		err = params.p.MustCheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
+		err = params.P.(*planner).MustCheckGrantOptionsForUser(params.Ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.P.(*planner).User(), n.isGrant)
 		if err != nil {
 			return err
 		}
@@ -85,10 +85,10 @@ VALUES ($1, $2, $3, $4, (
 				// public means public has SELECT which
 				// is the default case.
 				if user == username.PublicRoleName() && userPrivs.Privileges == privilege.SELECT.Mask() {
-					_, err := params.p.InternalSQLTxn().ExecEx(
-						params.ctx,
+					_, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+						params.Ctx,
 						`delete-system-privilege`,
-						params.p.txn,
+						params.P.(*planner).txn,
 						sessiondata.NodeUserSessionDataOverride,
 						deleteStmt,
 						user.Normalized(),
@@ -108,10 +108,10 @@ VALUES ($1, $2, $3, $4, (
 				if err != nil {
 					return err
 				}
-				if _, err := params.p.InternalSQLTxn().ExecEx(
-					params.ctx,
+				if _, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+					params.Ctx,
 					`insert-system-privilege`,
-					params.p.txn,
+					params.P.(*planner).txn,
 					sessiondata.NodeUserSessionDataOverride,
 					upsertStmt,
 					user.Normalized(),
@@ -134,10 +134,10 @@ VALUES ($1, $2, $3, $4, (
 				// For Public role and virtual tables, leave an empty
 				// row to indicate that SELECT has been revoked.
 				if emptyPrivs && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
-					_, err := params.p.InternalSQLTxn().ExecEx(
-						params.ctx,
+					_, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+						params.Ctx,
 						`insert-system-privilege`,
-						params.p.txn,
+						params.P.(*planner).txn,
 						sessiondata.NodeUserSessionDataOverride,
 						upsertStmt,
 						user.Normalized(),
@@ -154,10 +154,10 @@ VALUES ($1, $2, $3, $4, (
 				// If there are no entries remaining on the PrivilegeDescriptor for the user
 				// we can remove the entire row for the user.
 				if emptyPrivs {
-					_, err := params.p.InternalSQLTxn().ExecEx(
-						params.ctx,
+					_, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+						params.Ctx,
 						`delete-system-privilege`,
-						params.p.txn,
+						params.P.(*planner).txn,
 						sessiondata.NodeUserSessionDataOverride,
 						deleteStmt,
 						user.Normalized(),
@@ -177,10 +177,10 @@ VALUES ($1, $2, $3, $4, (
 				if err != nil {
 					return err
 				}
-				if _, err := params.p.InternalSQLTxn().ExecEx(
-					params.ctx,
+				if _, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+					params.Ctx,
 					`insert-system-privilege`,
-					params.p.txn,
+					params.P.(*planner).txn,
 					sessiondata.NodeUserSessionDataOverride,
 					upsertStmt,
 					user.Normalized(),
@@ -195,7 +195,7 @@ VALUES ($1, $2, $3, $4, (
 	}
 
 	// Bump table version to invalidate cache.
-	return params.p.BumpPrivilegesTableVersion(params.ctx)
+	return params.P.(*planner).BumpPrivilegesTableVersion(params.Ctx)
 }
 
 func (*changeNonDescriptorBackedPrivilegesNode) Next(runParams) (bool, error) { return false, nil }

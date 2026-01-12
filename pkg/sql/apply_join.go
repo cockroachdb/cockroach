@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -41,7 +42,7 @@ type applyJoinNode struct {
 
 	// forwarder allows propagating the ProducerMetadata towards the
 	// DistSQLReceiver.
-	forwarder metadataForwarder
+	forwarder plannode.MetadataForwarder
 
 	// pred represents the join predicate.
 	pred *joinPredicate
@@ -99,7 +100,7 @@ func newApplyJoinNode(
 
 	return &applyJoinNode{
 		joinType:            joinType,
-		singleInputPlanNode: singleInputPlanNode{left},
+		singleInputPlanNode: singleInputPlanNode{Source: left},
 		pred:                pred,
 		rightTypes:          getTypesFromResultColumns(rightCols),
 		planRightSideFn:     planRightSideFn,
@@ -107,7 +108,7 @@ func newApplyJoinNode(
 	}, nil
 }
 
-func (a *applyJoinNode) startExec(params runParams) error {
+func (a *applyJoinNode) StartExec(params runParams) error {
 	// If needed, pre-allocate a right row of NULL tuples for when the
 	// join predicate fails to match.
 	if a.joinType == descpb.LeftOuterJoin {
@@ -117,7 +118,7 @@ func (a *applyJoinNode) startExec(params runParams) error {
 		}
 	}
 	a.run.out = make(tree.Datums, len(a.columns))
-	a.run.rightRows.Init(params.ctx, a.rightTypes, params.extendedEvalCtx, "apply-join" /* opName */)
+	a.run.rightRows.Init(params.Ctx, a.rightTypes, params.ExtendedEvalCtx.(*ExtendedEvalContext), "apply-join" /* opName */)
 	return nil
 }
 
@@ -141,7 +142,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 					break
 				}
 				// Compute join.
-				predMatched, err := a.pred.eval(params.ctx, params.EvalContext(), a.run.leftRow, rrow)
+				predMatched, err := a.pred.eval(params.Ctx, params.EvalContext(), a.run.leftRow, rrow)
 				if err != nil {
 					return false, err
 				}
@@ -201,7 +202,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		// We need a new row on the left.
-		ok, err := a.input.Next(params)
+		ok, err := a.Source.Next(params)
 		if err != nil {
 			return false, err
 		}
@@ -213,7 +214,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 
 		// Extract the values of the outer columns of the other side of the apply
 		// from the latest input row.
-		leftRow := a.input.Values()
+		leftRow := a.Source.Values()
 		a.run.leftRow = leftRow
 		a.iterationCount++
 
@@ -233,7 +234,7 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 // clearRightRows clears rightRows and resets rightRowsIterator. This function
 // must be called before reusing rightRows and rightRowsIterator.
 func (a *applyJoinNode) clearRightRows(params runParams) error {
-	if err := a.run.rightRows.Clear(params.ctx); err != nil {
+	if err := a.run.rightRows.Clear(params.Ctx); err != nil {
 		return err
 	}
 	a.run.rightRowsIterator.Close()
@@ -248,9 +249,9 @@ func (a *applyJoinNode) clearRightRows(params runParams) error {
 // side of the join, and that we should completely give up on the outer join.
 func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree.Datums) error {
 	opName := "apply-join-iteration-" + strconv.Itoa(a.iterationCount)
-	ctx, sp := tracing.ChildSpan(params.ctx, opName)
+	ctx, sp := tracing.ChildSpan(params.Ctx, opName)
 	defer sp.Finish()
-	p, err := a.planRightSideFn(ctx, newExecFactory(ctx, params.p), leftRow)
+	p, err := a.planRightSideFn(ctx, newExecFactory(ctx, params.P.(*planner)), leftRow)
 	if err != nil {
 		return err
 	}
@@ -280,17 +281,17 @@ func runPlanInsidePlan(
 	sqlStatsBuilder *sqlstats.RecordedStatementStatsBuilder,
 ) (stats topLevelQueryStats, retErr error) {
 	defer plan.close(ctx)
-	execCfg := params.ExecCfg()
+	execCfg := params.ExecCfg().(*ExecutorConfig)
 	recv := MakeDistSQLReceiver(
 		ctx, resultWriter, tree.Rows,
 		execCfg.RangeDescriptorCache,
-		params.p.Txn(),
+		params.P.(*planner).Txn(),
 		execCfg.Clock,
-		params.p.extendedEvalCtx.Tracing,
+		params.ExtendedEvalCtx.GetTracing().(*SessionTracing),
 	)
 	defer recv.Release()
 
-	plannerCopy := *params.p
+	plannerCopy := *params.P.(*planner)
 	plannerCopy.curPlan.planComponents = *plan
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
@@ -315,7 +316,7 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
+		subqueryResultMemAcc := params.P.(*planner).Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		// Note that planAndRunSubquery updates recv.stats with top-level
 		// subquery stats.
@@ -327,7 +328,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 			false, /* skipDistSQLDiagramGeneration */
-			params.p.innerPlansMustUseLeafTxn(),
+			params.P.(*planner).innerPlansMustUseLeafTxn(),
 		) {
 			return recv.stats, resultWriter.Err()
 		}
@@ -366,7 +367,7 @@ func runPlanInsidePlan(
 			}
 		}()
 	}
-	if params.p.innerPlansMustUseLeafTxn() {
+	if params.P.(*planner).innerPlansMustUseLeafTxn() {
 		planCtx.flowConcurrency = distsql.ConcurrencyWithOuterPlan
 	}
 	planCtx.stmtForDistSQLDiagram = stmtForDistSQLDiagram
@@ -392,7 +393,7 @@ func runPlanInsidePlan(
 	execCfg.DistSQLPlanner.PlanAndRunPostQueries(
 		ctx,
 		&plannerCopy,
-		func(usedConcurrently bool) *extendedEvalContext {
+		func(usedConcurrently bool) *ExtendedEvalContext {
 			return evalCtxFactory()
 		},
 		&plannerCopy.curPlan.planComponents,
@@ -413,7 +414,7 @@ func (a *applyJoinNode) Values() tree.Datums {
 }
 
 func (a *applyJoinNode) Close(ctx context.Context) {
-	a.input.Close(ctx)
+	a.Source.Close(ctx)
 	a.run.rightRows.Close(ctx)
 	if a.run.rightRowsIterator != nil {
 		a.run.rightRowsIterator.Close()

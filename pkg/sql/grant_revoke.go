@@ -198,11 +198,11 @@ func (p *planner) preChangePrivilegesValidation(
 	return nil
 }
 
-func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error {
-	ctx := params.ctx
-	p := params.p
+func (n *changeDescriptorBackedPrivilegesNode) StartExec(params runParams) error {
+	ctx := params.Ctx
+	p := params.P
 
-	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
+	if err := params.P.(*planner).preChangePrivilegesValidation(params.Ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
 
@@ -210,8 +210,8 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 	var descriptorsWithTypes []DescriptorWithObjectType
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptorsWithTypes, err = p.getDescriptorsFromTargetListForPrivilegeChange(ctx, n.targets)
+	p.(*planner).runWithOptions(resolveFlags{skipCache: true}, func() {
+		descriptorsWithTypes, err = p.(*planner).getDescriptorsFromTargetListForPrivilegeChange(ctx, n.targets)
 	})
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 	// First, update the descriptors. We want to catch all errors before
 	// we update them in KV below.
-	b := p.txn.NewBatch()
+	b := p.Txn().NewBatch()
 	for _, descriptorWithType := range descriptorsWithTypes {
 		// Disallow privilege changes on system objects. For more context, see #43842.
 		descriptor := descriptorWithType.descriptor
@@ -251,7 +251,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			for _, priv := range n.desiredprivs {
 				// Only allow granting/revoking privileges that the requesting
 				// user themselves have on the descriptor.
-				if err := p.CheckPrivilege(ctx, descriptor, priv); err != nil {
+				if err := p.(*planner).CheckPrivilege(ctx, descriptor, priv); err != nil {
 					return err
 				}
 				// Track privileges that do not apply to sequences.
@@ -268,7 +268,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				}
 			}
 
-			err := p.MustCheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.User(), n.isGrant)
+			err := p.(*planner).MustCheckGrantOptionsForUser(ctx, descriptor.GetPrivileges(), descriptor, n.desiredprivs, p.(*planner).User(), n.isGrant)
 			if err != nil {
 				return err
 			}
@@ -294,7 +294,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					return err
 				}
 				if _, ok := unsupportedPrivsForType[objType]; !ok {
-					params.p.BufferClientNotice(
+					params.P.(*planner).BufferClientNotice(
 						ctx,
 						pgnotice.Newf(
 							"some privileges have no effect on %ss: %s",
@@ -325,7 +325,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				}
 				descPrivsChanged = descPrivsChanged || changed
 				if !n.isGrant && grantee == privileges.Owner() {
-					params.p.BufferClientNotice(
+					params.P.(*planner).BufferClientNotice(
 						ctx,
 						pgnotice.Newf(
 							"%s is the owner of %s and still has all privileges implicitly",
@@ -366,10 +366,10 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 		switch d := descriptor.(type) {
 		case *dbdesc.Mutable:
-			if err := p.writeDatabaseChangeToBatch(ctx, d, b); err != nil {
+			if err := p.(*planner).writeDatabaseChangeToBatch(ctx, d, b); err != nil {
 				return err
 			}
-			if err := p.createNonDropDatabaseChangeJob(ctx, d.ID, fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
+			if err := p.(*planner).createNonDropDatabaseChangeJob(ctx, d.ID, fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
 				return err
 			}
 			for _, grantee := range n.grantees {
@@ -385,7 +385,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 		case *tabledesc.Mutable:
 			if !d.Dropped() {
-				if err := p.writeSchemaChangeToBatch(ctx, d, b); err != nil {
+				if err := p.(*planner).writeSchemaChangeToBatch(ctx, d, b); err != nil {
 					return err
 				}
 			}
@@ -402,7 +402,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 		case *typedesc.Mutable:
 			if !d.Dropped() {
-				err := p.writeDescToBatch(ctx, d, b)
+				err := p.(*planner).writeDescToBatch(ctx, d, b)
 				if err != nil {
 					return err
 				}
@@ -420,7 +420,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 		case *schemadesc.Mutable:
 			if !d.Dropped() {
-				err := p.writeDescToBatch(ctx, d, b)
+				err := p.(*planner).writeDescToBatch(ctx, d, b)
 				if err != nil {
 					return err
 				}
@@ -438,7 +438,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			}
 		case *funcdesc.Mutable:
 			if !d.Dropped() {
-				err := p.writeDescToBatch(ctx, d, b)
+				err := p.(*planner).writeDescToBatch(ctx, d, b)
 				if err != nil {
 					return err
 				}
@@ -458,7 +458,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 	}
 
 	// Now update the descriptors transactionally.
-	if err := p.txn.Run(ctx, b); err != nil {
+	if err := p.Txn().Run(ctx, b); err != nil {
 		return err
 	}
 
@@ -466,7 +466,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 	// auditable log event and is recorded in the same transaction as
 	// the table descriptor update.
 	if events != nil {
-		if err := params.p.logEvents(params.ctx, events...); err != nil {
+		if err := params.P.(*planner).logEvents(params.Ctx, events...); err != nil {
 			return err
 		}
 	}
@@ -621,7 +621,7 @@ func (p *planner) getTablePatternsComposition(
 	}
 	// Note that part of the reason the code is structured this way is that
 	// resolving mutable descriptors for virtual table IDs results in an error.
-	muts, err := p.Descriptors().MutableByID(p.txn).Descs(ctx, nonVirtualIDs)
+	muts, err := p.Descriptors().MutableByID(p.Txn()).Descs(ctx, nonVirtualIDs)
 	if err != nil {
 		return unknownComposition, err
 	}

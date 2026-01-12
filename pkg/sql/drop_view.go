@@ -92,19 +92,19 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 // and expects to see its own writes.
 func (n *dropViewNode) ReadingOwnWrites() {}
 
-func (n *dropViewNode) startExec(params runParams) error {
+func (n *dropViewNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter(
 		tree.GetTableType(false /* isSequence */, true /* isView */, n.n.IsMaterialized),
 	))
 
-	ctx := params.ctx
+	ctx := params.Ctx
 	for _, toDel := range n.td {
 		droppedDesc := toDel.desc
 		if droppedDesc == nil {
 			continue
 		}
 
-		cascadeDroppedViews, err := params.p.dropViewImpl(
+		cascadeDroppedViews, err := params.P.(*planner).dropViewImpl(
 			ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()), n.n.DropBehavior,
 		)
 		if err != nil {
@@ -113,7 +113,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 		// Log a Drop View event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := params.p.logEvent(ctx,
+		if err := params.P.(*planner).logEvent(ctx,
 			droppedDesc.ID,
 			&eventpb.DropView{
 				ViewName:            toDel.tn.FQString(),

@@ -107,17 +107,17 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 // and expects to see its own writes.
 func (n *dropTableNode) ReadingOwnWrites() {}
 
-func (n *dropTableNode) startExec(params runParams) error {
+func (n *dropTableNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("table"))
 
-	ctx := params.ctx
+	ctx := params.Ctx
 	for _, toDel := range n.td {
 		droppedDesc := toDel.desc
 		if droppedDesc == nil {
 			continue
 		}
 
-		droppedViews, err := params.p.dropTableImpl(
+		droppedViews, err := params.P.(*planner).dropTableImpl(
 			ctx,
 			droppedDesc,
 			false, /* droppingDatabase */
@@ -130,7 +130,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 		// Log a Drop Table event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := params.p.logEvent(params.ctx,
+		if err := params.P.(*planner).logEvent(params.Ctx,
 			droppedDesc.ID,
 			&eventpb.DropTable{
 				TableName:           toDel.tn.FQString(),
@@ -345,7 +345,7 @@ func (p *planner) dropTableImpl(
 
 	b := p.Txn().NewBatch()
 	if err := p.descCollection.DeleteTableComments(
-		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), b, tableDesc.GetID(),
+		ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), b, tableDesc.GetID(),
 	); err != nil {
 		return droppedViews, err
 	}
@@ -450,8 +450,8 @@ func (p *planner) markTableMutationJobsSuccessful(
 		// in a batch only when the transaction commits. So, if a job's record exists
 		// in the cache, we can simply delete that record from cache because the
 		// job is not created yet.
-		if record, exists := p.ExtendedEvalContext().jobs.uniqueToCreate[tableDesc.ID]; exists && record.JobID == jobID {
-			delete(p.ExtendedEvalContext().jobs.uniqueToCreate, tableDesc.ID)
+		if record, exists := p.ExtendedEvalContext().GetJobs().(*txnJobsCollection).uniqueToCreate[tableDesc.ID]; exists && record.JobID == jobID {
+			delete(p.ExtendedEvalContext().GetJobs().(*txnJobsCollection).uniqueToCreate, tableDesc.ID)
 			continue
 		}
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())

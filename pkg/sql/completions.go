@@ -29,10 +29,10 @@ type completionsNode struct {
 	results compengine.Engine
 }
 
-func (n *completionsNode) startExec(params runParams) (err error) {
-	override := sessiondata.InternalExecutorOverride{User: params.p.User()}
+func (n *completionsNode) StartExec(params runParams) (err error) {
+	override := sessiondata.InternalExecutorOverride{User: params.P.(*planner).User()}
 	queryIterFn := func(ctx context.Context, opName redact.RedactableString, stmt string, args ...interface{}) (compengine.Rows, error) {
-		return params.p.QueryIteratorEx(ctx, opName,
+		return params.P.(*planner).QueryIteratorEx(ctx, opName,
 			override,
 			stmt, args...)
 	}
@@ -41,7 +41,7 @@ func (n *completionsNode) startExec(params runParams) (err error) {
 }
 
 func (n *completionsNode) Next(params runParams) (bool, error) {
-	return n.results.Next(params.ctx)
+	return n.results.Next(params.Ctx)
 }
 
 func (n *completionsNode) Values() tree.Datums {

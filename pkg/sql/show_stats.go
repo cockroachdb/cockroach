@@ -181,7 +181,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					statsList[i], statsList[j] = statsList[j], statsList[i]
 				}
 
-				merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().Settings)
+				merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().(*ExtendedEvalContext).Settings)
 				statsList = append(merged, statsList...)
 				if withMerge {
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
@@ -195,7 +195,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				if withForecast {
-					forecasts := stats.ForecastTableStatistics(ctx, p.ExtendedEvalContext().Settings, statsList)
+					forecasts := stats.ForecastTableStatistics(ctx, p.ExtendedEvalContext().(*ExtendedEvalContext).Settings, statsList)
 					forecastRows := make([]tree.Datums, 0, len(forecasts))
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
 					for i := len(forecasts) - 1; i >= 0; i-- {

@@ -173,9 +173,9 @@ func backup(
 	}
 
 	oracle := physicalplan.DefaultReplicaChooser
-	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+	if useBulkOracle.Get(&evalCtx.(*sql.ExtendedEvalContext).Settings.SV) {
 		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
-			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			dsp.ReplicaOracleConfig(evalCtx.(*sql.ExtendedEvalContext).Locality),
 			locFilter,
 		)
 		if err != nil {
@@ -186,7 +186,7 @@ func backup(
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), oracle, locFilter, details.StrictLocalityFiltering,
+		ctx, evalCtx.(*sql.ExtendedEvalContext), execCtx.ExecCfg(), oracle, locFilter, details.StrictLocalityFiltering,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")

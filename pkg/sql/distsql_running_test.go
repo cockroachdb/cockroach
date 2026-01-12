@@ -169,7 +169,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			execCfg.RangeDescriptorCache,
 			txn,
 			execCfg.Clock,
-			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().(*ExtendedEvalContext).Tracing,
 		)
 
 		// We need to re-plan every time, since the plan is closed automatically
@@ -188,11 +188,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need distribute = true so that executing the plan involves marshaling
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
-		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil /* txn */, FullDistribution)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx.(*ExtendedEvalContext), p, nil /* txn */, FullDistribution)
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
-			ctx, evalCtx, planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
+			ctx, evalCtx.(*ExtendedEvalContext), planCtx, txn, p.curPlan.main, recv, nil, /* finishedSetupFn */
 		)
 		return rw.Err()
 	})
@@ -293,7 +293,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			execCfg.RangeDescriptorCache,
 			txn,
 			execCfg.Clock,
-			p.ExtendedEvalContext().Tracing,
+			p.ExtendedEvalContext().(*ExtendedEvalContext).Tracing,
 		)
 
 		p.stmt = makeStatement(
@@ -307,15 +307,15 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		defer p.curPlan.close(ctx)
 
 		evalCtx := p.ExtendedEvalContext()
-		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, txn, LocalDistribution)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx.(*ExtendedEvalContext), p, txn, LocalDistribution)
 		planCtx.stmtType = recv.stmtType
 
-		evalCtxFactory := func(bool) *extendedEvalContext {
-			factoryEvalCtx := extendedEvalContext{Tracing: evalCtx.Tracing}
-			factoryEvalCtx.Context = evalCtx.Context
+		evalCtxFactory := func(bool) *ExtendedEvalContext {
+			factoryEvalCtx := ExtendedEvalContext{Tracing: evalCtx.(*ExtendedEvalContext).Tracing}
+			factoryEvalCtx.Context = evalCtx.(*ExtendedEvalContext).Context
 			return &factoryEvalCtx
 		}
-		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, p, recv, evalCtxFactory)
+		err = execCfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx.(*ExtendedEvalContext), planCtx, p, recv, evalCtxFactory)
 		if err != nil {
 			return err
 		}

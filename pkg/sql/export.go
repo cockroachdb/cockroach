@@ -52,7 +52,7 @@ type exportPlanningInfo struct {
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
-func (e *exportNode) startExec(params runParams) error {
+func (e *exportNode) StartExec(params runParams) error {
 	panic("exportNode cannot be run in local mode")
 }
 
@@ -65,7 +65,9 @@ func (e *exportNode) Values() tree.Datums {
 }
 
 func (e *exportNode) Close(ctx context.Context) {
-	e.input.Close(ctx)
+	if input, err := e.Input(0); err == nil {
+		input.Close(ctx)
+	}
 }
 
 const (
@@ -155,7 +157,7 @@ func buildExportPlanningInfo(
 		return nil, err
 	}
 
-	if !planner.ExtendedEvalContext().TxnIsSingleStmt {
+	if !planner.ExtendedEvalContext().TxnIsSingleStmt() {
 		return nil, errors.Errorf("EXPORT cannot be used inside a multi-statement transaction")
 	}
 

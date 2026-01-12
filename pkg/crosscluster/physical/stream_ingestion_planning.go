@@ -57,7 +57,7 @@ func streamIngestionJobDescription(
 		ReplicationSourceConnUri:    tree.NewDString(source.Redacted()),
 		Options:                     streamIngestion.Options,
 	}
-	ann := p.ExtendedEvalContext().Annotations
+	ann := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Annotations
 	return tree.AsStringWithFQNames(redactedCreateStmt, ann), nil
 }
 
@@ -113,7 +113,7 @@ func ingestionPlanHook(
 		return nil, nil, false, err
 	}
 
-	evalCtx := &p.ExtendedEvalContext().Context
+	evalCtx := &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context
 	options, err := evalTenantReplicationOptions(ctx, ingestionStmt.Options, exprEval, evalCtx, p.SemaCtx(), createReplicationOp)
 	if err != nil {
 		return nil, nil, false, err
@@ -173,7 +173,7 @@ func ingestionPlanHook(
 		tenantInfo.DataState = mtinfopb.DataStateAdd
 		tenantInfo.Name = roachpb.TenantName(dstTenantName)
 
-		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Descs)
 		if err != nil {
 			return err
 		}
@@ -257,7 +257,7 @@ func createReplicationJob(
 			// PreviousSourceTenant on the source's tenant
 			// record.
 			TenantID:  destinationTenantID,
-			ClusterID: p.ExtendedEvalContext().ClusterID,
+			ClusterID: p.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID,
 		}
 	}
 
@@ -326,7 +326,7 @@ func createReaderTenant(
 		readerInfo.Name = tenantName + "-readonly"
 		readerInfo.ReadFromTenant = &destinationTenantID
 
-		readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Descs)
 		if err != nil {
 			return readerID, err
 		}

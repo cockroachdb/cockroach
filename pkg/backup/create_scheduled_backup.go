@@ -298,7 +298,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	evalCtx := &p.ExtendedEvalContext().Context
+	evalCtx := &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context
 	firstRun, err := scheduleFirstRun(evalCtx, scheduleOptions)
 	if err != nil {
 		return err

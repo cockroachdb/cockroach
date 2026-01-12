@@ -21,7 +21,7 @@ type showVarNode struct {
 	val   string
 }
 
-func (s *showVarNode) startExec(params runParams) error {
+func (s *showVarNode) StartExec(params runParams) error {
 	return nil
 }
 
@@ -35,7 +35,7 @@ func (s *showVarNode) Next(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	s.val, err = v.Get(params.extendedEvalCtx, params.p.Txn())
+	s.val, err = v.Get(params.ExtendedEvalCtx.(*ExtendedEvalContext), params.P.(*planner).Txn())
 	return true, err
 }
 

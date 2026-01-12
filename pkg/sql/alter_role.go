@@ -142,7 +142,7 @@ func (p *planner) checkPasswordOptionConstraints(
 	return nil
 }
 
-func (n *alterRoleNode) startExec(params runParams) error {
+func (n *alterRoleNode) StartExec(params runParams) error {
 	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
@@ -160,7 +160,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Restrict PASSWORD and PROVISIONSRC alterations for provisioned users.
-	if provisioned, err := params.p.UserHasRoleOption(params.ctx, n.roleName, roleoption.PROVISIONSRC); err != nil {
+	if provisioned, err := params.P.(*planner).UserHasRoleOption(params.Ctx, n.roleName, roleoption.PROVISIONSRC); err != nil {
 		return err
 	} else if provisioned &&
 		(n.roleOptions.Contains(roleoption.PROVISIONSRC) || n.roleOptions.Contains(roleoption.PASSWORD)) {
@@ -169,7 +169,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	needMoreChecks := true
-	if n.roleName == params.p.SessionData().User() && len(n.roleOptions) == 1 && n.roleOptions.Contains(roleoption.
+	if n.roleName == params.P.(*planner).SessionData().User() && len(n.roleOptions) == 1 && n.roleOptions.Contains(roleoption.
 		PASSWORD) {
 		// Note: This call to GetPassword must happen during execution, not during
 		// planning, since the password might be ea plaecholder argument that needs
@@ -181,7 +181,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// If sql.auth.change_own_password.enabled is set then the user is allowed to
 		// alter their own password to a non-null value without needing CREATEROLE or
 		// CREATELOGIN.
-		if !isNull && changeOwnPasswordEnabled.Get(params.p.execCfg.SV()) {
+		if !isNull && changeOwnPasswordEnabled.Get(params.P.(*planner).execCfg.SV()) {
 			needMoreChecks = false
 		}
 	}
@@ -190,21 +190,21 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		// CockroachDB does not support the superuser role option right now, but we
 		// make it so any member of the ADMIN role can only be edited by another ADMIN
 		// (done after checking for existence of the role).
-		if err := params.p.CheckGlobalPrivilegeOrRoleOption(params.ctx, privilege.CREATEROLE); err != nil {
+		if err := params.P.(*planner).CheckGlobalPrivilegeOrRoleOption(params.Ctx, privilege.CREATEROLE); err != nil {
 			return err
 		}
 		// Check that the requested combination of password options is
 		// compatible with the user's own CREATELOGIN privilege.
-		if err := params.p.checkPasswordOptionConstraints(params.ctx, n.roleOptions, false /* newUser */); err != nil {
+		if err := params.P.(*planner).checkPasswordOptionConstraints(params.Ctx, n.roleOptions, false /* newUser */); err != nil {
 			return err
 		}
 	}
 
 	// Check if role exists.
-	row, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx,
+	row, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+		params.Ctx,
 		opName,
-		params.p.txn,
+		params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT 1 FROM system.public.%s WHERE username = $1", catconstants.UsersTableName),
 		n.roleName,
@@ -219,12 +219,12 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return sqlerrors.NewUndefinedUserError(n.roleName)
 	}
 
-	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
+	isAdmin, err := params.P.(*planner).UserHasAdminRole(params.Ctx, n.roleName)
 	if err != nil {
 		return err
 	}
 	if isAdmin {
-		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
+		if hasAdmin, err := params.P.(*planner).HasAdminRole(params.Ctx); err != nil {
 			return err
 		} else if !hasAdmin {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -239,10 +239,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		rowAffected, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		rowAffected, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
 			n.roleName,
@@ -251,9 +251,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowAffected > 0 {
+		if sessioninit.CacheEnabled.Get(&params.P.(*planner).ExecCfg().Settings.SV) && rowAffected > 0 {
 			// Bump user table versions to force a refresh of AuthInfo cache.
-			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+			if err := params.P.(*planner).bumpUsersTableVersion(params.Ctx); err != nil {
 				return err
 			}
 		}
@@ -264,9 +264,9 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) && rowsAffected > 0 {
+	if sessioninit.CacheEnabled.Get(&params.P.(*planner).ExecCfg().Settings.SV) && rowsAffected > 0 {
 		// Bump role_options table versions to force a refresh of AuthInfo cache.
-		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).bumpRoleOptionsTableVersion(params.Ctx); err != nil {
 			return err
 		}
 	}
@@ -276,7 +276,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		optStrs[i] = n.roleOptions[i].String()
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		0, /* no target */
 		&eventpb.AlterRole{
 			RoleName: n.roleName.Normalized(),
@@ -455,7 +455,7 @@ func (p *planner) processSetOrResetClause(
 	return setSingleVar, varName, sVar, typedValues, nil
 }
 
-func (n *alterRoleSetNode) startExec(params runParams) error {
+func (n *alterRoleSetNode) StartExec(params runParams) error {
 	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
@@ -496,20 +496,20 @@ VALUES ($1, $2, $3, (
 		var rowsAffected int
 		var internalExecErr error
 		if newSettings == nil {
-			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
-				params.ctx,
+			rowsAffected, internalExecErr = params.P.(*planner).InternalSQLTxn().ExecEx(
+				params.Ctx,
 				opName,
-				params.p.txn,
+				params.P.(*planner).txn,
 				sessiondata.NodeUserSessionDataOverride,
 				deleteQuery,
 				n.dbDescID,
 				roleName,
 			)
 		} else {
-			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
-				params.ctx,
+			rowsAffected, internalExecErr = params.P.(*planner).InternalSQLTxn().ExecEx(
+				params.Ctx,
 				opName,
-				params.p.txn,
+				params.P.(*planner).txn,
 				sessiondata.NodeUserSessionDataOverride,
 				upsertQuery,
 				n.dbDescID,
@@ -521,13 +521,13 @@ VALUES ($1, $2, $3, (
 			return internalExecErr
 		}
 
-		if rowsAffected > 0 && sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+		if rowsAffected > 0 && sessioninit.CacheEnabled.Get(&params.P.(*planner).ExecCfg().Settings.SV) {
 			// Bump database_role_settings table versions to force a refresh of AuthInfo cache.
-			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
+			if err := params.P.(*planner).bumpDatabaseRoleSettingsTableVersion(params.Ctx); err != nil {
 				return err
 			}
 		}
-		return params.p.logEvent(params.ctx,
+		return params.P.(*planner).logEvent(params.Ctx,
 			0, /* no target */
 			&eventpb.AlterRole{
 				RoleName: roleName.Normalized(),
@@ -611,10 +611,10 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
-	row, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx,
+	row, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+		params.Ctx,
 		opName,
-		params.p.txn,
+		params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf("SELECT 1 FROM system.public.%s WHERE username = $1", catconstants.UsersTableName),
 		n.roleName,
@@ -628,12 +628,12 @@ func (n *alterRoleSetNode) getRoleName(
 		}
 		return false, username.SQLUsername{}, sqlerrors.NewUndefinedUserError(n.roleName)
 	}
-	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
+	isAdmin, err := params.P.(*planner).UserHasAdminRole(params.Ctx, n.roleName)
 	if err != nil {
 		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
-		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
+		if hasAdmin, err := params.P.(*planner).HasAdminRole(params.Ctx); err != nil {
 			return false, username.SQLUsername{}, err
 		} else if !hasAdmin {
 			return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -641,8 +641,8 @@ func (n *alterRoleSetNode) getRoleName(
 		}
 
 		// Note that admins implicitly have the REPAIRCLUSTER privilege.
-		if err := params.p.CheckPrivilege(
-			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		if err := params.P.(*planner).CheckPrivilege(
+			params.Ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 		); err != nil {
 			return false, username.SQLUsername{}, err
 		}
@@ -672,10 +672,10 @@ func (n *alterRoleSetNode) makeNewSettings(
 		`SELECT settings FROM system.public.%s WHERE database_id = $1 AND role_name = $2`,
 		catconstants.DatabaseRoleSettingsTableName,
 	)
-	datums, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx,
+	datums, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+		params.Ctx,
 		opName,
-		params.p.txn,
+		params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		selectQuery,
 		n.dbDescID,
@@ -706,7 +706,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 		return "", nil
 	}
 	for i, v := range n.typedValues {
-		d, err := eval.Expr(params.ctx, params.EvalContext(), v)
+		d, err := eval.Expr(params.Ctx, params.EvalContext(), v)
 		if err != nil {
 			return "", err
 		}
@@ -715,10 +715,10 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 	var strVal string
 	var err error
 	if n.sVar.GetStringVal != nil {
-		strVal, err = n.sVar.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues, params.p.Txn())
+		strVal, err = n.sVar.GetStringVal(params.Ctx, params.ExtendedEvalCtx, n.typedValues, params.P.(*planner).Txn())
 	} else {
 		// No string converter defined, use the default one.
-		strVal, err = getStringVal(params.ctx, params.EvalContext(), n.varName, n.typedValues)
+		strVal, err = getStringVal(params.Ctx, params.EvalContext(), n.varName, n.typedValues)
 	}
 	if err != nil {
 		return "", err
@@ -726,7 +726,7 @@ func (n *alterRoleSetNode) getSessionVarVal(params runParams) (string, error) {
 
 	// Validate the new string value, but don't actually apply it to any real
 	// session.
-	if err := CheckSessionVariableValueValid(params.ctx, params.ExecCfg().Settings, n.varName, strVal); err != nil {
+	if err := CheckSessionVariableValueValid(params.Ctx, params.ExecCfg().(*ExecutorConfig).Settings, n.varName, strVal); err != nil {
 		return "", err
 	}
 	return strVal, nil

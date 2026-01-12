@@ -215,7 +215,7 @@ func (p *planner) createDescriptor(
 	}
 
 	b := p.Txn().NewBatch()
-	kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	kvTrace := p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 	if err := p.Descriptors().WriteDescToBatch(ctx, kvTrace, descriptor, b); err != nil {
 		return err
 	}

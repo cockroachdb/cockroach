@@ -148,7 +148,7 @@ func backupJobDescription(
 		return "", err
 	}
 
-	ann := p.ExtendedEvalContext().Annotations
+	ann := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Annotations
 	return tree.AsStringWithFlags(
 		b, tree.FmtAlwaysQualifyNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
 	), nil
@@ -496,7 +496,7 @@ func backupPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnIsSingleStmt || detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt() || detached) {
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
@@ -512,7 +512,7 @@ func backupPlanHook(
 				return err
 			}
 			endTime = asOf.Timestamp
-			asOfInterval = asOf.Timestamp.WallTime - p.ExtendedEvalContext().StmtTimestamp.UnixNano()
+			asOfInterval = asOf.Timestamp.WallTime - p.ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp.UnixNano()
 		}
 
 		switch encryptionParams.Mode {

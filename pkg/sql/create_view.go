@@ -70,7 +70,7 @@ type createViewNode struct {
 // and expects to see its own writes.
 func (n *createViewNode) ReadingOwnWrites() {}
 
-func (n *createViewNode) startExec(params runParams) error {
+func (n *createViewNode) StartExec(params runParams) error {
 	// Check if the parent object is a replicated PCR descriptor, which will block
 	// schema changes.
 	if n.dbDesc.GetReplicatedPCRVersion() != 0 {
@@ -93,10 +93,10 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	viewName := createView.Name.Object()
-	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
+	log.VEventf(params.Ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// Check that the view does not contain references to other databases.
-	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
+	if !allowCrossDatabaseViews.Get(&params.P.(*planner).execCfg.Settings.SV) {
 		for _, dep := range n.planDeps {
 			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
 				return errors.WithHint(
@@ -119,11 +119,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			ids.Add(id)
 		}
 		// Lookup the dependent tables in bulk to minimize round-trips to KV.
-		if _, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().Get().Descs(params.ctx, ids.Ordered()); err != nil {
+		if _, err := params.P.(*planner).Descriptors().ByIDWithoutLeased(params.P.(*planner).Txn()).WithoutNonPublic().WithoutSynthetic().Get().Descs(params.Ctx, ids.Ordered()); err != nil {
 			return err
 		}
 		for id := range n.planDeps {
-			backRefMutable, err := params.p.Descriptors().MutableByID(params.p.Txn()).Table(params.ctx, id)
+			backRefMutable, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).Txn()).Table(params.Ctx, id)
 			if err != nil {
 				return err
 			}
@@ -136,8 +136,8 @@ func (n *createViewNode) startExec(params runParams) error {
 	if hasTempBackref {
 		createView.Persistence = tree.PersistenceTemporary
 		// This notice is sent from pg, let's imitate.
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
 		)
 	}
@@ -155,9 +155,9 @@ func (n *createViewNode) startExec(params runParams) error {
 		case createView.Replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := params.p.Descriptors().LookupObjectID(
-				params.ctx,
-				params.p.txn,
+			id, err := params.P.(*planner).Descriptors().LookupObjectID(
+				params.Ctx,
+				params.P.(*planner).txn,
 				n.dbDesc.GetID(),
 				schema.GetID(),
 				createView.Name.Table(),
@@ -165,11 +165,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			desc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
+			desc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Table(params.Ctx, id)
 			if err != nil {
 				return err
 			}
-			if err := params.p.CheckPrivilege(params.ctx, desc, privilege.DROP); err != nil {
+			if err := params.P.(*planner).CheckPrivilege(params.Ctx, desc, privilege.DROP); err != nil {
 				return err
 			}
 			if !desc.IsView() {
@@ -200,15 +200,15 @@ func (n *createViewNode) startExec(params runParams) error {
 	applyGlobalMultiRegionZoneConfig := false
 
 	var retErr error
-	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
+	params.P.(*planner).runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
 		retErr = func() error {
 			// If replacingDesc != nil, we found an existing view while resolving
 			// the name for our view. So instead of creating a new view, replace
 			// the existing one.
 			if replacingDesc != nil {
-				newDesc, err = params.p.replaceViewDesc(
-					params.ctx,
-					params.p,
+				newDesc, err = params.P.(*planner).replaceViewDesc(
+					params.Ctx,
+					params.P.(*planner),
 					n,
 					replacingDesc,
 					backRefMutables,
@@ -219,7 +219,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			} else {
 				// If we aren't replacing anything, make a new table descriptor.
 				id, err := params.EvalContext().DescIDGenerator.
-					GenerateUniqueDescID(params.ctx)
+					GenerateUniqueDescID(params.Ctx)
 				if err != nil {
 					return err
 				}
@@ -228,7 +228,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				// for CREATE MATERIALIZED VIEW ... AS OF SYSTEM TIME, we need to set
 				// the creation time to the specified timestamp.
 				var creationTime hlc.Timestamp
-				if asOf := params.p.extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill && n.createView.Materialized {
+				if asOf := params.P.(*planner).extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill && n.createView.Materialized {
 					creationTime = asOf.Timestamp
 
 					var mostRecentModTime hlc.Timestamp
@@ -247,7 +247,7 @@ func (n *createViewNode) startExec(params runParams) error {
 					}
 				}
 				desc, err := makeViewTableDesc(
-					params.ctx,
+					params.Ctx,
 					viewName,
 					n.viewQuery,
 					n.dbDesc.GetID(),
@@ -256,12 +256,12 @@ func (n *createViewNode) startExec(params runParams) error {
 					n.columns,
 					creationTime,
 					privs,
-					&params.p.semaCtx,
-					params.p.EvalContext(),
-					params.p.EvalContext().Settings,
+					&params.P.(*planner).semaCtx,
+					params.P.(*planner).EvalContext(),
+					params.P.(*planner).EvalContext().Settings,
 					createView.Persistence,
 					n.dbDesc.IsMultiRegion(),
-					params.p)
+					params.P.(*planner))
 				if err != nil {
 					return err
 				}
@@ -280,8 +280,8 @@ func (n *createViewNode) startExec(params runParams) error {
 					// on it.
 					desc.RefreshViewRequired = !createView.WithData
 					desc.State = descpb.DescriptorState_ADD
-					version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-					if err := desc.AllocateIDs(params.ctx, version); err != nil {
+					version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+					if err := desc.AllocateIDs(params.Ctx, version); err != nil {
 						return err
 					}
 					// For multi-region databases, we want this descriptor to be GLOBAL instead.
@@ -314,8 +314,8 @@ func (n *createViewNode) startExec(params runParams) error {
 
 				newDesc = &desc
 
-				if err = params.p.createDescriptor(
-					params.ctx,
+				if err = params.P.(*planner).createDescriptor(
+					params.Ctx,
 					newDesc,
 					tree.AsStringWithFQNames(n.createView, params.Ann()),
 				); err != nil {
@@ -343,8 +343,8 @@ func (n *createViewNode) startExec(params runParams) error {
 					dep.ByID = updated.desc.IsSequence()
 					backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 				}
-				if err := params.p.writeSchemaChange(
-					params.ctx,
+				if err := params.P.(*planner).writeSchemaChange(
+					params.Ctx,
 					backRefMutable,
 					descpb.InvalidMutationID,
 					fmt.Sprintf("updating view reference %q in table %s(%d)", &createView.Name,
@@ -358,32 +358,32 @@ func (n *createViewNode) startExec(params runParams) error {
 			// Add back references for the type dependencies.
 			for id := range n.typeDeps {
 				jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
-				if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+				if err := params.P.(*planner).addTypeBackReference(params.Ctx, id, newDesc.ID, jobDesc); err != nil {
 					return err
 				}
 			}
 
 			// Add back references for the routine dependencies.
 			for id := range n.funcDeps {
-				if err := params.p.addRoutineViewBackReference(params.ctx, id, newDesc.ID); err != nil {
+				if err := params.P.(*planner).addRoutineViewBackReference(params.Ctx, id, newDesc.ID); err != nil {
 					return err
 				}
 			}
 
-			if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
+			if err := validateDescriptor(params.Ctx, params.P.(*planner), newDesc); err != nil {
 				return err
 			}
 
 			if applyGlobalMultiRegionZoneConfig {
-				regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.GetID(), params.p.Descriptors())
+				regionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, n.dbDesc.GetID(), params.P.(*planner).Descriptors())
 				if err != nil {
 					return err
 				}
 				if err := ApplyZoneConfigForMultiRegionTable(
-					params.ctx,
-					params.p.InternalSQLTxn(),
-					params.p.ExecCfg(),
-					params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+					params.Ctx,
+					params.P.(*planner).InternalSQLTxn(),
+					params.P.(*planner).ExecCfg(),
+					params.P.(*planner).extendedEvalCtx.Tracing.KVTracingEnabled(),
 					regionConfig,
 					newDesc,
 					applyZoneConfigForMultiRegionTableOptionTableNewConfig(
@@ -396,7 +396,7 @@ func (n *createViewNode) startExec(params runParams) error {
 
 			// Log Create View event. This is an auditable log event and is
 			// recorded in the same transaction as the table descriptor update.
-			return params.p.logEvent(params.ctx,
+			return params.P.(*planner).logEvent(params.Ctx,
 				newDesc.ID,
 				&eventpb.CreateView{
 					ViewName:  createView.Name.FQString(),

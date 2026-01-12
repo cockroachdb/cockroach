@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -14,19 +14,19 @@ import (
 
 // topKNode represents a node that returns only the top K rows according to the
 // ordering, in the order specified.
-type topKNode struct {
+type TopKNode struct {
 	singleInputPlanNode
-	k        int64
-	ordering colinfo.ColumnOrdering
+	K        int64
+	Ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
-	// the prefix ordering[:alreadyOrderedPrefix].
-	alreadyOrderedPrefix int
-	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// the prefix Ordering[:alreadyOrderedPrefix].
+	AlreadyOrderedPrefix int
+	// EstimatedInputRowCount, when set, is the estimated number of rows that
 	// this topKNode will read from its input.
-	estimatedInputRowCount uint64
+	EstimatedInputRowCount uint64
 }
 
-func (n *topKNode) startExec(params runParams) error {
+func (n *topKNode) StartExec(params runParams) error {
 	panic("topKNode cannot be run in local mode")
 }
 
@@ -39,5 +39,10 @@ func (n *topKNode) Values() tree.Datums {
 }
 
 func (n *topKNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
+
+
+
+// Lowercase alias
+type topKNode = TopKNode

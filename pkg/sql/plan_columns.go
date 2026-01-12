@@ -44,13 +44,13 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *delayedNode:
 		return n.columns
 	case *groupNode:
-		return n.columns
+		return n.Columns
 	case *joinNode:
 		return n.columns
 	case *ordinalityNode:
-		return n.columns
+		return n.Columns
 	case *renderNode:
-		return n.columns
+		return n.Columns
 	case *scanNode:
 		return n.columns
 	case *unionNode:
@@ -58,17 +58,17 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *valuesNode:
 		return n.columns
 	case *vectorMutationSearchNode:
-		return n.columns
+		return n.Columns
 	case *vectorSearchNode:
-		return n.columns
+		return n.Columns
 	case *virtualTableNode:
 		return n.columns
 	case *windowNode:
-		return n.columns
+		return n.Columns
 	case *showTraceNode:
 		return n.columns
 	case *zeroNode:
-		return n.columns
+		return n.Columns
 	case *deleteNode:
 		return n.columns
 	case *deleteSwapNode:
@@ -86,7 +86,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *indexJoinNode:
 		return n.columns
 	case *projectSetNode:
-		return n.columns
+		return n.Columns
 	case *applyJoinNode:
 		return n.columns
 	case *lookupJoinNode:
@@ -98,7 +98,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *vTableLookupJoinNode:
 		return n.columns
 	case *invertedFilterNode:
-		return n.columns
+		return n.Columns
 	case *invertedJoinNode:
 		return n.columns
 	case *showFingerprintsNode:
@@ -146,34 +146,34 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
 	case *bufferNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *distinctNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *fetchNode:
 		return n.cursor.Types()
 	case *filterNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *max1RowNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *limitNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *saveTableNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *scanBufferNode:
 		return getPlanColumns(n.buffer, mut)
 	case *sortNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *topKNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 	case *recursiveCTENode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.Source, mut)
 
 	case *showVarNode:
 		return colinfo.ResultColumns{
 			{Name: n.name, Typ: types.String},
 		}
 	case *rowSourceToPlanNode:
-		return n.columns
+		return n.Columns
 	case *cdcValuesNode:
 		return n.columns
 
@@ -220,7 +220,7 @@ func (c *optColumnsSlot) getColumns(mut bool, cols colinfo.ResultColumns) colinf
 func resultIsRowsAffected(plan planNode) bool {
 	switch n := plan.(type) {
 	case mutationPlanNode:
-		return n.returnsRowsAffected()
+		return n.ReturnsRowsAffected()
 	case *moveNode, *controlJobsNode, *controlSchedulesNode,
 		*cancelQueriesNode, *cancelSessionsNode, *setZoneConfigNode:
 		// These nodes always return the row count.

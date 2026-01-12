@@ -101,9 +101,9 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 // and expects to see its own writes.
 func (n *renameTableNode) ReadingOwnWrites() {}
 
-func (n *renameTableNode) startExec(params runParams) error {
-	p := params.p
-	ctx := params.ctx
+func (n *renameTableNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	ctx := params.Ctx
 	tableDesc := n.tableDesc
 	oldTn := n.oldTn
 	oldNameKey := descpb.NameInfo{
@@ -133,7 +133,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		// process of deprecating qualified rename targets, so issue a notice.
 		// TODO (rohany): Convert this to take in an unqualified name after 20.2
 		//  is released (#51445).
-		params.p.BufferClientNotice(
+		params.P.(*planner).BufferClientNotice(
 			ctx,
 			errors.WithHintf(
 				pgnotice.Newf("renaming tables with a qualification is deprecated"),
@@ -190,9 +190,9 @@ func (n *renameTableNode) startExec(params runParams) error {
 	}
 
 	err := descs.CheckObjectNameCollision(
-		params.ctx,
+		params.Ctx,
 		p.Descriptors(),
-		params.p.txn,
+		params.P.(*planner).txn,
 		targetDbDesc.GetID(),
 		targetSchemaDesc.GetID(),
 		newTn,

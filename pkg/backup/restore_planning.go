@@ -1157,7 +1157,7 @@ func restoreJobDescription(
 		logSanitizedRestoreDestination(ctx, uri.String())
 	}
 
-	ann := p.ExtendedEvalContext().Annotations
+	ann := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Annotations
 	return tree.AsStringWithFlags(
 		r, tree.FmtAlwaysQualifyNames|tree.FmtShowFullURIs, tree.FmtAnnotations(ann),
 	), nil
@@ -1372,7 +1372,7 @@ func restorePlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if !(p.ExtendedEvalContext().TxnIsSingleStmt || restoreStmt.Options.Detached) {
+		if !(p.ExtendedEvalContext().TxnIsSingleStmt() || restoreStmt.Options.Detached) {
 			return errors.Errorf("RESTORE cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 

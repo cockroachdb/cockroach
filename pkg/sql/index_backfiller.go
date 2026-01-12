@@ -241,7 +241,7 @@ func (ib *IndexBackfillPlanner) plan(
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
-	var extEvalCtx extendedEvalContext
+	var extEvalCtx ExtendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
 	if err := DescsTxn(ctx, ib.execCfg, func(

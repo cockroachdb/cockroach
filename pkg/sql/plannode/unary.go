@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // unaryNode is a planNode with no columns and a single row with empty results
 // which is used by select statements that have no table. It is used for its
 // property as the join identity.
-type unaryNode struct {
+type UnaryNode struct {
 	zeroInputPlanNode
 	run unaryRun
 }
@@ -24,7 +24,7 @@ type unaryRun struct {
 	consumed bool
 }
 
-func (*unaryNode) startExec(runParams) error {
+func (*unaryNode) StartExec(runParams) error {
 	return nil
 }
 
@@ -37,3 +37,8 @@ func (u *unaryNode) Next(runParams) (bool, error) {
 }
 
 func (*unaryNode) Close(context.Context) {}
+
+
+
+// Lowercase alias
+type unaryNode = UnaryNode

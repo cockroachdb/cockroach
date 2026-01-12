@@ -32,7 +32,7 @@ func (p *FakeJobExecContext) SemaCtx() *tree.SemaContext {
 }
 
 // ExtendedEvalContext implements the JobExecContext interface.
-func (p *FakeJobExecContext) ExtendedEvalContext() *extendedEvalContext {
+func (p *FakeJobExecContext) ExtendedEvalContext() *ExtendedEvalContext {
 	panic("unimplemented")
 }
 

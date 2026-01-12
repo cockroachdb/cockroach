@@ -42,9 +42,9 @@ type relocateResults struct {
 	err       error
 }
 
-func (n *relocateRange) startExec(params runParams) (err error) {
-	execCfg := params.p.ExecCfg()
-	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.ctx, execCfg.Codec.TenantSpan())
+func (n *relocateRange) StartExec(params runParams) (err error) {
+	execCfg := params.P.(*planner).ExecCfg()
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(params.Ctx, execCfg.Codec.TenantSpan())
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (n *relocateRange) startExec(params runParams) (err error) {
 	n.run.rangeDescMap = rangeDescMap
 
 	typedExprToReplicationTarget := func(typedExpr tree.TypedExpr, name string) (target roachpb.ReplicationTarget, _ error) {
-		storeID, err := paramparse.DatumAsInt(params.ctx, params.EvalContext(), name, typedExpr)
+		storeID, err := paramparse.DatumAsInt(params.Ctx, params.EvalContext(), name, typedExpr)
 		if err != nil {
 			return target, err
 		}
@@ -66,7 +66,7 @@ func (n *relocateRange) startExec(params runParams) (err error) {
 		}
 		// Lookup all the store descriptors upfront, so we don't have to do it for each
 		// range we are working with.
-		storeDesc, err := params.ExecCfg().NodeDescs.GetStoreDescriptor(roachpb.StoreID(storeID))
+		storeDesc, err := params.ExecCfg().(*ExecutorConfig).NodeDescs.GetStoreDescriptor(roachpb.StoreID(storeID))
 		if err != nil {
 			return target, err
 		}
@@ -89,10 +89,10 @@ func (n *relocateRange) startExec(params runParams) (err error) {
 }
 
 func (n *relocateRange) Next(params runParams) (bool, error) {
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.Source.Next(params); err != nil || !ok {
 		return ok, err
 	}
-	datum := n.input.Values()[0]
+	datum := n.Source.Values()[0]
 	if datum == tree.DNull {
 		return true, nil
 	}
@@ -126,14 +126,14 @@ func (n *relocateRange) Values() tree.Datums {
 }
 
 func (n *relocateRange) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
 func (n *relocateRange) relocate(params runParams, rangeDesc roachpb.RangeDescriptor) error {
-	execCfg := params.ExecCfg()
+	execCfg := params.ExecCfg().(*ExecutorConfig)
 
 	if n.subjectReplicas == tree.RelocateLease {
-		err := execCfg.DB.AdminTransferLease(params.ctx, rangeDesc.StartKey, n.run.toTarget.StoreID)
+		err := execCfg.DB.AdminTransferLease(params.Ctx, rangeDesc.StartKey, n.run.toTarget.StoreID)
 		return err
 	}
 
@@ -144,7 +144,7 @@ func (n *relocateRange) relocate(params runParams, rangeDesc roachpb.RangeDescri
 		fromChangeType = roachpb.REMOVE_NON_VOTER
 	}
 	_, err := execCfg.DB.AdminChangeReplicas(
-		params.ctx, rangeDesc.StartKey, rangeDesc, []kvpb.ReplicationChange{
+		params.Ctx, rangeDesc.StartKey, rangeDesc, []kvpb.ReplicationChange{
 			{ChangeType: toChangeType, Target: n.run.toTarget},
 			{ChangeType: fromChangeType, Target: n.run.fromTarget},
 		},

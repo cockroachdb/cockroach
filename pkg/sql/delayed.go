@@ -58,12 +58,12 @@ func (n *delayedNode) SetInput(i int, p planNode) error {
 }
 
 // startExec constructs the wrapped planNode now that execution is underway.
-func (d *delayedNode) startExec(params runParams) error {
+func (d *delayedNode) StartExec(params runParams) error {
 	if d.input != nil {
 		panic("wrapped input should not yet exist")
 	}
 
-	plan, err := d.constructor(params.ctx, params.p)
+	plan, err := d.constructor(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
@@ -73,5 +73,5 @@ func (d *delayedNode) startExec(params runParams) error {
 	// recurse - calling children is handled by the planNode walker. The reason
 	// this won't suffice here is that the child of this node doesn't exist
 	// until after startExec is invoked.
-	return startExec(params, plan)
+	return StartExec(params, plan)
 }

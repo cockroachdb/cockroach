@@ -139,7 +139,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 }
 
 // scTxnFn is the type of functions that operates using transactions in the backfiller.
-type scTxnFn func(ctx context.Context, txn descs.Txn, evalCtx *extendedEvalContext) error
+type scTxnFn func(ctx context.Context, txn descs.Txn, evalCtx *ExtendedEvalContext) error
 
 // historicalTxnRunner is the type of the callback used by the various
 // helper functions to run checks at a fixed timestamp (logically, at
@@ -781,7 +781,7 @@ func (sc *SchemaChanger) validateConstraints(
 			}
 			desc := descI.(*tabledesc.Mutable)
 			// Each check operates at the historical timestamp.
-			return runHistoricalTxn(ctx, func(ctx context.Context, txn descs.Txn, evalCtx *extendedEvalContext) error {
+			return runHistoricalTxn(ctx, func(ctx context.Context, txn descs.Txn, evalCtx *ExtendedEvalContext) error {
 				// If the constraint is a check constraint that fails validation, we
 				// need a semaContext set up that can resolve types in order to pretty
 				// print the check expression back to the user.
@@ -1019,7 +1019,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	}
 
 	var p *PhysicalPlan
-	var extEvalCtx extendedEvalContext
+	var extEvalCtx ExtendedEvalContext
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.

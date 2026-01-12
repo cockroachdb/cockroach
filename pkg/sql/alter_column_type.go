@@ -49,7 +49,7 @@ func AlterColumnType(
 			}
 		}
 		if found {
-			return params.p.dependentError(
+			return params.P.(*planner).dependentError(
 				ctx, objType, col.GetName(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, op,
 			)
 		}
@@ -67,7 +67,7 @@ func AlterColumnType(
 		return err
 	}
 
-	typ, err := tree.ResolveType(ctx, t.ToType, params.p.semaCtx.GetTypeResolver())
+	typ, err := tree.ResolveType(ctx, t.ToType, params.P.(*planner).semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
 	}
@@ -120,10 +120,10 @@ func AlterColumnType(
 		if err := alterColumnTypeGeneral(ctx, tableDesc, col, typ, t.Using, params, cmds, tn); err != nil {
 			return err
 		}
-		if err := params.p.createOrUpdateSchemaChangeJob(params.ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion().NextMutationID); err != nil {
+		if err := params.P.(*planner).createOrUpdateSchemaChangeJob(params.Ctx, tableDesc, tree.AsStringWithFQNames(t, params.Ann()), tableDesc.ClusterVersion().NextMutationID); err != nil {
 			return err
 		}
-		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
+		params.P.(*planner).BufferClientNotice(params.Ctx, pgnotice.Newf("ALTER COLUMN TYPE changes are finalized asynchronously; "+
 			"further schema changes on this table may be restricted until the job completes; "+
 			"some writes to the altered column may be rejected until the schema change is finalized"))
 	default:
@@ -190,7 +190,7 @@ func alterColumnTypeGeneral(
 	}
 
 	// Disallow ALTER COLUMN TYPE general inside a multi-statement transaction.
-	if !params.extendedEvalCtx.TxnIsSingleStmt {
+	if !params.ExtendedEvalCtx.TxnIsSingleStmt() {
 		return sqlerrors.NewAlterColTypeInTxnNotSupportedErr()
 	}
 
@@ -229,7 +229,7 @@ func alterColumnTypeGeneral(
 	//
 	// This check is intentionally placed near the end of the compatibility checks
 	// to ensure consistent error messages for scenarios that overlap with the DSC.
-	if params.p.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
+	if params.P.(*planner).execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
 		return pgerror.New(pgcode.FeatureNotSupported,
 			"ALTER COLUMN TYPE is only implemented in the declarative schema changer")
 	}
@@ -273,10 +273,10 @@ func alterColumnTypeGeneral(
 			using,
 			toType,
 			tree.AlterColumnTypeUsingExpr,
-			&params.p.semaCtx,
+			&params.P.(*planner).semaCtx,
 			volatility.Volatile,
 			tn,
-			params.ExecCfg().Settings.Version.ActiveVersion(ctx),
+			params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(ctx),
 		)
 
 		if err != nil {
@@ -397,7 +397,7 @@ func alterColumnTypeGeneral(
 		tableDesc.SetPrimaryIndex(primaryIndex)
 	}
 
-	version := params.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(ctx)
 	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}

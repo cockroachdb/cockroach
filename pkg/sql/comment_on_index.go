@@ -46,15 +46,15 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 	}, nil
 }
 
-func (n *commentOnIndexNode) startExec(params runParams) error {
+func (n *commentOnIndexNode) StartExec(params runParams) error {
 	var err error
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(
-			params.ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType,
+		err = params.P.(*planner).deleteComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType,
 		)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.tableDesc.GetID(), uint32(n.index.GetID()), catalogkeys.IndexCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -66,12 +66,12 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 		comment = *n.n.Comment
 	}
 
-	tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+	tn, err := params.P.(*planner).getQualifiedTableName(params.Ctx, n.tableDesc)
 	if err != nil {
 		return err
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.CommentOnIndex{
 			TableName:   tn.FQString(),

@@ -36,8 +36,8 @@ func (p *planner) CreateExternalConnection(
 	return &createExternalConnectionNode{n: n}, nil
 }
 
-func (c *createExternalConnectionNode) startExec(params runParams) error {
-	return params.p.createExternalConnection(params, c.n)
+func (c *createExternalConnectionNode) StartExec(params runParams) error {
+	return params.P.(*planner).createExternalConnection(params, c.n)
 }
 
 type externalConnection struct {
@@ -65,7 +65,7 @@ func (p *planner) createExternalConnection(
 ) error {
 	txn := p.InternalSQLTxn()
 
-	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
+	if err := params.P.(*planner).CheckPrivilege(params.Ctx, syntheticprivilege.GlobalPrivilegeObject,
 		privilege.EXTERNALCONNECTION); err != nil {
 		return pgerror.New(
 			pgcode.InsufficientPrivilege,
@@ -75,7 +75,7 @@ func (p *planner) createExternalConnection(
 	// TODO(adityamaru): Add some metrics to track CREATE EXTERNAL CONNECTION
 	// usage.
 
-	ec, err := p.parseExternalConnection(params.ctx, n)
+	ec, err := p.parseExternalConnection(params.Ctx, n)
 	if err != nil {
 		return err
 	}
@@ -88,36 +88,36 @@ func (p *planner) createExternalConnection(
 	// newly created External Connection with the appropriate privileges. We will
 	// grant root/admin, and the user that created the object ALL privileges.
 
-	if err = logAndSanitizeExternalConnectionURI(params.ctx, ec.endpoint); err != nil {
+	if err = logAndSanitizeExternalConnectionURI(params.Ctx, ec.endpoint); err != nil {
 		return errors.Wrap(err, "failed to log and sanitize External Connection")
 	}
 
 	var SkipCheckingExternalStorageConnection bool
 	var SkipCheckingKMSConnection bool
-	if tk := params.ExecCfg().ExternalConnectionTestingKnobs; tk != nil {
+	if tk := params.ExecCfg().(*ExecutorConfig).ExternalConnectionTestingKnobs; tk != nil {
 		if tk.SkipCheckingExternalStorageConnection != nil {
-			SkipCheckingExternalStorageConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
+			SkipCheckingExternalStorageConnection = params.ExecCfg().(*ExecutorConfig).ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
 		}
 		if tk.SkipCheckingKMSConnection != nil {
-			SkipCheckingKMSConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
+			SkipCheckingKMSConnection = params.ExecCfg().(*ExecutorConfig).ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
 		}
 	}
 
 	env := externalconn.MakeExternalConnEnv(
-		params.ExecCfg().Settings,
-		&params.ExecCfg().ExternalIODirConfig,
-		params.ExecCfg().InternalDB,
+		params.ExecCfg().(*ExecutorConfig).Settings,
+		&params.ExecCfg().(*ExecutorConfig).ExternalIODirConfig,
+		params.ExecCfg().(*ExecutorConfig).InternalDB,
 		p.User(),
-		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		params.ExecCfg().(*ExecutorConfig).DistSQLSrv.ExternalStorageFromURI,
 		SkipCheckingExternalStorageConnection,
 		SkipCheckingKMSConnection,
-		&params.ExecCfg().DistSQLSrv.ServerConfig,
+		&params.ExecCfg().(*ExecutorConfig).DistSQLSrv.ServerConfig,
 	)
 
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
 	exConn, err := externalconn.ExternalConnectionFromURI(
-		params.ctx, env, ec.endpoint,
+		params.Ctx, env, ec.endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
@@ -126,7 +126,7 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
 
-	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
+	row, err := txn.QueryRowEx(params.Ctx, `get-user-id`, txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT user_id FROM system.users WHERE username = $1`,
 		p.User(),
@@ -139,7 +139,7 @@ func (p *planner) createExternalConnection(
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
-	if err := ex.Create(params.ctx, txn); err != nil {
+	if err := ex.Create(params.Ctx, txn); err != nil {
 		ifNotExists := n.ConnectionLabelSpec.IfNotExists
 		if ifNotExists && pgerror.GetPGCode(err) == pgcode.DuplicateObject {
 			return nil
@@ -150,7 +150,7 @@ func (p *planner) createExternalConnection(
 	// Grant user `ALL` on the newly created External Connection.
 	grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
 		ec.name, p.User().SQLIdentifier())
-	_, err = txn.ExecEx(params.ctx,
+	_, err = txn.ExecEx(params.Ctx,
 		"grant-on-create-external-connection", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, grantStatement)
 	if err != nil {

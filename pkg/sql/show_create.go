@@ -83,7 +83,7 @@ func ShowCreateTable(
 	if displayOptions.RedactableValues {
 		fmtFlags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
 	}
-	f := p.ExtendedEvalContext().FmtCtx(fmtFlags)
+	f := p.ExtendedEvalContext().(*ExtendedEvalContext).FmtCtx(fmtFlags)
 	f.WriteString("CREATE ")
 	if desc.IsTemporary() {
 		f.WriteString("TEMP ")

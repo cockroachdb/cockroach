@@ -23,7 +23,7 @@ type identifySystemNode struct {
 	shown     bool
 }
 
-func (s *identifySystemNode) startExec(params runParams) error {
+func (s *identifySystemNode) StartExec(params runParams) error {
 	return nil
 }
 

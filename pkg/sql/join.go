@@ -58,7 +58,7 @@ func (p *planner) makeJoinNode(
 	return n
 }
 
-func (n *joinNode) startExec(params runParams) error {
+func (n *joinNode) StartExec(params runParams) error {
 	panic("joinNode cannot be run in local mode")
 }
 

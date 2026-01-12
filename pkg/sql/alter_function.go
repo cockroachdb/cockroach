@@ -67,10 +67,10 @@ func (p *planner) AlterFunctionOptions(
 	return &alterFunctionOptionsNode{n: n}, nil
 }
 
-func (n *alterFunctionOptionsNode) startExec(params runParams) error {
+func (n *alterFunctionOptionsNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("function"))
 
-	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	fnDesc, err := params.P.(*planner).mustGetMutableFunctionForAlter(params.Ctx, &n.n.Function)
 	if err != nil {
 		return err
 	}
@@ -98,18 +98,18 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+	if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, fnDesc); err != nil {
 		return err
 	}
 
-	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	fnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
 	event := eventpb.AlterFunctionOptions{
 		FunctionName: fnName.FQString(),
 	}
-	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
+	return params.P.(*planner).logEvent(params.Ctx, fnDesc.GetID(), &event)
 }
 
 func maybeValidateNewFuncVolatility(
@@ -117,7 +117,7 @@ func maybeValidateNewFuncVolatility(
 ) error {
 	switch t := option.(type) {
 	case tree.RoutineVolatility:
-		f := NewReferenceProviderFactory(params.p)
+		f := NewReferenceProviderFactory(params.P.(*planner))
 		ast, err := fnDesc.ToCreateExpr()
 		if err != nil {
 			return err
@@ -127,7 +127,7 @@ func maybeValidateNewFuncVolatility(
 				ast.Options[i] = t
 			}
 		}
-		if _, err := f.NewReferenceProvider(params.ctx, ast); err != nil {
+		if _, err := f.NewReferenceProvider(params.Ctx, ast); err != nil {
 			return err
 		}
 	}
@@ -154,12 +154,12 @@ func (p *planner) AlterFunctionRename(
 	return &alterFunctionRenameNode{n: n}, nil
 }
 
-func (n *alterFunctionRenameNode) startExec(params runParams) error {
+func (n *alterFunctionRenameNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("function"))
 	// TODO(chengxiong): add validation that a function can not be altered if it's
 	// referenced by other objects. This is needed when want to allow function
 	// references.
-	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	fnDesc, err := params.P.(*planner).mustGetMutableFunctionForAlter(params.Ctx, &n.n.Function)
 	if err != nil {
 		return err
 	}
@@ -173,12 +173,12 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
 		)
 	}
-	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	oldFnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
 
-	scDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
+	scDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Schema(params.Ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
@@ -188,8 +188,8 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
-	existing, err := params.p.matchRoutine(
-		params.ctx, maybeExistingFuncObj, false, /* required */
+	existing, err := params.P.(*planner).matchRoutine(
+		params.Ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
 	)
 	if err != nil {
@@ -231,15 +231,15 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
 	fnDesc.SetName(string(n.n.NewName))
 	scDesc.AddFunction(fnDesc.GetName(), toSchemaOverloadSignature(fnDesc))
-	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+	if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, fnDesc); err != nil {
 		return err
 	}
 
-	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "alter function name"); err != nil {
+	if err := params.P.(*planner).writeSchemaDescChange(params.Ctx, scDesc, "alter function name"); err != nil {
 		return err
 	}
 
-	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	newFnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		FunctionName:    oldFnName.FQString(),
 		NewFunctionName: newFnName.FQString(),
 	}
-	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
+	return params.P.(*planner).logEvent(params.Ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionRenameNode) Next(params runParams) (bool, error) { return false, nil }
@@ -269,9 +269,9 @@ func (p *planner) AlterFunctionSetOwner(
 	return &alterFunctionSetOwnerNode{n: n}, nil
 }
 
-func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
+func (n *alterFunctionSetOwnerNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("function"))
-	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	fnDesc, err := params.P.(*planner).mustGetMutableFunctionForAlter(params.Ctx, &n.n.Function)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,7 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 		)
 	}
 	newOwner, err := decodeusername.FromRoleSpec(
-		params.p.SessionData(), username.PurposeValidation, n.n.NewOwner,
+		params.P.(*planner).SessionData(), username.PurposeValidation, n.n.NewOwner,
 	)
 	if err != nil {
 		return err
@@ -296,21 +296,21 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 	if newOwner == fnDesc.GetPrivileges().Owner() {
 		return nil
 	}
-	if err := params.p.checkCanAlterToNewOwner(params.ctx, fnDesc, newOwner); err != nil {
+	if err := params.P.(*planner).checkCanAlterToNewOwner(params.Ctx, fnDesc, newOwner); err != nil {
 		return err
 	}
-	if err := params.p.canCreateOnSchema(
-		params.ctx, fnDesc.GetParentSchemaID(), fnDesc.GetParentID(), newOwner, checkPublicSchema,
+	if err := params.P.(*planner).canCreateOnSchema(
+		params.Ctx, fnDesc.GetParentSchemaID(), fnDesc.GetParentID(), newOwner, checkPublicSchema,
 	); err != nil {
 		return err
 	}
 
 	fnDesc.GetPrivileges().SetOwner(newOwner)
-	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+	if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, fnDesc); err != nil {
 		return err
 	}
 
-	fnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	fnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (n *alterFunctionSetOwnerNode) startExec(params runParams) error {
 		FunctionName: fnName.FQString(),
 		Owner:        newOwner.Normalized(),
 	}
-	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
+	return params.P.(*planner).logEvent(params.Ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetOwnerNode) Next(params runParams) (bool, error) { return false, nil }
@@ -340,12 +340,12 @@ func (p *planner) AlterFunctionSetSchema(
 	return &alterFunctionSetSchemaNode{n: n}, nil
 }
 
-func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
+func (n *alterFunctionSetSchemaNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("function"))
 	// TODO(chengxiong): add validation that a function can not be altered if it's
 	// referenced by other objects. This is needed when want to allow function
 	// references.
-	fnDesc, err := params.p.mustGetMutableFunctionForAlter(params.ctx, &n.n.Function)
+	fnDesc, err := params.P.(*planner).mustGetMutableFunctionForAlter(params.Ctx, &n.n.Function)
 	if err != nil {
 		return err
 	}
@@ -359,17 +359,17 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 			pgcode.UndefinedFunction, "could not find a procedure named %q", &n.n.Function.FuncName,
 		)
 	}
-	oldFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	oldFnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
 	// Functions cannot be resolved across db, so just use current db name to get
 	// the descriptor.
-	db, err := params.p.Descriptors().MutableByName(params.p.txn).Database(params.ctx, params.p.CurrentDatabase())
+	db, err := params.P.(*planner).Descriptors().MutableByName(params.P.(*planner).txn).Database(params.Ctx, params.P.(*planner).CurrentDatabase())
 	if err != nil {
 		return err
 	}
-	sc, err := params.p.Descriptors().ByName(params.p.txn).Get().Schema(params.ctx, db, string(n.n.NewSchemaName))
+	sc, err := params.P.(*planner).Descriptors().ByName(params.P.(*planner).txn).Get().Schema(params.Ctx, db, string(n.n.NewSchemaName))
 	if err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	case catalog.SchemaPublic:
 		// We do not need to check for privileges on the public schema.
 	default:
-		err = params.p.CheckPrivilege(params.ctx, sc, privilege.CREATE)
+		err = params.P.(*planner).CheckPrivilege(params.Ctx, sc, privilege.CREATE)
 		if err != nil {
 			return err
 		}
@@ -410,7 +410,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		// No-op if moving to the same schema.
 		return nil
 	}
-	targetSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, sc.GetID())
+	targetSc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Schema(params.Ctx, sc.GetID())
 	if err != nil {
 		return err
 	}
@@ -422,8 +422,8 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	}
 	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(targetSc.GetName())
 	maybeExistingFuncObj.FuncName.ExplicitSchema = true
-	existing, err := params.p.matchRoutine(
-		params.ctx, maybeExistingFuncObj, false, /* required */
+	existing, err := params.P.(*planner).matchRoutine(
+		params.Ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
 	)
 	if err != nil {
@@ -436,25 +436,25 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		)
 	}
 
-	sourceSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
+	sourceSc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Schema(params.Ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
 
 	sourceSc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
-	if err := params.p.writeSchemaDesc(params.ctx, sourceSc); err != nil {
+	if err := params.P.(*planner).writeSchemaDesc(params.Ctx, sourceSc); err != nil {
 		return err
 	}
 	targetSc.AddFunction(fnDesc.GetName(), toSchemaOverloadSignature(fnDesc))
-	if err := params.p.writeSchemaDesc(params.ctx, targetSc); err != nil {
+	if err := params.P.(*planner).writeSchemaDesc(params.Ctx, targetSc); err != nil {
 		return err
 	}
 	fnDesc.SetParentSchemaID(targetSc.GetID())
-	if err := params.p.writeFuncSchemaChange(params.ctx, fnDesc); err != nil {
+	if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, fnDesc); err != nil {
 		return err
 	}
 
-	newFnName, err := params.p.getQualifiedFunctionName(params.ctx, fnDesc)
+	newFnName, err := params.P.(*planner).getQualifiedFunctionName(params.Ctx, fnDesc)
 	if err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		NewDescriptorName: newFnName.FQString(),
 		DescriptorType:    string(fnDesc.DescriptorType()),
 	}
-	return params.p.logEvent(params.ctx, fnDesc.GetID(), &event)
+	return params.P.(*planner).logEvent(params.Ctx, fnDesc.GetID(), &event)
 }
 
 func (n *alterFunctionSetSchemaNode) Next(params runParams) (bool, error) { return false, nil }
@@ -477,7 +477,7 @@ func (p *planner) AlterFunctionDepExtension(
 	return &alterFunctionDepExtensionNode{n: n}, nil
 }
 
-func (n *alterFunctionDepExtensionNode) startExec(params runParams) error {
+func (n *alterFunctionDepExtensionNode) StartExec(params runParams) error {
 	return unimplemented.NewWithIssue(85532, "alter function depends on extension not supported")
 }
 
@@ -531,7 +531,7 @@ func getFuncRefsDisallowingAlter(
 	params runParams, fnDesc *funcdesc.Mutable,
 ) (dependentObjects []string, err error) {
 	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		desc, err := params.P.(*planner).Descriptors().ByIDWithoutLeased(params.P.(*planner).Txn()).Get().Desc(params.Ctx, dep.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -540,14 +540,14 @@ func getFuncRefsDisallowingAlter(
 			if !t.IsView() {
 				continue
 			}
-			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(
-				params.ctx, int64(dep.ID), tree.ResolveAnyTableKind)
+			fullyResolvedName, err := params.P.(*planner).GetQualifiedTableNameByID(
+				params.Ctx, int64(dep.ID), tree.ResolveAnyTableKind)
 			if err != nil {
 				return nil, err
 			}
 			dependentObjects = append(dependentObjects, fullyResolvedName.FQString())
 		case catalog.FunctionDescriptor:
-			fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+			fullyResolvedName, err := params.P.(*planner).GetQualifiedFunctionNameByID(params.Ctx, int64(dep.ID))
 			if err != nil {
 				return nil, err
 			}

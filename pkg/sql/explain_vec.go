@@ -33,16 +33,16 @@ type explainVecNode struct {
 	}
 }
 
-func (n *explainVecNode) startExec(params runParams) error {
+func (n *explainVecNode) StartExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
-	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	distribution, _ := params.p.getPlanDistribution(params.ctx, n.plan.main, notPostquery)
-	outerSubqueries := params.p.curPlan.subqueryPlans
+	distSQLPlanner := params.ExtendedEvalCtx.(*ExtendedEvalContext).DistSQLPlanner
+	distribution, _ := params.P.(*planner).getPlanDistribution(params.Ctx, n.plan.main, notPostquery)
+	outerSubqueries := params.P.(*planner).curPlan.subqueryPlans
 	planCtx := newPlanningCtxForExplainPurposes(distSQLPlanner, params, n.plan.subqueryPlans, distribution)
 	defer func() {
 		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
 	}()
-	physPlan, cleanup, err := newPhysPlanForExplainPurposes(params.ctx, planCtx, distSQLPlanner, n.plan.main)
+	physPlan, cleanup, err := newPhysPlanForExplainPurposes(params.Ctx, planCtx, distSQLPlanner, n.plan.main)
 	defer cleanup()
 	if err != nil {
 		if len(n.plan.subqueryPlans) > 0 {
@@ -52,10 +52,10 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	finalizePlanWithRowCount(params.ctx, planCtx, physPlan, n.plan.mainRowCount)
+	finalizePlanWithRowCount(params.Ctx, planCtx, physPlan, n.plan.mainRowCount)
 	flows, flowsCleanup := physPlan.GenerateFlowSpecs()
 	defer flowsCleanup(flows)
-	flowCtx := newFlowCtxForExplainPurposes(params.ctx, params.p)
+	flowCtx := newFlowCtxForExplainPurposes(params.Ctx, params.P.(*planner))
 
 	// We want to get the vectorized plan which would be executed with the
 	// current 'vectorize' option. If 'vectorize' is set to 'off', then the
@@ -73,7 +73,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	// statement would result in the collection of execution stats or not.
 	const recordingStats = false
 	n.run.lines, err = colflow.ExplainVec(
-		params.ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
+		params.Ctx, flowCtx, flows, physPlan.LocalProcessors, nil, /* opChains */
 		distSQLPlanner.gatewaySQLInstanceID, verbose, recordingStats,
 	)
 	if err != nil {
@@ -119,8 +119,8 @@ func newPlanningCtxForExplainPurposes(
 	if distribution.WillDistribute() {
 		distribute = FullDistribution
 	}
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
-		params.p, params.p.txn, distribute)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.Ctx, params.ExtendedEvalCtx.(*ExtendedEvalContext),
+		params.P.(*planner), params.P.(*planner).txn, distribute)
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {
 		p := &planCtx.planner.curPlan.subqueryPlans[i]

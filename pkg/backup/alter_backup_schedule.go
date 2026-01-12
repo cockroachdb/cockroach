@@ -454,7 +454,7 @@ func processFullBackupRecurrence(
 		// the newly created incremental manually.
 		schedDetails := *s.fullJob.ScheduleDetails()
 		if schedDetails.ClusterID.Equal(uuid.Nil) {
-			schedDetails.ClusterID = p.ExtendedEvalContext().ClusterID
+			schedDetails.ClusterID = p.ExtendedEvalContext().(*sql.ExtendedEvalContext).ClusterID
 		}
 
 		rec := s.fullJob.ScheduleExpr()

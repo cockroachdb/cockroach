@@ -57,11 +57,11 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 		}
 		scName := schema.Schema()
 
-		db, err := p.Descriptors().MutableByName(p.txn).Database(ctx, dbName)
+		db, err := p.Descriptors().MutableByName(p.Txn()).Database(ctx, dbName)
 		if err != nil {
 			return nil, err
 		}
-		sc, err := p.Descriptors().ByName(p.txn).MaybeGet().Schema(ctx, db, scName)
+		sc, err := p.Descriptors().ByName(p.Txn()).MaybeGet().Schema(ctx, db, scName)
 		if err != nil {
 			return nil, err
 		}
@@ -115,14 +115,14 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 	return &dropSchemaNode{n: n, d: d}, nil
 }
 
-func (n *dropSchemaNode) startExec(params runParams) error {
+func (n *dropSchemaNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("schema"))
 
-	ctx := params.ctx
-	p := params.p
+	ctx := params.Ctx
+	p := params.P
 
 	// Drop all collected objects.
-	if err := n.d.dropAllCollectedObjects(ctx, p); err != nil {
+	if err := n.d.dropAllCollectedObjects(ctx, p.(*planner)); err != nil {
 		return err
 	}
 
@@ -132,11 +132,11 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		sc := n.d.schemasToDelete[i].schema
 		schemaIDs[i] = sc.GetID()
 		db := n.d.schemasToDelete[i].dbDesc
-		mutDesc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
+		mutDesc, err := p.(*planner).Descriptors().MutableByID(p.Txn()).Schema(ctx, sc.GetID())
 		if err != nil {
 			return err
 		}
-		if err := p.dropSchemaImpl(ctx, db, mutDesc); err != nil {
+		if err := p.(*planner).dropSchemaImpl(ctx, db, mutDesc); err != nil {
 			return err
 		}
 	}
@@ -145,7 +145,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	for i := range n.d.schemasToDelete {
 		sc := n.d.schemasToDelete[i].schema
 		db := n.d.schemasToDelete[i].dbDesc
-		if err := p.writeNonDropDatabaseChange(
+		if err := p.(*planner).writeNonDropDatabaseChange(
 			ctx, db,
 			fmt.Sprintf("updating parent database %s for %s", db.GetName(), sc.GetName()),
 		); err != nil {
@@ -154,7 +154,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	}
 
 	// Create the job to drop the schema.
-	if err := p.createDropSchemaJob(
+	if err := p.(*planner).createDropSchemaJob(
 		schemaIDs,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
@@ -168,12 +168,12 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 	// in the same transaction as table descriptor update.
 	for _, schemaToDelete := range n.d.schemasToDelete {
 		sc := schemaToDelete.schema
-		qualifiedSchemaName, err := p.getQualifiedSchemaName(params.ctx, sc)
+		qualifiedSchemaName, err := p.(*planner).getQualifiedSchemaName(params.Ctx, sc)
 		if err != nil {
 			return err
 		}
 
-		if err := params.p.logEvent(params.ctx,
+		if err := params.P.(*planner).logEvent(params.Ctx,
 			sc.GetID(),
 			&eventpb.DropSchema{
 				SchemaName: qualifiedSchemaName.String(),
@@ -203,7 +203,7 @@ func (p *planner) dropSchemaImpl(
 	sc.SetDropped()
 
 	// Populate namespace update batch.
-	b := p.txn.NewBatch()
+	b := p.Txn().NewBatch()
 	if err := p.dropNamespaceEntry(ctx, b, sc); err != nil {
 		return err
 	}
@@ -219,7 +219,7 @@ func (p *planner) dropSchemaImpl(
 	}
 
 	// Run the namespace update batch.
-	return p.txn.Run(ctx, b)
+	return p.Txn().Run(ctx, b)
 }
 
 func (p *planner) createDropSchemaJob(

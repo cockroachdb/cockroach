@@ -296,7 +296,7 @@ func completeIngestion(
 		details.StreamID)
 	updateStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
-	evalContext := &execCtx.ExtendedEvalContext().Context
+	evalContext := &execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context
 	if err := startPostCutoverRetentionJob(ctx, execCtx.ExecCfg(), details, evalContext, cutoverTimestamp); err != nil {
 		log.Dev.Warningf(ctx, "failed to begin post cutover retention job: %s", err.Error())
 	}

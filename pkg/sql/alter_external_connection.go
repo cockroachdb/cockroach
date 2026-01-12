@@ -28,19 +28,19 @@ func (p *planner) AlterExternalConnection(
 	return &alterExternalConnectionNode{n: n}, nil
 }
 
-func (alt *alterExternalConnectionNode) startExec(params runParams) error {
-	return params.p.alterExternalConnection(params, alt.n)
+func (alt *alterExternalConnectionNode) StartExec(params runParams) error {
+	return params.P.(*planner).alterExternalConnection(params, alt.n)
 }
 
 func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExternalConnection) error {
 	txn := p.InternalSQLTxn()
 
 	exprEval := p.ExprEvaluator(alterExternalConnectionOp)
-	name, err := exprEval.String(params.ctx, n.ConnectionLabelSpec.Label)
+	name, err := exprEval.String(params.Ctx, n.ConnectionLabelSpec.Label)
 	if err != nil {
 		return err
 	}
-	endpoint, err := exprEval.String(params.ctx, n.As)
+	endpoint, err := exprEval.String(params.Ctx, n.As)
 	if err != nil {
 		return err
 	}
@@ -48,11 +48,11 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 		ConnectionName: name,
 	}
-	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.UPDATE); err != nil {
+	if err := p.CheckPrivilege(params.Ctx, ecPrivilege, privilege.UPDATE); err != nil {
 		return err
 	}
 
-	existingConn, err := externalconn.LoadExternalConnection(params.ctx, name, txn)
+	existingConn, err := externalconn.LoadExternalConnection(params.Ctx, name, txn)
 	var notFoundErr *externalconn.ExternalConnectionNotFoundError
 	if err != nil {
 		if errors.As(err, &notFoundErr) && n.IfExists {
@@ -66,23 +66,23 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 		return errors.AssertionFailedf("Failed to cast externalConnection (%s) to MutableExtneralConnection type", existingConn.ConnectionName())
 	}
 
-	if err = logAndSanitizeExternalConnectionURI(params.ctx, endpoint); err != nil {
+	if err = logAndSanitizeExternalConnectionURI(params.Ctx, endpoint); err != nil {
 		return errors.Wrap(err, "failed to log and santitize External Connection")
 	}
 
 	env := externalconn.MakeExternalConnEnv(
-		params.ExecCfg().Settings,
-		&params.ExecCfg().ExternalIODirConfig,
-		params.ExecCfg().InternalDB,
+		params.ExecCfg().(*ExecutorConfig).Settings,
+		&params.ExecCfg().(*ExecutorConfig).ExternalIODirConfig,
+		params.ExecCfg().(*ExecutorConfig).InternalDB,
 		p.User(),
-		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		params.ExecCfg().(*ExecutorConfig).DistSQLSrv.ExternalStorageFromURI,
 		false,
 		false,
-		&params.ExecCfg().DistSQLSrv.ServerConfig,
+		&params.ExecCfg().(*ExecutorConfig).DistSQLSrv.ServerConfig,
 	)
 
 	alterConn, err := externalconn.ExternalConnectionFromURI(
-		params.ctx, env, endpoint,
+		params.Ctx, env, endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
@@ -90,7 +90,7 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 
 	ex.SetConnectionDetails(*alterConn.ConnectionProto())
 
-	if err := ex.Update(params.ctx, txn); err != nil {
+	if err := ex.Update(params.Ctx, txn); err != nil {
 		return errors.Wrap(err, "failed to alter external connection")
 	}
 

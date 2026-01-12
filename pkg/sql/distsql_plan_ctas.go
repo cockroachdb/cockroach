@@ -30,7 +30,7 @@ func PlanAndRunCTAS(
 	if !isLocal {
 		distribute = FullDistribution
 	}
-	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner,
+	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext().(*ExtendedEvalContext), planner,
 		txn, distribute)
 	planCtx.stmtType = tree.Rows
 
@@ -51,6 +51,6 @@ func PlanAndRunCTAS(
 	finishedSetupFn, cleanup := getFinishedSetupFn(planner)
 	defer cleanup()
 	// Copy the eval.Context, as dsp.Run() might change it.
-	evalCtxCopy := planner.ExtendedEvalContext().Context.Copy()
+	evalCtxCopy := planner.ExtendedEvalContext().EvalContext().Copy()
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, finishedSetupFn)
 }

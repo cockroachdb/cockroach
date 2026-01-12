@@ -161,14 +161,14 @@ func (r *regionLocalInfoType) checkHomeRegion(row tree.Datums) error {
 }
 
 func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+	if ots := params.ExtendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 	if !r.rowsNeeded {
 		return
 	}
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		params.P.(*planner).Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 
@@ -212,7 +212,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// Verify the CHECK constraint results, if any.
 	if n := r.checkOrds.Len(); n > 0 {
 		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			params.Ctx, params.P.(*planner).EvalContext(), &params.P.(*planner).semaCtx, params.P.(*planner).SessionData(),
 			r.ti.tableDesc(), r.checkOrds, rowVals[:n],
 		); err != nil {
 			return err
@@ -248,7 +248,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
+	if err := r.ti.row(params.Ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
 		return err
 	}
 	r.onModifiedRow()
@@ -267,16 +267,16 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 			}
 		}
 	}
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(params.Ctx, r.resultRowBuffer)
 }
 
-func (n *insertNode) startExec(params runParams) error {
+func (n *insertNode) StartExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	n.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	n.run.init(params, n.columns)
 
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := n.run.ti.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -303,12 +303,12 @@ func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) 
 	// Consume/accumulate the rows for this batch.
 	lastBatch = false
 	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
+		if err = params.P.(*planner).cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
 		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
+		if next, err := n.Source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				// TODO(richardjcai): Don't like this, not sure how to check if the
@@ -324,14 +324,14 @@ func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) 
 
 		if buildutil.CrdbTestBuild {
 			// This testing knob allows us to suspend execution to force a race condition.
-			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn(params.p.stmt.SQL)
+			if fn := params.ExecCfg().(*ExecutorConfig).TestingKnobs.AfterArbiterRead; fn != nil {
+				fn(params.P.(*planner).stmt.SQL)
 			}
 		}
 
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
-		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
+		if err = n.run.processSourceRow(params, n.Source.Values()); err != nil {
 			return false, err
 		}
 
@@ -346,25 +346,25 @@ func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) 
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err = n.run.ti.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = n.run.ti.flushAndStartNewBatch(params.Ctx); err != nil {
 				return false, err
 			}
 		}
 	}
 
 	if lastBatch {
-		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = n.run.ti.finalize(params.ctx); err != nil {
+		n.run.ti.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+		if err = n.run.ti.finalize(params.Ctx); err != nil {
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.ti.tableDesc(), int(n.run.rowsAffected()))
+		params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, n.run.ti.tableDesc(), int(n.run.rowsAffected()))
 	}
 	return lastBatch, nil
 }
 
 func (n *insertNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 	n.run.close(ctx)
 	*n = insertNode{}
 	insertNodePool.Put(n)
@@ -375,22 +375,22 @@ func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
 }
 
-func (n *insertNode) rowsWritten() int64 {
+func (n *insertNode) RowsWritten() int64 {
 	return n.run.rowsAffected()
 }
 
-func (n *insertNode) indexRowsWritten() int64 {
+func (n *insertNode) IndexRowsWritten() int64 {
 	return n.run.ti.indexRowsWritten
 }
 
-func (n *insertNode) indexBytesWritten() int64 {
+func (n *insertNode) IndexBytesWritten() int64 {
 	return n.run.ti.indexBytesWritten
 }
 
-func (n *insertNode) returnsRowsAffected() bool {
+func (n *insertNode) ReturnsRowsAffected() bool {
 	return !n.run.rowsNeeded
 }
 
-func (n *insertNode) kvCPUTime() int64 {
+func (n *insertNode) KvCPUTime() int64 {
 	return n.run.ti.kvCPUTime
 }

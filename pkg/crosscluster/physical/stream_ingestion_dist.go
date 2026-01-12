@@ -238,12 +238,12 @@ func startDistIngestion(
 			nil, /* rangeCache */
 			noTxn,
 			nil, /* clockUpdater */
-			execCtx.ExtendedEvalContext().Tracing,
+			execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 		)
 		defer recv.Release()
 
 		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+		evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 		dsp.Run(ctx, planner.initialPlanCtx, noTxn, planner.initialPlan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 		return rw.Err()
 	}
@@ -253,7 +253,7 @@ func startDistIngestion(
 	// resume since it isn't clear to us at the moment whether
 	// re-splitting is always going to be useful.
 	if !streamProgress.InitialSplitComplete {
-		codec := execCtx.ExtendedEvalContext().Codec
+		codec := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Codec
 		splitter := &dbSplitAndScatter{db: execCtx.ExecCfg().DB}
 		countNumOfSplitsAndScatters := func() int {
 			numSplitsAndScatters := 0
@@ -586,7 +586,7 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 
 		p.srcTenantID = topology.SourceTenantID
 
-		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
+		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCtx.ExecCfg())
 		if err != nil {
 			return nil, nil, err
 		}

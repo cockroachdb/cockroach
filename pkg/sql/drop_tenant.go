@@ -39,15 +39,15 @@ func (p *planner) DropTenant(ctx context.Context, n *tree.DropTenant) (planNode,
 	}, nil
 }
 
-func (n *dropTenantNode) startExec(params runParams) error {
-	tenInfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+func (n *dropTenantNode) StartExec(params runParams) error {
+	tenInfo, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 	if err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject && n.ifExists {
 			return nil
 		}
 		return err
 	}
-	return params.p.DropTenantByID(params.ctx, tenInfo.ID, n.immediate, false /* ignoreServiceMode */)
+	return params.P.(*planner).DropTenantByID(params.Ctx, tenInfo.ID, n.immediate, false /* ignoreServiceMode */)
 }
 
 func (n *dropTenantNode) Next(_ runParams) (bool, error) { return false, nil }

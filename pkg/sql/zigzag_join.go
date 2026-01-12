@@ -55,7 +55,7 @@ type zigzagJoinSide struct {
 	fixedVals *valuesNode
 }
 
-func (zj *zigzagJoinNode) startExec(params runParams) error {
+func (zj *zigzagJoinNode) StartExec(params runParams) error {
 	panic("zigzag joins cannot be executed outside of distsql")
 }
 

@@ -149,7 +149,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),
-		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		execCtx.ExtendedEvalContext().GetTracing().(*sql.SessionTracing).KVTracingEnabled(),
 	)
 
 	// If there are no descriptors left, then we can short circuit here.

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -27,13 +27,13 @@ import (
 // In other words, *ordinalityNode establishes a barrier to many
 // common SQL optimizations*. Its use should be limited in clients to
 // situations where the corresponding performance cost is affordable.
-type ordinalityNode struct {
+type OrdinalityNode struct {
 	singleInputPlanNode
-	columns     colinfo.ResultColumns
-	reqOrdering ReqOrdering
+	Columns     colinfo.ResultColumns
+	ReqOrdering ReqOrdering
 }
 
-func (o *ordinalityNode) startExec(runParams) error {
+func (o *ordinalityNode) StartExec(runParams) error {
 	panic("ordinalityNode can't be run in local mode")
 }
 
@@ -45,4 +45,9 @@ func (o *ordinalityNode) Values() tree.Datums {
 	panic("ordinalityNode can't be run in local mode")
 }
 
-func (o *ordinalityNode) Close(ctx context.Context) { o.input.Close(ctx) }
+func (o *ordinalityNode) Close(ctx context.Context) { o.Source.Close(ctx) }
+
+
+
+// Lowercase alias
+type ordinalityNode = OrdinalityNode

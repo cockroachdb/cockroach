@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,7 +59,7 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 // and expects to see its own writes.
 func (n *alterIndexNode) ReadingOwnWrites() {}
 
-func (n *alterIndexNode) startExec(params runParams) error {
+func (n *alterIndexNode) StartExec(params runParams) error {
 	// Commands can either change the descriptor directly (for
 	// alterations that don't require a backfill) or add a mutation to
 	// the list.
@@ -93,12 +94,12 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot set explicit partitioning with ALTER INDEX PARTITION BY on a hash sharded index",
 				)
 			}
-			allowImplicitPartitioning := params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
+			allowImplicitPartitioning := params.P.(*planner).EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 				n.tableDesc.IsLocalityRegionalByRow()
 			alteredIndexDesc := n.index.IndexDescDeepCopy()
 			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				params.ctx,
-				params.extendedEvalCtx.Settings,
+				params.Ctx,
+				params.ExtendedEvalCtx.GetSettings().(*cluster.Settings),
 				params.EvalContext(),
 				n.tableDesc,
 				alteredIndexDesc,
@@ -126,14 +127,14 @@ func (n *alterIndexNode) startExec(params runParams) error {
 				n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
 				descriptorChanged = true
 				if err := deleteRemovedPartitionZoneConfigs(
-					params.ctx,
-					params.p.InternalSQLTxn(),
+					params.Ctx,
+					params.P.(*planner).InternalSQLTxn(),
 					n.tableDesc,
 					n.index.GetID(),
 					oldPartitioning,
 					n.index.GetPartitioning(),
-					params.extendedEvalCtx.ExecCfg,
-					params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+					params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig),
+					params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 				); err != nil {
 					return err
 				}
@@ -145,8 +146,8 @@ func (n *alterIndexNode) startExec(params runParams) error {
 
 	}
 
-	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+	version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+	if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 		return err
 	}
 
@@ -159,8 +160,8 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	if addedMutations {
 		mutationID = n.tableDesc.ClusterVersion().NextMutationID
 	}
-	if err := params.p.writeSchemaChange(
-		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	// Record this index alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterIndex{
 			TableName:  n.n.Index.Table.FQString(),

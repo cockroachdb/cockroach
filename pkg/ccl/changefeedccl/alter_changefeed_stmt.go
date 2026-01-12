@@ -578,7 +578,7 @@ func generateAndValidateNewTargetsForTableLevelFeed(
 	newJobStatementTime := prevDetails.StatementTime
 
 	statementTime := hlc.Timestamp{
-		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+		WallTime: p.ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp.UnixNano(),
 	}
 
 	// we attempt to resolve the changefeed targets as of the current time to
@@ -1033,7 +1033,7 @@ func storeAlterChangefeedFrontier(
 	// emit events for the new tables from the time of the ALTER CHANGEFEED
 	// statement, but not before.
 	statementTime := hlc.Timestamp{
-		WallTime: p.ExtendedEvalContext().GetStmtTimestamp().UnixNano(),
+		WallTime: p.ExtendedEvalContext().(*sql.ExtendedEvalContext).StmtTimestamp.UnixNano(),
 	}
 
 	getSpans := func(details jobspb.ChangefeedDetails) ([]roachpb.Span, error) {
@@ -1134,7 +1134,7 @@ type spanID struct {
 
 func fetchSpansForDescs(p sql.PlanHookState, spanIDs []spanID) (primarySpans []roachpb.Span) {
 	seen := make(map[spanID]struct{})
-	codec := p.ExtendedEvalContext().Codec
+	codec := p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Codec
 	for _, id := range spanIDs {
 		if _, isDup := seen[id]; isDup {
 			continue

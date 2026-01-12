@@ -100,7 +100,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	params runParams,
 ) error {
 	if !n.tableDesc.IsLocalityGlobal() {
-		f := params.p.EvalContext().FmtCtx(tree.FmtSimple)
+		f := params.P.(*planner).EvalContext().FmtCtx(tree.FmtSimple)
 		if err := multiregion.FormatTableLocalityConfig(n.tableDesc.LocalityConfig, f); err != nil {
 			// While we're in an error path and generally it's bad to return a
 			// different error in an error path, we will only get an error here if the
@@ -115,7 +115,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.P.(*planner).Descriptors().ByIDWithoutLeased(params.P.(*planner).txn).WithoutNonPublic().Get().Database(params.Ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -125,8 +125,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		return err
 	}
 
-	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+	if err := params.P.(*planner).alterTableDescLocalityToRegionalByTable(
+		params.Ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
 	); err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams)
 	if err != nil {
 		return err
 	}
-	err = params.p.alterTableDescLocalityToGlobal(params.ctx, n.tableDesc, regionEnumID)
+	err = params.P.(*planner).alterTableDescLocalityToGlobal(params.Ctx, n.tableDesc, regionEnumID)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.P.(*planner).Descriptors().ByIDWithoutLeased(params.P.(*planner).txn).WithoutNonPublic().Get().Database(params.Ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -187,8 +187,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		return err
 	}
 
-	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+	if err := params.P.(*planner).alterTableDescLocalityToRegionalByTable(
+		params.Ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
 	); err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		// When this operation is implemented in the declarative schema changer, we
 		// should not need this check since the declarative schema changer should
 		// handle the element transitions correctly.
-		if params.p.SessionData().SafeUpdates && !n.tableDesc.Adding() {
+		if params.P.(*planner).SessionData().SafeUpdates && !n.tableDesc.Adding() {
 			primaryRegion, err := n.dbDesc.PrimaryRegionName()
 			if err != nil {
 				return err
@@ -327,11 +327,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 				multiregion.MaybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
 			),
 		}
-		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+		tn, err := params.P.(*planner).getQualifiedTableName(params.Ctx, n.tableDesc)
 		if err != nil {
 			return err
 		}
-		if err := params.p.addColumnImpl(
+		if err := params.P.(*planner).addColumnImpl(
 			params,
 			&alterTableNode{
 				tableDesc: n.tableDesc,
@@ -346,7 +346,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			return err
 		}
 		// Add all newly created type back references.
-		if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+		if err := params.P.(*planner).addBackRefsFromAllTypesInTable(params.Ctx, n.tableDesc); err != nil {
 			return err
 		}
 
@@ -355,8 +355,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		mutationIdxAllowedInSameTxn = &mutationIdx
 		newColumnName = &partColName
 
-		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-		if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+		version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+		if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 			return err
 		}
 
@@ -369,11 +369,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		// functions.
 		col := n.tableDesc.Mutations[mutationIdx].GetColumn()
 		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
-			params.ctx,
+			params.Ctx,
 			multiregion.RegionalByRowGatewayRegionDefaultExpr(enumOID),
 			col.Type,
 			"REGIONAL BY ROW DEFAULT",
-			params.p.SemaCtx(),
+			params.P.(*planner).SemaCtx(),
 			volatility.Volatile,
 			false, /*allowAssignmentCast*/
 		)
@@ -459,8 +459,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 			ShardBuckets: tree.NewDInt(tree.DInt(n.tableDesc.PrimaryIndex.Sharded.ShardBuckets)),
 		}
 	}
-	if err := params.p.AlterPrimaryKey(
-		params.ctx,
+	if err := params.P.(*planner).AlterPrimaryKey(
+		params.Ctx,
 		n.tableDesc,
 		alterPKNode,
 		&alterPrimaryKeyLocalitySwap{
@@ -483,15 +483,15 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 		n.tableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
 	}
 
-	return params.p.writeSchemaChange(
-		params.ctx,
+	return params.P.(*planner).writeSchemaChange(
+		params.Ctx,
 		n.tableDesc,
 		n.tableDesc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(&n.n, params.Ann()),
 	)
 }
 
-func (n *alterTableSetLocalityNode) startExec(params runParams) error {
+func (n *alterTableSetLocalityNode) StartExec(params runParams) error {
 	newLocality := n.n.Locality
 	existingLocality := n.tableDesc.LocalityConfig
 
@@ -507,8 +507,8 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	)
 
 	// We should check index zone configs if moving to REGIONAL BY ROW.
-	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
-		params.ctx,
+	if err := params.P.(*planner).validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+		params.Ctx,
 		n.dbDesc,
 		n.tableDesc,
 	); err != nil {
@@ -600,7 +600,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterTable{
 			TableName: n.n.Name.String(),
@@ -613,8 +613,8 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 	params runParams, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	// Write out the table descriptor update.
-	if err := params.p.writeSchemaChange(
-		params.ctx,
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx,
 		n.tableDesc,
 		descpb.InvalidMutationID,
 		tree.AsStringWithFQNames(&n.n, params.Ann()),
@@ -622,16 +622,16 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, dbDesc.GetID(), params.P.(*planner).Descriptors())
 	if err != nil {
 		return err
 	}
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
-		params.ctx,
-		params.p.InternalSQLTxn(),
-		params.p.ExecCfg(),
-		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		params.Ctx,
+		params.P.(*planner).InternalSQLTxn(),
+		params.P.(*planner).ExecCfg(),
+		params.P.(*planner).extendedEvalCtx.Tracing.KVTracingEnabled(),
 		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,

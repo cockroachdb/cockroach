@@ -32,7 +32,7 @@ func alterTenantResetHook(
 		return nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege, "only the system tenant can alter tenant")
 	}
 
-	timestamp, err := asof.EvalSystemTimeExpr(ctx, &p.ExtendedEvalContext().Context, p.SemaCtx(), alterTenantStmt.Timestamp,
+	timestamp, err := asof.EvalSystemTimeExpr(ctx, &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context, p.SemaCtx(), alterTenantStmt.Timestamp,
 		alterTenantResetOp, asof.ReplicationCutover)
 	if err != nil {
 		return nil, nil, false, err
@@ -47,7 +47,7 @@ func alterTenantResetHook(
 		if err != nil {
 			return err
 		}
-		return RevertTenantToTimestamp(ctx, &p.ExtendedEvalContext().Context, tenInfo.Name, timestamp, p.ExtendedEvalContext().SessionID)
+		return RevertTenantToTimestamp(ctx, &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context, tenInfo.Name, timestamp, p.ExtendedEvalContext().(*sql.ExtendedEvalContext).SessionID)
 	}
 	return fn, nil, false, nil
 }

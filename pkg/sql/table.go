@@ -34,7 +34,8 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 }
 
 func (p *planner) checkDDLAtomicity() error {
-	if (!p.ExtendedEvalContext().TxnImplicit || !p.ExtendedEvalContext().TxnIsSingleStmt) &&
+	extEvalCtx := p.ExtendedEvalContext().(*ExtendedEvalContext)
+	if (!extEvalCtx.TxnImplicit || !extEvalCtx.TxnIsSingleStmt()) &&
 		p.SessionData().StrictDDLAtomicity {
 		return errors.WithHint(unimplemented.NewWithIssue(42061,
 			"cannot run this DDL statement inside a multi-statement transaction as its atomicity cannot be guaranteed"),
@@ -365,7 +366,7 @@ func (p *planner) writeTableDescToBatch(
 
 	if tableDesc.IsNew() {
 		if err := runSchemaChangesInTxn(
-			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			ctx, p, tableDesc, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 		); err != nil {
 			return err
 		}

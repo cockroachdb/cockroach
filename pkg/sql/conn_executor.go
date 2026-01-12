@@ -2777,7 +2777,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 		ex.extraTxnState.savepoints = ex.extraTxnState.rewindPosSnapshot.savepoints
 		// Note we use the Replace function instead of reassigning, as there are
-		// copies of the ex.sessionDataStack in the iterators and extendedEvalContext.
+		// copies of the ex.sessionDataStack in the iterators and ExtendedEvalContext.
 		ex.sessionDataStack.Replace(ex.extraTxnState.rewindPosSnapshot.sessionDataStack)
 		advInfo.rewCap.rewindAndUnlock(ctx)
 	case stayInPlace:
@@ -3868,11 +3868,11 @@ func bufferedWritesIsAllowedForIsolationLevel(
 	return allowBufferedWritesForWeakIsolation.Get(&st.SV)
 }
 
-// initEvalCtx initializes the fields of an extendedEvalContext that stay the
+// initEvalCtx initializes the fields of an ExtendedEvalContext that stay the
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
-func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
-	*evalCtx = extendedEvalContext{
+func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *ExtendedEvalContext, p *planner) {
+	*evalCtx = ExtendedEvalContext{
 		Context: eval.Context{
 			Planner:                          p,
 			StreamManagerFactory:             p,
@@ -3967,12 +3967,12 @@ func (ex *connExecutor) GetPCRReaderTimestamp() hlc.Timestamp {
 // shouldn't be reused across statements.
 //
 // Safe for concurrent use.
-func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
+func (ex *connExecutor) resetEvalCtx(evalCtx *ExtendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
 	newTxn := txn == nil || evalCtx.Txn != txn
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()
-	evalCtx.TxnIsSingleStmt = false
+	evalCtx.Context.TxnIsSingleStmt = false
 	func() {
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()

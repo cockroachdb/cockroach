@@ -121,7 +121,7 @@ func runCompactionPlan(
 		nil, /* rangeCache */
 		nil, /* txn */
 		nil, /* clockUpdater */
-		execCtx.ExtendedEvalContext().Tracing,
+		execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 	)
 	defer recv.Release()
 
@@ -129,7 +129,7 @@ func runCompactionPlan(
 		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
 	)
 
-	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
+	evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Copy()
 	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return rowResultWriter.Err()
 }
@@ -156,9 +156,9 @@ func createCompactionPlan(
 	evalCtx := execCtx.ExtendedEvalContext()
 	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
 	oracle := physicalplan.DefaultReplicaChooser
-	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+	if useBulkOracle.Get(&evalCtx.(*sql.ExtendedEvalContext).Settings.SV) {
 		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
-			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			dsp.ReplicaOracleConfig(evalCtx.(*sql.ExtendedEvalContext).Locality),
 			locFilter,
 		)
 		if err != nil {
@@ -166,8 +166,7 @@ func createCompactionPlan(
 		}
 	}
 
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(),
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(ctx, evalCtx.(*sql.ExtendedEvalContext), execCtx.ExecCfg(),
 		oracle, locFilter, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {

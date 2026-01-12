@@ -89,22 +89,22 @@ func (p *planner) AlterType(ctx context.Context, n *tree.AlterType) (planNode, e
 	}, nil
 }
 
-func (n *alterTypeNode) startExec(params runParams) error {
+func (n *alterTypeNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("type", n.n.Cmd.TelemetryName()))
 
-	typeName := tree.AsStringWithFQNames(n.n.Type, params.p.Ann())
+	typeName := tree.AsStringWithFQNames(n.n.Type, params.P.(*planner).Ann())
 	eventLogDone := false
 	var err error
 	switch t := n.n.Cmd.(type) {
 	case *tree.AlterTypeAddValue:
-		err = params.p.addEnumValue(params.ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.p.Ann()))
+		err = params.P.(*planner).addEnumValue(params.Ctx, n.desc, t, tree.AsStringWithFQNames(n.n, params.P.(*planner).Ann()))
 	case *tree.AlterTypeRenameValue:
-		err = params.p.renameTypeValue(params.ctx, n, string(t.OldVal), string(t.NewVal))
+		err = params.P.(*planner).renameTypeValue(params.Ctx, n, string(t.OldVal), string(t.NewVal))
 	case *tree.AlterTypeRename:
-		if err = params.p.renameType(params.ctx, n, string(t.NewName)); err != nil {
+		if err = params.P.(*planner).renameType(params.Ctx, n, string(t.NewName)); err != nil {
 			return err
 		}
-		err = params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameType{
+		err = params.P.(*planner).logEvent(params.Ctx, n.desc.ID, &eventpb.RenameType{
 			TypeName:    typeName,
 			NewTypeName: string(t.NewName),
 		})
@@ -112,7 +112,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 	case *tree.AlterTypeSetSchema:
 		// TODO(knz): this is missing dedicated logging,
 		// See https://github.com/cockroachdb/cockroach/issues/57741
-		err = params.p.setTypeSchema(params.ctx, n, string(t.Schema))
+		err = params.P.(*planner).setTypeSchema(params.Ctx, n, string(t.Schema))
 	case *tree.AlterTypeOwner:
 		owner, err := decodeusername.FromRoleSpec(
 			params.SessionData(), username.PurposeValidation, t.Owner,
@@ -120,12 +120,12 @@ func (n *alterTypeNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err = params.p.alterTypeOwner(params.ctx, n, owner); err != nil {
+		if err = params.P.(*planner).alterTypeOwner(params.Ctx, n, owner); err != nil {
 			return err
 		}
 		eventLogDone = true // done inside alterTypeOwner().
 	case *tree.AlterTypeDropValue:
-		err = params.p.dropEnumValue(params.ctx, n.desc, t.Val)
+		err = params.P.(*planner).dropEnumValue(params.Ctx, n.desc, t.Val)
 	default:
 		err = errors.AssertionFailedf("unknown alter type cmd %s", t)
 	}
@@ -135,7 +135,7 @@ func (n *alterTypeNode) startExec(params runParams) error {
 
 	if !eventLogDone {
 		// Write a log event.
-		if err := params.p.logEvent(params.ctx,
+		if err := params.P.(*planner).logEvent(params.Ctx,
 			n.desc.ID,
 			&eventpb.AlterType{
 				TypeName: typeName,

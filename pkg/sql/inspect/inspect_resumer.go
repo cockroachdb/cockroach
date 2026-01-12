@@ -166,7 +166,7 @@ func (c *inspectResumer) planInspectProcessors(
 	ctx context.Context, jobExecCtx sql.JobExecContext, entirePKSpans []roachpb.Span,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	distSQLPlanner := jobExecCtx.DistSQLPlanner()
-	planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext(), jobExecCtx.ExecCfg())
+	planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), jobExecCtx.ExecCfg())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -235,14 +235,14 @@ func (c *inspectResumer) runInspectPlan(
 		execCfg.RangeDescriptorCache,
 		nil, /* txn */
 		nil, /* clockUpdater */
-		jobExecCtx.ExtendedEvalContext().Tracing,
+		jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 	)
 	defer distSQLReceiver.Release()
 
 	distSQLPlanner := jobExecCtx.DistSQLPlanner()
 
 	// Copy the eval.Context, as dsp.Run() might change it.
-	evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
+	evalCtxCopy := jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 
 	distSQLPlanner.Run(ctx, planCtx, nil /* txn */, plan,
 		distSQLReceiver, evalCtxCopy, nil /* finishedSetupFn */)

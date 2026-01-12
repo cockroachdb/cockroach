@@ -157,9 +157,9 @@ type createStatsNode struct {
 	whereIndexID descpb.IndexID
 }
 
-func (n *createStatsNode) startExec(params runParams) error {
+func (n *createStatsNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("stats"))
-	return n.runJob(params.ctx)
+	return n.runJob(params.Ctx)
 }
 
 func (n *createStatsNode) Next(params runParams) (bool, error) {
@@ -994,7 +994,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		innerP := innerPlanner.(*planner)
 		innerEvalCtx := innerP.ExtendedEvalContext()
 		if details.AsOf != nil {
-			innerP.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}
+			*innerP.ExtendedEvalContext().GetAsOfSystemTime().(*eval.AsOfSystemTime) = eval.AsOfSystemTime{Timestamp: *details.AsOf}
 			innerP.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
 			if err := txn.KV().SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
@@ -1017,18 +1017,18 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				// plans.
 				singleColDetails := protoutil.Clone(&details).(*jobspb.CreateStatsDetails)
 				singleColDetails.ColumnStats = []jobspb.CreateStatsDetails_ColStat{colStat}
-				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
+				planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx.(*ExtendedEvalContext), innerP, txn.KV(), FullDistribution)
 				if err = dsp.planAndRunCreateStats(
-					ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), *singleColDetails,
+					ctx, innerEvalCtx.(*ExtendedEvalContext), planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), *singleColDetails,
 					len(details.ColumnStats), i,
 				); err != nil {
 					break
 				}
 			}
 		} else {
-			planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx, innerP, txn.KV(), FullDistribution)
+			planCtx := dsp.NewPlanningCtx(ctx, innerEvalCtx.(*ExtendedEvalContext), innerP, txn.KV(), FullDistribution)
 			err = dsp.planAndRunCreateStats(
-				ctx, innerEvalCtx, planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), details,
+				ctx, innerEvalCtx.(*ExtendedEvalContext), planCtx, innerP.SemaCtx(), txn.KV(), resultWriter, r.job.ID(), details,
 				1 /* numIndexes */, 0, /* curIndex */
 			)
 		}
@@ -1066,7 +1066,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	evalCtx := jobsPlanner.ExtendedEvalContext()
 
 	// Record this statistics creation in the event log.
-	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
+	if !createStatsPostEvents.Get(&evalCtx.GetSettings().(*cluster.Settings).SV) {
 		return nil
 	}
 
@@ -1078,9 +1078,9 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	// to use the transaction that inserted the new stats into the
 	// system.table_statistics table, but that would require calling
 	// logEvent() from the distsqlrun package.
-	return evalCtx.ExecCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	return evalCtx.GetExecCfg().(*ExecutorConfig).InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return logEventInternalForSQLStatements(ctx,
-			evalCtx.ExecCfg, txn,
+			evalCtx.GetExecCfg().(*ExecutorConfig), txn,
 			0, /* depth: use event_log=2 for vmodule filtering */
 			eventLogOptions{dst: LogEverywhere},
 			eventpb.CommonSQLEventDetails{
@@ -1138,13 +1138,13 @@ func checkRunningJobsInTxn(
 	}
 
 	if err := checkRunningJobsInTxnImpl(
-		ctx, p.ExtendedEvalContext().Settings, jobID, txn,
+		ctx, p.ExtendedEvalContext().GetSettings().(*cluster.Settings), jobID, txn,
 	); err != nil {
 		return err
 	}
 	if autoPartial {
 		return checkRunningAutoPartialJobsInTxn(
-			ctx, p.ExtendedEvalContext().Settings, jobID, txn, jobRegistry, tableID,
+			ctx, p.ExtendedEvalContext().GetSettings().(*cluster.Settings), jobID, txn, jobRegistry, tableID,
 		)
 	}
 	return nil

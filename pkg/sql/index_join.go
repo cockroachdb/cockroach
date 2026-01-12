@@ -43,7 +43,7 @@ type indexJoinPlanningInfo struct {
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
-func (n *indexJoinNode) startExec(params runParams) error {
+func (n *indexJoinNode) StartExec(params runParams) error {
 	panic("indexJoinNode cannot be run in local mode")
 }
 
@@ -56,5 +56,5 @@ func (n *indexJoinNode) Values() tree.Datums {
 }
 
 func (n *indexJoinNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

@@ -147,7 +147,7 @@ func (dsp *DistSQLPlanner) Exec(
 		execCfg.RangeDescriptorCache,
 		p.txn,
 		execCfg.Clock,
-		p.ExtendedEvalContext().Tracing,
+		p.ExtendedEvalContext().(*ExtendedEvalContext).Tracing,
 	)
 	defer recv.Release()
 
@@ -155,7 +155,7 @@ func (dsp *DistSQLPlanner) Exec(
 	if distribute {
 		distributionType = FullDistribution
 	}
-	evalCtx := p.ExtendedEvalContext()
+	evalCtx := p.ExtendedEvalContext().(*ExtendedEvalContext)
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
 		distributionType)
 	planCtx.stmtType = recv.stmtType

@@ -92,7 +92,7 @@ func distRestore(
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-			ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
+			ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCtx.ExecCfg(),
 			physicalplan.DefaultReplicaChooser, sql.SingleLocalityFilter(md.execLocality), sql.NoStrictLocalityFiltering,
 		)
 		if err != nil {
@@ -266,7 +266,7 @@ func distRestore(
 			nil,   /* rangeCache */
 			noTxn, /* txn - the flow does not read or write the database */
 			nil,   /* clockUpdater */
-			execCtx.ExtendedEvalContext().Tracing,
+			execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 		)
 		defer recv.Release()
 
@@ -274,7 +274,7 @@ func distRestore(
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, md.jobID)
 
 		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+		evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 		dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, nil /* finishedSetupFn */)
 		return errors.Wrap(rowResultWriter.Err(), "running distSQL flow")
 	})

@@ -55,7 +55,7 @@ func RevertSpansFanout(
 	}
 
 	dsp := rsCtx.DistSQLPlanner()
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, rsCtx.ExtendedEvalContext(), execCfg)
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, rsCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCfg)
 	if err != nil {
 		return err
 	}

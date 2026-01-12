@@ -125,7 +125,7 @@ func (im *IndexBackfillerMergePlanner) plan(
 	mergeTimestamp hlc.Timestamp,
 ) (func(context.Context) error, error) {
 	var p *PhysicalPlan
-	var extEvalCtx extendedEvalContext
+	var extEvalCtx ExtendedEvalContext
 	var planCtx *PlanningCtx
 
 	if err := DescsTxn(ctx, im.execCfg, func(

@@ -44,10 +44,10 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	return &truncateNode{n: n}, nil
 }
 
-func (t *truncateNode) startExec(params runParams) error {
-	p := params.p
+func (t *truncateNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
 	n := t.n
-	ctx := params.ctx
+	ctx := params.Ctx
 
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (ID->name) of tables to truncate.
@@ -127,7 +127,7 @@ func (t *truncateNode) startExec(params runParams) error {
 		}
 
 		// Log a Truncate Table event for this table.
-		if err := params.p.logEvent(ctx,
+		if err := params.P.(*planner).logEvent(ctx,
 			id,
 			&eventpb.TruncateTable{
 				TableName: name,
@@ -304,7 +304,7 @@ func (p *planner) truncateTable(
 		NewIndexes:        newIndexIDs[1:],
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(
-		ctx, p.InternalSQLTxn(), p.ExecCfg(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		ctx, p.InternalSQLTxn(), p.ExecCfg(), p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 		tableDesc, swapInfo, true, /* forceSwap */
 	); err != nil {
 		return err

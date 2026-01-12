@@ -192,15 +192,15 @@ type showFingerprintsRun struct {
 	values []tree.Datum
 }
 
-func (n *showFingerprintsNode) startExec(params runParams) error {
+func (n *showFingerprintsNode) StartExec(params runParams) error {
 	if n.tenantSpec != nil {
 		n.run.values = []tree.Datum{tree.DNull, tree.DNull, tree.DNull, tree.DNull}
 		return nil
 	}
 
 	if n.experimental {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("SHOW EXPERIMENTAL_FINGERPRINTS is deprecated. Use SHOW FINGERPRINTS instead."),
 		)
 	}
@@ -256,7 +256,7 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	tinfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+	tinfo, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return false, err
 	}
@@ -269,7 +269,7 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	// We want to write a protected timestamp record at the earliest timestamp
 	// that the fingerprint query is going to read from. When fingerprinting
 	// revisions, this will be the specified start time.
-	tsToProtect := params.p.EvalContext().Txn.ReadTimestamp()
+	tsToProtect := params.P.(*planner).EvalContext().Txn.ReadTimestamp()
 	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
 		if !n.options.startTimestamp.LessEq(tsToProtect) {
 			return false, pgerror.Newf(pgcode.InvalidParameterValue, `start timestamp %s is greater than the end timestamp %s`,
@@ -278,10 +278,10 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 		tsToProtect = n.options.startTimestamp
 	}
 	cleanup, err := protectTenantSpanWithSession(
-		params.ctx,
-		params.p.ExecCfg(),
+		params.Ctx,
+		params.P.(*planner).ExecCfg(),
 		tid,
-		params.p.ExtendedEvalContext().SessionID,
+		params.P.(*planner).ExtendedEvalContext().(*ExtendedEvalContext).SessionID,
 		tsToProtect,
 	)
 	if err != nil {
@@ -302,7 +302,7 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 		span = roachpb.Span{Key: keys.TableDataMin, EndKey: keys.TableDataMax}
 	}
 
-	fingerprint, err := params.p.FingerprintSpan(params.ctx,
+	fingerprint, err := params.P.(*planner).FingerprintSpan(params.Ctx,
 		span,
 		startTime,
 		allRevisions,
@@ -312,7 +312,7 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	}
 
 	endTime := hlc.Timestamp{
-		WallTime: params.p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
+		WallTime: params.P.(*planner).EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 	n.run.values[0] = tree.NewDString(string(tinfo.Name))
 	if !startTime.IsEmpty() {
@@ -359,14 +359,14 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// If we're in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidLeasedDescriptors set,
 	// like the outer one.
-	if params.p.EvalContext().AsOfSystemTime != nil {
-		ts := params.p.txn.ReadTimestamp()
+	if params.P.(*planner).EvalContext().AsOfSystemTime != nil {
+		ts := params.P.(*planner).txn.ReadTimestamp()
 		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
-	fingerprintCols, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx, "hash-fingerprint",
-		params.p.txn,
+	fingerprintCols, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+		params.Ctx, "hash-fingerprint",
+		params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		sql,
 	)

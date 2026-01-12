@@ -96,7 +96,7 @@ type lookupJoinPlanningInfo struct {
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
-func (lj *lookupJoinNode) startExec(params runParams) error {
+func (lj *lookupJoinNode) StartExec(params runParams) error {
 	panic("lookupJoinNode cannot be run in local mode")
 }
 
@@ -109,5 +109,5 @@ func (lj *lookupJoinNode) Values() tree.Datums {
 }
 
 func (lj *lookupJoinNode) Close(ctx context.Context) {
-	lj.input.Close(ctx)
+	lj.Source.Close(ctx)
 }

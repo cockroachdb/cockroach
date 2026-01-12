@@ -37,7 +37,7 @@ type showTraceReplicaNode struct {
 	}
 }
 
-func (n *showTraceReplicaNode) startExec(params runParams) error {
+func (n *showTraceReplicaNode) StartExec(params runParams) error {
 	return nil
 }
 
@@ -45,11 +45,11 @@ func (n *showTraceReplicaNode) Next(params runParams) (bool, error) {
 	var timestampD tree.Datum
 	var tag string
 	for {
-		ok, err := n.input.Next(params)
+		ok, err := n.Source.Next(params)
 		if !ok || err != nil {
 			return ok, err
 		}
-		values := n.input.Values()
+		values := n.Source.Values()
 		// The rows are received from showTraceNode; see ShowTraceColumns.
 		const (
 			tsCol  = 0
@@ -95,7 +95,7 @@ func (n *showTraceReplicaNode) Values() tree.Datums {
 }
 
 func (n *showTraceReplicaNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
 var nodeStoreRangeRE = regexp.MustCompile(`^\[n(\d+),(?:tenant=\d+,)?s(\d+),r(\d+)/`)

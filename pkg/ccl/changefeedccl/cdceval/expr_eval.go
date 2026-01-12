@@ -286,7 +286,7 @@ func (e *familyEvaluator) preparePlan(
 	err = withPlanner(ctx, e.execCfg, e.statementTS, e.user, e.currDesc.SchemaTS, e.sessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
 			e.cleanup = cleanup
-			e.rowEvalCtx = rowEvalContextFromEvalContext(&execCtx.ExtendedEvalContext().Context)
+			e.rowEvalCtx = rowEvalContextFromEvalContext(&execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context)
 			e.rowEvalCtx.withDiff = e.withDiff
 			e.rowEvalCtx.creationTime = e.statementTS
 

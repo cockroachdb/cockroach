@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
@@ -46,7 +47,7 @@ type planNodeToRowSource struct {
 var _ execinfra.LocalProcessor = &planNodeToRowSource{}
 var _ execreleasable.Releasable = &planNodeToRowSource{}
 var _ execopnode.OpNode = &planNodeToRowSource{}
-var _ metadataForwarder = &planNodeToRowSource{}
+var _ plannode.MetadataForwarder = &planNodeToRowSource{}
 
 var planNodeToRowSourcePool = sync.Pool{
 	New: func() interface{} {
@@ -154,7 +155,7 @@ func (p *planNodeToRowSource) Init(
 		return err
 	}
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		if txn := p.params.p.Txn(); txn != nil {
+		if txn := p.params.P.(*planner).Txn(); txn != nil {
 			p.contentionEventsListener.Init(txn.ID())
 		}
 		p.ExecStatsForTrace = p.execStatsForTrace
@@ -190,7 +191,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 				return err
 			}
 			if child == p.firstNotWrapped {
-				newChild := newRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped)
+				newChild := plannode.NewRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped)
 				return parent.SetInput(i, newChild)
 			}
 			if err := replaceFirstNotWrapped(child); err != nil {
@@ -204,9 +205,9 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 
 func (p *planNodeToRowSource) Start(ctx context.Context) {
 	ctx = p.StartInternal(ctx, nodeName(p.node), &p.contentionEventsListener, &p.tenantConsumptionListener)
-	p.params.ctx = ctx
+	p.params.Ctx = ctx
 	// This starts all of the nodes below this node.
-	if err := startExec(p.params, p.node); err != nil {
+	if err := StartExec(p.params, p.node); err != nil {
 		p.MoveToDraining(err)
 	}
 }
@@ -244,12 +245,12 @@ func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 	return nil, p.DrainHelper()
 }
 
-// forwardMetadata will be called by any upstream rowSourceToPlanNode processors
+// ForwardMetadata will be called by any upstream rowSourceToPlanNode processors
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
 // trailing metadata and expect us to forward it further.
-func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
-	p.ProcessorBase.AppendTrailingMeta(*metadata)
+func (p *planNodeToRowSource) ForwardMetadata(metadata interface{}) {
+	p.ProcessorBase.AppendTrailingMeta(*metadata.(*execinfrapb.ProducerMetadata))
 }
 
 func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
@@ -259,10 +260,10 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 		// if so.
 		if m, ok := p.node.(mutationPlanNode); ok {
 			metrics := execinfrapb.GetMetricsMeta()
-			metrics.RowsWritten = m.rowsWritten()
-			metrics.IndexRowsWritten = m.indexRowsWritten()
-			metrics.IndexBytesWritten = m.indexBytesWritten()
-			metrics.KVCPUTime = m.kvCPUTime()
+			metrics.RowsWritten = m.RowsWritten()
+			metrics.IndexRowsWritten = m.IndexRowsWritten()
+			metrics.IndexBytesWritten = m.IndexBytesWritten()
+			metrics.KVCPUTime = m.KvCPUTime()
 			meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
 		}
 	}

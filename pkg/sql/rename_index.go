@@ -76,9 +76,9 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 // and expects to see its own writes.
 func (n *renameIndexNode) ReadingOwnWrites() {}
 
-func (n *renameIndexNode) startExec(params runParams) error {
-	p := params.p
-	ctx := params.ctx
+func (n *renameIndexNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	ctx := params.Ctx
 	tableDesc := n.tableDesc
 	idx := n.idx
 

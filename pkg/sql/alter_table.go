@@ -163,7 +163,7 @@ func isAlterCmdValidWithoutPrimaryKey(cmd tree.AlterTableCmd) bool {
 // and expects to see its own writes.
 func (n *alterTableNode) ReadingOwnWrites() {}
 
-func (n *alterTableNode) startExec(params runParams) error {
+func (n *alterTableNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("table"))
 
 	// Commands can either change the descriptor directly (for
@@ -172,7 +172,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
-	resolved := params.p.ResolvedName(n.n.Table)
+	resolved := params.P.(*planner).ResolvedName(n.n.Table)
 	tn, ok := resolved.(*tree.TableName)
 	if !ok {
 		return errors.AssertionFailedf(
@@ -205,8 +205,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"multiple primary keys for table %q are not allowed", tn.Object())
 			}
 			var err error
-			params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-				err = params.p.addColumnImpl(params, n, tn, n.tableDesc, t)
+			params.P.(*planner).runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
+				err = params.P.(*planner).addColumnImpl(params, n, tn, n.tableDesc, t)
 			})
 			if err != nil {
 				return err
@@ -221,7 +221,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case *tree.UniqueConstraintTableDef:
 				if d.WithoutIndex {
 					if err := addUniqueWithoutIndexTableDef(
-						params.ctx,
+						params.Ctx,
 						params.EvalContext(),
 						params.SessionData(),
 						d,
@@ -229,7 +229,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						*tn,
 						NonEmptyTable,
 						t.ValidationBehavior,
-						params.p.SemaCtx(),
+						params.P.(*planner).SemaCtx(),
 					); err != nil {
 						return err
 					}
@@ -247,8 +247,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 						Name:          d.Name,
 						StorageParams: d.StorageParams,
 					}
-					if err := params.p.AlterPrimaryKey(
-						params.ctx,
+					if err := params.P.(*planner).AlterPrimaryKey(
+						params.Ctx,
 						n.tableDesc,
 						*alterPK,
 						nil, /* localityConfigSwap */
@@ -266,7 +266,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 
-				tableName, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
+				tableName, err := params.P.(*planner).getQualifiedTableName(params.Ctx, n.tableDesc)
 				if err != nil {
 					return err
 				}
@@ -278,14 +278,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				columns := make(tree.IndexElemList, len(d.Columns))
 				copy(columns, d.Columns)
 				if err := replaceExpressionElemsWithVirtualCols(
-					params.ctx,
+					params.Ctx,
 					n.tableDesc,
 					tableName,
 					columns,
 					idxtype.FORWARD,
 					false, /* isNewTable */
-					params.p.SemaCtx(),
-					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+					params.P.(*planner).SemaCtx(),
+					params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx),
 				); err != nil {
 					return err
 				}
@@ -318,8 +318,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				if d.Predicate != nil {
 					expr, err := schemaexpr.ValidatePartialIndexPredicate(
-						params.ctx, n.tableDesc, d.Predicate, tableName, params.p.SemaCtx(),
-						params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+						params.Ctx, n.tableDesc, d.Predicate, tableName, params.P.(*planner).SemaCtx(),
+						params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx),
 					)
 					if err != nil {
 						return err
@@ -327,8 +327,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					idx.Predicate = expr
 				}
 
-				idx, err = params.p.configureIndexDescForNewIndexPartitioning(
-					params.ctx,
+				idx, err = params.P.(*planner).configureIndexDescForNewIndexPartitioning(
+					params.Ctx,
 					n.tableDesc,
 					idx,
 					d.PartitionByIndex,
@@ -349,12 +349,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// We need to allocate IDs upfront in the event we need to update the zone config
 				// in the same transaction.
-				version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-				if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+				version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+				if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 					return err
 				}
-				if err := params.p.configureZoneConfigForNewIndexPartitioning(
-					params.ctx,
+				if err := params.P.(*planner).configureZoneConfigForNewIndexPartitioning(
+					params.Ctx,
 					n.tableDesc,
 					idx,
 				); err != nil {
@@ -362,8 +362,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				if n.tableDesc.IsLocalityRegionalByRow() {
-					if err := params.p.checkNoRegionChangeUnderway(
-						params.ctx,
+					if err := params.P.(*planner).checkNoRegionChangeUnderway(
+						params.Ctx,
 						n.tableDesc.GetParentID(),
 						"create an UNIQUE CONSTRAINT on a REGIONAL BY ROW table",
 					); err != nil {
@@ -372,12 +372,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			case *tree.CheckConstraintTableDef:
 				var err error
-				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-					ckBuilder := schemaexpr.MakeCheckConstraintBuilder(params.ctx, *tn, n.tableDesc, &params.p.semaCtx)
+				params.P.(*planner).runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
+					ckBuilder := schemaexpr.MakeCheckConstraintBuilder(params.Ctx, *tn, n.tableDesc, &params.P.(*planner).semaCtx)
 					for _, c := range n.tableDesc.AllConstraints() {
 						ckBuilder.MarkNameInUse(c.GetName())
 					}
-					ck, buildErr := ckBuilder.Build(d, params.ExecCfg().Settings.Version.ActiveVersion(params.ctx))
+					ck, buildErr := ckBuilder.Build(d, params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx))
 					if buildErr != nil {
 						err = buildErr
 						return
@@ -430,12 +430,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// on tables that were just added. See the comment at the start of ResolveFK().
 				// TODO(vivek): check if the cache can be used.
 				var err error
-				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
+				params.P.(*planner).runWithOptions(resolveFlags{skipCache: true}, func() {
 					// Check whether the table is empty, and pass the result to ResolveFK(). If
 					// the table is empty, then resolveFK will automatically add the necessary
 					// index for a fk constraint if the index does not exist.
-					span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().Codec)
-					kvs, scanErr := params.p.txn.Scan(params.ctx, span.Key, span.EndKey, 1)
+					span := n.tableDesc.PrimaryIndexSpan(params.ExecCfg().(*ExecutorConfig).Codec)
+					kvs, scanErr := params.P.(*planner).txn.Scan(params.Ctx, span.Key, span.EndKey, 1)
 					if scanErr != nil {
 						err = scanErr
 						return
@@ -447,9 +447,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 						tableState = NonEmptyTable
 					}
 					err = ResolveFK(
-						params.ctx,
-						params.p.txn,
-						params.p,
+						params.Ctx,
+						params.P.(*planner).txn,
+						params.P.(*planner),
 						n.prefix.Database,
 						n.prefix.Schema,
 						n.tableDesc,
@@ -457,7 +457,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						affected,
 						tableState,
 						t.ValidationBehavior,
-						params.p.EvalContext(),
+						params.P.(*planner).EvalContext(),
 					)
 				})
 				if err != nil {
@@ -467,11 +467,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				for _, updated := range affected {
 					// Disallow schema change if the FK references a table whose schema is
 					// locked.
-					if err := params.p.checkSchemaChangeIsAllowed(params.ctx, updated, n.n); err != nil {
+					if err := params.P.(*planner).checkSchemaChangeIsAllowed(params.Ctx, updated, n.n); err != nil {
 						return err
 					}
-					if err := params.p.writeSchemaChange(
-						params.ctx, updated, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+					if err := params.P.(*planner).writeSchemaChange(
+						params.Ctx, updated, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 					); err != nil {
 						return err
 					}
@@ -483,7 +483,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// the updated table desc yet. We can restore the call to Validate()
 				// after running a migration of all table descriptors, making it
 				// unnecessary to read the original table desc from KV.
-				// if err := n.tableDesc.Validate(params.ctx, params.p.txn); err != nil {
+				// if err := n.tableDesc.Validate(params.Ctx, params.P.(*planner).txn); err != nil {
 				// 	return err
 				// }
 
@@ -496,8 +496,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// For `ALTER PRIMARY KEY`, carry over the primary index name, like how we
 			// carried over comments associated with the old primary index.
 			t.Name = tree.Name(n.tableDesc.PrimaryIndex.Name)
-			if err := params.p.AlterPrimaryKey(
-				params.ctx,
+			if err := params.P.(*planner).AlterPrimaryKey(
+				params.Ctx,
 				n.tableDesc,
 				*t,
 				nil, /* localityConfigSwap */
@@ -511,7 +511,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if params.SessionData().SafeUpdates {
 				err := pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will " +
 					"remove all data in that column and drop any indexes that reference that column")
-				if !params.extendedEvalCtx.TxnIsSingleStmt {
+				if !params.ExtendedEvalCtx.TxnIsSingleStmt() {
 					err = errors.WithIssueLink(err, errors.IssueLink{
 						IssueURL: build.MakeIssueURL(46541),
 						Detail: "when used in an explicit transaction combined with other " +
@@ -552,8 +552,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return sqlerrors.NewUndefinedConstraintError(string(t.Constraint), n.tableDesc.Name)
 			}
 			if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
-				if err := params.p.tryRemoveFKBackReferences(
-					params.ctx, n.tableDesc, uwoi, t.DropBehavior, true,
+				if err := params.P.(*planner).tryRemoveFKBackReferences(
+					params.Ctx, n.tableDesc, uwoi, t.DropBehavior, true,
 				); err != nil {
 					return err
 				}
@@ -561,16 +561,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err := n.tableDesc.DropConstraint(
 				c,
 				func(backRef catalog.ForeignKeyConstraint) error {
-					return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
+					return params.P.(*planner).removeFKBackReference(params.Ctx, n.tableDesc, backRef.ForeignKeyDesc())
 				},
 				func(ck *descpb.TableDescriptor_CheckConstraint) error {
-					return params.p.removeCheckBackReferenceInFunctions(params.ctx, n.tableDesc, ck)
+					return params.P.(*planner).removeCheckBackReferenceInFunctions(params.Ctx, n.tableDesc, ck)
 				},
 			); err != nil {
 				return err
 			}
 			descriptorChanged = true
-			if err := validateDescriptor(params.ctx, params.p, n.tableDesc); err != nil {
+			if err := validateDescriptor(params.Ctx, params.P.(*planner), n.tableDesc); err != nil {
 				return err
 			}
 
@@ -592,25 +592,25 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if ck := c.AsCheck(); ck != nil {
 				if err := validateCheckInTxn(
-					params.ctx, params.p.InternalSQLTxn(), params.p.EvalContext(),
-					&params.p.semaCtx, params.p.SessionData(), n.tableDesc, ck,
+					params.Ctx, params.P.(*planner).InternalSQLTxn(), params.P.(*planner).EvalContext(),
+					&params.P.(*planner).semaCtx, params.P.(*planner).SessionData(), n.tableDesc, ck,
 				); err != nil {
 					return err
 				}
 				ck.CheckDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if fk := c.AsForeignKey(); fk != nil {
 				if err := validateFkInTxn(
-					params.ctx, params.p.InternalSQLTxn(), n.tableDesc, name,
+					params.Ctx, params.P.(*planner).InternalSQLTxn(), n.tableDesc, name,
 				); err != nil {
 					return err
 				}
 				fk.ForeignKeyDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
 				if err := validateUniqueWithoutIndexConstraintInTxn(
-					params.ctx,
-					params.p.InternalSQLTxn(),
+					params.Ctx,
+					params.P.(*planner).InternalSQLTxn(),
 					n.tableDesc,
-					params.p.User(),
+					params.P.(*planner).User(),
 					name,
 				); err != nil {
 					return err
@@ -647,7 +647,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return sqlerrors.NewAlterDependsOnDurationExprError("alter", "column", columnName, tn.Object())
 			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(params.ctx, tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
+			if err := applyColumnMutation(params.Ctx, tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -680,13 +680,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			newPrimaryIndexDesc := n.tableDesc.GetPrimaryIndex().IndexDescDeepCopy()
 			newImplicitCols, newPartitioning, err := CreatePartitioning(
-				params.ctx, params.p.ExecCfg().Settings,
+				params.Ctx, params.P.(*planner).ExecCfg().Settings,
 				params.EvalContext(),
 				n.tableDesc,
 				newPrimaryIndexDesc,
 				t.PartitionBy,
 				nil, /* allowedNewColumnNames */
-				params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
+				params.P.(*planner).EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 					n.tableDesc.IsLocalityRegionalByRow(),
 			)
 			if err != nil {
@@ -703,21 +703,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 				n.tableDesc.SetPrimaryIndex(newPrimaryIndexDesc)
 				descriptorChanged = true
 				if err := deleteRemovedPartitionZoneConfigs(
-					params.ctx,
-					params.p.InternalSQLTxn(),
+					params.Ctx,
+					params.P.(*planner).InternalSQLTxn(),
 					n.tableDesc,
 					n.tableDesc.GetPrimaryIndexID(),
 					oldPartitioning,
 					n.tableDesc.GetPrimaryIndex().GetPartitioning(),
-					params.extendedEvalCtx.ExecCfg,
-					params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+					params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig),
+					params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled(),
 				); err != nil {
 					return err
 				}
 			}
 
 		case *tree.AlterTableSetAudit:
-			changed, err := params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
+			changed, err := params.P.(*planner).setAuditMode(params.Ctx, n.tableDesc, t.Mode)
 			if err != nil {
 				return err
 			}
@@ -728,7 +728,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return errors.AssertionFailedf("missing stats data")
 			}
-			if !params.extendedEvalCtx.TxnIsSingleStmt {
+			if !params.ExtendedEvalCtx.TxnIsSingleStmt() {
 				return errors.New("cannot inject statistics in an explicit transaction")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
@@ -738,8 +738,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableSetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
 			if err := storageparam.Set(
-				params.ctx,
-				params.p.SemaCtx(),
+				params.Ctx,
+				params.P.(*planner).SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
 				setter,
@@ -773,7 +773,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableResetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
 			if err := storageparam.Reset(
-				params.ctx,
+				params.Ctx,
 				params.EvalContext(),
 				t.Params,
 				setter,
@@ -804,7 +804,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					columnName,
 				)
 			}
-			descChanged, err := params.p.renameColumn(params.ctx, tableDesc, columnName, t.NewName)
+			descChanged, err := params.P.(*planner).renameColumn(params.Ctx, tableDesc, columnName, t.NewName)
 			if err != nil {
 				return err
 			}
@@ -843,19 +843,19 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			if err := params.p.CheckPrivilege(params.ctx, n.tableDesc, privilege.CREATE); err != nil {
+			if err := params.P.(*planner).CheckPrivilege(params.Ctx, n.tableDesc, privilege.CREATE); err != nil {
 				return err
 			}
 
 			depViewRenameError := func(objType string, refTableID descpb.ID) error {
-				return params.p.dependentError(params.ctx,
+				return params.P.(*planner).dependentError(params.Ctx,
 					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID, n.tableDesc.ID, "rename",
 				)
 			}
 
 			if err := n.tableDesc.RenameConstraint(constraint, string(t.NewName), depViewRenameError,
 				func(desc *tabledesc.Mutable, ref catalog.ForeignKeyConstraint, newName string) error {
-					return params.p.updateFKBackReferenceName(params.ctx, desc, ref.ForeignKeyDesc(), newName)
+					return params.P.(*planner).updateFKBackReferenceName(params.Ctx, desc, ref.ForeignKeyDesc(), newName)
 				}); err != nil {
 				return err
 			}
@@ -868,8 +868,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
-		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-		if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+		version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+		if err := n.tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 			return err
 		}
 	}
@@ -889,21 +889,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 	if addedMutations {
 		mutationID = n.tableDesc.ClusterVersion().NextMutationID
 	}
-	if err := params.p.writeSchemaChange(
-		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}
 
 	// Add all newly created type back references.
-	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, n.tableDesc); err != nil {
+	if err := params.P.(*planner).addBackRefsFromAllTypesInTable(params.Ctx, n.tableDesc); err != nil {
 		return err
 	}
 
 	// Replace all UDF names with OIDs in check constraints and update back
 	// references in functions used.
 	for _, ck := range n.tableDesc.CheckConstraints() {
-		if err := params.p.updateFunctionReferencesForCheck(params.ctx, n.tableDesc, ck.CheckDesc()); err != nil {
+		if err := params.P.(*planner).updateFunctionReferencesForCheck(params.Ctx, n.tableDesc, ck.CheckDesc()); err != nil {
 			return err
 		}
 	}
@@ -911,10 +911,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.tableDesc.ID,
 		&eventpb.AlterTable{
-			TableName:           params.p.ResolvedName(n.n.Table).FQString(),
+			TableName:           params.P.(*planner).ResolvedName(n.n.Table).FQString(),
 			MutationID:          uint32(mutationID),
 			CascadeDroppedViews: droppedViews,
 		})
@@ -1149,7 +1149,7 @@ func applyColumnMutation(
 		if err != nil {
 			return err
 		}
-		newDef, prefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, colDef, tn)
+		newDef, prefix, seqName, seqOpts, err := params.P.(*planner).processSerialLikeInColumnDef(params.Ctx, colDef, tn)
 		if err != nil {
 			return err
 		}
@@ -1160,7 +1160,7 @@ func applyColumnMutation(
 
 		colOwnedSeqDesc, err := doCreateSequence(
 			ctx,
-			params.p,
+			params.P.(*planner),
 			params.SessionData(),
 			prefix.Database,
 			prefix.Schema,
@@ -1179,9 +1179,9 @@ func applyColumnMutation(
 		}
 
 		changedSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx,
-			params.p.ExecCfg().Settings,
-			params.p,
+			params.Ctx,
+			params.P.(*planner).ExecCfg().Settings,
+			params.P.(*planner),
 			tableDesc,
 			col.ColumnDesc(),
 			typedExpr,
@@ -1201,8 +1201,8 @@ func applyColumnMutation(
 					return err
 				}
 			}
-			if err := params.p.writeSchemaChange(
-				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(t, params.Ann()),
+			if err := params.P.(*planner).writeSchemaChange(
+				params.Ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(t, params.Ann()),
 			); err != nil {
 				return err
 			}
@@ -1258,7 +1258,7 @@ func applyColumnMutation(
 				col.GetName(), tableDesc.GetName(), col.NumUsesSequences())
 		}
 
-		seqDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(ctx, col.GetUsesSequenceID(0))
+		seqDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Table(ctx, col.GetUsesSequenceID(0))
 		if err != nil {
 			return err
 		}
@@ -1290,8 +1290,8 @@ func applyColumnMutation(
 	case *tree.AlterTableDropIdentity:
 		if !col.IsGeneratedAsIdentity() {
 			if t.IfExists {
-				params.p.BufferClientNotice(
-					params.ctx,
+				params.P.(*planner).BufferClientNotice(
+					params.Ctx,
 					pgnotice.Newf("column %q of relation %q is not an identity column, skipping", col.GetName(), tableDesc.GetName()),
 				)
 				return nil
@@ -1316,7 +1316,7 @@ func applyColumnMutation(
 
 		// Verify sequence is not depended on by another column.
 		// Use tree.DropDefault behavior to verify without the need to alter other dependencies via tree.DropCascade.
-		if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, col, tree.DropDefault); err != nil {
+		if err := params.P.(*planner).canRemoveAllColumnOwnedSequences(params.Ctx, tableDesc, col, tree.DropDefault); err != nil {
 			return err
 		}
 		// Drop the identity flag first, so that it is treated like a normal column.
@@ -1326,7 +1326,7 @@ func applyColumnMutation(
 
 		// Drop the identity sequence and remove it from the column OwnsSequenceIds and DefaultExpr.
 		// Use tree.DropCascade behavior to remove dependencies on the column.
-		if err := params.p.dropSequencesOwnedByCol(params.ctx, col, true /* queueJob */, tree.DropCascade); err != nil {
+		if err := params.P.(*planner).dropSequencesOwnedByCol(params.Ctx, col, true /* queueJob */, tree.DropCascade); err != nil {
 			return err
 		}
 
@@ -1382,7 +1382,7 @@ func updateNonComputedColExpr(
 	// sequence dependencies on the column and then recalculating the
 	// dependencies after the new expression has been parsed.
 	if col.NumUsesSequences() > 0 {
-		if err := params.p.removeSequenceDependencies(params.ctx, tab, col); err != nil {
+		if err := params.P.(*planner).removeSequenceDependencies(params.Ctx, tab, col); err != nil {
 			return err
 		}
 	}
@@ -1402,7 +1402,7 @@ func updateNonComputedColExpr(
 		return err
 	}
 
-	if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, tab, col.ColumnDesc()); err != nil {
+	if err := params.P.(*planner).maybeUpdateFunctionReferencesForColumn(params.Ctx, tab, col.ColumnDesc()); err != nil {
 		return err
 	}
 
@@ -1414,13 +1414,13 @@ func sanitizeColumnExpression(
 ) (tree.TypedExpr, string, error) {
 	colDatumType := col.GetType()
 	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		p.ctx, expr, colDatumType, context, &p.p.semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
+		p.Ctx, expr, colDatumType, context, &p.P.(*planner).semaCtx, volatility.Volatile, false, /*allowAssignmentCast*/
 	)
 	if err != nil {
 		return nil, "", pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
 	}
 
-	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, p.EvalContext().Settings.Version.ActiveVersionOrEmpty(p.ctx)); err != nil {
+	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, p.EvalContext().Settings.Version.ActiveVersionOrEmpty(p.Ctx)); err != nil {
 		return nil, "", err
 	}
 
@@ -1494,9 +1494,9 @@ func updateSequenceDependencies(
 		}
 
 		newSeqDescs, err := maybeAddSequenceDependencies(
-			params.ctx,
-			params.p.ExecCfg().Settings,
-			params.p,
+			params.Ctx,
+			params.P.(*planner).ExecCfg().Settings,
+			params.P.(*planner),
 			tableDesc,
 			colDesc.ColumnDesc(),
 			typedExpr,
@@ -1511,8 +1511,8 @@ func updateSequenceDependencies(
 	}
 
 	for _, changedSeqDesc := range seqDescsToUpdate {
-		if err := params.p.writeSchemaChange(
-			params.ctx, changedSeqDesc, descpb.InvalidMutationID,
+		if err := params.P.(*planner).writeSchemaChange(
+			params.Ctx, changedSeqDesc, descpb.InvalidMutationID,
 			fmt.Sprintf("updating dependent sequence %s(%d) for table %s(%d)",
 				changedSeqDesc.Name, changedSeqDesc.ID, tableDesc.Name, tableDesc.ID,
 			)); err != nil {
@@ -1531,7 +1531,7 @@ func updateSequenceDependencies(
 func injectTableStats(
 	params runParams, desc catalog.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	val, err := eval.Expr(params.ctx, params.EvalContext(), statsExpr)
+	val, err := eval.Expr(params.Ctx, params.EvalContext(), statsExpr)
 	if err != nil {
 		return err
 	}
@@ -1558,10 +1558,10 @@ func injectTableStats(
 
 	// First, delete all statistics for the table. (We use the current transaction
 	// so that this will rollback on any error.)
-	if _ /* rows */, err := params.p.InternalSQLTxn().Exec(
-		params.ctx,
+	if _ /* rows */, err := params.P.(*planner).InternalSQLTxn().Exec(
+		params.Ctx,
 		"delete-stats",
-		params.p.Txn(),
+		params.P.(*planner).Txn(),
 		`DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.GetID(),
 	); err != nil {
 		return errors.Wrapf(err, "failed to delete old stats")
@@ -1571,7 +1571,7 @@ func injectTableStats(
 StatsLoop:
 	for i := range jsonStats {
 		s := &jsonStats[i]
-		h, err := s.GetHistogram(params.ctx, &params.p.semaCtx, params.EvalContext())
+		h, err := s.GetHistogram(params.Ctx, &params.P.(*planner).semaCtx, params.EvalContext())
 		if err != nil {
 			return err
 		}
@@ -1605,8 +1605,8 @@ StatsLoop:
 		for _, colName := range s.Columns {
 			col := catalog.FindColumnByName(desc, colName)
 			if col == nil {
-				params.p.BufferClientNotice(
-					params.ctx,
+				params.P.(*planner).BufferClientNotice(
+					params.Ctx,
 					pgnotice.Newf("column %q does not exist", colName),
 				)
 				continue StatsLoop
@@ -1624,7 +1624,7 @@ StatsLoop:
 	// Invalidate the local cache synchronously; this guarantees that the next
 	// statement in the same session won't use a stale cache (the cache would
 	// normally be updated asynchronously).
-	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
+	params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).TableStatsCache.InvalidateTableStats(params.Ctx, desc.GetID())
 
 	return nil
 }
@@ -1637,8 +1637,8 @@ func insertJSONStatistic(
 	histogram interface{},
 ) error {
 	var (
-		ctx = params.ctx
-		txn = params.p.InternalSQLTxn()
+		ctx = params.Ctx
+		txn = params.P.(*planner).InternalSQLTxn()
 	)
 
 	var name interface{}
@@ -1920,30 +1920,30 @@ func dropColumnImpl(
 		)
 	}
 
-	if err := params.p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.ctx, tableDesc); err != nil {
+	if err := params.P.(*planner).disallowDroppingPrimaryIndexReferencedInUDFOrView(params.Ctx, tableDesc); err != nil {
 		return nil, err
 	}
 
 	// If the dropped column uses a sequence, remove references to it from that sequence.
 	if colToDrop.NumUsesSequences() > 0 {
-		if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, colToDrop); err != nil {
+		if err := params.P.(*planner).removeSequenceDependencies(params.Ctx, tableDesc, colToDrop); err != nil {
 			return nil, err
 		}
 	}
 
 	if colToDrop.NumUsesFunctions() > 0 {
-		if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, colToDrop.ColumnDesc()); err != nil {
+		if err := params.P.(*planner).removeColumnBackReferenceInFunctions(params.Ctx, tableDesc, colToDrop.ColumnDesc()); err != nil {
 			return nil, err
 		}
 	}
 
 	// You can't remove a column that owns a sequence that is depended on
 	// by another column
-	if err := params.p.canRemoveAllColumnOwnedSequences(params.ctx, tableDesc, colToDrop, t.DropBehavior); err != nil {
+	if err := params.P.(*planner).canRemoveAllColumnOwnedSequences(params.Ctx, tableDesc, colToDrop, t.DropBehavior); err != nil {
 		return nil, err
 	}
 
-	if err := params.p.dropSequencesOwnedByCol(params.ctx, colToDrop, true /* queueJob */, t.DropBehavior); err != nil {
+	if err := params.P.(*planner).dropSequencesOwnedByCol(params.Ctx, colToDrop, true /* queueJob */, t.DropBehavior); err != nil {
 		return nil, err
 	}
 
@@ -1961,8 +1961,8 @@ func dropColumnImpl(
 		if !found {
 			continue
 		}
-		err := params.p.canRemoveDependent(
-			params.ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
+		err := params.P.(*planner).canRemoveDependent(
+			params.Ctx, "column", string(t.Column), tableDesc.ID, tableDesc.ParentID, ref, t.DropBehavior,
 			true, /* blockOnTriggerDependency */
 		)
 		if err != nil {
@@ -1971,8 +1971,8 @@ func dropColumnImpl(
 		depsToDrop.Add(ref.ID)
 	}
 
-	droppedViews, err = params.p.removeDependents(
-		params.ctx, tableDesc, depsToDrop, "column", colToDrop.GetName(), t.DropBehavior,
+	droppedViews, err = params.P.(*planner).removeDependents(
+		params.Ctx, tableDesc, depsToDrop, "column", colToDrop.GetName(), t.DropBehavior,
 	)
 	if err != nil {
 		return nil, err
@@ -2024,7 +2024,7 @@ func dropColumnImpl(
 	}
 
 	for _, idxName := range idxNamesToDelete {
-		params.EvalContext().ClientNoticeSender.BufferClientNotice(params.ctx, pgnotice.Newf(
+		params.EvalContext().ClientNoticeSender.BufferClientNotice(params.Ctx, pgnotice.Newf(
 			"dropping index %q which depends on column %q",
 			idxName,
 			colToDrop.ColName(),
@@ -2035,8 +2035,8 @@ func dropColumnImpl(
 			colToDrop.ColName(),
 			tree.AsStringWithFQNames(tn, params.Ann()),
 		)
-		if err := params.p.dropIndexByName(
-			params.ctx, tn, tree.UnrestrictedName(idxName), tableDesc, false,
+		if err := params.P.(*planner).dropIndexByName(
+			params.Ctx, tn, tree.UnrestrictedName(idxName), tableDesc, false,
 			t.DropBehavior, ignoreIdxConstraint, jobDesc,
 		); err != nil {
 			return nil, err
@@ -2069,8 +2069,8 @@ func dropColumnImpl(
 		// an alternate index or constraint, since all possible matches will
 		// be dropped when the column is dropped.
 		const withSearchForReplacement = false
-		if err := params.p.tryRemoveFKBackReferences(
-			params.ctx, tableDesc, uwoi, t.DropBehavior, withSearchForReplacement,
+		if err := params.P.(*planner).tryRemoveFKBackReferences(
+			params.Ctx, tableDesc, uwoi, t.DropBehavior, withSearchForReplacement,
 		); err != nil {
 			return nil, err
 		}
@@ -2091,15 +2091,15 @@ func dropColumnImpl(
 			check,
 			nil, /* removeFKBackRef */
 			func(ck *descpb.TableDescriptor_CheckConstraint) error {
-				return params.p.removeCheckBackReferenceInFunctions(params.ctx, tableDesc, ck)
+				return params.P.(*planner).removeCheckBackReferenceInFunctions(params.Ctx, tableDesc, ck)
 			},
 		); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := params.p.deleteComment(
-		params.ctx, tableDesc.ID, uint32(colToDrop.GetPGAttributeNum()), catalogkeys.ColumnCommentType,
+	if err := params.P.(*planner).deleteComment(
+		params.Ctx, tableDesc.ID, uint32(colToDrop.GetPGAttributeNum()), catalogkeys.ColumnCommentType,
 	); err != nil {
 		return nil, err
 	}
@@ -2115,7 +2115,7 @@ func dropColumnImpl(
 		fk := &tableDesc.OutboundFKs[i]
 		if descpb.ColumnIDs(fk.OriginColumnIDs).Contains(colToDrop.GetID()) {
 			sliceIdx--
-			if err := params.p.removeFKBackReference(params.ctx, tableDesc, fk); err != nil {
+			if err := params.P.(*planner).removeFKBackReference(params.Ctx, tableDesc, fk); err != nil {
 				return nil, err
 			}
 		}
@@ -2138,7 +2138,7 @@ func dropColumnImpl(
 			"column %q in the middle of being added, try again later", t.Column)
 	}
 
-	return droppedViews, validateDescriptor(params.ctx, params.p, tableDesc)
+	return droppedViews, validateDescriptor(params.Ctx, params.P.(*planner), tableDesc)
 }
 
 // handleTTLStorageParamChange changes TTL storage parameters. descriptorChanged
@@ -2156,10 +2156,10 @@ func handleTTLStorageParamChange(
 
 		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
-			env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
-			schedules := jobs.ScheduledJobTxn(params.p.InternalSQLTxn())
+			env := jobs.JobSchedulerEnv(params.ExecCfg().(*ExecutorConfig).JobsKnobs())
+			schedules := jobs.ScheduledJobTxn(params.P.(*planner).InternalSQLTxn())
 			s, err := schedules.Load(
-				params.ctx,
+				params.Ctx,
 				env,
 				after.ScheduleID,
 			)
@@ -2169,7 +2169,7 @@ func handleTTLStorageParamChange(
 			if err := s.SetScheduleAndNextRun(after.DeletionCronOrDefault()); err != nil {
 				return false, err
 			}
-			if err := schedules.Update(params.ctx, s); err != nil {
+			if err := schedules.Update(params.Ctx, s); err != nil {
 				return false, err
 			}
 		}
@@ -2226,7 +2226,7 @@ func handleTTLStorageParamChange(
 		addCol := &tree.AlterTableAddColumn{
 			ColumnDef: col,
 		}
-		if err := params.p.addColumnImpl(
+		if err := params.P.(*planner).addColumnImpl(
 			params,
 			&alterTableNode{
 				tableDesc: tableDesc,
@@ -2240,8 +2240,8 @@ func handleTTLStorageParamChange(
 		); err != nil {
 			return false, err
 		}
-		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
+		version := params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx)
+		if err := tableDesc.AllocateIDs(params.Ctx, version); err != nil {
 			return false, err
 		}
 	}
@@ -2288,8 +2288,8 @@ func handleTTLStorageParamChange(
 			// Use foreign key actions to determine upstream impact and flag a notice if the
 			// actions for delete involve cascading deletes for any one of the inbound foreign keys.
 			if fk.OnDelete != semenumpb.ForeignKeyAction_NO_ACTION && fk.OnDelete != semenumpb.ForeignKeyAction_RESTRICT {
-				params.p.BufferClientNotice(
-					params.ctx,
+				params.P.(*planner).BufferClientNotice(
+					params.Ctx,
 					pgnotice.Newf("Columns within table %s are referenced as foreign keys."+
 						" This will make TTL deletion jobs more expensive as dependent rows"+
 						" in other tables will need to be updated as well. To improve performance"+
@@ -2310,8 +2310,8 @@ func handleTTLStorageParamChange(
 			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 		}
 		if _, err := schemaexpr.ValidateTTLExpirationExpression(
-			params.ctx, params.p.SemaCtx(), tn, after,
-			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+			params.Ctx, params.P.(*planner).SemaCtx(), tn, after,
+			params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersion(params.Ctx),
 			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {
 			return false, err
@@ -2404,7 +2404,7 @@ func handleRBRUsingConstraintStorageParamChange(
 		return false, err
 	}
 	constraintID, ok, err := maybeGetRBRTableUsingConstraint(
-		params.ctx, params.p.SemaCtx(), params.p.EvalContext(), tableDesc, storageParams, regionColName,
+		params.Ctx, params.P.(*planner).SemaCtx(), params.P.(*planner).EvalContext(), tableDesc, storageParams, regionColName,
 	)
 	if err != nil {
 		return false, err

@@ -50,15 +50,15 @@ type upsertRun struct {
 }
 
 func (r *upsertRun) init(params runParams) error {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+	if ots := params.ExtendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
-	return r.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	return r.tw.init(params.Ctx, params.P.(*planner).txn, params.EvalContext())
 }
 
-func (n *upsertNode) startExec(params runParams) error {
+func (n *upsertNode) StartExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	n.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	if err := n.run.init(params); err != nil {
 		return err
@@ -87,12 +87,12 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 	// Consume/accumulate the rows for this batch.
 	lastBatch = false
 	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
+		if err = params.P.(*planner).cancelChecker.Check(); err != nil {
 			return false, err
 		}
 
 		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
+		if next, err := n.Source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				return false, err
@@ -102,7 +102,7 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 
 		// Process the insertion for the current input row, potentially
 		// accumulating the result row for later.
-		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
+		if err = n.run.processSourceRow(params, n.Source.Values()); err != nil {
 			return false, err
 		}
 
@@ -117,19 +117,19 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.
-			if err = n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
+			if err = n.run.tw.flushAndStartNewBatch(params.Ctx); err != nil {
 				return false, err
 			}
 		}
 	}
 
 	if lastBatch {
-		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = n.run.tw.finalize(params.ctx); err != nil {
+		n.run.tw.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+		if err = n.run.tw.finalize(params.Ctx); err != nil {
 			return false, err
 		}
 		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.tw.tableDesc(), int(n.run.tw.rowsAffected()))
+		params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, n.run.tw.tableDesc(), int(n.run.tw.rowsAffected()))
 	}
 	return lastBatch, nil
 }
@@ -170,7 +170,7 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			params.Ctx, params.P.(*planner).EvalContext(), &params.P.(*planner).semaCtx, params.P.(*planner).SessionData(),
 			r.tw.tableDesc(), r.checkOrds, rowVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -200,40 +200,40 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 
 	if buildutil.CrdbTestBuild {
 		// This testing knob allows us to suspend execution to force a race condition.
-		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-			fn(params.p.stmt.SQL)
+		if fn := params.ExecCfg().(*ExecutorConfig).TestingKnobs.AfterArbiterRead; fn != nil {
+			fn(params.P.(*planner).stmt.SQL)
 		}
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return r.tw.row(params.ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
+	return r.tw.row(params.Ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
 }
 
 func (n *upsertNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 	n.run.tw.close(ctx)
 	*n = upsertNode{}
 	upsertNodePool.Put(n)
 }
 
-func (n *upsertNode) rowsWritten() int64 {
+func (n *upsertNode) RowsWritten() int64 {
 	return n.run.tw.rowsAffected()
 }
 
-func (n *upsertNode) indexRowsWritten() int64 {
+func (n *upsertNode) IndexRowsWritten() int64 {
 	return n.run.tw.indexRowsWritten
 }
 
-func (n *upsertNode) indexBytesWritten() int64 {
+func (n *upsertNode) IndexBytesWritten() int64 {
 	return n.run.tw.indexBytesWritten
 }
 
-func (n *upsertNode) returnsRowsAffected() bool {
+func (n *upsertNode) ReturnsRowsAffected() bool {
 	return !n.run.tw.rowsNeeded
 }
 
-func (n *upsertNode) kvCPUTime() int64 {
+func (n *upsertNode) KvCPUTime() int64 {
 	return n.run.tw.kvCPUTime
 }
 

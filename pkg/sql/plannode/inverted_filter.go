@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -15,25 +15,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-type invertedFilterNode struct {
+type InvertedFilterNode struct {
 	singleInputPlanNode
-	invertedFilterPlanningInfo
-	columns colinfo.ResultColumns
+	InvertedFilterPlanningInfo
+	Columns colinfo.ResultColumns
 }
 
-type invertedFilterPlanningInfo struct {
-	expression          *inverted.SpanExpression
-	preFiltererExpr     tree.TypedExpr
-	preFiltererType     *types.T
-	invColumn           int
-	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
+type InvertedFilterPlanningInfo struct {
+	Expression          *inverted.SpanExpression
+	PreFiltererExpr     tree.TypedExpr
+	PreFiltererType     *types.T
+	InvColumn           int
+	FinalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
-func (n *invertedFilterNode) startExec(params runParams) error {
+func (n *invertedFilterNode) StartExec(params runParams) error {
 	panic("invertedFiltererNode can't be run in local mode")
 }
 func (n *invertedFilterNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 func (n *invertedFilterNode) Next(params runParams) (bool, error) {
 	panic("invertedFiltererNode can't be run in local mode")
@@ -41,3 +41,10 @@ func (n *invertedFilterNode) Next(params runParams) (bool, error) {
 func (n *invertedFilterNode) Values() tree.Datums {
 	panic("invertedFiltererNode can't be run in local mode")
 }
+
+
+// Lowercase alias
+type invertedFilterNode = InvertedFilterNode
+
+// Lowercase alias
+type invertedFilterPlanningInfo = InvertedFilterPlanningInfo

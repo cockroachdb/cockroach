@@ -90,7 +90,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 // and expects to see its own writes.
 func (n *createSequenceNode) ReadingOwnWrites() {}
 
-func (n *createSequenceNode) startExec(params runParams) error {
+func (n *createSequenceNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("sequence"))
 
 	schemaDesc, err := getSchemaForCreateTable(params, n.dbDesc, n.n.Persistence, &n.n.Name,
@@ -103,7 +103,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	_, err = doCreateSequence(
-		params.ctx, params.p, params.SessionData(), n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
+		params.Ctx, params.P.(*planner), params.SessionData(), n.dbDesc, schemaDesc, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 

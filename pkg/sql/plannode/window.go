@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -32,24 +32,24 @@ import (
 //
 // Therefore, the schema of the source node will be changed to look as follows:
 // pass through column | OVER clauses columns | arguments to window functions.
-type windowNode struct {
+type WindowNode struct {
 	singleInputPlanNode
-	windowPlanningInfo
+	WindowPlanningInfo
 
-	// columns is the set of result columns.
-	columns colinfo.ResultColumns
+	// Columns is the set of result columns.
+	Columns colinfo.ResultColumns
 }
 
-type windowPlanningInfo struct {
+type WindowPlanningInfo struct {
 	// The window functions handled by this windowNode.
-	funcs []*windowFuncHolder
+	Funcs []*windowFuncHolder
 
-	partitionIdxs       []uint32
-	columnOrdering      colinfo.ColumnOrdering
-	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
+	PartitionIdxs       []uint32
+	ColumnOrdering      colinfo.ColumnOrdering
+	FinalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
-func (n *windowNode) startExec(params runParams) error {
+func (n *windowNode) StartExec(params runParams) error {
 	panic("windowNode can't be run in local mode")
 }
 
@@ -62,28 +62,28 @@ func (n *windowNode) Values() tree.Datums {
 }
 
 func (n *windowNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }
 
 var _ tree.TypedExpr = &windowFuncHolder{}
 var _ tree.VariableExpr = &windowFuncHolder{}
 
-type windowFuncHolder struct {
-	expr *tree.FuncExpr
-	args []tree.Expr
+type WindowFuncHolder struct {
+	Expr *tree.FuncExpr
+	Args []tree.Expr
 
-	argsIdxs     []uint32 // indices of the columns that are arguments to the window function
-	filterColIdx int      // optional index of filtering column, -1 if no filter
-	outputColIdx int      // index of the column that the output should be put into
+	ArgsIdxs     []uint32 // indices of the columns that are arguments to the window function
+	FilterColIdx int      // optional index of filtering column, -1 if no filter
+	OutputColIdx int      // index of the column that the output should be put into
 
-	frame *tree.WindowFrame
+	Frame *tree.WindowFrame
 }
 
 func (*windowFuncHolder) Variable() {}
 
 func (w *windowFuncHolder) Format(ctx *tree.FmtCtx) {
 	// Avoid duplicating the type annotation by calling .Format directly.
-	w.expr.Format(ctx)
+	w.Expr.Format(ctx)
 }
 
 func (w *windowFuncHolder) String() string { return tree.AsString(w) }
@@ -101,5 +101,14 @@ func (w *windowFuncHolder) Eval(ctx context.Context, v tree.ExprEvaluator) (tree
 }
 
 func (w *windowFuncHolder) ResolvedType() *types.T {
-	return w.expr.ResolvedType()
+	return w.Expr.ResolvedType()
 }
+
+
+
+// Lowercase alias
+type windowNode = WindowNode
+
+// Lowercase aliases
+type windowPlanningInfo = WindowPlanningInfo
+type windowFuncHolder = WindowFuncHolder

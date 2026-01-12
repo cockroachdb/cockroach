@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -21,15 +21,15 @@ import (
 // subqueries in SQL, such as using a subquery as an expression, expect that
 // the subquery can return at most 1 row - that expectation must be enforced at
 // runtime.
-type max1RowNode struct {
+type Max1RowNode struct {
 	singleInputPlanNode
 
 	nexted    bool
 	values    tree.Datums
-	errorText string
+	ErrorText string
 }
 
-func (m *max1RowNode) startExec(runParams) error {
+func (m *max1RowNode) StartExec(runParams) error {
 	return nil
 }
 
@@ -39,7 +39,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 	}
 	m.nexted = true
 
-	ok, err := m.input.Next(params)
+	ok, err := m.Source.Next(params)
 	if !ok || err != nil {
 		return ok, err
 	}
@@ -47,16 +47,16 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		// We need to eagerly check our parent plan for a new row, to ensure that
 		// we return an error as per the contract of this node if the parent plan
 		// isn't exhausted after a single row.
-		m.values = make(tree.Datums, len(m.input.Values()))
-		copy(m.values, m.input.Values())
+		m.values = make(tree.Datums, len(m.Source.Values()))
+		copy(m.values, m.Source.Values())
 		var secondOk bool
-		secondOk, err = m.input.Next(params)
+		secondOk, err = m.Source.Next(params)
 		if secondOk {
 			// TODO(knz): m.errorText could be passed via redact.Safe if there
 			// was a guarantee that it does not contain PII. Or better yet,
 			// the caller would construct an `error` object to return here
 			// instead of a string.
-			return false, pgerror.Newf(pgcode.CardinalityViolation, "%s", m.errorText)
+			return false, pgerror.Newf(pgcode.CardinalityViolation, "%s", m.ErrorText)
 		}
 	}
 	return ok, err
@@ -67,5 +67,9 @@ func (m *max1RowNode) Values() tree.Datums {
 }
 
 func (m *max1RowNode) Close(ctx context.Context) {
-	m.input.Close(ctx)
+	m.Source.Close(ctx)
 }
+
+
+// Lowercase alias
+type max1RowNode = Max1RowNode

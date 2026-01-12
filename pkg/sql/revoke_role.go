@@ -113,7 +113,7 @@ func (p *planner) RevokeRoleNode(ctx context.Context, n *tree.RevokeRole) (*Revo
 	}, nil
 }
 
-func (n *RevokeRoleNode) startExec(params runParams) error {
+func (n *RevokeRoleNode) StartExec(params runParams) error {
 	var opName redact.RedactableString = "revoke-role"
 
 	var memberStmt string
@@ -134,10 +134,10 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					username.RootUser, username.AdminRole)
 			}
-			affected, err := params.p.InternalSQLTxn().ExecEx(
-				params.ctx,
+			affected, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+				params.Ctx,
 				opName,
-				params.p.txn,
+				params.P.(*planner).txn,
 				sessiondata.NodeUserSessionDataOverride,
 				memberStmt,
 				r.Normalized(), m.Normalized(),
@@ -152,7 +152,7 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 
 	// We need to bump the table version to trigger a refresh if anything changed.
 	if rowsAffected > 0 {
-		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).BumpRoleMembershipTableVersion(params.Ctx); err != nil {
 			return err
 		}
 	}

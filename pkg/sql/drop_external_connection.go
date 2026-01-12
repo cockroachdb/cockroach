@@ -29,8 +29,8 @@ func (p *planner) DropExternalConnection(
 	return &dropExternalConnectionNode{n: n}, nil
 }
 
-func (c *dropExternalConnectionNode) startExec(params runParams) error {
-	return params.p.dropExternalConnection(params, c.n)
+func (c *dropExternalConnectionNode) StartExec(params runParams) error {
+	return params.P.(*planner).dropExternalConnection(params, c.n)
 }
 
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
@@ -38,7 +38,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	// usage.
 
 	name, err := p.ExprEvaluator(externalConnectionOp).String(
-		params.ctx, n.ConnectionLabel,
+		params.Ctx, n.ConnectionLabel,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection name")
@@ -48,17 +48,17 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 		ConnectionName: name,
 	}
-	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.DROP); err != nil {
+	if err := p.CheckPrivilege(params.Ctx, ecPrivilege, privilege.DROP); err != nil {
 		return err
 	}
 
 	// DROP EXTERNAL CONNECTION is only allowed for users with the `DROP`
 	// privilege on this object. We run the query as `node` since the user might
 	// not have `SELECT` on the system table.
-	if _ /* rows */, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx,
+	if _ /* rows */, err = params.P.(*planner).InternalSQLTxn().ExecEx(
+		params.Ctx,
 		dropExternalConnectionOp,
-		params.p.Txn(),
+		params.P.(*planner).Txn(),
 		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.external_connections WHERE connection_name = $1`, name,
 	); err != nil {
@@ -67,10 +67,10 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 
 	// We must also DELETE all rows from system.privileges that refer to
 	// external connection.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx,
+	if _, err = params.P.(*planner).InternalSQLTxn().ExecEx(
+		params.Ctx,
 		dropExternalConnectionOp,
-		params.p.Txn(),
+		params.P.(*planner).Txn(),
 		sessiondata.NodeUserSessionDataOverride,
 		`DELETE FROM system.privileges WHERE path = $1`, ecPrivilege.GetPath(),
 	); err != nil {

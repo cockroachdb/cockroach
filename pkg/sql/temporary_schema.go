@@ -116,7 +116,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	}
 	b := p.Txn().NewBatch()
 	if err := p.Descriptors().InsertTempSchemaToBatch(
-		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), db, tempSchemaName, id, b,
+		ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), db, tempSchemaName, id, b,
 	); err != nil {
 		return nil, err
 	}

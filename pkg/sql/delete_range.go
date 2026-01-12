@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -59,33 +60,33 @@ type deleteRangeNode struct {
 var _ planNode = &deleteRangeNode{}
 var _ mutationPlanNode = &deleteRangeNode{}
 
-func (d *deleteRangeNode) rowsWritten() int64 {
+func (d *deleteRangeNode) RowsWritten() int64 {
 	return d.rowsAffected()
 }
 
-func (d *deleteRangeNode) indexRowsWritten() int64 {
+func (d *deleteRangeNode) IndexRowsWritten() int64 {
 	// Same as rowsWritten, because deleteRangeNode only applies to primary index
 	// rows (it is not used if there's a secondary index on the table).
 	return d.rowsAffected()
 }
 
-func (d *deleteRangeNode) indexBytesWritten() int64 {
+func (d *deleteRangeNode) IndexBytesWritten() int64 {
 	// No bytes counted as written for a deletion.
 	return 0
 }
 
-func (d *deleteRangeNode) returnsRowsAffected() bool {
+func (d *deleteRangeNode) ReturnsRowsAffected() bool {
 	// DeleteRange always returns the number of rows deleted.
 	return true
 }
 
-func (d *deleteRangeNode) kvCPUTime() int64 {
+func (d *deleteRangeNode) KvCPUTime() int64 {
 	return d.kvCPUTimeAccum
 }
 
 // startExec implements the planNode interface.
-func (d *deleteRangeNode) startExec(params runParams) error {
-	if err := params.p.cancelChecker.Check(); err != nil {
+func (d *deleteRangeNode) StartExec(params runParams) error {
+	if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 		return err
 	}
 
@@ -94,12 +95,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	// fetch kvs.
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* fetchColumnIDs */
+		&spec, params.ExecCfg().(*ExecutorConfig).Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* fetchColumnIDs */
 	); err != nil {
 		return err
 	}
 	if err := d.fetcher.Init(
-		params.ctx,
+		params.Ctx,
 		row.FetcherInitArgs{
 			WillUseKVProvider: true,
 			Alloc:             &tree.DatumAlloc{},
@@ -109,7 +110,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		return err
 	}
 
-	ctx := params.ctx
+	ctx := params.Ctx
 	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	// TODO(yuzefovich): why are we making a copy of spans?
 	spans := make([]roachpb.Span, len(d.spans))
@@ -120,13 +121,13 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// It'll be edited if there are any resume spans encountered (if any request
 		// hits the key limit).
 		for len(spans) != 0 {
-			b := params.p.txn.NewBatch()
-			b.Header.MaxSpanRequestKeys = int64(row.DeleteRangeChunkSize(params.extendedEvalCtx.TestingKnobs.ForceProductionValues))
+			b := params.P.(*planner).txn.NewBatch()
+			b.Header.MaxSpanRequestKeys = int64(row.DeleteRangeChunkSize(params.ExtendedEvalCtx.GetTestingKnobs().(*eval.TestingKnobs).ForceProductionValues))
 			b.Header.LockTimeout = params.SessionData().LockTimeout
 			b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 			d.deleteSpans(params, b, spans)
 			log.VEventf(ctx, 2, "fast delete: processing %d spans", len(spans))
-			if err := params.p.txn.Run(ctx, b); err != nil {
+			if err := params.P.(*planner).txn.Run(ctx, b); err != nil {
 				return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 			}
 
@@ -144,12 +145,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		// limit, this command could technically use up unlimited memory. However,
 		// the optimizer only enables autoCommit if the maximum possible number of
 		// keys to delete in this command are low, so we're made safe.
-		b := params.p.txn.NewBatch()
+		b := params.P.(*planner).txn.NewBatch()
 		b.Header.LockTimeout = params.SessionData().LockTimeout
 		b.Header.DeadlockTimeout = params.SessionData().DeadlockTimeout
 		d.deleteSpans(params, b, spans)
 		log.VEventf(ctx, 2, "fast delete: processing %d spans and committing", len(spans))
-		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
+		if err := params.P.(*planner).txn.CommitInBatch(ctx, b); err != nil {
 			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
 
@@ -162,7 +163,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.desc, d.rowCount)
+	params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, d.desc, d.rowCount)
 
 	return nil
 }
@@ -170,8 +171,8 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 // deleteSpans adds each input span to a Del or a DelRange command in the given
 // batch.
 func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
-	ctx := params.ctx
-	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	ctx := params.Ctx
+	traceKV := params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 	for _, span := range spans {
 		if span.EndKey == nil {
 			if traceKV {

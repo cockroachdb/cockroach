@@ -111,9 +111,9 @@ func (p *planner) AlterTenantCapability(
 	}, nil
 }
 
-func (n *alterTenantCapabilityNode) startExec(params runParams) error {
-	p := params.p
-	ctx := params.ctx
+func (n *alterTenantCapabilityNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	ctx := params.Ctx
 
 	// Privilege check.
 	if err := CanManageTenant(ctx, p); err != nil {

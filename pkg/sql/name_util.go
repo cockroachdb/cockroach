@@ -16,7 +16,7 @@ func (p *planner) dropNamespaceEntry(
 	ctx context.Context, b *kv.Batch, oldNameKey catalog.NameKey,
 ) error {
 	return p.Descriptors().DeleteNamespaceEntryToBatch(
-		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), oldNameKey, b,
+		ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), oldNameKey, b,
 	)
 }
 
@@ -27,6 +27,6 @@ func (p *planner) renameNamespaceEntry(
 		return err
 	}
 	return p.Descriptors().InsertNamespaceEntryToBatch(
-		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), desc, b,
+		ctx, p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(), desc, b,
 	)
 }

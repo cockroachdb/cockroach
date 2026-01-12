@@ -80,7 +80,7 @@ func checksForDatabase(
 	ctx context.Context, p sql.PlanHookState, db catalog.DatabaseDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	avoidLeased := false
-	if aost := p.ExtendedEvalContext().AsOfSystemTime; aost != nil {
+	if aost := p.ExtendedEvalContext().GetAsOfSystemTime(); aost != nil {
 		avoidLeased = true
 	}
 	byNameGetter := p.Descriptors().ByNameWithLeased(p.Txn())

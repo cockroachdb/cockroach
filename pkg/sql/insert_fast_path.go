@@ -114,7 +114,7 @@ func (c *insertFastPathCheck) init(params runParams) error {
 	c.tabDesc = c.ReferencedTable.(*optTable).desc
 	c.idx = idx.idx
 
-	codec := params.ExecCfg().Codec
+	codec := params.ExecCfg().(*ExecutorConfig).Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
 	c.spanBuilder.InitAllowingExternalRowData(params.EvalContext(), codec, c.tabDesc, c.idx)
 
@@ -313,8 +313,8 @@ func (n *insertFastPathNode) runUniqChecks(params runParams) error {
 
 	// Run the uniqueness checks batch.
 	ba := n.run.uniqBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "uniqueness check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	log.VEventf(params.Ctx, 2, "uniqueness check: sending a batch with %d requests", len(ba.Requests))
+	br, err := params.P.(*planner).txn.Send(params.Ctx, ba)
 	if err != nil {
 		return err.GoError()
 	}
@@ -346,8 +346,8 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 
 	// Run the FK checks batch.
 	ba := n.run.fkBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "fk check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	log.VEventf(params.Ctx, 2, "fk check: sending a batch with %d requests", len(ba.Requests))
+	br, err := params.P.(*planner).txn.Send(params.Ctx, ba)
 	if err != nil {
 		return err.GoError()
 	}
@@ -383,8 +383,8 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 
 	// Run the combined uniqueness and FK checks batch.
 	ba := n.run.uniqBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	log.VEventf(params.Ctx, 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
+	br, err := params.P.(*planner).txn.Send(params.Ctx, ba)
 	if err != nil {
 		return err.GoError()
 	}
@@ -414,9 +414,9 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 	return nil
 }
 
-func (n *insertFastPathNode) startExec(params runParams) error {
+func (n *insertFastPathNode) StartExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	n.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	n.run.init(params, n.columns)
 
@@ -458,7 +458,7 @@ func (n *insertFastPathNode) startExec(params runParams) error {
 		n.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
 	}
 
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := n.run.ti.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -480,13 +480,13 @@ func (n *insertFastPathNode) Values() tree.Datums {
 func (n *insertFastPathNode) processBatch(params runParams) error {
 	// The fast path node does everything in one batch.
 	for rowIdx, tupleRow := range n.input {
-		if err := params.p.cancelChecker.Check(); err != nil {
+		if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 			return err
 		}
 		inputRow := n.run.inputRow(rowIdx)
 		for col, typedExpr := range tupleRow {
 			var err error
-			inputRow[col], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
+			inputRow[col], err = eval.Expr(params.Ctx, params.EvalContext(), typedExpr)
 			if err != nil {
 				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
 				return err
@@ -495,8 +495,8 @@ func (n *insertFastPathNode) processBatch(params runParams) error {
 
 		if buildutil.CrdbTestBuild {
 			// This testing knob allows us to suspend execution to force a race condition.
-			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn(params.p.stmt.SQL)
+			if fn := params.ExecCfg().(*ExecutorConfig).TestingKnobs.AfterArbiterRead; fn != nil {
+				fn(params.P.(*planner).stmt.SQL)
 			}
 		}
 
@@ -508,14 +508,14 @@ func (n *insertFastPathNode) processBatch(params runParams) error {
 
 		// Add uniqueness checks.
 		if len(n.run.uniqChecks) > 0 {
-			if _, err := n.run.addUniqChecks(params.ctx, rowIdx, inputRow, false /* forTesting */); err != nil {
+			if _, err := n.run.addUniqChecks(params.Ctx, rowIdx, inputRow, false /* forTesting */); err != nil {
 				return err
 			}
 		}
 
 		// Add FK existence checks.
 		if len(n.run.fkChecks) > 0 {
-			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow); err != nil {
+			if err := n.run.addFKChecks(params.Ctx, rowIdx, inputRow); err != nil {
 				return err
 			}
 		}
@@ -539,13 +539,13 @@ func (n *insertFastPathNode) processBatch(params runParams) error {
 			return err
 		}
 	}
-	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-	if err := n.run.ti.finalize(params.ctx); err != nil {
+	n.run.ti.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+	if err := n.run.ti.finalize(params.Ctx); err != nil {
 		return err
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.ti.ri.Helper.TableDesc, len(n.input))
+	params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, n.run.ti.ri.Helper.TableDesc, len(n.input))
 
 	return nil
 }
@@ -556,23 +556,23 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	insertFastPathNodePool.Put(n)
 }
 
-func (n *insertFastPathNode) rowsWritten() int64 {
+func (n *insertFastPathNode) RowsWritten() int64 {
 	return n.run.rowsAffected()
 }
 
-func (n *insertFastPathNode) indexRowsWritten() int64 {
+func (n *insertFastPathNode) IndexRowsWritten() int64 {
 	return n.run.ti.indexRowsWritten
 }
 
-func (n *insertFastPathNode) indexBytesWritten() int64 {
+func (n *insertFastPathNode) IndexBytesWritten() int64 {
 	return n.run.ti.indexBytesWritten
 }
 
-func (n *insertFastPathNode) returnsRowsAffected() bool {
+func (n *insertFastPathNode) ReturnsRowsAffected() bool {
 	return !n.run.rowsNeeded
 }
 
-func (n *insertFastPathNode) kvCPUTime() int64 {
+func (n *insertFastPathNode) KvCPUTime() int64 {
 	return n.run.ti.kvCPUTime + n.run.kvCPUTime
 }
 

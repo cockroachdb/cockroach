@@ -63,7 +63,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	case mode == sessiondatapb.UseNewSchemaChangerOff:
 		return nil, nil
 	case mode == sessiondatapb.UseNewSchemaChangerOn || mode == sessiondatapb.UseNewSchemaChangerUnsafe:
-		if !p.extendedEvalCtx.TxnIsSingleStmt &&
+		if !p.extendedEvalCtx.TxnIsSingleStmt() &&
 			(p.SessionData().Internal || !p.SessionData().AutoCommitBeforeDDL) {
 			return nil, nil
 		}
@@ -224,9 +224,9 @@ type schemaChangePlanNode struct {
 	logSchemaChangesFn scbuild.LogSchemaChangerEventsFn
 }
 
-func (s *schemaChangePlanNode) startExec(params runParams) error {
-	p := params.p
-	scs := p.ExtendedEvalContext().SchemaChangerState
+func (s *schemaChangePlanNode) StartExec(params runParams) error {
+	p := params.P.(*planner)
+	scs := p.ExtendedEvalContext().(*ExtendedEvalContext).SchemaChangerState
 	// Current schema change state (as tracked in `scs.state` in the planner)
 	// does not match that when we previously planned and created `s` (as tracked
 	// in `s.lastState` and was previously set to `scs.state` in the planner).
@@ -235,19 +235,19 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// re-build the plan with an updated incumbent state.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
 		deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
-		state, logSchemaChangesFn, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt, &scs.memAcc)
+		state, logSchemaChangesFn, err := scbuild.Build(params.Ctx, deps, scs.state, s.stmt, &scs.memAcc)
 		if err != nil {
 			return err
 		}
 		// Update with the re-planned state.
-		scs.memAcc.Shrink(params.ctx, s.plannedState.ByteSize())
+		scs.memAcc.Shrink(params.Ctx, s.plannedState.ByteSize())
 		s.plannedState = state
 		s.logSchemaChangesFn = logSchemaChangesFn
 	}
 
 	// First log events from the statement we just built.
 	if s.logSchemaChangesFn != nil {
-		err := s.logSchemaChangesFn(params.ctx)
+		err := s.logSchemaChangesFn(params.Ctx)
 		if err != nil {
 			return err
 		}
@@ -256,7 +256,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// Operation side effects are in-memory only.
 	const kvTrace = false
 	runDeps := newSchemaChangerTxnRunDependencies(
-		params.ctx,
+		params.Ctx,
 		p.SessionData(),
 		p.User(),
 		p.ExecCfg(),
@@ -268,7 +268,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
-		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
+		params.Ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
 	)
 	if err != nil {
 		return err

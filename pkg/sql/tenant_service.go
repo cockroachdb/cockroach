@@ -51,12 +51,12 @@ func (p *planner) alterTenantService(
 	}, nil
 }
 
-func (n *alterTenantServiceNode) startExec(params runParams) error {
-	rec, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+func (n *alterTenantServiceNode) StartExec(params runParams) error {
+	rec, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
-	return params.p.setTenantService(params.ctx, rec, n.newMode)
+	return params.P.(*planner).setTenantService(params.Ctx, rec, n.newMode)
 }
 
 func (n *alterTenantServiceNode) Next(_ runParams) (bool, error) { return false, nil }

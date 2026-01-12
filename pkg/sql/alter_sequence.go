@@ -57,7 +57,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 // and expects to see its own writes.
 func (n *alterSequenceNode) ReadingOwnWrites() {}
 
-func (n *alterSequenceNode) startExec(params runParams) error {
+func (n *alterSequenceNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeAlterCounter("sequence"))
 
 	// Alter sequence with specified options.
@@ -69,10 +69,10 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	// Record this sequence alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.seqDesc.ID,
 		&eventpb.AlterSequence{
-			SequenceName: params.p.ResolvedName(n.n.Name).FQString(),
+			SequenceName: params.P.(*planner).ResolvedName(n.n.Name).FQString(),
 		})
 }
 
@@ -103,8 +103,8 @@ func alterSequenceImpl(
 		}
 	}
 	if err := assignSequenceOptions(
-		params.ctx,
-		params.p,
+		params.Ctx,
+		params.P.(*planner),
 		seqDesc.SequenceOpts,
 		seqOptions,
 		false, /* setDefaults */
@@ -115,10 +115,10 @@ func alterSequenceImpl(
 		return err
 	}
 	opts := seqDesc.SequenceOpts
-	seqValueKey := params.p.ExecCfg().Codec.SequenceKey(uint32(seqDesc.ID))
+	seqValueKey := params.P.(*planner).ExecCfg().Codec.SequenceKey(uint32(seqDesc.ID))
 
 	getSequenceValue := func() (int64, error) {
-		kv, err := params.p.txn.Get(params.ctx, seqValueKey)
+		kv, err := params.P.(*planner).txn.Get(params.Ctx, seqValueKey)
 		if err != nil {
 			return 0, err
 		}
@@ -130,11 +130,11 @@ func alterSequenceImpl(
 		// Setting the sequence value should always cause the operation to run
 		// in the current transaction. This is achieved by treating the sequence
 		// as if it were just created.
-		if err := params.p.createdSequences.addCreatedSequence(seqDesc.ID); err != nil {
+		if err := params.P.(*planner).createdSequences.addCreatedSequence(seqDesc.ID); err != nil {
 			return err
 		}
 
-		err := params.p.txn.Put(params.ctx, seqValueKey, val)
+		err := params.P.(*planner).txn.Put(params.Ctx, seqValueKey, val)
 		if err != nil {
 			return err
 		}
@@ -222,8 +222,8 @@ func alterSequenceImpl(
 		}
 	}
 
-	if err := params.p.writeSchemaChange(
-		params.ctx, seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(formatter, params.Ann()),
+	if err := params.P.(*planner).writeSchemaChange(
+		params.Ctx, seqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(formatter, params.Ann()),
 	); err != nil {
 		return err
 	}

@@ -38,29 +38,29 @@ type checkExternalConnectionNode struct {
 
 var _ planNode = &checkExternalConnectionNode{}
 
-func (n *checkExternalConnectionNode) startExec(params runParams) error {
+func (n *checkExternalConnectionNode) StartExec(params runParams) error {
 	if err := n.parseParams(params); err != nil {
 		return err
 	}
 	if err := CheckDestinationPrivileges(
-		params.ctx,
-		params.p,
+		params.Ctx,
+		params.P.(*planner),
 		[]string{n.loc},
 	); err != nil {
 		return err
 	}
 
-	ctx, span := tracing.ChildSpan(params.ctx, "CheckExternalConnection-planning")
+	ctx, span := tracing.ChildSpan(params.Ctx, "CheckExternalConnection-planning")
 	defer span.Finish()
 
-	store, err := params.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, n.loc, params.p.User())
+	store, err := params.ExecCfg().(*ExecutorConfig).DistSQLSrv.ExternalStorageFromURI(ctx, n.loc, params.P.(*planner).User())
 	if err != nil {
 		return errors.Wrap(err, "connect to external storage")
 	}
 	defer store.Close()
 
-	dsp := params.p.DistSQLPlanner()
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, params.extendedEvalCtx, params.ExecCfg())
+	dsp := params.P.(*planner).DistSQLPlanner()
+	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, params.ExtendedEvalCtx.(*ExtendedEvalContext), params.ExecCfg().(*ExecutorConfig))
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 	})
 
 	workerStarted := make(chan struct{})
-	n.execGrp = ctxgroup.WithContext(params.ctx)
+	n.execGrp = ctxgroup.WithContext(params.Ctx)
 	n.execGrp.GoCtx(func(ctx context.Context) error {
 		// Derive a separate tracing span since the planning one will be
 		// finished when the main goroutine exits from startExec.
@@ -120,22 +120,22 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 			nil, /* rangeCache */
 			nil, /* txn - the flow does not read or write the database */
 			nil, /* clockUpdater */
-			params.extendedEvalCtx.Tracing,
+			params.ExtendedEvalCtx.GetTracing().(*SessionTracing),
 		)
 		defer recv.Release()
 		defer close(n.rows)
 
 		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := params.extendedEvalCtx.Context.Copy()
+		evalCtxCopy := params.ExtendedEvalCtx.EvalContext().Copy()
 		dsp.Run(ctx, planCtx, nil, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 		return nil
 	})
 
 	// Block until the worker goroutine has started. This allows us to guarantee
-	// that params.ctx contains a tracing span that hasn't been finished.
+	// that params.Ctx contains a tracing span that hasn't been finished.
 	// TODO(yuzefovich): this is a bit hacky. The issue is that
 	// planNodeToRowSource has already created a new tracing span for this
-	// checkExternalConnectionNode and has updated params.ctx accordingly; then,
+	// checkExternalConnectionNode and has updated params.Ctx accordingly; then,
 	// if the query is canceled before the worker goroutine starts, the tracing
 	// span is finished, yet it will have already been captured by the ctxgroup.
 	<-workerStarted
@@ -144,8 +144,8 @@ func (n *checkExternalConnectionNode) startExec(params runParams) error {
 
 func (n *checkExternalConnectionNode) Next(params runParams) (bool, error) {
 	select {
-	case <-params.ctx.Done():
-		return false, params.ctx.Err()
+	case <-params.Ctx.Done():
+		return false, params.Ctx.Err()
 	case row, more := <-n.rows:
 		if !more {
 			return false, nil
@@ -164,15 +164,15 @@ func (n *checkExternalConnectionNode) Close(_ context.Context) {
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {
-	params.p.SemaCtx().Properties.Require("check_external_connection", tree.RejectSubqueries)
-	exprEval := params.p.ExprEvaluator("CHECK EXTERNAL CONNECTION")
-	loc, err := exprEval.String(params.ctx, n.node.URI)
+	params.P.(*planner).SemaCtx().Properties.Require("check_external_connection", tree.RejectSubqueries)
+	exprEval := params.P.(*planner).ExprEvaluator("CHECK EXTERNAL CONNECTION")
+	loc, err := exprEval.String(params.Ctx, n.node.URI)
 	if err != nil {
 		return err
 	}
 	n.loc = loc
 	if n.node.Options.TransferSize != nil {
-		transferSizeStr, err := exprEval.String(params.ctx, n.node.Options.TransferSize)
+		transferSizeStr, err := exprEval.String(params.Ctx, n.node.Options.TransferSize)
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func (n *checkExternalConnectionNode) parseParams(params runParams) error {
 		n.params.TransferSize = parsed
 	}
 	if n.node.Options.Duration != nil {
-		durationStr, err := exprEval.String(params.ctx, n.node.Options.Duration)
+		durationStr, err := exprEval.String(params.Ctx, n.node.Options.Duration)
 		if err != nil {
 			return err
 		}
@@ -194,7 +194,7 @@ func (n *checkExternalConnectionNode) parseParams(params runParams) error {
 		n.params.MinDuration = parsed
 	}
 	if n.node.Options.Concurrency != nil {
-		concurrency, err := exprEval.Int(params.ctx, n.node.Options.Concurrency)
+		concurrency, err := exprEval.Int(params.Ctx, n.node.Options.Concurrency)
 		if err != nil {
 			return err
 		}

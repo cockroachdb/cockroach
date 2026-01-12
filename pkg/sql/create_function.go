@@ -47,13 +47,13 @@ type createFunctionNode struct {
 
 func (n *createFunctionNode) ReadingOwnWrites() {}
 
-func (n *createFunctionNode) startExec(params runParams) error {
+func (n *createFunctionNode) StartExec(params runParams) error {
 	if n.cf.RoutineBody != nil {
 		return unimplemented.NewWithIssue(85144, "CREATE FUNCTION...sql_body unimplemented")
 	}
 
-	if err := params.p.canCreateOnSchema(
-		params.ctx, n.scDesc.GetID(), n.dbDesc.GetID(), params.p.User(), skipCheckPublicSchema,
+	if err := params.P.(*planner).canCreateOnSchema(
+		params.Ctx, n.scDesc.GetID(), n.dbDesc.GetID(), params.P.(*planner).User(), skipCheckPublicSchema,
 	); err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 	}
 
 	for funcRef := range n.functionDeps {
-		funcDesc, err := params.p.Descriptors().ByIDWithLeased(params.p.Txn()).Get().Function(params.ctx, funcRef)
+		funcDesc, err := params.P.(*planner).Descriptors().ByIDWithLeased(params.P.(*planner).Txn()).Get().Function(params.Ctx, funcRef)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 		}
 	}
 
-	scDesc, err := params.p.descCollection.ByName(params.p.Txn()).Get().Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
+	scDesc, err := params.P.(*planner).descCollection.ByName(params.P.(*planner).Txn()).Get().Schema(params.Ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
 		return err
 	}
@@ -86,13 +86,13 @@ func (n *createFunctionNode) startExec(params runParams) error {
 
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("function"))
 
-	mutScDesc, err := params.p.descCollection.MutableByName(params.p.Txn()).Schema(params.ctx, n.dbDesc, n.scDesc.GetName())
+	mutScDesc, err := params.P.(*planner).descCollection.MutableByName(params.P.(*planner).Txn()).Schema(params.Ctx, n.dbDesc, n.scDesc.GetName())
 	if err != nil {
 		return err
 	}
 
 	var retErr error
-	params.p.runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
+	params.P.(*planner).runWithOptions(resolveFlags{contextDatabaseID: n.dbDesc.GetID()}, func() {
 		retErr = func() error {
 			udfMutableDesc, existing, err := n.getMutableFuncDesc(mutScDesc, params)
 			if err != nil {
@@ -112,7 +112,7 @@ func (n *createFunctionNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			return params.p.logEvent(params.ctx, udfMutableDesc.GetID(), &event)
+			return params.P.(*planner).logEvent(params.Ctx, udfMutableDesc.GetID(), &event)
 		}()
 	})
 
@@ -138,8 +138,8 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	err := params.p.createDescriptor(
-		params.ctx,
+	err := params.P.(*planner).createDescriptor(
+		params.Ctx,
 		udfDesc,
 		tree.AsStringWithFQNames(&n.cf.Name, params.Ann()),
 	)
@@ -147,7 +147,7 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	returnType, err := tree.ResolveType(params.Ctx, n.cf.ReturnType.Type, params.P.(*planner))
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func (n *createFunctionNode) createNewFunction(
 			DefaultExprs:     defaultExprs,
 		},
 	)
-	if err := params.p.writeSchemaDescChange(params.ctx, scDesc, "Create Function"); err != nil {
+	if err := params.P.(*planner).writeSchemaDescChange(params.Ctx, scDesc, "Create Function"); err != nil {
 		return err
 	}
 
@@ -210,7 +210,7 @@ func (n *createFunctionNode) replaceFunction(
 	// Make sure return type is the same. The signature of user-defined types
 	// may change, as long as the same type is referenced. If this is the case,
 	// we must update the return type.
-	retType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	retType, err := tree.ResolveType(params.Ctx, n.cf.ReturnType.Type, params.P.(*planner))
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func (n *createFunctionNode) replaceFunction(
 	var outParamTypes []*types.T
 	var defaultExprs []string
 	for i, p := range n.cf.Params {
-		udfDesc.Params[i], err = makeFunctionParam(params.ctx, params.p.SemaCtx(), p, params.p)
+		udfDesc.Params[i], err = makeFunctionParam(params.Ctx, params.P.(*planner).SemaCtx(), p, params.P.(*planner))
 		if err != nil {
 			return err
 		}
@@ -275,7 +275,7 @@ func (n *createFunctionNode) replaceFunction(
 
 	// Removing all existing references before adding new references.
 	for _, id := range udfDesc.DependsOn {
-		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
+		backRefMutable, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Table(params.Ctx, id)
 		if err != nil {
 			return err
 		}
@@ -284,23 +284,23 @@ func (n *createFunctionNode) replaceFunction(
 			"removing udf reference %s(%d) in table %s(%d)",
 			udfDesc.Name, udfDesc.ID, backRefMutable.Name, backRefMutable.ID,
 		)
-		if err := params.p.writeSchemaChange(params.ctx, backRefMutable, descpb.InvalidMutationID, jobDesc); err != nil {
+		if err := params.P.(*planner).writeSchemaChange(params.Ctx, backRefMutable, descpb.InvalidMutationID, jobDesc); err != nil {
 			return err
 		}
 	}
 	jobDesc := fmt.Sprintf("updating type back reference %d for function %d", udfDesc.DependsOnTypes, udfDesc.ID)
-	if err := params.p.removeTypeBackReferences(params.ctx, udfDesc.DependsOnTypes, udfDesc.ID, jobDesc); err != nil {
+	if err := params.P.(*planner).removeTypeBackReferences(params.Ctx, udfDesc.DependsOnTypes, udfDesc.ID, jobDesc); err != nil {
 		return err
 	}
 	for _, id := range udfDesc.DependsOnFunctions {
-		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Function(params.ctx, id)
+		backRefMutable, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Function(params.Ctx, id)
 		if err != nil {
 			return err
 		}
 		if err := backRefMutable.RemoveFunctionReference(udfDesc.ID); err != nil {
 			return err
 		}
-		if err := params.p.writeFuncSchemaChange(params.ctx, backRefMutable); err != nil {
+		if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, backRefMutable); err != nil {
 			return err
 		}
 	}
@@ -323,7 +323,7 @@ func (n *createFunctionNode) replaceFunction(
 	// (This is also assumed in ReplaceOverload.)
 	for i := 0; i < len(existing.DefaultExprs); i++ {
 		typ := existing.Types.GetAt(i + existing.Types.Length() - len(existing.DefaultExprs))
-		existing.DefaultExprs[i], err = tree.TypeCheck(params.ctx, existing.DefaultExprs[i], params.p.SemaCtx(), typ)
+		existing.DefaultExprs[i], err = tree.TypeCheck(params.Ctx, existing.DefaultExprs[i], params.P.(*planner).SemaCtx(), typ)
 		if err != nil {
 			return err
 		}
@@ -348,12 +348,12 @@ func (n *createFunctionNode) replaceFunction(
 		); err != nil {
 			return err
 		}
-		if err = params.p.writeSchemaDescChange(params.ctx, scDesc, "Replace Function"); err != nil {
+		if err = params.P.(*planner).writeSchemaDescChange(params.Ctx, scDesc, "Replace Function"); err != nil {
 			return err
 		}
 	}
 
-	return params.p.writeFuncSchemaChange(params.ctx, udfDesc)
+	return params.P.(*planner).writeFuncSchemaChange(params.Ctx, udfDesc)
 }
 
 func (n *createFunctionNode) getMutableFuncDesc(
@@ -361,7 +361,7 @@ func (n *createFunctionNode) getMutableFuncDesc(
 ) (fnDesc *funcdesc.Mutable, existing *tree.QualifiedOverload, err error) {
 	pbParams := make([]descpb.FunctionDescriptor_Parameter, len(n.cf.Params))
 	for i, param := range n.cf.Params {
-		pbParam, err := makeFunctionParam(params.ctx, params.p.SemaCtx(), param, params.p)
+		pbParam, err := makeFunctionParam(params.Ctx, params.P.(*planner).SemaCtx(), param, params.P.(*planner))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -373,8 +373,8 @@ func (n *createFunctionNode) getMutableFuncDesc(
 		FuncName: n.cf.Name,
 		Params:   n.cf.Params,
 	}
-	existing, err = params.p.matchRoutine(
-		params.ctx, &routineObj, false, /* required */
+	existing, err = params.P.(*planner).matchRoutine(
+		params.Ctx, &routineObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
 	)
 	if err != nil {
@@ -391,19 +391,19 @@ func (n *createFunctionNode) getMutableFuncDesc(
 			)
 		}
 		fnID := funcdesc.UserDefinedFunctionOIDToID(existing.Oid)
-		fnDesc, err = params.p.checkPrivilegesForDropFunction(params.ctx, fnID)
+		fnDesc, err = params.P.(*planner).checkPrivilegesForDropFunction(params.Ctx, fnID)
 		if err != nil {
 			return nil, nil, err
 		}
 		return fnDesc, existing, nil
 	}
 
-	funcDescID, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
+	funcDescID, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.Ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	returnType, err := tree.ResolveType(params.ctx, n.cf.ReturnType.Type, params.p)
+	returnType, err := tree.ResolveType(params.Ctx, n.cf.ReturnType.Type, params.P.(*planner))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -443,7 +443,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 		backrefTblIDs.Add(id)
 	}
 	for id := range n.typeDeps {
-		if isTable, err := params.p.descIsTable(params.ctx, id); err != nil {
+		if isTable, err := params.P.(*planner).descIsTable(params.Ctx, id); err != nil {
 			return err
 		} else if isTable {
 			backrefTblIDs.Add(id)
@@ -454,7 +454,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	// Read all referenced tables and update their dependencies.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable)
 	for _, id := range backrefTblIDs.Ordered() {
-		backRefMutable, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
+		backRefMutable, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Table(params.Ctx, id)
 		if err != nil {
 			return err
 		}
@@ -474,8 +474,8 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
 
-		if err := params.p.writeSchemaChange(
-			params.ctx,
+		if err := params.P.(*planner).writeSchemaChange(
+			params.Ctx,
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
@@ -488,8 +488,8 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 	for _, id := range implicitTypeTblIDs.Ordered() {
 		backRefMutable := backRefMutables[id]
 		backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, descpb.TableDescriptor_Reference{ID: udfDesc.ID})
-		if err := params.p.writeSchemaChange(
-			params.ctx,
+		if err := params.P.(*planner).writeSchemaChange(
+			params.Ctx,
 			backRefMutable,
 			descpb.InvalidMutationID,
 			fmt.Sprintf("updating udf reference %q in table %s(%d)",
@@ -507,7 +507,7 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 			continue
 		}
 		jobDesc := fmt.Sprintf("updating type back reference %d for function %d", id, udfDesc.ID)
-		if err := params.p.addTypeBackReference(params.ctx, id, udfDesc.ID, jobDesc); err != nil {
+		if err := params.P.(*planner).addTypeBackReference(params.Ctx, id, udfDesc.ID, jobDesc); err != nil {
 			return err
 		}
 	}
@@ -520,14 +520,14 @@ func (n *createFunctionNode) addUDFReferences(udfDesc *funcdesc.Mutable, params 
 		// AddFunctionReference).
 		udfDesc.DependsOnFunctions = append(udfDesc.DependsOnFunctions, id)
 		// Add a back reference.
-		backRefDesc, err := params.p.Descriptors().MutableByID(params.p.Txn()).Function(params.ctx, id)
+		backRefDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).Txn()).Function(params.Ctx, id)
 		if err != nil {
 			return err
 		}
 		if err := backRefDesc.AddFunctionReference(udfDesc.ID); err != nil {
 			return err
 		}
-		if err := params.p.writeFuncSchemaChange(params.ctx, backRefDesc); err != nil {
+		if err := params.P.(*planner).writeFuncSchemaChange(params.Ctx, backRefDesc); err != nil {
 			return err
 		}
 	}
@@ -594,13 +594,13 @@ func setFuncOptions(
 		lazilyEvalSQL := returnType != nil && returnType.Identical(types.Trigger)
 		if !lazilyEvalSQL {
 			// Replace any sequence names in the function body with IDs.
-			body, err = replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
+			body, err = replaceSeqNamesWithIDsLang(params.Ctx, params.P.(*planner), body, true, lang)
 			if err != nil {
 				return err
 			}
 			// Replace any UDT names in the function body with IDs.
 			body, err = serializeUserDefinedTypesLang(
-				params.ctx, params.p.SemaCtx(), body, true /* multiStmt */, "UDFs", lang)
+				params.Ctx, params.P.(*planner).SemaCtx(), body, true /* multiStmt */, "UDFs", lang)
 			if err != nil {
 				return err
 			}

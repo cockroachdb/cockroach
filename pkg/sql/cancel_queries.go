@@ -24,7 +24,7 @@ type cancelQueriesNode struct {
 }
 
 // startExec implements the planNode interface.
-func (n *cancelQueriesNode) startExec(params runParams) error {
+func (n *cancelQueriesNode) StartExec(params runParams) error {
 	// Execute the node to completion, keeping track of the affected row count.
 	for {
 		ok, err := n.cancelQuery(params)
@@ -40,11 +40,11 @@ func (n *cancelQueriesNode) cancelQuery(params runParams) (bool, error) {
 	// accumulate all the query IDs and then send batches to each of the
 	// nodes.
 
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.Source.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
-	datum := n.input.Values()[0]
+	datum := n.Source.Values()[0]
 	if datum == tree.DNull {
 		return true, nil
 	}
@@ -68,7 +68,7 @@ func (n *cancelQueriesNode) cancelQuery(params runParams) (bool, error) {
 		Username: params.SessionData().User().Normalized(),
 	}
 
-	response, err := params.extendedEvalCtx.SQLStatusServer.CancelQuery(params.ctx, request)
+	response, err := params.ExtendedEvalCtx.GetSQLStatusServer().(serverpb.SQLStatusServer).CancelQuery(params.Ctx, request)
 	if err != nil {
 		return false, err
 	}
@@ -91,5 +91,5 @@ func (n *cancelQueriesNode) Values() tree.Datums {
 }
 
 func (n *cancelQueriesNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

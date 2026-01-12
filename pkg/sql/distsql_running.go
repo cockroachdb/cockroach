@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/plannode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -1612,13 +1613,12 @@ func (r *DistSQLReceiver) checkConcurrentError() {
 	}
 }
 
-type metadataForwarder interface {
-	forwardMetadata(metadata *execinfrapb.ProducerMetadata)
-}
+// Deprecated: use plannode.MetadataForwarder instead.
+type metadataForwarder = plannode.MetadataForwarder
 
 // forwardInnerQueryStats propagates the query stats of "inner" plans as
 // metadata via the forwarder.
-func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
+func forwardInnerQueryStats(f plannode.MetadataForwarder, stats topLevelQueryStats) {
 	if !buildutil.CrdbTestBuild && f == nil {
 		// Safety measure in production builds in case the forwarder is nil for
 		// some reason.
@@ -1635,13 +1635,13 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 	// stats.networkEgressEstimate and stats.clientTime are ignored since they
 	// only matter at the "true" top-level query (and actually should be zero
 	// here anyway).
-	f.forwardMetadata(meta)
+	f.ForwardMetadata(meta)
 }
 
-func (r *DistSQLReceiver) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
+func (r *DistSQLReceiver) ForwardMetadata(metadata interface{}) {
 	// Note that we don't use pushMeta method directly in order to go through
 	// the testing callback path.
-	r.Push(nil /* row */, metadata)
+	r.Push(nil /* row */, metadata.(*execinfrapb.ProducerMetadata))
 }
 
 // pushMeta takes in non-empty metadata object and pushes it to the result
@@ -2001,11 +2001,11 @@ func getFinishedSetupFn(planner *planner) (finishedSetupFn func(flowinfra.Flow),
 // responsibility to do so.
 func (dsp *DistSQLPlanner) PlanAndRunAll(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	planCtx *PlanningCtx,
 	planner *planner,
 	recv *DistSQLReceiver,
-	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
+	evalCtxFactory func(usedConcurrently bool) *ExtendedEvalContext,
 ) (retErr error) {
 	defer func() {
 		if ppInfo := planCtx.getPortalPauseInfo(); ppInfo != nil && !ppInfo.resumableFlow.cleanup.isComplete {
@@ -2024,7 +2024,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		if !dsp.PlanAndRunSubqueries(
 			ctx,
 			planner,
-			func() *extendedEvalContext { return evalCtxFactory(false /* usedConcurrently */) },
+			func() *ExtendedEvalContext { return evalCtxFactory(false /* usedConcurrently */) },
 			planner.curPlan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
@@ -2068,7 +2068,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		return recv.commErr
 	}
 
-	if knobs := evalCtx.ExecCfg.DistSQLRunTestingKnobs; knobs != nil {
+	if knobs := evalCtx.GetExecCfg().(*ExecutorConfig).DistSQLRunTestingKnobs; knobs != nil {
 		if fn := knobs.RunBeforeCascadesAndChecks; fn != nil {
 			fn(planner.Txn().ID())
 		}
@@ -2093,7 +2093,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	ctx context.Context,
 	planner *planner,
-	evalCtxFactory func() *extendedEvalContext,
+	evalCtxFactory func() *ExtendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
@@ -2130,7 +2130,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	planIdx int,
 	subqueryPlan subquery,
 	planner *planner,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
@@ -2322,7 +2322,7 @@ var distributedQueryRerunAsLocalEnabled = settings.RegisterBoolSetting(
 // execution, then finishedSetupFn will be called twice.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
-	extEvalCtx *extendedEvalContext,
+	extEvalCtx *ExtendedEvalContext,
 	planCtx *PlanningCtx,
 	txn *kv.Txn,
 	plan planMaybePhysical,
@@ -2431,7 +2431,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 func (dsp *DistSQLPlanner) PlanAndRunPostQueries(
 	ctx context.Context,
 	planner *planner,
-	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
+	evalCtxFactory func(usedConcurrently bool) *ExtendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
 ) bool {
@@ -2631,7 +2631,7 @@ func checkPostQueryBuffer(postQuery postQueryMetadata) (hasBuffer bool, numBuffe
 func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 	ctx context.Context,
 	planner *planner,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
 	allowAutoCommit bool,
@@ -2680,7 +2680,7 @@ func (dsp *DistSQLPlanner) planAndRunCascadeOrTrigger(
 // given "fromPlan" to the given "toPlan". It returns false if an error was
 // encountered and sets that error in the provided receiver, otherwise true.
 func addPostQueriesFromPlan(
-	evalCtx *extendedEvalContext, recv *DistSQLReceiver, fromPlan, toPlan *planComponents,
+	evalCtx *ExtendedEvalContext, recv *DistSQLReceiver, fromPlan, toPlan *planComponents,
 ) bool {
 
 	// Collect any new checks.
@@ -2753,7 +2753,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
 	postqueryPlan planMaybePhysical,
 	planner *planner,
-	evalCtx *extendedEvalContext,
+	evalCtx *ExtendedEvalContext,
 	recv *DistSQLReceiver,
 	postqueryInfo postqueryInfo,
 	getSaveFlowsFunc func() SaveFlowsFunc,
@@ -2811,7 +2811,7 @@ func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
 	ctx context.Context,
 	checkPlans []checkPlan,
 	planner *planner,
-	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
+	evalCtxFactory func(usedConcurrently bool) *ExtendedEvalContext,
 	recv *DistSQLReceiver,
 ) error {
 	ctx, cancelCtx := context.WithCancel(ctx)

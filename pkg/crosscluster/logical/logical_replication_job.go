@@ -324,11 +324,11 @@ func (r *logicalReplicationResumer) ingest(
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
 			nil, /* clockUpdater */
-			jobExecCtx.ExtendedEvalContext().Tracing,
+			jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 		)
 		defer distSQLReceiver.Release()
 		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
+		evalCtxCopy := jobExecCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 		distSQLPlanner.Run(
 			ctx,
 			initialPlanCtx,
@@ -614,7 +614,7 @@ func (p *logicalReplicationPlanner) generatePlanImpl(
 		return nil, nil, info, err
 	}
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx.(*sql.ExtendedEvalContext), execCfg)
 	if err != nil {
 		return nil, nil, info, err
 	}
@@ -725,7 +725,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 
 	// TODO(msbutler): consider repartitioning topology
 
-	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+	planCtx, nodes, err := dsp.SetupAllNodesPlanning(ctx, evalCtx.(*sql.ExtendedEvalContext), execCfg)
 	if err != nil {
 		return nil, nil, info, err
 	}

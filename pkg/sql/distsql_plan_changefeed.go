@@ -338,8 +338,8 @@ func newCDCValuesNode(
 }
 
 // startExec implements planNode.
-func (n *cdcValuesNode) startExec(params runParams) error {
-	n.source.Start(params.ctx)
+func (n *cdcValuesNode) StartExec(params runParams) error {
+	n.source.Start(params.Ctx)
 	return nil
 }
 

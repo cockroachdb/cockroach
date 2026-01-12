@@ -45,7 +45,7 @@ func collectTelemetry(command tree.ScheduleCommand) {
 
 // loadSchedule loads schedule information as the node user.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
-	env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(params.ExecCfg().(*ExecutorConfig).JobsKnobs())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
@@ -53,10 +53,10 @@ func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, 
 	//
 	// Run the query as the node user since we perform our own privilege checks
 	// before using the returned schedule.
-	datums, cols, err := params.p.InternalSQLTxn().QueryRowExWithCols(
-		params.ctx,
+	datums, cols, err := params.P.(*planner).InternalSQLTxn().QueryRowExWithCols(
+		params.Ctx,
 		"load-schedule",
-		params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+		params.P.(*planner).Txn(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
 			"SELECT schedule_id, next_run, schedule_expr, executor_type, execution_args, owner FROM %s WHERE schedule_id = $1",
 			env.ScheduledJobsTableName(),
@@ -97,9 +97,9 @@ func DeleteSchedule(
 }
 
 // startExec implements planNode interface.
-func (n *controlSchedulesNode) startExec(params runParams) error {
+func (n *controlSchedulesNode) StartExec(params runParams) error {
 	for {
-		ok, err := n.input.Next(params)
+		ok, err := n.Source.Next(params)
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			break
 		}
 
-		schedule, err := loadSchedule(params, n.input.Values()[0])
+		schedule, err := loadSchedule(params, n.Source.Values()[0])
 		if err != nil {
 			return err
 		}
@@ -117,13 +117,13 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 		}
 
 		// Check that the user has privileges or is the owner of the schedules being altered.
-		hasPriv, err := params.p.HasPrivilege(
-			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER, params.p.User(),
+		hasPriv, err := params.P.(*planner).HasPrivilege(
+			params.Ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER, params.P.(*planner).User(),
 		)
 		if err != nil {
 			return err
 		}
-		isOwner := schedule.Owner() == params.p.User()
+		isOwner := schedule.Owner() == params.P.(*planner).User()
 		if !hasPriv && !isOwner {
 			return pgerror.Newf(pgcode.InsufficientPrivilege, "must have %s privilege or be owner of the "+
 				"schedule %d to %s it", privilege.REPAIRCLUSTER, schedule.ScheduleID(), n.command.String())
@@ -132,15 +132,15 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 		switch n.command {
 		case tree.PauseSchedule:
 			schedule.Pause()
-			err = jobs.ScheduledJobTxn(params.p.InternalSQLTxn()).
-				Update(params.ctx, schedule)
+			err = jobs.ScheduledJobTxn(params.P.(*planner).InternalSQLTxn()).
+				Update(params.Ctx, schedule)
 		case tree.ResumeSchedule:
 			// Only schedule the next run time on PAUSED schedules, since ACTIVE schedules may
 			// have a custom next run time set by first_run.
 			if schedule.IsPaused() {
 				if err = schedule.ScheduleNextRun(); err == nil {
-					err = jobs.ScheduledJobTxn(params.p.InternalSQLTxn()).
-						Update(params.ctx, schedule)
+					err = jobs.ScheduledJobTxn(params.P.(*planner).InternalSQLTxn()).
+						Update(params.Ctx, schedule)
 				}
 			}
 		case tree.ExecuteSchedule:
@@ -160,10 +160,10 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if schedule.IsPaused() {
 				err = errors.Newf("cannot execute a paused schedule; use RESUME SCHEDULE instead")
 			} else {
-				env := jobs.JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+				env := jobs.JobSchedulerEnv(params.ExecCfg().(*ExecutorConfig).JobsKnobs())
 				schedule.SetNextRun(env.Now())
-				err = jobs.ScheduledJobTxn(params.p.InternalSQLTxn()).
-					Update(params.ctx, schedule)
+				err = jobs.ScheduledJobTxn(params.P.(*planner).InternalSQLTxn()).
+					Update(params.Ctx, schedule)
 			}
 
 		case tree.DropSchedule:
@@ -174,15 +174,15 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			}
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
-					params.ExecCfg().ProtectedTimestampProvider.WithTxn(params.p.InternalSQLTxn()),
+					params.ExecCfg().(*ExecutorConfig).ProtectedTimestampProvider.WithTxn(params.P.(*planner).InternalSQLTxn()),
 				)
 				additionalDroppedSchedules, err := controller.OnDrop(
-					params.ctx,
+					params.Ctx,
 					scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv,
 					schedule,
-					params.p.InternalSQLTxn(),
-					params.p.Descriptors(),
+					params.P.(*planner).InternalSQLTxn(),
+					params.P.(*planner).Descriptors(),
 				)
 				if err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
@@ -190,7 +190,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 				n.addAffectedRows(additionalDroppedSchedules)
 			}
 			err = DeleteSchedule(
-				params.ctx, params.ExecCfg(), params.p.InternalSQLTxn(),
+				params.Ctx, params.ExecCfg().(*ExecutorConfig), params.P.(*planner).InternalSQLTxn(),
 				schedule.ScheduleID(),
 			)
 		default:
@@ -219,5 +219,5 @@ func (n *controlSchedulesNode) Values() tree.Datums {
 
 // Close implements planNode interface.
 func (n *controlSchedulesNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

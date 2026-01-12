@@ -88,7 +88,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	}
 }
 
-func (n *alterSchemaNode) startExec(params runParams) error {
+func (n *alterSchemaNode) StartExec(params runParams) error {
 	// Exit early with an error if the schema is undergoing a declarative schema
 	// change.
 	if catalog.HasConcurrentDeclarativeSchemaChange(n.desc) {
@@ -99,7 +99,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 	case *tree.AlterSchemaRename:
 		newName := string(t.NewName)
 
-		oldQualifiedSchemaName, err := params.p.getQualifiedSchemaName(params.ctx, n.desc)
+		oldQualifiedSchemaName, err := params.P.(*planner).getQualifiedSchemaName(params.Ctx, n.desc)
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		}
 
 		// Check that there isn't a name collision with the new name.
-		found, _, err := schemaExists(params.ctx, params.p.txn, params.p.Descriptors(), n.db.ID, newName)
+		found, _, err := schemaExists(params.Ctx, params.P.(*planner).txn, params.P.(*planner).Descriptors(), n.db.ID, newName)
 		if err != nil {
 			return err
 		}
@@ -119,35 +119,35 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		}
 
 		if err := maybeFailOnDependentDescInRename(
-			params.ctx, params.p, n.db, n.desc, false /* withLeased */, catalog.Schema,
+			params.Ctx, params.P.(*planner), n.db, n.desc, false /* withLeased */, catalog.Schema,
 		); err != nil {
 			return err
 		}
 
-		if err := params.p.renameSchema(
-			params.ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
+		if err := params.P.(*planner).renameSchema(
+			params.Ctx, n.db, n.desc, newName, tree.AsStringWithFQNames(n.n, params.Ann()),
 		); err != nil {
 			return err
 		}
 
-		newQualifiedSchemaName, err := params.p.getQualifiedSchemaName(params.ctx, n.desc)
+		newQualifiedSchemaName, err := params.P.(*planner).getQualifiedSchemaName(params.Ctx, n.desc)
 		if err != nil {
 			return err
 		}
 
-		return params.p.logEvent(params.ctx, n.desc.ID, &eventpb.RenameSchema{
+		return params.P.(*planner).logEvent(params.Ctx, n.desc.ID, &eventpb.RenameSchema{
 			SchemaName:    oldQualifiedSchemaName.String(),
 			NewSchemaName: newQualifiedSchemaName.String(),
 		})
 	case *tree.AlterSchemaOwner:
 		newOwner, err := decodeusername.FromRoleSpec(
-			params.p.SessionData(), username.PurposeValidation, t.Owner,
+			params.P.(*planner).SessionData(), username.PurposeValidation, t.Owner,
 		)
 		if err != nil {
 			return err
 		}
-		return params.p.alterSchemaOwner(
-			params.ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
+		return params.P.(*planner).alterSchemaOwner(
+			params.Ctx, n.desc, newOwner, tree.AsStringWithFQNames(n.n, params.Ann()),
 		)
 	default:
 		return errors.AssertionFailedf("unknown schema cmd %T", t)

@@ -321,10 +321,10 @@ func (p *planner) getAndValidateTypedClusterSetting(
 	return value, nil
 }
 
-func (n *setClusterSettingNode) startExec(params runParams) error {
+func (n *setClusterSettingNode) StartExec(params runParams) error {
 	if strings.HasPrefix(string(n.setting.InternalKey()), "sql.defaults") {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			errors.WithHintf(
 				pgnotice.Newf("setting global default %s is not recommended", n.name),
 				"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: %s",
@@ -333,22 +333,22 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		)
 	}
 
-	if !params.extendedEvalCtx.TxnIsSingleStmt {
+	if !params.ExtendedEvalCtx.TxnIsSingleStmt() {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a multi-statement transaction")
 	}
 
 	expectedEncodedValue, err := writeSettingInternal(
-		params.ctx,
-		params.extendedEvalCtx.ExecCfg.VersionUpgradeHook,
-		params.extendedEvalCtx.ExecCfg.InternalDB,
+		params.Ctx,
+		params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).VersionUpgradeHook,
+		params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).InternalDB,
 		n.setting, n.name,
-		params.p.User(),
+		params.P.(*planner).User(),
 		n.st,
 		n.value,
-		params.p.EvalContext(),
-		params.p.logEvent,
-		params.p.descCollection.ReleaseLeases,
-		params.p.makeUnsafeSettingInterlockInfo(),
+		params.P.(*planner).EvalContext(),
+		params.P.(*planner).logEvent,
+		params.P.(*planner).descCollection.ReleaseLeases,
+		params.P.(*planner).makeUnsafeSettingInterlockInfo(),
 	)
 	if err != nil {
 		return err
@@ -358,10 +358,10 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		if expectedEncodedValue == "false" {
 			// Bump role-related table versions to force other nodes to clear out
 			// their AuthInfo cache.
-			if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+			if err := params.P.(*planner).bumpUsersTableVersion(params.Ctx); err != nil {
 				return err
 			}
-			if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+			if err := params.P.(*planner).bumpRoleOptionsTableVersion(params.Ctx); err != nil {
 				return err
 			}
 		}
@@ -416,7 +416,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	if settings.IsIgnoringAllUpdates() {
 		return errors.New("setting updated but will not take effect in this process due to manual override")
 	}
-	return waitForSettingUpdate(params.ctx, params.extendedEvalCtx.ExecCfg,
+	return waitForSettingUpdate(params.Ctx, params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig),
 		n.setting, n.value == nil /* reset */, n.name, expectedEncodedValue)
 }
 
@@ -895,7 +895,7 @@ type unsafeSettingInterlockInfo struct {
 
 func (p *planner) makeUnsafeSettingInterlockInfo() unsafeSettingInterlockInfo {
 	return unsafeSettingInterlockInfo{
-		sessionID:    p.ExtendedEvalContext().SessionID,
+		sessionID:    p.ExtendedEvalContext().(*ExtendedEvalContext).SessionID,
 		interlockKey: p.SessionData().UnsafeSettingInterlockKey,
 	}
 }

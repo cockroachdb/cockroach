@@ -205,7 +205,7 @@ func (p *planner) endPreparedTxnNode(globalID *tree.StrVal, commit bool) *endPre
 	}
 }
 
-func (f *endPreparedTxnNode) startExec(params runParams) error {
+func (f *endPreparedTxnNode) StartExec(params runParams) error {
 	if err := f.checkNoActiveTxn(params); err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (f *endPreparedTxnNode) stmtName() string {
 // checkNoActiveTxn checks that there is no active transaction in the current
 // session. If there is, it returns an error.
 func (f *endPreparedTxnNode) checkNoActiveTxn(params runParams) error {
-	if params.p.autoCommit {
+	if params.P.(*planner).autoCommit {
 		return nil
 	}
 	return pgerror.Newf(pgcode.ActiveSQLTransaction,
@@ -267,7 +267,7 @@ func (f *endPreparedTxnNode) checkNoActiveTxn(params runParams) error {
 func (f *endPreparedTxnNode) selectPreparedTxn(
 	params runParams,
 ) (txnID uuid.UUID, txnKey roachpb.Key, owner string, err error) {
-	row, err := selectPreparedTransaction(params.ctx, params.p.InternalSQLTxn(), f.globalID)
+	row, err := selectPreparedTransaction(params.Ctx, params.P.(*planner).InternalSQLTxn(), f.globalID)
 	if err != nil {
 		return uuid.UUID{}, nil, "", err
 	}
@@ -298,8 +298,8 @@ func (f *endPreparedTxnNode) endPreparedTxn(
 
 	// Query the prepared transaction's record to determine its current status and
 	// to retrieve enough of its metadata to commit or rollback.
-	db := params.ExecCfg().DB
-	txnRecord, err := queryPreparedTransactionRecord(params.ctx, db, txnID, txnKey)
+	db := params.ExecCfg().(*ExecutorConfig).DB
+	txnRecord, err := queryPreparedTransactionRecord(params.Ctx, db, txnID, txnKey)
 	if err != nil {
 		return err
 	}
@@ -330,16 +330,16 @@ func (f *endPreparedTxnNode) endPreparedTxn(
 	txnRecord.ReadTimestamp = txnRecord.WriteTimestamp
 
 	if f.commit {
-		err = db.CommitPrepared(params.ctx, txnRecord)
+		err = db.CommitPrepared(params.Ctx, txnRecord)
 	} else {
-		err = db.RollbackPrepared(params.ctx, txnRecord)
+		err = db.RollbackPrepared(params.Ctx, txnRecord)
 	}
 	return err
 }
 
 // deletePreparedTxn deletes the prepared transaction from the system table.
 func (f *endPreparedTxnNode) deletePreparedTxn(params runParams) error {
-	return deletePreparedTransaction(params.ctx, params.p.InternalSQLTxn(), f.globalID)
+	return deletePreparedTransaction(params.Ctx, params.P.(*planner).InternalSQLTxn(), f.globalID)
 }
 
 func (f *endPreparedTxnNode) Next(params runParams) (bool, error) { return false, nil }

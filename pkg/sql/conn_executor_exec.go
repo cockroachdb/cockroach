@@ -1044,7 +1044,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// will still commit this transaction after this statement executes.
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
-	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
+	p.extendedEvalCtx.Context.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
 	defer func() { ex.extraTxnState.firstStmtExecuted = true }()
 
 	var stmtThresholdSpan *tracing.Span
@@ -2032,7 +2032,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	// will still commit this transaction after this statement executes.
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
-	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
+	p.extendedEvalCtx.Context.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
 	defer func() { ex.extraTxnState.firstStmtExecuted = true }()
 
 	var stmtThresholdSpan *tracing.Span
@@ -3416,32 +3416,32 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		err = planner.resumeFlowForPausablePortal(recv)
 	} else {
 		evalCtx := planner.ExtendedEvalContext()
-		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx.(*ExtendedEvalContext), planner, planner.txn, distribute)
 		planCtx.setUpForMainQuery(ctx, planner, recv)
 		planCtx.distSQLBlockers = distSQLBlockers
 
-		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
+		var evalCtxFactory func(usedConcurrently bool) *ExtendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
 			len(planner.curPlan.cascades) != 0 ||
 			len(planner.curPlan.checkPlans) != 0 ||
 			len(planner.curPlan.triggers) != 0 {
-			var serialEvalCtx extendedEvalContext
+			var serialEvalCtx ExtendedEvalContext
 			ex.initEvalCtx(ctx, &serialEvalCtx, planner)
-			evalCtxFactory = func(usedConcurrently bool) *extendedEvalContext {
+			evalCtxFactory = func(usedConcurrently bool) *ExtendedEvalContext {
 				// Reuse the same object if this factory is not used concurrently.
 				factoryEvalCtx := &serialEvalCtx
 				if usedConcurrently {
-					factoryEvalCtx = &extendedEvalContext{}
+					factoryEvalCtx = &ExtendedEvalContext{}
 					ex.initEvalCtx(ctx, factoryEvalCtx, planner)
 				}
-				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().StmtTimestamp)
+				ex.resetEvalCtx(factoryEvalCtx, planner.txn, planner.ExtendedEvalContext().GetStmtTimestamp().(time.Time))
 				factoryEvalCtx.Placeholders = &planner.semaCtx.Placeholders
 				factoryEvalCtx.Annotations = &planner.semaCtx.Annotations
-				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
+				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().GetSessionID().(clusterunique.ID)
 				return factoryEvalCtx
 			}
 		}
-		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
+		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx.(*ExtendedEvalContext), planCtx, planner, recv, evalCtxFactory)
 	}
 
 	if err == nil && res.Err() == nil {
@@ -4276,7 +4276,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.shouldExecuteOnTxnRestart = true
 
 	// Determine telemetry logging.
-	isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+	isTracing := ex.planner.ExtendedEvalContext().GetTracing().(*SessionTracing).Enabled()
 	ex.extraTxnState.shouldLogToTelemetry, ex.extraTxnState.telemetrySkippedTxns =
 		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(isTracing,
 			ex.executorType == executorTypeInternal,

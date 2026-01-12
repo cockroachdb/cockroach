@@ -41,12 +41,12 @@ type callNode struct {
 var _ planNode = &callNode{}
 
 // startExec implements the planNode interface.
-func (d *callNode) startExec(params runParams) error {
-	res, err := eval.Expr(params.ctx, params.EvalContext(), d.proc)
+func (d *callNode) StartExec(params runParams) error {
+	res, err := eval.Expr(params.Ctx, params.EvalContext(), d.proc)
 	if err != nil {
 		return err
 	}
-	if params.p.storedProcTxnState.getTxnOp() != tree.StoredProcTxnNoOp {
+	if params.P.(*planner).storedProcTxnState.getTxnOp() != tree.StoredProcTxnNoOp {
 		// The stored procedure has paused execution to COMMIT or ROLLBACK the
 		// current transaction. The current iteration should have no result.
 		return nil
@@ -312,7 +312,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	} else {
 		retTypes = []*types.T{g.expr.ResolvedType()}
 	}
-	g.rch.Init(ctx, retTypes, g.p.ExtendedEvalContext(), "routine" /* opName */)
+	g.rch.Init(ctx, retTypes, g.p.ExtendedEvalContext().(*ExtendedEvalContext), "routine" /* opName */)
 
 	// If this is the start of a PLpgSQL block with an exception handler, create a
 	// savepoint.
@@ -392,7 +392,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 						return
 					}
 					stmtStats := statsBuilder.
-						SessionID(g.p.ExtendedEvalContext().SessionID).
+						SessionID(g.p.ExtendedEvalContext().(*ExtendedEvalContext).SessionID).
 						QueryID(g.p.execCfg.GenerateID()).
 						LatencyRecorder(latencyRecorder).
 						PlanMetadata(

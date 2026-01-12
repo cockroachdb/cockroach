@@ -161,7 +161,7 @@ func createLogicalReplicationStreamPlanHook(
 			return errors.Wrapf(err, "failed privilege check: table or system level REPLICATIONDEST privilege required")
 		}
 
-		if !p.ExtendedEvalContext().TxnIsSingleStmt {
+		if !p.ExtendedEvalContext().TxnIsSingleStmt() {
 			return errors.New("cannot CREATE LOGICAL REPLICATION STREAM in a multi-statement transaction")
 		}
 
@@ -588,7 +588,7 @@ func evalLogicalReplicationOptions(
 			return nil, err
 		}
 		asOfClause := tree.AsOfClause{Expr: tree.NewStrVal(cursor)}
-		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().Context)
+		asOf, err := asof.Eval(ctx, asOfClause, p.SemaCtx(), &p.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context)
 		if err != nil {
 			return nil, err
 		}
@@ -759,7 +759,7 @@ func checkReplicationPrivileges(
 		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
 	); err != nil {
 		if !stmt.CreateTable {
-			return replicationutils.AuthorizeTableLevelPriv(ctx, p, p.ExtendedEvalContext().SessionAccessor, privilege.REPLICATIONDEST, resolvedDestObjects.TargetTableNames())
+			return replicationutils.AuthorizeTableLevelPriv(ctx, p, p.ExtendedEvalContext().(*sql.ExtendedEvalContext).SessionAccessor, privilege.REPLICATIONDEST, resolvedDestObjects.TargetTableNames())
 		} else {
 			dbDesc, err := p.InternalSQLTxn().Descriptors().ByIDWithLeased(p.InternalSQLTxn().KV()).WithoutNonPublic().Get().Database(ctx, resolvedDestObjects.ParentDatabaseID)
 			if err != nil {

@@ -117,7 +117,7 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn descs.T
 	for _, update := range zoneConfigUpdates {
 		if err = writeZoneConfigUpdate(
 			ctx, txn,
-			r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			r.localPlanner.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 			update,
 		); err != nil {
 			return err

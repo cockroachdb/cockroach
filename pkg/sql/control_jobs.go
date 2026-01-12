@@ -32,19 +32,19 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.State{
 }
 
 // startExec implements the planNode interface.
-func (n *controlJobsNode) startExec(params runParams) error {
+func (n *controlJobsNode) StartExec(params runParams) error {
 	if n.desiredStatus != jobs.StatePaused && len(n.reason) > 0 {
 		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
 			n.desiredStatus, jobs.StatePaused, n.reason)
 	}
 
-	reg := params.p.ExecCfg().JobRegistry
-	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(params.ctx, params.p)
+	reg := params.P.(*planner).ExecCfg().JobRegistry
+	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
 	for {
-		ok, err := n.input.Next(params)
+		ok, err := n.Source.Next(params)
 		if err != nil {
 			return err
 		}
@@ -52,7 +52,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			break
 		}
 
-		jobIDDatum := n.input.Values()[0]
+		jobIDDatum := n.Source.Values()[0]
 		if jobIDDatum == tree.DNull {
 			continue
 		}
@@ -62,19 +62,19 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
+		if err := reg.UpdateJobWithTxn(params.Ctx, jobspb.JobID(*jobID), params.P.(*planner).InternalSQLTxn(),
 			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				if err := jobsauth.Authorize(params.ctx, params.p,
+				if err := jobsauth.Authorize(params.Ctx, params.P.(*planner),
 					md.ID, md.Payload.UsernameProto.Decode(), jobsauth.ControlAccess, globalPrivileges); err != nil {
 					return err
 				}
 				switch n.desiredStatus {
 				case jobs.StatePaused:
-					return ju.PauseRequested(params.ctx, txn, md, n.reason)
+					return ju.PauseRequested(params.Ctx, txn, md, n.reason)
 				case jobs.StateRunning:
-					return ju.Unpaused(params.ctx, md)
+					return ju.Unpaused(params.Ctx, md)
 				case jobs.StateCanceled:
-					return ju.CancelRequested(params.ctx, md)
+					return ju.CancelRequested(params.Ctx, md)
 				default:
 					return errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 				}
@@ -106,5 +106,5 @@ func (n *controlJobsNode) Values() tree.Datums {
 }
 
 func (n *controlJobsNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.Source.Close(ctx)
 }

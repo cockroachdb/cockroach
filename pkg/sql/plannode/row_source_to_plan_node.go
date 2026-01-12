@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // rowSourceToPlanNode wraps an execinfra.RowSource and presents it as a
 // planNode. It must be constructed via newRowSourceToPlanNode, after which it
 // is a planNode and can be treated as such.
-type rowSourceToPlanNode struct {
+type RowSourceToPlanNode struct {
 	source    execinfra.RowSource
 	forwarder metadataForwarder
 
@@ -31,8 +31,8 @@ type rowSourceToPlanNode struct {
 	// planned for.
 	originalPlanNode planNode
 
-	// columns contains the metadata for the results of this node.
-	columns colinfo.ResultColumns
+	// Columns contains the metadata for the results of this node.
+	Columns colinfo.ResultColumns
 
 	// Temporary variables
 	row      rowenc.EncDatumRow
@@ -52,29 +52,29 @@ var _ planNode = &rowSourceToPlanNode{}
 //
 // NOTE: it is not guaranteed the ConsumerClosed will be called on the provided
 // RowSource by the returned rowSourceToPlanNode.
-func newRowSourceToPlanNode(
+func NewRowSourceToPlanNode(
 	s execinfra.RowSource,
 	forwarder metadataForwarder,
 	planCols colinfo.ResultColumns,
 	originalPlanNode planNode,
-) *rowSourceToPlanNode {
+) *RowSourceToPlanNode {
 	row := make(tree.Datums, len(planCols))
 
-	return &rowSourceToPlanNode{
+	return &RowSourceToPlanNode{
 		source:           s,
 		datumRow:         row,
 		forwarder:        forwarder,
-		columns:          planCols,
+		Columns:          planCols,
 		originalPlanNode: originalPlanNode,
 	}
 }
 
-func (r *rowSourceToPlanNode) startExec(params runParams) error {
-	r.source.Start(params.ctx)
+func (r *RowSourceToPlanNode) StartExec(params runParams) error {
+	r.source.Start(params.Ctx)
 	return nil
 }
 
-func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
+func (r *RowSourceToPlanNode) Next(params runParams) (bool, error) {
 	for {
 		var meta *execinfrapb.ProducerMetadata
 		r.row, meta = r.source.Next()
@@ -84,7 +84,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 			if meta.Err != nil {
 				return false, meta.Err
 			}
-			r.forwarder.forwardMetadata(meta)
+			r.forwarder.ForwardMetadata(meta)
 			continue
 		}
 
@@ -93,7 +93,7 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 		}
 
 		types := r.source.OutputTypes()
-		for i := range r.columns {
+		for i := range r.Columns {
 			encDatum := r.row[i]
 			err := encDatum.EnsureDecoded(types[i], &r.da)
 			if err != nil {
@@ -106,11 +106,11 @@ func (r *rowSourceToPlanNode) Next(params runParams) (bool, error) {
 	}
 }
 
-func (r *rowSourceToPlanNode) Values() tree.Datums {
+func (r *RowSourceToPlanNode) Values() tree.Datums {
 	return r.datumRow
 }
 
-func (r *rowSourceToPlanNode) Close(ctx context.Context) {
+func (r *RowSourceToPlanNode) Close(ctx context.Context) {
 	// Make sure to lose the reference to the source.
 	//
 	// Note that we do not call ConsumerClosed on it since it is not the
@@ -122,3 +122,7 @@ func (r *rowSourceToPlanNode) Close(ctx context.Context) {
 		r.originalPlanNode = nil
 	}
 }
+
+
+// Lowercase alias
+type rowSourceToPlanNode = RowSourceToPlanNode

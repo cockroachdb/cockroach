@@ -785,7 +785,7 @@ func (p *planner) refreshZoneConfigsForTablesWithValidation(
 		if err = writeZoneConfigUpdate(
 			ctx,
 			p.InternalSQLTxn(),
-			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			p.ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled(),
 			update,
 		); err != nil {
 			return err

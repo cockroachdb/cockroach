@@ -73,10 +73,10 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 // and expects to see its own writes.
 func (n *dropSequenceNode) ReadingOwnWrites() {}
 
-func (n *dropSequenceNode) startExec(params runParams) error {
+func (n *dropSequenceNode) StartExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeDropCounter("sequence"))
 
-	ctx := params.ctx
+	ctx := params.Ctx
 	for _, toDel := range n.td {
 		droppedDesc := toDel.desc
 		// Exit early with an error if the table is undergoing a declarative schema
@@ -85,7 +85,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 		if catalog.HasConcurrentDeclarativeSchemaChange(droppedDesc) {
 			return scerrors.ConcurrentSchemaChangeError(droppedDesc)
 		}
-		err := params.p.dropSequenceImpl(
+		err := params.P.(*planner).dropSequenceImpl(
 			ctx, droppedDesc, true /* queueJob */, tree.AsStringWithFQNames(n.n, params.Ann()), n.n.DropBehavior,
 		)
 		if err != nil {
@@ -94,7 +94,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 		// Log a Drop Sequence event for this table. This is an auditable log event
 		// and is recorded in the same transaction as the table descriptor
 		// update.
-		if err := params.p.logEvent(params.ctx,
+		if err := params.P.(*planner).logEvent(params.Ctx,
 			droppedDesc.ID,
 			&eventpb.DropSequence{
 				SequenceName: toDel.tn.FQString(),

@@ -52,20 +52,20 @@ func (p *planner) alterRenameTenant(
 	}, nil
 }
 
-func (n *renameTenantNode) startExec(params runParams) error {
-	newNamed, err := eval.Expr(params.ctx, params.p.EvalContext(), n.newName)
+func (n *renameTenantNode) StartExec(params runParams) error {
+	newNamed, err := eval.Expr(params.Ctx, params.P.(*planner).EvalContext(), n.newName)
 	if err != nil {
 		return err
 	}
-	newName, err := validateTenantName(params.ctx, newNamed)
+	newName, err := validateTenantName(params.Ctx, newNamed)
 	if err != nil {
 		return err
 	}
-	rec, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+	rec, err := n.tenantSpec.getTenantInfo(params.Ctx, params.P.(*planner))
 	if err != nil {
 		return err
 	}
-	return params.p.renameTenant(params.ctx, rec, newName)
+	return params.P.(*planner).renameTenant(params.Ctx, rec, newName)
 }
 
 func (n *renameTenantNode) Next(_ runParams) (bool, error) { return false, nil }

@@ -58,7 +58,7 @@ type valuesRun struct {
 	nextRow int // The index of the next row.
 }
 
-func (n *valuesNode) startExec(params runParams) error {
+func (n *valuesNode) StartExec(params runParams) error {
 	if n.coldataBatch != nil {
 		return errors.AssertionFailedf("planning error: valuesNode started with coldata.Batch")
 	}
@@ -74,7 +74,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
 	n.rows = rowcontainer.NewRowContainerWithCapacity(
-		params.p.Mon().MakeBoundAccount(),
+		params.P.(*planner).Mon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),
 	)
@@ -83,12 +83,12 @@ func (n *valuesNode) startExec(params runParams) error {
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
 			var err error
-			row[i], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
+			row[i], err = eval.Expr(params.Ctx, params.EvalContext(), typedExpr)
 			if err != nil {
 				return err
 			}
 		}
-		if _, err := n.rows.AddRow(params.ctx, row); err != nil {
+		if _, err := n.rows.AddRow(params.Ctx, row); err != nil {
 			return err
 		}
 	}

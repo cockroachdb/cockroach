@@ -216,7 +216,7 @@ func distBackup(
 		nil,   /* rangeCache */
 		noTxn, /* txn - the flow does not read or write the database */
 		nil,   /* clockUpdater */
-		execCtx.ExtendedEvalContext().Tracing,
+		execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Tracing,
 	)
 	defer recv.Release()
 
@@ -226,7 +226,7 @@ func distBackup(
 	jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
 	// Copy the eval.Context, as dsp.Run() might change it.
-	evalCtxCopy := execCtx.ExtendedEvalContext().Context.Copy()
+	evalCtxCopy := execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext).Context.Copy()
 	dsp.Run(ctx, planCtx, noTxn, p, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return rowResultWriter.Err()
 }

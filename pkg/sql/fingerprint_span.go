@@ -112,7 +112,7 @@ func (p *planner) fingerprintSpanFanout(
 		return fingerprintSpanImpl(ctx, txn, span, startTime, allRevisions, stripped)
 	}
 
-	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, extEvalCtx, execCfg)
+	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, extEvalCtx.(*ExtendedEvalContext), execCfg)
 	if err != nil {
 		return 0, nil, err
 	}

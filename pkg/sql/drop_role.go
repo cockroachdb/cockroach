@@ -81,7 +81,7 @@ type objectAndType struct {
 	ErrorMessage       error
 }
 
-func (n *DropRoleNode) startExec(params runParams) error {
+func (n *DropRoleNode) StartExec(params runParams) error {
 	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMDropCounter(sqltelemetry.Role)
@@ -91,7 +91,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		opName = "drop-user"
 	}
 
-	hasAdmin, err := params.p.HasAdminRole(params.ctx)
+	hasAdmin, err := params.P.(*planner).HasAdminRole(params.Ctx)
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			if n.ifExists {
 				// If `IF EXISTS` was specified, then a non-existing role should be
 				// skipped without causing any error.
-				roleExists, err := RoleExists(params.ctx, params.p.InternalSQLTxn(), name)
+				roleExists, err := RoleExists(params.Ctx, params.P.(*planner).InternalSQLTxn(), name)
 				if err != nil {
 					return err
 				}
@@ -122,7 +122,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				}
 			}
 
-			targetIsAdmin, err := params.p.UserHasAdminRole(params.ctx, name)
+			targetIsAdmin, err := params.P.(*planner).UserHasAdminRole(params.Ctx, name)
 			if err != nil {
 				return err
 			}
@@ -137,7 +137,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	defer privilegeObjectFormatter.Close()
 
 	// First check all the databases.
-	if err := forEachDatabaseDesc(params.ctx, params.p, nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
+	if err := forEachDatabaseDesc(params.Ctx, params.P.(*planner), nil /*nil prefix = all databases*/, true, /* requiresPrivileges */
 		func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 			if _, ok := userNames[db.GetPrivileges().Owner()]; ok {
 				userNames[db.GetPrivileges().Owner()] = append(
@@ -167,7 +167,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	// the predefined forEachTableAll() function because we need to look
 	// at all _visible_ descriptors, not just those on which the current
 	// user has permission.
-	all, err := params.p.Descriptors().GetAllDescriptors(params.ctx, params.p.txn)
+	all, err := params.P.(*planner).Descriptors().GetAllDescriptors(params.Ctx, params.P.(*planner).txn)
 	if err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := addDependentPrivilegesFromSystemPrivileges(params.ctx, n.roleNames, params.p, privilegeObjectFormatter, userNames); err != nil {
+	if err := addDependentPrivilegesFromSystemPrivileges(params.Ctx, n.roleNames, params.P.(*planner), privilegeObjectFormatter, userNames); err != nil {
 		return err
 	}
 
@@ -408,10 +408,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Check if user owns any scheduled jobs.
-		numSchedulesRow, err := params.p.InternalSQLTxn().QueryRowEx(
-			params.ctx,
+		numSchedulesRow, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+			params.Ctx,
 			"check-user-schedules",
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			"SELECT count(*) FROM system.scheduled_jobs WHERE owner=$1",
 			normalizedUsername,
@@ -429,10 +429,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				normalizedUsername, numSchedules)
 		}
 
-		numUsersDeleted, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		numUsersDeleted, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.users WHERE username=$1`,
 			normalizedUsername,
@@ -446,10 +446,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		if _, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		if _, err = params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			"drop-role-membership",
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
 			normalizedUsername,
@@ -457,10 +457,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		_, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		_, err = params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				`DELETE FROM system.public.%s WHERE username=$1`,
@@ -472,10 +472,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		if rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		if rowsDeleted, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				`DELETE FROM system.public.%s WHERE role_name = $1`,
@@ -488,10 +488,10 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			numRoleSettingsRowsDeleted += rowsDeleted
 		}
 
-		_, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		_, err = params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL;`,
 			normalizedUsername,
@@ -503,20 +503,20 @@ func (n *DropRoleNode) startExec(params runParams) error {
 
 	// Bump role-related table versions to force a refresh of membership/auth
 	// caches.
-	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
-		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+	if sessioninit.CacheEnabled.Get(&params.P.(*planner).ExecCfg().Settings.SV) {
+		if err := params.P.(*planner).bumpUsersTableVersion(params.Ctx); err != nil {
 			return err
 		}
-		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).bumpRoleOptionsTableVersion(params.Ctx); err != nil {
 			return err
 		}
 		if numRoleSettingsRowsDeleted > 0 {
-			if err := params.p.bumpDatabaseRoleSettingsTableVersion(params.ctx); err != nil {
+			if err := params.P.(*planner).bumpDatabaseRoleSettingsTableVersion(params.Ctx); err != nil {
 				return err
 			}
 		}
 	}
-	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+	if err := params.P.(*planner).BumpRoleMembershipTableVersion(params.Ctx); err != nil {
 		return err
 	}
 
@@ -526,7 +526,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 	sort.Strings(normalizedNames)
 	for _, name := range normalizedNames {
-		if err := params.p.logEvent(params.ctx,
+		if err := params.P.(*planner).logEvent(params.Ctx,
 			0, /* no target */
 			&eventpb.DropRole{RoleName: name}); err != nil {
 			return err

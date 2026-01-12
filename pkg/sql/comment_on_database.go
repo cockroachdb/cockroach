@@ -47,15 +47,15 @@ func (p *planner) CommentOnDatabase(
 	return &commentOnDatabaseNode{n: n, dbDesc: dbDesc}, nil
 }
 
-func (n *commentOnDatabaseNode) startExec(params runParams) error {
+func (n *commentOnDatabaseNode) StartExec(params runParams) error {
 	var err error
 	if n.n.Comment == nil {
-		err = params.p.deleteComment(
-			params.ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
+		err = params.P.(*planner).deleteComment(
+			params.Ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
 		)
 	} else {
-		err = params.p.updateComment(
-			params.ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType, *n.n.Comment,
+		err = params.P.(*planner).updateComment(
+			params.Ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType, *n.n.Comment,
 		)
 	}
 	if err != nil {
@@ -66,7 +66,7 @@ func (n *commentOnDatabaseNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		dbComment = *n.n.Comment
 	}
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		n.dbDesc.GetID(),
 		&eventpb.CommentOnDatabase{
 			DatabaseName: n.n.Name.String(),

@@ -145,14 +145,14 @@ func getSchemaForCreateTable(
 
 		// If the table is temporary, get the temporary schema ID.
 		var err error
-		schema, err = params.p.getOrCreateTemporarySchema(params.ctx, db)
+		schema, err = params.P.(*planner).getOrCreateTemporarySchema(params.Ctx, db)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// Otherwise, find the ID of the schema to create the table within.
 		var err error
-		schema, err = params.p.getNonTemporarySchemaForCreate(params.ctx, db, tableName.Schema())
+		schema, err = params.P.(*planner).getNonTemporarySchemaForCreate(params.Ctx, db, tableName.Schema())
 		if err != nil {
 			return nil, err
 		}
@@ -163,22 +163,22 @@ func getSchemaForCreateTable(
 
 	if persistence.IsUnlogged() {
 		telemetry.Inc(sqltelemetry.CreateUnloggedTableCounter)
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("UNLOGGED TABLE will behave as a regular table in CockroachDB"),
 		)
 	}
 
 	// Check permissions on the schema.
-	if err := params.p.canCreateOnSchema(
-		params.ctx, schema.GetID(), db.GetID(), params.p.User(), skipCheckPublicSchema); err != nil {
+	if err := params.P.(*planner).canCreateOnSchema(
+		params.Ctx, schema.GetID(), db.GetID(), params.P.(*planner).User(), skipCheckPublicSchema); err != nil {
 		return nil, err
 	}
 
 	desc, err := descs.GetDescriptorCollidingWithObjectName(
-		params.ctx,
-		params.p.Descriptors(),
-		params.p.txn,
+		params.Ctx,
+		params.P.(*planner).Descriptors(),
+		params.P.(*planner).txn,
 		db.GetID(),
 		schema.GetID(),
 		tableName.Table(),
@@ -234,8 +234,8 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 	}
 
 	if funcExpr, ok := colDef.DefaultExpr.Expr.(*tree.FuncExpr); ok {
-		searchPath := params.p.CurrentSearchPath()
-		fd, err := funcExpr.Func.Resolve(params.ctx, &searchPath, params.p.semaCtx.FunctionResolver)
+		searchPath := params.P.(*planner).CurrentSearchPath()
+		fd, err := funcExpr.Func.Resolve(params.Ctx, &searchPath, params.P.(*planner).semaCtx.FunctionResolver)
 		if err != nil {
 			return false, err
 		}
@@ -247,7 +247,7 @@ func hasPrimaryKeySerialType(params runParams, colDef *tree.ColumnTableDef) (boo
 	return false, nil
 }
 
-func (n *createTableNode) startExec(params runParams) error {
+func (n *createTableNode) StartExec(params runParams) error {
 	// Check if the parent object is a replicated PCR descriptor, which will block
 	// schema changes.
 	if n.dbDesc.GetReplicatedPCRVersion() != 0 {
@@ -294,8 +294,8 @@ func (n *createTableNode) startExec(params runParams) error {
 				}
 
 				if primaryKeySerial {
-					params.p.BufferClientNotice(
-						params.ctx,
+					params.P.(*planner).BufferClientNotice(
+						params.Ctx,
 						pgnotice.Newf("using sequential values in a primary key does not perform as well as using random UUIDs. See %s", docs.URL("serial.html")),
 					)
 					break
@@ -308,8 +308,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
-			params.p.BufferClientNotice(
-				params.ctx,
+			params.P.(*planner).BufferClientNotice(
+				params.Ctx,
 				pgnotice.Newf("relation %q already exists, skipping", n.n.Table.Table()),
 			)
 			return nil
@@ -343,8 +343,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		for _, def := range n.n.Defs {
 			if d, ok := def.(*tree.IndexTableDef); ok {
 				if d.PartitionByIndex == nil && !n.n.PartitionByTable.All {
-					params.p.BufferClientNotice(
-						params.ctx,
+					params.P.(*planner).BufferClientNotice(
+						params.Ctx,
 						errors.WithHint(
 							pgnotice.Newf("creating non-partitioned index on partitioned table may not be performant"),
 							"Consider modifying the index such that it is also partitioned.",
@@ -355,8 +355,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	id, err := params.extendedEvalCtx.DescIDGenerator.
-		GenerateUniqueDescID(params.ctx)
+	id, err := params.ExtendedEvalCtx.GetDescIDGenerator().(eval.DescIDGenerator).
+		GenerateUniqueDescID(params.Ctx)
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// TABLE AS ... AS OF SYSTEM TIME, we need to set the creation time to the
 	// specified timestamp.
 	var creationTime hlc.Timestamp
-	if asOf := params.p.extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill {
+	if asOf := params.P.(*planner).extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill {
 		creationTime = asOf.Timestamp
 	}
 	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
@@ -382,8 +382,8 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.As() {
-		params.p.BufferClientNotice(
-			params.ctx,
+		params.P.(*planner).BufferClientNotice(
+			params.Ctx,
 			pgnotice.Newf("CREATE TABLE ... AS does not copy over "+
 				"indexes, default expressions, or constraints; the new table "+
 				"has a hidden rowid primary key column"),
@@ -398,7 +398,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			asCols = asCols[:len(asCols)-1]
 		}
 		desc, err = newTableDescIfAs(
-			params, n.n, n.dbDesc, schema, id, creationTime, asCols, privs, params.p.EvalContext(),
+			params, n.n, n.dbDesc, schema, id, creationTime, asCols, privs, params.P.(*planner).EvalContext(),
 		)
 		if err != nil {
 			return err
@@ -406,7 +406,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		// If we have a single statement txn we want to run CTAS async, and
 		// consequently ensure it gets queued as a SchemaChange.
-		if params.extendedEvalCtx.TxnIsSingleStmt {
+		if params.ExtendedEvalCtx.TxnIsSingleStmt() {
 			desc.State = descpb.DescriptorState_ADD
 		}
 	} else {
@@ -426,7 +426,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 			var foundExternalReference bool
 			for id := range refs {
-				if _, t, err := params.p.Descriptors().GetUncommittedMutableTableByID(id); err != nil {
+				if _, t, err := params.P.(*planner).Descriptors().GetUncommittedMutableTableByID(id); err != nil {
 					return err
 				} else if t == nil || !t.IsNew() {
 					foundExternalReference = true
@@ -442,21 +442,21 @@ func (n *createTableNode) startExec(params runParams) error {
 	// Replace all UDF names with OIDs in check constraints and update back
 	// references in functions used.
 	for _, ck := range desc.CheckConstraints() {
-		if err := params.p.updateFunctionReferencesForCheck(params.ctx, desc, ck.CheckDesc()); err != nil {
+		if err := params.P.(*planner).updateFunctionReferencesForCheck(params.Ctx, desc, ck.CheckDesc()); err != nil {
 			return err
 		}
 	}
 
 	// Update cross-references between functions and columns.
 	for i := range desc.Columns {
-		if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, desc, &desc.Columns[i]); err != nil {
+		if err := params.P.(*planner).maybeUpdateFunctionReferencesForColumn(params.Ctx, desc, &desc.Columns[i]); err != nil {
 			return err
 		}
 	}
 
 	// Descriptor written to store here.
-	if err := params.p.createDescriptor(
-		params.ctx,
+	if err := params.P.(*planner).createDescriptor(
+		params.Ctx,
 		desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
@@ -464,8 +464,8 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	for _, updated := range affected {
-		if err := params.p.writeSchemaChange(
-			params.ctx, updated, descpb.InvalidMutationID,
+		if err := params.P.(*planner).writeSchemaChange(
+			params.Ctx, updated, descpb.InvalidMutationID,
 			fmt.Sprintf("updating referenced FK table %s(%d) for table %s(%d)",
 				updated.Name, updated.ID, desc.Name, desc.ID,
 			),
@@ -475,30 +475,30 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	// Install back references to types used by this table.
-	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, desc); err != nil {
+	if err := params.P.(*planner).addBackRefsFromAllTypesInTable(params.Ctx, desc); err != nil {
 		return err
 	}
 
-	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
+	if err := validateDescriptor(params.Ctx, params.P.(*planner), desc); err != nil {
 		return err
 	}
 
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, desc.ParentID)
+		dbDesc, err := params.P.(*planner).Descriptors().ByIDWithoutLeased(params.P.(*planner).txn).WithoutNonPublic().Get().Database(params.Ctx, desc.ParentID)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
 
-		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
+		regionConfig, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, dbDesc.GetID(), params.P.(*planner).Descriptors())
 		if err != nil {
 			return err
 		}
 
 		if err := ApplyZoneConfigForMultiRegionTable(
-			params.ctx,
-			params.p.InternalSQLTxn(),
-			params.p.ExecCfg(),
-			params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
+			params.Ctx,
+			params.P.(*planner).InternalSQLTxn(),
+			params.P.(*planner).ExecCfg(),
+			params.P.(*planner).extendedEvalCtx.Tracing.KVTracingEnabled(),
 			regionConfig,
 			desc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -512,13 +512,13 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, regionEnumID)
+			typeDesc, err := params.P.(*planner).Descriptors().MutableByID(params.P.(*planner).txn).Type(params.Ctx, regionEnumID)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}
 			_ = typeDesc.AddReferencingDescriptorID(desc.ID)
-			err = params.p.writeTypeSchemaChange(
-				params.ctx, typeDesc, "add REGIONAL BY TABLE back reference")
+			err = params.P.(*planner).writeTypeSchemaChange(
+				params.Ctx, typeDesc, "add REGIONAL BY TABLE back reference")
 			if err != nil {
 				return errors.Wrap(err, "error adding backreference to multi-region enum")
 			}
@@ -527,7 +527,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// Log Create Table event. This is an auditable log event and is
 	// recorded in the same transaction as the table descriptor update.
-	if err := params.p.logEvent(params.ctx,
+	if err := params.P.(*planner).logEvent(params.Ctx,
 		desc.ID,
 		&eventpb.CreateTable{
 			TableName: n.n.Table.FQString(),
@@ -537,12 +537,12 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	// If we are in a multi-statement txn or the source has placeholders, we
 	// execute the CTAS query synchronously.
-	if n.n.As() && !params.extendedEvalCtx.TxnIsSingleStmt {
+	if n.n.As() && !params.ExtendedEvalCtx.TxnIsSingleStmt() {
 		err = func() error {
 			// The data fill portion of CREATE AS must operate on a read snapshot,
 			// so that it doesn't end up observing its own writes.
-			prevMode := params.p.Txn().ConfigureStepping(params.ctx, kv.SteppingEnabled)
-			defer func() { _ = params.p.Txn().ConfigureStepping(params.ctx, prevMode) }()
+			prevMode := params.P.(*planner).Txn().ConfigureStepping(params.Ctx, kv.SteppingEnabled)
+			defer func() { _ = params.P.(*planner).Txn().ConfigureStepping(params.Ctx, prevMode) }()
 
 			// This is a very simplified version of the INSERT logic: no CHECK
 			// expressions, no FK checks, no arbitrary insertion order, no
@@ -551,13 +551,13 @@ func (n *createTableNode) startExec(params runParams) error {
 			// Instantiate a row inserter and table writer. It has a 1-1
 			// mapping to the definitions in the descriptor.
 			ri, err := row.MakeInserter(
-				params.ExecCfg().Codec,
+				params.ExecCfg().(*ExecutorConfig).Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
 				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
-				params.p.SessionData(),
-				&params.ExecCfg().Settings.SV,
-				params.ExecCfg().GetRowMetrics(params.p.SessionData().Internal),
+				params.P.(*planner).SessionData(),
+				&params.ExecCfg().(*ExecutorConfig).Settings.SV,
+				params.ExecCfg().(*ExecutorConfig).GetRowMetrics(params.P.(*planner).SessionData().Internal),
 			)
 			if err != nil {
 				return err
@@ -568,7 +568,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := ti.init(params.Ctx, params.P.(*planner).txn, params.P.(*planner).EvalContext()); err != nil {
 				return err
 			}
 
@@ -578,14 +578,14 @@ func (n *createTableNode) startExec(params runParams) error {
 			rowBuffer := make(tree.Datums, len(desc.Columns))
 
 			for {
-				if err := params.p.cancelChecker.Check(); err != nil {
+				if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 					return err
 				}
 				if next, err := n.input.Next(params); !next {
 					if err != nil {
 						return err
 					}
-					if err := ti.finalize(params.ctx); err != nil {
+					if err := ti.finalize(params.Ctx); err != nil {
 						return err
 					}
 					break
@@ -595,7 +595,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				// issue gigantic raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
+					if err := ti.flushAndStartNewBatch(params.Ctx); err != nil {
 						return err
 					}
 				}
@@ -609,7 +609,7 @@ func (n *createTableNode) startExec(params runParams) error {
 				var pm row.PartialIndexUpdateHelper
 				var vh row.VectorIndexUpdateHelper
 				var oth row.OriginTimestampCPutHelper
-				if err := ti.row(params.ctx, rowBuffer, pm, vh, oth, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				if err := ti.row(params.Ctx, rowBuffer, pm, vh, oth, params.ExtendedEvalCtx.GetTracing().(*SessionTracing).KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
@@ -1224,7 +1224,7 @@ func getFinalSourceQuery(
 	ctx := evalCtx.FmtCtx(
 		tree.FmtSerializable,
 		tree.FmtPlaceholderFormat(func(ctx *tree.FmtCtx, placeholder *tree.Placeholder) {
-			d, err := eval.Expr(params.ctx, evalCtx, placeholder)
+			d, err := eval.Expr(params.Ctx, evalCtx, placeholder)
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "failed to serialize placeholder"))
 			}
@@ -1235,7 +1235,7 @@ func getFinalSourceQuery(
 
 	// Use IDs instead of sequence names because name resolution depends on
 	// session data, and the internal executor has different session data.
-	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.ctx, params.p, ctx.CloseAndGetString(), false /* multiStmt */)
+	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.Ctx, params.P.(*planner), ctx.CloseAndGetString(), false /* multiStmt */)
 	if err != nil {
 		return "", err
 	}
@@ -1302,7 +1302,7 @@ func newTableDescIfAs(
 			// resolving it again.
 			typ := d.Type.(*types.T)
 			if typ.UserDefined() {
-				tn, typDesc, err := params.p.GetTypeDescriptor(params.ctx, typedesc.UserDefinedTypeOIDToID(typ.Oid()))
+				tn, typDesc, err := params.P.(*planner).GetTypeDescriptor(params.Ctx, typedesc.UserDefinedTypeOIDToID(typ.Oid()))
 				if err != nil {
 					return nil, err
 				}
@@ -2507,7 +2507,7 @@ func newTableDesc(
 	// Process any SERIAL columns to remove the SERIAL type, as required by
 	// NewTableDesc.
 	colNameToOwnedSeq, err := createSequencesForSerialColumns(
-		params.ctx, params.p, params.SessionData(), db, sc, n,
+		params.Ctx, params.P.(*planner), params.SessionData(), db, sc, n,
 	)
 	if err != nil {
 		return nil, err
@@ -2515,7 +2515,7 @@ func newTableDesc(
 
 	var regionConfig *multiregion.RegionConfig
 	if db.IsMultiRegion() {
-		conf, err := SynthesizeRegionConfig(params.ctx, params.p.txn, db.GetID(), params.p.Descriptors())
+		conf, err := SynthesizeRegionConfig(params.Ctx, params.P.(*planner).txn, db.GetID(), params.P.(*planner).Descriptors())
 		if err != nil {
 			return nil, err
 		}
@@ -2525,12 +2525,12 @@ func newTableDesc(
 	// We need to run NewTableDesc with caching disabled, because it needs to pull
 	// in descriptors from FK depended-on tables using their current state in KV.
 	// See the comment at the start of NewTableDesc() and ResolveFK().
-	params.p.runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
+	params.P.(*planner).runWithOptions(resolveFlags{skipCache: true, contextDatabaseID: db.GetID()}, func() {
 		ret, err = NewTableDesc(
-			params.ctx,
-			params.p.txn,
-			params.p,
-			params.p.ExecCfg().Settings,
+			params.Ctx,
+			params.P.(*planner).txn,
+			params.P.(*planner),
+			params.P.(*planner).ExecCfg().Settings,
 			n,
 			db,
 			sc,
@@ -2539,7 +2539,7 @@ func newTableDesc(
 			creationTime,
 			privileges,
 			affected,
-			params.p.SemaCtx(),
+			params.P.(*planner).SemaCtx(),
 			params.EvalContext(),
 			params.SessionData(),
 			n.Persistence,
@@ -2575,21 +2575,21 @@ func newTableDesc(
 			return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 		}
 		if _, err := schemaexpr.ValidateTTLExpirationExpression(
-			params.ctx, params.p.SemaCtx(), &n.Table, ttl, params.ExecCfg().Settings.Version.ActiveVersionOrEmpty(params.ctx),
+			params.Ctx, params.P.(*planner).SemaCtx(), &n.Table, ttl, params.ExecCfg().(*ExecutorConfig).Settings.Version.ActiveVersionOrEmpty(params.Ctx),
 			getAllNonDropColumnsFn, columnLookupByNameFn,
 		); err != nil {
 			return nil, err
 		}
 
-		params.p.Txn()
+		params.P.(*planner).Txn()
 		j, err := ttlinit.CreateRowLevelTTLScheduledJob(
-			params.ctx,
-			params.ExecCfg().JobsKnobs(),
-			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
-			params.p.User(),
+			params.Ctx,
+			params.ExecCfg().(*ExecutorConfig).JobsKnobs(),
+			jobs.ScheduledJobTxn(params.P.(*planner).InternalSQLTxn()),
+			params.P.(*planner).User(),
 			ret,
-			params.p.extendedEvalCtx.ClusterID,
-			params.p.execCfg.Settings.Version.ActiveVersion(params.ctx),
+			params.P.(*planner).extendedEvalCtx.ClusterID,
+			params.P.(*planner).execCfg.Settings.Version.ActiveVersion(params.Ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -2601,9 +2601,9 @@ func newTableDesc(
 	// aren't running under an internal executor.
 	if !ret.IsView() && !ret.IsSequence() && !ret.IsTemporary() &&
 		n.StorageParams.GetVal("schema_locked") == nil &&
-		!params.p.SessionData().Internal &&
-		params.p.SessionData().CreateTableWithSchemaLocked &&
-		params.p.IsActive(params.ctx, clusterversion.V25_2) {
+		!params.P.(*planner).SessionData().Internal &&
+		params.P.(*planner).SessionData().CreateTableWithSchemaLocked &&
+		params.P.(*planner).IsActive(params.Ctx, clusterversion.V25_2) {
 		ret.SchemaLocked = true
 	}
 
@@ -2654,7 +2654,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			newDefs = make(tree.TableDefs, 0, len(n.Defs))
 			newDefs = append(newDefs, n.Defs[:i]...)
 		}
-		_, td, err := params.p.ResolveMutableTableDescriptor(params.ctx, &d.Name, true, tree.ResolveRequireTableDesc)
+		_, td, err := params.P.(*planner).ResolveMutableTableDescriptor(params.Ctx, &d.Name, true, tree.ResolveRequireTableDesc)
 		if err != nil {
 			return nil, err
 		}

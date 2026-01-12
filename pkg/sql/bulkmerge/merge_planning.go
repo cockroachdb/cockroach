@@ -36,7 +36,7 @@ func newBulkMergePlan(
 	// TODO(mw5h): We need to be careful about mixed version clusters, so consider
 	// where we'll want to add a version gate.
 	planCtx, sqlInstanceIDs, err := execCtx.DistSQLPlanner().SetupAllNodesPlanning(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
+		ctx, execCtx.ExtendedEvalContext().(*sql.ExtendedEvalContext), execCtx.ExecCfg())
 	if err != nil {
 		return nil, nil, err
 	}

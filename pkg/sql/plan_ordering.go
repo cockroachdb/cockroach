@@ -18,28 +18,28 @@ type ReqOrdering = colinfo.ColumnOrdering
 func planReqOrdering(plan planNode) ReqOrdering {
 	switch n := plan.(type) {
 	case *limitNode:
-		return planReqOrdering(n.input)
+		return planReqOrdering(n.Source)
 	case *max1RowNode:
-		return planReqOrdering(n.input)
+		return planReqOrdering(n.Source)
 	case *saveTableNode:
-		return planReqOrdering(n.input)
+		return planReqOrdering(n.Source)
 	case *deleteNode:
 		if n.run.rowsNeeded {
-			return planReqOrdering(n.input)
+			return planReqOrdering(n.Source)
 		}
 	case *deleteSwapNode:
 		if n.run.rowsNeeded {
-			return planReqOrdering(n.input)
+			return planReqOrdering(n.Source)
 		}
 
 	case *filterNode:
-		return n.reqOrdering
+		return n.ReqOrdering
 
 	case *groupNode:
-		return n.reqOrdering
+		return n.ReqOrdering
 
 	case *distinctNode:
-		return n.reqOrdering
+		return n.ReqOrdering
 
 	case *indexJoinNode:
 		return n.reqOrdering
@@ -70,13 +70,13 @@ func planReqOrdering(plan planNode) ReqOrdering {
 	case *scanNode:
 		return n.reqOrdering
 	case *ordinalityNode:
-		return n.reqOrdering
+		return n.ReqOrdering
 	case *renderNode:
-		return n.reqOrdering
+		return n.ReqOrdering
 	case *sortNode:
-		return n.ordering
+		return n.Ordering
 	case *topKNode:
-		return n.ordering
+		return n.Ordering
 	case *lookupJoinNode:
 		return n.reqOrdering
 	case *invertedJoinNode:

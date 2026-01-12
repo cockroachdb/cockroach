@@ -120,7 +120,7 @@ func (p *planner) CreateRoleNode(
 	}, nil
 }
 
-func (n *CreateRoleNode) startExec(params runParams) error {
+func (n *CreateRoleNode) StartExec(params runParams) error {
 	var opName redact.RedactableString
 	if n.isRole {
 		sqltelemetry.IncIAMCreateCounter(sqltelemetry.Role)
@@ -136,10 +136,10 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if the user/role exists.
-	row, err := params.p.InternalSQLTxn().QueryRowEx(
-		params.ctx,
+	row, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+		params.Ctx,
 		opName,
-		params.p.txn,
+		params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`select "isRole" from system.public.%s where username = $1`, catconstants.UsersTableName),
 		n.roleName,
@@ -157,12 +157,12 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	stmt := fmt.Sprintf("INSERT INTO system.public.%s VALUES ($1, $2, $3, $4)", catconstants.UsersTableName)
-	roleID, err := descidgen.GenerateUniqueRoleID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
+	roleID, err := descidgen.GenerateUniqueRoleID(params.Ctx, params.ExecCfg().(*ExecutorConfig).DB, params.ExecCfg().(*ExecutorConfig).Codec)
 	if err != nil {
 		return err
 	}
-	rowsAffected, err := params.p.InternalSQLTxn().ExecEx(
-		params.ctx, opName, params.p.txn,
+	rowsAffected, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+		params.Ctx, opName, params.P.(*planner).txn,
 		sessiondata.NodeUserSessionDataOverride,
 		stmt, n.roleName, hashedPassword, n.isRole, roleID,
 	)
@@ -179,22 +179,22 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		return err
 	}
 
-	if sessioninit.CacheEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if sessioninit.CacheEnabled.Get(&params.P.(*planner).ExecCfg().Settings.SV) {
 		// Bump role-related table versions to force a refresh of AuthInfo cache.
-		if err := params.p.bumpUsersTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).bumpUsersTableVersion(params.Ctx); err != nil {
 			return err
 		}
-		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
+		if err := params.P.(*planner).bumpRoleOptionsTableVersion(params.Ctx); err != nil {
 			return err
 		}
 	}
 	// Bump role membership table version to force a refresh of role membership
 	// cache.
-	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+	if err := params.P.(*planner).BumpRoleMembershipTableVersion(params.Ctx); err != nil {
 		return err
 	}
 
-	return params.p.logEvent(params.ctx,
+	return params.P.(*planner).logEvent(params.Ctx,
 		0, /* no target */
 		&eventpb.CreateRole{RoleName: n.roleName.Normalized()})
 }
@@ -230,7 +230,7 @@ func updateRoleOptions(
 				qargs = append(qargs, nil)
 			} else {
 				if v.Validate != nil {
-					if err := v.Validate(params.ExecCfg().Settings, roleName, val); err != nil {
+					if err := v.Validate(params.ExecCfg().(*ExecutorConfig).Settings, roleName, val); err != nil {
 						return 0, err
 					}
 				}
@@ -238,8 +238,8 @@ func updateRoleOptions(
 			}
 		}
 
-		idRow, err := params.p.InternalSQLTxn().QueryRowEx(
-			params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
+		idRow, err := params.P.(*planner).InternalSQLTxn().QueryRowEx(
+			params.Ctx, `get-user-id`, params.P.(*planner).Txn(), sessiondata.NodeUserSessionDataOverride,
 			`SELECT user_id FROM system.users WHERE username = $1`, roleName.Normalized(),
 		)
 		if err != nil {
@@ -247,10 +247,10 @@ func updateRoleOptions(
 		}
 		qargs = append(qargs, tree.MustBeDOid(idRow[0]))
 
-		affected, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
+		affected, err := params.P.(*planner).InternalSQLTxn().ExecEx(
+			params.Ctx,
 			opName,
-			params.p.txn,
+			params.P.(*planner).txn,
 			sessiondata.NodeUserSessionDataOverride,
 			stmt,
 			qargs...,
@@ -284,7 +284,7 @@ func retrievePasswordFromRoleOptions(
 	if err != nil {
 		return true, nil, err
 	}
-	if !isNull && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+	if !isNull && params.ExtendedEvalCtx.GetExecCfg().(*ExecutorConfig).RPCContext.Insecure {
 		// We disallow setting a non-empty password in insecure mode
 		// because insecure means an observer may have MITM'ed the change
 		// and learned the password.
@@ -297,7 +297,7 @@ func retrievePasswordFromRoleOptions(
 	}
 
 	if !isNull {
-		if hashedPassword, err = params.p.checkPasswordAndGetHash(params.ctx, password); err != nil {
+		if hashedPassword, err = params.P.(*planner).checkPasswordAndGetHash(params.Ctx, password); err != nil {
 			return true, nil, err
 		}
 	}

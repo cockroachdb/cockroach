@@ -36,15 +36,15 @@ type updateSwapNode struct {
 
 var _ mutationPlanNode = &updateSwapNode{}
 
-func (u *updateSwapNode) startExec(params runParams) error {
+func (u *updateSwapNode) StartExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	u.run.traceKV = params.P.(*planner).ExtendedEvalContext().GetTracing().(*SessionTracing).KVTracingEnabled()
 
 	u.run.mustValidateOldPKValues = true
 
 	u.run.init(params, u.columns)
 
-	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := u.run.tu.init(params.Ctx, params.P.(*planner).txn, params.EvalContext()); err != nil {
 		return err
 	}
 
@@ -68,17 +68,17 @@ func (u *updateSwapNode) processBatch(params runParams) error {
 	// of input, to ensure the savepoint rollback below has the correct SQL
 	// semantics.
 
-	if err := params.p.cancelChecker.Check(); err != nil {
+	if err := params.P.(*planner).cancelChecker.Check(); err != nil {
 		return err
 	}
 
-	next, err := u.input.Next(params)
+	next, err := u.Source.Next(params)
 	if next {
-		if err = u.run.processSourceRow(params, u.input.Values()); err != nil {
+		if err = u.run.processSourceRow(params, u.Source.Values()); err != nil {
 			return err
 		}
 		// Verify that there was only a single row of input.
-		next, err = u.input.Next(params)
+		next, err = u.Source.Next(params)
 		if next {
 			return errors.AssertionFailedf("expected only 1 row as input to update swap")
 		}
@@ -91,21 +91,21 @@ func (u *updateSwapNode) processBatch(params runParams) error {
 	// batch. If the row does not actually exist, the write to the primary index
 	// will fail with ConditionFailedError, but writes to some secondary indexes
 	// might succeed. We use a savepoint here to undo those writes.
-	sp, err := u.run.tu.createSavepoint(params.ctx)
+	sp, err := u.run.tu.createSavepoint(params.Ctx)
 	if err != nil {
 		return err
 	}
 
-	u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-	if err = u.run.tu.finalize(params.ctx); err != nil {
+	u.run.tu.setRowsWrittenLimit(params.ExtendedEvalCtx.SessionData())
+	if err = u.run.tu.finalize(params.Ctx); err != nil {
 		// If this was a ConditionFailedError, it means the row did not exist in the
 		// primary index. We must roll back to the savepoint above to undo writes to
 		// all secondary indexes.
 		if condErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &condErr) {
 			// Reset the table writer so that it looks like there were no rows to
 			// update.
-			u.run.reset(params.ctx)
-			if err = u.run.tu.rollbackToSavepoint(params.ctx, sp); err != nil {
+			u.run.reset(params.Ctx)
+			if err = u.run.tu.rollbackToSavepoint(params.Ctx, sp); err != nil {
 				return err
 			}
 			return nil
@@ -114,35 +114,35 @@ func (u *updateSwapNode) processBatch(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
+	params.ExecCfg().(*ExecutorConfig).StatsRefresher.NotifyMutation(params.Ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
 
 	return nil
 }
 
 func (u *updateSwapNode) Close(ctx context.Context) {
-	u.input.Close(ctx)
+	u.Source.Close(ctx)
 	u.run.close(ctx)
 	*u = updateSwapNode{}
 	updateSwapNodePool.Put(u)
 }
 
-func (u *updateSwapNode) rowsWritten() int64 {
+func (u *updateSwapNode) RowsWritten() int64 {
 	return u.run.rowsAffected()
 }
 
-func (u *updateSwapNode) indexRowsWritten() int64 {
+func (u *updateSwapNode) IndexRowsWritten() int64 {
 	return u.run.tu.indexRowsWritten
 }
 
-func (u *updateSwapNode) indexBytesWritten() int64 {
+func (u *updateSwapNode) IndexBytesWritten() int64 {
 	return u.run.tu.indexBytesWritten
 }
 
-func (u *updateSwapNode) returnsRowsAffected() bool {
+func (u *updateSwapNode) ReturnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
 
-func (u *updateSwapNode) kvCPUTime() int64 {
+func (u *updateSwapNode) KvCPUTime() int64 {
 	return u.run.tu.kvCPUTime
 }
 

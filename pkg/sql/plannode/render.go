@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package plannode
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 // renderNode encapsulates the render logic of a select statement:
 // expressing new values using expressions over source values.
-type renderNode struct {
+type RenderNode struct {
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
@@ -26,28 +26,28 @@ type renderNode struct {
 
 	singleInputPlanNode
 
-	// Rendering expressions for rows and corresponding output columns.
-	render []tree.TypedExpr
+	// Render expressions for rows and corresponding output columns.
+	Render []tree.TypedExpr
 
-	// columns is the set of result columns.
-	columns colinfo.ResultColumns
+	// Columns is the set of result columns.
+	Columns colinfo.ResultColumns
 
 	// if set, join any distributed streams before applying the rendering; used to
 	// "materialize" an ordering before removing the ordering columns (at the root
 	// of a query or subquery).
-	serialize bool
+	Serialize bool
 
-	reqOrdering ReqOrdering
+	ReqOrdering ReqOrdering
 }
 
 var _ tree.IndexedVarContainer = &renderNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
-	return r.columns[idx].Typ
+	return r.Columns[idx].Typ
 }
 
-func (r *renderNode) startExec(runParams) error {
+func (r *renderNode) StartExec(runParams) error {
 	panic("renderNode can't be run in local mode")
 }
 
@@ -59,4 +59,9 @@ func (r *renderNode) Values() tree.Datums {
 	panic("renderNode can't be run in local mode")
 }
 
-func (r *renderNode) Close(ctx context.Context) { r.input.Close(ctx) }
+func (r *renderNode) Close(ctx context.Context) { r.Source.Close(ctx) }
+
+
+
+// Lowercase alias
+type renderNode = RenderNode
