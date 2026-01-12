@@ -9676,90 +9676,17 @@ WHERE object_id = table_descriptor_id
 
 	"crdb_internal.inject_hint": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
+			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "statement_fingerprint", Typ: types.String},
-				{Name: "donor_sql", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				stmtFingerprint := string(tree.MustBeDString(args[0]))
-				donorSQL := string(tree.MustBeDString(args[1]))
-
-				// Validate that the donor statement matches the target statement
-				// without hints.
-				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-					&evalCtx.Settings.SV,
-				))
-				stmts, err := parserutils.Parse(stmtFingerprint)
-				if err != nil {
-					return nil, pgerror.Wrap(
-						err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
-					)
-				}
-				if len(stmts) != 1 {
-					return nil, pgerror.New(
-						pgcode.InvalidParameterValue,
-						"could not parse statement fingerprint as a single SQL statement",
-					)
-				}
-				targetStmt := stmts[0]
-				stmts, err = parserutils.Parse(donorSQL)
-				if err != nil {
-					return nil, pgerror.Wrap(
-						err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
-					)
-				}
-				if len(stmts) != 1 {
-					return nil, pgerror.New(
-						pgcode.InvalidParameterValue,
-						"could not parse hint donor statement as a single SQL statement",
-					)
-				}
-				donorStmt := stmts[0]
-				donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
-				if err != nil {
-					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
-				}
-				if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
-					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-				}
-
-				// Do a trial hint injection to validate that the target statement gets
-				// rewritten into the donor statement.
-				result, _, err := donor.InjectHints(targetStmt.AST)
-				if err != nil {
-					return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
-				}
-				// Either the target statement or the donor statement could be
-				// non-fingerprint or fingerprint, so for an apples-to-apples comparison
-				// we need to convert both to fingerprints.
-				resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
-				donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
-				if resultFingerprint != donorFingerprint {
-					return nil, pgerror.Newf(
-						pgcode.InvalidParameterValue,
-						"could not validate that target statement is rewritten as donor statement (%s): %s",
-						donorFingerprint, resultFingerprint,
-					)
-				}
-
-				// Insert into statement_hints.
-				var hint hintpb.StatementHintUnion
-				hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-				hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(hintID)), nil
-			},
-			Info: "This function is used to build a serialized statement hint to be inserted into" +
-				" the system.statement_hints table. It returns the hint ID of the newly created hint.",
-			Volatility: volatility.Volatile,
+		rewriteInlineHintsOverload,
+	),
+	"information_schema.crdb_rewrite_inline_hints": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
 		},
+		rewriteInlineHintsOverload,
 	),
 	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
@@ -12901,3 +12828,95 @@ var datumsToBytesOverload = tree.Overload{
 }
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
+
+var rewriteInlineHintsOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "statement_fingerprint", Typ: types.String},
+		{Name: "donor_sql", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		// The user must have REPAIRCLUSTER to use this builtin.
+		if err := evalCtx.SessionAccessor.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		); err != nil {
+			return nil, err
+		}
+
+		stmtFingerprint := string(tree.MustBeDString(args[0]))
+		donorSQL := string(tree.MustBeDString(args[1]))
+
+		// Validate that the donor statement matches the target statement
+		// without hints.
+		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+			&evalCtx.Settings.SV,
+		))
+		stmts, err := parserutils.Parse(stmtFingerprint)
+		if err != nil {
+			return nil, pgerror.Wrap(
+				err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
+			)
+		}
+		if len(stmts) != 1 {
+			return nil, pgerror.New(
+				pgcode.InvalidParameterValue,
+				"could not parse statement fingerprint as a single SQL statement",
+			)
+		}
+		targetStmt := stmts[0]
+		stmts, err = parserutils.Parse(donorSQL)
+		if err != nil {
+			return nil, pgerror.Wrap(
+				err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
+			)
+		}
+		if len(stmts) != 1 {
+			return nil, pgerror.New(
+				pgcode.InvalidParameterValue,
+				"could not parse hint donor statement as a single SQL statement",
+			)
+		}
+		donorStmt := stmts[0]
+		donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
+		}
+		if err := donor.Validate(targetStmt.AST, fingerprintFlags); err != nil {
+			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		}
+
+		// Do a trial hint injection to validate that the target statement gets
+		// rewritten into the donor statement.
+		result, _, err := donor.InjectHints(targetStmt.AST)
+		if err != nil {
+			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		}
+		// Either the target statement or the donor statement could be
+		// non-fingerprint or fingerprint, so for an apples-to-apples comparison
+		// we need to convert both to fingerprints.
+		resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
+		donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
+		if resultFingerprint != donorFingerprint {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"could not validate that target statement is rewritten as donor statement (%s): %s",
+				donorFingerprint, resultFingerprint,
+			)
+		}
+
+		// Insert into statement_hints.
+		var hint hintpb.StatementHintUnion
+		hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
+		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
+		if err != nil {
+			return nil, err
+		}
+
+		return tree.NewDInt(tree.DInt(hintID)), nil
+	},
+	Info: `This function adds an inline-hints rewrite rule for a statement fingerprint. It ` +
+		`returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to ` +
+		`matching statement fingerprints. It first removes all inline hints from the target ` +
+		`statement, and then copies inline hints from the donor statement.`,
+	Volatility: volatility.Volatile,
+}

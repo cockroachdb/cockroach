@@ -3369,6 +3369,15 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Volatile</td></tr></tbody>
 </table>
 
+### System repair functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="information_schema.crdb_rewrite_inline_hints"></a><code>information_schema.crdb_rewrite_inline_hints(statement_fingerprint: <a href="string.html">string</a>, donor_sql: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function adds an inline-hints rewrite rule for a statement fingerprint. It returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to matching statement fingerprints. It first removes all inline hints from the target statement, and then copies inline hints from the donor statement.</p>
+</span></td><td>Volatile</td></tr></tbody>
+</table>
+
 ### TIMETZ functions
 
 <table>
