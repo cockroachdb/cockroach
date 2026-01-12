@@ -69,6 +69,7 @@ type bulkMergeProcessor struct {
 	input      execinfra.RowSource
 	flowCtx    *execinfra.FlowCtx
 	storageMux *bulkutil.ExternalStorageMux
+	iter       storage.SimpleMVCCIterator
 }
 
 type mergeProcessorInput struct {
@@ -189,9 +190,19 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 func (m *bulkMergeProcessor) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, "bulkMergeProcessor")
 	m.input.Start(ctx)
+
+	var err error
+	m.iter, err = m.createIter(ctx)
+	if err != nil {
+		m.MoveToDraining(err)
+		return
+	}
 }
 
 func (m *bulkMergeProcessor) Close(ctx context.Context) {
+	if m.iter != nil {
+		m.iter.Close()
+	}
 	err := m.storageMux.Close()
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to close external storage mux: %v", err)
@@ -199,62 +210,28 @@ func (m *bulkMergeProcessor) Close(ctx context.Context) {
 	m.ProcessorBase.Close(ctx)
 }
 
-// isOverlapping returns true if the sst may contribute keys to the merge span.
-// The merge span is a [start, end) range. The SST is a [start, end] range.
-func isOverlapping(mergeSpan roachpb.Span, sst execinfrapb.BulkMergeSpec_SST) bool {
-	// No overlap if sst.EndKey < mergeSpan.Key (SST is entirely left).
-	if bytes.Compare(sst.EndKey, mergeSpan.Key) < 0 {
-		return false
-	}
-
-	// No overlap if mergeSpan.EndKey <= sst.StartKey (SST is entirely right).
-	if bytes.Compare(mergeSpan.EndKey, sst.StartKey) <= 0 {
-		return false
-	}
-
-	return true
-}
-
 func (m *bulkMergeProcessor) mergeSSTs(
 	ctx context.Context, taskID taskset.TaskID,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
-	mergeSpan := m.spec.Spans[taskID]
-	var storeFiles []storageccl.StoreFile
-
-	// Find the ssts that overlap with the given task's key range.
-	for _, sst := range m.spec.SSTs {
-		if !isOverlapping(mergeSpan, sst) {
-			continue
-		}
-		file, err := m.storageMux.StoreFile(ctx, sst.URI)
-		if err != nil {
-			return execinfrapb.BulkMergeSpec_Output{}, err
-		}
-		storeFiles = append(storeFiles, file)
-	}
-
-	// It's possible that there are no ssts to merge for this task. In that case,
-	// we return an empty output.
-	if len(storeFiles) == 0 {
+	// If there's no iterator (no SSTs to merge), return an empty output.
+	if m.iter == nil {
 		return execinfrapb.BulkMergeSpec_Output{}, nil
 	}
 
-	sstTargetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
-	iterOpts := storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: mergeSpan.Key,
-		UpperBound: mergeSpan.EndKey,
+	mergeSpan := m.spec.Spans[taskID]
+
+	// Seek the iterator if it's not positioned within the current task's span.
+	// The spans are disjoint, so the only way the iterator would be contained
+	// within the span is if the previous task's span preceded it.
+	if ok, _ := m.iter.Valid(); !(ok && containsKey(mergeSpan, m.iter.UnsafeKey().Key)) {
+		m.iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key})
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
-	if err != nil {
-		return execinfrapb.BulkMergeSpec_Output{}, err
-	}
-	defer iter.Close()
 
 	if m.spec.Iteration == m.spec.MaxIterations {
-		return m.ingestFinalIteration(ctx, iter, mergeSpan)
+		return m.ingestFinalIteration(ctx, m.iter, mergeSpan)
 	}
 
+	sstTargetSize := targetFileSize.Get(&m.flowCtx.EvalCtx.Settings.SV)
 	destStore, err := m.flowCtx.Cfg.ExternalStorage(ctx, m.spec.OutputStorage)
 	if err != nil {
 		return execinfrapb.BulkMergeSpec_Output{}, err
@@ -274,16 +251,17 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 	defer writer.Close(ctx)
 
-	return processMergedData(ctx, iter, mergeSpan, writer)
+	return processMergedData(ctx, m.iter, mergeSpan, writer)
 }
 
 // processMergedData is a unified function for iterating over merged data and
-// writing it using a mergeWriter implementation.
+// writing it using a mergeWriter implementation. The iterator must already be
+// positioned at or before the start of mergeSpan.
 func processMergedData(
 	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span, writer mergeWriter,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
 	var endKey roachpb.Key
-	for iter.SeekGE(storage.MVCCKey{Key: mergeSpan.Key}); ; iter.NextKey() {
+	for {
 		ok, err := iter.Valid()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
@@ -291,7 +269,13 @@ func processMergedData(
 		if !ok {
 			break
 		}
+
 		key := iter.UnsafeKey()
+		if mergeSpan.EndKey.Compare(key.Key) <= 0 {
+			// We've reached the end of the span.
+			break
+		}
+
 		val, err := iter.UnsafeValue()
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
@@ -320,6 +304,8 @@ func processMergedData(
 			}
 			endKey = safeKey.PrefixEnd()
 		}
+
+		iter.NextKey()
 	}
 
 	return writer.Finish(ctx, mergeSpan.EndKey)
@@ -355,6 +341,61 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
 	return processMergedData(ctx, iter, mergeSpan, writer)
+}
+
+// createIter builds an iterator over all input SSTs. Actual access to the SSTs
+// is deferred until the iterator seeks to one based on the merge span used for
+// a given task ID.
+func (m *bulkMergeProcessor) createIter(ctx context.Context) (storage.SimpleMVCCIterator, error) {
+	// If there are no SSTs, there's nothing to merge.
+	if len(m.spec.SSTs) == 0 {
+		return nil, nil
+	}
+	if len(m.spec.Spans) == 0 {
+		return nil, errors.AssertionFailedf("no spans specified for merge processor")
+	}
+
+	var storeFiles []storageccl.StoreFile
+
+	// Create store files for all SSTs. We access the ones needed for each task
+	// in mergeSSTs.
+	for _, sst := range m.spec.SSTs {
+		file, err := m.storageMux.StoreFile(ctx, sst.URI)
+		if err != nil {
+			return nil, err
+		}
+		storeFiles = append(storeFiles, file)
+	}
+
+	iterOpts := storage.IterOptions{
+		KeyTypes: storage.IterKeyTypePointsAndRanges,
+		// We don't really need bounds here because the merge iterator covers the
+		// entire input data set, but the iterator has validation ensuring they
+		// are set. These bounds work because the spans are non-overlapping and
+		// sorted.
+		LowerBound: m.spec.Spans[0].Key,
+		UpperBound: m.spec.Spans[len(m.spec.Spans)-1].EndKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, nil, iterOpts)
+	if err != nil {
+		return nil, err
+	}
+	return iter, nil
+}
+
+// containsKey returns true if the given key is within the mergeSpan.
+func containsKey(mergeSpan roachpb.Span, key roachpb.Key) bool {
+	// key is to left
+	if bytes.Compare(key, mergeSpan.Key) < 0 {
+		return false
+	}
+
+	// key is to right
+	if bytes.Compare(mergeSpan.EndKey, key) <= 0 {
+		return false
+	}
+
+	return true
 }
 
 func init() {

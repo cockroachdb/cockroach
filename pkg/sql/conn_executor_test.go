@@ -11,6 +11,7 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"slices"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -525,12 +528,19 @@ func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const rows = 1000
-	defer rowexec.TestingSetScannedRowProgressFrequency(rows / 60)()
+	skip.UnderRace(t)
 
-	// We'll do more than 6 scans because we set a low TableReaderBatchBytesLimit
+	// Use the production value of coldata.BatchSize to make calculations below
+	// consistent.
+	require.NoError(t, coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize))
+	var rows = coldata.BatchSize() * 10
+	progressFrequency := int64(coldata.BatchSize())
+	defer colfetcher.TestingSetScanProgressFrequency(progressFrequency)()
+	defer rowexec.TestingSetScannedRowProgressFrequency(progressFrequency)()
+
+	// We'll do more than 5 scans because we set a low TableReaderBatchBytesLimit
 	// below.
-	const stallAfterScans = 6
+	const stallAfterScans = 5
 
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
@@ -554,9 +564,9 @@ func TestQueryProgress(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
-				// A low limit, to force many small scans such that we get progress
-				// reports.
-				TableReaderBatchBytesLimit: 1500,
+				// A low limit, to force many small scans such that we get
+				// progress reports.
+				TableReaderBatchBytesLimit: 50000,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(_ context.Context, req *kvpb.BatchRequest) *kvpb.Error {
@@ -581,17 +591,15 @@ func TestQueryProgress(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
-	// TODO(yuzefovich): the vectorized cfetcher doesn't emit metadata about
-	// the progress nor do we have an infrastructure to emit such metadata at
-	// the runtime (we can only propagate the metadata during the draining of
-	// the flow which defeats the purpose of the progress meta), so we use the
-	// old row-by-row engine in this test. We should fix that (#55758).
-	db.Exec(t, `SET vectorize=off`)
+	if rand.Float64() < 0.5 {
+		// Randomize the execution engine.
+		db.Exec(t, `SET vectorize=off`)
+	}
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	db.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (x INT PRIMARY KEY);`)
 	db.Exec(t, `INSERT INTO t.test SELECT generate_series(1, $1)::INT`, rows)
 	db.Exec(t, `CREATE STATISTICS __auto__ FROM t.test`)
-	const query = `SELECT count(*) FROM t.test WHERE x > $1 and x % 2 = 0`
+	const query = `SELECT count(*) FROM t.test WHERE x > 0`
 
 	// Invalidate the stats cache so that we can be sure to get the latest stats.
 	var tableID descpb.ID
@@ -616,7 +624,7 @@ func TestQueryProgress(t *testing.T) {
 			}
 		}()
 		atomic.StoreInt64(&queryRunningAtomic, 1)
-		_, err := rawDB.ExecContext(ctx, query, rows/2)
+		_, err := rawDB.ExecContext(ctx, query)
 		return err
 	})
 

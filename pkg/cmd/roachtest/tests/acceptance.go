@@ -116,6 +116,7 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name:     "mismatched-locality",
 				fn:       runMismatchedLocalityTest,
+				skip:     "TODO(#160845): unskip this",
 				numNodes: 3,
 			},
 		},

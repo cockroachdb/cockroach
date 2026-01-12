@@ -932,6 +932,9 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
     return u.val.(*tree.ShowFingerprintOptions)
 }
+func (u *sqlSymUnion) showHintsOptions() *tree.ShowHintsOptions {
+    return u.val.(*tree.ShowHintsOptions)
+}
 func (u *sqlSymUnion) logicalReplicationResources() tree.LogicalReplicationResources {
     return u.val.(tree.LogicalReplicationResources)
 }
@@ -1032,7 +1035,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
 %token <str> GLOBAL GOAL GRANT GRANTEE GRANTS GREATEST GROUP GROUPING GROUPS
 
-%token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
+%token <str> HAVING HASH HEADER HIGH HINTS HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
@@ -1408,6 +1411,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_external_connections_stmt
 %type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
+%type <tree.Statement> show_statement_hints_stmt opt_with_show_hints_options show_hints_options_list show_hints_options
 %type <bool> experimental_or_not_fingerprints
 %type <tree.Statement> show_functions_stmt
 %type <tree.Statement> show_procedures_stmt
@@ -8654,6 +8658,7 @@ show_stmt:
 | SHOW error                 // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 | show_full_scans_stmt
+| show_statement_hints_stmt
 | show_default_privileges_stmt // EXTEND WITH HELP: SHOW DEFAULT PRIVILEGES
 | show_completions_stmt
 | show_inspect_errors_stmt // EXTEND WITH HELP: SHOW INSPECT ERRORS
@@ -10490,7 +10495,7 @@ fingerprint_options_list:
     }
   }
 
-// List of valid backup options.
+// List of valid SHOW FINGERPRINTS options.
 fingerprint_options:
   START TIMESTAMP '=' d_expr
   {
@@ -10501,7 +10506,63 @@ fingerprint_options:
     $$.val = &tree.ShowFingerprintOptions{ExcludedUserColumns: $4.stringOrPlaceholderOptList()}
   }
 
+// %Help: SHOW STATEMENT HINTS - list statement hints for a fingerprint
+// %Category: Misc
+// %Text:
+// SHOW STATEMENT HINTS FOR <string>
+// SHOW STATEMENT HINTS WITH DETAILS FOR <string>
+//
+// Shows statement hints stored in system.statement_hints for the given
+// query string (which may be a string literal, dollar-quoted string, or
+// expression). WITH DETAILS includes decoded hint-specific information.
+//
+// Examples:
+//   SHOW STATEMENT HINTS FOR 'SELECT * FROM t WHERE x = 1'
+//   SHOW STATEMENT HINTS FOR $$ SELECT * FROM t WHERE x = 'value' $$
+//   SHOW STATEMENT HINTS FOR $1
+show_statement_hints_stmt:
+  SHOW STATEMENT HINTS FOR string_or_placeholder opt_with_show_hints_options
+  {
+    $$.val = &tree.ShowStatementHints{
+      Expr: $5.expr(),
+      Options: *$6.showHintsOptions(),
+    }
+  }
+| SHOW STATEMENT HINTS error // SHOW HELP: SHOW STATEMENT HINTS
 
+opt_with_show_hints_options:
+  WITH show_hints_options_list
+  {
+    $$.val = $2.showHintsOptions()
+  }
+| WITH OPTIONS '(' show_hints_options_list ')'
+  {
+    $$.val = $4.showHintsOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowHintsOptions{}
+  }
+
+show_hints_options_list:
+  // Require at least one option
+  show_hints_options
+  {
+    $$.val = $1.showHintsOptions()
+  }
+| show_hints_options_list ',' show_hints_options
+  {
+    if err := $1.showHintsOptions().CombineWith($3.showHintsOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid SHOW HINTS options.
+show_hints_options:
+  DETAILS
+  {
+    $$.val = &tree.ShowHintsOptions{Details: true}
+  }
 
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
@@ -18712,6 +18773,7 @@ unreserved_keyword:
 | HASH
 | HEADER
 | HIGH
+| HINTS
 | HISTOGRAM
 | HOLD
 | HOUR
@@ -19260,6 +19322,7 @@ bare_label_keywords:
 | HASH
 | HEADER
 | HIGH
+| HINTS
 | HISTOGRAM
 | HOLD
 | IDENTITY
