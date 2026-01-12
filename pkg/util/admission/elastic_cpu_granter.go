@@ -212,7 +212,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 		e.mu.tb.EnsureLowerBound(0)
 		e.mu.tbLastReset = now
 	}
-	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Microseconds())
+	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Nanoseconds())
 	e.metrics.AvailableNanos.Update(int64(e.mu.tb.Available()))
 
 	e.metrics.UtilizationLimit.Update(utilizationLimit)
@@ -296,10 +296,11 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 	}
 
 	elasticCPUNanosExhaustedDuration = metric.Metadata{
-		Name:        "admission.elastic_cpu.nanos_exhausted_duration",
-		Help:        "Total duration when elastic CPU nanoseconds were exhausted, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.elastic_cpu.nanos_exhausted_duration",
+		Help: "Total duration when elastic CPU tokens were exhausted. This is reported in " +
+			"nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 
 	elasticCPUOverLimitDurations = metric.Metadata{
