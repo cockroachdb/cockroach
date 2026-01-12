@@ -2766,24 +2766,19 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 	makeBuffer := func(kvSize int, txn *roachpb.Transaction, numWrites int) txnWriteBuffer {
 		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx, metrics)
 		sendFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			// Use CreateReply() which creates properly-typed responses for all
+			// request types. This is important because requireAllFlushedRequestsProcessed
+			// calls GetInner() on each response, which would panic on zero-valued
+			// ResponseUnion entries.
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
-			var resps []kvpb.ResponseUnion
-			resp := kvpb.ResponseUnion{}
-			// All requests get responses. Gets also have a return value.
-			for _, req := range ba.Requests {
-				switch req.GetInner().(type) {
-				case *kvpb.GetRequest:
+			// Populate Get responses with values.
+			for i, req := range ba.Requests {
+				if _, ok := req.GetInner().(*kvpb.GetRequest); ok {
 					v := makeValue(kvSize)
-					resp.Value = &kvpb.ResponseUnion_Get{
-						Get: &kvpb.GetResponse{
-							Value: &v,
-						},
-					}
+					br.Responses[i].GetGet().Value = &v
 				}
-				resps = append(resps, resp)
 			}
-			br.Responses = resps
 			return br, nil
 		}
 		mockSender.MockSend(sendFunc)
