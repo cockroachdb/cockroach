@@ -89,6 +89,9 @@ type OrderedSynchronizer struct {
 	// continueBatch, if set, indicates that the current output batch should be
 	// continued.
 	continueBatch bool
+	// tempBufferedMeta contains temporarily buffered metadata until the next
+	// input batch from the minimum input is fetched.
+	tempBufferedMeta []execinfrapb.ProducerMetadata
 }
 
 var (
@@ -135,8 +138,23 @@ func NewOrderedSynchronizer(
 	return os
 }
 
+// maybeEmitMeta checks whether the synchronizer has temporarily buffered any
+// metadata and returns one object if so.
+func (o *OrderedSynchronizer) maybeEmitMeta() *execinfrapb.ProducerMetadata {
+	if len(o.tempBufferedMeta) == 0 {
+		return nil
+	}
+	meta := o.tempBufferedMeta[0]
+	o.tempBufferedMeta[0] = execinfrapb.ProducerMetadata{}
+	o.tempBufferedMeta = o.tempBufferedMeta[1:]
+	return &meta
+}
+
 // Next is part of the Operator interface.
 func (o *OrderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	if meta := o.maybeEmitMeta(); meta != nil {
+		return nil, meta
+	}
 	if !o.heapInitialized {
 		for i := range o.inputs {
 			if o.inputBatches[i] != nil {
@@ -168,6 +186,10 @@ func (o *OrderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 	}
 	o.continueBatch = false
 	for batchDone := false; !batchDone; {
+		if meta := o.maybeEmitMeta(); meta != nil {
+			o.continueBatch = true
+			return nil, meta
+		}
 		if o.advanceMinBatch {
 			// Advance the minimum input batch, fetching a new batch if
 			// necessary.
@@ -175,12 +197,19 @@ func (o *OrderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				batch, meta := o.inputs[minBatch].Root.Next()
-				if meta != nil {
-					o.continueBatch = true
-					return nil, meta
+				// We're in the middle of updating the heap, so we need to fetch
+				// the next batch and update the comparators before we can emit
+				// any metadata. Thus, we'll temporarily buffer all meta and
+				// emit it at a convenient point in time.
+				for {
+					batch, meta := o.inputs[minBatch].Root.Next()
+					if meta != nil {
+						o.tempBufferedMeta = append(o.tempBufferedMeta, *meta)
+						continue
+					}
+					o.inputBatches[minBatch] = batch
+					break
 				}
-				o.inputBatches[minBatch] = batch
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -266,7 +295,11 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 }
 
 func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
-	var bufferedMeta []execinfrapb.ProducerMetadata
+	// We generally don't expect any temporarily buffered metadata here, but in
+	// some edge cases it's possible - guarantee that it's emitted at least
+	// during DrainMeta.
+	bufferedMeta := o.tempBufferedMeta
+	o.tempBufferedMeta = nil
 	if o.span != nil {
 		for i := range o.inputs {
 			for _, stats := range o.inputs[i].StatsCollectors {
