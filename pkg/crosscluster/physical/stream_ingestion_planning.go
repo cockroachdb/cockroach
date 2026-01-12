@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -173,7 +174,7 @@ func ingestionPlanHook(
 		tenantInfo.DataState = mtinfopb.DataStateAdd
 		tenantInfo.Name = roachpb.TenantName(dstTenantName)
 
-		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
 		if err != nil {
 			return err
 		}
@@ -326,7 +327,7 @@ func createReaderTenant(
 		readerInfo.Name = tenantName + "-readonly"
 		readerInfo.ReadFromTenant = &destinationTenantID
 
-		readerZcfg, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
+		readerZcfg, err := zoneconfig.GetHydratedForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
 		if err != nil {
 			return readerID, err
 		}

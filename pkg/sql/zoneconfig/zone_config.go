@@ -3,13 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql
+package zoneconfig
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -17,12 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
@@ -115,12 +107,12 @@ func getZoneConfig(
 	return 0, nil, 0, nil, sqlerrors.ErrNoZoneConfigApplies
 }
 
-// completeZoneConfig takes a zone config pointer and fills in the
+// Complete takes a zone config pointer and fills in the
 // missing fields by following the chain of inheritance.
 // In the worst case, will have to inherit from the default zone config.
 // NOTE: This will not work for subzones. To complete subzones, find a complete
 // parent zone (index or table) and apply InheritFromParent to it.
-func completeZoneConfig(
+func Complete(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
 	txn *kv.Txn,
@@ -183,20 +175,20 @@ func zoneConfigHook(
 		return nil, nil, false, err
 	}
 	// The context passed in won't actually be used.
-	if err = completeZoneConfig(context.TODO(), zone, nil /* txn */, helper, zoneID); err != nil {
+	if err = Complete(context.TODO(), zone, nil /* txn */, helper, zoneID); err != nil {
 		return nil, nil, false, err
 	}
 	return zone, placeholder, true, nil
 }
 
-// GetZoneConfigInTxn looks up the zone and subzone for the specified object ID,
+// GetInTxn looks up the zone and subzone for the specified object ID,
 // index, and partition. See the documentation on getZoneConfig for information
 // about the getInheritedDefault parameter.
 //
-// Unlike ZoneConfigHook, GetZoneConfigInTxn does not used a cached system
+// Unlike ZoneConfigHook, GetInTxn does not used a cached system
 // config. Instead, it uses the provided txn to make transactionally consistent
 // KV lookups.
-func GetZoneConfigInTxn(
+func GetInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	descriptors *descs.Collection,
@@ -212,7 +204,7 @@ func GetZoneConfigInTxn(
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	if err = completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
+	if err = Complete(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return 0, nil, nil, err
 	}
 	var subzone *zonepb.Subzone
@@ -238,12 +230,12 @@ func GetZoneConfigInTxn(
 	return zoneID, zone, subzone, nil
 }
 
-// GetHydratedZoneConfigForTenantsRange returns the zone config for RANGE
+// GetHydratedForTenantsRange returns the zone config for RANGE
 // TENANTS.
-func GetHydratedZoneConfigForTenantsRange(
+func GetHydratedForTenantsRange(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 ) (*zonepb.ZoneConfig, error) {
-	return GetHydratedZoneConfigForNamedZone(
+	return GetHydratedForNamedZone(
 		ctx,
 		txn,
 		descriptors,
@@ -251,9 +243,9 @@ func GetHydratedZoneConfigForTenantsRange(
 	)
 }
 
-// GetHydratedZoneConfigForNamedZone returns a zone config for the given named
+// GetHydratedForNamedZone returns a zone config for the given named
 // zone. Any missing fields are filled through the RANGE DEFAULT zone config.
-func GetHydratedZoneConfigForNamedZone(
+func GetHydratedForNamedZone(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, zoneName zonepb.NamedZone,
 ) (*zonepb.ZoneConfig, error) {
 	id, found := zonepb.NamedZones[zoneName]
@@ -267,15 +259,15 @@ func GetHydratedZoneConfigForNamedZone(
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
+	if err := Complete(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 	return zone, nil
 }
 
-// GetHydratedZoneConfigForTable returns a fully hydrated zone config for a
+// GetHydratedForTable returns a fully hydrated zone config for a
 // given table ID.
-func GetHydratedZoneConfigForTable(
+func GetHydratedForTable(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
 	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
@@ -285,7 +277,7 @@ func GetHydratedZoneConfigForTable(
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
+	if err := Complete(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 
@@ -330,9 +322,9 @@ func GetHydratedZoneConfigForTable(
 	return zone, nil
 }
 
-// GetHydratedZoneConfigForDatabase returns a fully hydrated zone config for a
+// GetHydratedForDatabase returns a fully hydrated zone config for a
 // given database ID.
-func GetHydratedZoneConfigForDatabase(
+func GetHydratedForDatabase(
 	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
 	zcHelper := descs.AsZoneConfigHydrationHelper(descriptors)
@@ -342,175 +334,9 @@ func GetHydratedZoneConfigForDatabase(
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(ctx, zone, txn, zcHelper, zoneID); err != nil {
+	if err := Complete(ctx, zone, txn, zcHelper, zoneID); err != nil {
 		return nil, err
 	}
 
 	return zone, nil
-}
-
-func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
-	if zs.NamedZone != "" {
-		return pgerror.Newf(
-			pgcode.InvalidCatalogName, "zone %q does not exist", zs.NamedZone)
-	} else if zs.Database != "" {
-		return sqlerrors.NewUndefinedDatabaseError(string(zs.Database))
-	} else {
-		return sqlerrors.NewUndefinedRelationError(&zs.TableOrIndex)
-	}
-}
-
-// resolveTableForZone ensures that the table part of the zone
-// specifier is resolved (or resolvable) and, if the zone specifier
-// points to an index, that the index name is expanded to a valid
-// table.
-// Returns res = nil if the zone specifier is not for a table or index.
-func (p *planner) resolveTableForZone(
-	ctx context.Context, zs *tree.ZoneSpecifier,
-) (res catalog.TableDescriptor, err error) {
-	if zs.TargetsIndex() {
-		var mutRes *tabledesc.Mutable
-		_, mutRes, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
-		if mutRes != nil {
-			res = mutRes
-		}
-	} else if zs.TargetsTable() {
-		var immutRes catalog.TableDescriptor
-		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			flags := tree.ObjectLookupFlags{
-				Required:          true,
-				IncludeOffline:    true,
-				DesiredObjectKind: tree.TableObject,
-			}
-			_, immutRes, err = resolver.ResolveExistingTableObject(ctx, p, &zs.TableOrIndex.Table, flags)
-		})
-		if err != nil {
-			return nil, err
-		} else if immutRes != nil {
-			res = immutRes
-		}
-	}
-	return res, err
-}
-
-// resolveZone resolves a zone specifier to a zone ID.  If the zone
-// specifier points to a table, index or partition, the table part
-// must be properly normalized already. It is the caller's
-// responsibility to do this using e.g .resolveTableForZone().
-func resolveZone(
-	ctx context.Context,
-	txn *kv.Txn,
-	col *descs.Collection,
-	zs *tree.ZoneSpecifier,
-	version clusterversion.Handle,
-) (descpb.ID, error) {
-	errMissingKey := errors.New("missing key")
-	id, err := zonepb.ResolveZoneSpecifier(ctx, zs,
-		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
-			id, err := col.LookupObjectID(ctx, txn, descpb.ID(parentID), descpb.ID(schemaID), name)
-			if err != nil {
-				return 0, err
-			}
-			if id == descpb.InvalidID {
-				return 0, errMissingKey
-			}
-			return uint32(id), nil
-		},
-		version,
-	)
-	if err != nil {
-		if errors.Is(err, errMissingKey) {
-			return 0, zoneSpecifierNotFoundError(*zs)
-		}
-		return 0, err
-	}
-	return descpb.ID(id), nil
-}
-
-func resolveSubzone(
-	zs *tree.ZoneSpecifier, table catalog.TableDescriptor,
-) (catalog.Index, string, error) {
-	if !zs.TargetsTable() || zs.TableOrIndex.Index == "" && zs.Partition == "" {
-		return nil, "", nil
-	}
-
-	indexName := string(zs.TableOrIndex.Index)
-	var index catalog.Index
-	if indexName == "" {
-		index = table.GetPrimaryIndex()
-		indexName = index.GetName()
-	} else {
-		var err error
-		index, err = catalog.MustFindIndexByName(table, indexName)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	partitionName := string(zs.Partition)
-	if partitionName != "" {
-		if index.GetPartitioning().FindPartitionByName(partitionName) == nil {
-			return nil, "", fmt.Errorf("partition %q does not exist on index %q", partitionName, indexName)
-		}
-	}
-
-	return index, partitionName, nil
-}
-
-func prepareRemovedPartitionZoneConfigs(
-	ctx context.Context,
-	txn descs.Txn,
-	tableDesc catalog.TableDescriptor,
-	indexID descpb.IndexID,
-	oldPart catalog.Partitioning,
-	newPart catalog.Partitioning,
-	execCfg *ExecutorConfig,
-) (*zoneConfigUpdate, error) {
-	newNames := map[string]struct{}{}
-	_ = newPart.ForEachPartitionName(func(newName string) error {
-		newNames[newName] = struct{}{}
-		return nil
-	})
-	removedNames := make([]string, 0, len(newNames))
-	_ = oldPart.ForEachPartitionName(func(oldName string) error {
-		if _, exists := newNames[oldName]; !exists {
-			removedNames = append(removedNames, oldName)
-		}
-		return nil
-	})
-	if len(removedNames) == 0 {
-		return nil, nil
-	}
-	zoneWithRaw, err := txn.Descriptors().GetZoneConfig(ctx, txn.KV(), tableDesc.GetID())
-	if err != nil {
-		return nil, err
-	}
-	if zoneWithRaw == nil {
-		zoneWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
-	}
-	for _, n := range removedNames {
-		zoneWithRaw.ZoneConfigProto().DeleteSubzone(uint32(indexID), n)
-	}
-	return prepareZoneConfigWrites(
-		ctx, execCfg, tableDesc.GetID(), tableDesc, zoneWithRaw.ZoneConfigProto(), zoneWithRaw.GetRawBytesInStorage(), false, /* hasNewSubzones */
-	)
-}
-
-func deleteRemovedPartitionZoneConfigs(
-	ctx context.Context,
-	txn descs.Txn,
-	tableDesc catalog.TableDescriptor,
-	indexID descpb.IndexID,
-	oldPart catalog.Partitioning,
-	newPart catalog.Partitioning,
-	execCfg *ExecutorConfig,
-	kvTrace bool,
-) error {
-	update, err := prepareRemovedPartitionZoneConfigs(
-		ctx, txn, tableDesc, indexID, oldPart, newPart, execCfg,
-	)
-	if update == nil || err != nil {
-		return err
-	}
-	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }

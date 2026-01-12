@@ -196,7 +196,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
            rolname           | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ----------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_role_canlogin | f        | t          | f             | f           | f           | f              | f            |           -1 |             | 
-+ regress_test_role_canlogin | f        | t          | f             | f           | t           | f              | f            |           -1 | ********    | 
++ regress_test_role_canlogin | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
  (1 row)
  
  ALTER ROLE regress_test_role_canlogin WITH LOGIN;
@@ -229,7 +229,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/roleattributes.ou
            rolname           | rolsuper | rolinherit | rolcreaterole | rolcreatedb | rolcanlogin | rolreplication | rolbypassrls | rolconnlimit | rolpassword | rolvaliduntil 
  ----------------------------+----------+------------+---------------+-------------+-------------+----------------+--------------+--------------+-------------+---------------
 - regress_test_user_canlogin | f        | t          | f             | f           | t           | f              | f            |           -1 |             | 
-+ regress_test_user_canlogin | f        | t          | f             | f           | f           | f              | f            |           -1 | ********    | 
++ regress_test_user_canlogin | f        | t          | f             | f           | t           | f              | f            |           -1 | ********    | 
  (1 row)
  
  ALTER USER regress_test_user_canlogin WITH NOLOGIN;

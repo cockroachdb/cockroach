@@ -75,6 +75,7 @@ go_library(
         "//pkg/sql/sqlliveness",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/sql/zoneconfig",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bulk",

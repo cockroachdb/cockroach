@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/errors"
 )
 
@@ -298,7 +298,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, errors.AssertionFailedf("unknown named zone config %s", name)
 	}
 
-	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(
+	zoneConfig, err := zoneconfig.GetHydratedForNamedZone(
 		ctx, txn, s.txn.Descriptors(), name,
 	)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		return nil, nil
 	}
 
-	zone, err := sql.GetHydratedZoneConfigForTable(
+	zone, err := zoneconfig.GetHydratedForTable(
 		ctx, txn, s.txn.Descriptors(), table.GetID(),
 	)
 	if err != nil {
@@ -651,7 +651,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 		//      emulate. As for what config to apply over said range -- we do as
 		//      the system config span does, applying the config for the system
 		//      database.
-		zone, err := sql.GetHydratedZoneConfigForDatabase(
+		zone, err := zoneconfig.GetHydratedForDatabase(
 			ctx, s.txn.KV(), s.txn.Descriptors(), keys.SystemDatabaseID,
 		)
 		if err != nil {
@@ -690,7 +690,7 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 			continue // nothing to do
 		}
 
-		zone, err := sql.GetHydratedZoneConfigForDatabase(
+		zone, err := zoneconfig.GetHydratedForDatabase(
 			ctx, s.txn.KV(), s.txn.Descriptors(), keys.RootNamespaceID,
 		)
 		if err != nil {
