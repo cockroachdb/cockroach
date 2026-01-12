@@ -191,7 +191,7 @@ func main() {
 	}
 
 	// Search for PRs.
-	prNumbers, err := searchItems(*searchQuery, "pr", *limit)
+	prNumbers, err := searchItems(*searchQuery, "pr", *limit, contribAfter, contribBefore)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error searching PRs: %v\n", err)
 		os.Exit(1)
@@ -236,7 +236,7 @@ func main() {
 
 	// Search for issues if requested.
 	if *includeIssues {
-		issueNumbers, err := searchItems(*searchQuery, "issue", *limit)
+		issueNumbers, err := searchItems(*searchQuery, "issue", *limit, contribAfter, contribBefore)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error searching issues: %v\n", err)
 			os.Exit(1)
@@ -297,10 +297,28 @@ func extractAuthors(query string) []string {
 	return authors
 }
 
-func searchItems(query string, itemType string, limit int) ([]int, error) {
+func searchItems(query string, itemType string, limit int, after, before time.Time) ([]int, error) {
 	// Use gh api directly because `gh search prs` with multiple --author flags
 	// AND's them together instead of OR'ing them like the web UI does.
 	fullQuery := query + " is:" + itemType
+
+	// Apply API-level date filtering with care to avoid data loss.
+	//
+	// GitHub's "updated:" field captures ANY activity (comments, labels, reviews),
+	// while our contribution dates track specific events (pushes for PRs, tracked
+	// author activity for issues). Since updated >= contribution (always), we can
+	// safely use "updated:>=after" as an optimization.
+	//
+	// For the upper bound, we use "created:<before" which filters by when the PR/issue
+	// was opened. Note: This may exclude PRs where commits were pushed before the cutoff
+	// but the PR was created after (e.g., commits on a branch, PR opened later). This is
+	// an acceptable trade-off for reducing API results.
+	if !after.IsZero() {
+		fullQuery += fmt.Sprintf(" updated:>=%s", after.Format("2006-01-02"))
+	}
+	if !before.IsZero() {
+		fullQuery += fmt.Sprintf(" created:<%s", before.Format("2006-01-02"))
+	}
 
 	var allNumbers []int
 	page := 1
