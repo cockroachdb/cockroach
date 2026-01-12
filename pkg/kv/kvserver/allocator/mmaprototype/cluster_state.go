@@ -2588,11 +2588,7 @@ func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 }
 
 func computeLoadSummary(
-	ctx context.Context,
-	ss *storeState,
-	ns *nodeState,
-	msl *meanStoreLoad,
-	mnl *meanNodeLoad,
+	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	sls := loadLow
 	var dimSummary [NumLoadDimensions]loadSummary
