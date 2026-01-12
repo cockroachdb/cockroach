@@ -354,12 +354,17 @@ func BenchmarkTimestampString(b *testing.B) {
 //
 // Performance regression triage notes:
 //
-// The function under test is a one-line comparison with the empty struct. We
-// have a TODO in which additional invariants may allow us to compare a single
-// struct field with zero.
+// We've changed the function under test between the following two different
+// implementations:
 //
-// However, until then, this benchmark is mostly informing us about changes in
-// the Go compiler and changes are unlikely to be actionable.
+//	t == Timestamp{}
+//
+// and
+//
+//	t.WallTime == 0 && t.Logical == 0
+//
+// a few times based on this benchmark. If we find ourselves changing it again,
+// consider deleting the benchmark instead.
 func BenchmarkTimestampIsEmpty(b *testing.B) {
 	cases := map[string]Timestamp{
 		"empty":    {},
