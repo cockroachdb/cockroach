@@ -172,9 +172,6 @@ func StartBackupRestoreTestCluster(
 		const payloadSize = 100
 		splits := 10
 		numAccounts := opts.bankArgs.numAccounts
-		if numAccounts == 0 {
-			splits = 0
-		}
 		bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 
 		// Lower the initial buffering adder ingest size to allow

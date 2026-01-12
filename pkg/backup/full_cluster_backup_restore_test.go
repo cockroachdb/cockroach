@@ -610,7 +610,7 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
@@ -846,7 +846,7 @@ func TestDropDatabaseRevisionHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
@@ -877,7 +877,7 @@ func TestClusterRevisionHistory(t *testing.T) {
 	ts := make([]string, 6)
 
 	var tc testCase
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	sqlDB.Exec(t, `CREATE DATABASE d1`)
