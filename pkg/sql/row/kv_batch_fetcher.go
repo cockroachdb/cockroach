@@ -49,10 +49,11 @@ func getKVBatchSize(forceProductionKVBatchSize bool) rowinfra.KeyLimit {
 	return defaultKVBatchSize
 }
 
-var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestValue(
+var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestRange(
 	"kv-batch-size",
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
-	1,                                   /* metamorphicValue */
+	1,                                   /* min */
+	100,                                 /* max */
 ))
 
 // elasticCPUDurationPerLowPriReadResponse controls how many CPU tokens are allotted

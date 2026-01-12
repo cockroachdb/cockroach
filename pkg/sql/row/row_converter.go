@@ -257,10 +257,11 @@ type DatumRowConverter struct {
 	db *kv.DB
 }
 
-var kvDatumRowConverterBatchSize = metamorphic.ConstantWithTestValue(
+var kvDatumRowConverterBatchSize = metamorphic.ConstantWithTestRange(
 	"datum-row-converter-batch-size",
 	5000, /* defaultValue */
-	1,    /* metamorphicValue */
+	1,    /* min */
+	100,  /* max */
 )
 
 const kvDatumRowConverterBatchMemSize = 4 << 20
