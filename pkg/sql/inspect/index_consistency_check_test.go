@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -143,6 +144,9 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				},
 				GCJob: &sql.GCJobTestingKnobs{
 					SkipWaitingForMVCCGC: true,
+				},
+				SQLEvalContext: &eval.TestingKnobs{
+					ForceProductionValues: true,
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
