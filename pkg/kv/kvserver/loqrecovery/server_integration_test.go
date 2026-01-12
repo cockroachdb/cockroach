@@ -59,8 +59,9 @@ func TestReplicaCollection(t *testing.T) {
 	defer listenerReg.Close()
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			StoreSpecs: []base.StoreSpec{{InMemory: true}},
-			Insecure:   true,
+			DefaultDRPCOption: base.TestDRPCDisabled,
+			StoreSpecs:        []base.StoreSpec{{InMemory: true}},
+			Insecure:          true,
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,

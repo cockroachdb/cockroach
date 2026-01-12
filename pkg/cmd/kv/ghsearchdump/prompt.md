@@ -29,10 +29,11 @@ Write from a team portfolio perspective, not a git log:
 - Write in narrative prose, not bullet lists or per-person summaries
 - **Structure by epic/workstream**: Organize into separate paragraphs—one for each major epic or workstream. This helps leadership quickly understand progress on different initiatives.
 - Sound like a human wrote it: avoid PR counts, percentages, or saying "X of Y were..." Use natural phrasing like "substantial effort", "primary focus", "considerable time"
-- Use inline markdown links for Jira compatibility: `[#12345](https://github.com/...)`
+- Use inline markdown links for Jira compatibility: `[#12345](https://github.com/cockroachdb/cockroach/pull/12345)`
 - **Cite PRs comprehensively as proof points**: Each technical claim should be backed by PR links. More PR links is better—they serve as evidence that work was actually completed. Group related PRs thematically in parentheses: `([#123](url), [#456](url), [#789](url))`. This lets readers verify claims and understand the scope of work.
 - Extract Epic IDs using `/Epic[:\s]+CRDB-(\d+)/i` to identify major workstreams
 - Skip bot comments, CI noise, and mechanical changes
+- **Output format**: Provide the final summary in a markdown code block (triple backticks with `markdown` language tag) so the user can easily copy-paste the raw markdown text with proper link formatting intact
 
 **Tone**: Technical but accessible for cross-functional leadership. Write like you're giving a portfolio update to stakeholders who need to understand:
 - What business value was delivered
