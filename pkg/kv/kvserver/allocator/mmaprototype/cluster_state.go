@@ -1295,16 +1295,16 @@ type clusterState struct {
 	mmaid int // a counter for rebalanceStores calls, for logging
 
 	// Disk utilization thresholds from cluster settings. These are set via
-	// SetDiskUtilThresholds and used by updateStoreStatuses and
-	// computeLoadSummary.
+	// SetDiskUtilThresholds to determine the store disposition.
 	//
-	// Note: SMA uses these thresholds differently:
-	// - 0.925 (RebalanceToThreshold): for rebalancing targets
-	// - 0.95 (ShedAndBlockAllThreshold): for allocation targets (e.g.
+	// SMA uses these thresholds:
+	// - 0.925 (rebalance_to_max_disk_utilization_threshold): for rebalancing
+	// targets
+	// - 0.95 (max_disk_utilization_threshold): for allocation targets (e.g.
 	// under-replicated ranges) AND for shedding decisions
 	//
-	// If MMA ever handles allocation of necessary replicas, we'd need to add
-	// a similar distinction.
+	// TODO(mma): If MMA ever handles allocation of necessary replicas, we'd need
+	// to add max_disk_utilization_threshold for allocation targets.
 	//
 	// Stores >= this threshold will refuse new replicas.
 	diskUtilRefuseThreshold float64
