@@ -102,6 +102,7 @@ func (o *profiler) maybeTakeProfile(
 	}
 
 	takeProfile := thresholdValue > o.highWaterMark
+	takeProfile = true
 	if hook := o.knobs.maybeTakeProfileHook; hook != nil {
 		hook(takeProfile)
 	}

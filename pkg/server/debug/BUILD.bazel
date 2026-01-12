@@ -47,7 +47,8 @@ go_library(
 
 go_test(
     name = "debug_test",
-    size = "small",
+    # N.B. TestOneMillionGorosProfile needs ~15 sec on average on m1pro, so we make the timeout "medium".
+    size = "medium",
     srcs = [
         "debug_test.go",
         "logspy_test.go",
@@ -61,8 +62,11 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/server/apiconstants",
         "//pkg/server/srvtestutils",
+        "//pkg/storage/storageconfig",
         "//pkg/testutils",
+        "//pkg/testutils/goroutines",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",

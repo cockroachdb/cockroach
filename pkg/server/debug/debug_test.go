@@ -8,15 +8,29 @@ package debug_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/goroutines"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // debugURL returns the root debug URL.
@@ -227,4 +241,158 @@ func TestAdminDebugRedirect(t *testing.T) {
 	} else if foundURL := redirectURL.String(); foundURL != expURL.String() {
 		t.Errorf("expected location %s; got %s", expURL, foundURL)
 	}
+}
+
+func TestOneMillionGorosProfile(t *testing.T) {
+	logScope := log.Scope(t)
+
+	//defer leaktest.AfterTest(t)()
+	defer logScope.Close(t)
+
+	ctx := context.Background()
+
+	var h *goroutines.Handle
+	opts := goroutines.Options{
+		Initial:    10_000,
+		Max:        1_200_000, // leave headroom for “doubling” trigger
+		SpawnBatch: 20000,
+		Name:       "pprof-debug2-stress",
+	}
+
+	args := base.TestServerArgs{}
+	args.Knobs.Server = &server.TestingKnobs{
+		GoroutineMixer:            &opts,
+		GoroutineMixerHandle:      &h,
+		EnvironmentSampleInterval: 1 * time.Second,
+	}
+	var myStoreSpec = storageconfig.Store{
+		InMemory: true,
+		Size:     storageconfig.BytesSize(512 << 20),
+		Path:     logScope.GetDirectory(),
+	}
+	args.StoreSpecs = []base.StoreSpec{myStoreSpec}
+
+	s, db, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(ctx)
+	defer db.Close()
+
+	require.NotNil(t, h)
+
+	_, err := db.Exec("select 1")
+	require.NoError(t, err)
+
+	h.GrowBy(40_000) // total 50_000
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 50_000 {
+			return errors.Errorf("expected 50_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	h.Double() // triggers internal dumper-on-doubling scenarios
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 100_000 {
+			return errors.Errorf("expected 100_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	h.Double()
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 200_000 {
+			return errors.Errorf("expected 200_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	h.GrowBy(50_000) // total 250_000
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 250_000 {
+			return errors.Errorf("expected 250_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	h.Double()
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 500_000 {
+			return errors.Errorf("expected 500_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	h.Double()
+
+	testutils.SucceedsSoon(t, func() error {
+		if h.Running() != 1_000_000 {
+			return errors.Errorf("expected 1_000_000 running goroutines, got %d", h.Running())
+		}
+		return nil
+	})
+
+	time.Sleep(5 * time.Second)
+
+	body, err := srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	require.NoError(t, err)
+	fmt.Println(getMetric(body, "sys_go_stop_other_ns"))
+
+	ts := s.ApplicationLayer()
+	start := time.Now()
+	body, err = getText(ts, debugURL(ts, "pprof/goroutine?debug=3").String())
+	require.NoError(t, err)
+	fmt.Printf("Profile length: %d, elapsed time: %s\n", len(body), time.Since(start))
+
+	profilePath := filepath.Join(logScope.GetDirectory(), "goroutine_dump_test_profile.txt")
+	err = os.WriteFile(profilePath, body, 0644)
+	require.NoError(t, err)
+
+	body, err = srvtestutils.GetText(s, s.AdminURL().WithPath(apiconstants.StatusPrefix+"vars").String())
+	require.NoError(t, err)
+	fmt.Println(getMetric(body, "sys_go_stop_other_ns"))
+
+	t.Fatalf("foo")
+
+	// ... now hit /debug/pprof/goroutine?debug=2 etc ...
+}
+
+// grep -E -v "HELP|TYPE" | grep metricName | awk '{print $2}'
+func getMetric(body []byte, metricName string) []string {
+	lines := strings.Split(string(body), "\n")
+	// Equivalent to: grep -E -v "HELP|TYPE" (but only for prometheus comment lines)
+	helpType := regexp.MustCompile(`^#\s*(?:HELP|TYPE)\b`)
+
+	out := make([]string, 0)
+	for _, line := range lines {
+		if helpType.MatchString(line) {
+			continue
+		}
+		if !strings.Contains(line, metricName) {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			out = append(out, fields[1])
+		}
+	}
+	return out
+}
+
+func getText(ts serverutils.ApplicationLayerInterface, url string) ([]byte, error) {
+	httpClient, err := ts.GetAdminHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	httpClient.Timeout = 5 * time.Minute
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
 }

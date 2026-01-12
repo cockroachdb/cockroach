@@ -182,18 +182,18 @@ load(
 
 # To point to a mirrored artifact, use:
 #
-go_download_sdk(
-    name = "go_sdk",
-    sdks = {
-        "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "0534a17eb0439fe1ce77d73d5c170d42bdb763af8bd60784afb4259aad51a369"),
-        "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "faac0835485699e8c755b7a3ada19cbcf8d36675bd51b5d6e9b7e8797a9bceef"),
-        "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "903e27384a71950a258612f0b9f7802669b262dd42f1b2d4273fbf1669d2c36d"),
-        "linux_s390x": ("go1.25.5.linux-s390x.tar.gz", "bfa50568f4166af6cc37df9aa461d3133cd508d4bf1d268948eca817a337ff36"),
-        "windows_amd64": ("go1.25.5.windows-amd64.tar.gz", "d77b014c0c6a7a9cf4d8e830d146a537ae885447b9b018e11d41e087d9e724ae"),
-    },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251216-001242/{}"],
-    version = "1.25.5",
-)
+#go_download_sdk(
+#    name = "go_sdk",
+#    sdks = {
+#        "darwin_arm64": ("go1.25.5.darwin-arm64.tar.gz", "0534a17eb0439fe1ce77d73d5c170d42bdb763af8bd60784afb4259aad51a369"),
+#        "linux_amd64": ("go1.25.5.linux-amd64.tar.gz", "faac0835485699e8c755b7a3ada19cbcf8d36675bd51b5d6e9b7e8797a9bceef"),
+#        "linux_arm64": ("go1.25.5.linux-arm64.tar.gz", "903e27384a71950a258612f0b9f7802669b262dd42f1b2d4273fbf1669d2c36d"),
+#        "linux_s390x": ("go1.25.5.linux-s390x.tar.gz", "bfa50568f4166af6cc37df9aa461d3133cd508d4bf1d268948eca817a337ff36"),
+#        "windows_amd64": ("go1.25.5.windows-amd64.tar.gz", "d77b014c0c6a7a9cf4d8e830d146a537ae885447b9b018e11d41e087d9e724ae"),
+#    },
+#    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251216-001242/{}"],
+#    version = "1.25.5",
+#)
 
 # To point to a local SDK path, use the following instead. We'll call the
 # directory into which you cloned the Go repository $GODIR[1]. You'll have to
@@ -201,10 +201,10 @@ go_download_sdk(
 #
 # [1]: https://go.dev/doc/contribute#testing
 #
-#   go_local_sdk(
-#       name = "go_sdk",
-#       path = "<path to $GODIR>",
-#   )
+go_local_sdk(
+       name = "go_sdk",
+       path = "/Users/srosenberg/workspace/go/src/github.com/cockroachdb/go",
+)
 
 # To use your whatever your local SDK is, use the following instead:
 #

@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "goroutines",
+    srcs = ["goroutinesmixer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/goroutines",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/ctxgroup",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "goroutines_test",
+    srcs = ["goroutinesmixer_test.go"],
+    embed = [":goroutines"],
+    deps = [
+        "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

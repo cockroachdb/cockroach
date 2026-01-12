@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/goroutines"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -289,6 +290,15 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if storeSpec.Size.IsPercent() {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
 			}
+			//if storeSpec.Path != "" && cfg.GoroutineDumpDirName == "" {
+			//	cfg.GoroutineDumpDirName = filepath.Join(storeSpec.Path, "logs", base.GoroutineDumpDir)
+			//}
+			//if storeSpec.Path != "" && cfg.CPUProfileDirName == "" {
+			//	cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
+			//}
+			//if storeSpec.Path != "" && cfg.HeapProfileDirName == "" {
+			//	cfg.HeapProfileDirName = filepath.Join(storeSpec.Path, "logs", base.HeapProfileDir)
+			//}
 		} else {
 			// The default store spec is in-memory, so if this one is on-disk then
 			// one specific test must have requested it. A failure is returned if
@@ -901,6 +911,18 @@ func (ts *testServer) Activate(ctx context.Context) error {
 	if ts.StartedDefaultTestTenant() {
 		if err := maybeRunVersionUpgrade(ts.TestTenant()); err != nil {
 			return err
+		}
+	}
+
+	if knobs := ts.TestingKnobs().Server; knobs != nil {
+		if knobs.(*TestingKnobs).GoroutineMixer != nil {
+			h, err := goroutines.Start(ctx, ts.stopper, *knobs.(*TestingKnobs).GoroutineMixer)
+			if err != nil {
+				return err
+			}
+			if knobs.(*TestingKnobs).GoroutineMixerHandle != nil {
+				*knobs.(*TestingKnobs).GoroutineMixerHandle = h
+			}
 		}
 	}
 
