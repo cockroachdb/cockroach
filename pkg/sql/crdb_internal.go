@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -4773,7 +4774,7 @@ CREATE TABLE crdb_internal.zones (
 			// Inherit full information about this zone.
 			fullZone := configProto
 			zcHelper := descs.AsZoneConfigHydrationHelper(p.Descriptors())
-			if err := completeZoneConfig(
+			if err := zoneconfig.Complete(
 				ctx, &fullZone, p.Txn(), zcHelper, descpb.ID(tree.MustBeDInt(r[0])),
 			); err != nil {
 				return err
@@ -5336,7 +5337,7 @@ func addPartitioningRows(
 		nameDString := tree.NewDString(name)
 
 		// Figure out which zone and subzone this partition should correspond to.
-		zoneID, zone, subzone, err := GetZoneConfigInTxn(
+		zoneID, zone, subzone, err := zoneconfig.GetInTxn(
 			ctx, p.txn, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
@@ -5392,7 +5393,7 @@ func addPartitioningRows(
 		partitionRange := tree.NewDString(buf.String())
 
 		// Figure out which zone and subzone this partition should correspond to.
-		zoneID, zone, subzone, err := GetZoneConfigInTxn(
+		zoneID, zone, subzone, err := zoneconfig.GetInTxn(
 			ctx, p.txn, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err

@@ -128,6 +128,7 @@ go_library(
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/ttl/ttlinit",
         "//pkg/sql/types",
+        "//pkg/sql/zoneconfig",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",

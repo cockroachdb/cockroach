@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -470,17 +471,17 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// config that exists on targetID and instead skip to the inherited
 		// default (whichever applies -- a database if targetID is a table,
 		// default if targetID is a database, etc.). For this, we use the last
-		// parameter getInheritedDefault to GetZoneConfigInTxn().
+		// parameter getInheritedDefault to zoneconfig.GetInTxn().
 		// These zones are only used for validations. The merged zone will
 		// not be written.
-		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
+		_, completeZone, completeSubzone, err := zoneconfig.GetInTxn(
 			params.ctx, params.p.txn, params.p.Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
 		if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 			// No zone config yet.
 			//
-			// GetZoneConfigInTxn will fail with ErrNoZoneConfigApplies when
+			// zoneconfig.GetInTxn will fail with ErrNoZoneConfigApplies when
 			// the target ID is not a database object, i.e. one of the system
 			// ranges (liveness, meta, etc.), and did not have a zone config
 			// already.
@@ -506,7 +507,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
-				if err := completeZoneConfig(
+				if err := zoneconfig.Complete(
 					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
@@ -516,7 +517,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// If we are operating on a subZone, we need to inherit all remaining
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
-				if err := completeZoneConfig(
+				if err := zoneconfig.Complete(
 					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
@@ -659,7 +660,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				}
 			} else {
 				// If the zone config for targetID was a subzone placeholder, it'll have
-				// been skipped over by GetZoneConfigInTxn. We need to load it regardless
+				// been skipped over by zoneconfig.GetInTxn. We need to load it regardless
 				// to avoid blowing away other subzones.
 
 				// TODO(ridwanmsharif): How is this supposed to change? getZoneConfigRaw

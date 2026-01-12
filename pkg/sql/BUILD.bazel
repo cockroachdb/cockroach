@@ -296,8 +296,7 @@ go_library(
         "window.go",
         "zero.go",
         "zigzag_join.go",
-        "zone_config.go",
-        "zone_config_helper.go",
+        "zone_config_planner.go",
         ":gen-advancecode-stringer",  # keep
         ":gen-distsqlblocker-stringer",  # keep
         ":gen-nodestatus-stringer",  # keep
@@ -558,6 +557,7 @@ go_library(
         "//pkg/sql/vecindex/vecsettings",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/sql/vtable",
+        "//pkg/sql/zoneconfig",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/upgrade",
@@ -778,7 +778,6 @@ go_test(
         "values_test.go",
         "virtual_schema_test.go",
         "virtual_table_test.go",
-        "zone_config_test.go",
         "zone_test.go",
     ],
     data = glob(["testdata/**"]) + [

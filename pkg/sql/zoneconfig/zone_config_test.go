@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package sql_test
+package zoneconfig_test
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -139,7 +139,7 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sqltestutils.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
+				_, zoneCfg, subzone, err := zoneconfig.GetInTxn(
 					ctx, txn.KV(), col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
@@ -377,7 +377,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sqltestutils.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
+				_, zoneCfg, subzone, err := zoneconfig.GetInTxn(
 					ctx, txn.KV(), col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
