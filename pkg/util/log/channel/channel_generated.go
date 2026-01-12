@@ -148,3 +148,6 @@ const CHANGEFEED = logpb.Channel_CHANGEFEED
 // KV_EXEC is used to report KV execution events that don't fall into the
 // KV_DISTRIBUTION channel.
 const KV_EXEC = logpb.Channel_KV_EXEC
+
+// SQL_STATS is used to report SQL statistics collection events
+const SQL_STATS = logpb.Channel_SQL_STATS

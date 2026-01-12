@@ -19,5 +19,6 @@ var channels = map[string]struct{}{
 	"KV_DISTRIBUTION": {},
 	"CHANGEFEED": {},
 	"KV_EXEC": {},
+	"SQL_STATS": {},
 	"CHANNEL_MAX": {},
 }
