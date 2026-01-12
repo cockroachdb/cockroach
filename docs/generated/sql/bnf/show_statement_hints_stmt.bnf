@@ -1,0 +1,2 @@
+show_statement_hints_stmt ::=
+	'SHOW' 'STATEMENT' 'HINTS' 'FOR' string_or_placeholder opt_with_show_hints_options
