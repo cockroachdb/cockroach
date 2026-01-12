@@ -49,7 +49,6 @@ const (
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
 	FIPSImageProject    = "ubuntu-os-pro-cloud"
-	ManagedLabel        = "managed"
 
 	// These values limit concurrent `gcloud` CLI operations, and command
 	// length, to avoid overwhelming the API when managing large clusters. The
@@ -1537,7 +1536,7 @@ func computeLabelsArg(opts vm.CreateOpts, providerOpts *ProviderOpts) (string, e
 	}
 
 	if providerOpts.Managed {
-		addLabel(ManagedLabel, "true")
+		addLabel(vm.TagManaged, "true")
 	}
 
 	if providerOpts.UseSpot {
@@ -3059,7 +3058,7 @@ func deleteInstanceTemplate(project, templateName string) error {
 // This function makes the assumption that a cluster is either completely
 // managed or not at all.
 func isManaged(vms vm.List) bool {
-	return vms[0].Labels[ManagedLabel] == "true"
+	return vms[0].Labels[vm.TagManaged] == "true"
 }
 
 // Delete is part of the vm.Provider interface.
@@ -3329,7 +3328,7 @@ func (p *Provider) List(
 			}
 			for _, template := range templates {
 				// Skip templates that are not marked as managed.
-				if managed, ok := template.Properties.Labels[ManagedLabel]; !(ok && managed == "true") {
+				if managed, ok := template.Properties.Labels[vm.TagManaged]; !(ok && managed == "true") {
 					continue
 				}
 				// There can be multiple dangling templates for the same cluster. We
