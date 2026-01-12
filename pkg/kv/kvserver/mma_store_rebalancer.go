@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -48,18 +47,16 @@ type mmaStoreRebalancer struct {
 	store *mmaStore
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
-	sp    *storepool.StorePool
 	as    *mmaintegration.AllocatorSync
 }
 
 func newMMAStoreRebalancer(
-	s *Store, mma mmaprototype.Allocator, st *cluster.Settings, sp *storepool.StorePool,
+	s *Store, mma mmaprototype.Allocator, st *cluster.Settings,
 ) *mmaStoreRebalancer {
 	return &mmaStoreRebalancer{
 		store: (*mmaStore)(s),
 		mma:   mma,
 		st:    st,
-		sp:    sp,
 		as:    s.cfg.AllocatorSync,
 	}
 }
@@ -128,6 +125,7 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 // rebalance may return true if errors happen in the process and fail to apply
 // the changes successfully.
 func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) bool {
+	m.mma.UpdateStoresStatuses(ctx, m.as.GetMMAStoreStatuses())
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {

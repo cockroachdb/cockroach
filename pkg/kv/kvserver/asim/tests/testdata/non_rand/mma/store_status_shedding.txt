@@ -1,0 +1,53 @@
+# This test verifies MMA's write bandwidth rebalancing respects store status.
+#
+# Setup: 4 nodes, 40 ranges (RF=3). All replicas start on s1,s2,s3 with s1
+# as leaseholder. s4 starts dead. Heavy write load (~19 MiB/s) creates
+# pressure on all replicas. Replicate queue is disabled to isolate MMA behavior.
+#
+# Write bandwidth affects ALL replicas (not just leaseholder), so MMA should
+# move replicas to balance write load. However, since s4 is dead, MMA should
+# NOT move replicas there.
+#
+# Expected: MMA should avoid moving replicas to s4 (dead store).
+gen_cluster nodes=4
+----
+
+setting split_queue_enabled=false
+----
+
+setting replicate_queue_enabled=false
+----
+
+# All ranges start on s1,s2,s3 with s1 as leaseholder. s4 has no replicas.
+gen_ranges ranges=40 placement_type=replica_placement
+{s1:*,s2,s3}:40
+----
+{s1:*,s2,s3}:40
+
+# Write-heavy workload (rw_ratio=0 means 100% writes).
+# High write bandwidth creates pressure on ALL replicas, not just leaseholder.
+# This forces MMA to move replicas, not just leases.
+gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000
+----
+19 MiB/s goodput
+
+# Node 4 becomes dead.
+set_status node=4 liveness=dead 
+----
+
+# Assert s4 (dead) should have 0 replicas.
+assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(4)
+----
+
+eval duration=6m seed=42 metrics=(replicas,leases,write_bytes_per_second) cfgs=(mma-only)
+----
+leases#1: first: [s1=40, s2=0, s3=0, s4=0] (stddev=17.32, mean=10.00, sum=40)
+leases#1: last:  [s1=40, s2=0, s3=0, s4=0] (stddev=17.32, mean=10.00, sum=40)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%]  (sum=0%)
+replicas#1: first: [s1=40, s2=40, s3=40, s4=0] (stddev=17.32, mean=30.00, sum=120)
+replicas#1: last:  [s1=40, s2=40, s3=40, s4=0] (stddev=17.32, mean=30.00, sum=120)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%]  (sum=0%)
+write_bytes_per_second#1: last:  [s1=19999999, s2=19999999, s3=19999999, s4=0] (stddev=8660253.60, mean=14999999.25, sum=59999997)
+write_bytes_per_second#1: thrash_pct: [s1=27020%, s2=27020%, s3=27020%, s4=0%]  (sum=81060%)
+artifacts[mma-only]: 9bd6f2a583adcd74
+==========================

@@ -2180,16 +2180,10 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	if !ok {
 		// This is the first time seeing this store.
 		ss := newStoreState()
-		// TODO(tbg): below is what we should be doing once asim and production code actually
-		// have a way to update the health status. For now, we just set it to healthy initially
-		// and that's where it will stay (outside of unit tests).
-		//
-		// At this point, the store's health is unknown. It will need to be marked
-		// as healthy separately. Until we know more, we won't place leases or
-		// replicas on it (nor will we try to shed any that are already reported to
-		// have replicas on it).
-		// ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
-		ss.status = MakeStatus(HealthOK, LeaseDispositionOK, ReplicaDispositionOK)
+		// At this point, the store's health is unknown. It will be updated by cs.updateStoreStatuses. Until we know more, we
+		// won't place leases or replicas on it (nor will we try to shed any that
+		// are already reported to have replicas on it).
+		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
 		cs.stores[sal.StoreID] = ss
@@ -2213,6 +2207,23 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 		cs.stores[sal.StoreID].localityTiers = cs.localityTierInterner.intern(loc)
 		cs.stores[sal.StoreID].storeAttributesAndLocalityWithNodeTier = sal
 		cs.constraintMatcher.setStore(sal)
+	}
+}
+
+// updateStoreStatuses updates each known store's health and disposition from storeStatuses.
+// Stores unknown in mma yet but are known to store pool are ignored with logging.
+func (cs *clusterState) updateStoreStatuses(
+	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
+) {
+	for storeID, storeStatus := range storeStatuses {
+		if _, ok := cs.stores[storeID]; !ok {
+			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
+			// setStore when gossip arrives, and then subsequent status updates will
+			// take effect.
+			log.KvDistribution.Infof(ctx, "store %d not found in cluster state, skipping update", storeID)
+			continue
+		}
+		cs.stores[storeID].status = storeStatus
 	}
 }
 
@@ -2443,12 +2454,15 @@ func (cs *clusterState) canShedAndAddLoad(
 		// In other words, whenever a node level summary was "bumped up" beyond
 		// the target's by some other local store, we reject the change.
 		//
-		// TODO(tbg): While the example illustrates that "something had to be
-		// done", I don't understand why it makes sense to solve this exactly
-		// as it was done. The node level summary is based on node-wide CPU
-		// utilization as well as its distance from the mean (across the
-		// candidate set). Store summaries a) reflect the worst dimension, and
-		// b) on the CPU dimension are based on the store-apportioned capacity.
+		// TODO(tbg,wenyihu6): There's a conceptual mismatch in this comparison: nls
+		// is CPU-specific while sls is max over all dimensions. A more consistent
+		// approach would compare nls with dimSummary[CPURate]. However, using sls
+		// is more permissive (since dimSummary[CPURate] <= sls). If sls is elevated
+		// due to a non-CPU dimension (e.g., write bandwidth), the check passes more
+		// easily, allowing more transfers. This helps avoid situations where the
+		// source is overloaded and needs to shed load, but all potential targets
+		// are rejected by overly strict checks despite having capacity. For now,
+		// we lean toward permissiveness, but it's unclear if this is optimal.
 		targetSLS.nls <= targetSLS.sls
 	if canAddLoad {
 		return true
