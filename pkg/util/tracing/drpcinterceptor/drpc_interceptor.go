@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,7 +19,6 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcerr"
-	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
 
@@ -27,12 +27,11 @@ import (
 func ExtractSpanMetaFromDRPCCtx(
 	ctx context.Context, tracer *tracing.Tracer,
 ) (tracing.SpanMeta, error) {
-	md, ok := drpcmetadata.Get(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
-		// No metadata in the context, so no span information.
 		return tracing.SpanMeta{}, nil
 	}
-	return tracer.ExtractMetaFrom(tracing.MapCarrier{Map: md})
+	return tracer.ExtractMetaFrom(tracing.MetadataCarrier{MD: md})
 }
 
 // ServerInterceptor returns a drpcmux.UnaryServerInterceptor for tracing.
@@ -156,7 +155,7 @@ func ClientInterceptor(
 		defer clientSpan.Finish()
 
 		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectDRPCSpanMeta(ctx, tracer, clientSpan)
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		if invoker != nil {
@@ -199,7 +198,7 @@ func StreamClientInterceptor(
 		init(clientSpan)
 
 		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectDRPCSpanMeta(ctx, tracer, clientSpan)
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		str, err := streamer(ctx, rpc, enc, cc)

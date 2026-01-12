@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
-	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
 
@@ -558,7 +557,7 @@ func gatewayRequestRecoveryInterceptor(
 // MarkDRPCGatewayRequest annotates ctx so that downstream DRPC calls can
 // be recognized as originating from the DB Console HTTP gateway.
 func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
-	return drpcmetadata.Add(ctx, gwRequestKey, "true")
+	return metadata.AppendToOutgoingContext(ctx, gwRequestKey, "true")
 }
 
 // drpcGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
@@ -567,13 +566,18 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 func drpcGatewayRequestRecoveryInterceptor(
 	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
 ) (resp interface{}, err error) {
-	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
-		defer func() {
-			if p := recover(); p != nil {
-				logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
-				err = errors.New("an unexpected error occurred")
-			}
-		}()
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) == 1 && val[0] != "" {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+					// The gRPC gateway will put this message in the HTTP response to the client.
+					err = errors.New("an unexpected error occurred")
+				}
+			}()
+		}
 	}
 	resp, err = handler(ctx, req)
 	return resp, err
@@ -591,9 +595,12 @@ func drpcGatewayRequestCounterInterceptor(
 	cc *drpcclient.ClientConn,
 	invoker drpcclient.UnaryInvoker,
 ) error {
-	// Check if this request originated from the DRPC HTTP gateway
-	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
-		telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) == 1 && val[0] != "" {
+			telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+		}
 	}
 	return invoker(ctx, rpc, enc, in, out, cc)
 }
