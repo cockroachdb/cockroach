@@ -125,6 +125,9 @@ func Start(
 
 func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "capture-index-usage-stats", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		// Start the scheduler immediately.
 		timer := time.NewTimer(0 * time.Second)
 		defer timer.Stop()
