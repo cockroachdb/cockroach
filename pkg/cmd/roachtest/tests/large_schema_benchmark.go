@@ -320,7 +320,10 @@ func registerLargeSchemaIntrospectionBenchmark(r registry.Registry) {
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(500),
 		spec.VolumeType("pd-ssd"),
-		spec.GCEMachineType("n2-standard-16"),
+		// Use highmem variant for more memory per node (128 GB vs 64 GB for
+		// n2-standard-16). Large schema operations require significant memory
+		// for the descriptor lease manager and span config subscriber.
+		spec.GCEMachineType("n2-highmem-16"),
 	}
 
 	r.Add(registry.TestSpec{
@@ -380,9 +383,15 @@ func runLargeSchemaIntrospectionBenchmark(
 		"SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'",
 		"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'",
 		"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'",
-		"SET CLUSTER SETTING jobs.retention_time='1h'",
+		"SET CLUSTER SETTING jobs.retention_time='2h'",
 		"SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=1000",
 		"SET CLUSTER SETTING sql.schema.approx_max_object_count = 0",
+		// Auto stats job can starve out other jobs when there are many tables.
+		// See https://github.com/cockroachdb/cockroach/issues/149475.
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		// Increase the lease refresh limit to handle the large number of
+		// descriptors being created. The default (500) is too low for 1M tables.
+		"SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 50000",
 	}
 	for _, stmt := range clusterSettings {
 		_, err := conn.Exec(stmt)
