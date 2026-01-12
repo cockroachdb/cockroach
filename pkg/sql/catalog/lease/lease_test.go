@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -4001,36 +4002,130 @@ func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
 	ctx := context.Background()
 	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
 
+	var versionToBlock atomic.Int64
+	versionWaitCh := make(chan descpb.ID)
+	versionContinueCh := make(chan struct{})
 	ts, conn, _ := serverutils.StartServer(
 		t, base.TestServerArgs{
 			Settings: st,
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &lease.ManagerTestingKnobs{
+					TestingOnNewVersion: func(id descpb.ID) {
+						if versionToBlock.Load() == int64(id) {
+							versionWaitCh <- id
+							<-versionContinueCh
+						}
+					},
+				},
+			},
 		})
 	defer ts.Stopper().Stop(ctx)
 
 	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
-	// Populate leased descriptors with the new object.
+	// Populate leased descriptors with the new objects.
 	runner.Exec(t, "CREATE TABLE t1(n int)")
+	runner.Exec(t, "CREATE TABLE t3(n int)")
+	runner.Exec(t, "CREATE TABLE t4(n int)")
 	runner.Exec(t, "SHOW CREATE TABLE t1")
-	txn1 := runner.Begin(t)
-	_, err := txn1.Exec("SET autocommit_before_ddl=false")
-	require.NoError(t, err)
-	_, err = txn1.Exec("ALTER TABLE t1 RENAME TO t2;")
-	require.NoError(t, err)
-	txn2 := runner.Begin(t)
-	_, err = txn2.Exec("SET autocommit_before_ddl=false")
-	require.NoError(t, err)
-	_, err = txn2.Exec("SELECT 't1'::REGCLASS::OID")
-	require.NoError(t, err)
-	// Intentionally pause schema change jobs.
-	runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints='schemachanger.before.exec,newschemachanger.before.exec'")
-	// Expected due to the pause point, since we don't want to wait for one version.
-	require.Regexp(t, `pq: transaction committed but schema change aborted with error: \(XXUUU\): job \d+ was paused before it completed with reason: pause point.*`, txn1.Commit())
-	// Execute the rename, which has looked up the old name via
-	// a leased descriptor.
-	_, err = txn2.Exec("ALTER TABLE t1 RENAME TO t2;")
-	require.NotNilf(t, err, "expected error when renaming table with stale descriptor")
-	require.Regexp(t, `pq: restart transaction: the descriptor t1\(\d+\) has been renamed before timestamp.*`, err)
-	require.NoError(t, txn2.Rollback())
+	var tblID int64
+	r := runner.QueryRow(t, "SELECT 't3'::REGCLASS::OID")
+	r.Scan(&tblID)
 
+	// In the simple conflict case, both txn's are trying to rename
+	// the same object.
+	t.Run("simple-rename-conflict", func(t *testing.T) {
+		txn1 := runner.Begin(t)
+		_, err := txn1.Exec("SET autocommit_before_ddl=false")
+		require.NoError(t, err)
+		_, err = txn1.Exec("ALTER TABLE t1 RENAME TO t2;")
+		require.NoError(t, err)
+		txn2 := runner.Begin(t)
+		_, err = txn2.Exec("SET autocommit_before_ddl=false")
+		require.NoError(t, err)
+		_, err = txn2.Exec("SELECT 't1'::REGCLASS::OID")
+		require.NoError(t, err)
+		// Intentionally pause schema change jobs.
+		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints='schemachanger.before.exec,newschemachanger.before.exec'")
+		// Expected due to the pause point, since we don't want to wait for one version.
+		require.Regexp(t, `pq: transaction committed but schema change aborted with error: \(XXUUU\): job \d+ was paused before it completed with reason: pause point.*`, txn1.Commit())
+		// Execute the rename, which has looked up the old name via
+		// a leased descriptor.
+		_, err = txn2.Exec("ALTER TABLE t1 RENAME TO t2;")
+		require.NotNilf(t, err, "expected error when renaming table with stale descriptor")
+		require.Regexp(t, `pq: restart transaction: the descriptor t1\(\d+\) has been renamed before timestamp.*`, err)
+		require.NoError(t, txn2.Rollback())
+		runner.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints=''")
+	})
+
+	// In the stale lease conflict case, we have two renames impacting
+	// conflicting objects. The lease refresh is delayed, such that the
+	// second txn is not aware of the first rename.
+	t.Run("rename-stale-lease-conflict", func(t *testing.T) {
+		// Block updates to the tblID descriptor.
+		versionToBlock.Store(tblID)
+		defer versionToBlock.Store(0)
+		txn2ReadyCh := make(chan struct{})
+		grp := ctxgroup.WithContext(ctx)
+		grp.GoCtx(func(ctx context.Context) error {
+			txn1, err := conn.Begin()
+			if err != nil {
+				return err
+			}
+			_, err = txn1.Exec("SET autocommit_before_ddl=false")
+			if err != nil {
+				return err
+			}
+			_, err = txn1.Exec("ALTER TABLE t3 RENAME TO t5;")
+			if err != nil {
+				return err
+			}
+			// Wait for txn2 to have a read timestamp and populate its cache
+			// before we commit, ensuring txn2 sees stale state.
+			<-txn2ReadyCh
+			return txn1.Commit()
+		})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			// Allow the new version to fully propagate,
+			// once we are done.
+			defer close(versionContinueCh)
+			txn2, err := conn.Begin()
+			if err != nil {
+				return err
+			}
+			defer func() {
+				// Ensure we always clean up the transaction.
+				_ = txn2.Rollback()
+			}()
+			_, err = txn2.Exec("SET autocommit_before_ddl=false")
+			if err != nil {
+				return err
+			}
+			// Intentionally select stale information.
+			_, err = txn2.Exec("SHOW TABLES")
+			if err != nil {
+				return err
+			}
+			// Signal that txn2 has populated its cache and is ready.
+			close(txn2ReadyCh)
+			// Wait for the first rename to complete.
+			<-versionWaitCh
+			// Rename should encounter a retriable error.
+			_, err = txn2.Exec("ALTER TABLE t4 RENAME TO t3;")
+			if err == nil {
+				return errors.AssertionFailedf("expected error when renaming table with stale descriptor")
+			}
+			matched, err := regexp.MatchString(`pq: restart transaction: the descriptor t3\(\d+\) has been renamed before timestamp.*`,
+				err.Error())
+			if err != nil {
+				return err
+			}
+			if !matched {
+				return errors.Wrapf(err, "expected retry error when renaming table with stale descriptor")
+			}
+			return nil
+		})
+		require.NoError(t, grp.Wait())
+	})
 }
