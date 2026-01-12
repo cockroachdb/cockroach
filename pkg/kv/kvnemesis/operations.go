@@ -396,7 +396,7 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 		if iter.RangeKeyChanged() {
 			hasPoint, hasRange := iter.HasPointAndRange()
 			if hasRange {
-				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+				for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					mvccValue, err := storage.DecodeMVCCValue(rkv.Value)
 					if err != nil {
 						panic(err)
