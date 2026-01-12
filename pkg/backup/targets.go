@@ -374,6 +374,7 @@ func selectTargets(
 	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
+	grants bool,
 ) (
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
@@ -393,26 +394,28 @@ func selectTargets(
 		return tables, dbs, patterns, nil, err
 	}
 
-	if descriptorCoverage == tree.SystemUsers {
-		systemTables := make([]catalog.Descriptor, 0)
+	userSystemTables := make([]catalog.Descriptor, 0)
+	if descriptorCoverage == tree.SystemUsers || grants {
 		var users catalog.Descriptor
 		for _, desc := range allDescs {
 			if desc.GetParentID() == systemschema.SystemDB.GetID() {
 				switch desc.GetName() {
 				case systemschema.UsersTable.GetName():
 					users = desc
-					systemTables = append(systemTables, desc)
+					userSystemTables = append(userSystemTables, desc)
 				case systemschema.RoleMembersTable.GetName():
-					systemTables = append(systemTables, desc)
+					userSystemTables = append(userSystemTables, desc)
 				case systemschema.RoleOptionsTable.GetName():
-					systemTables = append(systemTables, desc)
+					userSystemTables = append(userSystemTables, desc)
 				}
 			}
 		}
 		if users == nil {
 			return nil, nil, nil, nil, errors.Errorf("cannot restore system users as no system.users table in the backup")
 		}
-		return systemTables, nil, nil, nil, nil
+		if descriptorCoverage == tree.SystemUsers {
+			return userSystemTables, nil, nil, nil, nil
+		}
 	}
 
 	if targets.TenantID.IsSet() {
@@ -440,6 +443,10 @@ func selectTargets(
 		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
 			return nil, nil, nil, nil, err
 		}
+	}
+
+	for _, desc := range userSystemTables {
+		matched.Descs = append(matched.Descs, desc)
 	}
 
 	return matched.Descs, matched.RequestedDBs, matched.DescsByTablePattern, nil, nil

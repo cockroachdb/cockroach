@@ -538,3 +538,181 @@ func TestRestoreRevisionHistoryWithCompactions(t *testing.T) {
 		}
 	})
 }
+func TestRestoreWithGrants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO: maybe makes sense to do this with a standard dataset like bank, etc
+	_, db, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, 1 /* clusterSize */)
+	defer cleanupFn()
+
+	// TODO: we're gonna be restoring in different ways, (i.e. with grants but without users)
+	// so we should be careful about the order of these subtests, or have like a little helper func
+	// that brings everything back to the same starting state
+
+	t.Run("basic", func(t *testing.T) {
+		backupdest := "nodelocal://1/backup/" + t.Name()
+		db.Exec(t, "CREATE DATABASE foo")
+		db.Exec(t, "CREATE USER userfoo")
+		db.Exec(t, "GRANT DROP ON DATABASE foo TO userfoo")
+		db.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", backupdest))
+
+		db.Exec(t, "DROP DATABASE foo")
+		// TODO: find a decent way to validate the before state, maybe this means querying some internal
+		// data and making sure that it's empty
+
+		db.Exec(t, fmt.Sprintf("RESTORE DATABASE foo FROM LATEST IN '%s' WITH GRANTS", backupdest))
+
+		var privType string
+		db.QueryRow(t,
+			`SELECT "privilege_type"
+			 FROM [SHOW GRANTS ON DATABASE foo FOR userfoo]
+			 WHERE grantee = 'userfoo'`,
+		).Scan(&privType)
+		require.Equal(t, "DROP", privType)
+
+		db.Exec(t, "DROP DATABASE foo")
+		db.Exec(t, "DROP USER userfoo")
+	})
+
+	t.Run("with-users", func(t *testing.T) {
+		backupdest := "nodelocal://1/backup/" + t.Name()
+		db.Exec(t, "CREATE DATABASE foo")
+		db.Exec(t, "CREATE USER userfoo")
+		db.Exec(t, "CREATE USER userbar")
+		db.Exec(t, "GRANT DROP ON DATABASE foo TO userfoo")
+
+		db.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", backupdest))
+		db.Exec(t, "DROP DATABASE foo")
+		db.Exec(t, "DROP USER userfoo")
+		db.Exec(t, "DROP USER userbar")
+
+		db.Exec(t, fmt.Sprintf(
+			"RESTORE DATABASE foo FROM LATEST IN '%s' WITH GRANTS", // TODO: add "INCLUDING USERS"
+			backupdest))
+
+		// Note that this validates both that userfoo is restored, and it received the grant.
+		var privType string
+		db.QueryRow(t,
+			`SELECT "privilege_type"
+			 FROM [SHOW GRANTS ON DATABASE foo FOR userfoo]
+			 WHERE grantee = 'userfoo'`,
+		).Scan(&privType)
+		require.Equal(t, "DROP", privType)
+
+		// Validate that userbar did not also get restored.
+		rows := db.Query(t, "SELECT * FROM system.users WHERE username = 'userbar'")
+		require.False(t, rows.Next())
+		require.NoError(t, rows.Err())
+
+		db.Exec(t, "DROP DATABASE foo")
+		db.Exec(t, "DROP USER userfoo")
+	})
+
+	//          direct grant on db
+	//            |           |
+	//           org      userfoobar (x)
+	//          /   \
+	//    dev (x)   userbar
+	//         |
+	//      userfoo                   userbaz (no grants) (x)
+	t.Run("with-users-complex-heirarchy", func(t *testing.T) {
+		backupdest := "nodelocal://1/backup/" + t.Name()
+		db.Exec(t, "CREATE DATABASE foo")
+
+		db.Exec(t, "CREATE USER userfoo")
+		db.Exec(t, "CREATE USER userbar")
+		db.Exec(t, "CREATE USER userbaz")
+		db.Exec(t, "CREATE USER userfoobar")
+
+		db.Exec(t, "CREATE ROLE org")
+		db.Exec(t, "CREATE ROLE dev")
+
+		db.Exec(t, "GRANT DROP ON DATABASE foo TO org")
+		db.Exec(t, "GRANT DROP ON DATABASE foo TO userfoobar")
+
+		db.Exec(t, "GRANT org TO dev")
+		db.Exec(t, "GRANT org TO userbar")
+		db.Exec(t, "GRANT dev TO userfoo")
+
+		db.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", backupdest))
+		db.Exec(t, "DROP DATABASE foo")
+		db.Exec(t, "DROP USER userbaz")
+		db.Exec(t, "DROP USER userfoobar")
+		db.Exec(t, "DROP ROLE dev")
+
+		db.Exec(t, fmt.Sprintf(
+			"RESTORE DATABASE foo FROM LATEST IN '%s' WITH GRANTS", // TODO: add "INCLUDING USERS"
+			backupdest))
+
+		// TODO: this check isn't the most direct for what we actually care about, we should probably
+		// just expect SHOW GRANTS ON DATABASE foo to directly have the shape we want
+		var privType string
+		db.QueryRow(t,
+			`SELECT "privilege_type"
+			 FROM [SHOW GRANTS ON DATABASE foo]
+			 WHERE grantee = 'userfoo'`,
+		).Scan(&privType)
+		require.Equal(t, "DROP", privType)
+		db.QueryRow(t,
+			`SELECT "privilege_type"
+			 FROM [SHOW GRANTS ON DATABASE foo]
+			 WHERE grantee = 'userfoo'`,
+		).Scan(&privType)
+		require.Equal(t, "DROP", privType)
+
+		// Validate that userbar did not also get restored.
+		rows := db.Query(t, "SELECT * FROM system.users WHERE username = 'userbar'")
+		require.False(t, rows.Next())
+		require.NoError(t, rows.Err())
+
+		db.Exec(t, "DROP DATABASE foo")
+		db.Exec(t, "DROP USER userfoo")
+	})
+
+	// Test that when we run WITH GRANTS, but without INCLUDING USERS, only roles/users with direct
+	// grants on the target will be restored.
+	t.Run("without-users-only-direct-grants", func(t *testing.T) {})
+
+	// Test that grants for objects within a database are also restored
+	t.Run("nested-grants-db", func(t *testing.T) {})
+
+	// t.Run("cross-cluster", func(t *testing.T) {
+	// 	sharedDir := t.TempDir()
+	// 	var params base.TestClusterArgs
+	// 	params.ServerArgs.ExternalIODir = sharedDir
+	// 	_, srcDB, _, srcCleanup := backuptestutils.StartBackupRestoreTestCluster(
+	// 		t, 1 /* clusterSize */, backuptestutils.WithParams(params),
+	// 	)
+	// 	defer srcCleanup()
+	// 	_, targetDB, _, targetCleanup := backuptestutils.StartBackupRestoreTestCluster(
+	// 		t, 1 /* clusterSize */, backuptestutils.WithParams(params),
+	// 	)
+	// 	defer targetCleanup()
+	// 	backupDest := "nodelocal://1/backup/" + t.Name()
+	//
+	// 	srcDB.Exec(t, "CREATE DATABASE foo")
+	// 	srcDB.Exec(t, "CREATE USER userfoo")
+	// 	srcDB.Exec(t, "GRANT DROP ON DATABASE foo TO userfoo")
+	// 	srcDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", backupDest))
+	//
+	// 	targetDB.Exec(t, fmt.Sprintf("RESTORE DATABASE foo FROM LATEST IN '%s' WITH GRANTS", backupDest))
+	//
+	// 	var privType string
+	// 	targetDB.QueryRow(t,
+	// 		`SELECT "privilege_type"
+	// 		 FROM [SHOW GRANTS ON DATABASE foo FOR userfoo]
+	// 		 WHERE grantee = 'userfoo'`,
+	// 	).Scan(&privType)
+	// 	require.Equal(t, "DROP", privType)
+	// })
+
+	// things to test:
+	// - wonky dags of users/roles
+	// - db restores with tables/objects which have privs
+	// - table restores
+	// - different kinds of restore (loc aware, encrypted, etc)
+	// - user creation vs not (including whether we modify users etc)
+	// - db ownership
+	// - ideally all of these mixed together in weird ways
+}

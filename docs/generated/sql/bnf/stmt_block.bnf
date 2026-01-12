@@ -3113,6 +3113,7 @@ restore_options ::=
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
 	| 'EXPERIMENTAL' 'COPY'
 	| 'REMOVE_REGIONS'
+	| 'GRANTS' opt_grants_filter
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -3710,6 +3711,11 @@ virtual_cluster_name ::=
 
 virtual_cluster_opt ::=
 	'VIRTUAL_CLUSTER'
+
+opt_grants_filter ::=
+	'INCLUDING' '=' string_or_placeholder
+	| 'EXCLUDING' '=' string_or_placeholder
+	| 
 
 scrub_option ::=
 	'INDEX' 'ALL'

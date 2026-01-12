@@ -835,7 +835,7 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
+	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers || opts.Grants {
 		// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
 		// in the backup and current max desc ID in the restoring cluster. This generator
 		// keeps produced the next descriptor ID.
@@ -1684,8 +1684,6 @@ func doRestorePlan(
 		}
 	}
 
-	var fullyResolvedSubdir string
-
 	if restoreStmt.Options.OnlineImpl() {
 		// validate that from uris are allowed in online restore
 		for _, path := range from {
@@ -1700,6 +1698,7 @@ func doRestorePlan(
 		return err
 	}
 
+	var fullyResolvedSubdir string
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		// set subdir to content of latest file
 		latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
@@ -1827,19 +1826,69 @@ func doRestorePlan(
 		}
 	}
 
+	backupIsFullCluster := mainBackupManifests[0].DescriptorCoverage == tree.AllDescriptors
+	latestVersion := p.ExecCfg().Settings.Version.LatestVersion()
+	clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
+
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		// Validate that the backup is a full cluster backup if a full cluster restore was requested.
-		if mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
+		if !backupIsFullCluster {
 			return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 		}
 
 		// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 		// issues, we want to avoid full cluster restores if it is possible that an
 		// upgrade is in progress. We also check this during Resume.
-		latestVersion := p.ExecCfg().Settings.Version.LatestVersion()
-		clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
 		if clusterVersion.Less(latestVersion) {
 			return clusterRestoreDuringUpgradeErr(clusterVersion, latestVersion)
+		}
+	}
+
+	grantsIncluding := []string{}
+	grantsExcluding := []string{}
+	if restoreStmt.Options.Grants {
+		// Validate that the backup is a full cluster backup if restore with grants was requested.
+		if !backupIsFullCluster {
+			return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
+		}
+
+		// NOTE(at): we're gonna keep this for now, not sure if its gonna be an issue
+		if clusterVersion.Less(latestVersion) {
+			return clusterRestoreDuringUpgradeErr(clusterVersion, latestVersion)
+		}
+
+		switch restoreStmt.DescriptorCoverage {
+		case tree.AllDescriptors:
+			// Here we just negate the WITH GRANTS option, since we don't need to do anything different
+			// to keep the same semantics.
+			//
+			// TODO(at): figure out the *right* thing to do here
+			restoreStmt.Options.Grants = false
+		case tree.RequestedDescriptors:
+			if restoreStmt.Targets.TenantID.Specified {
+				// TODO(at): not sure if we need this, but simpler to just error in this situation for now
+				return errors.New("tenants not yet supported in restore with grants")
+			}
+		case tree.SystemUsers:
+			return errors.New("you silly goose")
+		default:
+			return errors.Newf("invalid descriptor coverage: %s", restoreStmt.DescriptorCoverage)
+		}
+
+		if restoreStmt.Options.GrantsIncluding != nil {
+			inc, err := exprEval.String(ctx, restoreStmt.Options.GrantsIncluding)
+			if err != nil {
+				return err
+			}
+			// TODO(at): this naive split is probably a bit too fragile
+			grantsIncluding = strings.Split(inc, ",")
+		}
+		if restoreStmt.Options.GrantsExcluding != nil {
+			exl, err := exprEval.String(ctx, restoreStmt.Options.GrantsExcluding)
+			if err != nil {
+				return err
+			}
+			grantsExcluding = strings.Split(exl, ",")
 		}
 	}
 
@@ -1849,7 +1898,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
+		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreStmt.Options.Grants,
 	)
 	if err != nil {
 		return errors.Wrap(err,
@@ -2103,6 +2152,9 @@ func doRestorePlan(
 		ExperimentalCopy:                 restoreStmt.Options.ExperimentalCopy,
 		RemoveRegions:                    restoreStmt.Options.RemoveRegions,
 		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
+		Grants:                           restoreStmt.Options.Grants,
+		GrantsIncluding:                  grantsIncluding,
+		GrantsExcluding:                  grantsExcluding,
 	}
 
 	jr := jobs.Record{

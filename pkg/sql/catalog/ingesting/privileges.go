@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,6 +33,7 @@ import (
 // or if all descriptors are being ingested such as during a cluster restore; in
 // the latter case assumptions can be made such as that any users mentioned in
 // privileges on the input descriptor still exists.
+// TODO(at) these functions are a good spot to do some refactoring for rwg
 func GetIngestingDescriptorPrivileges(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -42,6 +44,8 @@ func GetIngestingDescriptorPrivileges(
 	wroteSchemas map[descpb.ID]catalog.SchemaDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	includePublicSchemaCreatePriv bool,
+	// TODO(at): replace this with an actually good api
+	keep bool,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor:
@@ -56,6 +60,7 @@ func GetIngestingDescriptorPrivileges(
 			descCoverage,
 			privilege.Table,
 			includePublicSchemaCreatePriv,
+			keep,
 		)
 	case catalog.SchemaDescriptor:
 		return getIngestingPrivilegesForTableOrSchema(
@@ -69,6 +74,7 @@ func GetIngestingDescriptorPrivileges(
 			descCoverage,
 			privilege.Schema,
 			includePublicSchemaCreatePriv,
+			keep,
 		)
 	case catalog.TypeDescriptor:
 		// If the ingestion is not a cluster restore we cannot know that the users
@@ -78,10 +84,25 @@ func GetIngestingDescriptorPrivileges(
 			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 		}
 	case catalog.DatabaseDescriptor:
+		// NOTES(at):
+		// so this piece of code is blowing up our descriptors for restore with grants
+		// we either want to keep them in under certain conditions (if we're doing rwg),
+		// or we want to get the information we need to do rwg from somewhere else.
+		// alternatively, we could not end up here from above by checking if we are running rwg,
+		// but im not 100% sure thats not gonna wreck something else.
+		// ^ fun fact, it did
+		//
+		// so it looks like we're gonna have to modify this function, we want to make sure that
+		// whatever constraints this is trying to uphold dont get messed up
+		// also as a side note, it looks like this function is only called from sites where the type
+		// of desc is known, and yet we switch on it here. could break these out into new functions,
+		// which is maybe a good spot to refine the apis for each type
+		// (we need some special cases for dbs and tables, but not types, functions, etc)
+		//
 		// If the ingestion is not a cluster restore we cannot know that the users
 		// on the ingesting cluster match the ones that were on the cluster that was
 		// backed up. So we wipe the privileges on the database.
-		if descCoverage == tree.RequestedDescriptors {
+		if descCoverage == tree.RequestedDescriptors && !keep {
 			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
 	case catalog.FunctionDescriptor:
@@ -107,6 +128,8 @@ func getIngestingPrivilegesForTableOrSchema(
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
 	includePublicSchemaCreatePriv bool,
+	// TODO(at): make this better
+	keep bool,
 ) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	if _, ok := wroteDBs[desc.GetParentID()]; ok {
 		// If we're creating a new database in this ingestion, the tables and
@@ -120,7 +143,12 @@ func getIngestingPrivilegesForTableOrSchema(
 				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 			}
 		case privilege.Table:
-			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+			if !keep ||
+				desc.GetName() == systemschema.UsersTable.GetName() ||
+				desc.GetName() == systemschema.RoleMembersTable.GetName() ||
+				desc.GetName() == systemschema.RoleOptionsTable.GetName() {
+				updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+			}
 		default:
 			return nil, errors.Newf("unexpected privilege type %T", privilegeType)
 		}
@@ -167,9 +195,14 @@ func getIngestingPrivilegesForTableOrSchema(
 			return nil, errors.Newf("unexpected privilege type %T", privilegeType)
 		}
 
-		updatedPrivileges, err = catprivilege.CreatePrivilegesFromDefaultPrivileges(
-			dbDefaultPrivileges, schemaDefaultPrivileges, parentDB.GetID(), user, targetObject,
-		)
+		if !keep ||
+			desc.GetName() == systemschema.UsersTable.GetName() ||
+			desc.GetName() == systemschema.RoleMembersTable.GetName() ||
+			desc.GetName() == systemschema.RoleOptionsTable.GetName() {
+			updatedPrivileges, err = catprivilege.CreatePrivilegesFromDefaultPrivileges(
+				dbDefaultPrivileges, schemaDefaultPrivileges, parentDB.GetID(), user, targetObject,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}

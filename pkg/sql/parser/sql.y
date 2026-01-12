@@ -975,6 +975,19 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
     return u.val.(tree.FilterType)
 }
 
+// grantsFilter represents an optional INCLUDING or EXCLUDING filter for grants.
+type grantsFilter struct {
+    Including tree.Expr
+    Excluding tree.Expr
+}
+
+func (u *sqlSymUnion) grantsFilter() *grantsFilter {
+    if filter, ok := u.val.(*grantsFilter); ok {
+        return filter
+    }
+    return nil
+}
+
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -1480,6 +1493,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <[]tree.KVOption> kv_option_list opt_with_options var_set_list opt_with_schedule_options
 %type <*tree.BackupOptions> opt_with_backup_options backup_options backup_options_list
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
+%type <*grantsFilter> opt_grants_filter
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
@@ -4190,6 +4204,29 @@ restore_options:
 | REMOVE_REGIONS
   {
     $$.val = &tree.RestoreOptions{RemoveRegions: true, SkipLocalitiesCheck: true}
+  }
+| GRANTS opt_grants_filter
+  {
+    opts := &tree.RestoreOptions{Grants: true}
+    if filter := $2.grantsFilter(); filter != nil {
+      opts.GrantsIncluding = filter.Including
+      opts.GrantsExcluding = filter.Excluding
+    }
+    $$.val = opts
+  }
+
+opt_grants_filter:
+  INCLUDING '=' string_or_placeholder
+  {
+    $$.val = &grantsFilter{Including: $3.expr()}
+  }
+| EXCLUDING '=' string_or_placeholder
+  {
+    $$.val = &grantsFilter{Excluding: $3.expr()}
+  }
+| /* EMPTY */
+  {
+    $$.val = (*grantsFilter)(nil)
   }
 
 virtual_cluster_opt:

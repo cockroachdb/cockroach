@@ -664,7 +664,11 @@ message RestoreDetails {
 
   bool experimental_copy = 37;
 
-  // NEXT ID: 38.
+  bool grants = 38;
+  repeated string grants_including = 39;
+  repeated string grants_excluding = 40;
+
+  // NEXT ID: 41.
 }
 
 

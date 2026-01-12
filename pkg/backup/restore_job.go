@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -1447,6 +1448,7 @@ func createImportingDescriptors(
 				ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
 				details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB, includePublicSchemaCreatePriv,
 				true, /* deprecatedAllowCrossDatabaseRefs */
+				details.Grants,
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
 			}
@@ -1986,7 +1988,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			err.Error())
 	}
 
-	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 {
+	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && !details.Grants {
 		// We have no tables to restore (we are restoring an empty DB).
 		// Since we have already created any new databases that we needed,
 		// we can return without importing any data.
@@ -2195,6 +2197,25 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 	} else if isSystemUserRestore(details) {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
+			return err
+		}
+		details = r.job.Details().(jobspb.RestoreDetails)
+
+		if err := r.cleanupTempSystemTables(ctx); err != nil {
+			return err
+		}
+	} else if details.Grants {
+		including := make(map[string]struct{})
+		excluding := make(map[string]struct{})
+		for _, name := range details.GrantsIncluding {
+			including[name] = struct{}{}
+		}
+		for _, name := range details.GrantsExcluding {
+			excluding[name] = struct{}{}
+		}
+		if err := r.restoreWithGrants(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables(),
+			details.DatabaseDescs, details.TableDescs, including, excluding,
+		); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
@@ -2540,7 +2561,7 @@ func (r *restoreResumer) MaybeWaitForSpanConfigConformance(
 func tempSystemDatabaseID(
 	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
 ) descpb.ID {
-	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
+	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) && !details.Grants {
 		return descpb.InvalidID
 	}
 
@@ -3576,6 +3597,237 @@ func hasSystemTableByName(name string, systemTables []catalog.TableDescriptor) b
 		}
 	}
 	return false
+}
+
+func (r *restoreResumer) restoreWithGrants(
+	ctx context.Context, db isql.DB, systemTables []catalog.TableDescriptor,
+	dbDescriptors []*descpb.DatabaseDescriptor, tableDescriptors []*descpb.TableDescriptor,
+	including map[string]struct{}, excluding map[string]struct{},
+) error {
+	if !hasSystemTableByName(systemschema.UsersTable.GetName(), systemTables) {
+		return errors.AssertionFailedf(
+			"backed up system tables do not have system.users for restore with grants",
+		)
+	}
+	if !hasSystemTableByName(systemschema.RoleMembersTable.GetName(), systemTables) {
+		return errors.AssertionFailedf(
+			"backed up system tables do not have system.role_members for restore with grants",
+		)
+	}
+
+	// Build up a list of user/role names which directly have privileges on one or more of our targets
+	// TODO(at): move root/admin etc filtering higher up probably
+	directGrantUsernames := make(map[string]struct{})
+	for _, desc := range dbDescriptors {
+		privs, err := desc.GetPrivileges().Show(privilege.Database, true)
+		if err != nil {
+			return err
+		}
+		for _, user := range privs {
+			usernameStr := user.User.SQLIdentifier()
+			if usernameStr == username.RootUser ||
+				usernameStr == username.AdminRole ||
+				usernameStr == username.NodeUser ||
+				usernameStr == username.PublicRole {
+				continue
+			}
+			if _, ok := including[usernameStr]; len(including) != 0 && !ok {
+				continue
+			}
+			if _, ok := excluding[usernameStr]; len(excluding) != 0 && ok {
+				continue
+			}
+			directGrantUsernames[usernameStr] = struct{}{}
+		}
+	}
+	for _, desc := range tableDescriptors {
+		if desc.Name == systemschema.UsersTable.GetName() ||
+			desc.Name == systemschema.RoleMembersTable.GetName() ||
+			desc.Name == systemschema.RoleOptionsTable.GetName() {
+			continue
+		}
+		privs, err := desc.GetPrivileges().Show(privilege.Table, true)
+		if err != nil {
+			return err
+		}
+		for _, user := range privs {
+			usernameStr := user.User.SQLIdentifier()
+			if usernameStr == username.RootUser ||
+				usernameStr == username.AdminRole ||
+				usernameStr == username.NodeUser ||
+				usernameStr == username.PublicRole {
+				continue
+			}
+			directGrantUsernames[usernameStr] = struct{}{}
+		}
+	}
+	usernameList := make([]string, len(directGrantUsernames))
+	i := 0
+	for username := range directGrantUsernames {
+		usernameList[i] = username
+		i++
+	}
+
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		allUsernames := make([]string, 0)
+		for len(usernameList) > 0 {
+			allUsernames = append(allUsernames, usernameList...)
+			placeholders := make([]string, len(usernameList))
+			args := make([]interface{}, len(usernameList))
+			for i, username := range usernameList {
+				placeholders[i] = fmt.Sprintf("$%d", i+1)
+				args[i] = username
+			}
+
+			if _, err := txn.Exec(ctx, "rwg-insert-nonexistent-users", txn.KV(), fmt.Sprintf(
+				`INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id")
+				 SELECT backup."username", backup."hashedPassword", backup."isRole", backup."user_id"	
+				 FROM crdb_temp_system.users backup
+				 WHERE backup."username" IN (%s)
+           AND NOT EXISTS (
+             SELECT * FROM system.users target
+             WHERE target."username" = backup."username"
+           )`,
+				strings.Join(placeholders, ", "),
+			), args...); err != nil {
+				return err
+			}
+
+			next, err := txn.QueryBuffered(ctx, "rwg-get-cascading-roles", txn.KV(), fmt.Sprintf(
+				`SELECT member FROM crdb_temp_system.role_members
+				 WHERE role IN (%s)`,
+				strings.Join(placeholders, ", "),
+			), args...)
+			if err != nil {
+				return err
+			}
+
+			usernameList = []string{}
+			for _, datums := range next {
+				usernameStr := string(tree.MustBeDString(datums[0]))
+				if _, ok := including[usernameStr]; len(including) != 0 && !ok {
+					continue
+				}
+				if _, ok := excluding[usernameStr]; len(excluding) != 0 && ok {
+					continue
+				}
+				usernameList = append(usernameList, usernameStr)
+			}
+		}
+
+		placeholders := make([]string, len(allUsernames))
+		args := make([]interface{}, len(allUsernames))
+		for i, username := range allUsernames {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = username
+		}
+		if _, err := txn.Exec(ctx, "rwg-insert-nonexistent-role-members", txn.KV(), fmt.Sprintf(
+			`INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id")
+				 SELECT backup."role", backup."member", backup."isAdmin", backup."role_id", backup."member_id"
+				 FROM crdb_temp_system.role_members backup
+				 WHERE backup."role" IN (%s)
+		       AND NOT EXISTS (
+		         SELECT * FROM system.role_members target
+		         WHERE target."member" = backup."member"
+						   AND target."role" = backup."role"
+		       )`,
+			strings.Join(placeholders, ", "),
+		), args...); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return r.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		// Bump table versions to invalidate caches
+		usersTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, keys.UsersTableID)
+		if err != nil {
+			return err
+		}
+		if err := txn.Descriptors().WriteDesc(ctx, false, usersTable, txn.KV()); err != nil {
+			return err
+		}
+		roleMembersTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, keys.RoleMembersTableID)
+		if err != nil {
+			return err
+		}
+		if err := txn.Descriptors().WriteDesc(ctx, false, roleMembersTable, txn.KV()); err != nil {
+			return err
+		}
+		// TODO(at): do we need to do anything with system.role_options ?
+
+		for _, desc := range dbDescriptors {
+			mut, err := txn.Descriptors().MutableByID(txn.KV()).Database(ctx, desc.ID)
+			if err != nil {
+				return err
+			}
+			privs := desc.GetPrivileges()
+			filteredUsers := []catpb.UserPrivileges{}
+			for _, user := range privs.Users {
+				name := user.User().SQLIdentifier()
+				if isSpecialUser(name) {
+					filteredUsers = append(filteredUsers, user)
+					continue
+				}
+				if _, ok := including[name]; len(including) != 0 && !ok {
+					continue
+				}
+				if _, ok := excluding[name]; len(excluding) != 0 && ok {
+					continue
+				}
+				filteredUsers = append(filteredUsers, user)
+			}
+			privs.Users = filteredUsers
+			mut.Privileges = privs
+			if err := txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, mut, txn.KV()); err != nil {
+				return err
+			}
+		}
+		for _, desc := range tableDescriptors {
+			if desc.Name == systemschema.UsersTable.GetName() ||
+				desc.Name == systemschema.RoleMembersTable.GetName() ||
+				desc.Name == systemschema.RoleOptionsTable.GetName() {
+				continue
+			}
+			mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, desc.ID)
+			if err != nil {
+				return err
+			}
+			privs := desc.GetPrivileges()
+			filteredUsers := []catpb.UserPrivileges{}
+			for _, user := range privs.Users {
+				name := user.User().SQLIdentifier()
+				if isSpecialUser(name) {
+					filteredUsers = append(filteredUsers, user)
+					continue
+				}
+				if _, ok := including[name]; len(including) != 0 && !ok {
+					continue
+				}
+				if _, ok := excluding[name]; len(excluding) != 0 && ok {
+					continue
+				}
+				filteredUsers = append(filteredUsers, user)
+			}
+			privs.Users = filteredUsers
+			mut.Privileges = privs
+			if err := txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, mut, txn.KV()); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+}
+
+// TODO(at): lol do something better than this, probably when you refactor special case filtering
+func isSpecialUser(name string) bool {
+	return name == username.RootUser ||
+		name == username.AdminRole ||
+		name == username.NodeUser ||
+		name == username.PublicRole
 }
 
 // restoreSystemTables atomically replaces the contents of the system tables

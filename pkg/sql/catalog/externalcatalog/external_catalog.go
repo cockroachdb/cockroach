@@ -164,6 +164,7 @@ func IngestExternalCatalog(
 		ctx, txn.KV(), user, descsCol, nil, nil, tablesToWrite, nil, nil,
 		tree.RequestedDescriptors, nil /* extra */, "", true,
 		false, /*allowCrossDatabaseRefs*/
+		false,
 	)
 }
 

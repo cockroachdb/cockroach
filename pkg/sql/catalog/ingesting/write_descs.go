@@ -53,6 +53,8 @@ func WriteDescriptors(
 	inheritParentName string,
 	includePublicSchemaCreatePriv bool,
 	allowCrossDatabaseRefs bool,
+	// TODO(at): replace this with something good
+	keep bool,
 ) (err error) {
 	var writtenDescs nstree.MutableCatalog
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
@@ -76,7 +78,7 @@ func WriteDescriptors(
 	for i := range databases {
 		desc := databases[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user,
-			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv, keep)
 		if err != nil {
 			return err
 		}
@@ -114,7 +116,7 @@ func WriteDescriptors(
 	for i := range schemas {
 		sc := schemas[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user,
-			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv, keep)
 		if err != nil {
 			return err
 		}
@@ -143,7 +145,7 @@ func WriteDescriptors(
 	for i := range tables {
 		table := tables[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user,
-			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv, keep)
 		if err != nil {
 			return err
 		}
@@ -175,7 +177,7 @@ func WriteDescriptors(
 	for i := range types {
 		typ := types[i]
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user,
-			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv)
+			wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv, keep)
 		if err != nil {
 			return err
 		}
@@ -200,7 +202,7 @@ func WriteDescriptors(
 
 	for _, fn := range functions {
 		updatedPrivileges, err := GetIngestingDescriptorPrivileges(
-			ctx, txn, descsCol, fn, user, wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv,
+			ctx, txn, descsCol, fn, user, wroteDBs, wroteSchemas, descCoverage, includePublicSchemaCreatePriv, keep,
 		)
 		if err != nil {
 			return err
