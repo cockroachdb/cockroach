@@ -918,10 +918,18 @@ func (tc *Collection) lookupDescriptorID(
 	if err != nil {
 		return descpb.InvalidID, err
 	}
+	// Detect if there is any contradiction in the name resolution
+	// against any queried leased tables. This ensures that rename operations
+	// hit retryable errors in case of concurrent schema changes that create
+	// conflicts.
+	resolvedID := descpb.InvalidID
 	if e := read.LookupNamespaceEntry(key); e != nil {
-		return e.GetID(), nil
+		resolvedID = e.GetID()
 	}
-	return descpb.InvalidID, nil
+	if err := tc.ensureNameResolutionMatchesWithLeased(ctx, txn, key, resolvedID); err != nil {
+		return descpb.InvalidID, err
+	}
+	return resolvedID, nil
 }
 
 // GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion
