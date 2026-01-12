@@ -21,7 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -523,4 +526,84 @@ func WriteEncryptionInfoIfNotExists(
 		return err
 	}
 	return nil
+}
+
+// ResolveEncryptionOptionsFromExpr resolves the encryption options when reading
+// from a backup chain via a SHOW or RESTORE statement. defaultFullStore should
+// be a store rooted at the default full backup within a collection.
+// encryptionExpr should be the corresponding encryption expression provided in
+// the statement.
+func ResolveEncryptionOptionsFromExpr(
+	ctx context.Context,
+	p sql.PlanHookState,
+	exprEval exprutil.Evaluator,
+	defaultFullStore cloud.ExternalStorage,
+	mode jobspb.EncryptionMode,
+	encryptionExpr any,
+) (*jobspb.BackupEncryptionOptions, error) {
+	if mode == jobspb.EncryptionMode_None {
+		return nil, nil
+	}
+
+	var encryption *jobspb.BackupEncryptionOptions
+	kmsEnv := MakeBackupKMSEnv(
+		p.ExecCfg().Settings,
+		&p.ExecCfg().ExternalIODirConfig,
+		p.ExecCfg().InternalDB,
+		p.User(),
+	)
+	opts, err := ReadEncryptionOptions(ctx, defaultFullStore)
+	if err != nil {
+		return nil, err
+	}
+
+	switch mode {
+	case jobspb.EncryptionMode_Passphrase:
+		strExpr, ok := encryptionExpr.(tree.Expr)
+		if !ok {
+			return nil, errors.New("unexpected type for passphrase encryption expression")
+		}
+		passphrase, err := exprEval.String(ctx, strExpr)
+		if err != nil {
+			return nil, err
+		}
+		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
+		encryption = &jobspb.BackupEncryptionOptions{
+			Mode: mode,
+			Key:  encryptionKey,
+		}
+	case jobspb.EncryptionMode_KMS:
+		arrExpr, ok := encryptionExpr.(tree.Exprs)
+		if !ok {
+			return nil, errors.New("unexpected type for KMS encryption expression")
+		}
+		kms, err := exprEval.StringArray(ctx, arrExpr)
+		if err != nil {
+			return nil, err
+		}
+		// A backup could have been encrypted with multiple KMS keys that
+		// are stored across ENCRYPTION-INFO files. Iterate over all
+		// ENCRYPTION-INFO files to check if the KMS passed in during
+		// restore has been used to encrypt the backup at least once.
+		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+		for _, encFile := range opts {
+			defaultKMSInfo, err = ValidateKMSURIsAgainstFullBackup(
+				ctx,
+				kms,
+				NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
+				&kmsEnv,
+			)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		encryption = &jobspb.BackupEncryptionOptions{
+			Mode:    mode,
+			KMSInfo: defaultKMSInfo,
+		}
+	}
+	return encryption, nil
 }
