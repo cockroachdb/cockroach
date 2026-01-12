@@ -1554,11 +1554,11 @@ func splitTriggerHelper(
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
 		// TODO(arulajmani): This can be removed once all nodes are past the
-		// V25_4_WriteInitialTruncStateBeforeSplitApplication cluster version.
+		// TODO_Delete_V25_4_WriteInitialTruncStateBeforeSplitApplication cluster version.
 		// At that point, we'll no longer need to replicate the truncated state
 		// as all replicas will be responsible for writing it locally before
 		// applying the split.
-		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_4_WriteInitialTruncStateBeforeSplitApplication) {
+		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V25_4_WriteInitialTruncStateBeforeSplitApplication) {
 			if err := kvstorage.WriteInitialTruncState(ctx,
 				spanset.DisableForbiddenSpanAssertions(batch), split.RightDesc.RangeID); err != nil {
 				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

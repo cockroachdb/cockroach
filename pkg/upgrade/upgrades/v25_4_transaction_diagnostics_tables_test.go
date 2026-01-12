@@ -90,7 +90,7 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V25_4_TransactionDiagnosticsSupport,
+		clusterversion.TODO_Delete_V25_4_TransactionDiagnosticsSupport,
 		nil,   /* done */
 		false, /* expectError */
 	)

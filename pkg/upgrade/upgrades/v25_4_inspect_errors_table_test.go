@@ -45,7 +45,7 @@ func TestInspectErrorsTable(t *testing.T) {
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
 	_, err := sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.Error(t, err, "system.inspect_errors rates columns should not exist")
-	upgrades.Upgrade(t, sqlDB, clusterversion.V25_4_InspectErrorsTable, nil, false)
+	upgrades.Upgrade(t, sqlDB, clusterversion.TODO_Delete_V25_4_InspectErrorsTable, nil, false)
 	_, err = sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.NoError(t, err, "system.inspect_errors rates columns should exist")
 }
