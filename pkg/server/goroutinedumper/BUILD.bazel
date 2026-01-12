@@ -9,7 +9,6 @@ go_library(
         "//pkg/server/dumpstore",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/util/allstacks",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

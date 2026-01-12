@@ -7,6 +7,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -191,6 +192,7 @@ func startSampleEnvironment(
 					}
 
 					if goroutineDumper != nil {
+						fmt.Printf("MaybeDump: goroutines=%d\n", cfg.runtime.Goroutines.Value())
 						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
 					}
 					if heapProfiler != nil {
@@ -203,6 +205,7 @@ func startSampleEnvironment(
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
 					if cpuProfiler != nil {
+						fmt.Printf("MaybeTakeProfile: cpu combined=%d\n", int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
 						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
 					}
 				}

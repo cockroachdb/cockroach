@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils/goroutines"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -149,6 +150,12 @@ type TestingKnobs struct {
 
 	// EnvironmentSampleInterval overrides base.DefaultMetricsSampleInterval when used to construct sampleEnvironmentCfg.
 	EnvironmentSampleInterval time.Duration
+
+	// GoroutineMixer, if set, causes the server to start a variety of synthetic goroutines.
+	GoroutineMixer *goroutines.Options
+
+	// GoroutineMixHandle, if non-nil, will be populated with the running handle so tests can interact with it.
+	GoroutineMixerHandle **goroutines.Handle
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
