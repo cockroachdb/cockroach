@@ -931,3 +931,13 @@ func DecodeBackupID(backupID string) (fullEnd time.Time, backupEnd time.Time, er
 
 	return time.UnixMilli(int64(fullEndMillis)).UTC(), time.UnixMilli(int64(backupEndMillis)).UTC(), nil
 }
+
+// BackupIDToFullSubdir converts a backup ID to its corresponding full backup
+// subdirectory.
+func BackupIDToFullSubdir(backupID string) (string, error) {
+	fullEnd, _, err := DecodeBackupID(backupID)
+	if err != nil {
+		return "", err
+	}
+	return fullEnd.Format(backupbase.DateBasedIntoFolderName), nil
+}
