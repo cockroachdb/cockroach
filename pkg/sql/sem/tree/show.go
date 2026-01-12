@@ -88,13 +88,13 @@ const (
 	BackupValidateDetails
 )
 
-// TODO (msbutler): 22.2 after removing old style show backup syntax, rename
-// Path to Subdir and InCollection to Dest.
-
 // ShowBackup represents a SHOW BACKUP statement.
 //
 // TODO(msbutler): implement a walkableStmt for ShowBackup.
+// TODO(kev-cao): After we deprecate non-ID'd `SHOW BACKUP` statements, we can
+// rename Path to ID.
 type ShowBackup struct {
+	// Path can be either a subdirectory path or a backup ID.
 	Path         Expr
 	InCollection StringOrPlaceholderOptList
 	From         bool

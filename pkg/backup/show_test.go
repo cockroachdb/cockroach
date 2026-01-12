@@ -1001,3 +1001,229 @@ func TestShowBackupsWithIDs(t *testing.T) {
 		})
 	})
 }
+
+func TestShowBackupWithIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	var fullSubdir string
+	{
+		// Take a backup chain containing doubly compacted backups.
+		// We compact from t2 to t3 and then from t1 to t3.
+		// The backup chain is as follows:
+		// Full
+		// Inc1
+		// Inc2 @ t1
+		// Inc3 @ t2
+		// Inc4, Inc5, Inc6
+		// Inc7 @ t3
+		// Compaction from t2 to t3
+		// Compaction from t1 to t3
+		// Inc8 (adds new table to schema)
+		// Inc9 (empty)
+		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+
+		sqlDB.Exec(t, "CREATE DATABASE foo")
+		sqlDB.Exec(t, "CREATE TABLE foo.bar (i INT)")
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO $1", localFoo)
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t1 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t1.AsOfSystemTime())
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t2 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t2.AsOfSystemTime())
+
+		for range 3 {
+			sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+			sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+		}
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t3 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t3.AsOfSystemTime())
+
+		sqlDB.QueryRow(
+			t, fmt.Sprintf(`SELECT path FROM [SHOW BACKUPS IN '%s']`, localFoo),
+		).Scan(&fullSubdir)
+		require.NotEmpty(t, fullSubdir)
+
+		// Create our double compactions.
+		var compactionJob jobspb.JobID
+		sqlDB.QueryRow(
+			t,
+			`SELECT crdb_internal.backup_compaction(
+				0, $1, $2, $3::DECIMAL, $4::DECIMAL
+			)`,
+			fmt.Sprintf("BACKUP DATABASE foo INTO LATEST IN '%s'", localFoo),
+			fullSubdir,
+			t2.AsOfSystemTime(), t3.AsOfSystemTime(),
+		).Scan(&compactionJob)
+		jobutils.WaitForJobToSucceed(t, sqlDB, compactionJob)
+
+		sqlDB.QueryRow(
+			t,
+			`SELECT crdb_internal.backup_compaction(
+				0, $1, $2, $3::DECIMAL, $4::DECIMAL
+			)`,
+			fmt.Sprintf("BACKUP DATABASE foo INTO LATEST IN '%s'", localFoo),
+			fullSubdir,
+			t1.AsOfSystemTime(), t3.AsOfSystemTime(),
+		).Scan(&compactionJob)
+		jobutils.WaitForJobToSucceed(t, sqlDB, compactionJob)
+
+		// Add one more table to test SHOW BACKUP SCHEMA.
+		sqlDB.Exec(t, "CREATE TABLE foo.baz (j INT)")
+		sqlDB.Exec(t, "INSERT INTO foo.baz VALUES (1)")
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+
+		// Create an empty backup to test SHOW BACKUP FILES.
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+	}
+
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+	idRows := sqlDB.Query(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo))
+	var ids []string // All ids in sorted chronological order
+	for idRows.Next() {
+		var id string
+		var unused any
+		if err := idRows.Scan(&id, &unused, &unused); err != nil {
+			t.Fatal(err)
+		}
+		ids = append([]string{id}, ids...)
+	}
+	require.Equal(t, 10, len(ids), "should only see 9 backup IDs due to only 9 unique end times")
+
+	t.Run("show backup only shows one backup per id", func(t *testing.T) {
+		for idx, id := range ids {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&count)
+			require.Equal(t, 1, count, "expected one end time for id '%s' (idx %d)", id, idx)
+		}
+	})
+
+	t.Run("show backup files with id", func(t *testing.T) {
+		// All backups except the last should contain one SST since the backups are
+		// small.
+		for idx, id := range ids {
+			var fileCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP FILES FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&fileCount)
+			if idx == 9 {
+				require.Equal(t, 0, fileCount, "expected zero files in the empty incremental")
+			} else {
+				require.Equal(t, 1, fileCount, "expected one file for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show backup schemas", func(t *testing.T) {
+		for idx, id := range ids {
+			var schemaCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP SCHEMAS FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&schemaCount)
+			if idx < 8 {
+				// Backups prior to the addition of the second table should only have
+				// three schemas: database, public, bar.
+				require.Equal(t, 3, schemaCount, "expected three schemas for id '%s' (idx %d)", id, idx)
+			} else {
+				// The last two backups should have four schemas due to the addition
+				// of the baz table.
+				require.Equal(t, 4, schemaCount, "expected four schemas for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show backup ranges", func(t *testing.T) {
+		for idx, id := range ids {
+			var rangeCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP RANGES FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&rangeCount)
+			if idx < 8 {
+				// Backups prior to the addition of the second table should only have one
+				// range mapping to the only table.
+				require.Equal(t, 1, rangeCount, "expected one range id '%s' (idx %d)", id, idx)
+			} else {
+				// The last two backups should have two ranges due to the addition
+				// of the baz table.
+				require.Equal(t, 2, rangeCount, "expected two ranges for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show latest backup", func(t *testing.T) {
+		// We can test if we fetch the correct latest backup by ensuring that the
+		// backup picked when querying LATEST is the one with no files.
+		var fileCount int
+		sqlDB.QueryRow(
+			t,
+			`SELECT count(*) FROM [SHOW BACKUP FILES FROM LATEST IN $1]`,
+			localFoo,
+		).Scan(&fileCount)
+		require.Equal(t, 0, fileCount, "expected zero files in the latest incremental")
+	})
+
+	t.Run("show backup check_files", func(t *testing.T) {
+		// We delete the SST from the second to last backup and verify that the
+		// `check_files` only fails for that backup ID specifically. Under the old
+		// logic, the entire chain would fail.
+		var sstPath string
+		sqlDB.QueryRow(
+			t,
+			`SELECT path FROM [SHOW BACKUP FILES FROM $1 IN $2]`,
+			ids[8], localFoo,
+		).Scan(&sstPath)
+		require.NotEmpty(t, sstPath, "expected to find SST in penultimate backup")
+
+		backupURI, err := url.Parse(localFoo)
+		require.NoError(t, err, "could not parse backup URI")
+		absoluteSSTPath := filepath.Join(
+			tempDir, backupURI.Path, sstPath,
+		)
+
+		require.NoError(t, os.Remove(absoluteSSTPath), "could not delete SST to simulate corruption")
+
+		// Check that only the penultimate backup ID fails.
+		for idx, id := range ids {
+			checkQuery := `SHOW BACKUP FROM $1 IN $2 WITH check_files`
+			if idx == 8 {
+				sqlDB.ExpectErr(t, "following files are missing from the backup", checkQuery, id, localFoo)
+			} else {
+				sqlDB.Exec(t, checkQuery, id, localFoo)
+			}
+		}
+	})
+
+	t.Run("passing subdir fails", func(t *testing.T) {
+		// Ensure that if use_backups_with_ids is set, passing a subdirectory fails.
+		sqlDB.ExpectErr(
+			t,
+			"failed decoding backup ID",
+			`SHOW BACKUP FROM $1 IN $2`,
+			fullSubdir, localFoo,
+		)
+	})
+}
