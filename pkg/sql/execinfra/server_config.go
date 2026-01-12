@@ -247,6 +247,11 @@ type TestingKnobs struct {
 	// progress for a single index backfill.
 	RunBeforeIndexBackfillProgressUpdate func(ctx context.Context, completed []roachpb.Span)
 
+	// AfterDistributedMergeMapPhase is called after the map phase of a distributed
+	// merge index backfill completes, before any merge iterations begin. It receives
+	// the SST manifests produced by the map phase.
+	AfterDistributedMergeMapPhase func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest)
+
 	// AfterDistributedMergeIteration is called after each iteration of a
 	// distributed merge during index backfill. It receives the iteration number
 	// and the current SST manifests.

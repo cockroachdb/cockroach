@@ -880,6 +880,15 @@ message BackfillProgress {
   // distributed-merge SSTs for this backfill. These prefixes are used to clean
   // up job-scoped files on completion or cancellation.
   repeated string sst_storage_prefixes = 7 [(gogoproto.customname) = "SSTStoragePrefixes"];
+
+  // DistributedMergePhase tracks backfill progress through the distributed merge
+  // pipeline. This field is only meaningful when the job is using the pipeline,
+  // which is stored separately in DistributedMergeMode.
+  //
+  // Values:
+  //   0: Map phase complete, no merge iterations completed yet.
+  //   N (N >= 1): Merge iteration N completed.
+  int32 distributed_merge_phase = 8;
 }
 
 // IndexBackfillSSTManifest describes an SST produced by the backfill map stage.
