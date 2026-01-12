@@ -189,7 +189,7 @@ func (t Timestamp) AsOfSystemTime() string {
 func (t Timestamp) IsEmpty() bool {
 	// TODO(radu): consider making timestamps with zero wall time and non-zero
 	// logical time illegal. Then we can check just the wall time.
-	return t == Timestamp{}
+	return t.WallTime == 0 && t.Logical == 0
 }
 
 // IsSet returns true if t is not an empty Timestamp.
