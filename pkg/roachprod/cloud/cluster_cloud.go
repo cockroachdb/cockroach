@@ -446,6 +446,17 @@ func DestroyCluster(l *logger.Logger, c *cloudcluster.Cluster) error {
 
 	stopSpinner()
 
+	// Delete any load balancers associated with the cluster before deleting VMs.
+	// The port parameter is ignored when deleting; all LBs for the cluster are removed.
+	stopSpinner = ui.NewDefaultSpinner(l, "Destroying load balancers").Start()
+	lbErr := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+		return p.DeleteLoadBalancer(l, vms, 0)
+	})
+	stopSpinner()
+	if lbErr != nil {
+		l.Printf("WARNING: failed to delete load balancers: %s", lbErr)
+	}
+
 	stopSpinner = ui.NewDefaultSpinner(l, "Destroying VMs").Start()
 	// Allow both DNS and VM operations to run before returning any errors.
 	clusterErr := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
