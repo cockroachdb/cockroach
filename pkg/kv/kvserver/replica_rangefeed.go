@@ -659,8 +659,8 @@ func populatePrevValsInLogicalOpLog(
 		if err != nil {
 			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
 		}
-		if prevValRes.Value != nil {
-			*prevValPtr = prevValRes.Value.RawBytes
+		if prevValRes.Value.Exists() {
+			*prevValPtr = prevValRes.Value.Value.RawBytes
 		} else {
 			*prevValPtr = nil
 		}

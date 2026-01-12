@@ -1216,9 +1216,9 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 			ReadCategory: fs.BatchEvalReadCategory,
 		}); err != nil {
 			b.Fatalf("failed get: %+v", err)
-		} else if valRes.Value == nil {
+		} else if !valRes.Value.Exists() {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
-		} else if valueBytes, err := valRes.Value.GetBytes(); err != nil {
+		} else if valueBytes, err := valRes.Value.Value.GetBytes(); err != nil {
 			b.Fatal(err)
 		} else if len(valueBytes) != opts.valueBytes {
 			b.Fatalf("unexpected value size: %d", len(valueBytes))

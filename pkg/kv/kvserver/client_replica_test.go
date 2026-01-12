@@ -216,7 +216,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	valRes, err := storage.MVCCGet(context.Background(), store.StateEngine(), key, ts3,
 		storage.MVCCGetOptions{})
 	require.NoError(t, err)
-	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
+	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value.ToPointer()))
 }
 
 // TestTxnPutOutOfOrder tests a case where a put operation of an older

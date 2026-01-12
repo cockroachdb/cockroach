@@ -160,7 +160,7 @@ func Subsume(
 	valRes, err := storage.MVCCGetAsTxn(ctx, readWriter, descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor as txn")
-	} else if valRes.Value != nil {
+	} else if valRes.Value.IsPresent() {
 		return result.Result{}, errors.Errorf("non-deletion intent on local range descriptor")
 	}
 

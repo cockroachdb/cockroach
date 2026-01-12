@@ -1477,8 +1477,8 @@ func cmdGet(e *evalCtx) error {
 		if res.Intent != nil {
 			e.results.buf.Printf("get: %v -> intent {%s}\n", key, res.Intent.Txn)
 		}
-		if res.Value != nil {
-			e.results.buf.Printf("get: %v -> %v @%v\n", key, res.Value.PrettyPrint(), res.Value.Timestamp)
+		if res.Value.Exists() {
+			e.results.buf.Printf("get: %v -> %v @%v\n", key, res.Value.Value.PrettyPrint(), res.Value.Value.Timestamp)
 		} else {
 			e.results.buf.Printf("get: %v -> <no data>\n", key)
 		}

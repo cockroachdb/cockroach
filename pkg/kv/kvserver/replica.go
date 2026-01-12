@@ -2527,7 +2527,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		ctx, r.store.StateEngine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return false, err
-	} else if valRes.Value != nil {
+	} else if valRes.Value.IsPresent() {
 		return false, nil
 	}
 

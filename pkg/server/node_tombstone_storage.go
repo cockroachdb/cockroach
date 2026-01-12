@@ -58,12 +58,12 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 		if err != nil {
 			return time.Time{}, err
 		}
-		if valRes.Value == nil {
+		if !valRes.Value.Exists() {
 			// Not found.
 			continue
 		}
 		var tsp hlc.Timestamp
-		if err := valRes.Value.GetProto(&tsp); err != nil {
+		if err := valRes.Value.Value.GetProto(&tsp); err != nil {
 			return time.Time{}, err
 		}
 		// Found, offer to cache and return.

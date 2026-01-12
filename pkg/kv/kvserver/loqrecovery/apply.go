@@ -178,7 +178,7 @@ func applyReplicaUpdate(
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
 	res, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
-	if res.Value == nil {
+	if !res.Value.Exists() {
 		return PrepareReplicaReport{}, errors.Errorf(
 			"failed to find a range descriptor for range %v", key)
 	}
@@ -186,7 +186,7 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, err
 	}
 	var localDesc roachpb.RangeDescriptor
-	if err := res.Value.GetProto(&localDesc); err != nil {
+	if err := res.Value.Value.GetProto(&localDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	// Sanity check that this is indeed the right range.

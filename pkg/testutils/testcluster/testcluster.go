@@ -1905,12 +1905,12 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 				clock.Now(), storage.MVCCGetOptions{})
 			if err != nil {
 				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
-			} else if valRes.Value == nil {
+			} else if !valRes.Value.Exists() {
 				log.VEventf(context.Background(), 1, "store %d: missing key %s", s.StoreID(), key)
 			} else {
-				results[i], err = valRes.Value.GetInt()
+				results[i], err = valRes.Value.Value.GetInt()
 				if err != nil {
-					log.Dev.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value, key, err)
+					log.Dev.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), valRes.Value.Value, key, err)
 				}
 			}
 			return nil
