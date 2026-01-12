@@ -102,7 +102,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -11121,11 +11120,11 @@ func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
 }
 
 func speedUpSpanConfigReconciliation(t *testing.T, sqlDB *sqlutils.SQLRunner) {
-	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '1s'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '100ms'")
 }
 
 // TestStrictLocalityAwareBackupRegionalByRow tests that a strict locality-aware
@@ -11140,20 +11139,10 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 
 	knobs := base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		BackupRestore: &sql.BackupRestoreTestingKnobs{
-			RestoreSpanConfigConformanceRetryPolicy: &retry.Options{
-				InitialBackoff: time.Millisecond,
-				Multiplier:     2,
-				MaxBackoff:     1 * time.Second,
-				MaxDuration:    30 * time.Second,
-			},
-		}}
+	}
 
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Increases allocator queue frequency.
-			ScanMaxIdleTime: 10 * time.Millisecond,
-			// The range scanner validation requires the system tenant.
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs:             knobs,
 		},
@@ -11176,35 +11165,56 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 
 	// Wait for data constraints to be enforced.
 	east3NodeID := tc.Servers[2].NodeID()
-	checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
-		// make pageSize large enough to not affect the test
-		pageSize := 10000
-		init := func() {}
 
-		return func() error {
-			return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
-				for _, desc := range descriptors {
-					for _, replica := range desc.InternalReplicas {
-						if replica.NodeID != east3NodeID {
-							return errors.Newf("found table data located on another node %d, desc %v",
-								replica.NodeID, desc)
-						}
-					}
-				}
-				return nil
-			})
-		}
-	}
 	srv := tc.Servers[0]
 	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 		srv.DB(), codec, "test", "x")
 
-	testutils.SucceedsWithin(t,
-		checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB())),
-		time.Second*45*5)
+	startKey := tableDesc.PrimaryIndexSpan(codec).Key
 
-	require.NoError(t, tc.WaitForFullReplication())
+	// Wait for span config to be applied correctly.
+	checkSpanConfig := func() error {
+		kvSubscriber := srv.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
+		conf, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(tableDesc.PrimaryIndexSpan(codec).Key))
+		if err != nil {
+			return err
+		}
+		if conf.NumReplicas != 1 {
+			return errors.Newf("expected num_replicas=1, got %d", conf.NumReplicas)
+		}
+		if len(conf.Constraints) != 1 {
+			return errors.Newf("expected 1 constraint, got %d", len(conf.Constraints))
+		}
+		if conf.Constraints[0].Constraints[0].String() != "+region=east3" {
+			return errors.Newf("expected constraint +region=east3, got %s", conf.Constraints[0].Constraints[0].String())
+		}
+		return nil
+	}
+
+	nudgeAndValidateReplication := func() error {
+		for _, s := range tc.Servers {
+			err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+				return store.ForceReplicationScanAndProcess()
+			})
+			require.NoError(t, err)
+		}
+
+		rd := tc.LookupRangeOrFatal(t, startKey)
+
+		for _, repl := range rd.InternalReplicas {
+			if repl.NodeID != east3NodeID {
+				return errors.Newf("replica found on node %d, expected only on node %d", repl.NodeID, east3NodeID)
+			}
+		}
+		return nil
+	}
+
+	testutils.SucceedsSoon(t, checkSpanConfig)
+
+	testutils.SucceedsWithin(t,
+		nudgeAndValidateReplication,
+		time.Second*45*2)
 
 	// Clear the range cache to ensure it's updated with all replica placement info.
 	for _, s := range tc.Servers {
@@ -11237,7 +11247,7 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 		backupURIs[0], backupURIs[1],
 	)
 	if _, err := sqlDB.DB.ExecContext(ctx, badCmd); err == nil {
-		require.NoError(t, checkLocalities(tableDesc.PrimaryIndexSpan(codec), rangedesc.NewScanner(srv.DB()))())
+		require.NoError(t, nudgeAndValidateReplication())
 		t.Fatal("command succeeded but localities are correct")
 	}
 

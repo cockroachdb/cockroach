@@ -47,7 +47,9 @@ func InitCRDBLogConfig(logger *Logger) {
 	if err := logConf.Validate(nil); err != nil {
 		panic(fmt.Errorf("internal error: could not validate CRDB log config: %w", err))
 	}
-	if _, err := log.ApplyConfig(logConf, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */); err != nil {
+	// Use ApplyConfigForReconfig to handle both initial configuration and
+	// reconfigurations in tests (via TestingCRDBLogConfig) without racing.
+	if _, err := log.ApplyConfigForReconfig(logConf, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */); err != nil {
 		panic(fmt.Errorf("internal error: could not apply CRDB log config: %w", err))
 	}
 	logRedirectInst.logger = logger
@@ -64,8 +66,9 @@ func TestingCRDBLogConfig(logger *Logger) {
 	if logRedirectInst.cancelIntercept != nil {
 		logRedirectInst.cancelIntercept()
 	}
-	log.TestingResetActive()
 	logRedirectInst = &logRedirect{}
+	// InitCRDBLogConfig uses ApplyConfigForReconfig which atomically resets
+	// the active flag, so no separate TestingResetActive() call is needed.
 	InitCRDBLogConfig(logger)
 }
 
