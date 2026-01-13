@@ -60,15 +60,6 @@ var elasticAdmission = settings.RegisterBoolSetting(
 	true,
 )
 
-// exportRequestElasticControlEnabled determines whether export requests
-// integrate with elastic CPU control.
-var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kvadmission.export_request_elastic_control.enabled",
-	"determines whether the export requests integrate with elastic CPU control",
-	true,
-)
-
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
 // allotted for each unit of work during rangefeed catchup scans. Only takes
 // effect if kvadmission.rangefeed_catchup_scan_elastic_control.enabled is set.
@@ -369,13 +360,9 @@ func (n *controllerImpl) AdmitKVWork(
 		// - Bulk jobs such as backups, row-level TTL, issue KV requests with a
 		//   priority of admissionpb.BulkNormalPri or lower; these are eligible for
 		//   "elastic" CPU control, to adaptively utilize more or less CPU capacity
-		//	 depending on observed scheduling latencies. Requests with priority 
+		//	 depending on observed scheduling latencies. Requests with priority
 		// 	 above admissionpb.BulkNormalPri uses the normal slots mechanism.
-		shouldUseElasticCPU :=
-			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(admissionInfo.Priority <= admissionpb.BulkNormalPri && elasticAdmission.Get(&n.settings.SV))
-
-		if shouldUseElasticCPU {
+		if admissionInfo.Priority <= admissionpb.BulkNormalPri && elasticAdmission.Get(&n.settings.SV) {
 			var admitDuration time.Duration
 			if ba.IsSingleExportRequest() {
 				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)
