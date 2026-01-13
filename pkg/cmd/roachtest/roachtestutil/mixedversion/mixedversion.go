@@ -79,6 +79,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -93,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -607,9 +609,20 @@ func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 // Checks whether a skip upgrade step, pred->v, is feasible,
 // - pred is not of the same release series as msv (prevents skipping of user-specified hooks)
 // - v supports skip upgrades
+// - during M.1, there are enough supported versions to skip
 func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 	if t.options.minimumSupportedVersion.Series() == pred.Series() {
 		return false
+	}
+
+	// Special case for the current release series during M.1 transitional state.
+	// When MinSupported == PreviousRelease (only 1 supported version), we can't
+	// perform skip upgrades TO the current version being developed.
+	// This check only applies to the current series, not to older released versions.
+	r := clusterversion.Latest.ReleaseSeries()
+	currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+	if currentMajor.Equals(v.Version.Major()) {
+		return len(clusterversion.SupportedPreviousReleases()) > 1
 	}
 
 	series := v.Version.Major()
