@@ -80,7 +80,9 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
-// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth for elastic traffic.
+// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth, which
+// is used to shape elastic traffic. It can be exceeded if regular
+// (non-elastic) traffic by itself causes this utilization to be exceeded.
 var ElasticBandwidthMaxUtil = settings.RegisterFloatSetting(
 	settings.SystemOnly, "kvadmission.store.elastic_disk_bandwidth_max_util",
 	"sets the max utilization for disk bandwidth for elastic traffic",
@@ -677,7 +679,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		io.diskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 
-	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
+	tokensUsed, tokensUsedByElasticWork := io.kvGranter.addAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
 		toAllocateDiskWriteTokens,
@@ -777,7 +779,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	// NB: we also log if prevDoLogFlush is true, since we often see a single
 	// interval of no overload sandwiched between intervals of overload and we
 	// want to know what happened in that interval.
-	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 ||
+	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.prevWriteTokenUtil > 0.8 ||
 		log.V(1) {
 		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}
