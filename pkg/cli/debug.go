@@ -1638,12 +1638,18 @@ func init() {
 	f.StringVar(&debugTimeSeriesDumpOpts.metricsListFile, "metrics-list-file", "", "text file containing metric names or regex patterns to dump (one per line). Prefixes cr.node., cr.store., and cockroachdb. are automatically stripped if present. When specified, only matching metrics are dumped instead of all metrics.")
 
 	f = debugSendKVBatchCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
 		"which format to use for the trace output (off, text, jaeger)")
 	f.BoolVar(&debugSendKVBatchContext.keepCollectedSpans, "keep-collected-spans", debugSendKVBatchContext.keepCollectedSpans,
 		"whether to keep the CollectedSpans field on the response, to learn about how traces work")
 	f.StringVar(&debugSendKVBatchContext.traceFile, "trace-output", debugSendKVBatchContext.traceFile,
 		"the output file to use for the trace. If left empty, output to stderr.")
+
+	f = debugResetQuorumCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 }
 
 func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
