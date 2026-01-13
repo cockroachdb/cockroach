@@ -960,6 +960,9 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMl99v6jYUx9_3V
 statement ok
 CREATE TABLE data2 (a INT, b INT, PRIMARY KEY (a, b), INDEX(b));
 ALTER TABLE data2 SPLIT AT SELECT 1,i FROM generate_series(1, 9) AS g(i);
+
+retry
+statement ok
 ALTER TABLE data2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i);
 

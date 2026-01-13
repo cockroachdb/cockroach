@@ -94,6 +94,7 @@ distribution: local
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlGFv2jwQx98_n8K6NwU9LthJquepX9GWdMsEpYNMW7UglJErjQhxZpuVquK7T0kKLWlDy70wubP9u_PfZx5B_05AgPvjunfmXZFG1xv5o6-9Jhm5PffCJ3NyORz0yQzlxIS_EiTfP7tDl2gziVODSuPU6MZR_1vP964H3pXfaFgti1gtq0lJw24xYrdYs3kkxCd30Hf94Q3NWYsmGQy77pCc35A5UEhlhFfhAjWIn8BhTCFTcopaS5WHHosFXrQCwSjEabY0eXhMYSoVgngEE5sEQYCf1zjEMELVZkAhQhPGSYHdHqGTFzCJ0whXQOFCJstFqgWZl5UBhVEW5oF2AOdBsLqNgmDFWRCs2HsDHB-6hwdAwjQiNiPS3KHSMF5TkEvzfERtwhmC4C808bog2Jp-XBYv_YPKYHQZJwYVqjbf1WYz764yRWRKOlwQnatAtAmVEcWp7P9OgoBZLAgYe28Agml06LZcjIoaFAZLI0iH1-piVXThh-jyRcbpU7dYe7ql_Jpkc3x4q2PqSrMrpVmHlLa9Knu3sDIuqi-Qceaw0qynX854-XF6dro1xp1X_vPKHfvfeeUfiZcPuWM1P3BBTkUF-xAVRlIZVG1nV4MO_7c23UklnXNIuiHqTKYad9LVZWKVTMd8PaaA0QzL_ywtl2qK10pOi7WlOyhARSBCbcpZXjpeupnSRmG42D7zlyS-l2TVk3iVZO0l2fUkq0qy95KcepJdJTl7SSf7dBpTuE3k_SSOQMCmZ4_fGDYG-YZwpvMGGN3J-wLrP2T59d2GiUYK_XCOXTSoFnEaaxNPQRi1xPX6n78BAAD__8kUP_s=
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
@@ -162,6 +163,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlFFv2jAQx9_3K
 # Move all the index data that will be read to node 2 while the query executes
 # at node 1. The filtering moves to node 2 when it is distributable.
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
