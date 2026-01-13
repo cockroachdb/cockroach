@@ -4435,6 +4435,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | statement_statistics_per_aggregated_ts | [StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs) | repeated | statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics separated by the aggregated timestamp. | [reserved](#support-status) |
 | statement_statistics_per_plan_hash | [StatementDetailsResponse.CollectedStatementGroupedByPlanHash](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByPlanHash) | repeated | statement_statistics_per_plan_hash returns the same statement from above, but with its statistics separated by the plan hash. | [reserved](#support-status) |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
+| table_stats_collection_events | [StatementDetailsResponse.TableStatsCollectionEventsEntry](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.TableStatsCollectionEventsEntry) | repeated | table_stats_collection_events contains all stats collection events for all tables, grouped by table descriptor ID. | [reserved](#support-status) |
 
 
 
@@ -4485,6 +4486,54 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | explain_plan | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
 | plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
 | index_recommendations | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.TableStatsCollectionEventsEntry"></a>
+#### StatementDetailsResponse.TableStatsCollectionEventsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint32](#cockroach.server.serverpb.StatementDetailsResponse-uint32) |  |  |  |
+| value | [StatsCollection](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection"></a>
+#### StatsCollection
+
+StatsEventList is a wrapper for a list of StatsEvent.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| events | [StatsCollection.Event](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection.Event) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection.Event"></a>
+#### StatsCollection.Event
+
+StatsEvent represents a statistics collection event from the event log.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| event_type | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
+| reporting_id | [int32](#cockroach.server.serverpb.StatementDetailsResponse-int32) |  |  | [reserved](#support-status) |
+| info | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
+| unique_id | [bytes](#cockroach.server.serverpb.StatementDetailsResponse-bytes) |  |  | [reserved](#support-status) |
+| stats_name | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
+| column_ids | [uint32](#cockroach.server.serverpb.StatementDetailsResponse-uint32) | repeated |  | [reserved](#support-status) |
+| info_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| stats_id | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

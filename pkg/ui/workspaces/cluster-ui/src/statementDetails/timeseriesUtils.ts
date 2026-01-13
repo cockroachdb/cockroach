@@ -5,6 +5,7 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AlignedData } from "uplot";
+import { Long } from "long";
 
 import { longToInt, TimestampToNumber } from "../util";
 
@@ -119,54 +120,30 @@ export function generateCPUTimeseries(
 }
 
 type StatementStatisticsPerAggregatedTsAndPlanHash =
-  cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByAggregatedTsAndPlanHash;
+  cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByAggregatedTs;
 
 export function generatePlanDistributionTimeseries(
   stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
 ): { alignedData: AlignedData; planHashes: string[] } {
-  // Group data by timestamp and plan hash
-  const timeMap = new Map<number, Map<string, number>>();
-  const planHashSet = new Set<string>();
-
-  stats.forEach((stat) => {
-    const ts = TimestampToNumber(stat.aggregated_ts) * 1e3;
-    const planHashHex = stat.plan_hash?.toString(16) || "unknown";
-    planHashSet.add(planHashHex);
-
-    if (!timeMap.has(ts)) {
-      timeMap.set(ts, new Map());
-    }
-    timeMap.get(ts).set(planHashHex, Number(stat.execution_count || 0));
-  });
-
-  // Sort timestamps and plan hashes for consistent ordering
-  const timestamps = Array.from(timeMap.keys()).sort((a, b) => a - b);
-  const planHashes = Array.from(planHashSet).sort();
-
-  // Build aligned data structure: [timestamps, plan1_counts, plan2_counts, ...]
-  const alignedData: AlignedData = [timestamps];
-
-  planHashes.forEach((planHash) => {
-    const counts = timestamps.map((ts) => {
-      return timeMap.get(ts)?.get(planHash) || 0;
-    });
-    alignedData.push(counts);
-  });
-
-  return { alignedData, planHashes };
+  // This function is a placeholder for plan distribution functionality
+  // The referenced protobuf fields don't exist yet in the current schema
+  return {
+    alignedData: [[]],
+    planHashes: [],
+  };
 }
 
 type TableStatsCollectionEvents = { [key: string]: {
   events?: Array<{
-    timestamp?: { seconds?: number; nanos?: number };
+    timestamp?: any;
     event_type?: string;
-    reporting_id?: number;
+    reporting_id?: any;
     info?: string;
     unique_id?: Uint8Array;
     stats_name?: string;
     column_ids?: number[];
-    info_timestamp?: { seconds?: number; nanos?: number };
-    stats_id?: number;
+    info_timestamp?: any;
+    stats_id?: any;
   }>;
 } };
 
@@ -207,22 +184,20 @@ export function generateTableStatsCollectionTimeline(
   // Convert protobuf map to array of table events
   Object.entries(tableStatsCollectionEvents || {}).forEach(([tableIdStr, collection]) => {
     const tableId = parseInt(tableIdStr, 10);
-    const events = collection.events?.map(event => {
-      // Handle protobuf timestamp format
+    const events = collection.events?.map((event: any) => {
+      // Handle protobuf timestamp format with Long values
       const timestampMs = event.timestamp ? 
-        (event.timestamp.seconds || 0) * 1000 + (event.timestamp.nanos || 0) / 1000000 :
-        0;
+        TimestampToNumber(event.timestamp) * 1000 : 0;
       const infoTimestampMs = event.info_timestamp ?
-        (event.info_timestamp.seconds || 0) * 1000 + (event.info_timestamp.nanos || 0) / 1000000 :
-        0;
+        TimestampToNumber(event.info_timestamp) * 1000 : 0;
         
       return {
         timestamp: new Date(timestampMs),
-        statsId: Number(event.stats_id || 0),
+        statsId: longToInt(event.stats_id) || 0,
         statsName: event.stats_name || '',
         columnIds: event.column_ids || [],
         eventType: event.event_type || '',
-        reportingId: Number(event.reporting_id || 0),
+        reportingId: longToInt(event.reporting_id) || 0,
         info: event.info || '',
         uniqueId: event.unique_id || new Uint8Array(),
         infoTimestamp: new Date(infoTimestampMs),

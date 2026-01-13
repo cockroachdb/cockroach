@@ -5,20 +5,21 @@
 
 import React, { useMemo } from "react";
 import { Tooltip } from "antd";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { generateTableStatsCollectionTimeline } from "./timeseriesUtils";
 
 type TableStatsCollectionEvents = { [key: string]: {
   events?: Array<{
-    timestamp?: { seconds?: number; nanos?: number };
+    timestamp?: any;
     event_type?: string;
-    reporting_id?: number;
+    reporting_id?: any;
     info?: string;
     unique_id?: Uint8Array;
     stats_name?: string;
     column_ids?: number[];
-    info_timestamp?: { seconds?: number; nanos?: number };
-    stats_id?: number;
+    info_timestamp?: any;
+    stats_id?: any;
   }>;
 } };
 
