@@ -223,7 +223,7 @@ func activityTablesHaveFullData(
 		return false, nil
 	}
 
-	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
+	if (limit > 0 && sql.SqlStatsActivityTopCount.Get(&settings.SV) < limit) || !isSortOptionOnActivityTable(order) {
 		return false, nil
 	}
 
