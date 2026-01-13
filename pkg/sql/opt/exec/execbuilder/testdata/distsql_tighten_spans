@@ -82,6 +82,7 @@ retry
 statement ok
 ALTER TABLE p1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
 
+retry
 statement ok
 ALTER INDEX b EXPERIMENTAL_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
 
