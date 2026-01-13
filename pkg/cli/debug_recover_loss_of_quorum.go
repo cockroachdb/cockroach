@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -308,6 +309,10 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	var stats loqrecovery.CollectionStats
 
 	if len(debugRecoverCollectInfoOpts.Stores.Specs) == 0 {
+		// Enable DRPC for inter-node communication if needed.
+		// By default it is off.
+		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
+
 		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
@@ -427,6 +432,10 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		// If no replica info is provided, try to connect to a cluster default or
 		// explicitly provided to retrieve replica info.
+		// Enable DRPC for inter-node communication if needed.
+		// By default it is off.
+		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
+
 		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
@@ -677,6 +686,10 @@ func stageRecoveryOntoCluster(
 	ignoreInternalVersion bool,
 	maxConcurrency int,
 ) error {
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
+
 	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get admin connection to cluster")
@@ -952,6 +965,10 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 	if len(updatePlan.Updates) > 0 {
 		_, _ = fmt.Printf("Checking application of recovery plan %s\n", updatePlan.PlanID)
 	}
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {

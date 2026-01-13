@@ -1498,11 +1498,15 @@ func init() {
 		"maximum number of concurrent compactions")
 
 	f = debugRecoverCollectInfoCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.VarP(&debugRecoverCollectInfoOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
 	f.IntVarP(&debugRecoverCollectInfoOpts.maxConcurrency, "max-concurrency", "c", debugRecoverDefaultMaxConcurrency,
 		"maximum concurrency when fanning out RPCs to nodes in the cluster")
 
 	f = debugRecoverPlanCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.StringVarP(&debugRecoverPlanOpts.outputFileName, "plan", "o", "",
 		"filename to write plan to")
 	f.IntSliceVar(&debugRecoverPlanOpts.deadStoreIDs, "dead-store-ids", nil,
@@ -1520,6 +1524,8 @@ func init() {
 		formatHelper.maxPrintedKeyLength, cliflags.PrintKeyLength.Usage())
 
 	f = debugRecoverExecuteCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.VarP(&debugRecoverExecuteOpts.Stores, cliflags.RecoverStore.Name, cliflags.RecoverStore.Shorthand, cliflags.RecoverStore.Usage())
 	f.VarP(&debugRecoverExecuteOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
 		cliflags.ConfirmActions.Usage())
@@ -1531,6 +1537,8 @@ func init() {
 		"maximum concurrency when fanning out RPCs to nodes in the cluster")
 
 	f = debugRecoverVerifyCmd.Flags()
+	cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.IntVarP(&debugRecoverVerifyOpts.maxConcurrency, "max-concurrency", "c", debugRecoverDefaultMaxConcurrency,
 		"maximum concurrency when fanning out RPCs to nodes in the cluster")
 
