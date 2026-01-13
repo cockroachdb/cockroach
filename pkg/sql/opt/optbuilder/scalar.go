@@ -899,6 +899,8 @@ var SupportedCRDBInternalBuiltins = map[string]struct{}{
 	// https://docs.google.com/document/d/1STbb8bljTzK_jXRIJrxtijWsPhGErdH1vZdunzPwXvs/edit?tab=t.0
 	`crdb_internal.datums_to_bytes`:           {},
 	`crdb_internal.increment_feature_counter`: {},
+	// Used by sqlproxy for connection migration.
+	`crdb_internal.deserialize_session`: {},
 }
 
 // isUnsafeBuiltin returns true if the given function definition
