@@ -28,17 +28,17 @@ ok
 plan debug=true
 ----
 Seed:               12345
-Upgrades:           v22.2.3 → v23.1.4 → v23.2.0 → v24.1.1 → v24.3.0 (<current>)
+Upgrades:           v22.2.3 → v23.1.4 → v23.2.0 → v24.1.1 → v24.2.0 → v24.3.0 (<current>)
 Deployment mode:    system-only
 Hooks:              bank workload, csv server, initialize bank workload, mixed-version 1, mixed-version 2, validate upgrade
 Plan:
 ├── install fixtures for version "v22.2.3" (1) [stage=system-setup]
 ├── start cluster at version "v22.2.3" (2) [stage=system-setup]
 ├── wait for all nodes (:1-4) to acknowledge cluster version '22.2' on system tenant (3) [stage=system-setup]
-├── run "initialize bank workload" hookId="mixedversion.go:874" (4) [stage=on-startup]
+├── run "initialize bank workload" hookId="mixedversion.go:882" (4) [stage=on-startup]
 ├── start background hooks concurrently
-│   ├── run "bank workload" hookId="mixedversion.go:882", after 0s delay (5) [stage=background]
-│   └── run "csv server" hookId="mixedversion.go:851", after 0s delay (6) [stage=background]
+│   ├── run "bank workload" hookId="mixedversion.go:890", after 30s delay (5) [stage=background]
+│   └── run "csv server" hookId="mixedversion.go:859", after 30s delay (6) [stage=background]
 ├── upgrade cluster from "v22.2.3" to "v23.1.4"
 │   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (7) [stage=init]
 │   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
@@ -104,29 +104,56 @@ Plan:
 │   ├── run "mixed-version 1" hookId="planner_test.go:143" (58) [stage=running-upgrade-migrations,finalizing]
 │   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (59) [stage=running-upgrade-migrations,finalizing]
 │   └── run "validate upgrade" hookId="planner_test.go:145" (60) [stage=after-upgrade-finished]
-└── upgrade cluster from "v24.1.1" to "v24.3.0 (<current>)"
-   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (61) [stage=init]
-   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.3.0 (<current>)"
-   │   ├── restart node 4 with binary version v24.3.0 (<current>) (62) [stage=temporary-upgrade]
-   │   ├── restart node 3 with binary version v24.3.0 (<current>) (63) [stage=temporary-upgrade]
-   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (64) [stage=temporary-upgrade]
-   │   ├── restart node 2 with binary version v24.3.0 (<current>) (65) [stage=temporary-upgrade]
-   │   ├── restart node 1 with binary version v24.3.0 (<current>) (66) [stage=temporary-upgrade]
-   │   └── run "mixed-version 2" hookId="planner_test.go:143_1" (67) [stage=temporary-upgrade]
-   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.1.1"
-   │   ├── restart node 4 with binary version v24.1.1 (68) [stage=rollback-upgrade]
-   │   ├── restart node 2 with binary version v24.1.1 (69) [stage=rollback-upgrade]
-   │   ├── restart node 1 with binary version v24.1.1 (70) [stage=rollback-upgrade]
-   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (71) [stage=rollback-upgrade]
-   │   └── restart node 3 with binary version v24.1.1 (72) [stage=rollback-upgrade]
-   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.3.0 (<current>)"
-   │   ├── restart node 4 with binary version v24.3.0 (<current>) (73) [stage=last-upgrade]
-   │   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (74) [stage=last-upgrade]
-   │   ├── restart node 3 with binary version v24.3.0 (<current>) (75) [stage=last-upgrade]
-   │   ├── restart node 1 with binary version v24.3.0 (<current>) (76) [stage=last-upgrade]
-   │   ├── restart node 2 with binary version v24.3.0 (<current>) (77) [stage=last-upgrade]
-   │   └── run "mixed-version 1" hookId="planner_test.go:143" (78) [stage=last-upgrade]
-   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (79) [stage=running-upgrade-migrations,finalizing]
-   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (80) [stage=running-upgrade-migrations,finalizing]
-   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (81) [stage=running-upgrade-migrations,finalizing]
-   └── run "validate upgrade" hookId="planner_test.go:145" (82) [stage=after-upgrade-finished]
+├── upgrade cluster from "v24.1.1" to "v24.2.0"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (61) [stage=init]
+│   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.0"
+│   │   ├── restart node 4 with binary version v24.2.0 (62) [stage=temporary-upgrade]
+│   │   ├── restart node 3 with binary version v24.2.0 (63) [stage=temporary-upgrade]
+│   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (64) [stage=temporary-upgrade]
+│   │   ├── restart node 2 with binary version v24.2.0 (65) [stage=temporary-upgrade]
+│   │   ├── restart node 1 with binary version v24.2.0 (66) [stage=temporary-upgrade]
+│   │   └── run "mixed-version 2" hookId="planner_test.go:143_1" (67) [stage=temporary-upgrade]
+│   ├── downgrade nodes :1-4 from "v24.2.0" to "v24.1.1"
+│   │   ├── restart node 4 with binary version v24.1.1 (68) [stage=rollback-upgrade]
+│   │   ├── restart node 2 with binary version v24.1.1 (69) [stage=rollback-upgrade]
+│   │   ├── restart node 1 with binary version v24.1.1 (70) [stage=rollback-upgrade]
+│   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (71) [stage=rollback-upgrade]
+│   │   └── restart node 3 with binary version v24.1.1 (72) [stage=rollback-upgrade]
+│   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.0"
+│   │   ├── restart node 4 with binary version v24.2.0 (73) [stage=last-upgrade]
+│   │   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (74) [stage=last-upgrade]
+│   │   ├── restart node 3 with binary version v24.2.0 (75) [stage=last-upgrade]
+│   │   ├── restart node 1 with binary version v24.2.0 (76) [stage=last-upgrade]
+│   │   ├── restart node 2 with binary version v24.2.0 (77) [stage=last-upgrade]
+│   │   └── run "mixed-version 1" hookId="planner_test.go:143" (78) [stage=last-upgrade]
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (79) [stage=running-upgrade-migrations,finalizing]
+│   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (80) [stage=running-upgrade-migrations,finalizing]
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (81) [stage=running-upgrade-migrations,finalizing]
+│   └── run "validate upgrade" hookId="planner_test.go:145" (82) [stage=after-upgrade-finished]
+└── upgrade cluster from "v24.2.0" to "v24.3.0 (<current>)"
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (83) [stage=init]
+   ├── upgrade nodes :1-4 from "v24.2.0" to "v24.3.0 (<current>)"
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (84) [stage=temporary-upgrade]
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (85) [stage=temporary-upgrade]
+   │   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (86) [stage=temporary-upgrade]
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (87) [stage=temporary-upgrade]
+   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (88) [stage=temporary-upgrade]
+   │   └── restart node 1 with binary version v24.3.0 (<current>) (89) [stage=temporary-upgrade]
+   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.0"
+   │   ├── restart node 3 with binary version v24.2.0 (90) [stage=rollback-upgrade]
+   │   ├── run "mixed-version 2" hookId="planner_test.go:143_1" (91) [stage=rollback-upgrade]
+   │   ├── restart node 4 with binary version v24.2.0 (92) [stage=rollback-upgrade]
+   │   ├── restart node 2 with binary version v24.2.0 (93) [stage=rollback-upgrade]
+   │   ├── run "mixed-version 1" hookId="planner_test.go:143" (94) [stage=rollback-upgrade]
+   │   └── restart node 1 with binary version v24.2.0 (95) [stage=rollback-upgrade]
+   ├── upgrade nodes :1-4 from "v24.2.0" to "v24.3.0 (<current>)"
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (96) [stage=last-upgrade]
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (97) [stage=last-upgrade]
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (98) [stage=last-upgrade]
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (99) [stage=last-upgrade]
+   │   └── run mixed-version hooks concurrently
+   │      ├── run "mixed-version 1" hookId="planner_test.go:143", after 0s delay (100) [stage=last-upgrade]
+   │      └── run "mixed-version 2" hookId="planner_test.go:143_1", after 5s delay (101) [stage=last-upgrade]
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (102) [stage=running-upgrade-migrations,finalizing]
+   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (103) [stage=running-upgrade-migrations,finalizing]
+   └── run "validate upgrade" hookId="planner_test.go:145" (104) [stage=after-upgrade-finished]
