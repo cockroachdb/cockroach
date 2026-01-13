@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -166,6 +167,11 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	// Send BatchRequest.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
+
 	admin, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
