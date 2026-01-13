@@ -38,10 +38,12 @@ ORDER BY database_name
 
 	case tree.ShowRegionsFromDatabase:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.RegionsFromDatabase)
-		dbName := string(n.DatabaseName)
-		if dbName == "" {
-			dbName = d.evalCtx.SessionData().Database
+
+		dbName, err := d.getSpecifiedOrCurrentDatabase(n.DatabaseName)
+		if err != nil {
+			return nil, err
 		}
+
 		// Note the LEFT JOIN here -- in the case where regions no longer exist on the cluster
 		// but still exist on the database config, we want to still see this database region
 		// with no zones attached in this query.
@@ -68,8 +70,7 @@ FROM [
 LEFT JOIN zones_table ON (r.region = zones_table.region)
 ORDER BY "primary" DESC, "secondary" DESC, "region"`,
 			zonesClause,
-			lexbase.EscapeSQLString(dbName),
-		)
+			lexbase.EscapeSQLString(string(dbName)))
 
 		return d.parse(query)
 
@@ -139,11 +140,16 @@ ORDER BY zones_table.region
 	case tree.ShowSuperRegionsFromDatabase:
 		sqltelemetry.IncrementShowCounter(sqltelemetry.SuperRegions)
 
+		dbName, err := d.getSpecifiedOrCurrentDatabase(n.DatabaseName)
+		if err != nil {
+			return nil, err
+		}
+
 		query := fmt.Sprintf(
 			`
 SELECT database_name, super_region_name, regions
   FROM crdb_internal.super_regions
- WHERE database_name = '%s'`, n.DatabaseName)
+ WHERE database_name = %s`, lexbase.EscapeSQLString(string(dbName)))
 
 		return d.parse(query)
 	}
