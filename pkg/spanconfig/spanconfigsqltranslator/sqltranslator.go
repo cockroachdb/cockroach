@@ -547,23 +547,14 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	}
 
 	// Expand the database descriptor to all the tables inside it and return their
-	// IDs.
-
-	// GetAll is the only way to retrieve dropped descriptors whose IDs are not known
-	// ahead of time. This has unfortunate performance implications tracked by
-	// https://github.com/cockroachdb/cockroach/issues/90655
-	all, err := s.txn.Descriptors().GetAll(ctx, s.txn.KV())
+	// IDs. This uses an optimized scan that filters by parent database ID before
+	// fully unmarshaling descriptors, which is much faster than scanning all
+	// descriptors in the cluster.
+	ids, err := s.txn.Descriptors().GetAllTableIDsInDatabaseFromStorage(ctx, s.txn.KV(), db.GetID())
 	if err != nil {
 		return nil, err
 	}
-	var ret catalog.DescriptorIDSet
-	_ = all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetParentID() == db.GetID() && desc.DescriptorType() == catalog.Table {
-			ret.Add(desc.GetID())
-		}
-		return nil
-	})
-	return ret.Ordered(), nil
+	return ids, nil
 }
 
 // findDescendantLeafIDsForNamedZone finds all leaf IDs below the given named
