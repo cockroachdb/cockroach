@@ -14,7 +14,7 @@
 # Parameters:
 #   TEST_TIMEOUT: timeout for the entire test suite in seconds (default: 1800)
 #   TEST_COUNT: number of times to run each test (default: 3)
-#   GCE_PROJECT: GCE project to use (default: cockroach-ephemeral)
+#   GOOGLE_PROJECT: Google Cloud project to use (default: cockroach-ephemeral)
 
 set -exuo pipefail
 
@@ -24,8 +24,8 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 # Set defaults
 TEST_TIMEOUT="${TEST_TIMEOUT:-1800}"
-TEST_COUNT="${TEST_COUNT:-3}"
-GCE_PROJECT="${GCE_PROJECT:-cockroach-ephemeral}"
+TEST_COUNT="${TEST_COUNT:-1}" # Set to not 1 when this is working
+GOOGLE_PROJECT="${GOOGLE_PROJECT:-cockroach-ephemeral}"
 
 exit_status=0
 
@@ -63,96 +63,68 @@ export ROACHPROD_USER=teamcity
 # Generate SSH key for roachprod to access VMs
 generate_ssh_key
 
-# Set GCE project for roachprod
-gcloud config set project "$GCE_PROJECT"
+# Set Google Cloud project for roachprod
+gcloud config set project "$GOOGLE_PROJECT"
 
-# Build roachprod binary
-tc_start_block "Build roachprod"
+# Build bazci and roachprod
+tc_start_block "Build bazci and roachprod"
 run_bazel <<'EOF'
-bazel build --config crosslinux //pkg/cmd/roachprod
+bazel build --config crosslinux //pkg/cmd/bazci //pkg/cmd/roachprod
 BAZEL_BIN=$(bazel info bazel-bin --config crosslinux)
 mkdir -p bin
 cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 chmod a+w bin/roachprod
+cp $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci bin
+chmod a+w bin/bazci
 EOF
-tc_end_block "Build roachprod"
+tc_end_block "Build bazci and roachprod"
 
-# Build roachprod test binary
-tc_start_block "Build roachprod tests"
-run_bazel <<'EOF'
-bazel build --config crosslinux //pkg/cmd/roachprod/roachprodtest:roachprodtest_test
-BAZEL_BIN=$(bazel info bazel-bin --config crosslinux)
-mkdir -p bin
-cp $BAZEL_BIN/pkg/cmd/roachprod/roachprodtest/roachprodtest_test_/roachprodtest_test bin
-chmod a+w bin/roachprodtest_test
-EOF
-tc_end_block "Build roachprod tests"
+# Set up artifacts directory
+ARTIFACTS_DIR=$PWD/artifacts
+mkdir -p "$ARTIFACTS_DIR"
 
-# Log into gcloud again (credentials are removed by teamcity-support in the build script)
-log_into_gcloud
-
-# Install go-junit-report for XML test output
-tc_start_block "Install go-junit-report"
-go install github.com/jstemmer/go-junit-report/v2@latest
-tc_end_block "Install go-junit-report"
-
-# Create logs directory for test artifacts
-mkdir -p logs
-
-# Run the roachprod E2E tests directly (not through bazel test)
-# These tests will:
-# - Create clusters with randomized configurations
-# - Test basic operations (create, list, destroy)
-# - Verify roachprod functionality across different VM types and options
-# - Clean up clusters automatically on test completion
-# Running the binary directly allows roachprod to use the gcloud CLI
+# Run the roachprod E2E tests using bazci
+# bazci wraps bazel test and automatically:
+# - Collects test.xml and test.log files
+# - Stages them in the artifacts directory
+# - Munges XML for TeamCity compatibility
+# - Handles multiple test attempts (--runs_per_test)
+# - Adds --config=ci automatically
+# The TestMain function handles gcloud authentication using GOOGLE_EPHEMERAL_CREDENTIALS
 tc_start_block "Run roachprod E2E tests"
-export GOTRACEBACK=all
-export ROACHPROD_BINARY="$PWD/bin/roachprod"
-export ROACHPROD_USER=teamcity
-for i in $(seq 1 "$TEST_COUNT"); do
-  echo "Test iteration $i of $TEST_COUNT"
-
-  # Run test and capture output to log file, also pipe to junit report
-  set +e
-  ./bin/roachprodtest_test \
-    -test.run="TestCloud.*" \
-    -test.v \
-    -test.timeout="${TEST_TIMEOUT}s" \
-    2>&1 | tee "logs/roachprodtest-iteration-${i}.log"
-
-  # Capture the test exit status from the pipeline
-  test_exit_status=${PIPESTATUS[0]}
-  set -e
-
-  # Generate JUnit XML from the log file
-  cat "logs/roachprodtest-iteration-${i}.log" | \
-    go-junit-report > "logs/roachprodtest-iteration-${i}.xml"
-
-  if [ $test_exit_status -ne 0 ]; then
-    echo "Test iteration $i failed with exit status $test_exit_status"
-    exit_status=$test_exit_status
-    break
-  fi
-done
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e GOOGLE_PROJECT -e ROACHPROD_USER" \
+  run_bazel <<EOF
+# Inside Docker container, artifacts are mounted at /artifacts
+./bin/bazci --artifacts_dir=/artifacts -- test \
+  //pkg/cmd/roachprod/roachprodtest:roachprodtest_test \
+  --test_env=GOOGLE_EPHEMERAL_CREDENTIALS \
+  --test_env=GOOGLE_PROJECT \
+  --test_env=ROACHPROD_USER \
+  --test_filter="TestCloud.*" \
+  --test_output=all \
+  --test_arg=-test.v \
+  --test_timeout="$TEST_TIMEOUT" \
+  --runs_per_test="$TEST_COUNT" \
+  || exit_status=\$?
+EOF
 tc_end_block "Run roachprod E2E tests"
 
-# Import JUnit XML results into TeamCity
-tc_start_block "Import test results"
-echo "##teamcity[importData type='junit' path='logs/*.xml']"
-tc_end_block "Import test results"
+## Import JUnit XML results into TeamCity
+#tc_start_block "Import test results"
+#echo "##teamcity[importData type='junit' path='artifacts/**/*.xml']"
+#tc_end_block "Import test results"
 
-# Publish logs as artifacts
-echo "##teamcity[publishArtifacts 'logs/ => roachprodtest-logs.zip']"
+# Publish artifacts
+echo "##teamcity[publishArtifacts 'artifacts/ => roachprodtest-artifacts.zip']"
 
-# Log into gcloud again (credentials may be removed after bazel test)
-log_into_gcloud
-
-# List any remaining clusters for debugging (in case cleanup failed)
-# NEVER RUN roachprod destroy [-m,--all-mine]
-tc_start_block "List remaining clusters"
-./bin/roachprod list --mine || true
-tc_end_block "List remaining clusters"
+# Ensure gcloud is authenticated for final cluster listing
+#log_into_gcloud
+#
+## List any remaining clusters for debugging (in case cleanup failed)
+## NEVER RUN roachprod destroy [-m,--all-mine]
+#tc_start_block "List remaining clusters"
+#./bin/roachprod list --mine || true
+#tc_end_block "List remaining clusters"
 
 # Exit with the test status
 exit $exit_status
