@@ -38,9 +38,9 @@ var sqlStatsActivityFlushEnabled = settings.RegisterBoolSetting(
 	"enable the flush to the system statement and transaction activity tables",
 	true)
 
-// sqlStatsActivityTopCount is the cluster setting that controls the number of
+// SqlStatsActivityTopCount is the cluster setting that controls the number of
 // rows selected to be inserted into the activity tables
-var sqlStatsActivityTopCount = settings.RegisterIntSetting(
+var SqlStatsActivityTopCount = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.stats.activity.top.max",
 	"the limit per column for the top number of statistics to be flushed "+
@@ -71,7 +71,7 @@ const (
 )
 
 const (
-	sqlActivityCacheUpsertLimit = 500
+	sqlActivityInsertBatchSize = 500
 )
 
 // sqlActivityUpdateJob is responsible for translating the data in the
@@ -235,7 +235,7 @@ func (u *sqlActivityUpdater) upsertStatsForAggregatedTs(
 	// Get the config and pass it around to avoid any issue of it changing
 	// in the middle of the execution.
 	maxRowPersistedRows := sqlStatsActivityMaxPersistedRows.Get(&u.st.SV)
-	topLimit := sqlStatsActivityTopCount.Get(&u.st.SV)
+	topLimit := SqlStatsActivityTopCount.Get(&u.st.SV)
 
 	// The counts are using AS OF SYSTEM TIME so the values may be slightly
 	// off. This is acceptable to increase the performance.
@@ -894,7 +894,7 @@ UPSERT INTO system.public.statement_activity (
 		return err
 	}
 
-	qArgs := make([]interface{}, 0, sqlActivityCacheUpsertLimit*colCount)
+	qArgs := make([]interface{}, 0, sqlActivityInsertBatchSize*colCount)
 	var queryStr bytes.Buffer
 	queryStr.WriteString(queryBase)
 
@@ -937,19 +937,32 @@ UPSERT INTO system.public.statement_activity (
 			row[13],                     // service_latency_p99_seconds
 		)
 
-		if len(qArgs) == sqlActivityCacheUpsertLimit*colCount {
-			// Batch is full.
-			break
+		if len(qArgs) == sqlActivityInsertBatchSize*colCount {
+			// If batch size is reached, execute the upsert.
+			_, err = executor.ExecEx(ctx, redact.Sprint(opName),
+				txn,
+				sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+				queryStr.String(), qArgs...)
+
+			if err != nil {
+				return err
+			}
+			queryStr.Reset()
+			queryStr.WriteString(queryBase)
+			qArgs = qArgs[:0]
 		}
 	}
 
-	_, err = executor.ExecEx(ctx, redact.Sprint(opName),
-		txn,
-		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
-		queryStr.String(), qArgs...)
+	if len(qArgs) > 0 {
+		// If there are remaining args, execute the upsert.
+		_, err = executor.ExecEx(ctx, redact.Sprint(opName),
+			txn,
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+			queryStr.String(), qArgs...)
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -992,7 +1005,7 @@ UPSERT INTO system.public.transaction_activity (
 		return err
 	}
 
-	qArgs := make([]interface{}, 0, sqlActivityCacheUpsertLimit*colCount)
+	qArgs := make([]interface{}, 0, sqlActivityInsertBatchSize*colCount)
 	var queryStr bytes.Buffer
 	queryStr.WriteString(queryBase)
 
@@ -1031,18 +1044,30 @@ UPSERT INTO system.public.transaction_activity (
 			0,                          // service_latency_p99_seconds
 		)
 
-		if len(qArgs) == sqlActivityCacheUpsertLimit*colCount {
-			// Batch is full.
-			break
+		if len(qArgs) == sqlActivityInsertBatchSize*colCount {
+			// If batch size is reached, execute the upsert.
+			_, err = executor.ExecEx(ctx, redact.Sprint(opName),
+				txn,
+				sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+				queryStr.String(), qArgs...)
+			if err != nil {
+				return err
+			}
+			queryStr.Reset()
+			queryStr.WriteString(queryBase)
+			qArgs = qArgs[:0]
 		}
 	}
 
-	_, err = executor.ExecEx(ctx, redact.Sprint(opName),
-		txn,
-		sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
-		queryStr.String(), qArgs...)
-	if err != nil {
-		return err
+	if len(qArgs) > 0 {
+		// If there are remaining args, execute the upsert.
+		_, err = executor.ExecEx(ctx, redact.Sprint(opName),
+			txn,
+			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+			queryStr.String(), qArgs...)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
