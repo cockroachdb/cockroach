@@ -490,22 +490,23 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 //  2. supportsSkipUpgradeTo does not let us perform a skip upgrade over a .2 or .4 release.
 //     This edge case happens if we bump the current version first and there could be 3 supported
 //     previous releases in the current series.
+// Regression test for #157852.
+// After PR #157852 (Nov 14, 2025), the special case for M.1 transitional state
+// was removed because the version bump process changed to "bump current version first".
+// This test verifies that skip upgrade logic works correctly based on the version's
+// characteristics (.2/.4 vs .1/.3), not on the number of supported previous versions.
 func TestSupportsSkipCurrentVersion(t *testing.T) {
 	mvt := newTest()
 
-	// Case 1: If the minimumSupportedVersion on the current release says there is only 1 supported
-	// previous release, then it doesn't matter if the previous release is an innovation or not,
-	// we can't skip over it.
-	numSupportedVersions := len(clusterversion.SupportedPreviousReleases())
-
-	// Case 2: If the current release is an innovation release, it means the previous release
-	// is _not_ an innovation, i.e. we can't skip over it.
+	// The current release's skip upgrade support is determined by whether it's
+	// an innovation release (.1 or .3 ordinal), not by how many supported
+	// previous versions exist during M.1.
 	currentRelease := clusterversion.Latest.ReleaseSeries()
 	isInnovationRelease := currentRelease.Minor == 1 || currentRelease.Minor == 3
 
-	// We can only perform a skip upgrade to the current version if it's not an innovation and
-	// there are multiple supported previous versions.
-	expected := !isInnovationRelease && numSupportedVersions > 1
+	// Non-innovation releases (.2, .4) support skip upgrades.
+	// Innovation releases (.1, .3) do not.
+	expected := !isInnovationRelease
 
 	// N.B. The predecessor is only used to determine if we should skip over the
 	// mixedversion test's minimum supported version, and not relevant for this test.
