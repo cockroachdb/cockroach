@@ -731,6 +731,8 @@ type UDFDefinition struct {
 	// i-th column in the list corresponds to the i-th parameter of the function.
 	// During execution of the UDF, these columns are replaced with the arguments
 	// of the function invocation.
+	// TODO(mgartner): This can be replaced with the number of params if we
+	// always build parameter columns as placeholders instead of variables.
 	Params opt.ColList
 
 	// Body contains a relational expression for each statement in the function
