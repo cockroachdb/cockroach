@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -109,6 +110,10 @@ will then convert it to the --format requested in the current invocation.
 	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
+		// Enable DRPC for inter-node communication if needed.
+		// By default it is off.
+		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 		var convertFile string
 		if len(args) > 0 {
