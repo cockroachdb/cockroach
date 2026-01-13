@@ -51,9 +51,9 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
-// elasticAdmission determines whether internally
+// ElasticAdmission determines whether internally
 // submitted bulk pri requests integrate with elastic CPU control.
-var elasticAdmission = settings.RegisterBoolSetting(
+var ElasticAdmission = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.elastic_control_bulk_low_priority.enabled",
 	"determines whether the all low bulk priority requests integrate with elastic CPU control",
@@ -368,7 +368,7 @@ func (n *controllerImpl) AdmitKVWork(
 		// for elastic AC. This is intentional: elastic AC is designed
 		// specifically to run "background" work elastically at a rate that doesn't
 		// impact the cluster.
-		if admissionInfo.Priority <= admissionpb.BulkNormalPri && elasticAdmission.Get(&n.settings.SV) {
+		if admissionInfo.Priority <= admissionpb.BulkNormalPri && ElasticAdmission.Get(&n.settings.SV) {
 			var admitDuration time.Duration
 			if ba.IsSingleExportRequest() {
 				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)

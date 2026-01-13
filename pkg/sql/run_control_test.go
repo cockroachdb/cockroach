@@ -1108,6 +1108,7 @@ func TestStatementTimeoutForSchemaChangeCommit(t *testing.T) {
 				tc := serverutils.StartCluster(t, numNodes,
 					base.TestClusterArgs{
 						ServerArgs: base.TestServerArgs{
+							DisableElasticCPUAdmission: true,
 							Knobs: base.TestingKnobs{
 								SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 									AfterStage: func(p scplan.Plan, stageIdx int) error {

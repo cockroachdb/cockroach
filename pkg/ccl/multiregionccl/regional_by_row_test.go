@@ -341,6 +341,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// to backfill successfully.
 							currentBackfillChunk := -(chunksPerBackfill + 1)
 							var params base.TestServerArgs
+							params.DisableElasticCPUAdmission = true
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
