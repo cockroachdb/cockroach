@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -233,8 +234,8 @@ func (g *seqUUIDGen) next() uuid.UUID {
 
 // Store with its owning NodeID for easier grouping by owning nodes.
 type wrappedStore struct {
-	engine storage.Engine
-	nodeID roachpb.NodeID
+	engines kvstorage.Engines
+	nodeID  roachpb.NodeID
 }
 
 type quorumRecoveryEnv struct {
@@ -323,33 +324,25 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 
 		eng := e.getOrCreateStore(ctx, t, replica.StoreID, replica.NodeID)
 		if err = storage.MVCCPutProto(
-			ctx, eng, key, clock.Now(), &desc, storage.MVCCWriteOptions{},
+			ctx, eng.StateEngine(), key, clock.Now(), &desc, storage.MVCCWriteOptions{},
 		); err != nil {
 			t.Fatalf("failed to write range descriptor into store: %v", err)
 		}
 
 		sl := kvstorage.MakeStateLoader(replica.RangeID)
-		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
+		if _, err := sl.Save(ctx, eng.StateEngine(), replicaState); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
-		if err := sl.SetRaftTruncatedState(ctx, eng, &truncState); err != nil {
-			t.Fatalf("failed to save raft truncated state: %v", err)
-		}
-		if err := sl.SetHardState(ctx, eng, hardState); err != nil {
-			t.Fatalf("failed to save raft hard state: %v", err)
-		}
-		if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
-			t.Fatalf("failed to set raft replica ID: %v", err)
-		}
+		require.NoError(t, sl.SetRaftTruncatedState(ctx, eng.LogEngine(), &truncState))
+		require.NoError(t, sl.SetHardState(ctx, eng.LogEngine(), hardState))
+		require.NoError(t, sl.SetRaftReplicaID(ctx, eng.StateEngine(), replicaID))
 		for i, entry := range raftLog {
 			value, err := protoutil.Marshal(&entry)
-			if err != nil {
-				t.Fatalf("failed to serialize metadata entry for raft log")
-			}
-			if err := eng.PutUnversioned(keys.RaftLogKey(replica.RangeID,
-				kvpb.RaftIndex(uint64(i)+hardState.Commit+1)), value); err != nil {
-				t.Fatalf("failed to insert raft log entry into store: %s", err)
-			}
+			require.NoError(t, err)
+			require.NoError(t, eng.LogEngine().PutUnversioned(
+				keys.RaftLogKey(replica.RangeID, kvpb.RaftIndex(uint64(i)+hardState.Commit+1)),
+				value,
+			))
 		}
 	}
 	return "ok"
@@ -602,7 +595,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 
 func (e *quorumRecoveryEnv) getOrCreateStore(
 	ctx context.Context, t *testing.T, storeID roachpb.StoreID, nodeID roachpb.NodeID,
-) storage.Engine {
+) kvstorage.Engines {
 	wrapped := e.stores[storeID]
 	if wrapped.nodeID == 0 {
 		var err error
@@ -610,28 +603,28 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 			storage.InMemory(),
 			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */))
-		if err != nil {
-			t.Fatalf("failed to crate in mem store: %v", err)
-		}
-		sIdent := roachpb.StoreIdent{
-			ClusterID: e.clusterID,
-			NodeID:    nodeID,
-			StoreID:   storeID,
-		}
-		if err = storage.MVCCPutProto(
-			context.Background(), eng, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
-		); err != nil {
-			t.Fatalf("failed to populate test store ident: %v", err)
-		}
-		v := clusterversion.Latest.Version()
-		if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng}, clusterversion.ClusterVersion{Version: v}); err != nil {
-			t.Fatalf("failed to populate test store cluster version: %v", err)
-		}
-		wrapped.engine = eng
+		require.NoError(t, err)
+
+		engines := kvstorage.MakeEngines(eng)
+		require.NoError(t, storage.MVCCPutProto(
+			context.Background(), engines.LogEngine(), keys.StoreIdentKey(), hlc.Timestamp{},
+			&roachpb.StoreIdent{
+				ClusterID: e.clusterID,
+				NodeID:    nodeID,
+				StoreID:   storeID,
+			},
+			storage.MVCCWriteOptions{},
+		))
+
+		require.NoError(t, kvstorage.WriteClusterVersionToEngines(
+			ctx, []kvstorage.Engines{engines},
+			clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+		))
+		wrapped.engines = engines
 		wrapped.nodeID = nodeID
 		e.stores[storeID] = wrapped
 	}
-	return wrapped.engine
+	return wrapped.engines
 }
 
 func (e *quorumRecoveryEnv) handleCollectReplicas(
@@ -663,10 +656,10 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 
 func (e *quorumRecoveryEnv) groupStoresByNode(
 	t *testing.T, storeIDs []roachpb.StoreID,
-) map[roachpb.NodeID][]storage.Engine {
-	nodes := make(map[roachpb.NodeID][]storage.Engine)
+) map[roachpb.NodeID][]kvstorage.Engines {
+	nodes := make(map[roachpb.NodeID][]kvstorage.Engines)
 	iterateSelectedStores(t, storeIDs, e.stores,
-		func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
+		func(store kvstorage.Engines, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
 			nodes[nodeID] = append(nodes[nodeID], store)
 		})
 	return nodes
@@ -677,13 +670,13 @@ func (e *quorumRecoveryEnv) groupStoresByNodeStore(
 ) map[roachpb.NodeID]map[roachpb.StoreID]storage.Batch {
 	nodes := make(map[roachpb.NodeID]map[roachpb.StoreID]storage.Batch)
 	iterateSelectedStores(t, storeIDs, e.stores,
-		func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
+		func(store kvstorage.Engines, nodeID roachpb.NodeID, storeID roachpb.StoreID) {
 			nodeStores, ok := nodes[nodeID]
 			if !ok {
 				nodeStores = make(map[roachpb.StoreID]storage.Batch)
 				nodes[nodeID] = nodeStores
 			}
-			nodeStores[storeID] = store.NewBatch()
+			nodeStores[storeID] = store.TODOEngine().NewBatch()
 		})
 	return nodes
 }
@@ -692,14 +685,14 @@ func iterateSelectedStores(
 	t *testing.T,
 	storeIDs []roachpb.StoreID,
 	stores map[roachpb.StoreID]wrappedStore,
-	f func(store storage.Engine, nodeID roachpb.NodeID, storeID roachpb.StoreID),
+	f func(store kvstorage.Engines, nodeID roachpb.NodeID, storeID roachpb.StoreID),
 ) {
 	for _, id := range storeIDs {
 		wrappedStore, ok := stores[id]
 		if !ok {
 			t.Fatalf("attempt to get store that was not populated: %d", id)
 		}
-		f(wrappedStore.engine, wrappedStore.nodeID, id)
+		f(wrappedStore.engines, wrappedStore.nodeID, id)
 	}
 }
 
@@ -734,24 +727,20 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 		var descriptorViews []storeDescriptorView
 		var localDataViews []localDataView
 		store := e.stores[storeID]
-		err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, store.engine,
+		err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, store.engines.StateEngine(),
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := kvstorage.MakeStateLoader(desc.RangeID)
-				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
-				if err != nil {
-					t.Fatalf("failed to load Raft replica ID: %v", err)
-				}
+				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engines.StateEngine())
+				require.NoError(t, err)
 				localDataViews = append(localDataViews, localDataView{
 					RangeID:       desc.RangeID,
 					RaftReplicaID: int(raftReplicaID.ReplicaID),
 				})
 				return nil
 			})
-		if err != nil {
-			t.Fatalf("failed to make a dump of store replica data: %v", err)
-		}
+		require.NoError(t, err)
 		storesView = append(storesView, storeView{
 			NodeID:      e.stores[storeID].nodeID,
 			StoreID:     storeID,
@@ -815,7 +804,7 @@ func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData)
 
 func (e *quorumRecoveryEnv) cleanupStores() {
 	for _, store := range e.stores {
-		store.engine.Close()
+		store.engines.Close()
 	}
 	e.stores = nil
 }
@@ -841,13 +830,12 @@ func (e *quorumRecoveryEnv) dumpRecoveryEvents(
 	for _, storeID := range stores {
 		store, ok := e.stores[storeID]
 		if !ok {
-			t.Fatalf("store s%d doesn't exist, but event dump is requested for it", store)
+			t.Fatalf("store s%d doesn't exist, but event dump is requested for it", storeID)
 		}
-		// TODO(sep-raft-log): store.engine should be the log engine.
-		if _, err := RegisterOfflineRecoveryEvents(ctx, store.engine, logEvents); err != nil {
+		if _, err := RegisterOfflineRecoveryEvents(ctx, store.engines.LogEngine(), logEvents); err != nil {
 			return "", err
 		}
-		status, ok, err := readNodeRecoveryStatusInfo(ctx, store.engine)
+		status, ok, err := readNodeRecoveryStatusInfo(ctx, store.engines.LogEngine())
 		if err != nil {
 			return "", err
 		}

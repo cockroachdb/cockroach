@@ -221,8 +221,8 @@ func createTestStoreWithoutStart(
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
 	cfg.SpanConfigsDisabled = true
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 	require.Nil(t, cfg.Transport)
 
 	require.NotNil(t, cfg.Gossip) // was set above already
@@ -299,9 +299,9 @@ func createTestStoreWithoutStart(
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng.TODOEngine(), cv))
 	if err := kvstorage.InitEngine(
-		ctx, eng, storeIdent,
+		ctx, eng.TODOEngine(), storeIdent,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func createTestStoreWithoutStart(
 
 	kvs, splits := opts.splits()
 	if err := WriteInitialClusterData(
-		ctx, eng, kvs /* initialValues */, cv.Version,
+		ctx, eng.TODOEngine(), kvs /* initialValues */, cv.Version,
 		1 /* numStores */, splits, cfg.Clock.PhysicalNow(), cfg.TestingKnobs,
 	); err != nil {
 		t.Fatal(err)
@@ -423,11 +423,11 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 
 	// Put some random garbage into the engine.
-	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
+	require.NoError(t, eng.StateEngine().PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
@@ -438,17 +438,17 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.ErrorIs(t, err, &kvstorage.NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
-	err = kvstorage.InitEngine(ctx, eng, testIdent)
+	err = kvstorage.InitEngine(ctx, eng.TODOEngine(), testIdent)
 	require.ErrorContains(t, err, "cannot be bootstrapped")
 
 	// Bootstrap should fail on MVCC range key in engine.
-	require.NoError(t, eng.PutMVCCRangeKey(storage.MVCCRangeKey{
+	require.NoError(t, eng.StateEngine().PutMVCCRangeKey(storage.MVCCRangeKey{
 		StartKey:  roachpb.Key("a"),
 		EndKey:    roachpb.Key("b"),
 		Timestamp: hlc.MinTimestamp,
 	}, storage.MVCCValue{}))
 
-	err = kvstorage.InitEngine(ctx, eng, testIdent)
+	err = kvstorage.InitEngine(ctx, eng.TODOEngine(), testIdent)
 	require.ErrorContains(t, err, "found mvcc range key")
 }
 

@@ -1145,7 +1145,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storePool,
 		rpcContext,
 		node.stores,
-		&engines,
+		engines,
 		stopper,
 		sessionRegistry,
 		closedSessionCache,
@@ -1179,7 +1179,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
-	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
+	settingsWriter := newSettingsCacheWriter(engines[0].TODOEngine(), stopper)
 	stopTrigger := newStopTrigger()
 
 	// Initialize the pgwire pre-server, which initializes connections,

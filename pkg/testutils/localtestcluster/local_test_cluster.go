@@ -63,7 +63,7 @@ type LocalTestCluster struct {
 	Manual            *timeutil.ManualTime
 	Clock             *hlc.Clock
 	Gossip            *gossip.Gossip
-	Eng               storage.Engine
+	Eng               kvstorage.Engines
 	Store             *kvserver.Store
 	StoreTestingKnobs *kvserver.StoreTestingKnobs
 	dbContext         *kv.DBContext
@@ -155,8 +155,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{})
-	var err error
-	ltc.Eng, err = storage.Open(
+	eng, err := storage.Open(
 		ctx,
 		storage.InMemory(),
 		cfg.Settings,
@@ -166,7 +165,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ltc.stopper.AddCloser(ltc.Eng)
+	ltc.stopper.AddCloser(eng)
+	ltc.Eng = kvstorage.MakeEngines(eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
 	// Faster refresh intervals for testing.
@@ -210,7 +210,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		LivenessThreshold:       active,
 		RenewalDuration:         renewal,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
-		Engines:                 []storage.Engine{ltc.Eng},
+		Engines:                 []kvstorage.Engines{ltc.Eng},
 	})
 	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
 	{
@@ -252,11 +252,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
+	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng.LogEngine(), clusterversion.TestingClusterVersion); err != nil {
 		t.Fatalf("unable to write cluster version: %s", err)
 	}
 	if err := kvstorage.InitEngine(
-		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
+		ctx, ltc.Eng.TODOEngine(), roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
 	); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
@@ -301,7 +301,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 
 	if err := kvserver.WriteInitialClusterData(
 		ctx,
-		ltc.Eng,
+		ltc.Eng.TODOEngine(),
 		initialValues,
 		clusterversion.Latest.Version(),
 		1, /* numStores */

@@ -557,7 +557,7 @@ type systemStatusServer struct {
 	gossip             *gossip.Gossip
 	storePool          *storepool.StorePool
 	stores             *kvserver.Stores
-	engines            *Engines
+	engines            Engines
 	nodeLiveness       *liveness.NodeLiveness
 	spanConfigReporter spanconfig.Reporter
 	rangeStatsFetcher  *rangestats.Fetcher
@@ -680,7 +680,7 @@ func newSystemStatusServer(
 	storePool *storepool.StorePool,
 	rpcCtx *rpc.Context,
 	stores *kvserver.Stores,
-	engines *Engines,
+	engines Engines,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 	closedSessionCache *sql.ClosedSessionCache,
@@ -892,7 +892,7 @@ func (s *systemStatusServer) EngineStats(
 		return status.EngineStats(ctx, req)
 	}
 
-	stats, err := debug.GetLSMStats(*s.engines)
+	stats, err := debug.GetLSMStats(s.engines)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}

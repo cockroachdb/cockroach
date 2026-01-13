@@ -27,14 +27,16 @@ func TestCollectChecksStoreInfo(t *testing.T) {
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err, "failed to create engine")
-	defer eng.Close()
+	engines := kvstorage.MakeEngines(eng)
+	defer engines.Close()
+
 	v := roachpb.Version{Major: 21, Minor: 2}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, []storage.Engine{eng},
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, []kvstorage.Engines{engines},
 		clusterversion.ClusterVersion{Version: v}); err != nil {
 		t.Fatalf("failed to populate test store cluster version: %v", err)
 	}
 
-	_, _, err = CollectStoresReplicaInfo(ctx, []storage.Engine{eng})
+	_, _, err = CollectStoresReplicaInfo(ctx, []kvstorage.Engines{engines})
 	require.ErrorContains(t, err, "is too old for running version",
 		"engine version check not triggered")
 }

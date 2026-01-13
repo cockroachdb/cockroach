@@ -31,11 +31,11 @@ func WriteClusterVersion(
 // At the time of writing this is used during bootstrap, initial server start
 // (to perhaps fill into additional stores), and during cluster version bumps.
 func WriteClusterVersionToEngines(
-	ctx context.Context, engines []storage.Engine, cv clusterversion.ClusterVersion,
+	ctx context.Context, engines []Engines, cv clusterversion.ClusterVersion,
 ) error {
 	for _, eng := range engines {
-		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
-			return errors.Wrapf(err, "error writing version to engine %s", eng)
+		if err := WriteClusterVersion(ctx, eng.TODOEngine(), cv); err != nil {
+			return errors.Wrapf(err, "error writing version to engine %s", eng.TODOEngine())
 		}
 	}
 	return nil
@@ -55,9 +55,7 @@ func WriteClusterVersionToEngines(
 // binaryMinSupportedVersion is the minimum version supported by this binary. An
 // error is returned if any engine has a version lower that this.
 func SynthesizeClusterVersionFromEngines(
-	ctx context.Context,
-	engines []storage.Engine,
-	binaryVersion, binaryMinSupportedVersion roachpb.Version,
+	ctx context.Context, engines []Engines, binaryVersion, binaryMinSupportedVersion roachpb.Version,
 ) (clusterversion.ClusterVersion, error) {
 	// Find the most recent bootstrap info.
 	type originVersion struct {
@@ -71,29 +69,40 @@ func SynthesizeClusterVersionFromEngines(
 		origin:  "(no store)",
 	}
 
+	check := func(eng storage.Engine) error {
+		engVer := eng.MinVersion()
+		if engVer == (roachpb.Version{}) {
+			return errors.AssertionFailedf("store %s has no version", eng)
+		}
+		// Avoid running a binary with a store that is too new. For example,
+		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
+		if binaryVersion.Less(engVer) {
+			return errors.Errorf(
+				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
+				binaryVersion, eng, engVer)
+		}
+		// Track the smallest version encountered.
+		if engVer.Less(minStoreVersion.Version) {
+			minStoreVersion.Version = engVer
+			minStoreVersion.origin = fmt.Sprint(eng)
+		}
+		return nil
+	}
+
 	// We run this twice because it's only after having seen all the versions
 	// that we can decide whether the node catches a version error. However, we
 	// also want to name at least one engine that violates the version
 	// constraints, which at the latest the second loop will achieve (because
 	// then minStoreVersion don't change any more).
 	for _, eng := range engines {
-		engVer := eng.MinVersion()
-		if engVer == (roachpb.Version{}) {
-			return clusterversion.ClusterVersion{}, errors.AssertionFailedf("store %s has no version", eng)
-		}
-
-		// Avoid running a binary with a store that is too new. For example,
-		// restarting into 1.1 after having upgraded to 1.2 doesn't work.
-		if binaryVersion.Less(engVer) {
-			return clusterversion.ClusterVersion{}, errors.Errorf(
-				"cockroach version v%s is incompatible with data in store %s; use version v%s or later",
-				binaryVersion, eng, engVer)
-		}
-
-		// Track smallest use version encountered.
-		if engVer.Less(minStoreVersion.Version) {
-			minStoreVersion.Version = engVer
-			minStoreVersion.origin = fmt.Sprint(eng)
+		if !eng.Separated() {
+			if err := check(eng.Engine()); err != nil {
+				return clusterversion.ClusterVersion{}, err
+			}
+		} else if err := check(eng.StateEngine()); err != nil {
+			return clusterversion.ClusterVersion{}, err
+		} else if err := check(eng.LogEngine()); err != nil {
+			return clusterversion.ClusterVersion{}, err
 		}
 	}
 

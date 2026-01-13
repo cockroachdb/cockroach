@@ -83,7 +83,7 @@ func newKVNativeAndEngine(tb testing.TB) (*kvNative, storage.Engine) {
 		doneFn: func() {
 			s.Stopper().Stop(context.Background())
 		},
-	}, engines[0]
+	}, engines[0].TODOEngine()
 }
 
 func (kv *kvNative) Insert(rows, run int) error {

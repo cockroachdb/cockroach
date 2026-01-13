@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -67,7 +68,7 @@ func TestBootstrapCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	e := storage.NewDefaultInMemForTesting()
+	e := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 	defer e.Close()
 
 	initCfg := initServerCfg{
@@ -76,12 +77,12 @@ func TestBootstrapCluster(t *testing.T) {
 		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
 		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
-	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
+	if _, err := bootstrapCluster(ctx, []kvstorage.Engines{e}, initCfg); err != nil {
 		t.Fatal(err)
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	res, err := storage.MVCCScan(ctx, e, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{})
+	res, err := storage.MVCCScan(ctx, e.TODOEngine(), keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +309,7 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	e := storage.NewDefaultInMemForTesting()
+	e := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 	defer e.Close()
 
 	cv := clusterversion.TestingClusterVersion
@@ -318,7 +319,7 @@ func TestCorruptedClusterID(t *testing.T) {
 		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
 		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
-	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
+	if _, err := bootstrapCluster(ctx, []kvstorage.Engines{e}, initCfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -329,12 +330,12 @@ func TestCorruptedClusterID(t *testing.T) {
 		StoreID:   1,
 	}
 	if err := storage.MVCCPutProto(
-		ctx, e, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
+		ctx, e.LogEngine(), keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := inspectEngines(ctx, []storage.Engine{e}, cv.Version, cv.Version)
+	_, err := inspectEngines(ctx, []kvstorage.Engines{e}, cv.Version, cv.Version)
 	if !testutils.IsError(err, `partially initialized`) {
 		t.Fatal(err)
 	}
@@ -1024,9 +1025,9 @@ func TestDiskStatsMap(t *testing.T) {
 		},
 	}
 	// Engines.
-	engines := []storage.Engine{
-		storage.NewDefaultInMemForTesting(),
-		storage.NewDefaultInMemForTesting(),
+	engines := []kvstorage.Engines{
+		kvstorage.MakeEngines(storage.NewDefaultInMemForTesting()),
+		kvstorage.MakeEngines(storage.NewDefaultInMemForTesting()),
 	}
 	defer func() {
 		for i := range engines {
@@ -1037,7 +1038,7 @@ func TestDiskStatsMap(t *testing.T) {
 	engineIDs := []roachpb.StoreID{10, 5}
 	for i := range engines {
 		ident := roachpb.StoreIdent{StoreID: engineIDs[i]}
-		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i], keys.StoreIdentKey(),
+		require.NoError(t, storage.MVCCBlindPutProto(ctx, engines[i].LogEngine(), keys.StoreIdentKey(),
 			hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{}))
 	}
 	var dsm diskStatsMap

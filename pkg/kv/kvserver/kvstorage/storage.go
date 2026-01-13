@@ -206,6 +206,16 @@ func (e *Engines) Separated() bool {
 	return e.separated
 }
 
+// Close closes the underlying engine(s).
+func (e *Engines) Close() {
+	if !e.separated {
+		e.Engine().Close()
+		return
+	}
+	e.stateEngine.Close()
+	e.logEngine.Close()
+}
+
 // validateIsStateEngineSpan asserts that the provided span only overlaps with
 // keys in the State engine and returns an error if not.
 // Note that we could receive the span with a nil startKey, which has a special

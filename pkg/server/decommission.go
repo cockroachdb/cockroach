@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -111,7 +112,7 @@ func (t *decommissioningNodeMap) onNodeDecommissioned(nodeID roachpb.NodeID) {
 }
 
 func getPingCheckDecommissionFn(
-	engines Engines,
+	engines []kvstorage.Engines,
 ) (*nodeTombstoneStorage, func(context.Context, roachpb.NodeID, codes.Code) error) {
 	nodeTombStorage := &nodeTombstoneStorage{engs: engines}
 	return nodeTombStorage, func(ctx context.Context, nodeID roachpb.NodeID, errorCode codes.Code) error {
