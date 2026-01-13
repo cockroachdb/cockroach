@@ -350,6 +350,8 @@ func init() {
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
 	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
+	cliflagcfg.BoolFlag(genHAProxyCmd.Flags(), &useDRPC, cliflags.UseNewRPC)
+	_ = genHAProxyCmd.Flags().MarkHidden(cliflags.UseNewRPC.Name)
 
 	f := genSettingsListCmd.PersistentFlags()
 	f.BoolVar(&includeAllSettings, "all-settings", false,
