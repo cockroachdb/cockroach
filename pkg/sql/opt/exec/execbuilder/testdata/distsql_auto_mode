@@ -13,6 +13,9 @@ SET distsql=auto
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT);
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[(i+1)%5+1], i FROM generate_series(1, 5) as g(i);
 
 # Full table scan (no stats) - distribute.
@@ -231,6 +234,9 @@ RESET distribute_join_row_count_threshold;
 statement ok
 CREATE TABLE kw (k INT PRIMARY KEY, w INT);
 ALTER TABLE kw SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Large hash join - distribute.
@@ -248,6 +254,9 @@ distribution: full
 statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX b (b));
 ALTER TABLE abc SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE abc EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i)
 
 # Index join - don't distribute.
