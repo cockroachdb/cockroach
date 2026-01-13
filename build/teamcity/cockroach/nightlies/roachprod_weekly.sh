@@ -91,6 +91,14 @@ tc_end_block "Build roachprod tests"
 # Log into gcloud again (credentials are removed by teamcity-support in the build script)
 log_into_gcloud
 
+# Install go-junit-report for XML test output
+tc_start_block "Install go-junit-report"
+go install github.com/jstemmer/go-junit-report/v2@latest
+tc_end_block "Install go-junit-report"
+
+# Create logs directory for test artifacts
+mkdir -p logs
+
 # Run the roachprod E2E tests directly (not through bazel test)
 # These tests will:
 # - Create clusters with randomized configurations
@@ -108,6 +116,8 @@ for i in $(seq 1 "$TEST_COUNT"); do
     -test.run="TestCloud.*" \
     -test.v \
     -test.timeout="${TEST_TIMEOUT}s" \
+    2>&1 | tee "logs/roachprodtest-iteration-${i}.log" | \
+    $HOME/go/bin/go-junit-report -set-exit-code > "logs/roachprodtest-iteration-${i}.xml" \
     || exit_status=$?
 
   if [ $exit_status -ne 0 ]; then
@@ -116,6 +126,14 @@ for i in $(seq 1 "$TEST_COUNT"); do
   fi
 done
 tc_end_block "Run roachprod E2E tests"
+
+# Import JUnit XML results into TeamCity
+tc_start_block "Import test results"
+echo "##teamcity[importData type='junit' path='logs/*.xml']"
+tc_end_block "Import test results"
+
+# Publish logs as artifacts
+echo "##teamcity[publishArtifacts 'logs/ => roachprodtest-logs.zip']"
 
 # Log into gcloud again (credentials may be removed after bazel test)
 log_into_gcloud
