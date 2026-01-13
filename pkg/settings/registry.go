@@ -283,6 +283,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 26.2
 	"physical_replication.consumer.stream_compression.enabled": {},
+	"kvadmission.export_request_elastic_control.enabled":       {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
