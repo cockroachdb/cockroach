@@ -39,12 +39,46 @@ interface TooltipInfo {
   endTime: Date;
 }
 
-const COLORS = [
-  "#3366CC", "#DC3912", "#FF9900", "#109618", "#990099",
-  "#0099C6", "#DD4477", "#66AA00", "#B82E2E", "#316395",
-  "#994499", "#22AA99", "#AAAA11", "#6633CC", "#E67300",
-  "#8B0707", "#651067", "#329262", "#5574A6", "#3B3EAC"
+// Base color themes for different tables - each table gets a different hue
+const COLOR_THEMES = [
+  // Reds
+  ["#ffebee", "#ffcdd2", "#ef9a9a", "#e57373", "#ef5350", "#f44336", "#e53935", "#d32f2f", "#c62828", "#b71c1c"],
+  // Blues
+  ["#e3f2fd", "#bbdefb", "#90caf9", "#64b5f6", "#42a5f5", "#2196f3", "#1e88e5", "#1976d2", "#1565c0", "#0d47a1"],
+  // Greens
+  ["#e8f5e8", "#c8e6c9", "#a5d6a7", "#81c784", "#66bb6a", "#4caf50", "#43a047", "#388e3c", "#2e7d32", "#1b5e20"],
+  // Oranges
+  ["#fff3e0", "#ffe0b2", "#ffcc02", "#ffb74d", "#ffa726", "#ff9800", "#fb8c00", "#f57c00", "#ef6c00", "#e65100"],
+  // Purples
+  ["#f3e5f5", "#e1bee7", "#ce93d8", "#ba68c8", "#ab47bc", "#9c27b0", "#8e24aa", "#7b1fa2", "#6a1b9a", "#4a148c"],
+  // Teals
+  ["#e0f2f1", "#b2dfdb", "#80cbc4", "#4db6ac", "#26a69a", "#009688", "#00897b", "#00796b", "#00695c", "#004d40"],
+  // Yellows/Ambers
+  ["#fffde7", "#fff9c4", "#fff59d", "#fff176", "#ffee58", "#ffeb3b", "#fdd835", "#f9a825", "#f57f17", "#ff6f00"],
+  // Indigos
+  ["#e8eaf6", "#c5cae9", "#9fa8da", "#7986cb", "#5c6bc0", "#3f51b5", "#3949ab", "#303f9f", "#283593", "#1a237e"],
+  // Cyans
+  ["#e0f7fa", "#b2ebf2", "#80deea", "#4dd0e1", "#26c6da", "#00bcd4", "#00acc1", "#0097a7", "#00838f", "#006064"],
+  // Browns
+  ["#efebe9", "#d7ccc8", "#bcaaa4", "#a1887f", "#8d6e63", "#795548", "#6d4c41", "#5d4037", "#4e342e", "#3e2723"]
 ];
+
+// Generate color for a table segment based on table index and segment index
+const getSegmentColor = (tableIndex: number, segmentIndex: number, totalSegments: number): string => {
+  const colorTheme = COLOR_THEMES[tableIndex % COLOR_THEMES.length];
+  
+  if (totalSegments === 1) {
+    return colorTheme[4]; // Use middle color for single segment
+  }
+  
+  // Map segment index to color intensity (lighter to darker)
+  const colorIndex = Math.min(
+    Math.floor((segmentIndex / (totalSegments - 1)) * (colorTheme.length - 1)),
+    colorTheme.length - 1
+  );
+  
+  return colorTheme[colorIndex];
+};
 
 export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
   tableStatsCollectionEvents,
@@ -72,8 +106,10 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
   });
 
   const timeRange = maxTime - minTime;
-  const barHeight = Math.max(20, (height - 60) / tableNames.length);
-  const chartHeight = tableNames.length * barHeight + 60;
+  const barHeight = Math.max(30, (height - 120) / tableNames.length); // Increased minimum bar height
+  const barSpacing = 10; // Space between table bars
+  const bottomMargin = 80; // Increased space from x-axis
+  const chartHeight = tableNames.length * (barHeight + barSpacing) + bottomMargin;
 
   const renderTimelineBar = (
     tableName: string,
@@ -86,14 +122,14 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
       eventInfo: string;
     }>,
     yPosition: number,
+    tableIndex: number,
   ) => {
     return segments.map((segment, index) => {
       const startPercent = ((segment.startTime - minTime) / timeRange) * 100;
       const endPercent = ((segment.endTime - minTime) / timeRange) * 100;
       const widthPercent = Math.max(0.5, endPercent - startPercent); // Minimum width for visibility
       
-      const colorIndex = (segment.statsId % COLORS.length);
-      const color = COLORS[colorIndex];
+      const color = getSegmentColor(tableIndex, index, segments.length);
 
       const tooltipInfo: TooltipInfo = {
         tableName,
@@ -152,16 +188,17 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
           x1={`${xPercent}%`}
           y1={0}
           x2={`${xPercent}%`}
-          y2={chartHeight - 40}
+          y2={chartHeight - bottomMargin + 20}
           stroke="#ddd"
           strokeWidth={1}
         />
         <text
           x={`${xPercent}%`}
-          y={chartHeight - 20}
+          y={chartHeight - 30}
           textAnchor="middle"
-          fontSize={12}
-          fill="#666"
+          fontSize={14}
+          fill="#333"
+          fontWeight="500"
         >
           {date.toLocaleTimeString()}
         </text>
@@ -175,7 +212,7 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
         {timeLabels}
         
         {tableNames.map((tableName, index) => {
-          const yPosition = index * barHeight + 40;
+          const yPosition = index * (barHeight + barSpacing) + 40;
           const segments = eventsByTable.get(tableName) || [];
           
           return (
@@ -195,7 +232,7 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
               
               {/* Timeline bars */}
               <g transform={`translate(120, 0)`}>
-                {renderTimelineBar(tableName, segments, yPosition)}
+                {renderTimelineBar(tableName, segments, yPosition, index)}
               </g>
             </g>
           );

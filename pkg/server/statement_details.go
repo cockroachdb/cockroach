@@ -525,34 +525,80 @@ func (rb *statementDetailsRespBuilder) getAllTableDescriptorIDs(indexes []string
 }
 
 // getAllStatsEventForAllTables returns a map of table descriptor ID to list of stats collection events
-// for all tables in the database, sorted by info.Timestamp (oldest first).
+// for tables involved in the statement, sorted by info.Timestamp (oldest first).
 func (rb *statementDetailsRespBuilder) getAllStatsEventForAllTables(
 	ctx context.Context,
 ) (map[uint32]*serverpb.StatsCollection, error) {
-	// Query to get all table descriptor IDs
-	tableDescriptorRows, err := rb.ie.QueryIteratorEx(ctx, "get-all-table-descriptor-ids", nil,
-		sessiondata.NodeUserSessionDataOverride,
-		`SELECT table_id FROM crdb_internal.tables WHERE database_name != 'system'`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = tableDescriptorRows.Close()
-	}()
+	// First get the indexes used by this statement from the statistics
+	const queryFormat = `
+SELECT merge_statement_stats(statistics) AS statistics
+FROM %s %s
+GROUP BY fingerprint_id
+LIMIT 1`
 
-	var tableIDs []uint32
-	var ok bool
-	for ok, err = tableDescriptorRows.Next(ctx); ok; ok, err = tableDescriptorRows.Next(ctx) {
-		row := tableDescriptorRows.Cur()
-		if row == nil {
-			return nil, errors.New("unexpected null row when getting table descriptor IDs")
+	var row tree.Datums
+	var err error
+
+	if rb.activityHasData {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-activity", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`
+SELECT merge_statement_stats(statistics) AS statistics
+FROM crdb_internal.statement_activity %s
+GROUP BY fingerprint_id
+LIMIT 1`, rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
 		}
-		dInt := row[0].(*tree.DInt)
-		tableIDs = append(tableIDs, uint32(*dInt))
 	}
-	if err != nil {
+
+	// If there are no results from the activity table, retrieve the data from the persisted table.
+	if row == nil || row.Len() == 0 {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-persisted", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics_persisted", rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if row.Len() == 0 {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-combined", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If there are no results, return empty map
+	if row.Len() == 0 {
+		return make(map[uint32]*serverpb.StatsCollection), nil
+	}
+
+	// Parse the statistics to get the indexes
+	var statistics appstatspb.StatementStatistics
+	statsJSON := tree.MustBeDJSON(row[0]).JSON
+	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics); err != nil {
 		return nil, err
+	}
+
+	// Extract table descriptor IDs from the indexes used by this statement
+	tableIDStrings := rb.getAllTableDescriptorIDs(statistics.Indexes)
+	if len(tableIDStrings) == 0 {
+		return make(map[uint32]*serverpb.StatsCollection), nil
+	}
+
+	// Convert string table IDs to uint32
+	var tableIDs []uint32
+	for _, tableIDStr := range tableIDStrings {
+		tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
+		if err != nil {
+			continue // Skip invalid table IDs
+		}
+		tableIDs = append(tableIDs, uint32(tableID))
 	}
 
 	// Map to store events for each table
