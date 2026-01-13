@@ -47,7 +47,7 @@ store-id=1
 
 # Verify s2's store-level status is OK (not refusing).
 # This confirms we're testing per-replica disposition, not store-level.
-set-store-status store-id=2 health=ok leases=ok replicas=ok
+update-store-status store-id=2 health=ok leases=ok replicas=ok
 ----
 ok accepting all
 

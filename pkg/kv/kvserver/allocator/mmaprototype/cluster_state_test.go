@@ -504,7 +504,7 @@ func TestClusterState(t *testing.T) {
 					}
 					return printNodeListMeta(t)
 
-				case "set-store-status":
+				case "update-store-status":
 					// Sets the store status from args. If update=true, calls
 					// updateStoreStatuses which triggers the disk utilization check
 					// to augment the replica disposition based on current adjusted

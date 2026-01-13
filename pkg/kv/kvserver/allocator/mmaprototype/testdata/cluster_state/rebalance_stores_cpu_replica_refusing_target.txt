@@ -41,7 +41,7 @@ store-id=1
 ----
 
 # Mark s4 as refusing replicas.
-set-store-status store-id=4 replicas=refusing
+update-store-status store-id=4 replicas=refusing
 ----
 ok refusing=replicas
 

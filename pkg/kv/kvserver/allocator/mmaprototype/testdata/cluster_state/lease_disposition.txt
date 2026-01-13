@@ -46,7 +46,7 @@ retain-ready-lease-target-stores-only in=(1,3) range-id=1
 
 # Mark s2 as shedding replicas, which should have no effect
 # since we're looking at leases.
-set-store-status store-id=2 replicas=shedding
+update-store-status store-id=2 replicas=shedding
 ----
 ok shedding=replicas
 
@@ -56,7 +56,7 @@ retain-ready-lease-target-stores-only in=(1,2,3) range-id=1
 
 # Make store 2 unhealthy - it should be filtered out via disposition.
 # Unhealthy stores must have non-OK disposition (invariant).
-set-store-status store-id=2 health=unhealthy leases=shedding replicas=shedding
+update-store-status store-id=2 health=unhealthy leases=shedding replicas=shedding
 ----
 unhealthy shedding=leases,replicas
 
@@ -66,7 +66,7 @@ skipping s2 for lease transfer: lease disposition shedding (health unhealthy)
 [1 3]
 
 # Different kind of unhealthy. Same result.
-set-store-status store-id=2 health=unknown leases=shedding replicas=shedding
+update-store-status store-id=2 health=unknown leases=shedding replicas=shedding
 ----
 unknown shedding=leases,replicas
 
@@ -76,11 +76,11 @@ skipping s2 for lease transfer: lease disposition shedding (health unknown)
 [1 3]
 
 # Restore store 2, make store 3 refuse leases at store level.
-set-store-status store-id=2 health=ok leases=ok replicas=ok
+update-store-status store-id=2 health=ok leases=ok replicas=ok
 ----
 ok accepting all
 
-set-store-status store-id=3 leases=refusing
+update-store-status store-id=3 leases=refusing
 ----
 ok refusing=leases
 
@@ -90,7 +90,7 @@ skipping s3 for lease transfer: lease disposition refusing (health ok)
 [1 2]
 
 # Shedding and refusing are treated the same.
-set-store-status store-id=3 health=ok leases=shedding
+update-store-status store-id=3 health=ok leases=shedding
 ----
 ok shedding=leases
 
@@ -100,7 +100,7 @@ skipping s3 for lease transfer: lease disposition shedding (health ok)
 [1 2]
 
 # Restore store 3.
-set-store-status store-id=3 leases=ok
+update-store-status store-id=3 leases=ok
 ----
 ok accepting all
 

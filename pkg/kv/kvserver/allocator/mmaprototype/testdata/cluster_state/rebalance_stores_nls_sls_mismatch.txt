@@ -28,7 +28,7 @@ node-id=2 locality-tiers=node=2
 
 # s2 refuses replicas, so it will be filtered out of the candidate set
 # but its CPU still contributes to n1's node load.
-set-store-status store-id=2 replicas=refusing
+update-store-status store-id=2 replicas=refusing
 ----
 ok refusing=replicas
 
