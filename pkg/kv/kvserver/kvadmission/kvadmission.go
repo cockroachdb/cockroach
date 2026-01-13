@@ -249,8 +249,8 @@ type Handle struct {
 	elasticCPUWorkHandle *admission.ElasticCPUWorkHandle
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
 
-	callAdmittedWorkDoneOnKVAdmissionQ bool
-	cpuStart                           time.Duration
+	cpuStart            time.Duration
+	cpuKVAdmissionQResp admission.AdmitResponse
 }
 
 // AnnotateCtx annotates the given context with request-scoped admission
@@ -418,16 +418,16 @@ func (n *controllerImpl) AdmitKVWork(
 			}()
 		} else {
 			// Use the slots-based mechanism for everything else.
-			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			resp, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
 				return Handle{}, err
 			}
-			if callAdmittedWorkDoneOnKVAdmissionQ {
+			if resp.Enabled {
 				// We include the time to do other activities like intent resolution,
 				// since it is acceptable to charge them to the tenant.
 				ah.cpuStart = grunning.Time()
 			}
-			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
+			ah.cpuKVAdmissionQResp = resp
 		}
 	}
 	return ah, nil
@@ -436,7 +436,7 @@ func (n *controllerImpl) AdmitKVWork(
 // AdmittedKVWorkDone implements the Controller interface.
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
-	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+	if ah.cpuKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
 		if cpuTime < 0 {
 			// We sometimes see cpuTime to be negative. We use 1ns here, arbitrarily.
@@ -447,7 +447,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			}
 			cpuTime = 1
 		}
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
+		n.kvAdmissionQ.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
