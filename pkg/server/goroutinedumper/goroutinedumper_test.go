@@ -182,7 +182,7 @@ func TestTakeGoroutineDump(t *testing.T) {
 	t.Run("fails because dump already exists as a directory", func(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
-		path := filepath.Join(tempDir, "goroutine_dump.txt.gz")
+		path := filepath.Join(tempDir, "goroutine_dump.pb.gz")
 		err := os.Mkdir(path, 0755)
 		assert.NoError(t, err, "failed to make dump directory %s", path)
 
@@ -204,7 +204,7 @@ func TestTakeGoroutineDump(t *testing.T) {
 		err := takeGoroutineDump(path)
 		assert.NoError(t, err, "unexpected error when dumping goroutines")
 
-		expectedFile := filepath.Join(tempDir, "goroutine_dump.txt.gz")
+		expectedFile := filepath.Join(tempDir, "goroutine_dump.pb.gz")
 		f, err := os.Open(expectedFile)
 		if err != nil {
 			t.Fatalf("could not open goroutine dump file %s: %s", expectedFile, err)
