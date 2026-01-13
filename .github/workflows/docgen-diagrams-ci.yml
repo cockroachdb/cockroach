@@ -398,15 +398,97 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - name: Download diagram artifacts
+        if: needs.generate-diagrams.outputs.diagrams_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: sql-diagrams
+          path: artifacts/
+        continue-on-error: true
+
+      - name: Prepare diagram previews
+        id: prepare-previews
+        if: needs.generate-diagrams.outputs.diagrams_changed == 'true'
+        run: |
+          # CSS styling for railroad diagrams
+          DIAGRAM_CSS='<style>
+            .terminal { fill: #FFFFCC; stroke: #000000; stroke-width: 1; }
+            .nonterminal { fill: #FFCCCC; stroke: #000000; stroke-width: 1; }
+            .line { stroke: #000000; stroke-width: 1; fill: none; }
+            text.terminal { font-family: monospace; font-size: 12px; fill: #000000; }
+            text.nonterminal { font-family: monospace; font-size: 12px; fill: #000000; }
+            polygon { fill: #000000; }
+            rect { stroke-width: 1; }
+          </style>'
+
+          # Get list of changed HTML files
+          CHANGED_FILES='${{ needs.generate-diagrams.outputs.changed_files }}'
+
+          # Filter to only HTML files and limit to 5
+          HTML_FILES=$(echo "$CHANGED_FILES" | grep '\.html$' | head -5)
+
+          PREVIEWS=""
+          PREVIEW_COUNT=0
+          TOTAL_HTML=$(echo "$CHANGED_FILES" | grep -c '\.html$' || echo "0")
+          MAX_SIZE=40000  # 40KB limit per diagram
+
+          for file in $HTML_FILES; do
+            # Extract just the filename
+            BASENAME=$(basename "$file")
+
+            # Check if file exists in artifacts
+            if [[ -f "artifacts/$BASENAME" ]]; then
+              FILE_SIZE=$(stat -c%s "artifacts/$BASENAME" 2>/dev/null || stat -f%z "artifacts/$BASENAME" 2>/dev/null || echo "0")
+
+              if [[ $FILE_SIZE -lt $MAX_SIZE ]]; then
+                # Read the HTML content and add CSS
+                CONTENT=$(cat "artifacts/$BASENAME")
+
+                # Inject CSS into the SVG
+                STYLED_CONTENT=$(echo "$CONTENT" | sed "s/<svg /${DIAGRAM_CSS}<svg /")
+
+                PREVIEWS="${PREVIEWS}
+
+#### \`${BASENAME}\`
+
+${STYLED_CONTENT}
+
+"
+                PREVIEW_COUNT=$((PREVIEW_COUNT + 1))
+              else
+                PREVIEWS="${PREVIEWS}
+
+#### \`${BASENAME}\`
+*Diagram too large for preview ($(($FILE_SIZE / 1024))KB). Download artifacts to view.*
+
+"
+              fi
+            fi
+          done
+
+          # Calculate how many more diagrams exist
+          REMAINING=$((TOTAL_HTML - PREVIEW_COUNT))
+
+          # Save previews to file (to handle multiline output)
+          echo "$PREVIEWS" > /tmp/diagram_previews.md
+          echo "preview_count=$PREVIEW_COUNT" >> $GITHUB_OUTPUT
+          echo "remaining_count=$REMAINING" >> $GITHUB_OUTPUT
+          echo "total_html=$TOTAL_HTML" >> $GITHUB_OUTPUT
+
       - name: Create PR comment
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
+
             const validationStatus = '${{ needs.generate-diagrams.outputs.validation_status }}';
             const diagramsChanged = '${{ needs.generate-diagrams.outputs.diagrams_changed }}';
             const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
             const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
             const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
+            const previewCount = '${{ steps.prepare-previews.outputs.preview_count }}' || '0';
+            const remainingCount = '${{ steps.prepare-previews.outputs.remaining_count }}' || '0';
+            const totalHtml = '${{ steps.prepare-previews.outputs.total_html }}' || '0';
 
             let body = '## SQL Diagram Generation Report\n\n';
 
@@ -425,10 +507,27 @@ jobs:
                 body += 'A PR will be automatically opened in `generated-diagrams` to sync these changes.\n\n';
               }
 
-              // List changed files
-              if (changedFiles && changedFiles.trim() !== '') {
-                body += '### Changed Diagrams\n\n';
-                body += '```\n' + changedFiles + '\n```\n\n';
+              // Add diagram previews if available
+              let previews = '';
+              try {
+                previews = fs.readFileSync('/tmp/diagram_previews.md', 'utf8');
+              } catch (e) {
+                // No previews available
+              }
+
+              if (previews && previews.trim() !== '') {
+                body += '### Diagram Previews\n';
+                body += previews;
+
+                if (parseInt(remainingCount) > 0) {
+                  body += `\n*Showing ${previewCount} of ${totalHtml} changed diagrams. Download artifacts to view all.*\n\n`;
+                }
+              } else {
+                // Fallback to listing changed files
+                if (changedFiles && changedFiles.trim() !== '') {
+                  body += '### Changed Diagrams\n\n';
+                  body += '```\n' + changedFiles + '\n```\n\n';
+                }
               }
             } else {
               body += ':heavy_check_mark: **No diagram changes detected**\n\n';
