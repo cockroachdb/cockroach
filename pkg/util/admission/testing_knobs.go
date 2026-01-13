@@ -37,6 +37,11 @@ type TestingKnobs struct {
 	// AlwaysTryGrantWhenAdmitted causes the granter to unconditionally try
 	// admitting another request when admitting one.
 	AlwaysTryGrantWhenAdmitted bool
+
+	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+	// This knob allows disabling that, in order to take control over token
+	// count deductions in tests.
+	DisableCPUTimeTokenEstimation bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

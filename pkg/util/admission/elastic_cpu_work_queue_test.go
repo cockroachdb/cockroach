@@ -150,7 +150,9 @@ type testElasticCPUInternalWorkQueue struct {
 
 var _ elasticCPUInternalWorkQueue = &testElasticCPUInternalWorkQueue{}
 
-func (t *testElasticCPUInternalWorkQueue) Admit(_ context.Context, info WorkInfo) (AdmitResponse, error) {
+func (t *testElasticCPUInternalWorkQueue) Admit(
+	_ context.Context, info WorkInfo,
+) (AdmitResponse, error) {
 	if !t.disabled {
 		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
