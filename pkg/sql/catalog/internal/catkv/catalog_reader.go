@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // CatalogReader queries the system tables containing catalog data.
@@ -103,6 +104,14 @@ type CatalogReader interface {
 	// looks in the system database cache first if there is one.
 	GetByNames(
 		ctx context.Context, txn *kv.Txn, nameInfos []descpb.NameInfo,
+	) (nstree.Catalog, error)
+
+	// ScanAllTableDescriptorsForDatabase scans all descriptors but only fully
+	// unmarshals tables whose parent_id matches the given database ID.
+	// This is optimized for finding all tables in a specific database,
+	// including dropped tables that don't have namespace entries.
+	ScanAllTableDescriptorsForDatabase(
+		ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
 	) (nstree.Catalog, error)
 }
 
@@ -213,6 +222,64 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+	return mc.Catalog, nil
+}
+
+// ScanAllTableDescriptorsForDatabase is part of the CatalogReader interface.
+func (cr catalogReader) ScanAllTableDescriptorsForDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	if txn == nil {
+		return nstree.Catalog{}, errors.AssertionFailedf("nil txn for catalog query")
+	}
+
+	// Scan only the descriptor table (not namespace/comments/zones).
+	b := txn.NewBatch()
+	scan(ctx, b, catalogkeys.MakeAllDescsMetadataKey(cr.codec))
+	if err := txn.Run(ctx, b); err != nil {
+		return nstree.Catalog{}, err
+	}
+
+	for _, result := range b.Results {
+		if result.Err != nil {
+			return nstree.Catalog{}, result.Err
+		}
+		for _, row := range result.Rows {
+			// Extract parent ID from raw bytes before full unmarshaling.
+			descBytes, err := row.Value.GetBytes()
+			if err != nil {
+				return nstree.Catalog{}, err
+			}
+
+			parentID, isTable, err := descpb.ExtractParentDatabaseID(descBytes)
+			if err != nil {
+				// Log and skip malformed descriptors rather than failing entirely.
+				log.Dev.Warningf(ctx, "failed to extract parent ID from descriptor: %v", err)
+				continue
+			}
+
+			// Skip non-tables and tables with non-matching parent IDs.
+			if !isTable || parentID != parentDBID {
+				continue
+			}
+
+			// Full unmarshal for matching tables.
+			u32ID, err := cr.codec.DecodeDescMetadataID(row.Key)
+			if err != nil {
+				return nstree.Catalog{}, err
+			}
+			id := descpb.ID(u32ID)
+			desc, err := build(catalog.Table, id, row.Value, false /* isRequired */)
+			if err != nil {
+				return nstree.Catalog{}, wrapError(catalog.Table, id, err)
+			}
+			if desc != nil {
+				mc.UpsertDescriptor(desc)
+			}
+		}
+	}
+
 	return mc.Catalog, nil
 }
 

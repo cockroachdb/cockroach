@@ -1012,6 +1012,17 @@ func (tc *Collection) GetDescriptorsInSpans(
 	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
+// GetAllTablesInDatabaseIncludingDropped returns all table descriptors with
+// the given parent database ID, including dropped tables that don't have
+// namespace entries. This is more efficient than GetAll() when only tables
+// from a specific database are needed, as it uses lightweight proto parsing
+// to filter before full unmarshaling.
+func (tc *Collection) GetAllTablesInDatabaseIncludingDropped(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) (nstree.Catalog, error) {
+	return tc.cr.ScanAllTableDescriptorsForDatabase(ctx, txn, parentDBID)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.

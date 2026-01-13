@@ -251,6 +251,14 @@ func (c *cachedCatalogReader) ScanDescriptorsInSpans(
 	return c.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
+// ScanAllTableDescriptorsForDatabase is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanAllTableDescriptorsForDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) (nstree.Catalog, error) {
+	// Delegate to the underlying reader; this specialized query is not cached.
+	return c.cr.ScanAllTableDescriptorsForDatabase(ctx, txn, parentDBID)
+}
+
 // ScanNamespaceForDatabases is part of the CatalogReader interface.
 func (c *cachedCatalogReader) ScanNamespaceForDatabases(
 	ctx context.Context, txn *kv.Txn,
