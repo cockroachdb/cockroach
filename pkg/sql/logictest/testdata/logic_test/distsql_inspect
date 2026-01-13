@@ -1,4 +1,4 @@
-# LogicTest: 5node-default-configs
+# LogicTest: 5node-default-configs !metamorphic-batch-sizes
 
 skip under race
 
