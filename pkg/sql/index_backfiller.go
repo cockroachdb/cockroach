@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -368,24 +369,43 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	if len(manifests) == 0 {
 		return nil
 	}
-	ssts := make([]execinfrapb.BulkMergeSpec_SST, 0, len(manifests))
+
+	// Convert manifests to SSTFiles format for CombineFileInfo. We create a
+	// single SSTFiles entry containing all manifest data.
+	sstFileInfos := make([]*bulksst.SSTFileInfo, 0, len(manifests))
+	rowSamples := make([]string, 0, len(manifests))
 	for _, manifest := range manifests {
 		if manifest.Span == nil {
 			return errors.AssertionFailedf("manifest missing span metadata")
 		}
-		ssts = append(ssts, execinfrapb.BulkMergeSpec_SST{
-			URI:      manifest.URI,
-			StartKey: append([]byte(nil), manifest.Span.Key...),
-			EndKey:   append([]byte(nil), manifest.Span.EndKey...),
+		sstFileInfos = append(sstFileInfos, &bulksst.SSTFileInfo{
+			URI:       manifest.URI,
+			StartKey:  append(roachpb.Key(nil), manifest.Span.Key...),
+			EndKey:    append(roachpb.Key(nil), manifest.Span.EndKey...),
+			FileSize:  manifest.FileSize,
+			RowSample: append(roachpb.Key(nil), manifest.RowSample...),
 		})
+		if len(manifest.RowSample) > 0 {
+			rowSamples = append(rowSamples, string(manifest.RowSample))
+		}
 	}
-	targetSpans := make([]roachpb.Span, 0, len(progress.DestIndexIDs))
+	sstFiles := []bulksst.SSTFiles{{SST: sstFileInfos, RowSamples: rowSamples}}
+
+	// Build schema spans from destination indexes.
+	schemaSpans := make([]roachpb.Span, 0, len(progress.DestIndexIDs))
 	for _, idxID := range progress.DestIndexIDs {
 		span := descriptor.IndexSpan(ib.execCfg.Codec, idxID)
-		targetSpans = append(targetSpans, span)
+		schemaSpans = append(schemaSpans, span)
 	}
-	if len(targetSpans) == 0 {
+	if len(schemaSpans) == 0 {
 		return errors.AssertionFailedf("no destination index spans provided for merge")
+	}
+
+	// CombineFileInfo consolidates SST metadata and uses row samples to split
+	// schema spans into smaller merge spans for better parallelization.
+	ssts, mergeSpans, err := bulksst.CombineFileInfo(sstFiles, schemaSpans)
+	if err != nil {
+		return err
 	}
 
 	mem := &MemoryMetrics{}
@@ -427,7 +447,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			ctx,
 			jobExecCtx,
 			currentSSTs,
-			targetSpans,
+			mergeSpans,
 			genOutputURIAndRecordPrefix,
 			iteration,
 			maxIterations,
