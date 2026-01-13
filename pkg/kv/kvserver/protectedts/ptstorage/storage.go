@@ -58,8 +58,8 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) (err error) {
 		}
 	}()
 
-	if err := validateRecordForProtect(ctx, r, p.settings, p.knobs); err != nil {
-		return err
+	if validateErr := validateRecordForProtect(ctx, r, p.settings, p.knobs); validateErr != nil {
+		return validateErr
 	}
 
 	meta := r.Meta
@@ -146,8 +146,8 @@ func (p *storage) GetRecord(ctx context.Context, id uuid.UUID) (rec *ptpb.Record
 		return nil, protectedts.ErrNotExists
 	}
 	var r ptpb.Record
-	if err := rowToRecord(row, &r, false /* isDeprecatedRow */); err != nil {
-		return nil, err
+	if rowErr := rowToRecord(row, &r, false /* isDeprecatedRow */); rowErr != nil {
+		return nil, rowErr
 	}
 	return &r, nil
 }
