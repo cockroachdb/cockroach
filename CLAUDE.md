@@ -721,7 +721,134 @@ enum ReplicaType {
 - Add comments explaining review discussion outcomes
 - Prefix grammar suggestions with "nit:" to indicate low priority
 
-### Special Considerations
+### Error Handling
+
+CockroachDB uses the [github.com/cockroachdb/errors](https://github.com/cockroachdb/errors) library, a superset of Go's standard `errors` package and `pkg/errors`.
+
+#### Creating Errors
+
+```go
+// Simple static string errors
+errors.New("connection failed")
+
+// Formatted error strings
+errors.Newf("invalid value: %d", val)
+
+// Assertion failures for implementation bugs (generates louder alerts)
+errors.AssertionFailedf("expected non-nil pointer")
+```
+
+#### Wrapping and Adding Context
+
+It can be helpful to add context when propagating errors up the call stack:
+
+```go
+// Wrap with context (preferred over fmt.Errorf with %w)
+return errors.Wrap(err, "opening file")
+
+// Wrap with formatted context
+return errors.Wrapf(err, "connecting to %s", addr)
+```
+
+Keep context succinct; avoid phrases like "failed to" which pile up:
+
+```go
+// Bad: "failed to x: failed to y: failed to create store: the error"
+return errors.Newf("failed to create new store: %s", err)
+
+// Good: "x: y: new store: the error"
+return errors.Wrap(err, "new store")
+```
+
+#### User-Facing Information
+
+```go
+// Add hints for end-users (actionable guidance, excluded from Sentry)
+errors.WithHint(err, "check your network connection")
+
+// Add details for developers (contextual info, excluded from Sentry)
+errors.WithDetail(err, "request payload was 2.5MB")
+```
+
+#### Detecting and Handling Errors
+
+For errors that clients need to detect, use sentinel errors or custom types:
+
+```go
+// Sentinel error pattern
+var ErrNotFound = errors.New("not found")
+
+func Find(id string) error {
+    return ErrNotFound
+}
+
+// Caller detection with errors.Is (works across network boundaries!)
+if errors.Is(err, ErrNotFound) {
+    // handle not found
+}
+```
+
+For errors with additional information, use custom types:
+
+```go
+type NotFoundError struct {
+    Resource string
+}
+
+func (e *NotFoundError) Error() string {
+    return fmt.Sprintf("%s not found", e.Resource)
+}
+
+// Caller detection with errors.As
+var nfErr *NotFoundError
+if errors.As(err, &nfErr) {
+    log.Printf("missing: %s", nfErr.Resource)
+}
+```
+
+#### Error Propagation Options
+
+| Scenario | Approach |
+|----------|----------|
+| No additional context needed | Return original error |
+| Adding context | Use `errors.Wrap` or `errors.Wrapf` |
+| Passing through goroutine channel | Use `errors.WithStack` on both ends |
+| Callers don't need to detect this error | Use `errors.Newf` |
+| Hide original cause | Use `errors.Handled` or `errors.Opaque` |
+
+#### Safe Details for PII Protection
+
+Error messages are redacted by default in Sentry reports. Mark data as safe explicitly:
+
+```go
+// Mark specific values as safe for reporting
+errors.WithSafeDetails(err, "node_id=%d", nodeID)
+
+// The Safe() wrapper for known-safe values
+errors.Newf("processing %s", errors.Safe(operationName))
+```
+
+#### Type Assertions
+
+Always use the "comma ok" idiom to avoid panics:
+
+```go
+// Bad - panics on wrong type
+t := i.(string)
+
+// Good - handles gracefully
+t, ok := i.(string)
+if !ok {
+    return errors.New("expected string type")
+}
+```
+
+#### Key Files
+
+- `/docs/RFCS/20190318_error_handling.md` - Error handling RFC
+- [cockroachdb/errors README](https://raw.githubusercontent.com/cockroachdb/errors/refs/heads/master/README.md) - Full API documentation
+
+## Special Considerations
 
 - **Bazel Integration**: All builds must go through Bazel - do not use `go build` or `go test` directly
 - **SQL Compatibility**: Maintains PostgreSQL wire protocol compatibility
