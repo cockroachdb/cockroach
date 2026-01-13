@@ -33,6 +33,7 @@ message NewStatsCollected {
   string stats_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   repeated uint32 column_ids = 4;
   int64 stats_id = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  int64 row_count = 6;
 }
 
 

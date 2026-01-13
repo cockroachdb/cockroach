@@ -589,7 +589,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			}
 
 			// Log statistic collection event
-			s.logStatisticCollectedEvent(ctx, si.spec.StatName, ts, columnIDs, statsID)
+			s.logStatisticCollectedEvent(ctx, si.spec.StatName, ts, columnIDs, statsID, si.numRows)
 
 			// Release any memory temporarily used for this statistic.
 			s.tempMemAcc.Clear(ctx)
@@ -708,6 +708,7 @@ func (s *sampleAggregator) logStatisticCollectedEvent(
 	timestamp int64,
 	columnIDs []descpb.ColumnID,
 	statsID int64,
+	rowCount int64,
 ) {
 
 	colIDs := make([]uint32, len(columnIDs))
@@ -726,6 +727,7 @@ func (s *sampleAggregator) logStatisticCollectedEvent(
 		StatsName: statsName,
 		ColumnIds: colIDs,
 		StatsId:   statsID,
+		RowCount:  rowCount,
 	}
 
 	// Write event asynchronously (non-blocking)

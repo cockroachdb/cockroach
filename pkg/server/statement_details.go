@@ -682,6 +682,10 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 				statsEvent.StatsID = statsID
 			}
 
+			if rowCount, ok := infoMap["RowCount"].(int64); ok {
+				statsEvent.RowCount = rowCount
+			}
+
 			events = append(events, statsEvent)
 		}
 

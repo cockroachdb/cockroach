@@ -1814,6 +1814,7 @@ message StatsCollection {
     repeated uint32 column_ids = 7 [(gogoproto.customname) = "ColumnIDs"];
     google.protobuf.Timestamp info_timestamp = 8 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
     int64 stats_id = 9 [(gogoproto.customname) = "StatsID"];
+    int64 row_count = 10;
   }
 
   repeated Event events = 1;
