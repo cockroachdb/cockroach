@@ -290,7 +290,7 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 	execCfg := ts.ExecutorConfig().(ExecutorConfig)
 	st := cluster.MakeTestingClusterSettings()
 	su := st.MakeUpdater()
-	const topLimit = 3
+	const topLimit = 100
 	err := su.Set(ctx, "sql.stats.activity.top.max", settings.EncodedValue{
 		Value: settings.EncodeInt(int64(topLimit)),
 		Type:  "i",
@@ -885,7 +885,7 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 				}
 
 			case "explain-sql-activity-select-top-transactions":
-				limit := sqlStatsActivityTopCount.Get(&st.SV)
+				limit := SqlStatsActivityTopCount.Get(&st.SV)
 
 				var mockAggTsStr string
 				d.ScanArgs(t, "aggTs", &mockAggTsStr)
@@ -912,7 +912,7 @@ func TestSqlActivityUpdaterDataDriven(t *testing.T) {
 					require.NoError(t, err)
 				}
 			case "explain-sql-activity-select-top-statements":
-				limit := sqlStatsActivityTopCount.Get(&st.SV)
+				limit := SqlStatsActivityTopCount.Get(&st.SV)
 
 				var mockAggTsStr string
 				d.ScanArgs(t, "aggTs", &mockAggTsStr)
