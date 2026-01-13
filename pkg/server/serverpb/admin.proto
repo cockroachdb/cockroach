@@ -843,9 +843,6 @@ message DataDistributionResponse {
 
 // MetricMetadataRequest requests metadata for all metrics.
 message MetricMetadataRequest {
-  // include_layers, if true, populates the metricLayers field in the response
-  // with the layer assignment for each metric (STORAGE, APPLICATION, or SERVER).
-  bool include_layers = 1;
 }
 
 // MetricMetadataResponse contains the metadata for all metrics.
@@ -853,8 +850,6 @@ message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
   // Maps of metric metadata names to the tsdb recorded metric names
   map<string, string> recordedNames = 2 [(gogoproto.nullable) = false];
-  // Maps metric name to its layer (STORAGE, APPLICATION, or SERVER)
-  map<string, string> metricLayers = 3;
 }
 
 message EnqueueRangeRequest {

@@ -7554,10 +7554,6 @@ Support status: [reserved](#support-status)
 MetricMetadataRequest requests metadata for all metrics.
 
 
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| include_layers | [bool](#cockroach.server.serverpb.MetricMetadataRequest-bool) |  | include_layers, if true, populates the metricLayers field in the response with the layer assignment for each metric (STORAGE, APPLICATION, or SERVER). | [reserved](#support-status) |
-
 
 
 
@@ -7576,7 +7572,6 @@ MetricMetadataResponse contains the metadata for all metrics.
 | ----- | ---- | ----- | ----------- | -------------- |
 | metadata | [MetricMetadataResponse.MetadataEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetadataEntry) | repeated |  | [reserved](#support-status) |
 | recordedNames | [MetricMetadataResponse.RecordedNamesEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry) | repeated | Maps of metric metadata names to the tsdb recorded metric names | [reserved](#support-status) |
-| metricLayers | [MetricMetadataResponse.MetricLayersEntry](#cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetricLayersEntry) | repeated | Maps metric name to its layer (STORAGE, APPLICATION, or SERVER) | [reserved](#support-status) |
 
 
 
@@ -7599,20 +7594,6 @@ MetricMetadataResponse contains the metadata for all metrics.
 
 <a name="cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.RecordedNamesEntry"></a>
 #### MetricMetadataResponse.RecordedNamesEntry
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| key | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
-| value | [string](#cockroach.server.serverpb.MetricMetadataResponse-string) |  |  |  |
-
-
-
-
-
-<a name="cockroach.server.serverpb.MetricMetadataResponse-cockroach.server.serverpb.MetricMetadataResponse.MetricLayersEntry"></a>
-#### MetricMetadataResponse.MetricLayersEntry
 
 
 

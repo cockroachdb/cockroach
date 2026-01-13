@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	slugify "github.com/mozillazg/go-slugify"
@@ -37,34 +37,17 @@ import (
 )
 
 type MetricInfo struct {
-	Name                       string                      `yaml:"name"`
-	ExportedName               string                      `yaml:"exported_name"`
-	LabeledName                string                      `yaml:"labeled_name,omitempty"`
-	Description                string                      `yaml:"description"`
-	YAxisLabel                 string                      `yaml:"y_axis_label"`
-	Type                       string                      `yaml:"type"`
-	Unit                       string                      `yaml:"unit"`
-	Aggregation                string                      `yaml:"aggregation"`
-	Derivative                 string                      `yaml:"derivative"`
-	HowToUse                   string                      `yaml:"how_to_use,omitempty"`
-	Visibility                 string                      `yaml:"visibility,omitempty"`
-	MetricsVisualisationConfig *MetricsVisualisationConfig `yaml:"metrics_visualisation_config,omitempty"`
-}
-
-type MetricsVisualisationConfig struct {
-	Title       string               `yaml:"title"`
-	Options     map[string]string    `yaml:"options,omitempty"`
-	ChartConfig map[string]ChartInfo `yaml:"chart_config,omitempty"`
-}
-
-type ChartInfo struct {
-	Title        string            `yaml:"title"`
-	Type         string            `yaml:"type"`
-	Units        string            `yaml:"units"`
-	AxisLabel    string            `yaml:"axis_label"`
-	Tooltip      interface{}       `yaml:"tooltip"` // Can be string or map with "text" and "note" fields
-	Options      map[string]string `yaml:"options,omitempty"`
-	RecordedName string            `yaml:"recorded_name,omitempty"`
+	Name         string `yaml:"name"`
+	ExportedName string `yaml:"exported_name"`
+	LabeledName  string `yaml:"labeled_name,omitempty"`
+	Description  string `yaml:"description"`
+	YAxisLabel   string `yaml:"y_axis_label"`
+	Type         string `yaml:"type"`
+	Unit         string `yaml:"unit"`
+	Aggregation  string `yaml:"aggregation"`
+	Derivative   string `yaml:"derivative"`
+	HowToUse     string `yaml:"how_to_use,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
 }
 
 type Category struct {
@@ -81,10 +64,7 @@ type YAMLOutput struct {
 	Layers []*Layer
 }
 
-var (
-	manPath            string
-	percentileSuffixes = []string{"-p99.999", "-p99.99", "-p99.9", "-p99", "-p90", "-p75", "-p50"}
-)
+var manPath string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
@@ -389,16 +369,6 @@ func init() {
 	GenCmd.AddCommand(genCmds...)
 }
 
-// stripPercentileSuffix removes percentile suffixes like -p50, -p75, -p90, -p99, -p99.9, -p99.99, -p99.999 from a metric name.
-func stripPercentileSuffix(name string) string {
-	for _, suffix := range percentileSuffixes {
-		if strings.HasSuffix(name, suffix) {
-			return strings.TrimSuffix(name, suffix)
-		}
-	}
-	return name
-}
-
 func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
 	sArgs := base.TestServerArgs{
 		Insecure:          true,
@@ -429,69 +399,52 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 		return nil, errors.AssertionFailedf("could not initialize server in time")
 	}
 
-	// Retrieve all metric metadata with layer information.
-	metadataMap := make(map[string]metric.Metadata)
-	layersMap := make(map[string]string)
-	recordedNamesMap := make(map[string]string)
+	var sections []catalog.ChartSection
 
-	retrieve := func(layer serverutils.ApplicationLayerInterface, predicate func(string) bool) error {
+	// Retrieve the chart catalog (metric list) for the system tenant over RPC.
+	retrieve := func(layer serverutils.ApplicationLayerInterface, predicate func(catalog.MetricLayer) bool) error {
 		conn, err := layer.RPCClientConnE(username.RootUserName())
 		if err != nil {
 			return err
 		}
 		client := conn.NewAdminClient()
 
-		resp, err := client.AllMetricMetadata(ctx, &serverpb.MetricMetadataRequest{
-			IncludeLayers: true,
-		})
+		resp, err := client.ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
 		if err != nil {
 			return err
 		}
-
-		for name, meta := range resp.Metadata {
-			layerStr, ok := resp.MetricLayers[name]
-			if !ok {
-				// If layer information is not available, skip this metric
+		for _, section := range resp.Catalog {
+			if !predicate(section.MetricLayer) {
 				continue
 			}
-
-			if predicate(layerStr) {
-				metadataMap[name] = meta
-				layersMap[name] = layerStr
-			}
+			sections = append(sections, section)
 		}
-
-		// Collect recorded names
-		for name, recordedName := range resp.RecordedNames {
-			// Strip percentile suffix from the name to get the base metric name
-			baseName := stripPercentileSuffix(name)
-
-			if _, ok := metadataMap[baseName]; ok {
-				// Strip percentile suffix (e.g., "-p99", "-p50", "-p99.9") from recorded name
-				recordedName = stripPercentileSuffix(recordedName)
-				recordedNamesMap[baseName] = recordedName
-			}
-		}
-
 		return nil
 	}
 
-	if err := retrieve(srv, func(layerStr string) bool {
+	if err := retrieve(srv, func(layer catalog.MetricLayer) bool {
 		if skipFiltering {
 			return true
 		}
-		return layerStr != "APPLICATION"
+		return layer != catalog.MetricLayer_APPLICATION
 	}); err != nil {
 		return nil, err
 	}
-	if err := retrieve(srv.TestTenant(), func(layerStr string) bool {
+	if err := retrieve(srv.TestTenant(), func(layer catalog.MetricLayer) bool {
 		if skipFiltering {
 			return true
 		}
-		return layerStr == "APPLICATION"
+		return layer == catalog.MetricLayer_APPLICATION
 	}); err != nil {
 		return nil, err
 	}
+
+	// Sort by layer then category name.
+	sort.Slice(sections, func(i, j int) bool {
+		return sections[i].MetricLayer < sections[j].MetricLayer ||
+			(sections[i].MetricLayer == sections[j].MetricLayer &&
+				sections[i].Title < sections[j].Title)
+	})
 
 	// Structure for file is:
 	// layers:
@@ -505,145 +458,57 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 	//            y_axis_label: Active Statements
 
 	layers := make(map[string]*Layer)
-	for name, meta := range metadataMap {
-		layerStr := layersMap[name]
-
-		// Get or create the layer
-		layer, ok := layers[layerStr]
+	for _, section := range sections {
+		// Get or create the layer that the current section is in
+		layerName := section.MetricLayer.String()
+		layer, ok := layers[layerName]
 		if !ok {
 			layer = &Layer{
-				Name:       layerStr,
+				Name:       layerName,
 				Categories: []Category{},
 			}
-			layers[layerStr] = layer
+			layers[layerName] = layer
 		}
 
-		// Find or create the category within the layer
-		categoryName := meta.Category.String()
-		var category *Category
-		for i := range layer.Categories {
-			if layer.Categories[i].Name == categoryName {
-				category = &layer.Categories[i]
-				break
+		// Every section is a separate category
+		category := Category{
+			Name: section.Title,
+		}
+
+		for _, chart := range section.Charts {
+			// There are many charts, but only 1 metric per chart.
+			visibility := chart.Metrics[0].Visibility
+			// Only include visibility if it's not the default INTERNAL value
+			if visibility == "INTERNAL" {
+				visibility = ""
 			}
-		}
-		if category == nil {
-			layer.Categories = append(layer.Categories, Category{
-				Name:    categoryName,
-				Metrics: []MetricInfo{},
-			})
-			category = &layer.Categories[len(layer.Categories)-1]
+			metric := MetricInfo{
+				Name:         chart.Metrics[0].Name,
+				ExportedName: chart.Metrics[0].ExportedName,
+				LabeledName:  chart.Metrics[0].LabeledName,
+				Description:  strings.TrimSpace(chart.Metrics[0].Help),
+				YAxisLabel:   chart.AxisLabel,
+				Type:         chart.Metrics[0].MetricType.String(),
+				Unit:         chart.Units.String(),
+				Aggregation:  chart.Aggregator.String(),
+				Derivative:   chart.Derivative.String(),
+				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
+				Visibility:   visibility,
+			}
+			category.Metrics = append(category.Metrics, metric)
 		}
 
-		// Only include visibility if it's not the default INTERNAL value
-		visibility := meta.Visibility.String()
-		if visibility == "INTERNAL" {
-			visibility = ""
-		}
-
-		metricInfo := MetricInfo{
-			Name:                       name,
-			ExportedName:               metric.ExportedName(name),
-			LabeledName:                formatLabeledName(meta),
-			Description:                strings.TrimSpace(meta.Help),
-			YAxisLabel:                 meta.Measurement,
-			Type:                       meta.MetricType.String(),
-			Unit:                       meta.Unit.String(),
-			Aggregation:                "AVG", // Default aggregation
-			Derivative:                 deriveDerivative(meta),
-			HowToUse:                   strings.TrimSpace(meta.HowToUse),
-			Visibility:                 visibility,
-			MetricsVisualisationConfig: convertMetricsVisualisationConfig(meta.MetricsVisualisationConfig, name, recordedNamesMap),
-		}
-		category.Metrics = append(category.Metrics, metricInfo)
+		layer.Categories = append(layer.Categories, category)
 	}
 
-	// Sort categories and metrics within each layer
+	// Sort metrics within each layer by name
 	for _, layer := range layers {
-		// Sort categories by name
-		sort.Slice(layer.Categories, func(i, j int) bool {
-			return layer.Categories[i].Name < layer.Categories[j].Name
-		})
-		// Sort metrics within each category
-		for i := range layer.Categories {
-			sort.Slice(layer.Categories[i].Metrics, func(j, k int) bool {
-				return layer.Categories[i].Metrics[j].Name < layer.Categories[i].Metrics[k].Name
+		for _, cat := range layer.Categories {
+			sort.Slice(cat.Metrics, func(i, j int) bool {
+				return cat.Metrics[i].Name < cat.Metrics[j].Name
 			})
 		}
 	}
 
 	return layers, nil
-}
-
-// formatLabeledName formats the labeled name of a metric.
-func formatLabeledName(meta metric.Metadata) string {
-	if meta.LabeledName == "" && len(meta.StaticLabels) == 0 {
-		return ""
-	}
-	var labels []string
-	for _, lp := range meta.StaticLabels {
-		if lp.Name != nil && lp.Value != nil {
-			labels = append(labels, fmt.Sprintf("%s: %s", *lp.Name, *lp.Value))
-		}
-	}
-	if len(labels) == 0 {
-		return meta.LabeledName
-	}
-	return fmt.Sprintf("%s{%s}", meta.LabeledName, strings.Join(labels, ", "))
-}
-
-// deriveDerivative determines the derivative type based on the metric type.
-func deriveDerivative(meta metric.Metadata) string {
-	if meta.MetricType.String() == "COUNTER" {
-		return "NON_NEGATIVE_DERIVATIVE"
-	}
-	return "NONE"
-}
-
-// convertMetricsVisualisationConfig converts the protobuf MetricsVisualisationConfig
-// to the YAML-compatible structure.
-func convertMetricsVisualisationConfig(
-	config *metric.MetricsVisualisationConfig, metricName string, recordedNames map[string]string,
-) *MetricsVisualisationConfig {
-	if config == nil {
-		return nil
-	}
-
-	chartConfig := make(map[string]ChartInfo)
-	for key, chart := range config.ChartConfig {
-		// Use recorded name from map if available, otherwise fallback to metric name
-		recordedName := metricName
-		if recordedNames != nil {
-			if rn, ok := recordedNames[metricName]; ok {
-				recordedName = rn
-			}
-		}
-
-		// Build tooltip: if both tooltip and note exist, create a map, otherwise just use the string
-		var tooltip interface{}
-		if chart.Tooltip != "" && chart.Note != "" {
-			tooltip = map[string]string{
-				"text": chart.Tooltip,
-				"note": chart.Note,
-			}
-		} else {
-			tooltip = chart.Tooltip
-		}
-
-		chartConfig[key] = ChartInfo{
-			Title:        chart.Title,
-			Type:         chart.Type,
-			Units:        chart.Units.String(),
-			AxisLabel:    chart.AxisLabel,
-			Tooltip:      tooltip,
-			Options:      chart.Options,
-			RecordedName: recordedName,
-		}
-	}
-
-	return &MetricsVisualisationConfig{
-		Title:       config.Title,
-		Options:     config.Options,
-		ChartConfig: chartConfig,
-	}
 }
