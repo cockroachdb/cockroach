@@ -293,6 +293,8 @@ type WorkQueue struct {
 		epochLengthNanos            int64
 		epochClosingDeltaNanos      int64
 		maxQueueDelayToSwitchToLifo time.Duration
+		// Only used if mode == usesCPUTimeTokens.
+		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
 	}
 	logThreshold log.EveryN
 	metrics      *WorkQueueMetrics
@@ -388,6 +390,7 @@ func initWorkQueue(
 	q.stopCh = stopCh
 	q.timeSource = timeSource
 	q.knobs = knobs
+	q.mu.defaultCPUTimeTokenEstimator = cpuTimeTokenEstimator{}
 
 	func() {
 		q.mu.Lock()
@@ -401,7 +404,7 @@ func initWorkQueue(
 			for {
 				select {
 				case <-ticker.C:
-					q.gcTenantsAndResetUsed()
+					q.gcTenantsResetUsedAndUpdateEstimators()
 				case <-stopCh:
 					// Channel closed.
 					return
@@ -637,12 +640,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		panic(errors.AssertionFailedf("unexpected RequestedCount for slot-based queue: %d", info.RequestedCount))
 	}
 	q.metrics.incRequested(info.Priority)
-	tenantID := info.TenantID.ToUint64()
-	admitResponse := AdmitResponse{
-		tenantID:       info.TenantID,
-		requestedCount: info.RequestedCount,
-	}
 
+	tenantID := info.TenantID.ToUint64()
 	// The code in this method does not use defer to unlock the mutex because it
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
@@ -650,9 +649,30 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	q.mu.Lock()
 	tenant, ok := q.mu.tenants[tenantID]
 	if !ok {
-		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+		// See comment below about CPU time token estimation. If no tenantInfo
+		// struct exists for a tenant, then there is no cpuTimeTokenEstimator
+		// dedicated to that tenant yet. When we create the tenantInfo struct
+		// here, we also create the estimator. We init the estimator using a
+		// global estimator that sees workload across all tenants.
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+			q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
 		q.mu.tenants[tenantID] = tenant
 	}
+	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+	// When Admit is called, the request hasn't yet executed, so we do not
+	// know how much CPU time will be used by goroutines used to service it.
+	// When AdmittedWorkDone is called, the request is done executing, so we have
+	// a measurement of CPU time used servicing the request, courtesy of grunning.
+	// tenant.estimator uses past measurements from grunning to make estimates
+	// in this code path, that is, at admission time.
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
+	}
+	admitResponse := AdmitResponse{
+		tenantID:       info.TenantID,
+		requestedCount: info.RequestedCount,
+	}
+
 	if info.ReplicatedWorkInfo.Enabled {
 		if info.BypassAdmission {
 			// TODO(irfansharif): "Admin" work (like splits, scatters, lease
@@ -751,7 +771,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
-			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
 			q.mu.tenants[tenantID] = tenant
 		}
 		// Don't want to overflow tenant.used if it has decreased because of being
@@ -926,26 +947,49 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 			errors.AssertionFailedf("AdmittedWorkDone only supports usesSlots & usesCPUTimeTokens but got %v", q.mode))
 	}
 
-	// adjustTenantUsed adjusts `tenant.used`. This tracks usage of resources
-	// over a time interval. `tenant.used` is how the WorkQueue implements
-	// fair-sharing of resources.
-	//
-	// At admission time (as part of the call to Admit),
-	// q.adjustTenantUsed(tenantID, resp.requestedCount) is called. Now that the
-	// request is done executing, we have a measurement of CPU usage incurred by
-	// the request from grunning. So we adjust tenant.used again, correcting our
-	// earlier estimate. (In the case of slot-based AC, resp.requestedCount
-	// equals 1 nanosecond, so the change to tenant.used made here is the only
-	// significant one. With CPU time token AC, a more plausible estimate of CPU
-	// time incurred by a request is available at admission time (see
-	// cpu_time_token_estimation.go for more).
-	//
-	// NB: additionalUsed can be negative here (in case the initial estimate was
-	// too pessimistic).
 	additionalUsed := cpuTime.Nanoseconds() - resp.requestedCount
-	if additionalUsed != 0 {
-		q.adjustTenantUsed(resp.tenantID, additionalUsed)
-	}
+	func() {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+
+		// adjustTenantUsed adjusts `tenant.used`. This tracks usage of resources
+		// over a time interval. `tenant.used` is how the WorkQueue implements
+		// fair-sharing of resources.
+		//
+		// At admission time (as part of the call to Admit),
+		// q.adjustTenantUsed(tenantID, resp.requestedCount) is called. Now that the
+		// request is done executing, we have a measurement of CPU usage incurred by
+		// the request from grunning. So we adjust tenant.used again, correcting our
+		// earlier estimate. (In the case of slot-based AC, resp.requestedCount
+		// equals 1 nanosecond, so the change to tenant.used made here is the only
+		// significant one. With CPU time token AC, a more plausible estimate of CPU
+		// time incurred by a request is available at admission time (see
+		// cpu_time_token_estimation.go for more).
+		//
+		// NB: additionalUsed can be negative here (in case the initial estimate was
+		// too pessimistic).
+		if additionalUsed != 0 {
+			q.adjustTenantUsedLocked(resp.tenantID, additionalUsed)
+		}
+
+		// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+		// When Admit is called, the request hasn't yet executed, so we do not
+		// know how much CPU time will be used by goroutines used to service it.
+		// When AdmittedWorkDone is called, the request is done executing, so we have
+		// a measurement of CPU time used servicing the request, courtesy of grunning.
+		// tenant.estimator uses past measurements from grunning to make estimates
+		// in this code path, that is, at admission time.
+		if q.mode == usesCPUTimeTokens {
+			q.mu.defaultCPUTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
+			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
+			// If the tenant struct doesn't exist, it has been GCed due to a lack of
+			// activity. In this case, we do not leverage the grunning measurement
+			// for future estimates.
+			if ok {
+				tenant.cpuTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
+			}
+		}
+	}()
 
 	// Slot-based AC sets a concurrency limit on requests. A single slot is
 	// taken at admission time. That slot must be returned here, for the
@@ -953,7 +997,7 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 	//
 	// CPU time token AC represents CPU usage via nanosecond tokens. Tokens
 	// are refilled at some rate (see cpu_time_token_filler.go for more).
-	// Since this is rate limit instead of a concurrency limit, used tokens
+	// Since this is a rate limit instead of a concurrency limit, used tokens
 	// should not be returned. But the initial deduction of tokens is based
 	// on an estimate of CPU usage (see cpu_time_token_estimation.go for more).
 	// In AdmittedWorkDone, we have a measurement of usage. So the below calls
@@ -1054,9 +1098,19 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	return requestedCount
 }
 
-func (q *WorkQueue) gcTenantsAndResetUsed() {
+// gcTenantsResetUsedAndUpdateEstimators does three things:
+//  1. It resets tenant.used, which is the resource count over which the
+//     WorkQueue does fair-sharing. That is, fair-sharing is done over
+//     intervals that are sized at the frequency with which this
+//     function is called (as of 1/9/26, every 1s).
+//  2. It GCs tenantInfo entries, if a tenant has seen no workload over
+//     the interval.
+//  3. It updates CPU time token estimators. The estimators are only used
+//     if mode == usesCPUTimeTokens.
+func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.mu.defaultCPUTimeTokenEstimator.update()
 	// With large numbers of active tenants, this iteration could hold the lock
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
@@ -1065,6 +1119,7 @@ func (q *WorkQueue) gcTenantsAndResetUsed() {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		} else {
+			info.cpuTimeTokenEstimator.update()
 			info.used = 0
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
@@ -1077,9 +1132,13 @@ func (q *WorkQueue) gcTenantsAndResetUsed() {
 // case it is returning unused resources. This is only for WorkQueue's own
 // accounting -- it should not call into granter.
 func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64) {
-	tid := tenantID.ToUint64()
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.adjustTenantUsedLocked(tenantID, additionalUsed)
+}
+
+func (q *WorkQueue) adjustTenantUsedLocked(tenantID roachpb.TenantID, additionalUsed int64) {
+	tid := tenantID.ToUint64()
 	tenant, ok := q.mu.tenants[tid]
 	if !ok {
 		return
@@ -1456,6 +1515,10 @@ type tenantInfo struct {
 	// The heapIndex is maintained by the heap.Interface methods, and represents
 	// the heapIndex of the item in the heap.
 	heapIndex int
+
+	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+	// See the code in Admit that calls estimateTokensToBeUsed for more on this.
+	cpuTimeTokenEstimator cpuTimeTokenEstimator
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1471,8 +1534,10 @@ var tenantInfoPool = sync.Pool{
 	},
 }
 
-func newTenantInfo(id uint64, weight uint32) *tenantInfo {
+func newTenantInfo(id uint64, weight uint32, cpuTimeTokenEstimate int64) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
+	tokenEstimator := cpuTimeTokenEstimator{}
+	tokenEstimator.init(cpuTimeTokenEstimate)
 	*ti = tenantInfo{
 		id:                    id,
 		weight:                weight,
@@ -1481,6 +1546,8 @@ func newTenantInfo(id uint64, weight uint32) *tenantInfo {
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
 		fifoPriorityThreshold: int(admissionpb.LowPri),
 		heapIndex:             -1,
+		// This is only used if mode == usesCPUTimeTokens.
+		cpuTimeTokenEstimator: tokenEstimator,
 	}
 	return ti
 }
