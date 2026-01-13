@@ -46,7 +46,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Dead: excluded from all targets (shedding leases, shedding replicas)
-set-store-status store-id=3 health=dead leases=shedding replicas=shedding
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
@@ -61,7 +61,7 @@ skipping s3 for lease transfer: lease disposition shedding (health dead)
 [2]
 
 # Unknown: excluded from all targets (refusing leases, refusing replicas)
-set-store-status store-id=3 health=unknown leases=refusing replicas=refusing
+update-store-status store-id=3 health=unknown leases=refusing replicas=refusing
 ----
 unknown refusing=leases,replicas
 
@@ -76,7 +76,7 @@ skipping s3 for lease transfer: lease disposition refusing (health unknown)
 [2]
 
 # Decommissioning: excluded from all targets (shedding leases, shedding replicas)
-set-store-status store-id=3 health=ok leases=shedding replicas=shedding
+update-store-status store-id=3 health=ok leases=shedding replicas=shedding
 ----
 ok shedding=leases,replicas
 
@@ -91,7 +91,7 @@ skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Draining: excluded from all targets (shedding leases, refusing replicas)
-set-store-status store-id=3 health=ok leases=shedding replicas=refusing
+update-store-status store-id=3 health=ok leases=shedding replicas=refusing
 ----
 ok refusing=replicas shedding=leases
 
@@ -106,7 +106,7 @@ skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Suspect: excluded from all targets (shedding leases, refusing replicas)
-set-store-status store-id=3 health=unhealthy leases=shedding replicas=refusing
+update-store-status store-id=3 health=unhealthy leases=shedding replicas=refusing
 ----
 unhealthy refusing=replicas shedding=leases
 
@@ -121,7 +121,7 @@ skipping s3 for lease transfer: lease disposition shedding (health unhealthy)
 [2]
 
 # Throttled: excluded from replica targets, can receive leases
-set-store-status store-id=3 health=ok leases=ok replicas=refusing
+update-store-status store-id=3 health=ok leases=ok replicas=refusing
 ----
 ok refusing=replicas
 
@@ -135,7 +135,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Available: accepts everything
-set-store-status store-id=3 health=ok leases=ok replicas=ok
+update-store-status store-id=3 health=ok leases=ok replicas=ok
 ----
 ok accepting all
 
@@ -148,7 +148,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Rebalance test: verify s3 (dead) is excluded during actual rebalance
-set-store-status store-id=3 health=dead leases=shedding replicas=shedding
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
@@ -161,7 +161,7 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=400 fractionUsed=100.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
-[mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] overload-continued s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=100 meanLoad=400 fractionUsed=10.00% meanUtil=40.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -195,7 +195,7 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=550 fractionUsed=100.00% meanUtil=55.00% capacity=1000]
-[mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow high_disk=false frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent high_disk=false frac_pending=0.00,0.00(true))]
+[mmaid=1] can add load to n2s2: true targetSLS[(store=loadNormal worst=WriteBandwidth cpu=loadLow writes=loadNormal bytes=loadNormal node=loadLow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))]
 [mmaid=1] applying replica change r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL) to range 1 on store 1
 [mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: RemoveLease target store n1,s1 (replica-id=1 type=VOTER_FULL leaseholder=true)->(replica-id=1 type=VOTER_FULL)
 [mmaid=1] applying replica change r1 type: AddLease target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=2 type=VOTER_FULL leaseholder=true) to range 1 on store 2

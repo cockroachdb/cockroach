@@ -355,6 +355,9 @@ func TestClusterState(t *testing.T) {
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
+			// Set default disk utilization thresholds for tests (matches original MMA behavior).
+			cs.diskUtilRefuseThreshold = 0.9
+			cs.diskUtilShedThreshold = 0.9
 			tr := tracing.NewTracer()
 			tr.SetRedactable(true)
 			defer tr.Close()
@@ -501,18 +504,36 @@ func TestClusterState(t *testing.T) {
 					}
 					return printNodeListMeta(t)
 
-				case "set-store-status":
-					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
-					ss, ok := cs.stores[storeID]
-					if !ok {
-						t.Fatalf("store %d not found", storeID)
-					}
-					// NB: we intentionall bypass the assertion in MakeStatus
+				case "update-store-status":
+					// Sets the store status from args. If update=true, calls
+					// updateStoreStatuses which triggers the disk utilization check
+					// to augment the replica disposition based on current adjusted
+					// load. Thresholds must be set via set-disk-thresholds first.
+					//
+					// NB: we intentionally bypass the assertion in MakeStatus
 					// here so that we can test all combinations of health,
 					// lease, and replica dispositions, even those that we never
 					// want to see in production.
-					parseStatusFromArgs(t, d, &ss.status)
-					return ss.status.String()
+					if storeID, ok := dd.ScanArgOpt[roachpb.StoreID](t, d, "store-id"); ok {
+						ss, ok := cs.stores[storeID]
+						if !ok {
+							t.Fatalf("store %d not found", storeID)
+						}
+						parseStatusFromArgs(t, d, &ss.status)
+						return ss.status.String()
+					}
+
+					storeStatuses := make(map[roachpb.StoreID]Status)
+					for storeID, ss := range cs.stores {
+						storeStatuses[storeID] = ss.status
+					}
+					cs.updateStoreStatuses(ctx, storeStatuses)
+					// Read updated status from cs.stores. Go auto-sorts map keys when printing.
+					updatedStatuses := make(map[roachpb.StoreID]Status)
+					for storeID, ss := range cs.stores {
+						updatedStatuses[storeID] = ss.status
+					}
+					return fmt.Sprintf("updated: %v", updatedStatuses)
 
 				case "store-load-msg":
 					// TODO(sumeer): the load-time is passed as an argument, and is

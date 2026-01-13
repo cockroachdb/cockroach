@@ -119,7 +119,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:-2ns/s, write-bandwidth:-2 B/s, byte-size:-2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
@@ -174,7 +174,7 @@ store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth
   top-k-ranges (local-store-id=1) dim=CPURate: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
@@ -191,7 +191,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
@@ -220,7 +220,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:-2ns/s, write-bandwidth:-3 B/s, byte-size:-3 B] node-reported-cpu=0 node-adjusted-cpu=-2 seq=1
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
@@ -291,7 +291,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
   top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
 store-id=2 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:2 B/s, byte-size:2 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
 store-id=3 node-id=3 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=2
 store-id=4 node-id=4 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:2ns/s, write-bandwidth:3 B/s, byte-size:3 B] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
-  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
