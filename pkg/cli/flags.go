@@ -783,6 +783,8 @@ func init() {
 	// Zip command.
 	{
 		f := debugZipCmd.Flags()
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 		cliflagcfg.BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		_ = f.MarkDeprecated(cliflags.ZipRedactLogs.Name, "use --"+cliflags.ZipRedact.Name+" instead")
 		cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
@@ -792,6 +794,12 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
+	}
+	// List-files command
+	{
+		f := debugListFilesCmd.Flags()
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
@@ -1006,6 +1014,8 @@ func init() {
 	{
 		f := debugGossipValuesCmd.Flags()
 		cliflagcfg.StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile)
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	{
 		f := debugBallastCmd.Flags()
