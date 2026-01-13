@@ -409,68 +409,46 @@ jobs:
       - name: Prepare diagram previews
         id: prepare-previews
         if: needs.generate-diagrams.outputs.diagrams_changed == 'true'
+        shell: bash
         run: |
-          # CSS styling for railroad diagrams
-          DIAGRAM_CSS='<style>
-            .terminal { fill: #FFFFCC; stroke: #000000; stroke-width: 1; }
-            .nonterminal { fill: #FFCCCC; stroke: #000000; stroke-width: 1; }
-            .line { stroke: #000000; stroke-width: 1; fill: none; }
-            text.terminal { font-family: monospace; font-size: 12px; fill: #000000; }
-            text.nonterminal { font-family: monospace; font-size: 12px; fill: #000000; }
-            polygon { fill: #000000; }
-            rect { stroke-width: 1; }
-          </style>'
+          # CSS styling for railroad diagrams (inline in SVG)
+          CSS_STYLE='.terminal{fill:#FFFFCC;stroke:#000;stroke-width:1}.nonterminal{fill:#FFCCCC;stroke:#000;stroke-width:1}.line{stroke:#000;stroke-width:1;fill:none}text{font-family:monospace;font-size:12px;fill:#000}polygon{fill:#000}'
 
           # Get list of changed HTML files
           CHANGED_FILES='${{ needs.generate-diagrams.outputs.changed_files }}'
 
           # Filter to only HTML files and limit to 5
-          HTML_FILES=$(echo "$CHANGED_FILES" | grep '\.html$' | head -5)
+          HTML_FILES=$(echo "$CHANGED_FILES" | grep '\.html$' | head -5 || true)
 
-          PREVIEWS=""
+          # Initialize output file
+          : > /tmp/diagram_previews.md
           PREVIEW_COUNT=0
           TOTAL_HTML=$(echo "$CHANGED_FILES" | grep -c '\.html$' || echo "0")
-          MAX_SIZE=40000  # 40KB limit per diagram
+          MAX_SIZE=40000
 
           for file in $HTML_FILES; do
-            # Extract just the filename
             BASENAME=$(basename "$file")
 
-            # Check if file exists in artifacts
             if [[ -f "artifacts/$BASENAME" ]]; then
               FILE_SIZE=$(stat -c%s "artifacts/$BASENAME" 2>/dev/null || stat -f%z "artifacts/$BASENAME" 2>/dev/null || echo "0")
 
               if [[ $FILE_SIZE -lt $MAX_SIZE ]]; then
-                # Read the HTML content and add CSS
+                # Read HTML and inject CSS into SVG
                 CONTENT=$(cat "artifacts/$BASENAME")
+                STYLED_CONTENT=$(echo "$CONTENT" | sed "s/<svg /<style>${CSS_STYLE}<\/style><svg /")
 
-                # Inject CSS into the SVG
-                STYLED_CONTENT=$(echo "$CONTENT" | sed "s/<svg /${DIAGRAM_CSS}<svg /")
-
-                PREVIEWS="${PREVIEWS}
-
-#### \`${BASENAME}\`
-
-${STYLED_CONTENT}
-
-"
+                # Write to file using printf to avoid YAML issues
+                printf '\n#### %s\n\n%s\n\n' "$BASENAME" "$STYLED_CONTENT" >> /tmp/diagram_previews.md
                 PREVIEW_COUNT=$((PREVIEW_COUNT + 1))
               else
-                PREVIEWS="${PREVIEWS}
-
-#### \`${BASENAME}\`
-*Diagram too large for preview ($(($FILE_SIZE / 1024))KB). Download artifacts to view.*
-
-"
+                SIZE_KB=$((FILE_SIZE / 1024))
+                printf '\n#### %s\n*Diagram too large for preview (%dKB). Download artifacts to view.*\n\n' "$BASENAME" "$SIZE_KB" >> /tmp/diagram_previews.md
               fi
             fi
           done
 
-          # Calculate how many more diagrams exist
           REMAINING=$((TOTAL_HTML - PREVIEW_COUNT))
 
-          # Save previews to file (to handle multiline output)
-          echo "$PREVIEWS" > /tmp/diagram_previews.md
           echo "preview_count=$PREVIEW_COUNT" >> $GITHUB_OUTPUT
           echo "remaining_count=$REMAINING" >> $GITHUB_OUTPUT
           echo "total_html=$TOTAL_HTML" >> $GITHUB_OUTPUT
