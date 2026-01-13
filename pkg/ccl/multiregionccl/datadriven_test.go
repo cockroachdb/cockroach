@@ -59,6 +59,7 @@ func TestMultiRegionDataDriven_regional_by_row(t *testing.T) {
 func TestMultiRegionDataDriven_regional_by_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 160803)
 	testMultiRegionDataDriven(t, "regional_by_table")
 }
 
