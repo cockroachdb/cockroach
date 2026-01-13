@@ -27,6 +27,7 @@ go_test(
         "create_test.go",
         "help_test.go",
         "list_test.go",
+        "main_test.go",
         "version_test.go",
     ],
     data = [
