@@ -1295,7 +1295,7 @@ type clusterState struct {
 	mmaid int // a counter for rebalanceStores calls, for logging
 
 	// Disk utilization thresholds from cluster settings. These are set via
-	// SetDiskUtilThresholds to determine the store disposition.
+	// SetDiskUtilThresholds.
 	//
 	// SMA uses these thresholds:
 	// - 0.925 (rebalance_to_max_disk_utilization_threshold): for rebalancing
@@ -1303,12 +1303,17 @@ type clusterState struct {
 	// - 0.95 (max_disk_utilization_threshold): for allocation targets (e.g.
 	// under-replicated ranges) AND for shedding decisions
 	//
-	// TODO(mma): If MMA ever handles allocation of necessary replicas, we'd need
+	// TODO(mma): When MMA handles allocation of necessary replicas, we'd need
 	// to add max_disk_utilization_threshold for allocation targets.
 	//
 	// Stores >= this threshold will refuse new replicas.
 	diskUtilRefuseThreshold float64
-	// Stores >= this threshold will actively shed replicas.
+	// Stores >= this threshold will force ByteSize to be prioritized over other
+	// dimensions (CPURate, WriteBandwidth) when selecting ranges for the top-k,
+	// regardless of the load summary. Note that MMA will rebalance based on
+	// ByteSize even without this threshold, when ByteSize is the worst dimension
+	// relative to the cluster mean. See highDiskSpaceUtilization usage in
+	// processStoreLoadMsg.
 	diskUtilShedThreshold float64
 }
 
@@ -2364,6 +2369,9 @@ func (cs *clusterState) canShedAndAddLoad(
 	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
 	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
+		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
+
 	// Undo the addition.
 	targetSS.adjusted.load.subtract(deltaToAdd)
 	targetNS.adjustedCPU -= deltaToAdd[CPURate]
@@ -2390,8 +2398,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	}()
 	// Check if the target would have high disk utilization after the transfer.
 	// We compute this using the post-transfer load (current + delta).
-	postTransferByteSize := targetSS.adjusted.load[ByteSize] + deltaToAdd[ByteSize]
-	if highDiskSpaceUtilization(postTransferByteSize, targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold) {
+	if postTransferHighDiskSpaceUtil {
 		if populateFailureReason {
 			failureReason.WriteString("(post-transfer) targetSLS.highDiskSpaceUtilization")
 		}

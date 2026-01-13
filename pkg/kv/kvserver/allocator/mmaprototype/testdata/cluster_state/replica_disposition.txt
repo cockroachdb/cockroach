@@ -118,8 +118,9 @@ store-load-msg
 ----
 
 # Trigger updateStoreStatuses to augment disposition based on disk utilization.
-update-store-statuses
+set-store-status
 ----
+updated: map[1:ok accepting all 2:ok shedding=replicas 3:ok accepting all]
 
 retain-ready-replica-target-stores-only in=(1,2,3)
 ----
@@ -156,8 +157,9 @@ store-load-msg
 
 # Trigger updateStoreStatuses to ensure disposition is recalculated
 # (disk is now low, so disposition stays ok).
-update-store-statuses
+set-store-status
 ----
+updated: map[1:ok accepting all 2:ok accepting all 3:ok refusing=replicas]
 
 set-store-status store-id=3 replicas=ok
 ----

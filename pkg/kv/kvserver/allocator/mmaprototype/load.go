@@ -676,9 +676,10 @@ func loadSummaryForDimension(
 //     that would become too full.
 //
 //  3. topK dimension selection (threshold: diskUtilShedThreshold, 0.95):
-//     Determines whether to prioritize ByteSize dimension when selecting
-//     ranges to shed. Only switches to ByteSize priority when disk is
-//     critically full (>= 95%), not at the lower refuse threshold.
+//     Forces ByteSize dimension when selecting ranges to shed, regardless of
+//     the load summary. Note that ByteSize can also be selected at lower
+//     utilization via the normal load summary logic, if ByteSize is the worst
+//     dimension relative to the cluster mean.
 //
 // Note: Dispositions don't indicate *why* they're set (refusing could be due
 // to disk or other reasons), so callers needing explicit disk checks (like
