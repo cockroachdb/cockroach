@@ -141,7 +141,7 @@ const (
 )
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
-func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) (retErr error) {
 	it, err := r.db.Executor().QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.NodeUserSessionDataOverride, processQuery, s.ID().UnsafeBytes(), r.ID(),
@@ -149,6 +149,8 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
+
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// This map will eventually contain the job ids that must be resumed.
 	claimedToResume := make(map[jobspb.JobID]struct{})
