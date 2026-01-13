@@ -1796,6 +1796,27 @@ message StatementDetailsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;
+  // table_stats_collection_events contains all stats collection events for all tables,
+  // grouped by table descriptor ID.
+  map<uint32, StatsCollection> table_stats_collection_events = 5;
+}
+
+// StatsEventList is a wrapper for a list of StatsEvent.
+message StatsCollection {
+  // StatsEvent represents a statistics collection event from the event log.
+  message Event {
+    google.protobuf.Timestamp timestamp = 1 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+    string event_type = 2;
+    int32 reporting_id = 3 [(gogoproto.customname) = "ReportingID"];
+    string info = 4;
+    bytes unique_id = 5 [(gogoproto.customname) = "UniqueID"];
+    string stats_name = 6;
+    repeated uint32 column_ids = 7 [(gogoproto.customname) = "ColumnIDs"];
+    google.protobuf.Timestamp info_timestamp = 8 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+    int64 stats_id = 9 [(gogoproto.customname) = "StatsID"];
+  }
+
+  repeated Event events = 1;
 }
 
 message StatementDiagnosticsReport {

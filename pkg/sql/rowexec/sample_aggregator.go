@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/crlib/crtime"
@@ -570,7 +569,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			}
 
 			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			ts, statsID, err := stats.InsertNewStat(
 				ctx,
 				s.FlowCtx.Cfg.Settings,
 				txn,
@@ -584,12 +583,13 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
-			); err != nil {
+			)
+			if err != nil {
 				return err
 			}
 
 			// Log statistic collection event
-			s.logStatisticCollectedEvent(ctx, si, columnIDs, histogram)
+			s.logStatisticCollectedEvent(ctx, si.spec.StatName, ts, columnIDs, statsID)
 
 			// Release any memory temporarily used for this statistic.
 			s.tempMemAcc.Clear(ctx)
@@ -704,19 +704,28 @@ func (s *sampleAggregator) generateHistogram(
 // logStatisticCollectedEvent logs an event when a new statistic is successfully collected.
 func (s *sampleAggregator) logStatisticCollectedEvent(
 	ctx context.Context,
-	sketch sketchInfo,
+	statsName string,
+	timestamp int64,
 	columnIDs []descpb.ColumnID,
-	histogram *stats.HistogramData,
+	statsID int64,
 ) {
+
+	colIDs := make([]uint32, len(columnIDs))
+	for i, c := range columnIDs {
+		colIDs[i] = uint32(c)
+	}
 	// Create event payload for statistic collection
 	event := &eventpb.NewStatsCollected{
 		CommonEventDetails: logpb.CommonEventDetails{
-			Timestamp: timeutil.Now().UnixNano(),
+			Timestamp: timestamp,
+			EventType: "stats_collected",
 		},
 		CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
 			DescriptorID: uint32(s.tableID),
 		},
-		TableName: sketch.spec.StatName, // Use stat name as table identifier
+		StatsName: statsName,
+		ColumnIds: colIDs,
+		StatsId:   statsID,
 	}
 
 	// Write event asynchronously (non-blocking)

@@ -3742,14 +3742,38 @@ func (m *NewStatsCollected) AppendJSONFields(printComma bool, b redact.Redactabl
 
 	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
 
-	if m.TableName != "" {
+	if m.StatsName != "" {
 		if printComma {
 			b = append(b, ',')
 		}
 		printComma = true
-		b = append(b, "\"TableName\":\""...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableName)))
+		b = append(b, "\"StatsName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.StatsName)))
 		b = append(b, '"')
+	}
+
+	if len(m.ColumnIds) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ColumnIds\":["...)
+		for i, v := range m.ColumnIds {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendUint(b, uint64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	if m.StatsId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatsId\":"...)
+		b = strconv.AppendInt(b, int64(m.StatsId), 10)
 	}
 
 	return printComma, b
