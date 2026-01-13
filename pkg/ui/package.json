@@ -11,6 +11,7 @@
     "neverBuiltDependencies": [
       "contextify"
     ],
+    "onlyBuiltDependencies": [],
     "packageExtensions": {
       "// meta": [
         "Comment markers (like the '// meta' object you're currently reading)",
