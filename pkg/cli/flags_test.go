@@ -1928,3 +1928,87 @@ func TestUseNewRPC(t *testing.T) {
 		})
 	}
 }
+
+// TestUseNewRPCOnAllCommands verifies that the --use-new-rpc flag is properly
+// configured on all commands that support DRPC for inter-node communication.
+// This test covers commands modified to support the --use-new-rpc flag.
+func TestUseNewRPCOnAllCommands(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	// List of all commands that should have the --use-new-rpc flag.
+	// These commands were modified to support DRPC for inter-node communication.
+	testCommands := []*cobra.Command{
+		// gen commands
+		genHAProxyCmd, // gen haproxy
+
+		// debug info commands
+		debugGossipValuesCmd,    // debug gossip-values
+		debugTimeSeriesDumpCmd,  // debug tsdump
+		debugZipCmd,             // debug zip
+		debugListFilesCmd,       // debug list-files
+
+		// debug operation commands
+		debugSendKVBatchCmd, // debug send-kv-batch
+		debugResetQuorumCmd, // debug reset-quorum
+
+		// debug recover commands
+		debugRecoverCollectInfoCmd, // debug recover collect-info
+		debugRecoverPlanCmd,        // debug recover plan
+		debugRecoverExecuteCmd,     // debug recover execute
+		debugRecoverVerifyCmd,      // debug recover verify
+
+		// node commands
+		decommissionNodeCmd, // node decommission
+		recommissionNodeCmd, // node recommission
+		drainNodeCmd,        // node drain
+	}
+
+	testCases := []struct {
+		name        string
+		args        []string
+		expectedVal bool
+	}{
+		{"default", []string{}, false},
+		{"enabled", []string{"--use-new-rpc"}, true},
+		{"explicitly_enabled", []string{"--use-new-rpc=true"}, true},
+		{"explicitly_disabled", []string{"--use-new-rpc=false"}, false},
+	}
+
+	for _, cmd := range testCommands {
+		cmdName := cmd.Use
+		t.Run(cmdName, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					// Reset to defaults before each test
+					initCLIDefaults()
+
+					f := cmd.Flags()
+					if err := f.Parse(tc.args); err != nil {
+						t.Fatal(err)
+					}
+
+					// Verify the flag exists
+					flag := f.Lookup(cliflags.UseNewRPC.Name)
+					if flag == nil {
+						t.Fatalf("command %s is missing --%s flag", cmdName, cliflags.UseNewRPC.Name)
+					}
+
+					// Verify the flag is hidden
+					require.True(t, flag.Hidden, "flag --%s should be hidden on command %s", cliflags.UseNewRPC.Name, cmdName)
+
+					// Verify the flag has the correct value
+					useDRPC, err := strconv.ParseBool(flag.Value.String())
+					require.NoError(t, err)
+
+					if useDRPC != tc.expectedVal {
+						t.Errorf("command %s: expected --%s=%v, but got %v", cmdName, cliflags.UseNewRPC.Name, tc.expectedVal, useDRPC)
+					}
+				})
+			}
+		})
+	}
+}
