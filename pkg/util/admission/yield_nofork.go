@@ -10,5 +10,8 @@
 
 package admission
 
-func runtimeYield() {
+import "time"
+
+func runtimeYield() time.Duration {
+	return 0
 }

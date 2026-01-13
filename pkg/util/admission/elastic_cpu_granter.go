@@ -272,6 +272,12 @@ func (e *elasticCPUGranter) computeUtilizationMetric() {
 	e.metrics.lastBypassedAdmissionCumNanos = curBypassedNanos
 }
 
+// RecordYieldDelay records a yield delay duration in the metrics. Called by
+// ElasticCPUWorkHandle when runtime.Yield causes a delay.
+func (e *elasticCPUGranter) RecordYieldDelay(d time.Duration) {
+	e.metrics.YieldDelayNanos.Inc(d.Nanoseconds())
+}
+
 // TODO(irfansharif): Provide separate enums for different elastic CPU token
 // sizes? (1ms, 10ms, 100ms). Write up something about picking the right value.
 // Can this value be auto-estimated?
@@ -349,6 +355,13 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
 	}
+
+	elasticCPUYieldDelayNanos = metric.Metadata{
+		Name:        "admission.elastic_cpu.yield_delay_nanos",
+		Help:        "Total nanoseconds goroutines were delayed by runtime.Yield",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // elasticCPUGranterMetrics are the metrics associated with an instance of the
@@ -362,6 +375,7 @@ type elasticCPUGranterMetrics struct {
 	UtilizationLimit       *metric.GaugeFloat64
 	NanosExhaustedDuration *metric.Counter
 	OverLimitDuration      metric.IHistogram
+	YieldDelayNanos        *metric.Counter
 
 	Utilization                  *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
 	BypassedAdmissionUtilization *metric.GaugeFloat64
@@ -390,6 +404,7 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		YieldDelayNanos:              metric.NewCounter(elasticCPUYieldDelayNanos),
 		Utilization:                  metric.NewGaugeFloat64(elasticCPUGranterUtilization),
 		BypassedAdmissionUtilization: metric.NewGaugeFloat64(elasticCPUGranterBypassedUtilization),
 		UtilizationLimit:             metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),

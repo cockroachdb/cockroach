@@ -8369,7 +8369,7 @@ func mvccExportToWriter(
 			// accounted for in admission control by penalizing the subsequent
 			// request, so doing it slightly is fine.
 			stopAllowed := isNewKey || opts.StopMidKey
-			if overLimit, _ := elasticCPUHandle.IsOverLimitAndPossiblyYield(); overLimit && stopAllowed {
+			if overLimit, _, _ := elasticCPUHandle.IsOverLimitAndPossiblyYield(); overLimit && stopAllowed {
 				resumeKey = unsafeKey.Clone()
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}

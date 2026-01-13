@@ -10865,6 +10865,14 @@ layers:
       unit: PERCENT
       aggregation: AVG
       derivative: NONE
+    - name: admission.elastic_cpu.yield_delay_nanos
+      exported_name: admission_elastic_cpu_yield_delay_nanos
+      description: Total nanoseconds goroutines were delayed by runtime.Yield
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.elastic_cpu_bypassed.utilization
       exported_name: admission_elastic_cpu_bypassed_utilization
       description: CPU utilization by elastic work that bypassed admission
