@@ -28,22 +28,10 @@ type bulkMergeFunc func(
 
 var registeredBulkMerge bulkMergeFunc
 
-type bulkIngestFunc func(
-	ctx context.Context,
-	execCtx JobExecContext,
-	spans []roachpb.Span,
-	ssts []execinfrapb.BulkMergeSpec_SST,
-) error
-
 // RegisterBulkMerge installs the distributed merge implementation so other
 // packages can invoke it without introducing an import cycle.
 func RegisterBulkMerge(fn bulkMergeFunc) {
 	registeredBulkMerge = fn
-}
-
-// RegisterBulkIngest installs the distributed ingest implementation.
-func RegisterBulkIngest(fn bulkIngestFunc) {
-	// TODO(159374): remove ingest processor
 }
 
 func invokeBulkMerge(
