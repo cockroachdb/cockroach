@@ -37,7 +37,7 @@ var (
 type ElasticCPUWorkQueue struct {
 	settings  *cluster.Settings
 	workQueue elasticCPUInternalWorkQueue
-	granter   granter
+	granter   granterAndYieldDelayRecorder
 	metrics   *elasticCPUGranterMetrics
 
 	testingEnabled bool
@@ -54,7 +54,7 @@ type elasticCPUInternalWorkQueue interface {
 func makeElasticCPUWorkQueue(
 	settings *cluster.Settings,
 	workQueue elasticCPUInternalWorkQueue,
-	granter granter,
+	granter granterAndYieldDelayRecorder,
 	metrics *elasticCPUGranterMetrics,
 ) *ElasticCPUWorkQueue {
 	return &ElasticCPUWorkQueue{
@@ -94,7 +94,7 @@ func (e *ElasticCPUWorkQueue) Admit(
 	if info.BypassAdmission {
 		e.metrics.bypassedAdmissionCumNanos.Add(duration.Nanoseconds())
 	}
-	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission), nil
+	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission, e.granter), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has

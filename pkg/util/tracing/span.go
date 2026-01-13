@@ -222,11 +222,20 @@ func (sp *Span) Redactable() bool {
 //
 // Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	sp.finishInternal()
+	sp.finishInternal(time.Time{})
 }
 
-// finishInternal finishes the span.
-func (sp *Span) finishInternal() {
+// FinishAt marks the Span as completed at a specific time. This is useful for
+// creating spans that represent work that already happened, where you want to
+// set both the start time (via WithStartTime) and end time explicitly.
+//
+// Finishing a nil *Span is a noop.
+func (sp *Span) FinishAt(endTime time.Time) {
+	sp.finishInternal(endTime)
+}
+
+// finishInternal finishes the span. If endTime is zero, the current time is used.
+func (sp *Span) finishInternal(endTime time.Time) {
 	if sp == nil || sp.detectUseAfterFinish() {
 		return
 	}
@@ -234,7 +243,7 @@ func (sp *Span) finishInternal() {
 		sp.finishStack = debugutil.Stack()
 	}
 	atomic.StoreInt32(&sp.finished, 1)
-	sp.i.Finish()
+	sp.i.FinishAt(endTime)
 	// Release the reference that the span held to itself. Unless we're racing
 	// with the finishing of the parent or one of the children, this one will be
 	// the last reference, and the span will be made available for re-allocation.
@@ -255,7 +264,7 @@ func (sp *Span) FinishAndGetRecording(recType tracingpb.RecordingType) tracingpb
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
 	// Reach directly into sp.i to pass the finishing argument.
-	sp.finishInternal()
+	sp.finishInternal(time.Time{})
 	return rec
 }
 
@@ -272,7 +281,7 @@ func (sp *Span) FinishAndGetConfiguredRecording() tracingpb.Recording {
 		// Reach directly into sp.i to pass the finishing argument.
 		rec = sp.i.GetRecording(recType, true /* finishing */)
 	}
-	sp.finishInternal()
+	sp.finishInternal(time.Time{})
 	return rec
 }
 

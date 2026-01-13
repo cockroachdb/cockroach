@@ -253,6 +253,14 @@ type granter interface {
 	continueGrantChain(grantChainID grantChainID)
 }
 
+type granterAndYieldDelayRecorder interface {
+	granter
+
+	// RecordYieldDelay records a delay caused by runtime.Yield(). This is only
+	// relevant for elastic CPU work; other granters can implement this as a no-op.
+	RecordYieldDelay(d time.Duration)
+}
+
 // granterWithLockedCalls is an encapsulation of typically one
 // granter-requester pair. It is used as an internal
 // implementation detail of the GrantCoordinator. An implementer of

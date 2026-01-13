@@ -125,7 +125,7 @@ type testElasticCPUGranter struct {
 	buf strings.Builder
 }
 
-var _ granter = &testElasticCPUGranter{}
+var _ granterAndYieldDelayRecorder = &testElasticCPUGranter{}
 
 func (t *testElasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	panic("unimplemented")
@@ -141,6 +141,10 @@ func (t *testElasticCPUGranter) tookWithoutPermission(count int64) {
 
 func (t *testElasticCPUGranter) continueGrantChain(grantChainID grantChainID) {
 	panic("unimplemented")
+}
+
+func (t *testElasticCPUGranter) RecordYieldDelay(d time.Duration) {
+	// No-op for tests.
 }
 
 type testElasticCPUInternalWorkQueue struct {
