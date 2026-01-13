@@ -46,7 +46,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Dead: excluded from all targets (shedding leases, shedding replicas)
-set-store-status store-id=3 health=dead leases=shedding replicas=shedding
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
@@ -61,7 +61,7 @@ skipping s3 for lease transfer: lease disposition shedding (health dead)
 [2]
 
 # Unknown: excluded from all targets (refusing leases, refusing replicas)
-set-store-status store-id=3 health=unknown leases=refusing replicas=refusing
+update-store-status store-id=3 health=unknown leases=refusing replicas=refusing
 ----
 unknown refusing=leases,replicas
 
@@ -76,7 +76,7 @@ skipping s3 for lease transfer: lease disposition refusing (health unknown)
 [2]
 
 # Decommissioning: excluded from all targets (shedding leases, shedding replicas)
-set-store-status store-id=3 health=ok leases=shedding replicas=shedding
+update-store-status store-id=3 health=ok leases=shedding replicas=shedding
 ----
 ok shedding=leases,replicas
 
@@ -91,7 +91,7 @@ skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Draining: excluded from all targets (shedding leases, refusing replicas)
-set-store-status store-id=3 health=ok leases=shedding replicas=refusing
+update-store-status store-id=3 health=ok leases=shedding replicas=refusing
 ----
 ok refusing=replicas shedding=leases
 
@@ -106,7 +106,7 @@ skipping s3 for lease transfer: lease disposition shedding (health ok)
 [2]
 
 # Suspect: excluded from all targets (shedding leases, refusing replicas)
-set-store-status store-id=3 health=unhealthy leases=shedding replicas=refusing
+update-store-status store-id=3 health=unhealthy leases=shedding replicas=refusing
 ----
 unhealthy refusing=replicas shedding=leases
 
@@ -121,7 +121,7 @@ skipping s3 for lease transfer: lease disposition shedding (health unhealthy)
 [2]
 
 # Throttled: excluded from replica targets, can receive leases
-set-store-status store-id=3 health=ok leases=ok replicas=refusing
+update-store-status store-id=3 health=ok leases=ok replicas=refusing
 ----
 ok refusing=replicas
 
@@ -135,7 +135,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Available: accepts everything
-set-store-status store-id=3 health=ok leases=ok replicas=ok
+update-store-status store-id=3 health=ok leases=ok replicas=ok
 ----
 ok accepting all
 
@@ -148,7 +148,7 @@ retain-ready-lease-target-stores-only in=(2,3) range-id=1
 [2 3]
 
 # Rebalance test: verify s3 (dead) is excluded during actual rebalance
-set-store-status store-id=3 health=dead leases=shedding replicas=shedding
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
 ----
 dead shedding=leases,replicas
 
