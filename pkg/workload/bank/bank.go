@@ -72,8 +72,10 @@ var bankMeta = workload.Meta{
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Because this workload can create a large number of objects, the import
-		// concurrent may need to be limited.
-		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
+		// concurrent may need to be limited. With a large number of tables,
+		// high concurrency can cause one of the table imports to fail after
+		// retrying the transaction too many times.
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 8, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return g
 	},
 }
