@@ -103,9 +103,10 @@ func (tg *testGranter) storeReplicatedWorkAdmittedLocked(
 }
 
 type testWork struct {
-	tenantID roachpb.TenantID
 	cancel   context.CancelFunc
 	admitted bool
+	// For plain WorkQueue testing.
+	resp AdmitResponse
 	// For StoreWorkQueue testing.
 	handle StoreWorkHandle
 }
@@ -133,11 +134,14 @@ func (m *workMap) delete(id int) {
 	delete(m.workMap, id)
 }
 
+// resp can be empty when not testing plain WorkQueue (e.g.
+// TestSnapshotQueue).
 // handle can be empty when not testing StoreWorkQueue.
-func (m *workMap) setAdmitted(id int, handle StoreWorkHandle) {
+func (m *workMap) setAdmitted(id int, resp AdmitResponse, handle StoreWorkHandle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workMap[id].admitted = true
+	m.workMap[id].resp = resp
 	m.workMap[id].handle = handle
 }
 
@@ -213,7 +217,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := WorkInfo{
 					TenantID:        tenant,
 					Priority:        admissionpb.WorkPriority(priority),
@@ -221,14 +225,17 @@ func TestWorkQueueBasic(t *testing.T) {
 					BypassAdmission: bypass,
 				}
 				go func(ctx context.Context, info WorkInfo, id int) {
-					enabled, err := q.Admit(ctx, info)
-					require.True(t, enabled)
+					require.Equal(t, int64(0), info.RequestedCount)
+					resp, err := q.Admit(ctx, info)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
 						wrkMap.delete(id)
 					} else {
+						require.True(t, resp.Enabled)
+						// Since slots, one concurrent slot always requested.
+						require.Equal(t, int64(1), resp.requestedCount)
 						buf.printf("id %d: admit succeeded", id)
-						wrkMap.setAdmitted(id, StoreWorkHandle{})
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -284,7 +291,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				if d.HasArg("cpu-time") {
 					d.ScanArgs(t, "cpu-time", &cpuTime)
 				}
-				q.AdmittedWorkDone(work.tenantID, time.Duration(cpuTime))
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
 
@@ -325,7 +332,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				return q.String()
 
 			case "gc-tenants-and-reset-used":
-				q.gcTenantsAndResetUsed()
+				q.gcTenantsResetUsedAndUpdateEstimators()
 				return q.String()
 
 			default:
@@ -360,6 +367,267 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 	}
 }
 
+// TestCPUTimeTokenWorkQueue is a very minimal test of WorkQueue, when
+// WorkQueue.mode = usesCPUTimeTokens. In this case, the WorkQueue is
+// like the slot-based WorkQueue tested extensively in TestWorkQueueBasic.
+// The only difference is different logic in AdmittedWorkDone.
+// TestCPUTimeTokenWorkQueue therefore does a very simple series of calls
+// to Admit and AdmittedWorkDone, in order to assert that AdmittedWorkDone
+// makes the right granter calls and the right changes to used. For
+// extensive testing of the WorkQueue, e.g. of fair-sharing, of queuing,
+// we rely on TestWorkQueueBasic. Also, see TestCPUTimeTokenEstimation
+// for testing of CPU time token estimation.
+func TestCPUTimeTokenWorkQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var wrkMap workMap
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_work_queue"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				closeFn()
+				tg = &testGranter{buf: &buf}
+				// We want all calls to tryGet to return true. Thus all calls
+				// to Admit allow admission immediately. This is all that is
+				// needed to test AdmittedWorkDone, and that is all that is
+				// desired here, as per the comment above
+				// TestCPUTimeTokenWorkQueue.
+				tg.returnValueFromTryGet = true
+				opts := makeWorkQueueOptions(KVWork)
+				opts.mode = usesCPUTimeTokens
+				timeSource = timeutil.NewManualTime(initialTime)
+				opts.timeSource = timeSource
+				opts.disableEpochClosingGoroutine = true
+				opts.disableGCTenantsAndResetUsed = true
+				st = cluster.MakeTestingClusterSettings()
+				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+					KVWork, tg, st, metrics, opts).(*WorkQueue)
+				q.knobs.DisableCPUTimeTokenEstimation = true
+				tg.r = q
+				wrkMap.resetMap()
+				return ""
+
+			case "admit":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				if _, ok := wrkMap.get(id); ok {
+					panic(fmt.Sprintf("id %d is already used", id))
+				}
+				tenant := scanTenantID(t, d)
+				var requestedCount int64
+				d.ScanArgs(t, "requested-count", &requestedCount)
+				ctx, cancel := context.WithCancel(context.Background())
+				wrkMap.set(id, &testWork{cancel: cancel})
+				workInfo := WorkInfo{
+					RequestedCount: requestedCount,
+					TenantID:       tenant,
+					Priority:       admissionpb.WorkPriority(0),
+					CreateTime:     int64(time.Millisecond),
+				}
+				// Won't block, since returnValueFromTryGet is true.
+				resp, err := q.Admit(ctx, workInfo)
+				require.True(t, resp.Enabled)
+				if err != nil {
+					buf.printf("id %d: admit failed", id)
+					wrkMap.delete(id)
+				} else {
+					buf.printf("id %d: admit succeeded", id)
+					wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+				}
+				return buf.stringAndReset()
+
+			case "work-done":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d\n", id)
+				}
+				if !work.admitted {
+					return fmt.Sprintf("id not admitted: %d\n", id)
+				}
+				cpuTime := int64(1)
+				if d.HasArg("cpu-time") {
+					d.ScanArgs(t, "cpu-time", &cpuTime)
+				}
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
+				wrkMap.delete(id)
+				return buf.stringAndReset()
+
+			case "print":
+				return q.String()
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+// TestCPUTimeTokenEstimation tests estimation of the number of
+// CPU time tokens used by some work that calls Admit before it executes.
+// This is a test of the estimation logic *only*. See
+// TestCPUTimeTokenWorkQueue for a test of the CPU time work queue
+// itself.
+func TestCPUTimeTokenEstimation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	closeFn()
+	tg = &testGranter{buf: &buf}
+	// We want all calls to tryGet to return true. Thus all calls
+	// to Admit allow admission immediately.
+	tg.returnValueFromTryGet = true
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	timeSource = timeutil.NewManualTime(initialTime)
+	opts.timeSource = timeSource
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCTenantsAndResetUsed = true
+	st = cluster.MakeTestingClusterSettings()
+	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, tg, st, metrics, opts).(*WorkQueue)
+	tg.r = q
+	ctx := context.Background()
+
+	checkEstimation := func(resp AdmitResponse, expected time.Duration) {
+		require.InDelta(
+			t, expected.Nanoseconds(), resp.requestedCount, float64(time.Millisecond.Nanoseconds()),
+			"expected %v, got %v (tolerance 1ms)", time.Duration(expected.Nanoseconds()), time.Duration(resp.requestedCount))
+	}
+
+	// At init time, the estimators haven't seen any requests yet. They are
+	// hard-coded to return a single nanosecond token as an estimate in this
+	// case.
+	info1 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(1),
+	}
+	resp1, err := q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, time.Nanosecond)
+
+	// A bunch of work finishes. 3*100=300 pieces of work have
+	// finished in total. Every 3*10=30 pieces of work that finish,
+	// a call to update happens, and the exponentially-smoothed estimates
+	// are updated. This simulates 30 pieces of work finishing every 1s,
+	// for 10s total (see the ticker in initWorkQueue). The rest of the
+	// cases are structured in a similar fashion, and so we will not
+	// repeat this explanation.
+	//
+	// In this case, all work is for tenant 1. The mean is 100ms. So,
+	// after a number of calls to update updating the exponentially-
+	// smoothed estimates, we expect 100ms for future estimates (see
+	// next call to Admit down below).
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 100*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 50*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcTenantsResetUsedAndUpdateEstimators()
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 100*time.Millisecond)
+
+	// Tenant 2 is a new tenant. So the global estimator should be
+	// used. The global estimator has seen the same workload as
+	// tenant 1's estimator, so it should make the same estimate:
+	// 100ms.
+	info2 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(2),
+	}
+	resp2, err := q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 100*time.Millisecond)
+
+	// A bunch of work finishes for tenant 1 and tenant 2. The mean for
+	// the tenant 1 work is 200ms. The mean for the tenant 2 work is
+	// 300ms.
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 200*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 250*time.Millisecond)
+
+		q.AdmittedWorkDone(resp2, 300*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 250*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 350*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcTenantsResetUsedAndUpdateEstimators()
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 200*time.Millisecond)
+
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 300*time.Millisecond)
+
+	// Tenant 3 is a new tenant. So the global estimator should be
+	// used. Lately, the estimator has seen equal number of 200ms mean
+	// requests and 300ms mean requests. (200 + 300) / 2 = 500 / 2 =
+	// 250. So 250ms is the expected estimate for tenant 3 work.
+	info3 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(3),
+	}
+	resp3, err := q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
+
+	// This is a test of GC. If a call to update happens without any
+	// work happening during that interval, the tenant's estimator should be
+	// GCed. The first call to gcTenantsResetUsedAndUpdateEstimators resets
+	// the interval over which activity is checked. The second call GCes the
+	// per-tenant estimators. So tenant 1 & tenant 2 should use the global
+	// estimator, just like tenant 3.
+	q.gcTenantsResetUsedAndUpdateEstimators()
+	q.gcTenantsResetUsedAndUpdateEstimators()
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 250*time.Millisecond)
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 250*time.Millisecond)
+	resp3, err = q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
+}
+
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
 // decrements and tenantInfo.used resets that used to fail until we eliminated
 // the code that decrements tenantInfo.used for tokens. It would also trigger
@@ -390,22 +658,23 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 			select {
 			case <-ticker.C:
 				ctx, cancel := context.WithCancel(context.Background())
-				work2 := &testWork{tenantID: roachpb.MustMakeTenantID(tenantID), cancel: cancel}
+				work2 := &testWork{cancel: cancel}
 				tenantID++
-				go func(ctx context.Context, w *testWork, createTime int64) {
-					enabled, err := q.Admit(ctx, WorkInfo{
-						TenantID:   w.tenantID,
+				go func(ctx context.Context, tenantID uint64, createTime int64) {
+					resp, err := q.Admit(ctx, WorkInfo{
+						TenantID:   roachpb.MustMakeTenantID(tenantID),
 						CreateTime: createTime,
 					})
 					buf.printf("admit")
-					require.Equal(t, true, enabled)
 					mu.Lock()
 					defer mu.Unlock()
 					totalCount++
 					if err != nil {
 						errCount++
+					} else {
+						require.Equal(t, true, resp.Enabled)
 					}
-				}(ctx, work2, createTime)
+				}(ctx, tenantID, createTime)
 				createTime++
 				if work != nil {
 					rv := tg.r.granted(1)
@@ -442,7 +711,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsAndResetUsed()
+				q.gcTenantsResetUsedAndUpdateEstimators()
 			}
 		}
 	}()
@@ -564,7 +833,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
 				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
-				opts.usesTokens = true
+				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
 				opts.disableGCTenantsAndResetUsed = true
@@ -594,7 +863,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := StoreWriteWorkInfo{
 					WorkInfo: WorkInfo{
 						TenantID:        tenant,
@@ -610,7 +879,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded with handle %+v", id, handle)
-						wrkMap.setAdmitted(id, handle)
+						wrkMap.setAdmitted(id, AdmitResponse{}, handle)
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine

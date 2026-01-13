@@ -152,11 +152,11 @@ var _ elasticCPUInternalWorkQueue = &testElasticCPUInternalWorkQueue{}
 
 func (t *testElasticCPUInternalWorkQueue) Admit(
 	_ context.Context, info WorkInfo,
-) (enabled bool, err error) {
+) (AdmitResponse, error) {
 	if !t.disabled {
 		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
-	return !t.disabled, nil
+	return AdmitResponse{Enabled: !t.disabled}, nil
 }
 
 func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {

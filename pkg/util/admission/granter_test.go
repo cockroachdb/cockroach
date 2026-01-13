@@ -85,7 +85,7 @@ func TestCPUGranterBasic(t *testing.T) {
 				req := &testRequester{
 					workKind:               workKind,
 					granter:                granter,
-					usesTokens:             opts.usesTokens,
+					usesTokens:             opts.mode == usesTokens,
 					buf:                    &buf,
 					returnValueFromGranted: 1,
 				}
@@ -436,7 +436,7 @@ func TestStoreCoordinators(t *testing.T) {
 		req := &testRequester{
 			workKind:   workKind,
 			granter:    granter,
-			usesTokens: opts.usesTokens,
+			usesTokens: opts.mode == usesTokens,
 			buf:        &buf,
 		}
 		if workKind == KVWork {

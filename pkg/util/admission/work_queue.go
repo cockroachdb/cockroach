@@ -262,7 +262,7 @@ type WorkQueue struct {
 	workKind       WorkKind
 	queueKind      QueueKind
 	granter        granter
-	usesTokens     bool
+	mode           workQueueMode
 	tiedToRange    bool
 	usesAsyncAdmit bool
 	settings       *cluster.Settings
@@ -293,6 +293,8 @@ type WorkQueue struct {
 		epochLengthNanos            int64
 		epochClosingDeltaNanos      int64
 		maxQueueDelayToSwitchToLifo time.Duration
+		// Only used if mode == usesCPUTimeTokens.
+		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
 	}
 	logThreshold log.EveryN
 	metrics      *WorkQueueMetrics
@@ -305,7 +307,7 @@ type WorkQueue struct {
 var _ requester = &WorkQueue{}
 
 type workQueueOptions struct {
-	usesTokens     bool
+	mode           workQueueMode
 	tiedToRange    bool
 	usesAsyncAdmit bool
 
@@ -322,12 +324,12 @@ type workQueueOptions struct {
 func makeWorkQueueOptions(workKind WorkKind) workQueueOptions {
 	switch workKind {
 	case KVWork:
-		// CPU bound KV work uses tokens. We also use KVWork for the per-store
-		// queues, which use tokens -- the caller overrides the usesTokens value
+		// CPU bound KV work uses slots. We also use KVWork for the per-store
+		// queues, which use tokens -- the caller overrides the mode value
 		// in that case.
-		return workQueueOptions{usesTokens: false, tiedToRange: true}
+		return workQueueOptions{mode: usesSlots, tiedToRange: true}
 	case SQLKVResponseWork, SQLSQLResponseWork:
-		return workQueueOptions{usesTokens: true, tiedToRange: false}
+		return workQueueOptions{mode: usesTokens, tiedToRange: false}
 	default:
 		panic(errors.AssertionFailedf("unexpected workKind %d", workKind))
 	}
@@ -379,7 +381,7 @@ func initWorkQueue(
 	q.workKind = workKind
 	q.queueKind = queueKind
 	q.granter = granter
-	q.usesTokens = opts.usesTokens
+	q.mode = opts.mode
 	q.tiedToRange = opts.tiedToRange
 	q.usesAsyncAdmit = opts.usesAsyncAdmit
 	q.settings = settings
@@ -388,6 +390,7 @@ func initWorkQueue(
 	q.stopCh = stopCh
 	q.timeSource = timeSource
 	q.knobs = knobs
+	q.mu.defaultCPUTimeTokenEstimator = cpuTimeTokenEstimator{}
 
 	func() {
 		q.mu.Lock()
@@ -401,7 +404,7 @@ func initWorkQueue(
 			for {
 				select {
 				case <-ticker.C:
-					q.gcTenantsAndResetUsed()
+					q.gcTenantsResetUsedAndUpdateEstimators()
 				case <-stopCh:
 					// Channel closed.
 					return
@@ -414,6 +417,39 @@ func initWorkQueue(
 		q.startClosingEpochs()
 	}
 }
+
+// WorkQueue is mostly agnostic to what kind of resource is being managed.
+// With that said, there are a few different types of resources. If the
+// resource type is a slot, what the WorkQueue is really doing is enforcing
+// a concurrency limit. On the other hand, if the resource type is a token,
+// the WorkQueue is enforcing a rate limit -- there is some maximum number
+// of tokens that can be used per second. These are different things. In
+// particular, a slot must be returned, after it is acquired, so that
+// additional work can execute. Tokens are not returned in this way at all.
+// This difference is an important thing controlled by the workQueueMode
+// option. See AdmittedWorkDone for more. Note that we plan to deprecate
+// slots soon, in favor of tokens, even in case of foreground CPU AC.
+//
+// It is somewhat unfortunate that we need both usesTokens and
+// usesCPUTimeTokens. If these were one option instead of two, then when
+// slots goes away, we could delete this entire option, which would be
+// good for simplicity. The basic difference is that with CPU time token
+// AC, AdmittedWorkDone is supported -- and needed to incorporate
+// grunning-based measurements of CPU time post execution of a request.
+// With other token-based WorkQueues, AdmittedWorkDone is not supported.
+// Note that elastic CPU currently uses usesTokens, but in the long term,
+// it may be able to use usesCPUTimeTokens. Then, all uses of usesTokens
+// will be for IO. So at that point, there will be just two modes:
+// usesIOTokens (currently, usesTokens) and usesCPUTimeTokens (for both
+// foreground and elastic CPU AC).
+type workQueueMode uint8
+
+const (
+	usesSlots workQueueMode = iota
+	usesTokens
+	// TODO(josh): In next commit, implement.
+	usesCPUTimeTokens
+)
 
 func isInTenantHeap(tenant *tenantInfo) bool {
 	// If there is some waiting work, this tenant is in tenantHeap.
@@ -559,17 +595,35 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 	}
 }
 
-// Admit is called when requesting admission for some work. If err!=nil, the
-// request was not admitted, potentially due to the deadline being exceeded.
-// The enabled return value is relevant when err=nil, and represents whether
-// admission control is enabled. AdmittedWorkDone must be called iff
-// enabled=true && err!=nil, and the WorkKind for this queue uses slots.
-func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err error) {
+// AdmitResponse is the return value of Admit. We use a struct to enable
+// passing certain internal information such as requestedCount from Admit
+// to AdmittedWorkDone.
+type AdmitResponse struct {
+	// If true, admission control is enabled.
+	Enabled bool
+
+	tenantID roachpb.TenantID
+	// requestedCount is the number of slots or tokens taken at Admit time.
+	// It is useful to return, so that in AdmittedWorkDone, we can adjust
+	// the deduction, in cases where we have more information, such as in
+	// CPU time token AC, where a grunning-based measurement of CPU time
+	// is available by the time AdmittedWorkDone is called.
+	requestedCount int64
+}
+
+// Admit is called when requesting admission for some work. If
+// error!=nil, the request was not admitted, potentially
+// due to the deadline being exceeded. The AdmitResponse return value is
+// relevant when error=nil, and includes info on whether admission control
+// is enabled. AdmittedWorkDone must be called iff
+// AdmitResponse.Enabled=true && error==nil, and the WorkKind for this
+// queue is KVWork.
+func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error) {
 	if !info.ReplicatedWorkInfo.Enabled {
 		enabledSetting := admissionControlEnabledSettings[q.workKind]
 		if enabledSetting != nil && !enabledSetting.Get(&q.settings.SV) {
 			q.metrics.recordBypassedAdmission(info.Priority)
-			return false, nil
+			return AdmitResponse{Enabled: false}, nil
 		}
 	}
 
@@ -582,12 +636,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
 	}
-	if !q.usesTokens && info.RequestedCount != 1 {
-		panic(errors.AssertionFailedf("unexpected RequestedCount: %d", info.RequestedCount))
+	if q.mode == usesSlots && info.RequestedCount != 1 {
+		panic(errors.AssertionFailedf("unexpected RequestedCount for slot-based queue: %d", info.RequestedCount))
 	}
 	q.metrics.incRequested(info.Priority)
-	tenantID := info.TenantID.ToUint64()
 
+	tenantID := info.TenantID.ToUint64()
 	// The code in this method does not use defer to unlock the mutex because it
 	// needs the flexibility of selectively unlocking on a certain code path.
 	// When changing the code, be careful in making sure the mutex is properly
@@ -595,9 +649,30 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	q.mu.Lock()
 	tenant, ok := q.mu.tenants[tenantID]
 	if !ok {
-		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+		// See comment below about CPU time token estimation. If no tenantInfo
+		// struct exists for a tenant, then there is no cpuTimeTokenEstimator
+		// dedicated to that tenant yet. When we create the tenantInfo struct
+		// here, we also create the estimator. We init the estimator using a
+		// global estimator that sees workload across all tenants.
+		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+			q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
 		q.mu.tenants[tenantID] = tenant
 	}
+	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+	// When Admit is called, the request hasn't yet executed, so we do not
+	// know how much CPU time will be used by goroutines used to service it.
+	// When AdmittedWorkDone is called, the request is done executing, so we have
+	// a measurement of CPU time used servicing the request, courtesy of grunning.
+	// tenant.estimator uses past measurements from grunning to make estimates
+	// in this code path, that is, at admission time.
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
+	}
+	admitResponse := AdmitResponse{
+		tenantID:       info.TenantID,
+		requestedCount: info.RequestedCount,
+	}
+
 	if info.ReplicatedWorkInfo.Enabled {
 		if info.BypassAdmission {
 			// TODO(irfansharif): "Admin" work (like splits, scatters, lease
@@ -609,8 +684,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			// information about it being bypassed above-raft.
 			panic("unexpected BypassAdmission bit set for below raft admission")
 		}
-		if !q.usesTokens {
-			panic("unexpected ReplicatedWrite.Enabled on slot-based queue")
+		if q.mode != usesTokens {
+			panic(errors.AssertionFailedf("unexpected ReplicatedWrite.Enabled in mode %v", q.mode))
 		}
 	}
 	if info.BypassAdmission && q.workKind == KVWork {
@@ -622,7 +697,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		q.metrics.recordBypassedAdmission(info.Priority)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse, nil
 	}
 	// Work is subject to admission control.
 
@@ -671,7 +747,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				)
 			}
 			q.metrics.recordFastPathAdmission(info.Priority)
-			return true, nil
+			admitResponse.Enabled = true
+			return admitResponse, nil
 		}
 		// Did not get token/slot.
 		//
@@ -694,7 +771,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
-			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID))
+			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
+				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed())
 			q.mu.tenants[tenantID] = tenant
 		}
 		// Don't want to overflow tenant.used if it has decreased because of being
@@ -720,9 +798,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 			deadlineSubstring = fmt.Sprintf("deadline: %v, ", deadline)
 		}
-		return true,
-			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: %snow: %v",
-				q.workKind, deadlineSubstring, startTime)
+		return AdmitResponse{}, errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: %snow: %v",
+			q.workKind, deadlineSubstring, startTime)
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -760,8 +837,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 				info.ReplicatedWorkInfo.Ingested,
 			)
 		}
-
-		return false, nil // return without waiting (admission is asynchronous)
+		admitResponse.Enabled = false
+		return admitResponse, nil
 	}
 
 	// Start waiting for admission.
@@ -810,15 +887,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
 		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 			log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-			return true,
-				errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
-					q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+			return AdmitResponse{}, errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
 		}
 		// This is a pure context cancellation.
 		log.Eventf(ctx, "context canceled, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-		return true,
-			errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
-				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
+		return AdmitResponse{}, errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
+			q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -831,7 +906,8 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, false)
 		q.granter.continueGrantChain(chainID)
-		return true, nil
+		admitResponse.Enabled = true
+		return admitResponse, nil
 	}
 }
 
@@ -858,19 +934,87 @@ func recordAdmissionWorkQueueStats(
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
-// finished. It must be called iff the WorkKind of this WorkQueue uses slots
-// (not tokens), i.e., KVWork.
-func (q *WorkQueue) AdmittedWorkDone(tenantID roachpb.TenantID, cpuTime time.Duration) {
-	if q.usesTokens {
-		panic(errors.AssertionFailedf("tokens should not be returned"))
+// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork.
+// Note that cpuTime is an argument to AdmittedWorkDone. So, even though
+// WorkQueue supports various resources other than CPU, AdmittedWorkDone is
+// special-cased for CPU time admission control.
+func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) {
+	if q.workKind != KVWork {
+		panic(errors.AssertionFailedf("AdmittedWorkDone only supports KVWork but got %v", q.workKind))
 	}
-	// Single slot is allocated for the work in the granter, and tenant.used was
-	// incremented by 1.
-	additionalUsed := cpuTime - 1
-	if additionalUsed != 0 {
-		q.adjustTenantUsed(tenantID, additionalUsed.Nanoseconds())
+	if q.mode != usesSlots && q.mode != usesCPUTimeTokens {
+		panic(
+			errors.AssertionFailedf("AdmittedWorkDone only supports usesSlots & usesCPUTimeTokens but got %v", q.mode))
 	}
-	q.granter.returnGrant(1)
+
+	additionalUsed := cpuTime.Nanoseconds() - resp.requestedCount
+	func() {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+
+		// adjustTenantUsed adjusts `tenant.used`. This tracks usage of resources
+		// over a time interval. `tenant.used` is how the WorkQueue implements
+		// fair-sharing of resources.
+		//
+		// At admission time (as part of the call to Admit),
+		// q.adjustTenantUsed(tenantID, resp.requestedCount) is called. Now that the
+		// request is done executing, we have a measurement of CPU usage incurred by
+		// the request from grunning. So we adjust tenant.used again, correcting our
+		// earlier estimate. (In the case of slot-based AC, resp.requestedCount
+		// equals 1 nanosecond, so the change to tenant.used made here is the only
+		// significant one. With CPU time token AC, a more plausible estimate of CPU
+		// time incurred by a request is available at admission time (see
+		// cpu_time_token_estimation.go for more).
+		//
+		// NB: additionalUsed can be negative here (in case the initial estimate was
+		// too pessimistic).
+		if additionalUsed != 0 {
+			q.adjustTenantUsedLocked(resp.tenantID, additionalUsed)
+		}
+
+		// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+		// When Admit is called, the request hasn't yet executed, so we do not
+		// know how much CPU time will be used by goroutines used to service it.
+		// When AdmittedWorkDone is called, the request is done executing, so we have
+		// a measurement of CPU time used servicing the request, courtesy of grunning.
+		// tenant.estimator uses past measurements from grunning to make estimates
+		// in this code path, that is, at admission time.
+		if q.mode == usesCPUTimeTokens {
+			q.mu.defaultCPUTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
+			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
+			// If the tenant struct doesn't exist, it has been GCed due to a lack of
+			// activity. In this case, we do not leverage the grunning measurement
+			// for future estimates.
+			if ok {
+				tenant.cpuTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
+			}
+		}
+	}()
+
+	// Slot-based AC sets a concurrency limit on requests. A single slot is
+	// taken at admission time. That slot must be returned here, for the
+	// concurrency limit to be a concurrency limit.
+	//
+	// CPU time token AC represents CPU usage via nanosecond tokens. Tokens
+	// are refilled at some rate (see cpu_time_token_filler.go for more).
+	// Since this is a rate limit instead of a concurrency limit, used tokens
+	// should not be returned. But the initial deduction of tokens is based
+	// on an estimate of CPU usage (see cpu_time_token_estimation.go for more).
+	// In AdmittedWorkDone, we have a measurement of usage. So the below calls
+	// to tookWithoutPermission / returnGrant correct the estimate.
+	//
+	// Even though a call to returnGrant is made in both of these cases, they
+	// are quite different. Note that in the long term we will deprecate
+	// slot-based AC.
+	if q.mode == usesCPUTimeTokens {
+		if additionalUsed > 0 {
+			q.granter.tookWithoutPermission(additionalUsed)
+		} else if additionalUsed < 0 {
+			q.granter.returnGrant(-additionalUsed)
+		}
+	} else { // q.mode == usesSlots
+		q.granter.returnGrant(1)
+	}
 }
 
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
@@ -954,9 +1098,19 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	return requestedCount
 }
 
-func (q *WorkQueue) gcTenantsAndResetUsed() {
+// gcTenantsResetUsedAndUpdateEstimators does three things:
+//  1. It resets tenant.used, which is the resource count over which the
+//     WorkQueue does fair-sharing. That is, fair-sharing is done over
+//     intervals that are sized at the frequency with which this
+//     function is called (as of 1/9/26, every 1s).
+//  2. It GCs tenantInfo entries, if a tenant has seen no workload over
+//     the interval.
+//  3. It updates CPU time token estimators. The estimators are only used
+//     if mode == usesCPUTimeTokens.
+func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.mu.defaultCPUTimeTokenEstimator.update()
 	// With large numbers of active tenants, this iteration could hold the lock
 	// longer than desired. We could break this iteration into smaller parts if
 	// needed.
@@ -965,6 +1119,7 @@ func (q *WorkQueue) gcTenantsAndResetUsed() {
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		} else {
+			info.cpuTimeTokenEstimator.update()
 			info.used = 0
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
@@ -977,9 +1132,13 @@ func (q *WorkQueue) gcTenantsAndResetUsed() {
 // case it is returning unused resources. This is only for WorkQueue's own
 // accounting -- it should not call into granter.
 func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64) {
-	tid := tenantID.ToUint64()
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	q.adjustTenantUsedLocked(tenantID, additionalUsed)
+}
+
+func (q *WorkQueue) adjustTenantUsedLocked(tenantID roachpb.TenantID, additionalUsed int64) {
+	tid := tenantID.ToUint64()
 	tenant, ok := q.mu.tenants[tid]
 	if !ok {
 		return
@@ -1356,6 +1515,10 @@ type tenantInfo struct {
 	// The heapIndex is maintained by the heap.Interface methods, and represents
 	// the heapIndex of the item in the heap.
 	heapIndex int
+
+	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
+	// See the code in Admit that calls estimateTokensToBeUsed for more on this.
+	cpuTimeTokenEstimator cpuTimeTokenEstimator
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1371,8 +1534,10 @@ var tenantInfoPool = sync.Pool{
 	},
 }
 
-func newTenantInfo(id uint64, weight uint32) *tenantInfo {
+func newTenantInfo(id uint64, weight uint32, cpuTimeTokenEstimate int64) *tenantInfo {
 	ti := tenantInfoPool.Get().(*tenantInfo)
+	tokenEstimator := cpuTimeTokenEstimator{}
+	tokenEstimator.init(cpuTimeTokenEstimate)
 	*ti = tenantInfo{
 		id:                    id,
 		weight:                weight,
@@ -1381,6 +1546,8 @@ func newTenantInfo(id uint64, weight uint32) *tenantInfo {
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
 		fifoPriorityThreshold: int(admissionpb.LowPri),
 		heapIndex:             -1,
+		// This is only used if mode == usesCPUTimeTokens.
+		cpuTimeTokenEstimator: tokenEstimator,
 	}
 	return ti
 }
@@ -1997,7 +2164,7 @@ func (q *StoreWorkQueue) Admit(
 		info.CreateTime = q.sequenceReplicatedWork(info.CreateTime, info.ReplicatedWorkInfo)
 	}
 
-	enabled, err := q.q[wc].Admit(ctx, info.WorkInfo)
+	resp, err := q.q[wc].Admit(ctx, info.WorkInfo)
 	if err != nil {
 		return StoreWorkHandle{}, err
 	}
@@ -2006,7 +2173,7 @@ func (q *StoreWorkQueue) Admit(
 		tenantID:            info.TenantID,
 		workClass:           wc,
 		writeTokens:         info.RequestedCount,
-		useAdmittedWorkDone: enabled,
+		useAdmittedWorkDone: resp.Enabled,
 	}
 	if !info.ReplicatedWorkInfo.Enabled {
 		return h, nil
