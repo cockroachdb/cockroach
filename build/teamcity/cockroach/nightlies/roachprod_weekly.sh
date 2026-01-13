@@ -112,16 +112,26 @@ export ROACHPROD_BINARY="$PWD/bin/roachprod"
 export ROACHPROD_USER=teamcity
 for i in $(seq 1 "$TEST_COUNT"); do
   echo "Test iteration $i of $TEST_COUNT"
+
+  # Run test and capture output to log file, also pipe to junit report
+  set +e
   ./bin/roachprodtest_test \
     -test.run="TestCloud.*" \
     -test.v \
     -test.timeout="${TEST_TIMEOUT}s" \
-    2>&1 | tee "logs/roachprodtest-iteration-${i}.log" | \
-    $HOME/go/bin/go-junit-report -set-exit-code > "logs/roachprodtest-iteration-${i}.xml" \
-    || exit_status=$?
+    2>&1 | tee "logs/roachprodtest-iteration-${i}.log"
 
-  if [ $exit_status -ne 0 ]; then
-    echo "Test iteration $i failed with exit status $exit_status"
+  # Capture the test exit status from the pipeline
+  test_exit_status=${PIPESTATUS[0]}
+  set -e
+
+  # Generate JUnit XML from the log file
+  cat "logs/roachprodtest-iteration-${i}.log" | \
+    go-junit-report > "logs/roachprodtest-iteration-${i}.xml"
+
+  if [ $test_exit_status -ne 0 ]; then
+    echo "Test iteration $i failed with exit status $test_exit_status"
+    exit_status=$test_exit_status
     break
   fi
 done
