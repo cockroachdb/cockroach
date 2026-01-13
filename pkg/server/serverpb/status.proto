@@ -1797,8 +1797,14 @@ message StatementDetailsResponse {
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;
   // table_stats_collection_events contains all stats collection events for all tables,
-  // grouped by table descriptor ID.
-  map<uint32, StatsCollection> table_stats_collection_events = 5;
+  // grouped by table descriptor ID and timestamp.
+  repeated TableStatsCollectionEvents table_stats_collection_events = 5;
+}
+
+// TableStatsCollectionEvents contains all stats collection events for a specific table.
+message TableStatsCollectionEvents {
+  uint32 table_id = 1;
+  repeated StatsCollection collections = 2 [(gogoproto.nullable) = false];
 }
 
 // StatsEventList is a wrapper for a list of StatsEvent.
@@ -1818,6 +1824,7 @@ message StatsCollection {
   }
 
   repeated Event events = 1;
+  google.protobuf.Timestamp timestamp = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 message StatementDiagnosticsReport {

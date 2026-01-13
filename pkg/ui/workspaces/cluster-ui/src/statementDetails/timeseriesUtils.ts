@@ -133,19 +133,23 @@ export function generatePlanDistributionTimeseries(
   };
 }
 
-type TableStatsCollectionEvents = { [key: string]: {
-  events?: Array<{
+type TableStatsCollectionEvents = Array<{
+  table_id?: number;
+  collections?: Array<{
     timestamp?: any;
-    event_type?: string;
-    reporting_id?: any;
-    info?: string;
-    unique_id?: Uint8Array;
-    stats_name?: string;
-    column_ids?: number[];
-    info_timestamp?: any;
-    stats_id?: any;
+    events?: Array<{
+      timestamp?: any;
+      event_type?: string;
+      reporting_id?: any;
+      info?: string;
+      unique_id?: Uint8Array;
+      stats_name?: string;
+      column_ids?: number[];
+      info_timestamp?: any;
+      stats_id?: any;
+    }>;
   }>;
-} };
+}>;
 
 interface TableStatsEvent {
   tableId: number;
@@ -181,10 +185,19 @@ export function generateTableStatsCollectionTimeline(
 ): TableStatsTimelineData {
   const tableEvents: TableStatsEvent[] = [];
   
-  // Convert protobuf map to array of table events
-  Object.entries(tableStatsCollectionEvents || {}).forEach(([tableIdStr, collection]) => {
-    const tableId = parseInt(tableIdStr, 10);
-    const events = collection.events?.map((event: any) => {
+  // Convert protobuf array to array of table events
+  (tableStatsCollectionEvents || []).forEach((tableStatsEvents) => {
+    const tableId = tableStatsEvents.table_id || 0;
+    
+    // Process all collections for this table
+    const allEvents: any[] = [];
+    (tableStatsEvents.collections || []).forEach((collection) => {
+      (collection.events || []).forEach((event: any) => {
+        allEvents.push(event);
+      });
+    });
+    
+    const events = allEvents.map((event: any) => {
       // Handle protobuf timestamp format with Long values
       const timestampMs = event.timestamp ? 
         TimestampToNumber(event.timestamp) * 1000 : 0;

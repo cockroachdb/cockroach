@@ -3184,6 +3184,7 @@ An event of type `new_stats_collected` is recorded when new table statistics are
 | `StatsName` | The name of the table for which statistics were collected. | no |
 | `ColumnIds` |  | yes |
 | `StatsId` |  | no |
+| `RowCount` |  | no |
 
 
 #### Common fields

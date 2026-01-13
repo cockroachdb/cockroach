@@ -967,7 +967,7 @@ export class StatementDetails extends React.Component<
 
           {/* Table Stats Collection Events Timeline */}
           {this.props.statementDetails.table_stats_collection_events &&
-            Object.keys(this.props.statementDetails.table_stats_collection_events).length > 0 && (
+            this.props.statementDetails.table_stats_collection_events.length > 0 && (
             <>
               <p className={summaryCardStylesCx("summary--card__divider")} />
               <Row gutter={24}>

@@ -9,19 +9,23 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { generateTableStatsCollectionTimeline } from "./timeseriesUtils";
 
-type TableStatsCollectionEvents = { [key: string]: {
-  events?: Array<{
+type TableStatsCollectionEvents = Array<{
+  table_id?: number;
+  collections?: Array<{
     timestamp?: any;
-    event_type?: string;
-    reporting_id?: any;
-    info?: string;
-    unique_id?: Uint8Array;
-    stats_name?: string;
-    column_ids?: number[];
-    info_timestamp?: any;
-    stats_id?: any;
+    events?: Array<{
+      timestamp?: any;
+      event_type?: string;
+      reporting_id?: any;
+      info?: string;
+      unique_id?: Uint8Array;
+      stats_name?: string;
+      column_ids?: number[];
+      info_timestamp?: any;
+      stats_id?: any;
+    }>;
   }>;
-} };
+}>;
 
 interface TableStatsTimelineProps {
   tableStatsCollectionEvents: TableStatsCollectionEvents;
@@ -72,8 +76,11 @@ const getSegmentColor = (tableIndex: number, segmentIndex: number, totalSegments
   }
   
   // Map segment index to color intensity (lighter to darker)
+  // Skip the first 2 very light colors to ensure minimum 5% opacity
+  const minColorIndex = 2; // Start from 3rd color for minimum opacity
+  const availableColors = colorTheme.length - minColorIndex;
   const colorIndex = Math.min(
-    Math.floor((segmentIndex / (totalSegments - 1)) * (colorTheme.length - 1)),
+    minColorIndex + Math.floor((segmentIndex / (totalSegments - 1)) * (availableColors - 1)),
     colorTheme.length - 1
   );
   
@@ -86,7 +93,7 @@ export const TableStatsTimeline: React.FC<TableStatsTimelineProps> = ({
   height = 400,
 }) => {
   const { tableNames, eventsByTable } = useMemo(() => 
-    generateTableStatsCollectionTimeline(tableStatsCollectionEvents || {}),
+    generateTableStatsCollectionTimeline(tableStatsCollectionEvents || []),
     [tableStatsCollectionEvents]
   );
 

@@ -524,11 +524,12 @@ func (rb *statementDetailsRespBuilder) getAllTableDescriptorIDs(indexes []string
 	return tableIDs
 }
 
-// getAllStatsEventForAllTables returns a map of table descriptor ID to list of stats collection events
+// getAllStatsEventForAllTables returns a list of table stats collection events
 // for tables involved in the statement, sorted by info.Timestamp (oldest first).
 func (rb *statementDetailsRespBuilder) getAllStatsEventForAllTables(
 	ctx context.Context,
-) (map[uint32]*serverpb.StatsCollection, error) {
+) ([]*serverpb.TableStatsCollectionEvents, error) {
+	var result []*serverpb.TableStatsCollectionEvents
 	// First get the indexes used by this statement from the statistics
 	const queryFormat = `
 SELECT merge_statement_stats(statistics) AS statistics
@@ -573,9 +574,9 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 		}
 	}
 
-	// If there are no results, return empty map
+	// If there are no results, return empty slice
 	if row.Len() == 0 {
-		return make(map[uint32]*serverpb.StatsCollection), nil
+		return result, nil
 	}
 
 	// Parse the statistics to get the indexes
@@ -588,7 +589,7 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 	// Extract table descriptor IDs from the indexes used by this statement
 	tableIDStrings := rb.getAllTableDescriptorIDs(statistics.Indexes)
 	if len(tableIDStrings) == 0 {
-		return make(map[uint32]*serverpb.StatsCollection), nil
+		return result, nil
 	}
 
 	// Convert string table IDs to uint32
@@ -601,11 +602,9 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 		tableIDs = append(tableIDs, uint32(tableID))
 	}
 
-	// Map to store events for each table
-	result := make(map[uint32]*serverpb.StatsCollection)
-
 	// Query events for each table
 	for _, tableID := range tableIDs {
+		var singleTableStatsCollection []serverpb.StatsCollection
 		eventRows, err := rb.ie.QueryIteratorEx(ctx, "get-stats-events-for-table", nil,
 			sessiondata.NodeUserSessionDataOverride,
 			`SELECT timestamp, "eventType", info, "uniqueID" 
@@ -619,7 +618,7 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 			return nil, err
 		}
 
-		var events []*serverpb.StatsCollection_Event
+		var eventsPerTimestamp serverpb.StatsCollection
 		scanner := makeResultScanner(eventRows.Types())
 		var ok bool
 		for ok, err = eventRows.Next(ctx); ok; ok, err = eventRows.Next(ctx) {
@@ -629,12 +628,22 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 				return nil, errors.New("unexpected null row when getting stats events")
 			}
 
-			statsEvent := &serverpb.StatsCollection_Event{}
 			var ts time.Time
 			if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 				_ = eventRows.Close()
 				return nil, err
 			}
+
+			if len(eventsPerTimestamp.Events) == 0 {
+				eventsPerTimestamp.Timestamp = ts
+				eventsPerTimestamp.Events = make([]*serverpb.StatsCollection_Event, 0)
+			} else if eventsPerTimestamp.Timestamp.Compare(ts) < 0 {
+				singleTableStatsCollection = append(singleTableStatsCollection, eventsPerTimestamp)
+				eventsPerTimestamp = serverpb.StatsCollection{Timestamp: ts}
+				eventsPerTimestamp.Events = make([]*serverpb.StatsCollection_Event, 0)
+			}
+
+			statsEvent := &serverpb.StatsCollection_Event{}
 			statsEvent.Timestamp = ts
 
 			if err := scanner.ScanIndex(row, 1, &statsEvent.EventType); err != nil {
@@ -685,10 +694,10 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 			if rowCount, ok := infoMap["RowCount"].(int64); ok {
 				statsEvent.RowCount = rowCount
 			}
-
-			events = append(events, statsEvent)
+			eventsPerTimestamp.Events = append(eventsPerTimestamp.Events, statsEvent)
 		}
 
+		// Finished on all the events of the given table.
 		if err != nil {
 			return nil, err
 		}
@@ -697,12 +706,14 @@ LIMIT 1`, rb.whereClause), rb.qargs...)
 			return nil, err
 		}
 
-		// Only add to result if there are events for this table
-		if len(events) > 0 {
-			result[tableID] = &serverpb.StatsCollection{
-				Events: events,
-			}
+		if len(eventsPerTimestamp.Events) > 0 {
+			singleTableStatsCollection = append(singleTableStatsCollection, eventsPerTimestamp)
 		}
+
+		result = append(result, &serverpb.TableStatsCollectionEvents{
+			TableId:     tableID,
+			Collections: singleTableStatsCollection,
+		})
 	}
 
 	return result, nil

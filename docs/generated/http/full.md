@@ -4499,7 +4499,20 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | key | [uint32](#cockroach.server.serverpb.StatementDetailsResponse-uint32) |  |  |  |
-| value | [StatsCollection](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection) |  |  |  |
+| value | [StatsCollectionList](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollectionList) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollectionList"></a>
+#### StatsCollectionList
+
+StatsCollectionList is a wrapper for a list of StatsCollection.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| collections | [StatsCollection](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection) | repeated |  | [reserved](#support-status) |
 
 
 
@@ -4513,6 +4526,7 @@ StatsEventList is a wrapper for a list of StatsEvent.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | events | [StatsCollection.Event](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatsCollection.Event) | repeated |  | [reserved](#support-status) |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 
 
 
@@ -4534,6 +4548,7 @@ StatsEvent represents a statistics collection event from the event log.
 | column_ids | [uint32](#cockroach.server.serverpb.StatementDetailsResponse-uint32) | repeated |  | [reserved](#support-status) |
 | info_timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | stats_id | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  |  | [reserved](#support-status) |
+| row_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

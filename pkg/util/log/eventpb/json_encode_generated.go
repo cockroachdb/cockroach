@@ -3776,6 +3776,15 @@ func (m *NewStatsCollected) AppendJSONFields(printComma bool, b redact.Redactabl
 		b = strconv.AppendInt(b, int64(m.StatsId), 10)
 	}
 
+	if m.RowCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RowCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RowCount), 10)
+	}
+
 	return printComma, b
 }
 
