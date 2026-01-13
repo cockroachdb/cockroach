@@ -6,9 +6,11 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"strings"
 	"time"
@@ -16,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,14 +57,46 @@ func registerCdcShowChangefeedJobsBench(r registry.Registry) {
 	}
 	cfJobsSpec := r.MakeClusterSpec(cfg.nodeCount)
 	r.Add(registry.TestSpec{
-		Name:              "cdc/show-changefeed-jobs-bench",
-		Owner:             registry.OwnerCDC,
-		Cluster:           cfJobsSpec,
-		EncryptionSupport: registry.EncryptionMetamorphic,
+		Name:      "cdc/show-changefeed-jobs-bench",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   cfJobsSpec,
+		// Disable metamorphic encryption to reduce perf noise on roachperf.
+		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Leases:            registry.MetamorphicLeases,
 		CompatibleClouds:  registry.AllClouds,
-		Suites:            registry.ManualOnly,
-		Timeout:           cfg.roachtestTimeout,
+		Suites:            registry.Suites(registry.Nightly),
+		PostProcessPerfMetrics: func(testName string, hist *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			var showJobsSeconds, showCFSeconds float64
+			for _, s := range hist.Summaries {
+				switch s.Name {
+				case "show_jobs_avg":
+					// HighestTrackableValue is expressed in nanoseconds in the exporter.
+					showJobsSeconds = float64(s.HighestTrackableValue) / 1e9
+				case "show_changefeed_jobs_avg":
+					showCFSeconds = float64(s.HighestTrackableValue) / 1e9
+				}
+			}
+			var out roachtestutil.AggregatedPerfMetrics
+			if showJobsSeconds > 0 {
+				out = append(out, &roachtestutil.AggregatedMetric{
+					Name:           fmt.Sprintf("%s_show_jobs_avg_seconds", testName),
+					Value:          roachtestutil.MetricPoint(showJobsSeconds),
+					Unit:           "s",
+					IsHigherBetter: false,
+				})
+			}
+			if showCFSeconds > 0 {
+				out = append(out, &roachtestutil.AggregatedMetric{
+					Name:           fmt.Sprintf("%s_show_changefeed_jobs_avg_seconds", testName),
+					Value:          roachtestutil.MetricPoint(showCFSeconds),
+					Unit:           "s",
+					IsHigherBetter: false,
+				})
+			}
+			return out, nil
+		},
+		Timeout: cfg.roachtestTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCdcShowChangefeedJobsBench(ctx, t, c, cfg)
 		},
@@ -170,18 +206,54 @@ func runCdcShowChangefeedJobsBench(
 		showCFQ := "SELECT * FROM [SHOW CHANGEFEED JOBS]"
 
 		// Run the queries for the specified number of iterations, logging the results.
+		var totalShowJobs time.Duration
+		var totalShowJobsSamples int
+		var totalShowCF time.Duration
+		var totalShowCFSamples int
 		for i := 1; i <= cfg.iterations; i++ {
 			n, avg, err := runPhase("SHOW JOBS", showJobsQ, cfg.phaseDuration, cfg.sampleEvery)
 			if err != nil {
 				return err
 			}
 			t.L().Printf("[iter %d] SHOW JOBS samples=%d avg=%s", i, n, avg)
+			if n > 0 {
+				totalShowJobs += time.Duration(n) * avg
+				totalShowJobsSamples += n
+			}
 
 			n, avg, err = runPhase("SHOW CHANGEFEED JOBS", showCFQ, cfg.phaseDuration, cfg.sampleEvery)
 			if err != nil {
 				return err
 			}
 			t.L().Printf("[iter %d] SHOW CHANGEFEED JOBS samples=%d avg=%s", i, n, avg)
+			if n > 0 {
+				totalShowCF += time.Duration(n) * avg
+				totalShowCFSamples += n
+			}
+		}
+
+		// Export aggregated averages for roachperf as perf artifacts.
+		if totalShowJobsSamples > 0 || totalShowCFSamples > 0 {
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			bytesBuf := bytes.NewBuffer([]byte{})
+			writer := io.Writer(bytesBuf)
+			exporter.Init(&writer)
+			defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, c.Node(1), "")
+
+			reg := histogram.NewRegistryWithExporter(time.Hour, histogram.MockWorkloadName, exporter)
+			h := reg.GetHandle()
+			if totalShowJobsSamples > 0 {
+				avg := totalShowJobs / time.Duration(totalShowJobsSamples)
+				// Record as seconds in the histogram; precise value recovered in post-processing.
+				h.Get("show_jobs_avg").Record(avg)
+			}
+			if totalShowCFSamples > 0 {
+				avg := totalShowCF / time.Duration(totalShowCFSamples)
+				h.Get("show_changefeed_jobs_avg").Record(avg)
+			}
+			reg.Tick(func(tick histogram.Tick) {
+				_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
+			})
 		}
 		workloadCancel()
 		return nil
