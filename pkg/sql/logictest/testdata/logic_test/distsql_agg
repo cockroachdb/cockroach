@@ -676,7 +676,12 @@ INSERT INTO t55837 (i, y, x) VALUES
   (3, 2.0,   3),
   (4, 3.0,   3);
 ALTER TABLE t55837 SPLIT AT VALUES (3);
+
+retry
+statement ok
 ALTER TABLE t55837 EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 2);
+
+statement ok
 SELECT * FROM t55837 -- make sure that the range cache is populated
 
 # Regression test for incorrectly planning a local distinct stage (#55837).
@@ -691,9 +696,19 @@ statement ok
 CREATE TABLE table58683_1 (col1 INT8 PRIMARY KEY);
 INSERT INTO table58683_1 SELECT i FROM generate_series(1, 5) AS g(i);
 ALTER TABLE table58683_1 SPLIT AT SELECT i FROM generate_series(1, 5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) AS g(i);
+
+statement ok
 CREATE TABLE table58683_2 (col2 BOOL);
+
+retry
+statement ok
 ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
+
+statement ok
 SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
 
 # Regression test for #74736 - missing Get results when:
@@ -703,7 +718,12 @@ SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.t
 statement ok
 CREATE TABLE table74736 (k INT PRIMARY KEY, blob STRING);
 ALTER TABLE table74736 SPLIT AT VALUES (1000000);
+
+retry
+statement ok
 ALTER TABLE table74736 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 1000000);
+
+statement ok
 INSERT INTO table74736 SELECT x * 10000, repeat('a', 200000) FROM generate_series(1, 130) AS g(x);
 
 query TTTI colnames,rowsort
@@ -729,7 +749,12 @@ SET DISTSQL = ON
 statement ok
 CREATE TABLE t108901 AS SELECT g::FLOAT8 AS _float8 FROM generate_series(1, 5) AS g;
 ALTER TABLE t108901 SPLIT AT VALUES (1), (2), (3);
+
+retry
+statement ok
 ALTER TABLE t108901 RELOCATE VOTERS VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3);
+
+statement ok
 SET disable_optimizer_rules = PruneWindowOutputCols;
 
 statement error integer out of range

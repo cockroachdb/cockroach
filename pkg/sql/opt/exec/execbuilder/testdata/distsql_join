@@ -255,6 +255,9 @@ CREATE TABLE lineitem (
   CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders (o_orderkey)
 );
 ALTER TABLE lineitem SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i);
+
+retry
+statement ok
 ALTER TABLE lineitem EXPERIMENTAL_RELOCATE SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # This query checks that there is no type mismatch during the vectorized flow
@@ -286,6 +289,9 @@ RESET vectorize
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v));
 ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1,5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE kv EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) as g(i);
 
 statement ok

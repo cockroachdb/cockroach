@@ -61,6 +61,7 @@ INSERT INTO json_tab VALUES
 statement ok
 ALTER INDEX json_inv SPLIT AT VALUES (10), (20)
 
+retry
 statement ok
 ALTER INDEX json_inv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
 
@@ -336,6 +337,7 @@ ALTER TABLE array_tab VALIDATE CONSTRAINT check_c
 statement ok
 ALTER INDEX arr_inv SPLIT AT VALUES (10), (20)
 
+retry
 statement ok
 ALTER INDEX arr_inv EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1), (ARRAY[2], 10), (ARRAY[3], 20)
 
