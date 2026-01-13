@@ -23,6 +23,7 @@ func TestSupportedCRDBInternalBuiltinsNotChanged(t *testing.T) {
 	expectedBuiltins := map[string]struct{}{
 		`crdb_internal.datums_to_bytes`:           {},
 		`crdb_internal.increment_feature_counter`: {},
+		`crdb_internal.deserialize_session`:       {},
 	}
 
 	// Check that the actual map matches the expected map
