@@ -4,11 +4,11 @@ set-store
 node-id=1 locality-tiers=region=foo,node=1
   store-id=1 attrs=purple
 
-set-store-status store-id=1 health=unhealthy replicas=refusing leases=shedding
+update-store-status store-id=1 health=unhealthy replicas=refusing leases=shedding
 ----
 unhealthy refusing=replicas shedding=leases
 
-set-store-status store-id=1 health=unhealthy replicas=shedding leases=shedding
+update-store-status store-id=1 health=unhealthy replicas=shedding leases=shedding
 ----
 unhealthy shedding=leases,replicas
 
@@ -16,6 +16,6 @@ get-load-info
 ----
 store-id=1 node-id=1 status=unhealthy shedding=leases,replicas reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
 
-set-store-status store-id=1 health=ok replicas=ok leases=ok
+update-store-status store-id=1 health=ok replicas=ok leases=ok
 ----
 ok accepting all

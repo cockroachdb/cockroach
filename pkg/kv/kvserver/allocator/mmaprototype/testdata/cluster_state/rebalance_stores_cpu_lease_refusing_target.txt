@@ -37,7 +37,7 @@ store-id=1
 ----
 
 # Mark s2 as refusing leases.
-set-store-status store-id=2 leases=refusing
+update-store-status store-id=2 leases=refusing
 ----
 ok refusing=leases
 
