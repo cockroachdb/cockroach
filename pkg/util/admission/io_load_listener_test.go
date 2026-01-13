@@ -442,23 +442,23 @@ var _ granterWithIOTokens = &testGranterWithIOTokens{}
 func (g *testGranterWithIOTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticReadBandwidthTokens int64,
+	diskWriteTokens int64,
+	diskReadTokens int64,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
-	maxElasticDiskBandwidthTokens int64,
+	maxDiskWriteTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
-		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
-		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+		"disk-write-bw-tokens=%s disk-read-bw-tokens=%s "+
+		"max-io-tokens=%s(elastic %s) max-disk-write-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
+		tokensForTokenTickDurationToString(diskWriteTokens),
+		tokensForTokenTickDurationToString(diskReadTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
-		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		tokensForTokenTickDurationToString(maxDiskWriteTokens),
 		lastTick,
 	)
 	if g.allTokensUsed {
@@ -508,8 +508,8 @@ var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticDiskReadBandwidthTokens int64,
+	diskBandwidthTokens int64,
+	diskReadBandwidthTokens int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -517,8 +517,8 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), diskBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), diskReadBandwidthTokens)
 	return 0, 0
 }
 
