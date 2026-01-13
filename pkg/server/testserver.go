@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -1494,6 +1495,9 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
+	if args.DisableElasticCPUAdmission {
+		kvadmission.ElasticAdmission.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+	}
 	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
 
 	hts := &httpTestServer{}
@@ -1886,6 +1890,9 @@ func (ts *testServer) StartTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
+	if params.DisableElasticCPUAdmission {
+		kvadmission.ElasticAdmission.Override(ctx, &st.SV, false)
+	}
 	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
 
 	hts := &httpTestServer{}

@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -426,6 +427,9 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 	// system components/rangefeeds/etc of several testservers/tenants is enough
 	// to have a perpetually non-empty runnable queue in CIs for 10+ minutes. As
 	// such, we have to disable yield AC if we want background work to run at all.
+	if params.DisableElasticCPUAdmission {
+		kvadmission.ElasticAdmission.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+	}
 	admission.YieldForElasticCPU.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
 	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
