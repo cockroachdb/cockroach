@@ -170,7 +170,14 @@ func backupRestoreRoundTrip(
 		if err != nil {
 			return err
 		}
-		defer stopBackgroundCommands()
+		defer func() {
+			if stopBackgroundCommands != nil {
+				// Since stopBackgroundCommands may get reassigned below, call
+				// stopBackgroundCommands within an anonymous function to ensure the up
+				// to date assignment gets called on defer.
+				stopBackgroundCommands()
+			}
+		}()
 
 		for i := 0; i < numFullBackups; i++ {
 			allNodes := labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()}
@@ -221,7 +228,6 @@ func backupRestoreRoundTrip(
 				}
 			}
 		}
-		stopBackgroundCommands()
 		return nil
 	})
 
