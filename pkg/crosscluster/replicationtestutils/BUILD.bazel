@@ -75,6 +75,7 @@ go_test(
     data = ["//c-deps:libgeos"],
     embed = [":replicationtestutils"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/storageccl",
         "//pkg/security/securityassets",
