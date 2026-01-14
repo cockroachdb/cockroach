@@ -2987,6 +2987,12 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 				Server: &server.TestingKnobs{
 					WallClock: manual,
 				},
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable raft ticks from refreshing the leaderless watcher
+					// state, allowing the test full control over the leaderless
+					// watcher state.
+					DisableLeaderlessWatcherRefreshOnRaftTick: true,
+				},
 			},
 		},
 	})
