@@ -420,6 +420,6 @@ func (coord *storeGrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 		g.mu.availableIOTokens[admissionpb.RegularWorkClass],
 		g.mu.availableIOTokens[admissionpb.ElasticWorkClass],
 		g.mu.diskTokensAvailable.writeByteTokens,
-		g.mu.diskTokensError.diskReadTokensAlreadyDeducted,
+		g.mu.diskTokensError.alreadyDeductedTokens.readByteTokens,
 	)
 }
