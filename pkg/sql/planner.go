@@ -213,6 +213,8 @@ type planner struct {
 	// session (e.g. internal queries).
 	sessionMonitor *mon.BytesMonitor
 
+	compiler Compiler
+
 	// Corresponding Statement for this query.
 	stmt Statement
 
