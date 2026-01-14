@@ -473,7 +473,9 @@ func (r *Registry) maybeClearLease(job *Job, jobErr error) {
 func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn *kv.Txn) {
 	// We use the serverCtx here rather than the context from the
 	// caller since the caller's context may have been canceled.
-	r.withSession(r.serverCtx, func(ctx context.Context, s sqlliveness.Session) {
+	ctx, cancel := r.stopper.WithCancelOnQuiesce(r.serverCtx)
+	defer cancel()
+	r.withSession(ctx, func(ctx context.Context, s sqlliveness.Session) {
 		n, err := ex.ExecEx(ctx, "clear-job-claim", txn,
 			sessiondata.NodeUserSessionDataOverride,
 			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
