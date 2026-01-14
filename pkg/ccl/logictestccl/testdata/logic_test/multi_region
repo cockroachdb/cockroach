@@ -1713,8 +1713,83 @@ statement ok
 CREATE VIEW v2 AS SELECT c1, crdb_region = 'us-east-1' AS is_us_east1 FROM t1;
 
 statement ok
-SET sql_safe_updates = false;
-DROP DATABASE bank_151216;
-SET sql_safe_updates = true
+USE system;
+
+statement ok
+DROP DATABASE bank_151216 CASCADE;
+
+# Regression test for issue #113782
+# Tests that SHOW REGIONS and SHOW SUPER REGIONS return an error
+# when the provided database does not exist.
+subtest issue_113782_show_regions
+
+statement error database "not_a_db_113782" does not exist
+SHOW REGIONS FROM DATABASE not_a_db_113782
+
+statement error database "Delimited DB 113782" does not exist
+SHOW REGIONS FROM DATABASE "Delimited DB 113782"
+
+statement error database "not_a_db_113782" does not exist
+SHOW SUPER REGIONS FROM DATABASE not_a_db_113782
+
+statement error database "Delimited DB 113782" does not exist
+SHOW SUPER REGIONS FROM DATABASE "Delimited DB 113782"
+
+# Basic test that existing functionality is preserved
+statement ok
+CREATE DATABASE db_113782 PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE db_113782
+----
+database                   region          primary  secondary  zones
+db_113782                  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+db_113782                  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+db_113782                  us-east-1       false    false      {us-az1,us-az2,us-az3}
+
+statement ok
+USE db_113782
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE
+----
+database                   region          primary  secondary  zones
+db_113782                  ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+db_113782                  ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+db_113782                  us-east-1       false    false      {us-az1,us-az2,us-az3}
+
+statement ok
+USE system
+
+statement ok
+DROP DATABASE db_113782 CASCADE
+
+statement ok
+CREATE DATABASE "DelimitedDB_113782" PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE "DelimitedDB_113782"
+----
+database                   region          primary  secondary  zones
+DelimitedDB_113782         ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+DelimitedDB_113782         ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+DelimitedDB_113782         us-east-1       false    false      {us-az1,us-az2,us-az3}
+
+statement ok
+USE "DelimitedDB_113782"
+
+query TTBBT colnames,rowsort
+SHOW REGIONS FROM DATABASE
+----
+database                   region          primary  secondary  zones
+DelimitedDB_113782         ca-central-1    true     false      {ca-az1,ca-az2,ca-az3}
+DelimitedDB_113782         ap-southeast-2  false    false      {ap-az1,ap-az2,ap-az3}
+DelimitedDB_113782         us-east-1       false    false      {us-az1,us-az2,us-az3}
+
+statement ok
+USE system
+
+statement ok
+DROP DATABASE "DelimitedDB_113782" CASCADE
 
 subtest end

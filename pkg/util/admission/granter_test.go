@@ -154,13 +154,13 @@ func TestCPUGranterBasic(t *testing.T) {
 			coord.CPULoad(runnable, procs, samplePeriod)
 			str := flushAndReset()
 			kvsa := coord.mu.cpuLoadListener.(*kvSlotAdjuster)
-			microsToMillis := func(micros int64) int64 {
-				return micros * int64(time.Microsecond) / int64(time.Millisecond)
+			nanosToMillis := func(nanos int64) int64 {
+				return nanos * int64(time.Nanosecond) / int64(time.Millisecond)
 			}
 			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
 				str, kvsa.totalSlotsMetric.Value(),
-				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
-				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
+				nanosToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
+				nanosToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
