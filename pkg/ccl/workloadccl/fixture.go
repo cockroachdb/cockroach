@@ -419,6 +419,7 @@ func ImportFixture(
 			concurrencyLimit = importLimit
 		}
 	}
+	log.Dev.Infof(ctx, `importing with concurrency limit %d`, concurrencyLimit)
 	concurrentImportLimit := limit.MakeConcurrentRequestLimiter("workload_import", concurrencyLimit)
 	for _, t := range tables {
 		table := t
