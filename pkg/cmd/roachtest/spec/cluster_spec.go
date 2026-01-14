@@ -110,11 +110,10 @@ type ClusterSpec struct {
 	// CPUs is the number of CPUs per node.
 	CPUs                 int
 	Mem                  MemPerCPU
-	SSDs                 int
+	DiskCount            int
 	RAID0                bool
 	VolumeSize           int
 	VolumeType           string
-	VolumeCount          int
 	LocalSSD             LocalSSDSetting
 	Geo                  bool
 	Lifetime             time.Duration
@@ -246,7 +245,7 @@ func awsMachineSupportsSSD(machineType string) bool {
 
 func getAWSOpts(
 	machineType string,
-	volumeSize, volumeCount, ebsThroughput int,
+	volumeSize, diskCount, ebsThroughput int,
 	volumeType string,
 	ebsIOPS int,
 	localSSD bool,
@@ -260,8 +259,8 @@ func getAWSOpts(
 	if volumeType != "" {
 		opts.DefaultEBSVolume.Disk.VolumeType = volumeType
 	}
-	if volumeCount != 0 {
-		opts.EBSVolumeCount = volumeCount
+	if diskCount != 0 {
+		opts.EBSVolumeCount = diskCount
 	}
 	if ebsIOPS != 0 {
 		opts.DefaultEBSVolume.Disk.IOPs = ebsIOPS
@@ -284,14 +283,13 @@ func getAWSOpts(
 
 func getGCEOpts(
 	machineType string,
-	volumeSize, localSSDCount int,
+	volumeSize, diskCount int,
 	localSSD bool,
 	RAID0 bool,
 	terminateOnMigration bool,
 	minCPUPlatform string,
 	arch vm.CPUArch,
 	volumeType string,
-	volumeCount int,
 	useSpot bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
@@ -305,17 +303,20 @@ func getGCEOpts(
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
 	}
-	if volumeCount != 0 {
-		opts.PDVolumeCount = volumeCount
+
+	// Route diskCount to either local SSDs or persistent disks based on localSSD flag.
+	if localSSD {
+		opts.SSDCount = diskCount
+		if opts.SSDCount == 0 {
+			opts.SSDCount = 1 // Default to 1 local SSD
+		}
+	} else {
+		if diskCount != 0 {
+			opts.PDVolumeCount = diskCount
+		}
 	}
-	opts.SSDCount = localSSDCount
-	if localSSD && localSSDCount > 0 {
-		// NB: As the default behavior for _roachprod_ (at least in AWS/GCP) is
-		// to mount multiple disks as a single store using a RAID 0 array, we
-		// must explicitly ask for multiple stores to be enabled, _unless_ the
-		// test has explicitly asked for RAID0.
-		opts.UseMultipleDisks = !RAID0
-	}
+
+	opts.UseMultipleDisks = !RAID0
 	opts.TerminateOnMigration = terminateOnMigration
 	opts.UseSpot = useSpot
 	if volumeType != "" {
@@ -326,12 +327,7 @@ func getGCEOpts(
 }
 
 func getAzureOpts(
-	machineType string,
-	volumeSize int,
-	volumeType string,
-	volumeCount int,
-	volumeIOPS int,
-	RAID0 bool,
+	machineType string, volumeSize int, volumeType string, diskCount int, volumeIOPS int, RAID0 bool,
 ) vm.ProviderOpts {
 	opts := azure.DefaultProviderOpts()
 	opts.MachineType = machineType
@@ -341,8 +337,8 @@ func getAzureOpts(
 	if volumeType != "" {
 		opts.NetworkDiskType = volumeType
 	}
-	if volumeCount != 0 {
-		opts.NetworkDiskCount = volumeCount
+	if diskCount != 0 {
+		opts.NetworkDiskCount = diskCount
 	}
 	if volumeIOPS != 0 {
 		opts.UltraDiskIOPS = int64(volumeIOPS)
@@ -419,17 +415,8 @@ func (s *ClusterSpec) RoachprodOpts(
 	default:
 		return vm.CreateOpts{}, nil, nil, "", errors.Errorf("unsupported cloud %v", cloud)
 	}
-	if cloud != GCE {
-		// TODO(DarrylWong): support specifying SSD count on other providers, see: #123777.
-		// Once done, revisit all tests that set SSD count to see if they can run on non GCE.
-		if s.SSDs != 0 {
-			return vm.CreateOpts{}, nil, nil, "", errors.Errorf("specifying SSD count is not yet supported on %s", cloud)
-		}
-	}
-
 	createVMOpts.GeoDistributed = s.Geo
 	createVMOpts.Arch = string(requestedArch)
-	ssdCount := s.SSDs
 
 	machineType := params.Defaults.MachineType
 	switch cloud {
@@ -538,7 +525,7 @@ func (s *ClusterSpec) RoachprodOpts(
 		// If the user did not explicitly disable local SSD and local SSD is available
 		// for the selected cloud provider, machine type and architecture,
 		// add it to the list of available volume types.
-		if s.LocalSSD != LocalSSDDisable && s.isLocalSSDAvailable(cloud, machineType, selectedArch) {
+		if s.LocalSSD != LocalSSDDisable && s.isLocalSSDAvailable(cloud, machineType, selectedArch) == nil {
 			availableVolumeTypes = append(availableVolumeTypes, "local-ssd")
 		}
 
@@ -568,11 +555,17 @@ func (s *ClusterSpec) RoachprodOpts(
 	// - if no particular volume size is requested, and,
 	// - on AWS, if the machine type supports it.
 	// - on GCE, if the machine type is not ARM64.
+	// - on non-GCE clouds, only if DiskCount <= 1 (only GCE supports multiple local SSDs).
 	if selectedVolumeType == "local-ssd" {
-		if s.isLocalSSDAvailable(cloud, machineType, selectedArch) {
-			if ssdCount == 0 {
-				ssdCount = 1
-			}
+		if err := s.isLocalSSDAvailable(cloud, machineType, selectedArch); err != nil {
+			// Local SSD was selected but is not available; fall back to default volume type.
+			fmt.Printf(
+				"WARN: local SSD selected but not available (%s);"+
+					"falling back to default volume type\n",
+				err.Error(),
+			)
+			createVMOpts.SSDOpts.UseLocalSSD = false
+		} else {
 			createVMOpts.SSDOpts.UseLocalSSD = true
 
 			// Disable ext4 barriers for local SSDs unless explicitly requested.
@@ -582,15 +575,6 @@ func (s *ClusterSpec) RoachprodOpts(
 			if !useIOBarrier && createVMOpts.SSDOpts.FileSystem == vm.Ext4 {
 				createVMOpts.SSDOpts.NoExt4Barrier = true
 			}
-		} else {
-			// Local SSD was selected but is not available; fall back to default volume type.
-			fmt.Printf(
-				"WARN: local SSD selected but not available for machine type %s or because volume size %d != 0;"+
-					"falling back to default volume type\n",
-				machineType,
-				s.VolumeSize,
-			)
-			createVMOpts.SSDOpts.UseLocalSSD = false
 		}
 	} else {
 		createVMOpts.SSDOpts.UseLocalSSD = false
@@ -622,27 +606,27 @@ func (s *ClusterSpec) RoachprodOpts(
 	var workloadProviderOpts vm.ProviderOpts
 	switch cloud {
 	case AWS:
-		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.VolumeCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
+		providerOpts = getAWSOpts(machineType, s.VolumeSize, s.DiskCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.UseSpotVMs)
-		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.VolumeCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
+		workloadProviderOpts = getAWSOpts(workloadMachineType, s.VolumeSize, s.DiskCount, s.AWS.VolumeThroughput, s.VolumeType, s.AWS.VolumeIOPS,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.UseSpotVMs)
 	case GCE:
-		providerOpts = getGCEOpts(machineType, s.VolumeSize, ssdCount,
+		providerOpts = getGCEOpts(machineType, s.VolumeSize, s.DiskCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
-			s.VolumeCount, s.UseSpotVMs,
+			s.UseSpotVMs,
 		)
-		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, ssdCount,
+		workloadProviderOpts = getGCEOpts(workloadMachineType, s.VolumeSize, s.DiskCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
 			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.VolumeType,
-			s.VolumeCount, s.UseSpotVMs,
+			s.UseSpotVMs,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType,
-			s.VolumeSize, s.VolumeType, s.VolumeCount, s.Azure.VolumeIOPS, s.RAID0,
+			s.VolumeSize, s.VolumeType, s.DiskCount, s.Azure.VolumeIOPS, s.RAID0,
 		)
 		workloadProviderOpts = getAzureOpts(workloadMachineType,
-			s.VolumeSize, s.VolumeType, s.VolumeCount, s.Azure.VolumeIOPS, s.RAID0,
+			s.VolumeSize, s.VolumeType, s.DiskCount, s.Azure.VolumeIOPS, s.RAID0,
 		)
 	}
 
@@ -651,10 +635,33 @@ func (s *ClusterSpec) RoachprodOpts(
 
 func (s *ClusterSpec) isLocalSSDAvailable(
 	cloud Cloud, machineType string, selectedArch vm.CPUArch,
-) bool {
-	return s.VolumeSize == 0 &&
-		(cloud != AWS || awsMachineSupportsSSD(machineType)) &&
-		(cloud != GCE || selectedArch != vm.ArchARM64)
+) error {
+	switch cloud {
+	case AWS:
+		// On AWS, local SSDs are only supported on certain machine types.
+		if !awsMachineSupportsSSD(machineType) {
+			return fmt.Errorf("local SSDs not supported on AWS machine type %s", machineType)
+		}
+	case GCE:
+		// On GCE, local SSDs are not supported on ARM64 machine types.
+		if selectedArch == vm.ArchARM64 {
+			return errors.New("local SSDs not supported on GCE ARM64 machine types")
+		}
+	}
+
+	// Local SSDs are only supported when no volume size is specified.
+	if s.VolumeSize != 0 {
+		return errors.New("local SSDs not supported with non-zero volume size")
+	}
+
+	// TODO(DarrylWong): support specifying SSD count on other providers, see: #123777.
+	// Once done, revisit all tests that set SSD count to see if they can run on non GCE.
+	if cloud != GCE && s.DiskCount > 1 {
+		return fmt.Errorf("local SSDs not supported on %s with disk count > 1", cloud)
+	}
+
+	// If we reach here, local SSDs are supported on the selected cloud and machine type.
+	return nil
 }
 
 // SetRoachprodOptsZones updates the providerOpts with the VM zones as specified in the params/spec.
