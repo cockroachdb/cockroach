@@ -419,19 +419,92 @@ In the release cycle:
 
 ### Common Test Failures After M.1 PR
 
-After the main M.1 PR is merged, CI tests will typically reveal two types of failures that need fixing:
+After the main M.1 PR is merged, CI tests will typically reveal failures that need fixing. **CRITICAL:** Before modifying any code, use the decision tree below to determine the correct approach.
 
-#### Type 1: Version Gate Failures
-These are logic errors in code that references version gates. Review test output carefully as each case is unique and requires understanding the specific version gate logic.
+#### Decision Tree for Test Failures
+
+When a test fails after M.1 changes, follow this decision tree:
+
+```
+Test fails after M.1 changes
+    │
+    ├─ FIRST: Did you modify production code beyond the runbook steps?
+    │  └─ YES → STOP! Revert changes and consult previous M.1 PRs
+    │  └─ NO → Continue below
+    │
+    ├─ Is it a logic test expecting old version number?
+    │  └─ YES → Update test expectations in testdata file (Type 2A, 2B, 2C below)
+    │
+    ├─ Is it a bootstrap hash mismatch?
+    │  └─ YES → Regenerate with -rewrite flag (See Type 2D below)
+    │
+    ├─ Is it a mixedversion test failure?
+    │  └─ Did you modify mixedversion production code?
+    │      ├─ YES → REVERT immediately! Check previous M.1 PRs first
+    │      └─ NO → Check test history (Type 2E below)
+    │
+    └─ Is it failing in production code logic?
+       └─ Check test history: When was this test added?
+           ├─ BEFORE last M.1 → Likely test expectation issue
+           └─ AFTER last M.1 → May be new regression test requiring code change (Type 1 below)
+```
+
+#### ⚠️ CRITICAL WARNINGS: When NOT to Modify Production Code
+
+**RED FLAGS that indicate you're going the wrong direction:**
+- ❌ Adding imports to files that didn't have them (unless it's a new regression test requirement)
+- ❌ Adding conditional logic based on version counts
+- ❌ "Fixing" one test breaks multiple others (ALWAYS WRONG)
+- ❌ Previous M.1 PRs didn't make similar changes (unless new test was added since then)
+- ❌ Adding BUILD.bazel dependencies to mixedversion package
+
+**GREEN FLAGS that indicate production code change may be needed:**
+- ✅ Failing test was added as regression test AFTER last M.1
+- ✅ Test explicitly checks version-bump edge cases with clear documentation
+- ✅ Test commit message references specific issue number
+- ✅ Multiple related tests fail expecting the same new behavior
+
+**Before modifying production code, ALWAYS:**
+1. Check: Did previous M.1 PRs modify this file?
+   ```bash
+   gh pr view 149494 --json files --jq '.files[] | select(.path == "path/to/file") | .path'
+   ```
+2. Check: Was the failing test added AFTER the last M.1?
+   ```bash
+   git log -S "TestName" --oneline --all
+   git show <commit-hash>  # Review the test's purpose
+   ```
+3. Verify there's a clear bug, not just making the test pass
+4. Check if test expectation needs updating instead
+
+#### Type 1: Version Gate Failures (Rare - Requires Code Changes)
+
+These are logic errors in code that references version gates OR new regression tests added after the previous M.1.
+
+**How to identify:**
+- Test was added AFTER the previous M.1 PR
+- Test explicitly validates version-bump edge cases
+- Test documents a specific issue number it's fixing
 
 **Example locations:**
 - Version-dependent feature checks
 - Migration logic
 - Upgrade compatibility code
+- Mixedversion test behavior (only if test is new)
 
-#### Type 2: Test Expectation Updates (Most Common)
+**Action:**
+1. Find when the test was added:
+   ```bash
+   git log -S "TestSupportsSkipCurrentVersion" --oneline --all
+   ```
+2. Compare date with last M.1 (e.g., PR #149494 was July 2025)
+3. If test is newer, read the test carefully to understand required behavior
+4. Make minimal production code changes to satisfy the new test
+5. Run full test suite for the package (not just the specific test)
 
-These are straightforward test output updates that happen because version numbers and URLs changed.
+#### Type 2: Test Expectation Updates (Most Common - No Code Changes)
+
+These are straightforward test output updates that happen because version numbers and URLs changed. **Do NOT modify production code for these failures.**
 
 ##### A. Documentation URL Updates (v25.4 → dev)
 
@@ -518,6 +591,76 @@ sed -i '' 's/^25\.4$/26.1/' <file>
 ./dev test pkg/sql/logictest --filter='TestReadCommittedLogic/crdb_internal_catalog'
 ```
 
+##### D. Bootstrap Schema Hash Mismatches
+
+**Pattern:** Bootstrap hash values change when system schema versions change.
+
+**Symptoms:**
+- `TestInitialValuesToString` - hash mismatch
+- `TestValidateSystemSchemaAfterBootStrap` - schema validation failures
+
+**Files typically affected:**
+- `pkg/sql/catalog/bootstrap/testdata/testdata` (hash values)
+- `pkg/sql/catalog/systemschema_test/testdata/bootstrap_system`
+- `pkg/sql/catalog/systemschema_test/testdata/bootstrap_tenant`
+
+**Fix:** Regenerate bootstrap test data
+```bash
+bazel test //pkg/sql/catalog/bootstrap:bootstrap_test \
+  --test_arg=-test.v \
+  --test_arg=-rewrite \
+  --sandbox_writable_path=$(pwd)/pkg/sql/catalog/bootstrap
+```
+
+**Verification:**
+```bash
+# Run test again WITHOUT -rewrite to confirm it passes
+./dev test pkg/sql/catalog/bootstrap -f='TestInitialValuesToString'
+```
+
+##### E. Mixedversion Test Failures (TRICKY!)
+
+**Pattern:** Tests show unexpected upgrade paths or version selections.
+
+**⚠️ CRITICAL WARNING:** These failures are almost NEVER caused by the version bump itself. They're usually caused by incorrect modifications to mixedversion production code.
+
+**Common symptoms:**
+- `TestTestPlanner/step_stages` - extra version in upgrade path
+- `Test_choosePreviousReleases/skip-version_upgrades` - wrong version list
+- `TestSupportsSkipUpgradeTo` - unexpected true/false value
+- `TestSupportsSkipCurrentVersion` - unexpected behavior
+
+**BEFORE making any changes:**
+1. Check if you made ANY changes to `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`
+2. If YES: REVERT THEM IMMEDIATELY (unless the test is new - see below)
+3. Check previous M.1 PRs - did they modify mixedversion code? (Usually NO)
+   ```bash
+   gh pr view 149494 --json files --jq '.files[] | select(.path | contains("mixedversion/mixedversion.go"))'
+   ```
+
+**When mixedversion code changes ARE needed:**
+Only if ALL of these are true:
+- The failing test was added AFTER the previous M.1 (check with `git log -S "TestName"`)
+- The test explicitly validates version-bump edge cases
+- The test documents a specific issue number
+
+**If testdata regeneration is needed (rare):**
+```bash
+bazel test //pkg/cmd/roachtest/roachtestutil/mixedversion:mixedversion_test \
+  --test_filter=TestTestPlanner \
+  --test_arg=-test.v \
+  --test_arg=-rewrite \
+  --sandbox_writable_path=$(pwd)/pkg/cmd/roachtest/roachtestutil/mixedversion
+```
+
+**Verification:**
+```bash
+# ALWAYS run full mixedversion test suite, not just filtered tests
+./dev test pkg/cmd/roachtest/roachtestutil/mixedversion
+```
+
+**If unsure:** Do NOT modify mixedversion code. Instead, ask on Slack (#test-eng channel) or file an issue.
+
 ### Post-Fix Verification Checklist
 
 After fixing test failures:
@@ -525,6 +668,12 @@ After fixing test failures:
 ```bash
 # Run the tests that previously failed
 ./dev test pkg/sql/logictest --filter='<test_name>'
+
+# CRITICAL: Run FULL test suites for packages with modified production code
+# Do NOT rely on filtered tests alone - they can miss related failures
+./dev test pkg/cmd/roachtest/roachtestutil/mixedversion  # If mixedversion code changed
+./dev test pkg/sql/pgwire -f='TestPGTest'                # If pgwire tests failed
+./dev test pkg/sql/logictest -f='TestLogic'              # After logic test changes
 
 # Verify file count is similar to previous M.1 PRs
 # Expected: ~60-65 files changed total (original PR + test fixes)
@@ -534,6 +683,32 @@ git diff --stat <base_branch>
 ./dev test pkg/sql/logictest --filter='TestLogic/local/cluster_settings'
 ./dev test pkg/sql/catalog/bootstrap
 ```
+
+**Why full test suites matter:**
+- Filtered tests like `-f='TestSupportsSkipCurrentVersion'` can pass while related tests fail
+- Production code changes can have cascading effects on other tests
+- Running the full package test suite catches these issues before CI does
+
+### Files That Should/Shouldn't Change in M.1
+
+**Files that SHOULD change in M.1:**
+- ✅ `pkg/clusterversion/cockroach_versions.go` (version constants)
+- ✅ `pkg/sql/logictest/testdata/logic_test/*` (version expectations)
+- ✅ `pkg/sql/catalog/bootstrap/testdata/*` (bootstrap data)
+- ✅ `pkg/sql/catalog/systemschema_test/testdata/*` (schema expectations)
+- ✅ `pkg/sql/schemachanger/scplan/internal/rules/release_X_Y/*` (new release rules)
+- ✅ `pkg/testutils/release/cockroach_releases.yaml` (releases file)
+- ✅ `docs/generated/settings/*` (generated docs)
+
+**Files that should NOT change in M.1 (unless test is new):**
+- ❌ `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` (production logic)
+- ❌ `pkg/clusterversion/clusterversion.go` (logic, only constants change)
+- ❌ Production code with upgrade/migration logic (unless new regression test)
+- ❌ `pkg/sql/logictest/REPOSITORIES.bzl` (only changes in M.2 after RC)
+
+**Files that may change if testdata regeneration is needed:**
+- ⚠️ `pkg/cmd/roachtest/roachtestutil/mixedversion/testdata/planner/*` (if new regression test)
+- ⚠️ `pkg/sql/pgwire/testdata/pgtest/*` (URL version updates)
 
 ### Historical Context
 
