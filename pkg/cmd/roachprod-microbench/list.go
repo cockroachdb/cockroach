@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -47,28 +48,53 @@ func listBenchmarks(pkgDir string) ([]BenchmarkInfo, error) {
 		return nil, err
 	}
 
-	benchmarkInfoList := make([]BenchmarkInfo, 0)
-	err = filepath.WalkDir(absPkgDir, func(path string, d fs.DirEntry, err error) error {
+	var benchmarkInfoList []BenchmarkInfo
+	g := errgroup.Group{}
+	resultsCh := make(chan []BenchmarkInfo)
+
+	// Start a goroutine to collect results
+	done := make(chan struct{})
+	go func() {
+		for biList := range resultsCh {
+			benchmarkInfoList = append(benchmarkInfoList, biList...)
+		}
+		close(done)
+	}()
+
+	walkErr := filepath.WalkDir(absPkgDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		fset := token.NewFileSet()
-		f, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if parseErr != nil {
-			return parseErr
-		}
-		bi, analyzeErr := analyzeBenchmarkAST(co, f, absPkgDir, path)
-		if analyzeErr != nil {
-			return analyzeErr
-		}
-		benchmarkInfoList = append(benchmarkInfoList, bi...)
+		g.Go(func() error {
+			fset := token.NewFileSet()
+			f, parseErr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+			if parseErr != nil {
+				return parseErr
+			}
+			bi, analyzeErr := analyzeBenchmarkAST(co, f, absPkgDir, path)
+			if analyzeErr != nil {
+				return analyzeErr
+			}
+			resultsCh <- bi
+			return nil
+		})
 		return nil
 	})
-	if err != nil {
-		return nil, err
+
+	// Always wait for all goroutines to complete before closing the channel
+	groupErr := g.Wait()
+	close(resultsCh)
+	<-done
+
+	// Check for errors after all goroutines have finished
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	if groupErr != nil {
+		return nil, groupErr
 	}
 
 	return benchmarkInfoList, nil
