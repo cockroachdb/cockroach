@@ -216,6 +216,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 		availableTokensMetric:           sgcMetrics.KVIOTokensAvailable,
 		tokensTakenMetric:               sgcMetrics.KVIOTokensTaken,
 		tokensReturnedMetric:            sgcMetrics.KVIOTokensReturned,
+		diskWriteByteTokensExhaustedDurationMetric: sgcMetrics.KVDiskWriteByteTokensExhaustedDuration,
 	}
 	// Setting tokens to unlimited is defensive. We expect that
 	// pebbleMetricsTick and allocateIOTokensTick will get called during
@@ -340,8 +341,11 @@ type StoreGrantCoordinatorMetrics struct {
 	KVIOTokensBypassed          *metric.Counter
 	KVIOTokensAvailable         [admissionpb.NumWorkClasses]*metric.Gauge
 	KVIOTokensExhaustedDuration [admissionpb.NumWorkClasses]*metric.Counter
-	L0CompactedBytes            *metric.Counter
-	L0TokensProduced            *metric.Counter
+
+	KVDiskWriteByteTokensExhaustedDuration *metric.Counter
+
+	L0CompactedBytes *metric.Counter
+	L0TokensProduced *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -361,6 +365,7 @@ func makeStoreGrantCoordinatorMetrics(registry *metric.Registry) StoreGrantCoord
 		metric.NewCounter(kvIOTokensExhaustedDuration),
 		metric.NewCounter(kvElasticIOTokensExhaustedDuration),
 	}
+	m.KVDiskWriteByteTokensExhaustedDuration = metric.NewCounter(kvDiskWriteByteTokensExhaustedDuration)
 	registry.AddMetricStruct(m)
 	return m
 }
