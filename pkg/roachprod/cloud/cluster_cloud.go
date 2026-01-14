@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -365,10 +366,10 @@ func GrowCluster(l *logger.Logger, c *cloudcluster.Cluster, numNodes int) error 
 	provider := c.VMs[0].Provider
 	if !c.IsLocal() {
 		providers := c.Clouds()
-		// Only GCE supports expanding a cluster.
-		if len(providers) != 1 || provider != gce.ProviderName {
-			return errors.Errorf("cannot grow cluster %s, growing a cluster is currently only supported on %s",
-				c.Name, gce.ProviderName)
+		// Only GCE and AWS support expanding a cluster.
+		if len(providers) != 1 || (provider != gce.ProviderName && provider != aws.ProviderName) {
+			return errors.Errorf("cannot grow cluster %s, growing a cluster is currently only supported on %s and %s",
+				c.Name, gce.ProviderName, aws.ProviderName)
 		}
 	}
 
@@ -398,10 +399,10 @@ func ShrinkCluster(l *logger.Logger, c *cloudcluster.Cluster, numNodes int) erro
 	provider := c.VMs[0].Provider
 	if !c.IsLocal() {
 		providers := c.Clouds()
-		// Only GCE supports shrinking a cluster.
-		if len(providers) != 1 || provider != gce.ProviderName {
-			return errors.Errorf("cannot shrink cluster %s, shrinking a cluster is currently only supported on %s",
-				c.Name, gce.ProviderName)
+		// Only GCE and AWS support shrinking a cluster.
+		if len(providers) != 1 || (provider != gce.ProviderName && provider != aws.ProviderName) {
+			return errors.Errorf("cannot shrink cluster %s, shrinking a cluster is currently only supported on %s and %s",
+				c.Name, gce.ProviderName, aws.ProviderName)
 		}
 	}
 
