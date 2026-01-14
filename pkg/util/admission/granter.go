@@ -841,6 +841,10 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	return additionalL0TokensNeeded
 }
 
+func (sg *kvStoreTokenGranter) hasExhaustedDiskTokens() bool {
+	return sg.diskWriteByteTokensExhaustedDurationMetric.Count() > 0
+}
+
 // StoreMetrics are the metrics and some config information for a store.
 type StoreMetrics struct {
 	StoreID roachpb.StoreID

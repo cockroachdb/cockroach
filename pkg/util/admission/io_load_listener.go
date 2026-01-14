@@ -532,7 +532,10 @@ func replaceFlushThroughputBytesBySSTableWriteThroughput(m *pebble.Metrics) {
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call. Returns true iff the system is
-// loaded.
+// loaded or has been loaded sometime in the past (the callee is free to
+// choose whichever, since the caller incorporates this bool into a running
+// bool representing historical overload, to do a one way switch to ticking
+// more frequently).
 func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) bool {
 	ctx = logtags.AddTag(ctx, "s", io.storeID)
 	m := metrics.Metrics
@@ -581,11 +584,11 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	}
 	io.adjustTokens(ctx, metrics)
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
-	// We assume that the system is loaded if there is less than unlimited tokens
-	// available.
-	//
-	// TODO(sumeer): this condition should also incorporate disk byte tokens.
-	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens
+	// We assume that the system is loaded if there is less than unlimited
+	// tokens available, or has suffered from disk bandwidth overload in the
+	// past.
+	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens ||
+		io.kvGranter.hasExhaustedDiskTokens()
 }
 
 // For both byte and disk bandwidth tokens, allocateTokensTick gives out
