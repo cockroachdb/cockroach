@@ -61,6 +61,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *vectorSearchNode:
 		return n.columns
+	case *vmNode:
+		return n.columns
 	case *virtualTableNode:
 		return n.columns
 	case *windowNode:

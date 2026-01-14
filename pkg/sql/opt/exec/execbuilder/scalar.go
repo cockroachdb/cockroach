@@ -875,7 +875,7 @@ func (b *Builder) buildSubquery(
 			memo.ExtractTailCalls(input, tailCalls)
 
 			ef := ref.(exec.Factory)
-			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb := New(ctx, ef, b.optimizer, nil, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.routineResultBuffers = b.routineResultBuffers
 			eb.disableTelemetry = true
@@ -1312,7 +1312,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 				ef = &gistFactory
 			}
 
-			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb := New(ctx, ef, &o, nil, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true

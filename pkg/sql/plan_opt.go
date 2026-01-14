@@ -444,6 +444,7 @@ type optPlanningCtx struct {
 	// -- Fields below are reinitialized for each query ---
 
 	optimizer xform.Optimizer
+	compiler  Compiler
 
 	// When set, we are allowed to reuse a memo, or store a memo for later reuse.
 	allowMemoReuse bool
@@ -1010,22 +1011,33 @@ func (opc *optPlanningCtx) runExecBuilder(
 	var bld *execbuilder.Builder
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		bld = execbuilder.New(
-			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			ctx, f, &opc.optimizer, &opc.compiler, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
 		if disableTelemetryAndPlanGists {
 			bld.DisableTelemetry()
 		}
+		if !opc.p.EvalContext().SessionData().SQLVMEnabled {
+			// Set the compiled expression result to Failed to disable
+			// compilation.
+			bld.SetCompiledExpr(exec.CompiledExprResult{Failed: true})
+		} else if opc.p.stmt.Prepared != nil {
+			bld.SetCompiledExpr(opc.p.stmt.Prepared.Compiled)
+		}
 		plan, err := bld.Build()
 		if err != nil {
 			return err
+		}
+		if opc.p.EvalContext().SessionData().SQLVMEnabled && opc.p.stmt.Prepared != nil {
+			comp := bld.GetCompiledExpr()
+			opc.p.stmt.Prepared.Compiled = comp
 		}
 		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
 		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
 		bld = execbuilder.New(
-			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
+			ctx, explainFactory, &opc.optimizer, &opc.compiler, mem, opc.catalog, mem.RootExpr(),
 			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
 		if disableTelemetryAndPlanGists {

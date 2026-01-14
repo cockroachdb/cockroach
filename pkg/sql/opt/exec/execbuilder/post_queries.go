@@ -310,7 +310,7 @@ func (cb *postQueryBuilder) planPostQuery(
 
 	// 5. Execbuild the optimized expression.
 	eb := New(
-		ctx, execFactory, &o, factory.Memo(), cb.b.catalog, optimizedExpr,
+		ctx, execFactory, &o, nil /* compiler */, factory.Memo(), cb.b.catalog, optimizedExpr,
 		semaCtx, evalCtx, allowAutoCommit, evalCtx.Planner.IsANSIDML(),
 	)
 	if bufferRef != nil {

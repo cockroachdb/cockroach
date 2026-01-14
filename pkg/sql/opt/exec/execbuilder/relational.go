@@ -972,6 +972,41 @@ func (b *Builder) buildPlaceholderScan(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 
+	// TODO(mgartner): Add support for incremental compilation of a vm.Program.
+	// For now, attempting compilation here is sufficient because PlaceholderScans
+	// are the only supported expressions in the VM compiler.
+	marcus := b.evalCtx.SessionData().ApplicationName == "marcus"
+	_ = marcus
+	if b.compiler != nil && b.evalCtx.SessionData().SQLVMEnabled && !b.compiledExpr.Failed {
+		if b.compiledExpr.Expr == nil && b.compiledExpr.Program.Len() == 0 {
+			if p, ok := b.compiler.Compile(b.evalCtx, b.mem.Metadata(), scan); ok {
+				b.compiledExpr = exec.CompiledExprResult{
+					Expr:    scan,
+					Program: p,
+					Failed:  false,
+				}
+			} else {
+				b.compiledExpr = exec.CompiledExprResult{
+					Failed: true,
+				}
+			}
+		}
+		if b.compiledExpr.Expr == scan && b.compiledExpr.Program.Len() > 0 {
+			// TODO(mgartner): Cache the result columns and outputMap too.
+			_, outputMap := b.getColumns(scan.Cols, scan.Table)
+			resultCols := make(colinfo.ResultColumns, scan.Cols.Len())
+			for col, ok := scan.Cols.Next(0); ok; col, ok = scan.Cols.Next(col + 1) {
+				ordinal, _ := outputMap.Get(col)
+				resultCols[ordinal] = b.resultColumn(col)
+			}
+			root, err := b.factory.ConstructVMNode(b.compiledExpr.Program, resultCols)
+			if err != nil {
+				return execPlan{}, colOrdMap{}, err
+			}
+			return execPlan{root: root}, outputMap, nil
+		}
+	}
+
 	// Evaluate the scalar expressions.
 	values := make([]tree.Datum, len(scan.Span))
 	for i, expr := range scan.Span {
@@ -1327,7 +1362,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 			return nil, err
 		}
 
-		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+		eb := New(ctx, ef, &o, nil, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
 		eb.routineResultBuffers = b.routineResultBuffers

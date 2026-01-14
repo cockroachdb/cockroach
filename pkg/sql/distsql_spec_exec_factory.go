@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -1579,6 +1580,12 @@ func (e *distSQLSpecExecFactory) ConstructVectorMutationSearch(
 	}
 	physPlan.ResultColumns = cols
 	return plan, nil
+}
+
+func (e *distSQLSpecExecFactory) ConstructVMNode(
+	program vm.Program, columns colinfo.ResultColumns,
+) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: compiled program")
 }
 
 func (e *distSQLSpecExecFactory) ConstructCreateTable(
