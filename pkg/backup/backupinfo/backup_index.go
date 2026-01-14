@@ -522,6 +522,61 @@ func FindLatestBackup(
 	return index, encodeBackupID(lastSeenFullEnd, latestEnd), nil
 }
 
+// ResolveBackupIDtoIndex takes a backup ID and resolves it to the corresponding
+// backup index. The store should be rooted at the default collection URI
+// (the one that contains the `metadata/` directory).
+//
+// NB: If there are multiple backups with the same end time (i.e. compacted
+// backups), the backup with the *latest* start time is chosen. This ensures
+// that the backup we choose is the same one we encoded in ListRestorableBackups.
+func ResolveBackupIDtoIndex(
+	ctx context.Context, store cloud.ExternalStorage, latestOrID string,
+) (backuppb.BackupIndexMetadata, error) {
+	fullEnd, backupEnd, err := DecodeBackupID(latestOrID)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+	indexSubdir, err := endTimeToIndexSubdir(fullEnd)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+
+	var matchingIdxFile string
+	if err := store.List(
+		ctx,
+		indexSubdir+"/",
+		cloud.ListOptions{},
+		func(file string) error {
+			_, end, err := parseIndexBasename(file)
+			if err != nil {
+				return err
+			}
+			if end.Equal(backupEnd) {
+				matchingIdxFile = path.Join(indexSubdir, file)
+			} else if end.Before(backupEnd) {
+				// By choosing to only stop listing after we see a backup OLDER than the
+				// end time encoded in the ID, we ensure that if there are multiple
+				// backups with the same end time, we pick the one with the latest start
+				// time as indexes are sorted with ascending start time breaking ties.
+				return cloud.ErrListingDone
+			}
+			return nil
+		},
+	); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "listing index subdir %s", indexSubdir)
+	}
+	if matchingIdxFile == "" {
+		return backuppb.BackupIndexMetadata{}, errors.Newf(
+			"backup with ID %s not found", latestOrID,
+		)
+	}
+	index, err := readIndexFile(ctx, store, matchingIdxFile)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+	return index, nil
+}
+
 // ParseBackupFilePathFromIndexFileName parses the path to a backup given the
 // basename of its index file and its subdirectory. For full backups, the
 // returned path is relative to the root of the backup. For incremental
