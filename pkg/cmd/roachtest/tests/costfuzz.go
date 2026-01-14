@@ -86,7 +86,8 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 	conn, connInfo := h.chooseConn()
 
 	// First, run the statement without cost perturbation.
-	controlRows, err := h.runQuery(stmt, conn, connInfo)
+	h.addStmtForLogging(connInfo, nil /* rows */)
+	controlRows, err := h.runQuery(stmt, conn)
 	if err != nil {
 		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
@@ -96,21 +97,25 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 	// Maybe use a different connection for the second query.
 	conn, connInfo = h.chooseConn()
 
+	// Log the connInfo once so that when rerunning the test log, all SET
+	// statements apply to the same connection.
+	h.addStmtForLogging(connInfo, nil /* rows */)
+
 	seedStmt := fmt.Sprintf("SET testing_optimizer_random_seed = %d", rnd.Int63())
-	if err := h.execStmt(seedStmt, conn, connInfo); err != nil {
+	if err := h.execStmt(seedStmt, conn); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to set random seed")
 	}
 	// Perturb costs such that an expression with cost c will be randomly assigned
 	// a new cost in the range [0, 2*c).
 	perturbCostsStmt := "SET testing_optimizer_cost_perturbation = 1.0"
-	if err := h.execStmt(perturbCostsStmt, conn, connInfo); err != nil {
+	if err := h.execStmt(perturbCostsStmt, conn); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to perturb costs")
 	}
 
 	// Then, rerun the statement with cost perturbation.
-	perturbRows, err2 := h.runQuery(stmt, conn, connInfo)
+	perturbRows, err2 := h.runQuery(stmt, conn)
 	if err2 != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -150,12 +155,12 @@ func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelp
 
 	// Finally, disable cost perturbation for the next statement.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"
-	if err := h.execStmt(resetSeedStmt, conn, connInfo); err != nil {
+	if err := h.execStmt(resetSeedStmt, conn); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to reset random seed")
 	}
 	resetPerturbCostsStmt := "RESET testing_optimizer_cost_perturbation"
-	if err := h.execStmt(resetPerturbCostsStmt, conn, connInfo); err != nil {
+	if err := h.execStmt(resetPerturbCostsStmt, conn); err != nil {
 		h.logStatements()
 		return h.makeError(err, "failed to disable cost perturbation")
 	}
