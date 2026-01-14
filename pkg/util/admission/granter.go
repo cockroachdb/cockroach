@@ -83,8 +83,8 @@ func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	}
 	if sg.usedSlots == sg.totalSlots {
 		now := timeutil.Now()
-		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-		sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+		exhaustedDuration := now.Sub(sg.exhaustedStart)
+		sg.slotsExhaustedDurationMetric.Inc(exhaustedDuration.Nanoseconds())
 	}
 	sg.usedSlots--
 	if sg.usedSlots < 0 {
@@ -150,8 +150,8 @@ func (sg *slotGranter) setTotalSlotsLockedInternal(totalSlots int) {
 	if totalSlots > sg.totalSlots {
 		if sg.totalSlots <= sg.usedSlots && totalSlots > sg.usedSlots {
 			now := timeutil.Now()
-			exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
-			sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+			exhaustedDuration := now.Sub(sg.exhaustedStart)
+			sg.slotsExhaustedDurationMetric.Inc(exhaustedDuration.Nanoseconds())
 		}
 	} else if totalSlots < sg.totalSlots {
 		if sg.totalSlots > sg.usedSlots && totalSlots <= sg.usedSlots {
@@ -583,8 +583,8 @@ func (sg *kvStoreTokenGranter) subtractTokensLockedForWorkClass(
 		// don't show a sudden change in the metric after minutes of exhaustion
 		// (we had observed such behavior prior to this change).
 		now := timeutil.Now()
-		exhaustedMicros := now.Sub(sg.mu.exhaustedStart[wc]).Microseconds()
-		sg.ioTokensExhaustedDurationMetric[wc].Inc(exhaustedMicros)
+		exhaustedDuration := now.Sub(sg.mu.exhaustedStart[wc])
+		sg.ioTokensExhaustedDurationMetric[wc].Inc(exhaustedDuration.Nanoseconds())
 		if sg.mu.availableIOTokens[wc] <= 0 {
 			sg.mu.exhaustedStart[wc] = now
 		}
@@ -845,26 +845,29 @@ var (
 	// NB: this metric is independent of whether slots enforcement is happening
 	// or not.
 	kvSlotsExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.slots_exhausted_duration.kv",
-		Help:        "Total duration when KV slots were exhausted, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.granter.slots_exhausted_duration.kv",
+		Help: "Total duration when KV slots were exhausted. This is reported in " +
+			"nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	// We have a metric for both short and long period. These metrics use the
 	// period provided in CPULoad and not wall time. So if the sum of the rate
 	// of these two is < 1sec/sec, the CPULoad ticks are not happening at the
 	// expected frequency (this could happen due to CPU overload).
 	kvCPULoadShortPeriodDuration = metric.Metadata{
-		Name:        "admission.granter.cpu_load_short_period_duration.kv",
-		Help:        "Total duration when CPULoad was being called with a short period, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.granter.cpu_load_short_period_duration.kv",
+		Help: "Total duration when CPULoad was being called with a short period. This is " +
+			"reported in nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	kvCPULoadLongPeriodDuration = metric.Metadata{
-		Name:        "admission.granter.cpu_load_long_period_duration.kv",
-		Help:        "Total duration when CPULoad was being called with a long period, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.granter.cpu_load_long_period_duration.kv",
+		Help: "Total duration when CPULoad was being called with a long period. This is " +
+			"reported in nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	kvSlotAdjusterIncrements = metric.Metadata{
 		Name:        "admission.granter.slot_adjuster_increments.kv",
@@ -879,16 +882,18 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	kvIOTokensExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.io_tokens_exhausted_duration.kv",
-		Help:        "Total duration when IO tokens were exhausted, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.granter.io_tokens_exhausted_duration.kv",
+		Help: "Total duration when IO tokens were exhausted. This is reported in nanoseconds " +
+			"from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	kvElasticIOTokensExhaustedDuration = metric.Metadata{
-		Name:        "admission.granter.elastic_io_tokens_exhausted_duration.kv",
-		Help:        "Total duration when Elastic IO tokens were exhausted, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.granter.elastic_io_tokens_exhausted_duration.kv",
+		Help: "Total duration when Elastic IO tokens were exhausted. This is reported in " +
+			"nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	kvIOTokensTaken = metric.Metadata{
 		Name:        "admission.granter.io_tokens_taken.kv",
