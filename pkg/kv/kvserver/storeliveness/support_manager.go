@@ -124,6 +124,12 @@ func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 // SupportState implements the SupportStatus interface.
 func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.ClockTimestamp) {
 	ss := sm.supporterStateHandler.getSupportFor(id)
+	return computeSupportState(ss)
+}
+
+// computeSupportState determines the SupportState and withdrawal timestamp from
+// a supportState. This is extracted as a standalone function for testability.
+func computeSupportState(ss supportState) (SupportState, hlc.ClockTimestamp) {
 	// If we've never seen this store, return StateUnknown.
 	if ss.empty() {
 		return StateUnknown, hlc.ClockTimestamp{}

@@ -270,10 +270,43 @@ func TestSupportManagerRestart(t *testing.T) {
 		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
+
+	// Establish active support for a second store (will NOT be withdrawn).
+	storeWithActiveSupport := slpb.StoreIdent{NodeID: roachpb.NodeID(3), StoreID: roachpb.StoreID(3)}
+	activeHeartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       storeWithActiveSupport,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(10 * sm.options.SupportDuration), // far future
+	}
+	sm.handleMessages(ctx, []*slpb.Message{activeHeartbeat})
+
+	// Verify active support for storeWithActiveSupport.
+	state, withdrawnTS := sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// Withdraw support for remoteStore (but not storeWithActiveSupport).
 	manual.Resume()
 	manual.Increment(sm.options.SupportDuration.Nanoseconds())
 	sm.withdrawSupport(ctx)
 	withdrawalTime := sm.supporterStateHandler.supporterState.meta.MaxWithdrawn.ToTimestamp()
+
+	// Verify support was withdrawn for remoteStore.
+	state, withdrawnTS = sm.SupportState(remoteStore)
+	require.Equal(t, StateNotSupporting, state)
+	require.False(t, withdrawnTS.IsEmpty())
+
+	// Verify storeWithActiveSupport still has active support.
+	state, withdrawnTS = sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+
+	// A store we've never seen should return StateUnknown.
+	neverSeenStore := slpb.StoreIdent{NodeID: roachpb.NodeID(99), StoreID: roachpb.StoreID(99)}
+	state, withdrawnTS = sm.SupportState(neverSeenStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
 
 	// Simulate a restart by creating a new SupportManager with the same engine.
 	// Use a regressed clock.
@@ -290,6 +323,25 @@ func TestSupportManagerRestart(t *testing.T) {
 	now = sm.clock.Now()
 	require.True(t, requestedTime.Less(now))
 	require.True(t, withdrawalTime.Less(now))
+
+	// After restart, verify SupportState for different scenarios:
+
+	// 1. Store with withdrawn support: should return StateUnknown because
+	//    lastSupportWithdrawnTime is not persisted to disk.
+	state, withdrawnTS = sm.SupportState(remoteStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// 2. Store with active support: should return StateSupporting because
+	//    Expiration is persisted to disk.
+	state, withdrawnTS = sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// 3. Store we've never seen: should return StateUnknown.
+	state, withdrawnTS = sm.SupportState(neverSeenStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
 }
 
 // TestSupportManagerDiskStall tests that the SupportManager continues to
