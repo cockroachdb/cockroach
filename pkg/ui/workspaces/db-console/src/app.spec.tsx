@@ -679,10 +679,11 @@ describe("Routing to", () => {
   });
 
   describe("'/sessions' path", () => {
-    test("redirected to '/sql-activity?tab=Sessions'", () => {
+    // The default filters are set to Active and Idle.
+    test("redirected to '/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle'", () => {
       navigateToPath("/sessions");
       expect(history.location.pathname + history.location.search).toBe(
-        "/sql-activity?tab=Sessions",
+        "/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle",
       );
     });
   });

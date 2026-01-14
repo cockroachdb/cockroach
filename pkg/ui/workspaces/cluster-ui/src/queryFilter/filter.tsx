@@ -195,6 +195,7 @@ export const handleFiltersFromQueryString = (
         database: filters.database,
         regions: filters.regions,
         nodes: filters.nodes,
+        sessionStatus: filters.sessionStatus,
       },
       history,
     );
@@ -238,6 +239,7 @@ export const updateFiltersQueryParamsOnTab = (
         database: filters.database,
         regions: filters.regions,
         nodes: filters.nodes,
+        sessionStatus: filters.sessionStatus,
       },
       history,
     );

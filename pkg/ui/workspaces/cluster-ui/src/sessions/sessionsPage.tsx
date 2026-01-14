@@ -10,6 +10,7 @@ import moment from "moment-timezone";
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 
+import { SessionsRequest } from "src/api/sessionsApi";
 import { Loading } from "src/loading";
 import { Pagination } from "src/pagination";
 import {
@@ -65,12 +66,31 @@ const sessionsPageCx = classNames.bind(sessionPageStyles);
 
 const sessionStatusFilterOptions = ["Active", "Closed", "Idle"];
 
+// Default filters for sessions page - Active and Idle selected by default
+export const defaultFiltersForSessionsPage: Filters = {
+  ...defaultFilters,
+  sessionStatus: "Active,Idle",
+};
+
+// Helper function to determine if closed sessions should be excluded based on filter
+export const shouldExcludeClosedSessions = (filters: Filters): boolean => {
+  // If no session status filter is set or it's empty (user cleared filters),
+  // show all sessions including closed (don't exclude)
+  if (!filters?.sessionStatus || filters.sessionStatus === "") {
+    return false;
+  }
+  // If "Closed" is explicitly selected in the filter, include closed sessions
+  // Otherwise, exclude closed sessions (e.g., when only "Active,Idle" is selected)
+  const selectedStatuses = filters.sessionStatus.split(",");
+  return !selectedStatuses.includes("Closed");
+};
+
 export interface OwnProps {
   sessions: SessionInfo[];
   internalAppNamePrefix: string;
   sessionsError: Error | Error[];
   sortSetting: SortSetting;
-  refreshSessions: () => void;
+  refreshSessions: (req?: SessionsRequest) => void;
   cancelSession: (payload: ICancelSessionRequest) => void;
   cancelQuery: (payload: ICancelQueryRequest) => void;
   onPageChanged?: (newPage: number) => void;
@@ -127,7 +147,7 @@ export class SessionsPage extends React.Component<
   constructor(props: SessionsPageProps) {
     super(props);
     this.state = {
-      filters: defaultFilters,
+      filters: defaultFiltersForSessionsPage,
       apps: [],
       pagination: {
         pageSize: 20,
@@ -137,6 +157,18 @@ export class SessionsPage extends React.Component<
 
     const stateFromHistory = this.getStateFromHistory();
     this.state = merge(this.state, stateFromHistory);
+
+    // If sessionStatus is not set or empty, use the sessions page default (Active,Idle)
+    if (!this.state.filters?.sessionStatus) {
+      this.state = {
+        ...this.state,
+        filters: {
+          ...this.state.filters,
+          sessionStatus: defaultFiltersForSessionsPage.sessionStatus,
+        },
+      };
+    }
+
     this.terminateSessionRef = React.createRef();
     this.terminateQueryRef = React.createRef();
 
@@ -196,15 +228,26 @@ export class SessionsPage extends React.Component<
     });
   };
 
+  getSessionsRequest = (): SessionsRequest => {
+    const filters = this.state.filters || this.props.filters;
+    return {
+      excludeClosedSessions: shouldExcludeClosedSessions(filters),
+    };
+  };
+
   componentDidMount(): void {
-    if (!this.props.sessions || this.props.sessions.length === 0) {
-      this.props.refreshSessions();
+    // If no filters are stored in localStorage, set the default filters
+    if (!this.props.filters || !this.props.filters.sessionStatus) {
+      this.props.onFilterChange?.(defaultFiltersForSessionsPage);
     }
 
-    this.refreshDataInterval = setInterval(
-      this.props.refreshSessions,
-      10 * 1000,
-    );
+    if (!this.props.sessions || this.props.sessions.length === 0) {
+      this.props.refreshSessions(this.getSessionsRequest());
+    }
+
+    this.refreshDataInterval = setInterval(() => {
+      this.props.refreshSessions(this.getSessionsRequest());
+    }, 10 * 1000);
   }
 
   componentWillUnmount(): void {
@@ -239,15 +282,22 @@ export class SessionsPage extends React.Component<
       this.props.onFilterChange(filters);
     }
 
-    this.setState({
-      filters: filters,
-    });
+    this.setState(
+      {
+        filters: filters,
+      },
+      () => {
+        // Refresh sessions with the new filter settings
+        this.props.refreshSessions(this.getSessionsRequest());
+      },
+    );
     this.resetPagination();
     syncHistory(
       {
         app: filters.app,
         timeNumber: filters.timeNumber,
         timeUnit: filters.timeUnit,
+        sessionStatus: filters.sessionStatus,
       },
       this.props.history,
     );
@@ -258,17 +308,24 @@ export class SessionsPage extends React.Component<
       this.props.onFilterChange(defaultFilters);
     }
 
-    this.setState({
-      filters: {
-        ...defaultFilters,
+    this.setState(
+      {
+        filters: {
+          ...defaultFilters,
+        },
       },
-    });
+      () => {
+        // Refresh sessions with cleared filters (include all sessions)
+        this.props.refreshSessions(this.getSessionsRequest());
+      },
+    );
     this.resetPagination();
     syncHistory(
       {
         app: undefined,
         timeNumber: undefined,
         timeUnit: undefined,
+        sessionStatus: undefined,
       },
       this.props.history,
     );
