@@ -1,0 +1,530 @@
+# LogicTest: !local-mixed-25.4
+
+subtest delay_delete_with_manual_stats
+# We test that for a table with canary stats rollout enabled (i.e. with
+# a non-zero stats_canary_window), when a new stats is created, the
+# deemed-to-be-obsolete stats will not be immediately deleted, but
+# marked with delay_delete=true. The actual deletion will happen after
+# another new stats is collected. Since the auto-stats collection is not
+# deterministic in tests, we test with manual stats collection. If the
+# existing stats are manual, collecting new stats would normally lead to
+# its immediate removal. This is because we typically only retain the
+# most recent 4 *auto* statistics. But with canary_window set, we should
+# still see this manual stats after the new stats is collected, but
+# marked with delay_delete=true.
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT) WITH (sql_stats_canary_window = '15s')
+
+statement ok
+INSERT INTO t (a, b) SELECT i, i FROM generate_series(1, 1000) as g(i);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           1000       false
+NULL             {b}           1000       false
+
+# For a table with canary_window set, we don't immediately evict the
+# existing most-recent stats (row_count=1000) right away, but mark it
+# with delay_delete=true.
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(1001, 2000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           2000       false
+NULL             {b}           2000       false
+NULL             {a}           1000       true
+NULL             {b}           1000       true
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(2001, 3000);
+CREATE STATISTICS s FROM t;
+
+# The previously marked stats (row_count=1000) is now deleted,
+# and the current most-recent stats (row_count=2000) is marked with
+# delay_delete=true.
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+s                {a}           3000       false
+s                {b}           3000       false
+NULL             {a}           2000       true
+NULL             {b}           2000       true
+
+# Test with new stats collected only on column a, which means
+# deleteOtherStats = false.
+# The other column (b) should not be affected.
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(3001, 4000);
+CREATE STATISTICS s_a2 ON a FROM t
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+s_a2             {a}           4000       false
+s                {a}           3000       true
+s                {b}           3000       false
+NULL             {b}           2000       true
+
+# But such 2-phases deletion is disabled for table with canary_window unset.
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '0s');
+
+statement ok
+INSERT INTO t (a) SELECT * FROM generate_series(4001, 5000);
+ANALYZE t;
+
+query TTIB colnames,retry
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+NULL             {a}           5000       false
+NULL             {b}           5000       false
+
+subtest end
+
+subtest auto_stats
+
+statement ok
+ALTER TABLE t SET (sql_stats_canary_window = '10s');
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 100,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 200,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 300,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 400,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 500,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    }
+]';
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       false
+__auto__         {a}           1000       false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 600,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 6000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       false
+__auto__         {a}           1000       true
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 700,
+        "name": "manual",
+        "null_count": 0,
+        "row_count": 7000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+manual           {a}           7000       false
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+__auto__         {a}           2000       true
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 8:00:00.00000+00:00",
+        "distinct_count": 800,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 8000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           8000       false
+manual           {a}           7000       true
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 9:00:00.00000+00:00",
+        "distinct_count": 900,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 9000
+    }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           9000       false
+__auto__         {a}           8000       false
+__auto__         {a}           6000       false
+__auto__         {a}           5000       false
+__auto__         {a}           4000       false
+__auto__         {a}           3000       true
+
+subtest end
+
+subtest partial_stats
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-05 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-06 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 6
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-07 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 12
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:01:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial1",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:02:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 10,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial2",
+    "null_count": 0,
+    "row_count": 20,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__merged__       {a}           24         false
+partial2         {a}           20         false
+partial1         {a}           10         false
+__auto__         {a}           12         false
+__auto__         {a}           9          false
+__auto__         {a}           6          false
+__auto__         {a}           3          false
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[{
+    "avg_size": 1,
+    "columns": [
+     "a"
+    ],
+    "created_at": "1988-08-09 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "0"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "1"
+     },
+     {
+       "distinct_range": 0,
+       "num_eq": 6,
+       "num_range": 0,
+       "upper_bound": "2"
+     }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 18
+}]'
+
+query TTIB colnames
+SELECT statistics_name, column_names, row_count, delay_delete
+FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names
+----
+statistics_name  column_names  row_count  delay_delete
+__auto__         {a}           18         false
+partial2         {a}           20         true
+partial1         {a}           10         true
+__auto__         {a}           12         false
+__auto__         {a}           9          false
+__auto__         {a}           6          false
+__auto__         {a}           3          false
+
+subtest end

@@ -224,6 +224,7 @@ sql_safe_updates                                                 off
 ssl                                                              on
 standard_conforming_strings                                      on
 statement_timeout                                                0
+stats_as_of                                                      ·
 streamer_always_maintain_ordering                                off
 streamer_enabled                                                 on
 streamer_head_of_line_only_fraction                              0.8
@@ -449,13 +450,11 @@ CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 schema_name  table_name  type   owner  estimated_row_count  locality
 public       foo         table  root   0                    NULL
 
-
 query T colnames
 SELECT * FROM [SHOW TIMEZONE]
 ----
 timezone
 UTC
-
 
 query T colnames
 SELECT * FROM [SHOW TIME ZONE]
@@ -463,13 +462,11 @@ SELECT * FROM [SHOW TIME ZONE]
 timezone
 UTC
 
-
 query T colnames
 SELECT * FROM [SHOW TRANSACTION ISOLATION LEVEL]
 ----
 transaction_isolation
 serializable
-
 
 query T colnames
 SELECT * FROM [SHOW TRANSACTION PRIORITY]
@@ -482,7 +479,6 @@ SELECT * FROM [SHOW TRANSACTION STATUS]
 ----
 transaction_status
 NoTxn
-
 
 query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
@@ -504,7 +500,6 @@ v           CREATE VIEW public.v (
               id
             ) AS SELECT id FROM system.public.descriptor;
 
-
 query TTT colnames
 SELECT username,options,member_of FROM [SHOW USERS] ORDER BY 1
 ----
@@ -512,7 +507,6 @@ username  options  member_of
 admin     {}       {}
 root      {}       {admin}
 testuser  {}       {}
-
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]

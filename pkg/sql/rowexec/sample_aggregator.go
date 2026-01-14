@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -462,7 +464,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := s.FlowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram {
@@ -540,24 +542,10 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded, if the new statistic
-			// is not partial.
-			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			if err := stats.WriteStatsWithOldDeleted(
 				ctx,
-				s.FlowCtx.Cfg.Settings,
 				txn,
+				s.FlowCtx.Cfg.Settings,
 				s.tableID,
 				si.spec.StatName,
 				columnIDs,
@@ -568,6 +556,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
+				"", /* createdAt */
+				0,  /* statisticID */
 			); err != nil {
 				return err
 			}
@@ -591,16 +581,32 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			columnsUsed[i] = columnIDs
 		}
 		keepTime := stats.TableStatisticsRetentionPeriod.Get(&s.FlowCtx.Cfg.Settings.SV)
-		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+
+		columnIDsPlaceholders, placeHolderVals, err := stats.GetPlaceholderValsFromColumnIDs(s.tableID, columnsUsed, keepTime)
+		if err != nil {
+			return err
+		}
+
+		if err := s.FlowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			tableDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, s.tableID)
+			if err != nil {
+				return err
+			}
+			canaryEnabled := tableDesc.TableDesc().StatsCanaryWindow != 0
+			if canaryEnabled && s.FlowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn) {
+				if err := stats.DeleteExpiredStatsForOtherColumns(ctx, txn, columnIDsPlaceholders, placeHolderVals); err != nil {
+					return errors.Wrapf(err, "fail to delete expired stats for other columns for table id: %d", s.tableID)
+				}
+				return stats.MarkDelayDeleteForOtherColumns(ctx, txn, columnIDsPlaceholders, placeHolderVals)
+			}
 			// Delete old stats from columns that were not collected. This is
 			// important to prevent single-column stats from deleted columns or
 			// multi-column stats from deleted indexes from persisting indefinitely.
 			return stats.DeleteOldStatsForOtherColumns(
 				ctx,
 				txn,
-				s.tableID,
-				columnsUsed,
-				keepTime,
+				columnIDsPlaceholders,
+				placeHolderVals,
 			)
 		}); err != nil {
 			return err

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -260,9 +261,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(
-				ctx, tableID, nil /* forecast */, nil /* udtCols */, nil, /* typeResolver */
-			)
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -270,9 +269,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(
-						ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil, /* typeResolver */
-					)
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}
@@ -552,15 +549,17 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		tableID descpb.ID, columnIDs [][]descpb.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			return DeleteOldStatsForOtherColumns(ctx, txn, tableID, columnIDs, defaultKeepTime)
+			columnIDsPlaceholders, placeholderVals, err := GetPlaceholderValsFromColumnIDs(tableID, columnIDs, defaultKeepTime)
+			if err != nil {
+				return err
+			}
+			return DeleteOldStatsForOtherColumns(ctx, txn, columnIDsPlaceholders, placeholderVals)
 		}); err != nil {
 			return err
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(
-				ctx, tableID, nil /* forecast */, nil /* udtCols */, nil, /* typeResolver */
-			)
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -568,9 +567,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(
-						ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil, /* typeResolver */
-					)
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}
