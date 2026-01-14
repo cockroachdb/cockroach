@@ -1,5 +1,6 @@
 # LogicTest: !local-prepared
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
+# knob-opt: sync-event-log
 
 # Speed up the rangefeed.
 user host-cluster-root
@@ -36,7 +37,7 @@ SELECT information_schema.crdb_rewrite_inline_hints(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint1;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
 
 let $hint2
 SELECT information_schema.crdb_rewrite_inline_hints(
@@ -48,7 +49,7 @@ SELECT information_schema.crdb_rewrite_inline_hints(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint2;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
 
 let $hint3
 SELECT information_schema.crdb_rewrite_inline_hints(
@@ -68,7 +69,7 @@ SELECT count(*) FROM system.statement_hints;
 3
 
 query I
-SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = 10';
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
 ----
 2
 
@@ -76,6 +77,45 @@ query I
 SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b';
 ----
 1
+
+# Verify that rewrite_inline_hints events were logged.
+
+query I
+SELECT count(*) FROM system.eventlog WHERE "eventType" = 'rewrite_inline_hints';
+----
+3
+
+query ITT
+SELECT "reportingID",
+       info::JSONB->>'StatementFingerprint',
+       info::JSONB->>'DonorSQL'
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+ORDER BY "timestamp"
+----
+1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@primary WHERE y = _
+1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@xy_y_idx WHERE y = _
+1  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b
+
+# Verify that the HintID in the event matches the returned hint ID.
+query B
+SELECT (info::JSONB->>'HintID')::INT = $hint1
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND info::JSONB->>'StatementFingerprint' = 'SELECT * FROM xy WHERE y = _'
+ORDER BY "timestamp"
+LIMIT 1
+----
+true
+
+# Verify the full event structure (excluding non-deterministic fields).
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp' - 'HintID'
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND info::JSONB->>'StatementFingerprint' = 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
+----
+1  {"DonorSQL": "SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b", "EventType": "rewrite_inline_hints", "Statement": "SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b', 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b')", "StatementFingerprint": "SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b", "Tag": "SELECT", "User": "root"}
 
 statement count 3
 DELETE FROM system.statement_hints WHERE true;
@@ -98,13 +138,29 @@ SELECT information_schema.crdb_rewrite_inline_hints(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint4;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
+
+# Verify the event was logged within the transaction.
+query I
+SELECT count(*) FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND (info::JSONB->>'HintID')::INT = $hint4;
+----
+1
 
 statement ok
 ROLLBACK;
 
 query I
 SELECT count(*) FROM system.statement_hints;
+----
+0
+
+# Verify the event log entry was also rolled back.
+query I
+SELECT count(*) FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND (info::JSONB->>'HintID')::INT = $hint4;
 ----
 0
 
@@ -755,7 +811,7 @@ SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT b FROM ab'
 )
 
-statement error hint injection donor statement AST node \$1 did not match AST node 5
+statement ok
 SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT a FROM ab WHERE b = 5',
   'SELECT a FROM ab WHERE b = $1'
@@ -972,3 +1028,53 @@ statement ok
 SELECT information_schema.crdb_rewrite_inline_hints('SELECT _', 'SELECT _')
 
 user root
+
+# Test for #160308, in which ROWS FROM is added to the fingerprint.
+
+query T noticetrace
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM abc JOIN (SELECT i FROM generate_series(_, _) g(i)) ON b = i',
+  'SELECT * FROM abc INNER MERGE JOIN (SELECT i FROM generate_series(_, _) g(i)) ON b = i'
+)
+----
+NOTICE: statement fingerprint changed to: SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i
+NOTICE: hint donor statement changed to: SELECT * FROM abc INNER MERGE JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i
+
+query TT
+SELECT fingerprint, hint_type
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i']
+----
+SELECT * FROM abc JOIN (SELECT i FROM ROWS FROM (generate_series(_, _)) AS g (i)) ON b = i  rewrite_inline_hints
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN
+SELECT * FROM abc
+JOIN (SELECT i FROM generate_series(1, 10000) g(i))
+ON b = i
+----
+distribution: local
+statement hints count: 1
+·
+• merge join
+│ equality: (b) = (generate_series)
+│
+├── • sort
+│   │ order: +b
+│   │
+│   └── • scan
+│         missing stats
+│         table: abc@abc_pkey
+│         spans: FULL SCAN
+│
+└── • sort
+    │ estimated row count: 10
+    │ order: +generate_series
+    │
+    └── • project set
+        │ estimated row count: 10
+        │
+        └── • emptyrow

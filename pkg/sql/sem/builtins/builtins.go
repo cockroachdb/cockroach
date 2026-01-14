@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -85,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -12843,40 +12845,54 @@ var rewriteInlineHintsOverload = tree.Overload{
 			return nil, err
 		}
 
-		stmtFingerprint := string(tree.MustBeDString(args[0]))
-		donorSQL := string(tree.MustBeDString(args[1]))
+		targetArg := string(tree.MustBeDString(args[0]))
+		donorArg := string(tree.MustBeDString(args[1]))
 
-		// Validate that the donor statement matches the target statement
-		// without hints.
+		// First, parse both arguments and convert both to statement fingerprints if
+		// they are not already.
 		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
 			&evalCtx.Settings.SV,
 		))
-		stmts, err := parserutils.Parse(stmtFingerprint)
+		parse := func(arg, which string) (stmt statements.Statement[tree.Statement], fingerprint string, err error) {
+			stmts, err := parserutils.Parse(arg)
+			if err != nil {
+				return stmt, fingerprint, pgerror.Wrapf(
+					err, pgcode.InvalidParameterValue, "could not parse %s", which,
+				)
+			}
+			if len(stmts) != 1 {
+				return stmt, fingerprint, pgerror.Newf(
+					pgcode.InvalidParameterValue, "could not parse %s as a single SQL statement", which,
+				)
+			}
+			stmt = stmts[0]
+			fingerprint = tree.FormatStatementHideConstants(stmt.AST, fingerprintFlags)
+			if fingerprint != arg {
+				evalCtx.ClientNoticeSender.BufferClientNotice(
+					ctx, pgnotice.Newf("%s changed to: %s", which, fingerprint),
+				)
+				// Re-parse the statement fingerprint to get an updated AST.
+				stmt, err = parserutils.ParseOne(fingerprint)
+				if err != nil {
+					// Assertion failure is appropriate here, so no error wrapping.
+					return stmt, fingerprint, err
+				}
+			}
+			return stmt, fingerprint, nil
+		}
+
+		targetStmt, targetSQL, err := parse(targetArg, "statement fingerprint")
 		if err != nil {
-			return nil, pgerror.Wrap(
-				err, pgcode.InvalidParameterValue, "could not parse statement fingerprint",
-			)
+			return nil, err
 		}
-		if len(stmts) != 1 {
-			return nil, pgerror.New(
-				pgcode.InvalidParameterValue,
-				"could not parse statement fingerprint as a single SQL statement",
-			)
-		}
-		targetStmt := stmts[0]
-		stmts, err = parserutils.Parse(donorSQL)
+
+		donorStmt, donorSQL, err := parse(donorArg, "hint donor statement")
 		if err != nil {
-			return nil, pgerror.Wrap(
-				err, pgcode.InvalidParameterValue, "could not parse hint donor statement",
-			)
+			return nil, err
 		}
-		if len(stmts) != 1 {
-			return nil, pgerror.New(
-				pgcode.InvalidParameterValue,
-				"could not parse hint donor statement as a single SQL statement",
-			)
-		}
-		donorStmt := stmts[0]
+
+		// Validate that the donor statement matches the target statement
+		// without hints.
 		donor, err := tree.NewHintInjectionDonor(donorStmt.AST, fingerprintFlags)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(err, "error while creating donor")
@@ -12891,9 +12907,8 @@ var rewriteInlineHintsOverload = tree.Overload{
 		if err != nil {
 			return nil, pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 		}
-		// Either the target statement or the donor statement could be
-		// non-fingerprint or fingerprint, so for an apples-to-apples comparison
-		// we need to convert both to fingerprints.
+		// The donor statement could be non-fingerprint or fingerprint, so for an
+		// apples-to-apples comparison we convert both to fingerprints.
 		resultFingerprint := tree.FormatStatementHideConstants(result, fingerprintFlags)
 		donorFingerprint := tree.FormatStatementHideConstants(donorStmt.AST, fingerprintFlags)
 		if resultFingerprint != donorFingerprint {
@@ -12904,11 +12919,20 @@ var rewriteInlineHintsOverload = tree.Overload{
 			)
 		}
 
-		// Insert into statement_hints.
+		// Now that we've passed some basic validation, insert into statement_hints.
 		var hint hintpb.StatementHintUnion
 		hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
-		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
+		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, targetSQL, hint)
 		if err != nil {
+			return nil, err
+		}
+
+		// Log the statement hint injection event.
+		if err := evalCtx.Planner.LogEvent(ctx, &eventpb.RewriteInlineHints{
+			StatementFingerprint: targetSQL,
+			DonorSQL:             donorSQL,
+			HintID:               hintID,
+		}); err != nil {
 			return nil, err
 		}
 
