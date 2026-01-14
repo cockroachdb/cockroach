@@ -159,6 +159,7 @@ func RegisterTests(r registry.Registry) {
 	registerSecondaryIndexesMultiVersionCluster(r)
 	registerSequelize(r)
 	registerSlowDrain(r)
+	registerStoreMetrics(r)
 	registerSysbench(r)
 	registerTLP(r)
 	registerTPCC(r)
