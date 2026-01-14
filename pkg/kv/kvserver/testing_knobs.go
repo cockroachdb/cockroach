@@ -581,6 +581,10 @@ type StoreTestingKnobs struct {
 	// NodeIsLiveCallbackWorkDone, if set, is called after nodeIsLiveCallback
 	// completes its iteration over all replicas on the store.
 	NodeIsLiveCallbackWorkDone func(livenesspb.Liveness)
+
+	// DisableLeaderlessWatcherRefreshOnRaftTick, if set, disables refreshing
+	// the leaderless watcher's unavailable state during raft ticks.
+	DisableLeaderlessWatcherRefreshOnRaftTick bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
