@@ -754,8 +754,8 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
-func (u *sqlSymUnion) showAfterBefore() *tree.ShowAfterBefore {
-  return u.val.(*tree.ShowAfterBefore)
+func (u *sqlSymUnion) showBackupTimeFilter() *tree.ShowBackupTimeFilter {
+  return u.val.(*tree.ShowBackupTimeFilter)
 }
 func (u *sqlSymUnion) checkExternalConnectionOptions() *tree.CheckExternalConnectionOptions {
   return u.val.(*tree.CheckExternalConnectionOptions)
@@ -1060,14 +1060,14 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEG_INNER_PRODUCT NEVER NEW NEW_DB_NAME NEW_KMS NEXT NO NOBYPASSRLS NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEG_INNER_PRODUCT NEVER NEW NEWER NEW_DB_NAME NEW_KMS NEXT NO NOBYPASSRLS NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NODE NOLOGIN NOMODIFYCLUSTERSETTING NOREPLICATION
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT
 %token <str> NOTHING NOTHING_AFTER_RETURNING
 %token <str> NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOVIEWCLUSTERSETTING NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD OLD_KMS ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD OLDER OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PERMISSIVE PHYSICAL PLACEMENT PLACING
@@ -1092,7 +1092,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> STABLE START STATE STATEMENT STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBJECT SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THAN THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TRANSFER TRANSFORM TREAT TRIGGER TRIGGERS TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -1488,7 +1488,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
-%type <*tree.ShowAfterBefore> opt_show_after_before_clause
+%type <*tree.ShowBackupTimeFilter> opt_show_backup_time_filter_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -9013,12 +9013,12 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_after_before_clause
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_backup_time_filter_clause
  {
 
     $$.val = &tree.ShowBackup{
       InCollection:    $4.stringOrPlaceholderOptList(),
-      TimeRange: *$5.showAfterBefore(),
+      TimeRange: *$5.showBackupTimeFilter(),
     }
   }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
@@ -9167,26 +9167,26 @@ show_backup_options:
  $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
  }
 
-opt_show_after_before_clause:
-  AFTER a_expr
+opt_show_backup_time_filter_clause:
+  NEWER THAN a_expr
   {
-    $$.val = &tree.ShowAfterBefore{After: $2.expr()}
+    $$.val = &tree.ShowBackupTimeFilter{NewerThan: $3.expr()}
   }
-  | BEFORE a_expr
+  | OLDER THAN a_expr
   {
-    $$.val = &tree.ShowAfterBefore{Before: $2.expr()}
+    $$.val = &tree.ShowBackupTimeFilter{OlderThan: $3.expr()}
   }
-  | AFTER a_expr BEFORE a_expr
+  | NEWER THAN a_expr OLDER THAN a_expr
   {
-    $$.val = &tree.ShowAfterBefore{After: $2.expr(), Before: $4.expr()}
+    $$.val = &tree.ShowBackupTimeFilter{NewerThan: $3.expr(), OlderThan: $6.expr()}
   }
-  | BEFORE a_expr AFTER a_expr
+  | OLDER THAN a_expr NEWER THAN a_expr
   {
-    $$.val = &tree.ShowAfterBefore{After: $4.expr(), Before: $2.expr()}
+    $$.val = &tree.ShowBackupTimeFilter{NewerThan: $6.expr(), OlderThan: $3.expr()}
   }
   | /* EMPTY */
   {
-    $$.val = &tree.ShowAfterBefore{}
+    $$.val = &tree.ShowBackupTimeFilter{}
   }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
@@ -18858,6 +18858,7 @@ unreserved_keyword:
 | NAN
 | NEVER
 | NEW
+| NEWER
 | NEW_DB_NAME
 | NEW_KMS
 | NEXT
@@ -18891,6 +18892,7 @@ unreserved_keyword:
 | OFF
 | OIDS
 | OLD
+| OLDER
 | OLD_KMS
 | OPERATOR
 | OPT
@@ -19062,6 +19064,7 @@ unreserved_keyword:
 | TENANTS
 | TESTING_RELOCATE
 | TEXT
+| THAN
 | TIES
 | TRACE
 | TRACING
@@ -19431,6 +19434,7 @@ bare_label_keywords:
 | NATURAL
 | NEVER
 | NEW
+| NEWER
 | NEW_DB_NAME
 | NEW_KMS
 | NEXT
@@ -19468,6 +19472,7 @@ bare_label_keywords:
 | OFF
 | OIDS
 | OLD
+| OLDER
 | OLD_KMS
 | ONLY
 | OPERATOR
@@ -19661,6 +19666,7 @@ bare_label_keywords:
 | TENANT_NAME
 | TESTING_RELOCATE
 | TEXT
+| THAN
 | THEN
 | THROTTLING
 | TIES

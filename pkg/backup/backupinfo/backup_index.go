@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -234,8 +235,11 @@ type RestorableBackup struct {
 // ListRestorableBackups lists all restorable backups from the backup index
 // within the specified time interval (inclusive at both ends). The store should
 // be rooted at the default collection URI (the one that contains the
-// `metadata/` directory).
-//
+// `metadata/` directory). A maxCount of 0 indicates no limit on the number
+// of backups to return, otherwise, if the number of backups found exceeds
+// maxCount, iteration will stop early and the boolean return value will be
+// set to true.
+
 // NB: Duplicate end times within a chain are elided, as IDs only identify
 // unique end times within a chain. For the purposes of determining which
 // backup's metadata we use to populate the fields, we always pick the backup
@@ -248,86 +252,113 @@ type RestorableBackup struct {
 // milliseconds. As such, it is possible that a backup with an end time slightly
 // ahead of `before` may be included in the results.
 func ListRestorableBackups(
-	ctx context.Context, store cloud.ExternalStorage, after, before time.Time,
-) ([]RestorableBackup, error) {
-	idxInRange, err := listIndexesWithinRange(ctx, store, after, before)
-	if err != nil {
-		return nil, err
-	}
+	ctx context.Context, store cloud.ExternalStorage, newerThan, olderThan time.Time, maxCount uint,
+) ([]RestorableBackup, bool, error) {
+	ctx, trace := tracing.ChildSpan(ctx, "backupinfo.ListRestorableBackups")
+	defer trace.Finish()
 
-	var filteredIndexes []parsedIndex
-	for _, index := range idxInRange {
-		if len(filteredIndexes) > 0 {
-			last := &filteredIndexes[len(filteredIndexes)-1]
-			// Elide duplicate end times within a chain. Because the indexes are
-			// sorted with ascending start times breaking ties, keeping the last one
-			// ensures that we keep the non-compacted backup.
-			if last.end.Equal(index.end) && last.fullEnd.Equal(index.fullEnd) {
-				last.filePath = index.filePath
-				continue
+	var filteredIdxs []parsedIndex
+	var exceededMax bool
+	if err := listIndexesWithinRange(
+		ctx, store, newerThan, olderThan,
+		func(index parsedIndex) error {
+			if len(filteredIdxs) > 0 {
+				lastIdx := len(filteredIdxs) - 1
+				// Elide duplicate end times within a chain. Because indexes are fetched
+				// in descending order with ties broken by ascending start time, keeping
+				// the last one ensures that we keep the non-compacted backup.
+				if filteredIdxs[lastIdx].end.Equal(index.end) &&
+					filteredIdxs[lastIdx].fullEnd.Equal(index.fullEnd) {
+					if buildutil.CrdbTestBuild {
+						// Sanity check that start times are in ascending order for indexes
+						// with the same end time.
+						if index.start.Before(filteredIdxs[lastIdx].start) {
+							return errors.Newf(
+								"expected index start times to be in ascending order: %s vs %s",
+								index.start, filteredIdxs[lastIdx].start,
+							)
+						}
+					}
+					filteredIdxs[lastIdx] = index
+					return nil
+				}
 			}
-		}
-		filteredIndexes = append(filteredIndexes, index)
+			filteredIdxs = append(filteredIdxs, index)
+			if maxCount > 0 && uint(len(filteredIdxs)) > maxCount {
+				exceededMax = true
+				return cloud.ErrListingDone
+			}
+			return nil
+		},
+	); err != nil {
+		return nil, false, err
+	}
+	if exceededMax {
+		filteredIdxs = filteredIdxs[:maxCount]
 	}
 
-	backups := make([]RestorableBackup, 0, len(filteredIndexes))
-	for _, index := range filteredIndexes {
-		reader, _, err := store.ReadFile(ctx, index.filePath, cloud.ReadOptions{})
+	ctx, readTrace := tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
+	defer readTrace.Finish()
+	backups, err := util.MapE(filteredIdxs, func(index parsedIndex) (RestorableBackup, error) {
+		idxMeta, err := readIndexFile(ctx, store, index.filePath)
 		if err != nil {
-			return nil, errors.Wrapf(err, "reading index file %s", index.filePath)
+			return RestorableBackup{}, err
 		}
-
-		bytes, err := ioctx.ReadAll(ctx, reader)
-		besteffort.Error(ctx, "cleanup-index-reader", func(ctx context.Context) error {
-			return reader.Close(ctx)
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "reading index file %s", index.filePath)
-		}
-
-		idxMeta := backuppb.BackupIndexMetadata{}
-		if err := protoutil.Unmarshal(bytes, &idxMeta); err != nil {
-			return nil, errors.Wrapf(err, "unmarshalling index file %s", index.filePath)
-		}
-
-		backups = append(backups, RestorableBackup{
+		return RestorableBackup{
 			ID:                encodeBackupID(index.fullEnd, index.end),
 			EndTime:           idxMeta.EndTime,
 			MVCCFilter:        idxMeta.MVCCFilter,
 			RevisionStartTime: idxMeta.RevisionStartTime,
-		})
+		}, nil
+	})
+	if err != nil {
+		return nil, false, err
 	}
-	return backups, nil
+
+	return backups, exceededMax, nil
 }
 
 type parsedIndex struct {
-	filePath     string // path to the index relative to the backup collection root
-	fullEnd, end time.Time
+	filePath            string // path to the index relative to the backup collection root
+	fullEnd, start, end time.Time
 }
 
 // listIndexesWithinRange lists all index files whose end time falls within the
 // specified time interval (inclusive at both ends). The store should be rooted
 // at the default collection URI (the one that contains the `metadata/`
-// directory). The returned index filenames are relative to the `metadata/index`
-// directory and sorted in descending order by end time, with ties broken by
-// ascending start time.
+// directory). The indexes are passed to the callback in descending end time
+// order, with ties broken by ascending start time order. To stop iteration
+// early, the callback can return cloud.ErrListingDone. Any other returned error
+// by the callback will be propagated back to the caller.
 //
 // NB: Filtering is applied to backup end times truncated to tens of
 // milliseconds.
 func listIndexesWithinRange(
-	ctx context.Context, store cloud.ExternalStorage, after, before time.Time,
-) ([]parsedIndex, error) {
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	newerThan, olderThan time.Time,
+	cb func(parsedIndex) error,
+) error {
 	// First, find the full backup end time prefix we begin listing from. Since
 	// full backup end times are stored in descending order in the index, we add
 	// ten milliseconds (the maximum granularity of the timestamp encoding) to
 	// ensure an inclusive start.
-	maxEndTime := before.Add(10 * time.Millisecond)
+	maxEndTime := olderThan.Add(10 * time.Millisecond)
 	maxEndTimeSubdir, err := endTimeToIndexSubdir(maxEndTime)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var idxInRange []parsedIndex
+	// We don't immediately emit an index when we see it; instead, we hold onto
+	// it until the next index is seen. This is because we may need to swap with
+	// the next index in order to maintain descending end tinme order. This occurs
+	// when incremental backups are created and appended to the previous chain
+	// while the full backup for a new chain is still being run. Note that this
+	// swapping of the last two seen indexes only maintains a sorted order due to
+	// the way the backup index is sorted and the invariant that the existence of
+	// an incremental backup in a chain ensures that no backup in an older chain
+	// can have an end time greater than or equal to the incremental's end time.
+	var pendingEmit parsedIndex
 	err = store.List(
 		ctx,
 		backupbase.BackupIndexDirectoryPath+"/",
@@ -342,39 +373,52 @@ func listIndexesWithinRange(
 			}
 			// Once we see an *incremental* backup with an end time before `after`, we
 			// can stop iterating as we have found all backups within the time range.
-			if !start.IsZero() && end.Before(after) {
+			if !start.IsZero() && end.Before(newerThan) {
 				return cloud.ErrListingDone
 			}
-			if end.After(before) || end.Before(after) {
+			if end.After(olderThan) || end.Before(newerThan) {
 				return nil
 			}
-			entry := parsedIndex{
+			nextEntry := parsedIndex{
 				filePath: path.Join(backupbase.BackupIndexDirectoryPath, file),
 				fullEnd:  full,
+				start:    start,
 				end:      end,
 			}
-			// We may need to swap with the last index appended to maintain descending
-			// end time order. This occurs when incremental backups are created and
-			// appended to the previous chain while the full backup for a new chain
-			// is still being run. Note that this swapping of the last two elements
-			// only maintains a sorted order due to the way the backup index is sorted
-			// and the invariant that the existence of an incremental backup in a
-			// chain ensures that no backup in an older chain can have an end time
-			// greater than or equal to the incremental's end time.
-			if len(idxInRange) > 0 && end.After(idxInRange[len(idxInRange)-1].end) {
-				tmp := idxInRange[len(idxInRange)-1]
-				idxInRange[len(idxInRange)-1] = entry
-				entry = tmp
+			if pendingEmit == (parsedIndex{}) {
+				pendingEmit = nextEntry
+				return nil
 			}
-			idxInRange = append(idxInRange, entry)
+			if !nextEntry.end.After(pendingEmit.end) {
+				// The pending emit has an end time less than or equal to the new entry,
+				// so we can guarantee that the pending emit is the next index to be
+				// flushed.
+				if err := cb(pendingEmit); err != nil {
+					return err
+				}
+				pendingEmit = nextEntry
+			} else {
+				// This new entry does have an end time newer than the last index, so we
+				// need to emit this one first and continue holding onto that previous
+				// index.
+				if err := cb(nextEntry); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	)
 	if err != nil && !errors.Is(err, cloud.ErrListingDone) {
-		return nil, err
+		return err
 	}
 
-	return idxInRange, nil
+	// Loop has ended, we can flush any pending index.
+	if pendingEmit != (parsedIndex{}) {
+		if err := cb(pendingEmit); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
@@ -691,6 +735,33 @@ func parseTimesFromIndexFilepath(filepath string) (fullEnd, start, end time.Time
 	}
 
 	return fullEnd, start, end, nil
+}
+
+// readIndexFile reads and unmarshals the backup index file at the given path.
+// store should be rooted at the default collection URI (the one that contains
+// the `metadata/` directory). The indexFilePath is relative to the collection
+// URI.
+func readIndexFile(
+	ctx context.Context, store cloud.ExternalStorage, indexFilePath string,
+) (backuppb.BackupIndexMetadata, error) {
+	reader, _, err := store.ReadFile(ctx, indexFilePath, cloud.ReadOptions{})
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "reading index file %s", indexFilePath)
+	}
+	defer besteffort.Error(ctx, "cleanup-index-reader", func(ctx context.Context) error {
+		return reader.Close(ctx)
+	})
+
+	bytes, err := ioctx.ReadAll(ctx, reader)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "reading index file %s", indexFilePath)
+	}
+
+	idxMeta := backuppb.BackupIndexMetadata{}
+	if err := protoutil.Unmarshal(bytes, &idxMeta); err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "unmarshalling index file %s", indexFilePath)
+	}
+	return idxMeta, nil
 }
 
 // encodeBackupID generates a backup ID for a backup identified by its parent

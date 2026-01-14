@@ -4542,6 +4542,22 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`use_backups_with_ids`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_backups_with_ids`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("use_backups_with_ids", s)
+			if err != nil {
+				return err
+			}
+			m.SetUseBackupsWithIDs(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseBackupsWithIDs), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
