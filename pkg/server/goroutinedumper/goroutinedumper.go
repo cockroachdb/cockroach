@@ -6,17 +6,16 @@
 package goroutinedumper
 
 import (
-	"compress/gzip"
 	"context"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -155,19 +154,14 @@ func (gd *GoroutineDumper) CheckOwnsFile(_ context.Context, fi os.DirEntry) bool
 }
 
 func takeGoroutineDump(path string) error {
-	path += ".txt.gz"
+	path += ".pb.gz"
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "error creating file %s for goroutine dump", path)
 	}
 	defer f.Close()
-	w := gzip.NewWriter(f)
-	if _, err := w.Write(allstacks.Get()); err != nil {
+	if err = pprof.Lookup("goroutine").WriteTo(f, 3); err != nil {
 		return errors.Wrapf(err, "error writing goroutine dump to %s", path)
-	}
-	// Flush and write the gzip header. It doesn't close the underlying writer.
-	if err := w.Close(); err != nil {
-		return errors.Wrapf(err, "error closing gzip writer for %s", path)
 	}
 	// Return f.Close() too so that we don't miss a potential error if everything
 	// else succeeded.
