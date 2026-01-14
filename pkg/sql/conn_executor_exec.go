@@ -579,6 +579,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if len(stmt.Hints) > 0 {
 		telemetry.Inc(sqltelemetry.StatementHintsCounter)
+		ex.metrics.EngineMetrics.QueryWithStatementHintsCount.Inc(1)
 	}
 
 	// This goroutine is the only one that can modify txnState.mu.priority and
@@ -1480,6 +1481,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	if len(vars.stmt.Hints) > 0 {
 		telemetry.Inc(sqltelemetry.StatementHintsCounter)
+		ex.metrics.EngineMetrics.QueryWithStatementHintsCount.Inc(1)
 	}
 
 	// For pausable portal, the instrumentation helper needs to be set up only

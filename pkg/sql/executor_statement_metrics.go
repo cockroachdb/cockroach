@@ -99,6 +99,9 @@ type EngineMetrics struct {
 	// StatementIndexBytesWritten counts the number of primary and secondary index
 	// bytes modified by SQL statements.
 	StatementIndexBytesWritten *metric.Counter
+
+	// QueryWithStatementHintsCount counts queries executed with external statement hints.
+	QueryWithStatementHintsCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.

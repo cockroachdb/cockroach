@@ -680,6 +680,7 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			StatementBytesRead:                metric.NewCounter(getMetricMeta(MetaStatementBytesRead, internal)),
 			StatementIndexRowsWritten:         metric.NewCounter(getMetricMeta(MetaStatementIndexRowsWritten, internal)),
 			StatementIndexBytesWritten:        metric.NewCounter(getMetricMeta(MetaStatementIndexBytesWritten, internal)),
+			QueryWithStatementHintsCount:      metric.NewCounter(getMetricMeta(MetaQueryWithStatementHints, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
