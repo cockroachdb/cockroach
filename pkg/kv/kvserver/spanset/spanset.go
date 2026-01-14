@@ -231,21 +231,6 @@ func (s *SpanSet) SetForbiddenMatcher(matcher func(TrickySpan) error) {
 	s.forbiddenSpansMatcher = matcher
 }
 
-// Merge merges all spans in s2 into s. s2 is not modified.
-func (s *SpanSet) Merge(s2 *SpanSet) {
-	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
-		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
-		}
-	}
-	s.forbiddenSpansMatcher = s2.forbiddenSpansMatcher
-	// TODO(ibrahim): Figure out if the merged `allowUndeclared` and
-	// `allowForbidden` should be true if it was true in either `s` or `s2`.
-	s.allowUndeclared = s2.allowUndeclared
-	s.allowForbidden = s2.allowForbidden
-	s.SortAndDedup()
-}
-
 // SortAndDedup sorts the spans in the SpanSet by key and removes duplicate or
 // overlapping / redundant spans. The SpanSet represents the same subset of the
 // {keys}x{timestamps} space before and after this call, but is not guaranteed
