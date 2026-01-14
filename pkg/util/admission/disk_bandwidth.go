@@ -101,6 +101,7 @@ type diskBandwidthLimiterState struct {
 	// across the sum of prevUsedTokens[i].writeByteTokens (for all work types
 	// i).
 	prevWriteTokenUtil float64
+	prevDiskErrorStats diskErrorStats
 	// prevDiskLoad represents the disk load info for the previous
 	// adjustmentInterval.
 	prevDiskLoad intervalDiskLoadInfo
@@ -145,7 +146,9 @@ type diskTokens struct {
 // for the next adjustmentInterval. It returns the disk tokens to allocate
 // over the next adjustmentInterval.
 func (d *diskBandwidthLimiter) computeElasticTokens(
-	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	id intervalDiskLoadInfo,
+	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	diskErrStats diskErrorStats,
 ) diskTokens {
 	// TODO(aaditya): Include calculation for read and IOPS.
 	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
@@ -185,6 +188,7 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 		prevTokens:         prevState.tokens,
 		prevUsedTokens:     usedTokens,
 		prevWriteTokenUtil: writeTokenUtil,
+		prevDiskErrorStats: diskErrStats,
 		prevDiskLoad:       id,
 	}
 	return tokens
@@ -198,7 +202,7 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 	p.Printf("diskBandwidthLimiter%s (writeUtil %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
-		"readBW %s/s, provisioned %s/s)",
+		"readBW %s/s, provisioned %s/s, err(cum,abs,acc) write: %s,%s,%s read: %s,%s,%s)",
 		redact.SafeString(unlimitedPrefix),
 		d.state.prevWriteTokenUtil,
 		ib(d.state.prevUsedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
@@ -211,6 +215,12 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 		ib(d.state.prevDiskLoad.intWriteBytes/adjustmentInterval),
 		ib(d.state.prevDiskLoad.intReadBytes/adjustmentInterval),
 		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval),
+		ib(d.state.prevDiskErrorStats.cumError.writeByteTokens),
+		ib(d.state.prevDiskErrorStats.absError.writeByteTokens),
+		ib(d.state.prevDiskErrorStats.accountedForError.writeByteTokens),
+		ib(d.state.prevDiskErrorStats.cumError.readByteTokens),
+		ib(d.state.prevDiskErrorStats.absError.readByteTokens),
+		ib(d.state.prevDiskErrorStats.accountedForError.readByteTokens),
 	)
 }
 
