@@ -354,7 +354,8 @@ func BenchmarkTimestampString(b *testing.B) {
 //
 // Performance regression triage notes:
 //
-// We've changed the function under test between two different implementation:
+// We've changed the function under test between the following two different
+// implementations:
 //
 //	t == Timestamp{}
 //
