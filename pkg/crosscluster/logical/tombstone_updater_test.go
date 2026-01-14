@@ -16,10 +16,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeDescriptor struct {
+	lease.LeasedDescriptor
+	expiration hlc.Timestamp
+}
+
+func (e *fakeDescriptor) Expiration(ctx context.Context) hlc.Timestamp {
+	return e.expiration
+}
+
+func TestTombstoneDescriptorLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clock := hlc.NewClockForTesting(nil)
+
+	before := clock.Now()
+	expiration := before.Add(1, 0)
+	after := expiration.Add(1, 0)
+
+	tu := &tombstoneUpdater{}
+	require.False(t, tu.hasValidLease(ctx, before))
+
+	tu.leased.descriptor = &fakeDescriptor{
+		expiration: expiration,
+	}
+
+	require.True(t, tu.hasValidLease(ctx, before))
+	require.False(t, tu.hasValidLease(ctx, expiration))
+	require.False(t, tu.hasValidLease(ctx, after))
+}
 
 func TestTombstoneUpdaterSetsOriginID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
