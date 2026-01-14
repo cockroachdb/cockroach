@@ -246,6 +246,14 @@ const (
 	// table statistics collections.
 	V26_1_AddTableStatisticsLocksTable
 
+	// V26_1_StatementHintsTypeNameEnabledColumnsAdded adds hint_type, hint_name,
+	// and enabled columns to the system.statement_hints table.
+	V26_1_StatementHintsTypeNameEnabledColumnsAdded
+
+	// V26_1_StatementHintsTypeColumnBackfilled adds hint_type, hint_name, and enabled
+	// columns to the system.statement_hints table.
+	V26_1_StatementHintsTypeColumnBackfilled
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -317,6 +325,10 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_1_InstallMeta2StaticSplitPoint: {Major: 25, Minor: 4, Internal: 4},
 
 	V26_1_AddTableStatisticsLocksTable: {Major: 25, Minor: 4, Internal: 6},
+
+	V26_1_StatementHintsTypeNameEnabledColumnsAdded: {Major: 25, Minor: 4, Internal: 8},
+
+	V26_1_StatementHintsTypeColumnBackfilled: {Major: 25, Minor: 4, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

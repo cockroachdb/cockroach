@@ -11,6 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHintType(t *testing.T) {
+	// Test empty (unset) hint returns UNKNOWN.
+	var emptyHint StatementHintUnion
+	require.Equal(t, HintTypeEmpty, emptyHint.HintTypeStr())
+
+	// Test InjectHints returns REWRITE INLINE HINTS.
+	var injectHint StatementHintUnion
+	injectHint.SetValue(&InjectHints{DonorSQL: "SELECT * FROM t"})
+	require.Equal(t, HintTypeRewriteInlineHints, injectHint.HintTypeStr())
+}
+
 func TestFromToBytes(t *testing.T) {
 	// Test writing empty hint.
 	_, err := ToBytes(StatementHintUnion{})
