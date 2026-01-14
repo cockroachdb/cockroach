@@ -4469,6 +4469,13 @@ func lookupNamesByKey(
 	return tableID, dbName, schemaName, tableName, indexName
 }
 
+var rangesNoLeasesPageSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.ranges_no_leases.page_size",
+	"foo",
+	128,
+)
+
 // crdbInternalRangesNoLeasesTable exposes all ranges in the system without the
 // `lease_holder` information.
 //
@@ -4536,7 +4543,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 
 		execCfg := p.ExecCfg()
-		pageSize := int64(128)
+		pageSize := rangesNoLeasesPageSize.Get(&execCfg.Settings.SV)
 		if limit > 0 {
 			pageSize = min(limit, pageSize)
 		}
