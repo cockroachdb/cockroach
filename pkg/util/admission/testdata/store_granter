@@ -450,32 +450,32 @@ init-store-grant-coordinator
 GrantCoordinator:
  io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
-# Tokens already deducted is 0. Any writes that occur will be considered error.
+# Tokens already deducted is 0. Any writes or reads that occur will be considered error.
 adjust-disk-error actual-write-bytes=10 actual-read-bytes=10
 ----
 GrantCoordinator:
- io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912910, disk-read-tokens-deducted: 0
+ io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912910, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=10, read=10), abs-error(write=10, read=10), accounted-for-error(write=10, read=10)
 
 set-tokens io-tokens=50 disk-write-tokens=70 disk-read-tokens=20 tick-interval=250
 ----
 GrantCoordinator:
- io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20
+ io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20 disk-tokens-error: cum-error(write=10, read=10), abs-error(write=10, read=10), accounted-for-error(write=10, read=10)
 
 # Tokens already deducted is 0. Any writes that occur will be considered error.
-# We accounted for 20B of reads, so reads in excess of that will be error. The
+# We assumed 20B of read tokens, so reads in excess of that will be error. The
 # delta writes since last error adjustment is 10B, while delta reads since last
 # adjustment is 40B. Hence, error = writeErr + readErr = (10-0) + (40-20) = 30.
 # We expect 70-30=40 tokens available.
 adjust-disk-error actual-write-bytes=20 actual-read-bytes=50
 ----
 GrantCoordinator:
- io-avail: 50(50), disk-write-tokens-avail: 40, disk-read-tokens-deducted: 0
+ io-avail: 50(50), disk-write-tokens-avail: 40, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=20, read=30), abs-error(write=20, read=30), accounted-for-error(write=20, read=30)
 
 try-get work=regular v=10
 ----
 kv-regular: tryGet(10) returned true
 GrantCoordinator:
- io-avail: 40(40), disk-write-tokens-avail: 30, disk-read-tokens-deducted: 0
+ io-avail: 40(40), disk-write-tokens-avail: 30, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=20, read=30), abs-error(write=20, read=30), accounted-for-error(write=20, read=30)
 
 # +20B writes and +5B reads since last error accounting. Since we already
 # deducted 10B of write tokens during admission, the error here is 10B. We
@@ -483,4 +483,27 @@ GrantCoordinator:
 adjust-disk-error actual-write-bytes=40 actual-read-bytes=55
 ----
 GrantCoordinator:
- io-avail: 40(40), disk-write-tokens-avail: 15, disk-read-tokens-deducted: 0
+ io-avail: 40(40), disk-write-tokens-avail: 15, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=30, read=35), abs-error(write=30, read=35), accounted-for-error(write=30, read=35)
+
+set-tokens io-tokens=50 disk-write-tokens=70 disk-read-tokens=20 tick-interval=250
+----
+GrantCoordinator:
+ io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20 disk-tokens-error: cum-error(write=30, read=35), abs-error(write=30, read=35), accounted-for-error(write=30, read=35)
+
+# With this deduction we have seen 20B of write tokens. Additionally, the
+# preceding set-tokens call has resulted in 20B of read tokens.
+try-get work=regular v=20
+----
+kv-regular: tryGet(20) returned true
+GrantCoordinator:
+ io-avail: 30(30), disk-write-tokens-avail: 50, disk-read-tokens-deducted: 20 disk-tokens-error: cum-error(write=30, read=35), abs-error(write=30, read=35), accounted-for-error(write=30, read=35)
+
+# The observed delta in actual disk writes is 5 (45-40), and actual disk reads
+# is 10 (65-55). But the token deduction is 20B for writes and 20B for reads.
+# Hence, the error is negative, which reduces the cum-error values, which
+# increasing the abs-error. Since the error is negative, the
+# accounted-for-error does not change.
+adjust-disk-error actual-write-bytes=45 actual-read-bytes=65
+----
+GrantCoordinator:
+ io-avail: 30(30), disk-write-tokens-avail: 50, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=15, read=25), abs-error(write=45, read=45), accounted-for-error(write=30, read=35)
