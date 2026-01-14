@@ -132,7 +132,14 @@ func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.Cl
 	if !ss.Expiration.IsEmpty() {
 		return StateSupporting, ss.lastSupportWithdrawnTime
 	}
-	// Otherwise, support has been withdrawn.
+	// Expiration is empty, meaning support was withdrawn. But if we don't have
+	// a withdrawal timestamp, this is stale state from before a restart
+	// (lastSupportWithdrawnTime is not persisted). Return StateUnknown since we
+	// can't confirm the withdrawal is recent.
+	if ss.lastSupportWithdrawnTime.IsEmpty() {
+		return StateUnknown, hlc.ClockTimestamp{}
+	}
+	// Support was withdrawn and we have evidence of when.
 	return StateNotSupporting, ss.lastSupportWithdrawnTime
 }
 
