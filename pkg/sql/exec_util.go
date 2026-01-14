@@ -905,6 +905,13 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaQueryWithStatementHints = metric.Metadata{
+		Name:        "sql.query.with_statement_hints.count",
+		Help:        "Number of SQL queries executed with external statement hints",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_SQL,
+	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",

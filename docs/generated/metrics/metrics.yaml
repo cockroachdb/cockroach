@@ -1401,6 +1401,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.
       visibility: ESSENTIAL
+    - name: sql.query.with_statement_hints.count
+      exported_name: sql_query_with_statement_hints_count
+      description: Number of SQL queries executed with external statement hints
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.query.with_statement_hints.count.internal
+      exported_name: sql_query_with_statement_hints_count_internal
+      description: Number of SQL queries executed with external statement hints (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.routine.delete.count
       exported_name: sql_routine_delete_count
       labeled_name: 'sql.count{query_type: routine_delete}'

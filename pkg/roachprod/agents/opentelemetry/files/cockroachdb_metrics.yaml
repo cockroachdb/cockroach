@@ -2117,6 +2117,8 @@ sql_query_started_count: sql.query.started.count
 sql_query_started_count_internal: sql.query.started.internal
 sql_query_unique_count: sql.query.unique.count
 sql_query_unique_count_internal: sql.query.unique.count.internal
+sql_query_with_statement_hints_count: sql.query.with_statement_hints.count
+sql_query_with_statement_hints_count_internal: sql.query.with_statement_hints.count.internal
 sql_restart_savepoint_count: sql.restart_savepoint.count
 sql_restart_savepoint_count_internal: sql.restart_savepoint.internal
 sql_restart_savepoint_release_count: sql.restart_savepoint.release.count
