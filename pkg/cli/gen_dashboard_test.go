@@ -6,9 +6,14 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -334,4 +339,469 @@ func TestExtractPercentileValue(t *testing.T) {
 			require.Equal(t, tc.expectedValue, result)
 		})
 	}
+}
+
+func TestBuildPrometheusQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name             string
+		metricName       string
+		metricTypeMap    map[string]string
+		expectedContains []string
+	}{
+		{
+			name:       "basic counter metric",
+			metricName: "sql.conns",
+			metricTypeMap: map[string]string{
+				"sql.conns": "COUNTER",
+			},
+			expectedContains: []string{
+				"sum(rate(sql_conns{",
+				`job="cockroachdb"`,
+				`cluster=~"$cluster"`,
+				`node_id=~"$node|.*"`,
+				`store=~"$store|.*"`,
+				"[$__rate_interval]))",
+			},
+		},
+		{
+			name:       "basic gauge metric",
+			metricName: "sys.cpu.user.percent",
+			metricTypeMap: map[string]string{
+				"sys.cpu.user.percent": "GAUGE",
+			},
+			expectedContains: []string{
+				"sum(sys_cpu_user_percent{",
+				`job="cockroachdb"`,
+				`cluster=~"$cluster"`,
+				`node_id=~"$node|.*"`,
+				`store=~"$store|.*"`,
+				"})",
+			},
+		},
+		{
+			name:       "histogram with p99 percentile",
+			metricName: "sql.service.latency-p99",
+			metricTypeMap: map[string]string{
+				"sql.service.latency": "HISTOGRAM",
+			},
+			expectedContains: []string{
+				"histogram_quantile(0.99, rate(sql_service_latency_bucket{",
+				`job="cockroachdb"`,
+				`cluster=~"$cluster"`,
+				`node_id=~"$node|.*"`,
+				`store=~"$store|.*"`,
+				"}[$__rate_interval]))",
+			},
+		},
+		{
+			name:       "histogram with p99.9 percentile",
+			metricName: "sql.service.latency-p99.9",
+			metricTypeMap: map[string]string{
+				"sql.service.latency": "HISTOGRAM",
+			},
+			expectedContains: []string{
+				"histogram_quantile(0.999, rate(sql_service_latency_bucket{",
+				`job="cockroachdb"`,
+				"}[$__rate_interval]))",
+			},
+		},
+		{
+			name:       "histogram with p50 percentile",
+			metricName: "sql.service.latency-p50",
+			metricTypeMap: map[string]string{
+				"sql.service.latency": "HISTOGRAM",
+			},
+			expectedContains: []string{
+				"histogram_quantile(0.50, rate(sql_service_latency_bucket{",
+				"}[$__rate_interval]))",
+			},
+		},
+		{
+			name:       "histogram with max percentile",
+			metricName: "sql.service.latency-max",
+			metricTypeMap: map[string]string{
+				"sql.service.latency": "HISTOGRAM",
+			},
+			expectedContains: []string{
+				"histogram_quantile(1, rate(sql_service_latency_bucket{",
+				"}[$__rate_interval]))",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			query := buildPrometheusQuery(tc.metricName, tc.metricTypeMap)
+
+			for _, expected := range tc.expectedContains {
+				require.Contains(t, query, expected, "query should contain: %s", expected)
+			}
+
+			// Verify counter metrics use rate()
+			if tc.metricTypeMap[stripPercentileSuffix(tc.metricName)] == "COUNTER" {
+				require.Contains(t, query, "rate(", "counter metrics should use rate()")
+			}
+
+			// Verify gauge metrics use sum() without rate()
+			if tc.metricTypeMap[stripPercentileSuffix(tc.metricName)] == "GAUGE" {
+				require.Contains(t, query, "sum(", "gauge metrics should use sum()")
+				require.NotContains(t, query, "rate(", "gauge metrics should not use rate()")
+			}
+
+			// Verify histogram metrics use histogram_quantile()
+			if tc.metricTypeMap[stripPercentileSuffix(tc.metricName)] == "HISTOGRAM" {
+				require.Contains(t, query, "histogram_quantile(", "histogram metrics should use histogram_quantile()")
+				require.Contains(t, query, "_bucket{", "histogram metrics should query _bucket")
+			}
+		})
+	}
+}
+
+func TestExtractPrometheusPercentile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name           string
+		percentileVal  string
+		expectedResult string
+	}{
+		{
+			name:           "p99 to 0.99",
+			percentileVal:  "p99",
+			expectedResult: "0.99",
+		},
+		{
+			name:           "p99.9 to 0.999",
+			percentileVal:  "p99.9",
+			expectedResult: "0.999",
+		},
+		{
+			name:           "p50 to 0.50",
+			percentileVal:  "p50",
+			expectedResult: "0.50",
+		},
+		{
+			name:           "p90 to 0.90",
+			percentileVal:  "p90",
+			expectedResult: "0.90",
+		},
+		{
+			name:           "max to 1",
+			percentileVal:  "max",
+			expectedResult: "1",
+		},
+		{
+			name:           "99 without p prefix",
+			percentileVal:  "99",
+			expectedResult: "0.99",
+		},
+		{
+			name:           "50 without p prefix",
+			percentileVal:  "50",
+			expectedResult: "0.50",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractPrometheusPercentile(tc.percentileVal)
+			require.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+func TestGetGrafanaUnit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name         string
+		units        string
+		expectedUnit string
+	}{
+		{
+			name:         "Duration unit",
+			units:        "Duration",
+			expectedUnit: "ns",
+		},
+		{
+			name:         "DurationSeconds unit",
+			units:        "DurationSeconds",
+			expectedUnit: "s",
+		},
+		{
+			name:         "Bytes unit",
+			units:        "Bytes",
+			expectedUnit: "bytes",
+		},
+		{
+			name:         "Percentage unit",
+			units:        "Percentage",
+			expectedUnit: "percentunit",
+		},
+		{
+			name:         "Count unit",
+			units:        "Count",
+			expectedUnit: "short",
+		},
+		{
+			name:         "Unknown unit defaults to short",
+			units:        "UnknownUnit",
+			expectedUnit: "short",
+		},
+		{
+			name:         "Empty unit defaults to short",
+			units:        "",
+			expectedUnit: "short",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getGrafanaUnit(tc.units)
+			require.Equal(t, tc.expectedUnit, result)
+		})
+	}
+}
+
+func TestGetLegend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name           string
+		title          string
+		registry       string
+		groupByStorage bool
+		expectedLegend string
+	}{
+		{
+			name:           "no grouping returns title only",
+			title:          "Latency",
+			registry:       "node",
+			groupByStorage: false,
+			expectedLegend: "Latency",
+		},
+		{
+			name:           "node metric with grouping",
+			title:          "SQL Latency",
+			registry:       "node",
+			groupByStorage: true,
+			expectedLegend: "SQL Latency-n$node",
+		},
+		{
+			name:           "store metric with grouping",
+			title:          "Storage Capacity",
+			registry:       "store",
+			groupByStorage: true,
+			expectedLegend: "Storage Capacity-s$store",
+		},
+		{
+			name:           "empty registry defaults to node with grouping",
+			title:          "Throughput",
+			registry:       "",
+			groupByStorage: true,
+			expectedLegend: "Throughput-n$",
+		},
+		{
+			name:           "unknown registry defaults to node with grouping",
+			title:          "Throughput",
+			registry:       "unknown",
+			groupByStorage: true,
+			expectedLegend: "Throughput-n$unknown",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getLegend(tc.title, tc.registry, tc.groupByStorage)
+			require.Equal(t, tc.expectedLegend, result)
+		})
+	}
+}
+
+func TestConvertGraphToGrafanaPanel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name        string
+		graph       GraphConfig
+		metricTypes map[string]string
+		panelID     int
+		yPos        int
+	}{
+		{
+			name: "single counter metric",
+			graph: GraphConfig{
+				Title:   "SQL Connections",
+				Tooltip: "Number of SQL connections",
+				Axis: AxisConfig{
+					Label: "Connections",
+					Units: "Count",
+				},
+				Metrics: []MetricConfig{
+					{
+						Name:  "sql.conns",
+						Title: "Connections",
+					},
+				},
+				GroupByStorage: false,
+			},
+			metricTypes: map[string]string{
+				"sql.conns": "COUNTER",
+			},
+			panelID: 1,
+			yPos:    0,
+		},
+		{
+			name: "multiple metrics with different types",
+			graph: GraphConfig{
+				Title:   "SQL Performance",
+				Tooltip: "SQL performance metrics",
+				Axis: AxisConfig{
+					Label: "Latency",
+					Units: "Duration",
+				},
+				Metrics: []MetricConfig{
+					{
+						Name:  "sql.service.latency-p99",
+						Title: "P99 Latency",
+					},
+					{
+						Name:  "sql.service.latency-p50",
+						Title: "P50 Latency",
+					},
+				},
+				GroupByStorage: false,
+			},
+			metricTypes: map[string]string{
+				"sql.service.latency": "HISTOGRAM",
+			},
+			panelID: 2,
+			yPos:    8,
+		},
+		{
+			name: "node metric with grouping",
+			graph: GraphConfig{
+				Title:   "Node CPU",
+				Tooltip: "CPU usage per node",
+				Axis: AxisConfig{
+					Label: "CPU %",
+					Units: "Percentage",
+				},
+				Metrics: []MetricConfig{
+					{
+						Name:  "cr.node.sys.cpu.user.percent",
+						Title: "User CPU",
+					},
+				},
+				GroupByStorage: true,
+			},
+			metricTypes: map[string]string{
+				"sys.cpu.user.percent": "GAUGE",
+			},
+			panelID: 3,
+			yPos:    16,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			panel := convertGraphToGrafanaPanel(tc.graph, tc.metricTypes, tc.panelID, tc.yPos)
+
+			// Verify basic panel properties
+			require.Equal(t, tc.graph.Title, panel.Title)
+			require.Equal(t, tc.graph.Tooltip, panel.Description)
+			require.Equal(t, tc.panelID, panel.ID)
+			require.Equal(t, "timeseries", panel.Type)
+
+			// Verify grid position
+			require.Equal(t, tc.yPos, panel.GridPos.Y)
+			require.Equal(t, 8, panel.GridPos.H)
+			require.Equal(t, 12, panel.GridPos.W)
+
+			// Verify number of targets matches number of metrics
+			require.Equal(t, len(tc.graph.Metrics), len(panel.Targets))
+
+			// Verify datasource configuration
+			require.NotNil(t, panel.Datasource)
+			require.Equal(t, "prometheus", panel.Datasource.Type)
+			require.Equal(t, "${DS_PROMETHEUS}", panel.Datasource.UID)
+
+			// Verify field config
+			require.NotNil(t, panel.FieldConfig)
+			expectedUnit := getGrafanaUnit(tc.graph.Axis.Units)
+			require.Equal(t, expectedUnit, panel.FieldConfig.Defaults.Unit)
+			require.Equal(t, tc.graph.Axis.Label, panel.FieldConfig.Defaults.Custom.Axis.Label)
+
+			// Verify panel options
+			require.NotNil(t, panel.Options)
+			require.True(t, panel.Options.Legend.ShowLegend)
+
+			// Verify targets have correct RefIDs (1, 2, 3, ...)
+			for i, target := range panel.Targets {
+				expectedRefID := fmt.Sprintf("%d", i+1)
+				require.Equal(t, expectedRefID, target.RefID)
+				require.Equal(t, "code", target.EditorMode)
+				require.True(t, target.Exemplar)
+				require.True(t, target.Range)
+			}
+		})
+	}
+}
+
+// TestGenDashboardE2E tests the end-to-end CLI invocation of gen dashboard command.
+// This test generates dashboard JSON files and compares them against golden files.
+func TestGenDashboardE2E(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "gen_dashboard", "basic"), func(t *testing.T, d *datadriven.TestData) string {
+		c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+		defer c.Cleanup()
+
+		// Map command to tool type
+		var tool string
+		switch d.Cmd {
+		case "gen-datadog":
+			tool = "datadog"
+		case "gen-grafana":
+			tool = "grafana"
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+
+		// Create temporary output file
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, fmt.Sprintf("%s_dashboard.json", tool))
+
+		// Build the command based on tool type
+		var cmd string
+		if tool == "datadog" {
+			// Parse rollup interval if provided (Datadog only)
+			rollupInterval := 10
+			if d.HasArg("rollup-interval") {
+				d.ScanArgs(t, "rollup-interval", &rollupInterval)
+			}
+			cmd = fmt.Sprintf("gen dashboard --tool=%s --rollup-interval=%d --output=%s",
+				tool, rollupInterval, outputFile)
+		} else {
+			// Grafana doesn't use rollup interval
+			cmd = fmt.Sprintf("gen dashboard --tool=%s --output=%s",
+				tool, outputFile)
+		}
+
+		// Run the gen dashboard command
+		output, err := c.RunWithCapture(cmd)
+		if err != nil {
+			return fmt.Sprintf("ERROR: %v\nOUTPUT: %s", err, output)
+		}
+
+		// Read the generated JSON
+		data, err := os.ReadFile(outputFile)
+		if err != nil {
+			return fmt.Sprintf("ERROR reading file: %v\nCommand output: %s", err, output)
+		}
+
+		return string(data)
+	})
 }
