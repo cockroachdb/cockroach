@@ -28,15 +28,13 @@ type spanSetEngine struct {
 var _ storage.Engine = &spanSetEngine{}
 
 // NewEngine creates a new spanSetEngine wrapper.
-func NewEngine(engine storage.Engine, forbiddenMatchers ...func(TrickySpan) error) storage.Engine {
+func NewEngine(engine storage.Engine, forbiddenMatcher func(TrickySpan) error) storage.Engine {
 	spans := &SpanSet{}
 	// For engines, we disable undeclared access assertions as we only care about
 	// preventing access to spans that don't belong to this engine.
 	spans.DisableUndeclaredAccessAssertions()
-	// Add the forbidden matchers that assert against access to disallowed keys.
-	for _, matcher := range forbiddenMatchers {
-		spans.AddForbiddenMatcher(matcher)
-	}
+	// Set the forbidden matcher that asserts against access to disallowed keys.
+	spans.SetForbiddenMatcher(forbiddenMatcher)
 	return &spanSetEngine{
 		ReadWriter: makeSpanSetReadWriter(engine, spans),
 		e:          engine,
