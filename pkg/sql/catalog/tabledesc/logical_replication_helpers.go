@@ -116,27 +116,21 @@ func checkOutboundReferences(dst *descpb.TableDescriptor) error {
 	return nil
 }
 
-// We disallow expression evaluation (e.g., virtual columns that appear in an
-// index) because the LDR KV write path does not understand how to evaluate
-// expressions. The writer expects to receive the full set of columns, even the
-// computed ones, along with a list of columns that we've already determined
-// should be updated.
+// For the KV writer, we disallow expression evaluation (e.g., virtual columns
+// that appear in an index) because the LDR KV write path does not understand
+// how to evaluate expressions. The writer expects to receive the full set of
+// columns, even the computed ones, along with a list of columns that we've
+// already determined should be updated.
+//
+// TODO(msbutler): allow virtual computed columns in pk.
 func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible bool) error {
-	// Disallow partial indexes.
-	if requireKVCompatible {
-		for _, idx := range dst.Indexes {
-			if idx.IsPartial() {
-				return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
-			}
-		}
-	}
-
 	// Disallow virtual columns if they are a key of an index.
 	// NB: it is impossible for a virtual column to be stored in an index.
 	columns := make([]catalog.Column, len(dst.Columns))
 	for i, col := range dst.Columns {
 		columns[i] = column{desc: &col, ordinal: i}
 	}
+
 	colOrd := catalog.ColumnIDToOrdinalMap(columns)
 	for _, pkColID := range dst.PrimaryIndex.KeyColumnIDs {
 		pkColOrd, ok := colOrd.Get(pkColID)
@@ -147,14 +141,23 @@ func checkExpressionEvaluation(dst *descpb.TableDescriptor, requireKVCompatible 
 			)
 		}
 	}
-	for _, idx := range dst.Indexes {
-		for _, keyColID := range idx.KeyColumnIDs {
-			keyColOrd, ok := colOrd.Get(keyColID)
-			if ok && columns[keyColOrd].IsComputed() && columns[keyColOrd].IsVirtual() {
-				return errors.Newf(
-					"table %s has a virtual computed column %s that is a key of index %s",
-					dst.Name, columns[keyColOrd].GetName(), idx.Name,
-				)
+
+	if requireKVCompatible {
+		for _, idx := range dst.Indexes {
+			if idx.IsPartial() {
+				return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+			}
+		}
+
+		for _, idx := range dst.Indexes {
+			for _, keyColID := range idx.KeyColumnIDs {
+				keyColOrd, ok := colOrd.Get(keyColID)
+				if ok && columns[keyColOrd].IsComputed() && columns[keyColOrd].IsVirtual() {
+					return errors.Newf(
+						"table %s has a virtual computed column %s that is a key of index %s",
+						dst.Name, columns[keyColOrd].GetName(), idx.Name,
+					)
+				}
 			}
 		}
 	}
