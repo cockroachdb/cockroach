@@ -328,8 +328,7 @@ func registerImport(r registry.Registry) {
 			suites = registry.ManualOnly
 		}
 
-		// TODO(#159956): unskip distMerge=true.
-		for _, distMerge := range []bool{false} {
+		for _, distMerge := range []bool{false, true} {
 			for _, numNodes := range testSpec.nodes {
 				ts := testSpec
 				numNodes := numNodes
