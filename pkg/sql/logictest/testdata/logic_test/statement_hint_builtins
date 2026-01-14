@@ -1078,3 +1078,27 @@ statement hints count: 1
         │ estimated row count: 10
         │
         └── • emptyrow
+
+# Test the sql.query.with_statement_hints.count metric.
+
+query B
+SELECT value > 0
+FROM crdb_internal.node_metrics
+WHERE name = 'sql.query.with_statement_hints.count'
+----
+true
+
+let $initial_hints_count
+SELECT value::int
+FROM crdb_internal.node_metrics
+WHERE name = 'sql.query.with_statement_hints.count'
+
+statement ok
+SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+
+query B
+SELECT value::int > $initial_hints_count
+FROM crdb_internal.node_metrics
+WHERE name = 'sql.query.with_statement_hints.count'
+----
+true
