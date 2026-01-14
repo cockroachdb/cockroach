@@ -469,8 +469,9 @@ func (g *testGranterWithIOTokens) addAvailableTokens(
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	_ diskErrorStats,
 ) {
-	return g.diskBandwidthTokensUsed
+	return g.diskBandwidthTokensUsed, diskErrorStats{}
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
@@ -528,8 +529,9 @@ func (g *testGranterNonNegativeTokens) addAvailableTokens(
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	_ diskErrorStats,
 ) {
-	return [admissionpb.NumStoreWorkTypes]diskTokens{}
+	return [admissionpb.NumStoreWorkTypes]diskTokens{}, diskErrorStats{}
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(

@@ -747,10 +747,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	elasticBWMaxUtil := ElasticBandwidthMaxUtil.Get(&io.settings.SV)
 	intDiskLoadInfo := computeIntervalDiskLoadInfo(
 		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats, elasticBWMaxUtil)
-	diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
+	diskTokensUsed, diskErrStats := io.kvGranter.getDiskTokensUsedAndReset()
 	if metrics.DiskStats.ProvisionedBandwidth > 0 {
 		tokens := io.diskBandwidthLimiter.computeElasticTokens(
-			intDiskLoadInfo, diskTokensUsed)
+			intDiskLoadInfo, diskTokensUsed, diskErrStats)
 		io.diskWriteTokens = tokens.writeByteTokens
 		io.diskWriteTokensAllocated = 0
 		io.diskReadTokens = tokens.readByteTokens
