@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -134,8 +135,16 @@ func runTests(ctx context.Context, pkgToTests map[string][]string, extraBazelArg
 	slices.Sort(allTestsSlice)
 	testFilter := strings.Join(allTestsSlice, "|")
 	testFilter = "^(" + testFilter + ")$"
-	// Run each test multiple times.
-	bazelArgs := []string{"test", "--test_filter", testFilter, "--runs_per_test", "10"}
+	runsPerTest := 25
+	// Run each test multiple times. Calculate the number of times based on
+	// whether this is --race or not.
+	for i := range extraBazelArgs {
+		if extraBazelArgs[i] == "--config=race" ||
+			(i < len(extraBazelArgs)-1 && extraBazelArgs[i] == "--config" && extraBazelArgs[i+1] == "race") {
+			runsPerTest = 10
+		}
+	}
+	bazelArgs := []string{"test", "--test_filter", testFilter, "--runs_per_test", strconv.Itoa(runsPerTest)}
 	bazelArgs = append(bazelArgs, testPackages...)
 	bazelArgs = append(bazelArgs, extraBazelArgs...)
 	fmt.Printf("running `bazel` with args %+v\n", bazelArgs)
