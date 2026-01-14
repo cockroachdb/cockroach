@@ -44,6 +44,7 @@ go_library(
         "@org_golang_x_exp//maps",
         "@org_golang_x_perf//benchfmt",
         "@org_golang_x_perf//benchseries",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -72,6 +73,7 @@ go_test(
         "//pkg/cmd/roachprod-microbench/cluster",
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/cmd/roachprod-microbench/parser",
+        "//pkg/internal/codeowners",
         "//pkg/testutils/datapathutils",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
