@@ -153,6 +153,7 @@ go_test(
         "sst_stats_diff_test.go",
         "sst_test.go",
         "sst_writer_test.go",
+        "storage_test.go",
         "store_properties_test.go",
         "temp_engine_test.go",
     ],

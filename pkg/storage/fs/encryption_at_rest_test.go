@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package engineccl
+package fs
 
 import (
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,8 +36,8 @@ func TestEncryptedFS(t *testing.T) {
 	memFS := vfs.NewMem()
 
 	require.NoError(t, memFS.MkdirAll("/bar", os.ModePerm))
-	fileRegistry := &fs.FileRegistry{FS: memFS, DBDir: "/bar"}
-	require.NoError(t, fileRegistry.Load(context.Background()))
+	fileRegistry := &FileRegistry{FS: memFS, DBDir: "/bar", CanElideEntry: elidePlaintext}
+	require.NoError(t, fileRegistry.Load(t.Context()))
 
 	// Using a StoreKeyManager for the test since it is easy to create. Write a key for the
 	// StoreKeyManager.
@@ -46,14 +45,14 @@ func TestEncryptedFS(t *testing.T) {
 	for i := 0; i < keyIDLength+16; i++ {
 		b = append(b, 'a')
 	}
-	f, err := memFS.Create("keyfile", fs.UnspecifiedWriteCategory)
+	f, err := memFS.Create("keyfile", UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	bReader := bytes.NewReader(b)
 	_, err = io.Copy(f, bReader)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile", oldKeyFilename: "plain"}
-	require.NoError(t, keyManager.Load(context.Background()))
+	require.NoError(t, keyManager.Load(t.Context()))
 
 	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
 
@@ -119,7 +118,7 @@ func TestEncryptedFS(t *testing.T) {
 		)
 		switch s[0] {
 		case "create":
-			g, err = encryptedFS.Create(s[1], fs.UnspecifiedWriteCategory)
+			g, err = encryptedFS.Create(s[1], UnspecifiedWriteCategory)
 		case "link":
 			err = encryptedFS.Link(s[1], s[2])
 		case "open":
@@ -131,7 +130,7 @@ func TestEncryptedFS(t *testing.T) {
 		case "rename":
 			err = encryptedFS.Rename(s[1], s[2])
 		case "reuseForWrite":
-			g, err = encryptedFS.ReuseForWrite(s[1], s[2], fs.UnspecifiedWriteCategory)
+			g, err = encryptedFS.ReuseForWrite(s[1], s[2], UnspecifiedWriteCategory)
 		case "f.write":
 			_, err = f.Write([]byte(s[1]))
 		case "f.read":
@@ -193,11 +192,11 @@ func TestEncryptedFSUnencryptedFiles(t *testing.T) {
 	memFS := vfs.NewMem()
 	require.NoError(t, memFS.MkdirAll("/foo", os.ModeDir))
 
-	fileRegistry := &fs.FileRegistry{FS: memFS, DBDir: "/foo"}
-	require.NoError(t, fileRegistry.Load(context.Background()))
+	fileRegistry := &FileRegistry{FS: memFS, DBDir: "/foo", CanElideEntry: elidePlaintext}
+	require.NoError(t, fileRegistry.Load(t.Context()))
 
 	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "plain", oldKeyFilename: "plain"}
-	require.NoError(t, keyManager.Load(context.Background()))
+	require.NoError(t, keyManager.Load(t.Context()))
 
 	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
 
@@ -206,7 +205,7 @@ func TestEncryptedFSUnencryptedFiles(t *testing.T) {
 	var filesCreated []string
 	for i := 0; i < 5; i++ {
 		filename := fmt.Sprintf("file%d", i)
-		f, err := encryptedFS.Create(filename, fs.UnspecifiedWriteCategory)
+		f, err := encryptedFS.Create(filename, UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		filesCreated = append(filesCreated, filename)
 		require.NoError(t, f.Close())
@@ -218,24 +217,24 @@ func TestEncryptedFSUnencryptedFiles(t *testing.T) {
 	}
 }
 
-func TestCanRegistryElide(t *testing.T) {
+func TestElidePlaintext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var entry *enginepb.FileEntry = nil
-	require.True(t, canRegistryElide(entry))
+	require.True(t, elidePlaintext(entry))
 
 	entry = &enginepb.FileEntry{EnvType: enginepb.EnvType_Store}
 	settings := &enginepb.EncryptionSettings{EncryptionType: enginepb.EncryptionType_Plaintext}
 	b, err := protoutil.Marshal(settings)
 	require.NoError(t, err)
 	entry.EncryptionSettings = b
-	require.True(t, canRegistryElide(entry))
+	require.True(t, elidePlaintext(entry))
 
 	settings = &enginepb.EncryptionSettings{EncryptionType: enginepb.EncryptionType_AES128_CTR}
 	b, err = protoutil.Marshal(settings)
 	require.NoError(t, err)
 	entry.EncryptionSettings = b
-	require.False(t, canRegistryElide(entry))
+	require.False(t, elidePlaintext(entry))
 }
 
 // errorInjector injects errors into metadata writes involving the
@@ -302,7 +301,7 @@ type encryptedTestFS struct {
 	errorProb  float64
 	errorRand  *rand.Rand
 
-	encEnv *fs.EncryptionEnv
+	encEnv *EncryptionEnv
 }
 
 func (etfs *encryptedTestFS) fs() vfs.FS {
@@ -327,12 +326,17 @@ func (etfs *encryptedTestFS) restart() error {
 	fsMeta := errorfs.Wrap(etfs.mem, ei)
 	// TODO(sumeer): Do deterministic rollover of file registry after small
 	// number of operations.
-	fileRegistry := &fs.FileRegistry{
-		FS: fsMeta, DBDir: "", ReadOnly: false, NumOldRegistryFiles: 2}
+	fileRegistry := &FileRegistry{
+		FS:                  fsMeta,
+		DBDir:               "",
+		ReadOnly:            false,
+		NumOldRegistryFiles: 2,
+		CanElideEntry:       elidePlaintext,
+	}
 	if err := fileRegistry.Load(context.Background()); err != nil {
 		return err
 	}
-	encEnv, err := newEncryptedEnv(
+	encEnv, err := NewEncryptedEnv(
 		fsMeta, fileRegistry, "", false, etfs.encOptions)
 	if err != nil {
 		return err
@@ -408,7 +412,7 @@ func (op *createOp) run(t *fsTest) {
 	// Create is idempotent, so we simply retry on injected errors.
 	withRetry(t, func() error {
 		var f vfs.File
-		f, err := t.fs.fs().Create(op.name, fs.UnspecifiedWriteCategory)
+		f, err := t.fs.fs().Create(op.name, UnspecifiedWriteCategory)
 		if err != nil {
 			return err
 		}

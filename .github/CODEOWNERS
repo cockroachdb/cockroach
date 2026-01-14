@@ -377,8 +377,8 @@
 /pkg/ccl/spanconfigccl/spanconfigsqltranslatorccl/ @cockroachdb/sql-foundations
 /pkg/ccl/spanconfigccl/spanconfigsqlwatcherccl/    @cockroachdb/sql-foundations
 
-/pkg/ccl/storageccl/engineccl   @cockroachdb/storage
-/pkg/storage/                   @cockroachdb/storage
+/pkg/storage/                @cockroachdb/storage
+/pkg/storage/fs/             @cockroachdb/storage
 
 /pkg/ui/                     @cockroachdb/obs-prs
 
