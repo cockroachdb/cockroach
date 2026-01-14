@@ -79,6 +79,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -607,8 +608,15 @@ func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 // Checks whether a skip upgrade step, pred->v, is feasible,
 // - pred is not of the same release series as msv (prevents skipping of user-specified hooks)
 // - v supports skip upgrades
+// - there are multiple supported previous versions to skip over
 func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 	if t.options.minimumSupportedVersion.Series() == pred.Series() {
+		return false
+	}
+
+	// If there's only one supported previous version, we can't skip.
+	// This happens during the version bump process when MinSupported == PreviousRelease.
+	if len(clusterversion.SupportedPreviousReleases()) <= 1 {
 		return false
 	}
 

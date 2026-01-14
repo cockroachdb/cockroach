@@ -1628,7 +1628,11 @@ message InspectProgress {
   int64 job_completed_check_count = 2;
 }
 
+// InspectProcessorProgress is the per-processor progress for an INSPECT job.
+// 
+// Deprecated: Moved to cockroach.sql.inspect.inspectpb.
 message InspectProcessorProgress {
+  option deprecated=true;
   int64 checks_completed = 1;  // Number of checks completed since last update.
   bool finished = 2;           // Processor finished all checks.
 

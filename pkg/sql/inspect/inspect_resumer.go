@@ -72,25 +72,34 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	remainingSpans := c.filterCompletedSpans(pkSpans, completedSpans)
 
-	// If all spans are completed, job is done.
-	if len(remainingSpans) == 0 {
-		log.Dev.Infof(ctx, "all spans already completed, INSPECT job finished")
-		return nil
+	if len(remainingSpans) > 0 {
+		plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, remainingSpans)
+		if err != nil {
+			return err
+		}
+
+		// After planning, we have the finalized set of spans to process
+		// (adjacent spans on the same node are merged). Compute the checks to
+		// run and initialize progress tracking from the plan.
+
+		remainingPartitionedSpans := c.extractSpansFromPlan(ctx, plan)
+		if err := c.initProgress(ctx, execCfg, progressTracker, remainingPartitionedSpans, completedSpans); err != nil {
+			return err
+		}
+
+		if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
+			return err
+		}
+	} else {
+		// If all spans are completed, planning and processing can be skipped.
+		if err := c.initProgress(ctx, execCfg, progressTracker, nil /* remainingPartitionedSpans */, completedSpans); err != nil {
+			return err
+		}
+		log.Dev.Infof(ctx, "all spans already completed, INSPECT checks on spans finished")
 	}
 
-	plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, remainingSpans)
-	if err != nil {
-		return err
-	}
-
-	// After planning, we have the finalized set of spans to process (adjacent
-	// spans on the same node are merged). Compute the checks to run and initialize
-	// progress tracking from the plan.
-	if err := c.initProgressFromPlan(ctx, execCfg, progressTracker, plan, completedSpans); err != nil {
-		return err
-	}
-
-	if err := c.runInspectPlan(ctx, jobExecCtx, planCtx, plan, progressTracker); err != nil {
+	// Run any cluster-level checks after all spans have been processed.
+	if err := c.processClusterChecks(ctx, jobExecCtx, progressTracker); err != nil {
 		return err
 	}
 
@@ -206,6 +215,23 @@ func (c *inspectResumer) planInspectProcessors(
 	return physicalPlan, planCtx, nil
 }
 
+// extractSpansFromPlan extracts the finalized set of spans to process (adjacent
+// spans on the same node are merged) from the plan.
+func (c *inspectResumer) extractSpansFromPlan(
+	ctx context.Context, plan *sql.PhysicalPlan,
+) []roachpb.Span {
+	// Extract all spans from the plan processors.
+	var remainingPartitionedSpans []roachpb.Span
+	if plan != nil {
+		for i := range plan.Processors {
+			if plan.Processors[i].Spec.Core.Inspect != nil {
+				remainingPartitionedSpans = append(remainingPartitionedSpans, plan.Processors[i].Spec.Core.Inspect.Spans...)
+			}
+		}
+	}
+	return remainingPartitionedSpans
+}
+
 // runInspectPlan executes the distributed physical plan for the INSPECT job.
 // It sets up a metadata-only DistSQL receiver to collect any execution errors
 // and progress updates, then runs the plan using the provided planning context
@@ -275,23 +301,15 @@ func (c *inspectResumer) setupProgressTracking(
 	return progressTracker, completedSpans, cleanup, nil
 }
 
-// initProgressFromPlan initializes job progress based on the actual partitioned spans
-// that will be processed.
-func (c *inspectResumer) initProgressFromPlan(
+// initProgressFromPlan initializes job progress based on the actual partitioned
+// spans that will be processed.
+func (c *inspectResumer) initProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	progressTracker *inspectProgressTracker,
-	plan *sql.PhysicalPlan,
+	remainingPartitionedSpans []roachpb.Span,
 	completedPartitionedSpans []roachpb.Span,
 ) error {
-	// Extract all spans from the plan processors.
-	var remainingPartitionedSpans []roachpb.Span
-	for i := range plan.Processors {
-		if plan.Processors[i].Spec.Core.Inspect != nil {
-			remainingPartitionedSpans = append(remainingPartitionedSpans, plan.Processors[i].Spec.Core.Inspect.Spans...)
-		}
-	}
-
 	applicabilityCheckers, err := buildApplicabilityCheckers(c.job.Details().(jobspb.InspectDetails))
 	if err != nil {
 		return err
@@ -299,21 +317,26 @@ func (c *inspectResumer) initProgressFromPlan(
 
 	// Calculate total applicable checks on ALL spans (not just remaining ones)
 	// This ensures consistent progress calculation across job restarts.
-	completedCheckCount, err := countApplicableChecks(completedPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	completedSpanCheckCount, err := countApplicableSpanChecks(completedPartitionedSpans, applicabilityCheckers, execCfg.Codec)
 	if err != nil {
 		return err
 	}
-	remainingCheckCount, err := countApplicableChecks(remainingPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	remainingSpanCheckCount, err := countApplicableSpanChecks(remainingPartitionedSpans, applicabilityCheckers, execCfg.Codec)
 	if err != nil {
 		return err
 	}
 
-	totalCheckCount := completedCheckCount + remainingCheckCount
+	clusterCheckCount, err := countApplicableClusterChecks(applicabilityCheckers)
+	if err != nil {
+		return err
+	}
 
-	log.Dev.Infof(ctx, "INSPECT progress init: %d partitioned spans, %d total checks (%d remaining + %d completed)",
-		len(remainingPartitionedSpans), totalCheckCount, remainingCheckCount, completedCheckCount)
+	totalCheckCount := completedSpanCheckCount + remainingSpanCheckCount + clusterCheckCount
 
-	return progressTracker.initJobProgress(ctx, totalCheckCount, completedCheckCount)
+	log.Dev.Infof(ctx, "INSPECT progress init: %d partitioned spans, %d total checks (%d completed + %d remaining span + %d cluster)",
+		len(remainingPartitionedSpans), totalCheckCount, completedSpanCheckCount, remainingSpanCheckCount, clusterCheckCount)
+
+	return progressTracker.initJobProgress(ctx, totalCheckCount, completedSpanCheckCount)
 }
 
 // filterCompletedSpans removes spans that are already completed from the list to process.
@@ -413,6 +436,71 @@ func (r *inspectResumer) ReportResults(ctx context.Context, resultsCh chan<- tre
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// processClusterChecks runs any cluster-level checks using the accumulated job
+// progress.
+func (c *inspectResumer) processClusterChecks(
+	ctx context.Context, jobExecCtx sql.JobExecContext, progressTracker *inspectProgressTracker,
+) (err error) {
+	details, ok := c.job.Details().(jobspb.InspectDetails)
+	if !ok {
+		return errors.AssertionFailedf("expected inspect details, got %T", c.job.Details())
+	}
+
+	// Build check factories from the job details
+	checkFactories, factoryErr := buildInspectCheckFactories(jobExecCtx.ExecCfg(), details)
+	if factoryErr != nil {
+		return factoryErr
+	}
+
+	// Get the timestamp to use for checks
+	timestamp := jobExecCtx.ExecCfg().DB.Clock().Now()
+	if !details.AsOf.IsEmpty() {
+		timestamp = details.AsOf
+	}
+
+	logger := getInspectLogger(jobExecCtx.ExecCfg(), c.job.ID())
+
+	var clusterChecks []inspectClusterCheck
+	for _, factory := range checkFactories {
+		check := factory(timestamp)
+		if clusterCheck, ok := check.(inspectClusterCheck); ok {
+			clusterChecks = append(clusterChecks, clusterCheck)
+		}
+	}
+
+	if initialClusterCheckCount := len(clusterChecks); initialClusterCheckCount > 0 {
+		runner := clusterRunner{
+			checks:          clusterChecks,
+			logger:          logger,
+			progressTracker: progressTracker,
+		}
+		defer func() {
+			err = errors.CombineErrors(err, runner.Close(ctx))
+		}()
+
+		for {
+			ok, stepErr := runner.Step(ctx)
+			if stepErr != nil {
+				return stepErr
+			}
+
+			if !ok {
+				break
+			}
+		}
+		if err := progressTracker.stepCompletedCheckCount(ctx, initialClusterCheckCount); err != nil {
+			return errors.Wrapf(err, "error updating progress for cluster check")
+		}
+	}
+
+	log.Dev.Infof(ctx, "INSPECT resumer completed clusterIssuesFound=%t", logger.hasIssues())
+	if err := logger.userError(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func init() {

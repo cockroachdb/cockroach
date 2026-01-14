@@ -283,7 +283,7 @@ func Test_choosePreviousReleases(t *testing.T) {
 			arch:              vm.ArchAMD64,
 			numUpgrades:       3,
 			enableSkipVersion: true,
-			expectedReleases:  []string{"23.1.17", "23.2.4", "24.1.1"},
+			expectedReleases:  []string{"23.2.4", "24.1.1", "24.2.2"},
 		},
 	}
 
@@ -469,6 +469,13 @@ func TestSupportsSkipUpgradeTo(t *testing.T) {
 	expect := func(verStr string, expected bool) {
 		t.Helper()
 		v := clusterupgrade.MustParseVersion(verStr)
+		// Special case during version bump: if we only have 1 supported release,
+		// supportsSkipUpgradeTo will return false for all versions.
+		// This happens in the transitional period after bumping the current version
+		// but before bumping MinSupported (e.g., after M.1 but before M.4).
+		if len(clusterversion.SupportedPreviousReleases()) <= 1 {
+			expected = false
+		}
 		require.Equal(t, expected, mvt.supportsSkipUpgradeTo(prev, v))
 	}
 	for _, v := range []string{"v24.3.0", "v24.3.0-beta.1", "v25.2.1", "v25.2.0-rc.1"} {

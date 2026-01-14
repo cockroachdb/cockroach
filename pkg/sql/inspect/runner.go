@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -21,6 +22,17 @@ import (
 type inspectCheckApplicability interface {
 	// AppliesTo reports whether this check applies to the given span.
 	AppliesTo(codec keys.SQLCodec, span roachpb.Span) (bool, error)
+
+	// IsSpanLevel reports whether this check is a span-level check.
+	IsSpanLevel() bool
+}
+
+// inspectCheckClusterApplicability defines the interface for determining if a
+// check is cluster-level.
+type inspectCheckClusterApplicability interface {
+	// AppliesToCluster reports whether this check is applied at the
+	// cluster-level.
+	AppliesToCluster() (bool, error)
 }
 
 // assertCheckApplies is a helper that calls AppliesTo and asserts the check applies.
@@ -37,6 +49,21 @@ func assertCheckApplies(
 	}
 	return nil
 }
+
+// checkState represents the state of a check.
+type checkState int
+
+const (
+	// checkNotStarted indicates Start() has not been called yet.
+	checkNotStarted checkState = iota
+	// checkHashMatched indicates the hash precheck passed - no corruption detected,
+	// so the full check can be skipped.
+	checkHashMatched
+	// checkRunning indicates the full check is actively running and may produce more results.
+	checkRunning
+	// checkDone indicates the check has finished (iterator exhausted or error occurred).
+	checkDone
+)
 
 // inspectCheck defines a single validation operation used by the INSPECT system.
 // Each check represents a specific type of data validation, such as index consistency.
@@ -69,6 +96,46 @@ type inspectCheck interface {
 	Close(ctx context.Context) error
 }
 
+// inspectSpanCheck defines a check that performs validations run after other
+// checks on the span have completed.
+type inspectSpanCheck interface {
+	// CheckSpan performs a validation using the other checks run on the span
+	// and updates the processor progress with any span information for use by
+	// the cluster-level checks.
+	CheckSpan(ctx context.Context, checks inspectChecks, logger *inspectLoggerBundle, data *inspectpb.InspectProcessorSpanCheckData) error
+}
+
+// checkClusterState represents the state of a cluster-level check.
+type checkClusterState int //lint:ignore U1000 unused
+
+const (
+	// clusterCheckNotStarted indicates StartCluster() has not been called yet.
+	clusterCheckNotStarted checkClusterState = iota //lint:ignore U1000 unused
+	// checkRunning indicates the full check is actively running and may produce more results.
+	clusterCheckRunning //lint:ignore U1000 unused
+	// checkDone indicates the check has finished (iterator exhausted or error occurred).
+	clusterCheckDone //lint:ignore U1000 unused
+)
+
+// inspectClusterCheck defines a check that performs validations after all the
+// spans have been processed.
+type inspectClusterCheck interface {
+	// Started reports whether the check has been initialized.
+	StartedCluster() bool
+
+	// StartCluster prepares the check to begin returning results.
+	StartCluster(ctx context.Context, checkData *inspectpb.InspectSpanCheckData) error
+
+	// NextCluster returns the next inspect error, if any.
+	NextCluster(ctx context.Context) (*inspectIssue, error)
+
+	// DoneCluster reports whether the check has produced all results.
+	DoneCluster(ctx context.Context) bool
+
+	// CloseCluster cleans up resources for the check.
+	CloseCluster(ctx context.Context) error
+}
+
 // inspectRunner coordinates the execution of a set of inspectChecks.
 //
 // It manages the lifecycle of each check, including initialization,
@@ -81,7 +148,7 @@ type inspectCheck interface {
 type inspectRunner struct {
 	// checks holds the list of checks to run. Each check is run to completion
 	// before moving on to the next.
-	checks []inspectCheck
+	checks inspectChecks
 
 	// logger records issues reported by the checks.
 	logger inspectLogger
@@ -89,6 +156,8 @@ type inspectRunner struct {
 	// foundIssue indicates whether any issues were found.
 	foundIssue bool
 }
+
+type inspectChecks []inspectCheck
 
 // Step advances execution by processing one result from the current inspectCheck.
 //

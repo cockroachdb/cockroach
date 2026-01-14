@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "inspect",
     srcs = [
+        "cluster_runner.go",
         "index_consistency_check.go",
         "inspect_job_entry.go",
         "inspect_logger.go",
@@ -40,6 +41,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/inspect/inspectpb",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
@@ -74,6 +76,7 @@ go_test(
     name = "inspect_test",
     size = "large",
     srcs = [
+        "cluster_runner_test.go",
         "index_consistency_check_test.go",
         "inspect_metrics_test.go",
         "inspect_processor_test.go",
@@ -111,6 +114,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/inspect/inspectpb",
         "//pkg/sql/isql",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/eval",
@@ -124,6 +128,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
