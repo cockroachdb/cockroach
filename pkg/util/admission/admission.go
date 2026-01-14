@@ -332,6 +332,9 @@ type granterWithIOTokens interface {
 	// of WorkQueue at admission time. See the long explanatory comment at the
 	// beginning of store_token_estimation.go, regarding token estimation.
 	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel)
+	// hadExhaustedIOTokens returns whether the granter has exhausted disk
+	// tokens anytime in the past.
+	hasExhaustedDiskTokens() bool
 }
 
 // granterWithStoreReplicatedWorkAdmitted is used to abstract
