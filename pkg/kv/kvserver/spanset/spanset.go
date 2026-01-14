@@ -89,15 +89,13 @@ type TrickySpan roachpb.Span
 // spans in increasing key order after calls to SortAndDedup.
 type SpanSet struct {
 	spans [NumSpanAccess][NumSpanScope][]Span
-	// forbiddenSpansMatchers are functions that return an error if the given span
+	// forbiddenSpansMatcher is a function that returns an error if the given span
 	// shouldn't be accessed (forbidden). This allows for complex pattern matching
 	// like forbidding specific keys across all range IDs without enumerating them
 	// explicitly.
-	// TODO(ibrahim): consider making this a single matcher given that we
-	// currently only use one matcher at a time.
-	forbiddenSpansMatchers []func(TrickySpan) error
-	allowUndeclared        bool
-	allowForbidden         bool
+	forbiddenSpansMatcher func(TrickySpan) error
+	allowUndeclared       bool
+	allowForbidden        bool
 }
 
 var spanSetPool = sync.Pool{
@@ -126,7 +124,7 @@ func (s *SpanSet) Release() {
 			s.spans[sa][ss] = recycle
 		}
 	}
-	s.forbiddenSpansMatchers = nil
+	s.forbiddenSpansMatcher = nil
 	s.allowForbidden = false
 	s.allowUndeclared = false
 	spanSetPool.Put(s)
@@ -170,7 +168,7 @@ func (s *SpanSet) Copy() *SpanSet {
 			n.spans[sa][ss] = append(n.spans[sa][ss], s.spans[sa][ss]...)
 		}
 	}
-	n.forbiddenSpansMatchers = append(n.forbiddenSpansMatchers, s.forbiddenSpansMatchers...)
+	n.forbiddenSpansMatcher = s.forbiddenSpansMatcher
 	n.allowUndeclared = s.allowUndeclared
 	n.allowForbidden = s.allowForbidden
 	return n
@@ -225,25 +223,12 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
 }
 
-// AddForbiddenMatcher adds a forbidden span matcher. The matcher is a function
-// that is called for each span access to check if it should be forbidden.
-func (s *SpanSet) AddForbiddenMatcher(matcher func(TrickySpan) error) {
-	s.forbiddenSpansMatchers = append(s.forbiddenSpansMatchers, matcher)
-}
-
-// Merge merges all spans in s2 into s. s2 is not modified.
-func (s *SpanSet) Merge(s2 *SpanSet) {
-	for sa := SpanAccess(0); sa < NumSpanAccess; sa++ {
-		for ss := SpanScope(0); ss < NumSpanScope; ss++ {
-			s.spans[sa][ss] = append(s.spans[sa][ss], s2.spans[sa][ss]...)
-		}
-	}
-	s.forbiddenSpansMatchers = append(s.forbiddenSpansMatchers, s2.forbiddenSpansMatchers...)
-	// TODO(ibrahim): Figure out if the merged `allowUndeclared` and
-	// `allowForbidden` should be true if it was true in either `s` or `s2`.
-	s.allowUndeclared = s2.allowUndeclared
-	s.allowForbidden = s2.allowForbidden
-	s.SortAndDedup()
+// SetForbiddenMatcher sets the forbidden span matcher, a function that is
+// called for each span access to check if it should be forbidden.
+//
+// NB: if the matcher is already set, it gets overridden.
+func (s *SpanSet) SetForbiddenMatcher(matcher func(TrickySpan) error) {
+	s.forbiddenSpansMatcher = matcher
 }
 
 // SortAndDedup sorts the spans in the SpanSet by key and removes duplicate or
@@ -366,13 +351,9 @@ func (s *SpanSet) checkAllowed(
 	access SpanAccess, span TrickySpan, check func(SpanAccess, Span) bool,
 ) error {
 	// Unless explicitly disabled, check if we access any forbidden spans.
-	if !s.allowForbidden {
-		// Check if the span is forbidden.
-		for _, matcher := range s.forbiddenSpansMatchers {
-			if err := matcher(span); err != nil {
-				return errors.Errorf("cannot %s span %s: matches forbidden pattern",
-					access, span)
-			}
+	if !s.allowForbidden && s.forbiddenSpansMatcher != nil {
+		if err := s.forbiddenSpansMatcher(span); err != nil {
+			return errors.Errorf("cannot %s span %s: matches forbidden pattern", access, span)
 		}
 	}
 
