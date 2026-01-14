@@ -6,11 +6,9 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"strings"
 	"time"
@@ -18,14 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,6 +37,9 @@ type cdcBenchConfig struct {
 	iterations             int
 	phaseDuration          time.Duration
 	sampleEvery            time.Duration
+	spanInterval           string
+	frontierFreq           string
+	lagThreshold           string
 }
 
 func registerCdcShowChangefeedJobsBench(r registry.Registry) {
@@ -54,49 +54,20 @@ func registerCdcShowChangefeedJobsBench(r registry.Registry) {
 		iterations:             5,
 		phaseDuration:          time.Minute,
 		sampleEvery:            10 * time.Second,
+		spanInterval:           "1s",
+		frontierFreq:           "1s",
+		lagThreshold:           "100ms",
 	}
 	cfJobsSpec := r.MakeClusterSpec(cfg.nodeCount)
 	r.Add(registry.TestSpec{
-		Name:      "cdc/show-changefeed-jobs-bench",
-		Owner:     registry.OwnerCDC,
-		Benchmark: true,
-		Cluster:   cfJobsSpec,
-		// Disable metamorphic encryption to reduce perf noise on roachperf.
-		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+		Name:              "cdc/show-changefeed-jobs-bench",
+		Owner:             registry.OwnerCDC,
+		Cluster:           cfJobsSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		CompatibleClouds:  registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
-		PostProcessPerfMetrics: func(testName string, hist *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
-			var showJobsSeconds, showCFSeconds float64
-			for _, s := range hist.Summaries {
-				switch s.Name {
-				case "show_jobs_avg":
-					// HighestTrackableValue is expressed in nanoseconds in the exporter.
-					showJobsSeconds = float64(s.HighestTrackableValue) / 1e9
-				case "show_changefeed_jobs_avg":
-					showCFSeconds = float64(s.HighestTrackableValue) / 1e9
-				}
-			}
-			var out roachtestutil.AggregatedPerfMetrics
-			if showJobsSeconds > 0 {
-				out = append(out, &roachtestutil.AggregatedMetric{
-					Name:           fmt.Sprintf("%s_show_jobs_avg_seconds", testName),
-					Value:          roachtestutil.MetricPoint(showJobsSeconds),
-					Unit:           "s",
-					IsHigherBetter: false,
-				})
-			}
-			if showCFSeconds > 0 {
-				out = append(out, &roachtestutil.AggregatedMetric{
-					Name:           fmt.Sprintf("%s_show_changefeed_jobs_avg_seconds", testName),
-					Value:          roachtestutil.MetricPoint(showCFSeconds),
-					Unit:           "s",
-					IsHigherBetter: false,
-				})
-			}
-			return out, nil
-		},
-		Timeout: cfg.roachtestTimeout,
+		Timeout:           cfg.roachtestTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCdcShowChangefeedJobsBench(ctx, t, c, cfg)
 		},
@@ -110,6 +81,22 @@ func registerCdcShowChangefeedJobsBench(r registry.Registry) {
 func runCdcShowChangefeedJobsBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBenchConfig,
 ) {
+	t.L().Printf(
+		"cfg: tables=%d nodes=%d ranges=%d changefeeds=%d resolved=%s min_checkpoint_frequency=%s iterations=%d phase=%s sampleEvery=%s settings(span_checkpoint.interval=%s frontier_checkpoint_frequency=%s frontier_highwater_lag_checkpoint_threshold=%s)",
+		cfg.tableCount,
+		cfg.nodeCount,
+		cfg.ranges,
+		cfg.changefeedCount,
+		cfg.resolvedInterval,
+		cfg.minCheckpointFrequency,
+		cfg.iterations,
+		cfg.phaseDuration,
+		cfg.sampleEvery,
+		cfg.spanInterval,
+		cfg.frontierFreq,
+		cfg.lagThreshold,
+	)
+
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
@@ -131,9 +118,11 @@ func runCdcShowChangefeedJobsBench(
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled=false")
-	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'")
-	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'")
-	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.span_checkpoint.interval = $1", cfg.spanInterval)
+	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = $1", cfg.frontierFreq)
+	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = $1", cfg.lagThreshold)
+
+	// Log configuration and effective cluster settings used for this run.
 
 	initCmd := fmt.Sprintf(
 		"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
@@ -202,58 +191,26 @@ func runCdcShowChangefeedJobsBench(
 			return n, sum / time.Duration(n), nil
 		}
 
+		waitForCFJobs(ctx, t, c, cfg)
+
 		showJobsQ := "SELECT * FROM [SHOW JOBS] WHERE job_type = 'CHANGEFEED'"
 		showCFQ := "SELECT * FROM [SHOW CHANGEFEED JOBS]"
 
 		// Run the queries for the specified number of iterations, logging the results.
-		var totalShowJobs time.Duration
-		var totalShowJobsSamples int
-		var totalShowCF time.Duration
-		var totalShowCFSamples int
 		for i := 1; i <= cfg.iterations; i++ {
+			logCFJobStats(ctx, t, c, i)
+
 			n, avg, err := runPhase("SHOW JOBS", showJobsQ, cfg.phaseDuration, cfg.sampleEvery)
 			if err != nil {
 				return err
 			}
 			t.L().Printf("[iter %d] SHOW JOBS samples=%d avg=%s", i, n, avg)
-			if n > 0 {
-				totalShowJobs += time.Duration(n) * avg
-				totalShowJobsSamples += n
-			}
 
 			n, avg, err = runPhase("SHOW CHANGEFEED JOBS", showCFQ, cfg.phaseDuration, cfg.sampleEvery)
 			if err != nil {
 				return err
 			}
 			t.L().Printf("[iter %d] SHOW CHANGEFEED JOBS samples=%d avg=%s", i, n, avg)
-			if n > 0 {
-				totalShowCF += time.Duration(n) * avg
-				totalShowCFSamples += n
-			}
-		}
-
-		// Export aggregated averages for roachperf as perf artifacts.
-		if totalShowJobsSamples > 0 || totalShowCFSamples > 0 {
-			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
-			bytesBuf := bytes.NewBuffer([]byte{})
-			writer := io.Writer(bytesBuf)
-			exporter.Init(&writer)
-			defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, c.Node(1), "")
-
-			reg := histogram.NewRegistryWithExporter(time.Hour, histogram.MockWorkloadName, exporter)
-			h := reg.GetHandle()
-			if totalShowJobsSamples > 0 {
-				avg := totalShowJobs / time.Duration(totalShowJobsSamples)
-				// Record as seconds in the histogram; precise value recovered in post-processing.
-				h.Get("show_jobs_avg").Record(avg)
-			}
-			if totalShowCFSamples > 0 {
-				avg := totalShowCF / time.Duration(totalShowCFSamples)
-				h.Get("show_changefeed_jobs_avg").Record(avg)
-			}
-			reg.Tick(func(tick histogram.Tick) {
-				_ = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
-			})
 		}
 		workloadCancel()
 		return nil
@@ -289,4 +246,56 @@ func createChangefeeds(
 		)
 		sqlDBs[0].Exec(t, stmt)
 	}
+}
+
+func logCFJobStats(ctx context.Context, t test.Test, c cluster.Cluster, iteration int) {
+	sqlDB := c.Conn(ctx, t.L(), 1)
+	const sizeQuery = `
+SELECT
+  count(*) AS n,
+  round(avg(length(payload)))::INT AS avg_payload,
+  percentile_disc(0.50) WITHIN GROUP (ORDER BY length(payload)) AS p50_payload,
+  max(length(payload)) AS max_payload,
+  round(avg(coalesce(length(progress), 0)))::INT AS avg_progress,
+  percentile_disc(0.50) WITHIN GROUP (ORDER BY coalesce(length(progress), 0)) AS p50_progress,
+  max(coalesce(length(progress), 0)) AS max_progress
+FROM crdb_internal.system_jobs
+WHERE job_type = 'CHANGEFEED'`
+	var n, ap, p50p, mp, ag, p50g, mg int
+	err := sqlDB.QueryRowContext(ctx, sizeQuery).Scan(&n, &ap, &p50p, &mp, &ag, &p50g, &mg)
+	if err != nil {
+		t.L().Printf("error getting CF job size stats: %v", err)
+		return
+	}
+	t.L().Printf("[iter %d] CF job sizes: n=%d avg_payload=%dB p50=%dB max=%dB avg_progress=%dB p50=%dB max=%dB", iteration, n, ap, p50p, mp, ag, p50g, mg)
+
+	const checkpointIntervalQuery = `
+SELECT count(*) AS checkpoints_last_minute
+FROM system.job_progress_history p
+JOIN system.jobs j ON j.id = p.job_id
+WHERE j.job_type = 'CHANGEFEED'
+  AND p.written > now() - interval '1 minute'
+	`
+	var checkpointsLastMinute int
+	err = sqlDB.QueryRowContext(ctx, checkpointIntervalQuery).Scan(&checkpointsLastMinute)
+	if err != nil {
+		t.L().Printf("error getting CF checkpoint interval stats: %v", err)
+		return
+	}
+	t.L().Printf("[iter %d] CF checkpoint interval: checkpoints_last_minute=%d", iteration, checkpointsLastMinute)
+}
+
+func waitForCFJobs(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBenchConfig) {
+	sqlDB := c.Conn(ctx, t.L(), 1)
+	testutils.SucceedsSoon(t, func() error {
+		var running int
+		err := sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM crdb_internal.system_jobs WHERE job_type = 'CHANGEFEED' AND status = 'running'").Scan(&running)
+		if err != nil {
+			return err
+		}
+		if running != cfg.changefeedCount {
+			return fmt.Errorf("expected %d running CF jobs, got %d", cfg.changefeedCount, running)
+		}
+		return nil
+	})
 }
