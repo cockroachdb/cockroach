@@ -491,6 +491,11 @@ type Planner interface {
 	// GetHintIDs returns the external statement hints we're using for this
 	// statement.
 	GetHintIDs() []int64
+
+	// LogEvent logs an event to both the system.eventlog table and external
+	// structured logs. This is exposed on the Planner interface to allow builtins
+	// to log events.
+	LogEvent(ctx context.Context, event interface{}) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

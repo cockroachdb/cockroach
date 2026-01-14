@@ -618,6 +618,11 @@ func (ep *DummyEvalPlanner) GetHintIDs() []int64 {
 	return nil
 }
 
+// LogEvent is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) LogEvent(ctx context.Context, event interface{}) error {
+	return nil
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
