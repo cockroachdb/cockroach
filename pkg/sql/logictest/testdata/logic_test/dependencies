@@ -74,11 +74,11 @@ descriptor_id  descriptor_name  index_id  index_name            column_type  col
 106            test_kv          2         test_v_idx            key          2          v            ASC               false
 106            test_kv          4         test_v_idx2           extra        1          NULL         NULL              false
 106            test_kv          4         test_v_idx2           key          2          v            DESC              false
-106            test_kv          4         test_v_idx2           storing      3          NULL         NULL              false
+106            test_kv          4         test_v_idx2           storing      3          w            NULL              false
 106            test_kv          6         test_v_idx3           composite    3          NULL         NULL              false
 106            test_kv          6         test_v_idx3           extra        1          NULL         NULL              false
 106            test_kv          6         test_v_idx3           key          3          w            ASC               false
-106            test_kv          6         test_v_idx3           storing      2          NULL         NULL              false
+106            test_kv          6         test_v_idx3           storing      2          v            NULL              false
 107            test_kvr1        1         test_kvr1_pkey        key          1          k            ASC               false
 108            test_kvr2        1         test_kvr2_pkey        key          3          rowid        ASC               false
 108            test_kvr2        2         test_kvr2_v_key       extra        3          NULL         NULL              false
