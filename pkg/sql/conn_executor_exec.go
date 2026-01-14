@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -605,6 +606,24 @@ func (ex *connExecutor) execStmtInOpenState(
 			)
 		}
 	}()
+
+	// Capture gateway work span for observability.
+	if collector := ex.server.cfg.DistSQLSrv.ServerConfig.WorkSpanCollector; collector != nil {
+		if perftrace.Enabled.Get(&ex.server.cfg.Settings.SV) {
+			gatewaySpanHandle := collector.StartSpan(
+				perftrace.SpanTypeGateway,
+				"gateway",
+				uint64(ih.fingerprintId),
+				0, // No parent for gateway span
+			)
+			gatewaySpanHandle.Start()
+			ctx = perftrace.WithParentSpanID(ctx, gatewaySpanHandle.ID())
+			ctx = perftrace.WithFingerprintID(ctx, uint64(ih.fingerprintId))
+			// Make collector available to KV layer for batch span capture.
+			ctx = perftrace.WithCollector(ctx, collector)
+			defer gatewaySpanHandle.Finish()
+		}
+	}
 
 	if ex.executorType != executorTypeInternal && ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
 		timerDuration :=

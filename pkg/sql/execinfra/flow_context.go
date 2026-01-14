@@ -91,6 +91,10 @@ type FlowCtx struct {
 	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
+
+	// StatementFingerprintID is the fingerprint ID of the statement being executed.
+	// Used for work span capture observability.
+	StatementFingerprintID uint64
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.

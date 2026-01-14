@@ -65,6 +65,11 @@ message SetupFlowRequest {
   // is populated on a best effort basis.
   optional string statement_sql = 10 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "StatementSQL"];
+
+  // StatementFingerprintID is the fingerprint ID of the statement being executed.
+  // Used for work span capture observability.
+  optional uint64 statement_fingerprint_id = 14 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "StatementFingerprintID"];
 }
 
 // FlowSpec describes a "flow" which is a subgraph of a distributed SQL

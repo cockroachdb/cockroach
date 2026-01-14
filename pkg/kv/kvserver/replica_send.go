@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -130,6 +131,23 @@ func (r *Replica) SendWithWriteBytes(
 	// recorded regardless of errors that are encountered.
 	startCPU := grunning.Time()
 	defer r.MeasureReqCPUNanos(ctx, startCPU)
+
+	// Capture KV batch work span for observability.
+	// This is done at the kvserver layer (not dist_sender) so that CPU time
+	// is accurately captured for requests processed on remote nodes.
+	if collector := perftrace.GetCollectorFromContext(ctx); collector != nil {
+		fingerprintID := perftrace.GetFingerprintFromContext(ctx)
+		parentID := perftrace.GetParentSpanIDFromContext(ctx)
+		kvSpanHandle := collector.StartSpan(
+			perftrace.SpanTypeKVBatch,
+			"replica batch",
+			fingerprintID,
+			parentID,
+		)
+		kvSpanHandle.Start()
+		ctx = perftrace.WithCurrentSpanHandle(ctx, kvSpanHandle)
+		defer kvSpanHandle.Finish()
+	}
 
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		var reset func()

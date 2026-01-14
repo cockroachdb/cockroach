@@ -107,6 +107,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
@@ -186,6 +187,8 @@ type SQLServer struct {
 	settingsWatcher                *settingswatcher.SettingsWatcher
 
 	systemConfigWatcher *systemconfigwatcher.Cache
+
+	workSpanFlusher *perftrace.Flusher
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 
@@ -1252,6 +1255,20 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider
 
+	// Initialize work span capture for observability.
+	workSpanCollector := perftrace.NewCollector(
+		int32(cfg.nodeIDContainer.SQLInstanceID()),
+		cfg.clock,
+		cfg.Settings,
+	)
+	distSQLServer.ServerConfig.WorkSpanCollector = workSpanCollector
+	workSpanFlusher := perftrace.NewFlusher(
+		workSpanCollector,
+		internalDB,
+		cfg.Settings,
+		cfg.stopper,
+	)
+
 	for _, m := range pgServer.Metrics() {
 		cfg.registry.AddMetricStruct(m)
 	}
@@ -1454,6 +1471,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		spanconfigSQLWatcher:           spanConfig.sqlWatcher,
 		settingsWatcher:                settingsWatcher,
 		systemConfigWatcher:            cfg.systemConfigWatcher,
+		workSpanFlusher:                workSpanFlusher,
 		isMeta1Leaseholder:             cfg.isMeta1Leaseholder,
 		cfg:                            cfg.BaseConfig,
 		internalDBMemMonitor:           internalDBMonitor,
@@ -1788,6 +1806,9 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+
+	// Start the work span flusher for observability.
+	s.workSpanFlusher.Start(ctx)
 
 	s.startLicenseEnforcer(ctx, knobs)
 

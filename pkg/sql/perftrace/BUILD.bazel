@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "perftrace",
+    srcs = [
+        "cluster_settings.go",
+        "collector.go",
+        "flush.go",
+        "reservoir.go",
+        "work_span.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/perftrace",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)

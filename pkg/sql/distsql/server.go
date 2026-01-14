@@ -388,6 +388,7 @@ func (ds *ServerImpl) setupFlow(
 		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
+	flowCtx.StatementFingerprintID = req.StatementFingerprintID
 
 	// req always contains the desired vectorize mode, regardless of whether we
 	// have non-nil localState.EvalContext. We don't want to update EvalContext

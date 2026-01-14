@@ -246,6 +246,10 @@ const (
 	// table statistics collections.
 	V26_1_AddTableStatisticsLocksTable
 
+	// V26_1_AddWorkSpanTable adds the system.work_span table for query
+	// observability through work span capture.
+	V26_1_AddWorkSpanTable
+
 	// V26_1 is CockroachDB v26.1. It's used for all v26.1.x patch releases.
 	V26_1
 
@@ -322,6 +326,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_1_InstallMeta2StaticSplitPoint: {Major: 25, Minor: 4, Internal: 4},
 
 	V26_1_AddTableStatisticsLocksTable: {Major: 25, Minor: 4, Internal: 6},
+
+	V26_1_AddWorkSpanTable: {Major: 25, Minor: 4, Internal: 8},
 
 	V26_1: {Major: 26, Minor: 1, Internal: 0},
 

@@ -461,11 +461,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
 	setupReq := execinfrapb.SetupFlowRequest{
-		LeafTxnInputState: leafInputState,
-		Version:           execversion.V25_4,
-		TraceKV:           recv.tracing.KVTracingEnabled(),
-		CollectStats:      planCtx.collectExecStats,
-		StatementSQL:      statementSQL,
+		LeafTxnInputState:      leafInputState,
+		Version:                execversion.V25_4,
+		TraceKV:                recv.tracing.KVTracingEnabled(),
+		CollectStats:           planCtx.collectExecStats,
+		StatementSQL:           statementSQL,
+		StatementFingerprintID: planCtx.statementFingerprintID,
 	}
 	if localState.IsLocal {
 		// VectorizeMode is the only field that the setup code expects to be set

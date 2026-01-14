@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -126,7 +127,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 	tracer := newContentionEventTracer(tracing.SpanFromContext(ctx), w.clock)
 	// Make sure the contention time info is finalized when exiting the function.
-	defer tracer.notify(ctx, waitingState{kind: doneWaiting})
+	// Also add lock wait time to the current work span for observability.
+	defer func() {
+		tracer.notify(ctx, waitingState{kind: doneWaiting})
+		perftrace.AddContentionTimeFromContext(ctx, tracer.TotalLockWaitTime())
+	}()
 
 	for {
 		select {
@@ -1188,6 +1193,19 @@ func (tag *contentionTag) Render() []attribute.KeyValue {
 		})
 	}
 	return tags
+}
+
+// TotalLockWaitTime returns the total time spent waiting for locks.
+// This should be called after the final notify() with doneWaiting.
+func (tag *contentionTag) TotalLockWaitTime() time.Duration {
+	tag.mu.Lock()
+	defer tag.mu.Unlock()
+	return tag.mu.lockWait
+}
+
+// TotalLockWaitTime returns the total time spent waiting for locks.
+func (h *contentionEventTracer) TotalLockWaitTime() time.Duration {
+	return h.tag.TotalLockWaitTime()
 }
 
 const (

@@ -131,6 +131,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"create work_span table",
+		clusterversion.V26_1_AddWorkSpanTable.Version(),
+		upgrade.NoPrecondition,
+		createWorkSpanTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	newFirstUpgrade(clusterversion.V26_2_Start.Version()),
 
 	// Note: when starting a new release version, the first upgrade (for

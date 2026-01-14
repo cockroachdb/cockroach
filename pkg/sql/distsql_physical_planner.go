@@ -454,6 +454,10 @@ type PlanningCtx struct {
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
 
+	// statementFingerprintID is the fingerprint ID of the statement being
+	// executed. This is propagated to remote nodes for work span capture.
+	statementFingerprintID uint64
+
 	// parallelizeScansIfLocal indicates whether we might want to create
 	// multiple table readers if the physical plan ends up being fully local.
 	// This value is determined based on whether there are any mutations in the
@@ -541,6 +545,7 @@ func (p *PlanningCtx) setUpForMainQuery(
 	}
 	p.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	p.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+	p.statementFingerprintID = uint64(planner.instrumentation.fingerprintId)
 }
 
 // associateWithPlanNode returns a callback function (possibly nil) that should

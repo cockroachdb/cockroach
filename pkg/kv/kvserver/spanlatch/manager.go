@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -584,9 +585,9 @@ func (m *Manager) waitForSignal(
 	wait, held *latch,
 ) error {
 	sp := tracing.SpanFromContext(ctx)
-	if sp != nil || m.latchWaitDurations != nil {
+	if sp != nil || m.latchWaitDurations != nil || perftrace.GetCurrentSpanHandleFromContext(ctx) != nil {
 		startTime := m.clock.PhysicalTime()
-		defer m.logWaitTime(sp, startTime, wait, held)
+		defer m.logWaitTime(ctx, sp, startTime, wait, held)
 	}
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
@@ -633,8 +634,8 @@ func (m *Manager) waitForSignal(
 }
 
 // logWaitTime records the amount of time spent waiting for a latch held by the
-// transaction with the given ID.213
-func (m *Manager) logWaitTime(sp *tracing.Span, startTime time.Time, wait, held *latch) {
+// transaction with the given ID.
+func (m *Manager) logWaitTime(ctx context.Context, sp *tracing.Span, startTime time.Time, wait, held *latch) {
 	elapsed := m.clock.PhysicalTime().Sub(startTime)
 	if m.latchWaitDurations != nil {
 		// Track the wait time in the "per-store" metrics.
@@ -653,6 +654,8 @@ func (m *Manager) logWaitTime(sp *tracing.Span, startTime time.Time, wait, held 
 			sp.RecordStructured(ev)
 		}
 	}
+	// Add latch wait time to the current work span for observability.
+	perftrace.AddContentionTimeFromContext(ctx, elapsed)
 }
 
 // Poison marks the Guard as poisoned, meaning that the request will not be

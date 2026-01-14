@@ -295,6 +295,7 @@ go_library(
         "//pkg/sql/ttl/ttljob",
         "//pkg/sql/ttl/ttlschedule",
         "//pkg/sql/vecindex",
+        "//pkg/sql/perftrace",
         "//pkg/storage",
         "//pkg/storage/disk",
         "//pkg/storage/enginepb",

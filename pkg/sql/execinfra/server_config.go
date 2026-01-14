@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/perftrace"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -216,6 +217,11 @@ type ServerConfig struct {
 	// for operations on a vector index. It's stored as an `interface{}` due to
 	// package dependency cycles
 	VecIndexManager interface{}
+
+	// WorkSpanCollector manages work span capture for observability.
+	// When non-nil and enabled via cluster setting, processors and other
+	// components can use this to capture spans representing work done.
+	WorkSpanCollector *perftrace.Collector
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get

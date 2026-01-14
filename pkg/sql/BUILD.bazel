@@ -558,6 +558,7 @@ go_library(
         "//pkg/sql/vecindex/vecstore",
         "//pkg/sql/vtable",
         "//pkg/sql/zoneconfig",
+        "//pkg/sql/perftrace",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/upgrade",
