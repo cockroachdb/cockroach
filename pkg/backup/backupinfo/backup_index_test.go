@@ -1113,6 +1113,133 @@ func TestEncodeDecodeBackupID(t *testing.T) {
 	})
 }
 
+func TestResolveBackupIDtoIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	execCfg := &sql.ExecutorConfig{Settings: st}
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	makeExternalStorage := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return externalStorage, nil
+	}
+
+	fakeBackupCollection{
+		{
+			// Simple chain.
+			b(0, 2), b(2, 4), b(4, 6),
+		},
+		{
+			// Single compacted backup.
+			b(0, 8), b(8, 10), b(10, 12), b(8, 14), b(12, 14),
+		},
+		{
+			// Double compacted backup, same end time.
+			b(0, 16), b(16, 18), b(18, 20), b(20, 22), b(18, 26), b(20, 26), b(22, 26), b(26, 28),
+		},
+		{
+			// Duplicate end time from previous chain.
+			b(0, 28),
+		},
+	}.writeIndexes(t, ctx, execCfg, makeExternalStorage, collectionURI)
+
+	testcases := []struct {
+		name string
+		// endTimesToID is a tuple of [fullEnd, end] times to construct the ID from.
+		endTimesToID [2]int
+		// expectedTimes is the tuple of [start, end] times expected in the resolved
+		// index.
+		expectedTimes [2]int
+	}{
+		{
+			name:          "simple chain/full backup",
+			endTimesToID:  [2]int{2, 2},
+			expectedTimes: [2]int{0, 2},
+		},
+		{
+			name:          "simple chain/incremental backup",
+			endTimesToID:  [2]int{2, 4},
+			expectedTimes: [2]int{2, 4},
+		},
+		{
+			name:          "single compacted backup",
+			endTimesToID:  [2]int{8, 14},
+			expectedTimes: [2]int{12, 14},
+		},
+		{
+			name:          "doubly compacted backup",
+			endTimesToID:  [2]int{16, 26},
+			expectedTimes: [2]int{22, 26},
+		},
+		{
+			name:          "duplicate end time from prev chain chain (choose prev)",
+			endTimesToID:  [2]int{16, 28},
+			expectedTimes: [2]int{26, 28},
+		},
+		{
+			name:          "duplicate end time from prev chain chain (choose new)",
+			endTimesToID:  [2]int{28, 28},
+			expectedTimes: [2]int{0, 28},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			fullEnd := intToTime(tc.endTimesToID[0]).GoTime()
+			endTime := intToTime(tc.endTimesToID[1]).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			index, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.NoError(t, err)
+
+			expectedTS := [2]hlc.Timestamp{
+				intToTimeWithNano(tc.expectedTimes[0]),
+				intToTimeWithNano(tc.expectedTimes[1]),
+			}
+			actualTS := [2]hlc.Timestamp{index.StartTime, index.EndTime}
+			require.Equal(t, expectedTS, actualTS)
+		})
+	}
+
+	t.Run("bad IDs", func(t *testing.T) {
+		t.Run("no matching full subdir", func(t *testing.T) {
+			fullEnd := intToTime(100).GoTime()
+			endTime := intToTime(200).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
+		})
+
+		t.Run("no matching backup end time", func(t *testing.T) {
+			fullEnd := intToTime(28).GoTime()
+			endTime := intToTime(30).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
+		})
+	})
+}
+
+
 // intToTime converts the integer time to an easy-to-read hlc.Timestamp
 // (i.e. XX000000000). We use ints to more easily write times for test cases.
 func intToTime(t int) hlc.Timestamp {
