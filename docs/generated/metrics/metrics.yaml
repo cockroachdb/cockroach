@@ -11155,7 +11155,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.slots_exhausted_duration.kv
       exported_name: admission_granter_slots_exhausted_duration_kv
-      description: Total duration when KV slots were exhausted, as observed by the slot granter (not waiters). This is repored in nanoseconds from 26.1 onwards, and was microseconds before that.
+      description: Total duration when KV slots were exhausted, as observed by the slot granter (not waiters). This is reported in nanoseconds from 26.1 onwards, and was microseconds before that.
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
