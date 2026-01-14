@@ -962,6 +962,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.AlwaysDistributeFullScans {
 		sd.AlwaysDistributeFullScans = true
 	}
+	if o.PreventPartitioningSoftLimitedScans != nil {
+		sd.DistSQLPreventPartitioningSoftLimitedScans = *o.PreventPartitioningSoftLimitedScans
+	}
 	// For 25.2, we're being conservative and explicitly disabling buffered
 	// writes for the internal executor.
 	// TODO(yuzefovich): remove this for 25.3.

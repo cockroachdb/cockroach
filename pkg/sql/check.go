@@ -65,10 +65,12 @@ func validateCheckExpr(
 	}
 	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
 
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride := sessiondata.NodeUserSessionDataOverride
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
