@@ -2042,7 +2042,6 @@ func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetr
 		total:    totalMetric,
 		registry: registry,
 	}
-	// TODO(abaptist): This is done to pre-register stats.
 	for pri := range admissionpb.WorkPriorityDict {
 		wqm.getOrCreate(pri)
 	}
