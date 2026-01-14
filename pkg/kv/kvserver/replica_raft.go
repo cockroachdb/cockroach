@@ -1478,9 +1478,11 @@ func (r *Replica) tick(
 	postTickStatus := r.mu.internalRaftGroup.BasicStatus()
 
 	// Refresh the unavailability state on the leaderlessWatcher.
-	r.LeaderlessWatcher.refreshUnavailableState(
-		ctx, postTickStatus.Lead, nowPhysicalTime, r.store.cfg.Settings, r.replicaUnavailableErrorRLocked,
-	)
+	if !r.store.TestingKnobs().DisableLeaderlessWatcherRefreshOnRaftTick {
+		r.LeaderlessWatcher.refreshUnavailableState(
+			ctx, postTickStatus.Lead, nowPhysicalTime, r.store.cfg.Settings, r.replicaUnavailableErrorRLocked,
+		)
+	}
 
 	if preTickStatus.RaftState != postTickStatus.RaftState {
 		if postTickStatus.RaftState == raftpb.StatePreCandidate {
