@@ -1475,10 +1475,10 @@ def go_deps():
         name = "com_github_cespare_xxhash_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cespare/xxhash/v2",
-        sha256 = "fc180cdb0c00fbffbd39b774a72cdb5f0c32ace25370d5135195918a8c3fbd25",
-        strip_prefix = "github.com/cespare/xxhash/v2@v2.2.0",
+        sha256 = "145a26cdc7c49db566017b807c4989ee7f7ddeb569423e9cb99f995fac3621d3",
+        strip_prefix = "github.com/cespare/xxhash/v2@v2.3.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cespare/xxhash/v2/com_github_cespare_xxhash_v2-v2.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cespare/xxhash/v2/com_github_cespare_xxhash_v2-v2.3.0.zip",
         ],
     )
     go_repository(
@@ -1854,10 +1854,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "0beffe4b5e58a88d80024b6cef2f3525f2a7e4278dfbc4909a225b1f7f1cb9c1",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260109185256-d007ab7ad309",
+        sha256 = "2d941d36cd0ac0eb7873c6b2aef7424b3ea68a73072c836002fba4877c29b743",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260114193607-d46b09519993",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260109185256-d007ab7ad309.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260114193607-d46b09519993.zip",
         ],
     )
     go_repository(
@@ -2909,6 +2909,16 @@ def go_deps():
         strip_prefix = "github.com/fanixk/geohash@v0.0.0-20150324002647-c1f9b5fa157a",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fanixk/geohash/com_github_fanixk_geohash-v0.0.0-20150324002647-c1f9b5fa157a.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_fastfilter_xorfilter",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/FastFilter/xorfilter",
+        sha256 = "844a71379ea6cfcf04e95fdf27a473066a383ae255644b024f9b11c03608e6b8",
+        strip_prefix = "github.com/FastFilter/xorfilter@v0.4.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/FastFilter/xorfilter/com_github_fastfilter_xorfilter-v0.4.0.zip",
         ],
     )
     go_repository(
