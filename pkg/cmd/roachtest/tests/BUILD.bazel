@@ -194,6 +194,7 @@ go_library(
         "sqlsmith.go",
         "status_server.go",
         "stop_and_copy.go",
+        "store_metrics.go",
         "sysbench.go",
         "tlp.go",
         "tombstones.go",
