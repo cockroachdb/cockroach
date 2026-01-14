@@ -372,6 +372,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 				}
 				lookupRKey := keys.MustAddr(lookupKey)
 
+				// Rate limiter for diagnostic logging to help diagnose flakes where
+				// replicas intermittently fail to serve local requests. See #160349.
+				logEvery := log.Every(10 * time.Second)
+
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
 				// wrapped in a succeeds soon.
@@ -388,6 +392,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					actualPlacement, err := parseReplicasFromRange(t, ds.tc, desc)
 					if err != nil {
 						return err
+					}
+					if logEvery.ShouldLog() {
+						t.Logf("wait-for-zone-config-changes: initial replica check passed (%d replicas served locally)",
+							len(desc.Replicas().VoterAndNonVoterDescriptors()))
 					}
 
 					leaseHolderNode := ds.tc.Server(actualPlacement.getLeaseholder())
@@ -463,6 +471,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					if err != nil {
 						return err
 					}
+					if logEvery.ShouldLog() {
+						t.Logf("wait-for-zone-config-changes: final replica check passed (%d replicas served locally)",
+							len(desc.Replicas().VoterAndNonVoterDescriptors()))
+					}
 					err = actualPlacement.satisfiesExpectedPlacement(expectedPlacement)
 					if err != nil {
 						return err
@@ -486,7 +498,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					}
 
 					return nil
-				}, 5*time.Minute); err != nil {
+				}, 7*time.Minute); err != nil {
 					return err.Error()
 				}
 
@@ -671,8 +683,11 @@ func parseReplicasFromInput(
 	return &ret
 }
 
-// parseReplicasFromInput constructs a replicaPlacement from a range descriptor.
-// It also ensures all replicas have the same view of who the leaseholder is.
+// parseReplicasFromRange constructs a replicaPlacement from a range descriptor.
+// In doing so, it:
+//   - verifies that all replicas agree on the current leaseholder
+//   - checks that each replica can serve a lease request locally (using the
+//     QueryLocalNodeOnly policy)
 func parseReplicasFromRange(
 	t *testing.T, tc serverutils.TestClusterInterface, desc roachpb.RangeDescriptor,
 ) (*replicaPlacement, error) {

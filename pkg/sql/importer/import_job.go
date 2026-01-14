@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -396,6 +397,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	logutil.LogJobCompletion(ctx, importJobRecoveryEventType, r.job.ID(), true, nil, r.res.Rows)
+
+	// Cleanup temp storage on success
+	r.cleanupTempStorage(ctx, p.ExecCfg())
+
 	return nil
 }
 
@@ -904,7 +909,46 @@ func (r *importResumer) OnFailOrCancel(
 		return emitImportJobEvent(ctx, p, jobs.StateFailed, r.job)
 	})
 
+	// Cleanup temp storage on failure/cancellation
+	r.cleanupTempStorage(ctx, cfg)
+
 	return nil
+}
+
+// cleanupTempStorage best-effort deletes job-scoped temporary files produced by
+// distributed merge import. The storage prefixes should omit the "/job/<job-id>/"
+// suffix; this helper will scope cleanup to the current job ID automatically.
+//
+// This should only be called once the job is finishing (successfully or after
+// cancellation), to avoid deleting files needed for retry.
+func (r *importResumer) cleanupTempStorage(ctx context.Context, execCfg *sql.ExecutorConfig) {
+	if execCfg == nil || execCfg.DistSQLSrv == nil || execCfg.DistSQLSrv.ExternalStorageFromURI == nil {
+		return
+	}
+	details := r.job.Details().(jobspb.ImportDetails)
+	if !details.UseDistributedMerge {
+		return
+	}
+	progress := r.job.Progress()
+	importProgress := progress.GetImport()
+	if importProgress == nil {
+		return
+	}
+
+	prefixes := importProgress.SSTStoragePrefixes
+	if len(prefixes) == 0 {
+		return
+	}
+
+	cleaner := bulkutil.NewBulkJobCleaner(execCfg.DistSQLSrv.ExternalStorageFromURI, username.NodeUserName())
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Dev.Warningf(ctx, "job %d: closing bulk job cleaner: %v", r.job.ID(), err)
+		}
+	}()
+	if err := cleaner.CleanupJobDirectories(ctx, r.job.ID(), prefixes); err != nil {
+		log.Dev.Warningf(ctx, "job %d: cleaning up temporary SST files: %v", r.job.ID(), err)
+	}
 }
 
 // CollectProfile is a part of the Resumer interface.
