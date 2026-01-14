@@ -87,11 +87,17 @@ type InternalExecutorOverride struct {
 	// AlwaysDistributeFullScans, if true, overrides the
 	// always_distribute_full_scans session variable.
 	AlwaysDistributeFullScans bool
+	// PreventPartitioningSoftLimitedScans, if set, overrides the
+	// distsql_prevent_partitioning_soft_limited_scans session variable.
+	PreventPartitioningSoftLimitedScans *bool
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
 // override any session data.
 var NoSessionDataOverride = InternalExecutorOverride{}
+
+// False is a helper variable for setting *bool fields in InternalExecutorOverride.
+var False = false
 
 // NodeUserSessionDataOverride is an InternalExecutorOverride which overrides
 // the user to the NodeUser.
