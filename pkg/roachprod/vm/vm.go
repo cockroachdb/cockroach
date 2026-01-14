@@ -39,6 +39,8 @@ const (
 	TagUsage = "usage"
 	// TagArch is the CPU architecture tag const.
 	TagArch = "arch"
+	// TagManaged is the label used to identify managed clusters
+	TagManaged = "managed"
 
 	ArchARM64   = CPUArch("arm64")
 	ArchAMD64   = CPUArch("amd64")
