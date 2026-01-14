@@ -11,6 +11,7 @@ import {
 } from "src/api/statementsApi";
 import { WorkloadInsightEventFilters } from "src/insights";
 import { defaultFilters, Filters } from "src/queryFilter/";
+import { defaultFiltersForSessionsPage } from "src/sessions/sessionsPage";
 
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { DOMAIN_NAME } from "../utils";
@@ -150,6 +151,26 @@ const defaultJobTypeSetting = 0;
 
 const defaultIsAutoRefreshEnabledSetting = true;
 
+// Helper function to get sessions page filters with proper default for sessionStatus.
+// This handles migration for existing localStorage values that may have empty sessionStatus.
+const getSessionsPageFilters = (): Filters => {
+  const storedFilters = JSON.parse(
+    localStorage.getItem("filters/SessionsPage"),
+  );
+  if (!storedFilters) {
+    return defaultFiltersForSessionsPage;
+  }
+  // If stored filters exist but sessionStatus is empty or not set,
+  // apply the default sessionStatus (Active,Idle)
+  if (!storedFilters.sessionStatus) {
+    return {
+      ...storedFilters,
+      sessionStatus: defaultFiltersForSessionsPage.sessionStatus,
+    };
+  }
+  return storedFilters;
+};
+
 // TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
@@ -241,8 +262,7 @@ const initialState: LocalStorageState = {
   [LocalStorageKeys.DB_FILTERS]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.DB_FILTERS)) ||
     defaultFilters,
-  "filters/SessionsPage":
-    JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
+  "filters/SessionsPage": getSessionsPageFilters(),
   "filters/InsightsPage":
     JSON.parse(localStorage.getItem("filters/InsightsPage")) ||
     defaultFiltersInsights,
