@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -790,7 +791,12 @@ func sendExportRequestWithPriorityOverride(
 	}
 
 	sendRequest := func(ctx context.Context) (kvpb.Response, error) {
-		resp, pErr := kv.SendWrappedWith(ctx, sender, header, req)
+		resp, pErr := kv.SendWrappedWithAdmission(ctx, sender, header, kvpb.AdmissionHeader{
+			Priority:                 int32(admissionpb.BulkNormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		}, req)
 		if pErr != nil {
 			err := pErr.GoError()
 			return nil, errors.Wrapf(err, `fetching changes for %s`, span)

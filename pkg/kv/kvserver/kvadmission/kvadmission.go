@@ -51,21 +51,12 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
-// elasticAdmissionAllLowPri determines whether internally
-// submitted low bulk pri requests integrate with elastic CPU control.
-var elasticAdmissionAllLowPri = settings.RegisterBoolSetting(
+// ElasticAdmission determines whether internally
+// submitted bulk pri requests integrate with elastic CPU control.
+var ElasticAdmission = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.elastic_control_bulk_low_priority.enabled",
 	"determines whether the all low bulk priority requests integrate with elastic CPU control",
-	true,
-)
-
-// exportRequestElasticControlEnabled determines whether export requests
-// integrate with elastic CPU control.
-var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kvadmission.export_request_elastic_control.enabled",
-	"determines whether the export requests integrate with elastic CPU control",
 	true,
 )
 
@@ -366,27 +357,18 @@ func (n *controllerImpl) AdmitKVWork(
 		}
 	}
 	if admissionEnabled {
-		// - Backups generate batches with single export requests, which we
-		//   admit through the elastic CPU work queue. We grant this
-		//   CPU-intensive work a set amount of CPU time and expect it to
-		//   terminate (cooperatively) once it exceeds its grant. The amount
-		//   disbursed is 100ms, which we've experimentally found to be long
-		//   enough to do enough useful work per-request while not causing too
-		//   much in the way of scheduling delays on individual cores. Within
-		//   admission control we have machinery that observes scheduling
-		//   latencies periodically and reduces the total amount of CPU time
-		//   handed out through this mechanism, as a way to provide latency
-		//   isolation to non-elastic ("latency sensitive") work running on the
-		//   same machine.
-		// - We do the same for internally submitted bulk low priority requests in
-		//   general (notably, for KV work done on the behalf of row-level TTL
-		//   reads or other jobs). Everything admissionpb.UserLowPri and above uses
-		//   the slots mechanism.
-		shouldUseElasticCPU :=
-			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(admissionInfo.Priority <= admissionpb.BulkLowPri && elasticAdmissionAllLowPri.Get(&n.settings.SV))
-
-		if shouldUseElasticCPU {
+		// Bulk jobs such as backups or row-level TTL issue KV requests with a
+		// priority of admissionpb.BulkNormalPri or lower; these are eligible for
+		// "elastic" CPU control, to adaptively utilize more or less CPU capacity
+		// depending on observed scheduling latencies. Requests with priority above
+		// admissionpb.BulkNormalPri uses the normal slots mechanism.
+		//
+		// NB: Background QoS in SQL uses UserLowPri. UserLowPri is currently below
+		// BulkNormalPri, meaning requests sent by background SQL are eligible
+		// for elastic AC. This is intentional: elastic AC is designed
+		// specifically to run "background" work elastically at a rate that doesn't
+		// impact the cluster.
+		if admissionInfo.Priority <= admissionpb.BulkNormalPri && ElasticAdmission.Get(&n.settings.SV) {
 			var admitDuration time.Duration
 			if ba.IsSingleExportRequest() {
 				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)

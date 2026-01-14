@@ -72,6 +72,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	knobs := sqlstats.CreateTestingKnobs()
 	knobs.StubTimeNow = stubTime.Now
 	knobs.OnStmtStatsFlushFinished = injector.invokePostStmtStatsFlushCallback

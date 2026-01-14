@@ -432,7 +432,7 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 	}
 	admissionPri := admissionpb.WorkPriority(admissionHeader.Priority)
 	if internalLowPriReadElasticControlEnabled.Get(sv) &&
-		admissionPri < admissionpb.UserLowPri {
+		admissionPri <= admissionpb.BulkNormalPri {
 
 		f.admissionPacer = pacerFactory.NewPacer(
 			elasticCPUDurationPerLowPriReadResponse.Get(sv),

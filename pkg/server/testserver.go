@@ -665,18 +665,19 @@ func (ts *testServer) startDefaultTestTenant(
 		TenantName: ts.params.DefaultTenantName,
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
-		TenantID:                  serverutils.TestTenantID(),
-		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:         &tempStorageConfig,
-		Locality:                  ts.params.Locality,
-		ExternalIODir:             ts.params.ExternalIODir,
-		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
-		ForceInsecure:             ts.Insecure(),
-		UseDatabase:               ts.params.UseDatabase,
-		SSLCertsDir:               ts.params.SSLCertsDir,
-		TestingKnobs:              ts.params.Knobs,
-		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
-		Settings:                  tenantSettings,
+		TenantID:                   serverutils.TestTenantID(),
+		MemoryPoolSize:             ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:          &tempStorageConfig,
+		Locality:                   ts.params.Locality,
+		ExternalIODir:              ts.params.ExternalIODir,
+		ExternalIODirConfig:        ts.params.ExternalIODirConfig,
+		ForceInsecure:              ts.Insecure(),
+		UseDatabase:                ts.params.UseDatabase,
+		SSLCertsDir:                ts.params.SSLCertsDir,
+		TestingKnobs:               ts.params.Knobs,
+		StartDiagnosticsReporting:  ts.params.StartDiagnosticsReporting,
+		Settings:                   tenantSettings,
+		DisableElasticCPUAdmission: ts.params.DisableElasticCPUAdmission,
 	}
 	ts.setupTenantTestingKnobs(&params.TestingKnobs)
 	return ts.StartTenant(ctx, params)
@@ -684,11 +685,12 @@ func (ts *testServer) startDefaultTestTenant(
 
 func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
 	args := base.TestSharedProcessTenantArgs{
-		TenantName:  ts.params.DefaultTenantName,
-		TenantID:    serverutils.TestTenantID(),
-		Knobs:       ts.params.Knobs,
-		UseDatabase: ts.params.UseDatabase,
-		Settings:    ts.params.Settings,
+		TenantName:                 ts.params.DefaultTenantName,
+		TenantID:                   serverutils.TestTenantID(),
+		Knobs:                      ts.params.Knobs,
+		UseDatabase:                ts.params.UseDatabase,
+		Settings:                   ts.params.Settings,
+		DisableElasticCPUAdmission: ts.params.DisableElasticCPUAdmission,
 	}
 	ts.setupTenantTestingKnobs(&args.Knobs)
 	return args
@@ -1494,6 +1496,17 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
+	// NB: ElasticAdmission is a SystemOnly setting so it can only be set on the
+	// system tenant; for shared-process tenants, the system tenant's setting
+	// already applies at the KV layer.
+	if args.DisableElasticCPUAdmission {
+		if s, ok := settings.LookupForLocalAccessByKey(
+			settings.InternalKey("sqladmission.low_pri_read_response_elastic_control.enabled"),
+			false, /* forSystemTenant */
+		); ok {
+			s.(*settings.BoolSetting).Override(ctx, &sqlServer.cfg.Settings.SV, false)
+		}
+	}
 	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
 
 	hts := &httpTestServer{}
@@ -1886,6 +1899,16 @@ func (ts *testServer) StartTenant(
 
 	// Disable yield AC for tenant servers in tests, for the same reason as the
 	// system tenant (see comment in serverutils.NewServer).
+	// NB: ElasticAdmission is a SystemOnly setting so it can only be set on the
+	// system tenant; the setting on the host cluster already applies at the KV layer.
+	if params.DisableElasticCPUAdmission {
+		if s, ok := settings.LookupForLocalAccessByKey(
+			settings.InternalKey("sqladmission.low_pri_read_response_elastic_control.enabled"),
+			false, /* forSystemTenant */
+		); ok {
+			s.(*settings.BoolSetting).Override(ctx, &st.SV, false)
+		}
+	}
 	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
 
 	hts := &httpTestServer{}

@@ -81,6 +81,7 @@ func TestSQLStatsFlush(t *testing.T) {
 
 	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					StubTimeNow: fakeTime.Now,
@@ -275,7 +276,9 @@ func TestSQLStatsInitialDelay(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
@@ -303,6 +306,7 @@ func TestSQLStatsLogDiscardMessage(t *testing.T) {
 	fakeTime.setTime(timeutil.Now())
 
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		StubTimeNow: fakeTime.Now,
 	}
@@ -373,6 +377,7 @@ func TestSQLStatsMinimumFlushInterval(t *testing.T) {
 	fakeTime.setTime(timeutil.Now())
 
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
 		StubTimeNow: fakeTime.Now,
 	}
@@ -443,7 +448,9 @@ func TestInMemoryStatsDiscard(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -547,7 +554,9 @@ func TestSQLStatsGatewayNodeSetting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -596,6 +605,7 @@ func TestSQLStatsPersistedLimitReached(t *testing.T) {
 
 	ctx := context.Background()
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	srv, conn, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
@@ -703,7 +713,9 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
@@ -807,6 +819,7 @@ func TestSQLStatsStmtSampling(t *testing.T) {
 
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 	// We need to disable probabilistic sampling to ensure that this test is deterministic.
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{DisableProbabilisticSampling: true}
@@ -902,6 +915,7 @@ func TestPersistedSQLStats_Flush(t *testing.T) {
 
 		// We create a server without starting it to control adding new stats and flushing them manually.
 		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: &sqlstats.TestingKnobs{
 					FlushInterceptor: func(ctx context.Context, stopper *stop.Stopper, aggregatedTs time.Time, stmtStats []*appstatspb.CollectedStatementStatistics, txnStats []*appstatspb.CollectedTransactionStatistics) {
@@ -1250,6 +1264,7 @@ func TestSQLStatsFlushDoesntWaitForFlushSigReceiver(t *testing.T) {
 	}
 	tc := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: sqlStatsKnobs,
 			},
@@ -1281,6 +1296,7 @@ func TestSQLStatsFlushWorkerDoesntSignalJobOnAbort(t *testing.T) {
 
 	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
 		Knobs: base.TestingKnobs{
 			SQLStatsKnobs: sqlStatsKnobs,
 		},
