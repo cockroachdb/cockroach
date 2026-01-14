@@ -468,6 +468,11 @@ func TestCreateTables(t *testing.T) {
 		sqlc.QueryRow(t, "CREATE LOGICALLY REPLICATED TABLE tab2 FROM TABLE tab2 ON $1 WITH UNIDIRECTIONAL", aURL.String()).Scan(&jobID)
 		jobutils.WaitForJobToPause(t, sqlc, jobID)
 
+		// Verify error is visible from SHOW JOBS.
+		var errMsg string
+		sqlc.QueryRow(t, "SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&errMsg)
+		require.Contains(t, errMsg, "pausing: pause point")
+
 		// Verify created tables are not visible as we paused before publishing
 		// tables.
 		var res int
