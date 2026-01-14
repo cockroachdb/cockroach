@@ -888,7 +888,7 @@ func (m *mockIteratorFactory) NewIterator(
 }
 
 func (m *mockIteratorFactory) NewLazyIterator(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64,
 ) (rangedesc.LazyIterator, error) {
 	intersectingRanges := m.filterIntersectingRanges(span)
 	return &mockIterator{ranges: intersectingRanges, index: 0}, nil

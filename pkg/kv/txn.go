@@ -701,19 +701,18 @@ func (txn *Txn) Inc(ctx context.Context, key interface{}, value int64) (KeyValue
 func (txn *Txn) scan(
 	ctx context.Context,
 	begin, end interface{},
-	maxRows int64,
+	maxRows, targetBytes int64,
 	isReverse bool,
 	str kvpb.KeyLockingStrengthType,
 	dur kvpb.KeyLockingDurabilityType,
-) ([]KeyValue, error) {
+) (rows []KeyValue, resumeSpan *roachpb.Span, _ error) {
 	b := txn.NewBatch()
-	if maxRows > 0 {
-		b.Header.MaxSpanRequestKeys = maxRows
-	}
+	b.Header.MaxSpanRequestKeys = maxRows
+	b.Header.TargetBytes = targetBytes
 	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(txn.Run(ctx, b), b)
-	return r.Rows, err
+	return r.Rows, r.ResumeSpan, err
 }
 
 // Scan retrieves the rows between begin (inclusive) and end (exclusive) in
@@ -726,7 +725,22 @@ func (txn *Txn) scan(
 func (txn *Txn) Scan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	return rows, err
+}
+
+// ScanWithTargetBytes retrieves the rows between begin (inclusive) and end
+// (exclusive) in ascending order.
+//
+// The returned []KeyValue will use up to targetBytes bytes (or all results when
+// zero is supplied). Non-nil resume span indicates that the scan was
+// incomplete.
+//
+// key can be either a byte slice or a string.
+func (txn *Txn) ScanWithTargetBytes(
+	ctx context.Context, begin, end interface{}, targetBytes int64,
+) (rows []KeyValue, resumeSpan *roachpb.Span, _ error) {
+	return txn.scan(ctx, begin, end, 0 /* maxRows */, targetBytes, false /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
 }
 
 // ScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -740,7 +754,8 @@ func (txn *Txn) Scan(
 func (txn *Txn) ScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForUpdate, dur)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, false /* isReverse */, kvpb.ForUpdate, dur)
+	return rows, err
 }
 
 // ScanForShare retrieves the rows between begin (inclusive) and end (exclusive)
@@ -754,7 +769,8 @@ func (txn *Txn) ScanForUpdate(
 func (txn *Txn) ScanForShare(
 	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, false /* isReverse */, kvpb.ForShare, dur)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, false /* isReverse */, kvpb.ForShare, dur)
+	return rows, err
 }
 
 // ReverseScan retrieves the rows between begin (inclusive) and end (exclusive)
@@ -767,7 +783,8 @@ func (txn *Txn) ScanForShare(
 func (txn *Txn) ReverseScan(
 	ctx context.Context, begin, end interface{}, maxRows int64,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, true /* isReverse */, kvpb.NonLocking, kvpb.Invalid)
+	return rows, err
 }
 
 // ReverseScanForUpdate retrieves the rows between begin (inclusive) and end
@@ -781,7 +798,8 @@ func (txn *Txn) ReverseScan(
 func (txn *Txn) ReverseScanForUpdate(
 	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForUpdate, dur)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, true /* isReverse */, kvpb.ForUpdate, dur)
+	return rows, err
 }
 
 // ReverseScanForShare retrieves the rows between begin (inclusive) and end
@@ -795,31 +813,62 @@ func (txn *Txn) ReverseScanForUpdate(
 func (txn *Txn) ReverseScanForShare(
 	ctx context.Context, begin, end interface{}, maxRows int64, dur kvpb.KeyLockingDurabilityType,
 ) ([]KeyValue, error) {
-	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, dur)
+	rows, _, err := txn.scan(ctx, begin, end, maxRows, 0 /* targetBytes */, true /* isReverse */, kvpb.ForShare, dur)
+	return rows, err
 }
 
 // Iterate performs a paginated scan and applying the function f to every page.
 // The semantics of retrieval and ordering are the same as for Scan. Note that
 // Txn auto-retries the transaction if necessary. Hence, the paginated data
 // must not be used for side-effects before the txn has committed.
+//
+// pageSize determines the number of KeyValues retrieved whereas pageTargetSize
+// determines the memory footprint of KeyValues retrieved. At most one can be
+// non-zero.
 func (txn *Txn) Iterate(
-	ctx context.Context, begin, end interface{}, pageSize int, f func([]KeyValue) error,
+	ctx context.Context,
+	begin, end interface{},
+	pageSize int,
+	pageTargetBytes int64,
+	f func([]KeyValue) error,
 ) error {
-	for {
-		rows, err := txn.Scan(ctx, begin, end, int64(pageSize))
-		if err != nil {
-			return err
+	if pageTargetBytes != 0 {
+		if pageSize != 0 {
+			return errors.AssertionFailedf("both pageSize and pageTargetBytes are non-zero")
 		}
-		if len(rows) == 0 {
-			return nil
+		for {
+			rows, resumeSpan, err := txn.ScanWithTargetBytes(ctx, begin, end, pageTargetBytes)
+			if err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				return nil
+			}
+			if err := f(rows); err != nil {
+				return errors.Wrap(err, "running iterate callback")
+			}
+			if resumeSpan == nil {
+				return nil
+			}
+			begin = resumeSpan.Key
 		}
-		if err := f(rows); err != nil {
-			return errors.Wrap(err, "running iterate callback")
+	} else {
+		for {
+			rows, err := txn.Scan(ctx, begin, end, int64(pageSize))
+			if err != nil {
+				return err
+			}
+			if len(rows) == 0 {
+				return nil
+			}
+			if err := f(rows); err != nil {
+				return errors.Wrap(err, "running iterate callback")
+			}
+			if len(rows) < pageSize {
+				return nil
+			}
+			begin = rows[len(rows)-1].Key.Next()
 		}
-		if len(rows) < pageSize {
-			return nil
-		}
-		begin = rows[len(rows)-1].Key.Next()
 	}
 }
 

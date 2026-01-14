@@ -653,12 +653,12 @@ func (c *connector) EngineStats(
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,
 ) (rangedesc.Iterator, error) {
-	rangeDescriptors, err := c.getRangeDescs(ctx, span, 0)
+	rangeDescriptors, err := c.getRangeDescs(ctx, span, 0 /* pageSize */, 0)
 	return rangedesc.NewSliceIterator(rangeDescriptors), err
 }
 
 func (c *connector) getRangeDescs(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, _ int64,
 ) ([]roachpb.RangeDescriptor, error) {
 	var rangeDescriptors []roachpb.RangeDescriptor
 
@@ -713,9 +713,14 @@ func (c *connector) getRangeDescs(
 
 // NewLazyIterator implements the IteratorFactory interface.
 func (i *connector) NewLazyIterator(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64,
 ) (rangedesc.LazyIterator, error) {
-	return rangedesc.NewPaginatedIter(ctx, span, pageSize, i.getRangeDescs)
+	if pageTargetBytes != 0 {
+		// TODO(yuzefovich): we could easily support it by extending
+		// GetRangeDescriptorsRequest if the need arises.
+		return nil, errors.AssertionFailedf("non-zero pageTargetBytes is unsupported")
+	}
+	return rangedesc.NewPaginatedIter(ctx, span, pageSize, pageTargetBytes, i.getRangeDescs)
 }
 
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.

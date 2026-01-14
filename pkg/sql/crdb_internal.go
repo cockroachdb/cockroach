@@ -4469,11 +4469,12 @@ func lookupNamesByKey(
 	return tableID, dbName, schemaName, tableName, indexName
 }
 
-var rangesNoLeasesPageSize = settings.RegisterIntSetting(
+// TODO: probably remove this.
+var rangesNoLeasesPageTargetBytes = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
-	"sql.ranges_no_leases.page_size",
-	"foo",
-	128,
+	"sql.ranges_no_leases.page_target_bytes",
+	"WIP",
+	10<<20,
 )
 
 // crdbInternalRangesNoLeasesTable exposes all ranges in the system without the
@@ -4543,11 +4544,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 
 		execCfg := p.ExecCfg()
-		pageSize := rangesNoLeasesPageSize.Get(&execCfg.Settings.SV)
+		var pageSize int
+		var pageTargetBytes int64
 		if limit > 0 {
-			pageSize = min(limit, pageSize)
+			pageSize = int(limit)
+		} else {
+			pageTargetBytes = rangesNoLeasesPageTargetBytes.Get(&execCfg.Settings.SV)
 		}
-		rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, execCfg.Codec.TenantSpan(), int(pageSize))
+		rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, execCfg.Codec.TenantSpan(), pageSize, pageTargetBytes)
 		if err != nil {
 			return nil, nil, err
 		}

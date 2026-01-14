@@ -1127,7 +1127,7 @@ func getRangeStartkeys(
 	rangeStartKeys := make([]roachpb.RKey, 0)
 
 	for i := range rangeKeySpans {
-		iter, err := rangeDescIterFactory.NewLazyIterator(ctx, rangeKeySpans[i], 100)
+		iter, err := rangeDescIterFactory.NewLazyIterator(ctx, rangeKeySpans[i], 100 /* pageSize */, 0 /* pageTargetBytes */)
 		if err != nil {
 			log.Dev.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangeKeySpans[i], err)
 			continue

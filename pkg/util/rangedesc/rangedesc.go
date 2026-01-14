@@ -18,7 +18,8 @@ import (
 // Scanner paginates through range descriptors in the system.
 type Scanner interface {
 	// Scan paginates through range descriptors in the system that overlap
-	// with the given span. When doing so it uses the given page size. It's
+	// with the given span. When doing so it uses the given page size or the
+	// target bytes footprint (both limits cannot be used simultaneously). It's
 	// important to note that the closure is being executed in the context of a
 	// distributed transaction that may be automatically retried. So something
 	// like the following is an anti-pattern:
@@ -50,8 +51,8 @@ type Scanner interface {
 	// (page sizes that are much larger than expected # of descriptors would
 	// lead to wasted work).
 	Scan(
-		ctx context.Context, pageSize int, init func(), span roachpb.Span,
-		fn func(descriptors ...roachpb.RangeDescriptor) error,
+		ctx context.Context, pageSize int, pageTargetBytes int64, init func(),
+		span roachpb.Span, fn func(descriptors ...roachpb.RangeDescriptor) error,
 	) error
 }
 
@@ -85,7 +86,12 @@ type IteratorFactory interface {
 	// observed results may not be consistent as of a single timestamp; callers
 	// that requite all results be consistent may wish to use the eager iterator
 	// or add a timestamp parameter to this API (or pick it on first fetch).
-	NewLazyIterator(ctx context.Context, span roachpb.Span, pageSize int) (LazyIterator, error)
+	//
+	// When non-zero, pageSize is the pagination limit in the number of KVs
+	// whereas as pageTargetBytes in the memory footprint of KVs. Both cannot be
+	// non-zero at the same time. Some implementations don't support the
+	// non-zero pageTargetBytes - an error will be returned.
+	NewLazyIterator(ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64) (LazyIterator, error)
 }
 
 // DB is a database handle to a CRDB cluster.
@@ -117,6 +123,7 @@ var _ IteratorFactory = &impl{}
 func (i *impl) Scan(
 	ctx context.Context,
 	pageSize int,
+	pageTargetBytes int64,
 	init func(),
 	span roachpb.Span,
 	fn func(descriptors ...roachpb.RangeDescriptor) error,
@@ -152,7 +159,7 @@ func (i *impl) Scan(
 		// We'll keep scanning until we've found a range descriptor outside the
 		// scan of interest.
 		var lastRangeIDInMeta1 roachpb.RangeID
-		return iterutil.Map(txn.Iterate(ctx, metaScanStartKey, keys.MetaMax, pageSize,
+		return iterutil.Map(txn.Iterate(ctx, metaScanStartKey, keys.MetaMax, pageSize, pageTargetBytes,
 			func(rows []kv.KeyValue) error {
 				descriptors := make([]roachpb.RangeDescriptor, 0, len(rows))
 				stopMetaIteration := false
@@ -216,19 +223,19 @@ func (i *impl) Scan(
 
 // NewIterator implements the IteratorFactory interface.
 func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
-	rangeDescriptors, err := i.getPage(ctx, span, 0)
+	rangeDescriptors, err := i.getPage(ctx, span, 0 /* pageSize */, 0 /* pageTargetBytes */)
 	return NewSliceIterator(rangeDescriptors), err
 }
 
 // NewLazyIterator implements the IteratorFactory interface.
 func (i *impl) NewLazyIterator(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64,
 ) (LazyIterator, error) {
-	return NewPaginatedIter(ctx, span, pageSize, i.getPage)
+	return NewPaginatedIter(ctx, span, pageSize, pageTargetBytes, i.getPage)
 }
 
 func (i *impl) getPage(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64,
 ) ([]roachpb.RangeDescriptor, error) {
 	fetchPageSize := pageSize
 	// We need a non-zero fetch page size here since otherwise Scan will read all
@@ -242,12 +249,12 @@ func (i *impl) getPage(
 	// trips to meta1/2 reasonable for a huge (say 10k range) span, though such
 	// callers would be better off with Scan anyway as this method buffers all of
 	// the descs eagerly.
-	if fetchPageSize == 0 {
+	if fetchPageSize == 0 && pageTargetBytes == 0 {
 		fetchPageSize = 128
 	}
 
 	var rangeDescriptors []roachpb.RangeDescriptor
-	err := iterutil.Map(i.Scan(ctx, fetchPageSize, func() {
+	err := iterutil.Map(i.Scan(ctx, fetchPageSize, pageTargetBytes, func() {
 		rangeDescriptors = rangeDescriptors[:0] // retryable
 	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
 		rangeDescriptors = append(rangeDescriptors, descriptors...)
@@ -292,21 +299,23 @@ func NewPaginatedIter(
 	ctx context.Context,
 	span roachpb.Span,
 	pageSize int,
-	fn func(context.Context, roachpb.Span, int) ([]roachpb.RangeDescriptor, error),
+	pageTargetBytes int64,
+	fn func(context.Context, roachpb.Span, int, int64) ([]roachpb.RangeDescriptor, error),
 ) (LazyIterator, error) {
-	it := &paginated{ctx: ctx, fetch: fn, pageSize: pageSize, span: span}
+	it := &paginated{ctx: ctx, fetch: fn, pageSize: pageSize, pageTargetBytes: pageTargetBytes, span: span}
 	it.fill()
 	return it, it.Error()
 }
 
 type paginated struct {
-	ctx      context.Context
-	span     roachpb.Span
-	curPage  []roachpb.RangeDescriptor
-	curIdx   int
-	fetch    func(context.Context, roachpb.Span, int) ([]roachpb.RangeDescriptor, error)
-	pageSize int
-	err      error
+	ctx             context.Context
+	span            roachpb.Span
+	curPage         []roachpb.RangeDescriptor
+	curIdx          int
+	fetch           func(context.Context, roachpb.Span, int, int64) ([]roachpb.RangeDescriptor, error)
+	pageSize        int
+	pageTargetBytes int64
+	err             error
 }
 
 // Valid implements the LazyIterator interface.
@@ -332,7 +341,7 @@ func (i *paginated) fill() {
 		i.span.Key = i.curPage[len(i.curPage)-1].EndKey.AsRawKey()
 	}
 	if i.span.Valid() {
-		i.curPage, i.err = i.fetch(i.ctx, i.span, i.pageSize)
+		i.curPage, i.err = i.fetch(i.ctx, i.span, i.pageSize, i.pageTargetBytes)
 		i.curIdx = 0
 	}
 }

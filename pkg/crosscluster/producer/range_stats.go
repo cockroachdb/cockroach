@@ -86,7 +86,7 @@ func computeRangeStats(
 ) (streampb.StreamEvent_RangeStats, error) {
 	var stats streampb.StreamEvent_RangeStats
 	for _, initialSpan := range spans {
-		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100)
+		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100 /* pageSize */, 0 /* pageTargetBytes */)
 		if err != nil {
 			return streampb.StreamEvent_RangeStats{}, err
 		}

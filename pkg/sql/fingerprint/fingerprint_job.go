@@ -255,7 +255,7 @@ func (p partitionSpans) partition(
 		for part := range spanPartitions {
 			subdivided := make([]roachpb.Span, 0, len(spanPartitions[part].Spans))
 			for _, sp := range spanPartitions[part].Spans {
-				rdi, err := p.JobExecContext.ExecCfg().RangeDescIteratorFactory.NewLazyIterator(ctx, sp, 64)
+				rdi, err := p.JobExecContext.ExecCfg().RangeDescIteratorFactory.NewLazyIterator(ctx, sp, 64 /* pageSize */, 0 /* pageTargetBytes */)
 				if err != nil {
 					return nil, err
 				}

@@ -1382,6 +1382,7 @@ func (s *state) GetSpanConfigForKey(
 func (s *state) Scan(
 	ctx context.Context,
 	pageSize int,
+	pageTargetBytes int64,
 	init func(),
 	span roachpb.Span,
 	fn func(descriptors ...roachpb.RangeDescriptor) error,

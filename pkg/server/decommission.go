@@ -215,7 +215,7 @@ func (s *topLevelServer) DecommissionPreCheck(
 	// Iterate through all range descriptors using the rangedesc.Scanner, which
 	// will perform the requisite meta1/meta2 lookups, including retries.
 	rangeDescScanner := rangedesc.NewScanner(s.db)
-	err = rangeDescScanner.Scan(ctx, pageSize, initCounters, keys.EverythingSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+	err = rangeDescScanner.Scan(ctx, pageSize, 0 /* pageTargetBytes */, initCounters, keys.EverythingSpan, func(descriptors ...roachpb.RangeDescriptor) error {
 		for _, desc := range descriptors {
 			// Track replicas by node for recording purposes.
 			// Skip checks if this range doesn't exist on a potentially decommissioning node.

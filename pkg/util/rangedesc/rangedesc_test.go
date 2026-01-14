@@ -83,14 +83,25 @@ func TestEverythingScanner(t *testing.T) {
 			}
 
 			scanner := rangedesc.NewScanner(kvDB)
-			for _, pageSize := range []int{1, 5, 10, 50} {
+			for _, tc := range []struct {
+				pageSize        int
+				pageTargetBytes int64
+			}{
+				{pageSize: 1},
+				{pageSize: 5},
+				{pageSize: 10},
+				{pageSize: 50},
+				{pageTargetBytes: 1},
+				{pageTargetBytes: 100},
+				{pageTargetBytes: 1000},
+				{pageTargetBytes: 10000},
+			} {
 				var numDescs int
 				init := func() { numDescs = 0 }
-				if err := scanner.Scan(ctx, pageSize, init, keys.EverythingSpan,
-					func(descriptors ...roachpb.RangeDescriptor) error {
-						numDescs += len(descriptors)
-						return nil
-					}); err != nil {
+				if err := scanner.Scan(ctx, tc.pageSize, tc.pageTargetBytes, init, keys.EverythingSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+					numDescs += len(descriptors)
+					return nil
+				}); err != nil {
 					t.Fatal(err)
 				}
 
@@ -137,14 +148,13 @@ func TestDataDriven(t *testing.T) {
 
 				var numDescs int
 				init := func() { numDescs = 0 }
-				if err := scanner.Scan(ctx, pageSize, init, scope,
-					func(descriptors ...roachpb.RangeDescriptor) error {
-						for _, desc := range descriptors {
-							buf.WriteString(fmt.Sprintf("- r%d:%s\n", desc.RangeID, desc.KeySpan().String()))
-						}
-						numDescs += len(descriptors)
-						return nil
-					}); err != nil {
+				if err := scanner.Scan(ctx, pageSize, 0 /* pageTargetBytes */, init, scope, func(descriptors ...roachpb.RangeDescriptor) error {
+					for _, desc := range descriptors {
+						buf.WriteString(fmt.Sprintf("- r%d:%s\n", desc.RangeID, desc.KeySpan().String()))
+					}
+					numDescs += len(descriptors)
+					return nil
+				}); err != nil {
 					t.Fatal(err)
 				}
 
@@ -207,7 +217,7 @@ func TestIterator(t *testing.T) {
 			iter, err := iteratorFactory.NewIterator(ctx, keys.EverythingSpan)
 			require.NoError(t, err)
 
-			lazy, err := iteratorFactory.NewLazyIterator(ctx, keys.EverythingSpan, 2)
+			lazy, err := iteratorFactory.NewLazyIterator(ctx, keys.EverythingSpan, 2 /* pageSize */, 0 /* pageTargetBytes */)
 			require.NoError(t, err)
 
 			var descs []roachpb.RangeDescriptor

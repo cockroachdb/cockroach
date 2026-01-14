@@ -38,7 +38,7 @@ type rangeIteratorFactory struct {
 }
 
 func (r *rangeIteratorFactory) NewLazyIterator(
-	ctx context.Context, span roachpb.Span, pageSize int,
+	ctx context.Context, span roachpb.Span, pageSize int, pageTargetBytes int64,
 ) (rangedesc.LazyIterator, error) {
 	var rangeDescs []roachpb.RangeDescriptor
 	for _, span := range r.ranges {
@@ -48,7 +48,7 @@ func (r *rangeIteratorFactory) NewLazyIterator(
 			EndKey:   roachpb.RKey(rangeSpan.EndKey),
 		})
 	}
-	return rangedesc.NewPaginatedIter(ctx, span, pageSize, func(_ context.Context, span roachpb.Span, _ int) ([]roachpb.RangeDescriptor, error) {
+	return rangedesc.NewPaginatedIter(ctx, span, pageSize, pageTargetBytes, func(_ context.Context, span roachpb.Span, _ int, _ int64) ([]roachpb.RangeDescriptor, error) {
 		var filteredDesc []roachpb.RangeDescriptor
 		for _, desc := range rangeDescs {
 			toRight := span.Key.Compare(desc.EndKey.AsRawKey()) == 1

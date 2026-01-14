@@ -1303,7 +1303,7 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 			init := func() {}
 
 			return func() error {
-				return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
+				return scanner.Scan(ctx, pageSize, 0 /* pageTargetBytes */, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
 					for _, desc := range descriptors {
 						for _, replica := range desc.InternalReplicas {
 							if replica.NodeID != marsNodeID {

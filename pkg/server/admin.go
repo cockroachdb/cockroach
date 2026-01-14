@@ -2756,7 +2756,7 @@ func (s *systemAdminServer) decommissionStatusHelper(
 		for _, nodeID := range nodeIDs {
 			replicaCounts[nodeID] = 0
 		}
-		return txn.Iterate(ctx, keys.Meta2Prefix, keys.MetaMax, pageSize,
+		return txn.Iterate(ctx, keys.Meta2Prefix, keys.MetaMax, pageSize, 0, /* pageTargetBytes */
 			func(rows []kv.KeyValue) error {
 				rangeDesc := roachpb.RangeDescriptor{}
 				for _, row := range rows {

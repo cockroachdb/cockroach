@@ -256,7 +256,7 @@ func scanTargetSpansToPushTimestampCache(
 				// TODO(dt): a Count() request would be nice here if the target isn't
 				// empty, since we don't need to drag all the results back just to
 				// then ignore them -- we just need the iteration on the far end.
-				if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, iterateNoop); err != nil {
+				if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, 0 /* pageTargetBytes */, iterateNoop); err != nil {
 					return err
 				}
 			}

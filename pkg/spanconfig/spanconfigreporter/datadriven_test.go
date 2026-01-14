@@ -249,7 +249,12 @@ func (s *mockCluster) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.Store
 
 // Scan implements rangedesc.Scanner interface.
 func (s *mockCluster) Scan(
-	_ context.Context, _ int, _ func(), _ roachpb.Span, fn func(...roachpb.RangeDescriptor) error,
+	ctx context.Context,
+	pageSize int,
+	pageTargetBytes int64,
+	init func(),
+	span roachpb.Span,
+	fn func(descriptors ...roachpb.RangeDescriptor) error,
 ) error {
 	var descs []roachpb.RangeDescriptor
 	for _, d := range s.ranges {

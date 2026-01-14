@@ -190,7 +190,7 @@ func (p *planner) fingerprintSpanFanout(
 			}()
 
 			for _, part := range partition {
-				rdi, err := p.execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, part, 64)
+				rdi, err := p.execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, part, 64 /* pageSize */, 0 /* pageTargetBytes */)
 				if err != nil {
 					return err
 				}

@@ -150,7 +150,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	return c.c.RangeDescScanner.Scan(ctx, blockSize, init, keys.EverythingSpan, fn)
+	return c.c.RangeDescScanner.Scan(ctx, blockSize, 0 /* pageTargetBytes */, init, keys.EverythingSpan, fn)
 }
 
 // ValidateAfterUpdateSystemVersion is part of the upgrade.Cluster interface.

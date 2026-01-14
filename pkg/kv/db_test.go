@@ -532,7 +532,7 @@ func TestDB_TxnIterate(t *testing.T) {
 		if err := db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			p = 0
 			rows = make([]kv.KeyValue, 0)
-			return txn.Iterate(context.Background(), "a", "b", c.pageSize,
+			return txn.Iterate(context.Background(), "a", "b", c.pageSize, 0, /* pageTargetBytes */
 				func(rs []kv.KeyValue) error {
 					p++
 					rows = append(rows, rs...)

@@ -994,7 +994,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				// TODO(dt): a Count() request would be nice here if the target isn't
 				// empty, since we don't need to drag all the results back just to
 				// then ignore them -- we just need the iteration on the far end.
-				if err := txn.KV().Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+				if err := txn.KV().Iterate(ctx, span.Key, span.EndKey, pageSize, 0 /* pageTargetBytes */, noop); err != nil {
 					return err
 				}
 			}

@@ -251,7 +251,7 @@ func (s *systemStatusServer) statsForSpan(
 	var descriptors []roachpb.RangeDescriptor
 	scanner := rangedesc.NewScanner(s.db)
 	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
-	err = scanner.Scan(ctx, pageSize, func() {
+	err = scanner.Scan(ctx, pageSize, 0 /* pageTargetBytes */, func() {
 		// If the underlying txn fails and needs to be retried,
 		// clear the descriptors we've collected so far.
 		descriptors = nil
@@ -419,7 +419,7 @@ func nodeIDsForSpan(
 ) ([]roachpb.NodeID, error) {
 	nodeIDs := make(map[roachpb.NodeID]struct{})
 	scanner := rangedesc.NewScanner(db)
-	err := scanner.Scan(ctx, pageSize, func() {
+	err := scanner.Scan(ctx, pageSize, 0 /* pageTargetBytes */, func() {
 		// If the underlying txn fails and needs to be retried,
 		// clear the nodeIDs we've collected so far.
 		nodeIDs = map[roachpb.NodeID]struct{}{}

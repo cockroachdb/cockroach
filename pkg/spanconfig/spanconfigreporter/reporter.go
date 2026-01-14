@@ -135,7 +135,7 @@ func (r *Reporter) SpanConfigConformance(
 	for _, span := range spans {
 		// Build a separate report per span, so that we can handle resets correctly.
 		spanReport := roachpb.SpanConfigConformanceReport{}
-		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
+		if err := r.dep.Scan(ctx, int(rangeDescPageSize.Get(&r.settings.SV)), 0, /* pageTargetBytes */
 			func() { spanReport = roachpb.SpanConfigConformanceReport{} /* init */ },
 			span,
 			func(descriptors ...roachpb.RangeDescriptor) error {

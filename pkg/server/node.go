@@ -2948,7 +2948,7 @@ func (n *Node) getRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.RPCTenantService_GetRangeDescriptorsStream,
 ) error {
 
-	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
+	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize), 0 /* pageTargetBytes */)
 	if err != nil {
 		return err
 	}
