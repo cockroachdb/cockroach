@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1251,8 +1252,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
-		"Type of the boot disk volume")
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "auto",
+		"Type of the boot disk volume; defaults to pd-ssd if supported, otherwise hyperdisk-balanced")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
 		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
@@ -1262,9 +1263,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
-	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "pd-ssd",
+	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "auto",
 		"Type of the persistent disk volume, only used if local-ssd=false "+
-			"(pd-ssd, pd-balanced, pd-extreme, pd-standard, hyperdisk-balanced)")
+			"(pd-ssd, pd-balanced, pd-extreme, pd-standard, "+"hyperdisk-balanced; defaults to pd-ssd if supported, "+
+			"otherwise hyperdisk-balanced)")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeCount, ProviderName+"-pd-volume-count", 1,
@@ -1382,6 +1384,41 @@ func (o *ProviderOpts) useArmAMI() bool {
 func (o *ProviderOpts) machineTypeSupportsLocalSSD() bool {
 	info, err := gcedb.GetMachineInfo(o.MachineType)
 	return err == nil && len(info.AllowedLocalSSDCount) > 0
+}
+
+// autoStorageType returns "pd-ssd" if the machine type supports it, otherwise
+// returns "hyperdisk-balanced".
+func autoStorageType(machineType string) string {
+	info, err := gcedb.GetMachineInfo(machineType)
+	switch {
+	case err != nil:
+		// Unknown machine.
+		return "pd-ssd"
+	case slices.Contains(info.StorageTypes, "pd-ssd"):
+		return "pd-ssd"
+	case slices.Contains(info.StorageTypes, "hyperdisk-balanced"):
+		return "hyperdisk-balanced"
+	default:
+		// All known machine support either "pd-ssd" or "hyperdisk-balanced",
+		// but leave a fallback in case that changes.
+		return info.StorageTypes[0]
+	}
+}
+
+// bootDiskType returns the boot disk storage type.
+func (o *ProviderOpts) bootDiskType() string {
+	if o.BootDiskType == "auto" {
+		return autoStorageType(o.MachineType)
+	}
+	return o.BootDiskType
+}
+
+// pdVolumeType returns the attached storage volume type.
+func (o *ProviderOpts) pdVolumeType() string {
+	if o.PDVolumeType == "auto" {
+		return autoStorageType(o.MachineType)
+	}
+	return o.PDVolumeType
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
@@ -1569,7 +1606,7 @@ func (p *Provider) computeInstanceArgs(
 		"--scopes", "cloud-platform",
 		"--image", image,
 		"--image-project", imageProject,
-		"--boot-disk-type", providerOpts.BootDiskType,
+		"--boot-disk-type", providerOpts.bootDiskType(),
 	}
 
 	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
@@ -1655,7 +1692,7 @@ func (p *Provider) computeInstanceArgs(
 			// create the "PDVolumeCount" number of persistent disks with the same configuration
 			for i := 0; i < providerOpts.PDVolumeCount; i++ {
 				pdProps := []string{
-					fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+					fmt.Sprintf("type=%s", providerOpts.pdVolumeType()),
 					fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 					"auto-delete=yes",
 				}

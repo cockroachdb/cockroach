@@ -50,7 +50,7 @@ func (p *Provider) buildInstanceProperties(
 			Boot:       proto.Bool(true),
 			InitializeParams: &computepb.AttachedDiskInitializeParams{
 				DiskSizeGb:  proto.Int64(int64(opts.OsVolumeSize)),
-				DiskType:    proto.String(providerOpts.BootDiskType),
+				DiskType:    proto.String(providerOpts.bootDiskType()),
 				SourceImage: proto.String(fmt.Sprintf("projects/%s/global/images/%s", imageProject, image)),
 			},
 		},
@@ -78,7 +78,7 @@ func (p *Provider) buildInstanceProperties(
 					AutoDelete: proto.Bool(true),
 					InitializeParams: &computepb.AttachedDiskInitializeParams{
 						DiskSizeGb: proto.Int64(int64(providerOpts.PDVolumeSize)),
-						DiskType:   proto.String(providerOpts.PDVolumeType),
+						DiskType:   proto.String(providerOpts.pdVolumeType()),
 					},
 				})
 			}
