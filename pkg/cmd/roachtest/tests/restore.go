@@ -537,7 +537,7 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry) spec.ClusterSpec {
 		if !hw.useLocalSSD {
 			panic("cannot set stores per node and not use local SSD")
 		}
-		clusterOpts = append(clusterOpts, spec.SSD(hw.storesPerNode))
+		clusterOpts = append(clusterOpts, spec.Disks(hw.storesPerNode))
 		clusterOpts = append(clusterOpts, spec.Arch(spec.OnlyAMD64))
 	}
 
@@ -799,8 +799,8 @@ func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption
 func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 	opts := option.NewStartOpts(option.NoBackupSchedule)
 	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs, "--vmodule=cloud_logging_transport=1")
-	if rd.c.Spec().SSDs > 1 && !rd.c.Spec().RAID0 {
-		opts.RoachprodOpts.StoreCount = rd.c.Spec().SSDs
+	if rd.c.Spec().DiskCount > 1 && !rd.c.Spec().RAID0 {
+		opts.RoachprodOpts.StoreCount = rd.c.Spec().DiskCount
 	}
 	return opts
 }

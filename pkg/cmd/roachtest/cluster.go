@@ -1736,8 +1736,8 @@ func (c *clusterImpl) FetchPebbleCheckpoints(ctx context.Context, l *logger.Logg
 	// Checkpoints can be large. Bail out after 3 minutes.
 	return timeutil.RunWithTimeout(ctx, "checkpoints", 3*time.Minute, func(ctx context.Context) error {
 		numStores := 1
-		if ssds := c.spec.SSDs; ssds > 1 {
-			numStores = ssds
+		if !c.spec.RAID0 && c.spec.DiskCount > 1 {
+			numStores = c.spec.DiskCount
 		}
 		for storeIdx := 1; storeIdx <= numStores; storeIdx++ {
 			// Find any checkpoints.
@@ -3210,7 +3210,7 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 			l.PrintfCtx(ctx, "%q specified one or more GCE regions unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
 			return vm.ArchAMD64
 		}
-		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.SSDs > 1 {
+		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.DiskCount > 1 {
 			l.PrintfCtx(ctx, "%q specified multiple _local_ SSDs unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
 			return vm.ArchAMD64
 		}

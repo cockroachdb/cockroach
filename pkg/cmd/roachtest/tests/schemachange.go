@@ -340,7 +340,7 @@ func makeSchemaChangeBulkIngestTest(
 		Name:             fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d/%s", numNodes, numRows, operation),
 		Owner:            registry.OwnerSQLFoundations,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.SSD(4)),
+		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.Disks(4)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.LeaderLeases,
