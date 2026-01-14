@@ -87,9 +87,9 @@ func registerRebalanceLoad(r registry.Registry) {
 		appNode := c.Node(c.Spec().NodeCount)
 		numNodes := len(roachNodes)
 		numStores := numNodes
-		if c.Spec().SSDs > 1 && !c.Spec().RAID0 {
-			numStores *= c.Spec().SSDs
-			startOpts.RoachprodOpts.StoreCount = c.Spec().SSDs
+		if c.Spec().DiskCount > 1 && !c.Spec().RAID0 {
+			numStores *= c.Spec().DiskCount
+			startOpts.RoachprodOpts.StoreCount = c.Spec().DiskCount
 		}
 
 		settings := install.MakeClusterSettings()
@@ -224,7 +224,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(7,
 				// When using ssd > 1, only local SSDs on AMD64 arch are compatible
 				// currently. See #121951.
-				spec.SSD(2),
+				spec.Disks(2),
 				spec.Arch(spec.OnlyAMD64),
 				spec.PreferLocalSSD(),
 			), // the last node is just used to generate load

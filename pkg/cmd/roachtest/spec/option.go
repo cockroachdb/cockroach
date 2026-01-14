@@ -83,17 +83,12 @@ func VolumeType(volumeType string) Option {
 	}
 }
 
-// VolumeCount sets the volume count.
-func VolumeCount(volumeCount int) Option {
+// Disks sets the number of data disks per node. The disk type (local SSD vs
+// persistent disk) is determined by other options like PreferLocalSSD(),
+// DisableLocalSSD(), VolumeType(), or RandomizeVolumeType().
+func Disks(n int) Option {
 	return func(spec *ClusterSpec) {
-		spec.VolumeCount = volumeCount
-	}
-}
-
-// SSD is a node option which requests nodes with the specified number of SSDs.
-func SSD(n int) Option {
-	return func(spec *ClusterSpec) {
-		spec.SSDs = n
+		spec.DiskCount = n
 	}
 }
 

@@ -264,7 +264,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 
 	if benchSpec.multistore {
 		extraNameParts = append(extraNameParts, "multi-store")
-		specOptions = append(specOptions, spec.SSD(4))
+		specOptions = append(specOptions, spec.Disks(4))
 	}
 
 	if benchSpec.whileUpreplicating {

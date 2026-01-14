@@ -36,7 +36,7 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		Name:  "disk-stalled/wal-failover/among-stores",
 		Owner: registry.OwnerStorage,
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
-		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.SSD(2), spec.Arch(spec.AllExceptFIPS)),
+		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.Disks(2), spec.Arch(spec.AllExceptFIPS)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
@@ -436,7 +436,7 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 			spec.WorkloadNode(),
 			spec.ReuseNone(),
 			spec.DisableLocalSSD(),
-			spec.VolumeCount(2),
+			spec.Disks(2),
 			spec.VolumeType("pd-ssd"),
 			spec.VolumeSize(100),
 			// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
