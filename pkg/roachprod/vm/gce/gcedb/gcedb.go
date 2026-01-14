@@ -27,6 +27,32 @@ const (
 	ArchARM64 = "arm64"
 )
 
+// CPU Platform constants - exact names from GCE documentation.
+// Reference: https://docs.cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+const (
+	// Intel platforms (oldest to newest).
+	PlatformSandyBridge    = "Intel Sandy Bridge"
+	PlatformIvyBridge      = "Intel Ivy Bridge"
+	PlatformHaswell        = "Intel Haswell"
+	PlatformBroadwell      = "Intel Broadwell"
+	PlatformSkylake        = "Intel Skylake"
+	PlatformCascadeLake    = "Intel Cascade Lake"
+	PlatformIceLake        = "Intel Ice Lake"
+	PlatformSapphireRapids = "Intel Sapphire Rapids"
+	PlatformEmeraldRapids  = "Intel Emerald Rapids"
+	PlatformGraniteRapids  = "Intel Granite Rapids"
+
+	// AMD platforms (oldest to newest).
+	PlatformRome  = "AMD Rome"
+	PlatformMilan = "AMD Milan"
+	PlatformGenoa = "AMD Genoa"
+	PlatformTurin = "AMD Turin"
+
+	// ARM platforms.
+	PlatformAmpereAltra = "Ampere Altra"
+	PlatformAxion       = "Google Axion"
+)
+
 // MachineInfo contains the specifications for a GCE machine type.
 type MachineInfo struct {
 	// Number of CPU cores. Always at least 1, even for shared-core machines.
@@ -40,12 +66,38 @@ type MachineInfo struct {
 	AllowedLocalSSDCount []int
 	// List of allowed storage types, e.g. "pd-ssd", "hyperdisk-balanced".
 	StorageTypes []string
+	// CPU platforms supported by this machine type, in oldest-to-newest order.
+	// Empty if documentation doesn't specify exact platforms (e.g., E2).
+	CPUPlatforms []string
 }
 
 // String returns a human-readable representation of MachineInfo.
 func (m MachineInfo) String() string {
-	return fmt.Sprintf("CPUCores: %d\nMemoryGiB: %d\nArchitecture: %s\nAllowedLocalSSDCount: %v\nStorageTypes: %v",
-		m.CPUCores, m.MemoryGiB, m.Architecture, m.AllowedLocalSSDCount, m.StorageTypes)
+	return fmt.Sprintf("CPUCores: %d\nMemoryGiB: %d\nArchitecture: %s\nAllowedLocalSSDCount: %s\nStorageTypes: %s\nCPUPlatforms: %s",
+		m.CPUCores, m.MemoryGiB, m.Architecture,
+		formatIntSlice(m.AllowedLocalSSDCount),
+		formatStringSlice(m.StorageTypes),
+		formatStringSlice(m.CPUPlatforms))
+}
+
+// formatIntSlice formats an int slice as {1, 2, 4}.
+func formatIntSlice(s []int) string {
+	if len(s) == 0 {
+		return "{}"
+	}
+	parts := make([]string, len(s))
+	for i, v := range s {
+		parts[i] = strconv.Itoa(v)
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// formatStringSlice formats a string slice as (x, y, z).
+func formatStringSlice(s []string) string {
+	if len(s) == 0 {
+		return "()"
+	}
+	return "(" + strings.Join(s, ", ") + ")"
 }
 
 // Storage type constants.
@@ -70,6 +122,84 @@ var (
 	storageT2D = []string{"pd-standard", "pd-balanced", "pd-ssd", "hyperdisk-throughput"}
 	// A2/G2 storage.
 	storageAccelerator = []string{"pd-balanced", "pd-ssd", "hyperdisk-balanced", "hyperdisk-ml"}
+)
+
+// CPU platform slices for each machine family.
+// Reference: https://docs.cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+var (
+	// N1: supports multiple Intel generations.
+	platformsN1 = []string{PlatformSandyBridge, PlatformIvyBridge, PlatformHaswell, PlatformBroadwell, PlatformSkylake}
+
+	// N2: Cascade Lake and Ice Lake.
+	platformsN2 = []string{PlatformCascadeLake, PlatformIceLake}
+
+	// N2D: AMD Rome and Milan.
+	platformsN2D = []string{PlatformRome, PlatformMilan}
+
+	// N4: Intel Emerald Rapids only.
+	platformsN4 = []string{PlatformEmeraldRapids}
+
+	// N4D: AMD Turin.
+	platformsN4D = []string{PlatformTurin}
+
+	// N4A: Google Axion (ARM).
+	platformsN4A = []string{PlatformAxion}
+
+	// E2: Intel or AMD - auto-selected at VM creation.
+	// CPUPlatforms is nil because docs don't specify exact platforms.
+	platformsE2 []string = nil
+
+	// T2A: Ampere Altra (ARM).
+	platformsT2A = []string{PlatformAmpereAltra}
+
+	// T2D: AMD Milan.
+	platformsT2D = []string{PlatformMilan}
+
+	// C2: Intel Cascade Lake.
+	platformsC2 = []string{PlatformCascadeLake}
+
+	// C2D: AMD Milan.
+	platformsC2D = []string{PlatformMilan}
+
+	// C3: Intel Sapphire Rapids.
+	platformsC3 = []string{PlatformSapphireRapids}
+
+	// C3D: AMD Genoa.
+	platformsC3D = []string{PlatformGenoa}
+
+	// C4: Intel Emerald Rapids and Granite Rapids.
+	platformsC4 = []string{PlatformEmeraldRapids, PlatformGraniteRapids}
+
+	// C4A: Google Axion (ARM).
+	platformsC4A = []string{PlatformAxion}
+
+	// C4D: AMD Turin.
+	platformsC4D = []string{PlatformTurin}
+
+	// H3: Intel Sapphire Rapids.
+	platformsH3 = []string{PlatformSapphireRapids}
+
+	// M1: Intel Broadwell/Skylake (memory-optimized).
+	platformsM1 = []string{PlatformBroadwell, PlatformSkylake}
+
+	// M2: Intel Cascade Lake.
+	platformsM2 = []string{PlatformCascadeLake}
+
+	// M3: Intel Ice Lake.
+	platformsM3 = []string{PlatformIceLake}
+
+	// M4: Intel Sapphire Rapids.
+	platformsM4 = []string{PlatformSapphireRapids}
+
+	// A2: Intel Cascade Lake.
+	platformsA2 = []string{PlatformCascadeLake}
+
+	// A3: varies by variant (see getA3MachineInfo).
+	platformsA3Sapphire = []string{PlatformSapphireRapids} // High, Mega, Edge
+	platformsA3Emerald  = []string{PlatformEmeraldRapids}  // Ultra
+
+	// G2: Intel Cascade Lake.
+	platformsG2 = []string{PlatformCascadeLake}
 )
 
 // Memory ratios (GiB per vCPU) for each machine family and variant.
@@ -209,13 +339,14 @@ func GetMachineInfo(machineType string) (MachineInfo, error) {
 var sharedCoreMachines = map[string]MachineInfo{
 	// E2 shared-core (Intel or AMD, architecture assumed amd64).
 	// CPUCores is 1 even though these have fractional vCPUs.
-	"e2-micro":  {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard},
-	"e2-small":  {CPUCores: 1, MemoryGiB: 2, Architecture: ArchAMD64, StorageTypes: storagePDStandard},
-	"e2-medium": {CPUCores: 1, MemoryGiB: 4, Architecture: ArchAMD64, StorageTypes: storagePDStandard},
+	// CPUPlatforms inherits from E2 (nil - platform auto-selected).
+	"e2-micro":  {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard, CPUPlatforms: platformsE2},
+	"e2-small":  {CPUCores: 1, MemoryGiB: 2, Architecture: ArchAMD64, StorageTypes: storagePDStandard, CPUPlatforms: platformsE2},
+	"e2-medium": {CPUCores: 1, MemoryGiB: 4, Architecture: ArchAMD64, StorageTypes: storagePDStandard, CPUPlatforms: platformsE2},
 	// N1 shared-core (legacy, Intel). Memory rounded down to int.
 	// CPUCores is 1 even though these have fractional vCPUs.
-	"f1-micro": {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard}, // 0.6 GiB -> 1
-	"g1-small": {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard}, // 1.7 GiB -> 1
+	"f1-micro": {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard, CPUPlatforms: platformsN1}, // 0.6 GiB -> 1
+	"g1-small": {CPUCores: 1, MemoryGiB: 1, Architecture: ArchAMD64, StorageTypes: storagePDStandard, CPUPlatforms: platformsN1}, // 1.7 GiB -> 1
 }
 
 // parseCustomMachineType parses custom machine types: {family}-custom-{vcpus}-{memory_mb}[-ext].
@@ -248,24 +379,30 @@ func parseCustomMachineType(family string, parts []string) (MachineInfo, error) 
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN1()
 		info.StorageTypes = storagePDStandard
+		info.CPUPlatforms = platformsN1
 	case "n2":
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN2(vcpus)
 		info.StorageTypes = storageN2
+		info.CPUPlatforms = platformsN2
 	case "n2d":
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN2D(vcpus)
 		info.StorageTypes = storageN2
+		info.CPUPlatforms = platformsN2D
 	case "n4":
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsN4
 	case "e2":
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storagePDStandard
+		info.CPUPlatforms = platformsE2
 	case "c2d":
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsC2D(vcpus)
 		info.StorageTypes = storagePDFull
+		info.CPUPlatforms = platformsC2D
 	default:
 		return MachineInfo{}, fmt.Errorf("custom machine types not supported for family: %s", family)
 	}
@@ -289,67 +426,79 @@ func getPredefinedMachineInfo(
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN1()
 		info.StorageTypes = storagePDStandard
+		info.CPUPlatforms = platformsN1
 
 	case "n2":
 		info.MemoryGiB = n2MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN2(vcpus)
 		info.StorageTypes = storageN2
+		info.CPUPlatforms = platformsN2
 
 	case "n2d":
 		info.MemoryGiB = n2dMemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsN2D(vcpus)
 		info.StorageTypes = storageN2
+		info.CPUPlatforms = platformsN2D
 
 	case "n4":
 		info.MemoryGiB = n4MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsN4
 
 	case "n4d":
 		info.MemoryGiB = n4dMemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsN4D
 
 	case "n4a":
 		// N4A uses Google Axion (Arm Neoverse N3).
 		info.MemoryGiB = n4aMemoryGiB(variant, vcpus)
 		info.Architecture = ArchARM64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsN4A
 
 	case "e2":
 		info.MemoryGiB = e2MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storagePDStandard
+		info.CPUPlatforms = platformsE2
 
 	case "t2d":
 		info.MemoryGiB = vcpus * t2dFixed
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageT2D
+		info.CPUPlatforms = platformsT2D
 
 	case "t2a":
 		// T2A uses Ampere Altra (Arm Neoverse N1).
 		info.MemoryGiB = vcpus * t2aFixed
 		info.Architecture = ArchARM64
 		info.StorageTypes = storagePDStandard
+		info.CPUPlatforms = platformsT2A
 
 	case "c2":
 		info.MemoryGiB = vcpus * c2Standard
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsC2(vcpus)
 		info.StorageTypes = storagePDFull
+		info.CPUPlatforms = platformsC2
 
 	case "c2d":
 		info.MemoryGiB = c2dMemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsC2D(vcpus)
 		info.StorageTypes = storagePDFull
+		info.CPUPlatforms = platformsC2D
 
 	case "c3":
 		info.MemoryGiB = c3MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
+		info.CPUPlatforms = platformsC3
 		if hasLSSD {
 			info.AllowedLocalSSDCount = []int{lssdCountC3(vcpus)}
 		}
@@ -358,6 +507,7 @@ func getPredefinedMachineInfo(
 		info.MemoryGiB = c3dMemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageC3
+		info.CPUPlatforms = platformsC3D
 		if hasLSSD {
 			info.AllowedLocalSSDCount = []int{lssdCountC3D(vcpus)}
 		}
@@ -366,6 +516,7 @@ func getPredefinedMachineInfo(
 		info.MemoryGiB = c4MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsC4
 		if hasLSSD {
 			info.AllowedLocalSSDCount = []int{lssdCountC4(vcpus)}
 		}
@@ -375,6 +526,7 @@ func getPredefinedMachineInfo(
 		info.MemoryGiB = c3MemoryGiB(variant, vcpus) // Same ratios as C3.
 		info.Architecture = ArchARM64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsC4A
 		if hasLSSD {
 			info.AllowedLocalSSDCount = []int{lssdCountC4A(vcpus)}
 		}
@@ -383,6 +535,7 @@ func getPredefinedMachineInfo(
 		info.MemoryGiB = c4dMemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageHyperdiskOnly
+		info.CPUPlatforms = platformsC4D
 		if hasLSSD {
 			info.AllowedLocalSSDCount = []int{lssdCountC4D(vcpus)}
 		}
@@ -393,28 +546,33 @@ func getPredefinedMachineInfo(
 		info.MemoryGiB = 352
 		info.Architecture = ArchAMD64
 		info.StorageTypes = []string{"pd-balanced", "hyperdisk-balanced", "hyperdisk-throughput"}
+		info.CPUPlatforms = platformsH3
 
 	case "m1":
 		info.MemoryGiB = m1MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsM1(vcpus)
 		info.StorageTypes = storagePDFull
+		info.CPUPlatforms = platformsM1
 
 	case "m2":
 		info.MemoryGiB = m2MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageM2
+		info.CPUPlatforms = platformsM2
 
 	case "m3":
 		info.MemoryGiB = m3MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.AllowedLocalSSDCount = localSSDCountsM3(vcpus)
 		info.StorageTypes = storageM3
+		info.CPUPlatforms = platformsM3
 
 	case "m4":
 		info.MemoryGiB = m4MemoryGiB(variant, vcpus)
 		info.Architecture = ArchAMD64
 		info.StorageTypes = storageM4
+		info.CPUPlatforms = platformsM4
 
 	case "a2":
 		return getA2MachineInfo(variant, vcpus)
@@ -825,6 +983,7 @@ func getA2MachineInfo(variant string, vcpus int) (MachineInfo, error) {
 		CPUCores:     vcpus,
 		Architecture: ArchAMD64,
 		StorageTypes: storageAccelerator,
+		CPUPlatforms: platformsA2,
 	}
 
 	// Memory is roughly 85 GiB per 12 vCPUs for standard.
@@ -857,16 +1016,20 @@ func getA3MachineInfo(variant string, vcpus int) (MachineInfo, error) {
 		// a3-highgpu-8g: 208 vCPUs, 1872 GiB, 8x H100.
 		info.CPUCores = 208
 		info.MemoryGiB = 1872
+		info.CPUPlatforms = platformsA3Sapphire
 	case "megagpu":
 		// a3-megagpu-8g: 208 vCPUs, 1872 GiB, 8x H100.
 		info.CPUCores = 208
 		info.MemoryGiB = 1872
+		info.CPUPlatforms = platformsA3Sapphire
 	case "ultragpu":
 		// a3-ultragpu-8g: 224 vCPUs, 2952 GiB, 8x H200.
 		info.CPUCores = 224
 		info.MemoryGiB = 2952
+		info.CPUPlatforms = platformsA3Emerald
 	default:
 		info.MemoryGiB = vcpus * 9
+		info.CPUPlatforms = platformsA3Sapphire
 	}
 
 	return info, nil
@@ -879,6 +1042,7 @@ func getG2MachineInfo(variant string, vcpus int) (MachineInfo, error) {
 		CPUCores:     vcpus,
 		Architecture: ArchAMD64,
 		StorageTypes: []string{"pd-balanced", "pd-ssd", "hyperdisk-balanced", "hyperdisk-ml", "hyperdisk-throughput"},
+		CPUPlatforms: platformsG2,
 	}
 
 	// G2 has 16 GiB per 4 vCPUs (4 GiB/vCPU) for standard.
