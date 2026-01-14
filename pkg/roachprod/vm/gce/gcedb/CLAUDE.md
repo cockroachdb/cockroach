@@ -17,6 +17,9 @@ type MachineInfo struct {
   AllowedLocalSSDCount  []int
   // List of allowed storage types, e.g. "pd-ssd", "hyperdisk-balanced".
   StorageTypes          []string
+  // CPU platforms supported by this machine type, in oldest-to-newest order.
+  // Empty if documentation doesn't specify exact platforms (e.g., E2).
+  CPUPlatforms          []string
 }
 ```
 
@@ -32,6 +35,7 @@ MachineInfo{
   Architecture:         "amd64",
   AllowedLocalSSDCount: []int{4, 8, 16, 24},
   StorageTypes:         []string{"pd-standard", "pd-balanced", "pd-ssd", "pd-extreme", "hyperdisk-balanced", "hyperdisk-throughput"},
+  CPUPlatforms:         []string{"Intel Cascade Lake", "Intel Ice Lake"},
 }
 ```
 
@@ -73,6 +77,7 @@ To update the code, consult the following Google Cloud documentation pages:
 | Compute Optimized | https://docs.cloud.google.com/compute/docs/compute-optimized-machines |
 | Memory Optimized | https://docs.cloud.google.com/compute/docs/memory-optimized-machines |
 | Accelerator Optimized | https://docs.cloud.google.com/compute/docs/accelerator-optimized-machines |
+| CPU Platforms | https://docs.cloud.google.com/compute/docs/instances/specify-min-cpu-platform |
 | Local SSD | https://docs.cloud.google.com/compute/docs/disks/local-ssd |
 | Hyperdisk Support | https://docs.cloud.google.com/compute/docs/disks/hyperdisks |
 | Persistent Disk Support | https://docs.cloud.google.com/compute/docs/disks/persistent-disks |
@@ -105,14 +110,53 @@ To update the code, consult the following Google Cloud documentation pages:
    - ARM64: T2A, C4A, N4A
    - AMD64: all other families
 
+4. **CPU Platforms**: The `CPUPlatforms` field lists supported CPU platforms in
+   oldest-to-newest order. Each machine family typically supports one or more
+   specific CPU platforms:
+   - Use pre-defined platform slices (e.g., `platformsN2`, `platformsC4`) for each family
+   - If documentation doesn't specify exact platforms (e.g., E2), set `CPUPlatforms` to nil
+   - For families with variant-specific platforms (e.g., A3), set platform per variant
+   - Shared-core machines inherit platforms from their parent family
+
+### CPU Platforms by Family
+
+| Family | CPU Platforms (oldest → newest) |
+|--------|--------------------------------|
+| N1 | Intel Sandy Bridge, Ivy Bridge, Haswell, Broadwell, Skylake |
+| N2 | Intel Cascade Lake, Ice Lake |
+| N2D | AMD Rome, Milan |
+| N4 | Intel Emerald Rapids |
+| N4A | Google Axion |
+| N4D | AMD Turin |
+| E2 | (empty - platform auto-selected) |
+| T2A | Ampere Altra |
+| T2D | AMD Milan |
+| C2 | Intel Cascade Lake |
+| C2D | AMD Milan |
+| C3 | Intel Sapphire Rapids |
+| C3D | AMD Genoa |
+| C4 | Intel Emerald Rapids, Granite Rapids |
+| C4A | Google Axion |
+| C4D | AMD Turin |
+| H3 | Intel Sapphire Rapids |
+| M1 | Intel Broadwell, Skylake |
+| M2 | Intel Cascade Lake |
+| M3 | Intel Ice Lake |
+| M4 | Intel Sapphire Rapids |
+| A2 | Intel Cascade Lake |
+| A3 High/Mega/Edge | Intel Sapphire Rapids |
+| A3 Ultra | Intel Emerald Rapids |
+| G2 | Intel Cascade Lake |
+
 ### What Typically Changes
 
 When updating for new machine types:
-- **New families** (e.g., N5, C5): Add new case in switch, define memory ratios and architecture
+- **New families** (e.g., N5, C5): Add new case in switch, define memory ratios, architecture, and CPU platforms
 - **Memory ratios**: Check if ratios changed for existing families
 - **Storage types**: New hyperdisk types may be added; check compatibility matrices
 - **Local SSD limits**: May change with new machine sizes
 - **Architecture**: New ARM-based families may be added
+- **CPU platforms**: New processor generations may be added; check the machine family documentation pages for platform information
 
 ### Supported Machine Families
 
@@ -208,3 +252,7 @@ When adding or modifying machine families, verify the following:
 
 3. **Test coverage**: Add test cases for both base types AND `-lssd` variants
    to verify the local SSD behavior is correct for both.
+
+4. **CPU platforms**: Check the machine family documentation for CPU platform
+   information. Add the appropriate `platformsXXX` slice assignment and update
+   the "CPU Platforms by Family" table in this document.

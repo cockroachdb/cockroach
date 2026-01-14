@@ -1254,8 +1254,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
 	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "auto",
 		"Type of the boot disk volume; defaults to pd-ssd if supported, otherwise hyperdisk-balanced")
-	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
-		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "best",
+		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform); "+
+			"defaults to the latest platform for the machine type")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
 			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
@@ -1419,6 +1420,26 @@ func (o *ProviderOpts) pdVolumeType() string {
 		return autoStorageType(o.MachineType)
 	}
 	return o.PDVolumeType
+}
+
+// minCPUPlatform returns the minimum CPU platform to request, if necessary.
+func (p *ProviderOpts) minCPUPlatform() string {
+	switch p.MinCPUPlatform {
+	case "", "any":
+		return ""
+
+	case "best":
+		// By default, we choose the latest CPU platform available for the machine
+		// type. This ensures run-to-run consistency.
+		info, err := gcedb.GetMachineInfo(p.MachineType)
+		if err != nil || len(info.CPUPlatforms) < 2 {
+			return ""
+		}
+		return info.CPUPlatforms[len(info.CPUPlatforms)-1]
+
+	default:
+		return p.MinCPUPlatform
+	}
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
@@ -1587,11 +1608,6 @@ func (p *Provider) computeInstanceArgs(
 		return nil, cleanUpFn, errors.Errorf("local SSDs are not supported with %s instance types, use --local-ssd=false", providerOpts.MachineType)
 	}
 	if providerOpts.useArmAMI() {
-		if providerOpts.MinCPUPlatform != "" {
-			l.Printf("WARNING: --gce-min-cpu-platform is ignored for ARM64 instances")
-			providerOpts.MinCPUPlatform = ""
-		}
-		// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
@@ -1726,12 +1742,10 @@ func (p *Provider) computeInstanceArgs(
 	}
 
 	args = append(args, "--machine-type", providerOpts.MachineType)
-	if providerOpts.MinCPUPlatform != "" {
-		if strings.HasPrefix(providerOpts.MachineType, "n2d-") && strings.HasPrefix(providerOpts.MinCPUPlatform, "Intel") {
-			l.Printf("WARNING: MinCPUPlatform=%q is not supported for MachineType=%q, falling back to AMD Milan", providerOpts.MinCPUPlatform, providerOpts.MachineType)
-			providerOpts.MinCPUPlatform = "AMD Milan"
-		}
-		args = append(args, "--min-cpu-platform", providerOpts.MinCPUPlatform)
+	if platform := providerOpts.minCPUPlatform(); platform != "" {
+		l.Printf("Requesting platform %q for machine type %q; if you get an insufficient capacity error, "+
+			"disable using --gce-min-cpu-platform=any", platform, providerOpts.MachineType)
+		args = append(args, "--min-cpu-platform", platform)
 	}
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))

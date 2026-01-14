@@ -152,8 +152,8 @@ func (p *Provider) buildInstanceProperties(
 		Metadata:          metadata,
 	}
 
-	if providerOpts.MinCPUPlatform != "" {
-		props.MinCpuPlatform = proto.String(providerOpts.MinCPUPlatform)
+	if platform := providerOpts.minCPUPlatform(); platform != "" {
+		props.MinCpuPlatform = proto.String(platform)
 	}
 
 	// Set the labels on the instance properties.
