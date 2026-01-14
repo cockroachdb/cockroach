@@ -42,6 +42,10 @@ import (
 // ProviderName is aws.
 const ProviderName = "aws"
 
+// ManagedLabel is the label used to identify managed clusters (those using
+// launch templates and auto scaling groups).
+const ManagedLabel = "managed"
+
 //go:embed config.json
 var configJson []byte
 
@@ -368,6 +372,10 @@ type ProviderOpts struct {
 	// BootDiskOnly ensures that no additional disks will be attached, other than
 	// the boot disk.
 	BootDiskOnly bool
+
+	// Managed uses a launch template and auto scaling group to create VMs.
+	// This enables cluster resizing via Grow/Shrink operations.
+	Managed bool
 }
 
 // Provider implements the vm.Provider interface for AWS.
@@ -654,6 +662,8 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"the IAM instance profile to associate with created VMs if non-empty")
 	flags.BoolVar(&o.BootDiskOnly, ProviderName+"-boot-disk-only", o.BootDiskOnly,
 		"Only attach the boot disk. No additional volumes will be provisioned even if specified.")
+	flags.BoolVar(&o.Managed, ProviderName+"-managed", o.Managed,
+		"use a launch template and auto scaling group to create VMs (enables Grow/Shrink operations)")
 }
 
 // ConfigureClusterCleanupFlags implements ProviderOpts.
@@ -835,6 +845,11 @@ func (p *Provider) Create(
 		zones[i] = expandedZones[z]
 	}
 
+	// Use managed cluster creation (launch template + ASG) if --aws-managed is specified.
+	if providerOpts.Managed {
+		return p.createManagedCluster(l, names, zones, regions, machineType, opts, providerOpts)
+	}
+
 	var g errgroup.Group
 	limiter := rate.NewLimiter(rate.Limit(providerOpts.CreateRateLimit), 2 /* buckets */)
 	for i := range names {
@@ -874,12 +889,534 @@ func DefaultZones(geoDistributed bool) []string {
 	return []string{defaultZones[0]}
 }
 
-func (p *Provider) Grow(*logger.Logger, vm.List, string, []string) (vm.List, error) {
-	return nil, vm.UnimplementedError
+// createManagedCluster creates a cluster using Launch Templates and Auto Scaling Groups.
+// This enables Grow/Shrink operations for the cluster.
+//
+// AWS ASG doesn't support creating instances with custom names (unlike GCE MIG which has
+// `create-instance --instance <NAME>`). To preserve roachprod's naming conventions
+// (e.g., clustername-0001, clustername-0002), we:
+// 1. Create the launch template (stores instance configuration)
+// 2. Create the ASG with desiredCapacity=0 (management structure only)
+// 3. Create instances using runInstance() with proper names
+// 4. Attach instances to the ASG
+func (p *Provider) createManagedCluster(
+	l *logger.Logger,
+	names []string,
+	zones []string,
+	regions []string,
+	machineType string,
+	opts vm.CreateOpts,
+	providerOpts *ProviderOpts,
+) (vm.List, error) {
+	if len(names) == 0 {
+		return nil, errors.New("no VM names provided")
+	}
+
+	clusterName := opts.ClusterName
+
+	ctx := context.Background()
+
+	// Group zones by region for ASG creation.
+	// Each region gets one launch template and one ASG.
+	zonesByRegion := make(map[string][]string)
+	namesByRegion := make(map[string][]string)
+	zoneForName := make(map[string]string)
+	for i, zone := range zones {
+		az := p.Config.getAvailabilityZone(zone)
+		if az == nil {
+			return nil, errors.Errorf("unknown availability zone %s", zone)
+		}
+		region := az.Region.Name
+		if !slices.Contains(zonesByRegion[region], zone) {
+			zonesByRegion[region] = append(zonesByRegion[region], zone)
+		}
+		namesByRegion[region] = append(namesByRegion[region], names[i])
+		zoneForName[names[i]] = zone
+	}
+
+	// Step 1: Create launch template and ASG (with desiredCapacity=0) in each region.
+	g := ctxgroup.WithContext(ctx)
+	for region, regionZones := range zonesByRegion {
+		// Use the first zone for instance configuration (AMI lookup, etc.)
+		zone := regionZones[0]
+		cfg, az, err := p.getInstanceConfig(l, zone, machineType, opts, providerOpts)
+		if err != nil {
+			return nil, err
+		}
+
+		g.GoCtx(func(ctx context.Context) error {
+			// Create launch template
+			ltID, err := p.createLaunchTemplate(ctx, l, clusterName, region, cfg, az, opts, providerOpts)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create launch template in region %s", region)
+			}
+
+			// Create ASG with desiredCapacity=0 (we'll create and attach instances separately)
+			if err := p.createAutoScalingGroup(ctx, l, clusterName, region, ltID, regionZones, 0, opts); err != nil {
+				return errors.Wrapf(err, "failed to create auto scaling group in region %s", region)
+			}
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Step 2: Create instances with proper names using runInstance().
+	// This preserves roachprod naming conventions (e.g., clustername-0001).
+	l.Printf("Creating %d instances with proper names...", len(names))
+	var mu syncutil.Mutex
+	instanceIDsByRegion := make(map[string][]string)
+	limiter := rate.NewLimiter(rate.Limit(providerOpts.CreateRateLimit), 2)
+
+	g = ctxgroup.WithContext(ctx)
+	for i := range names {
+		index := i
+		vmName := names[i]
+		zone := zoneForName[vmName]
+		az := p.Config.getAvailabilityZone(zone)
+		region := az.Region.Name
+		res := limiter.Reserve()
+
+		g.GoCtx(func(ctx context.Context) error {
+			time.Sleep(res.Delay())
+			v, err := p.runInstance(l, vmName, index, zone, machineType, opts, providerOpts)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create instance %s", vmName)
+			}
+
+			mu.Lock()
+			instanceIDsByRegion[region] = append(instanceIDsByRegion[region], v.ProviderID)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Step 3: Wait for instances to be running before attaching to ASG.
+	l.Printf("Waiting for instances to be running...")
+	for region, instanceIDs := range instanceIDsByRegion {
+		waitRetry := retry.Start(retry.Options{
+			InitialBackoff: 5 * time.Second,
+			MaxBackoff:     30 * time.Second,
+			MaxRetries:     30,
+		})
+
+		allRunning := false
+		for waitRetry.Next() {
+			descArgs := []string{
+				"ec2", "describe-instances",
+				"--instance-ids",
+			}
+			descArgs = append(descArgs, instanceIDs...)
+			descArgs = append(descArgs, "--region", region)
+
+			var descOutput DescribeInstancesOutput
+			if err := p.runJSONCommandWithContext(ctx, l, descArgs, &descOutput); err != nil {
+				l.Printf("Warning: failed to describe instances: %v", err)
+				continue
+			}
+
+			runningCount := 0
+			for _, res := range descOutput.Reservations {
+				for _, inst := range res.Instances {
+					if inst.State.Name == "running" {
+						runningCount++
+					}
+				}
+			}
+
+			if runningCount == len(instanceIDs) {
+				l.Printf("All %d instances in region %s are running", runningCount, region)
+				allRunning = true
+				break
+			}
+
+			l.Printf("Waiting for instances in %s: %d/%d running", region, runningCount, len(instanceIDs))
+		}
+
+		if !allRunning {
+			return nil, errors.Errorf("timed out waiting for instances in region %s to reach running state", region)
+		}
+	}
+
+	// Step 4: Attach instances to the ASG and add the managed label.
+	g = ctxgroup.WithContext(ctx)
+	for region, instanceIDs := range instanceIDsByRegion {
+		asgName := autoScalingGroupName(clusterName, region)
+
+		g.GoCtx(func(ctx context.Context) error {
+			// Update ASG max size to accommodate the instances
+			updateArgs := []string{
+				"autoscaling", "update-auto-scaling-group",
+				"--auto-scaling-group-name", asgName,
+				"--max-size", strconv.Itoa(len(instanceIDs) * 2),
+				"--region", region,
+			}
+			if _, err := p.runCommandWithContext(ctx, l, updateArgs); err != nil {
+				return errors.Wrapf(err, "failed to update ASG max size")
+			}
+
+			// Attach instances to the ASG
+			l.Printf("Attaching %d instances to ASG %s", len(instanceIDs), asgName)
+			attachArgs := []string{
+				"autoscaling", "attach-instances",
+				"--auto-scaling-group-name", asgName,
+				"--instance-ids",
+			}
+			attachArgs = append(attachArgs, instanceIDs...)
+			attachArgs = append(attachArgs, "--region", region)
+
+			if _, err := p.runCommandWithContext(ctx, l, attachArgs); err != nil {
+				return errors.Wrapf(err, "failed to attach instances to ASG")
+			}
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Wait for IPs and return the VM list.
+	vmList, err := p.waitForIPs(ctx, l, names, regions, providerOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the managed label to all instances.
+	if err := p.AddLabels(l, vmList, map[string]string{ManagedLabel: "true"}); err != nil {
+		l.Printf("Warning: failed to add managed label to VMs: %v", err)
+	}
+
+	return vmList, nil
 }
 
-func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
-	return vm.UnimplementedError
+// Grow adds new VMs to a managed cluster.
+// For AWS, we create new EC2 instances using the launch template and attach them to the ASG.
+// This preserves roachprod's naming conventions while keeping the instances managed by the ASG.
+func (p *Provider) Grow(
+	l *logger.Logger, vms vm.List, clusterName string, names []string,
+) (vm.List, error) {
+	if !isManaged(vms) {
+		return nil, errors.New("growing is only supported for managed clusters (created with --aws-managed)")
+	}
+
+	if len(names) == 0 {
+		return nil, errors.New("no VM names provided for grow operation")
+	}
+
+	ctx := context.Background()
+
+	// Group existing VMs by region to understand the cluster's distribution
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	// For simplicity, we add new VMs to the first region.
+	// A more sophisticated approach would distribute them evenly.
+	var region string
+	var existingVMs vm.List
+	for r, vmList := range byRegion {
+		region = r
+		existingVMs = vmList
+		break
+	}
+
+	// Get the ASG name
+	asgName := autoScalingGroupName(clusterName, region)
+
+	// First, describe the ASG to get current capacity and max size
+	descArgs := []string{
+		"autoscaling", "describe-auto-scaling-groups",
+		"--auto-scaling-group-names", asgName,
+		"--region", region,
+	}
+
+	var descOutput struct {
+		AutoScalingGroups []struct {
+			DesiredCapacity int `json:"DesiredCapacity"`
+			MaxSize         int `json:"MaxSize"`
+			MinSize         int `json:"MinSize"`
+		} `json:"AutoScalingGroups"`
+	}
+
+	if err := p.runJSONCommandWithContext(ctx, l, descArgs, &descOutput); err != nil {
+		return nil, errors.Wrapf(err, "failed to describe ASG %s", asgName)
+	}
+
+	if len(descOutput.AutoScalingGroups) == 0 {
+		return nil, errors.Errorf("ASG %s not found", asgName)
+	}
+
+	currentCapacity := descOutput.AutoScalingGroups[0].DesiredCapacity
+	newCapacity := currentCapacity + len(names)
+	maxSize := descOutput.AutoScalingGroups[0].MaxSize
+
+	// If new capacity exceeds max size, update max size first
+	if newCapacity > maxSize {
+		l.Printf("Updating ASG max size from %d to %d", maxSize, newCapacity*2)
+		updateArgs := []string{
+			"autoscaling", "update-auto-scaling-group",
+			"--auto-scaling-group-name", asgName,
+			"--max-size", strconv.Itoa(newCapacity * 2),
+			"--region", region,
+		}
+		if _, err := p.runCommandWithContext(ctx, l, updateArgs); err != nil {
+			return nil, errors.Wrapf(err, "failed to update ASG max size")
+		}
+	}
+
+	// Get the zone from an existing VM
+	zone := existingVMs[0].Zone
+
+	// Ensure SSH keys are configured for the region before creating instances
+	if err := p.ConfigSSH(l, []string{zone}); err != nil {
+		return nil, errors.Wrap(err, "failed to configure SSH keys")
+	}
+
+	// Get the instance config from the existing VMs' labels
+	// We need to rebuild provider opts from labels
+	providerOpts := DefaultProviderOpts()
+
+	// Get the machine type from existing VM
+	machineType := existingVMs[0].MachineType
+
+	// Build CreateOpts from existing VM configuration
+	opts := vm.DefaultCreateOpts()
+	opts.ClusterName = clusterName
+	if lifetimeStr, ok := existingVMs[0].Labels[vm.TagLifetime]; ok {
+		if lifetime, err := time.ParseDuration(lifetimeStr); err == nil {
+			opts.Lifetime = lifetime
+		}
+	}
+
+	// Create instances using runInstance and collect their IDs
+	var mu syncutil.Mutex
+	var instanceIDs []string
+	g := ctxgroup.WithContext(ctx)
+
+	for i := range names {
+		index := i
+		vmName := names[i]
+		g.GoCtx(func(ctx context.Context) error {
+			// Create the instance
+			v, err := p.runInstance(l, vmName, index, zone, machineType, opts, providerOpts)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create instance %s", vmName)
+			}
+
+			mu.Lock()
+			instanceIDs = append(instanceIDs, v.ProviderID)
+			mu.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	// Wait for instances to be running before attaching to ASG
+	l.Printf("Waiting for %d new instances to be ready...", len(names))
+	waitRetry := retry.Start(retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     30,
+	})
+
+	allRunning := false
+	for waitRetry.Next() {
+		descInstancesArgs := []string{
+			"ec2", "describe-instances",
+			"--instance-ids",
+		}
+		descInstancesArgs = append(descInstancesArgs, instanceIDs...)
+		descInstancesArgs = append(descInstancesArgs, "--region", region)
+
+		var descInstancesOutput DescribeInstancesOutput
+		if err := p.runJSONCommandWithContext(ctx, l, descInstancesArgs, &descInstancesOutput); err != nil {
+			l.Printf("Warning: failed to describe instances: %v", err)
+			continue
+		}
+
+		runningCount := 0
+		for _, res := range descInstancesOutput.Reservations {
+			for _, inst := range res.Instances {
+				if inst.State.Name == "running" {
+					runningCount++
+				}
+			}
+		}
+
+		if runningCount == len(instanceIDs) {
+			l.Printf("All %d instances are running", runningCount)
+			allRunning = true
+			break
+		}
+
+		l.Printf("Waiting for instances: %d/%d running", runningCount, len(instanceIDs))
+	}
+
+	if !allRunning {
+		return nil, errors.Errorf("timed out waiting for %d instances to reach running state", len(instanceIDs))
+	}
+
+	// Attach instances to the ASG
+	l.Printf("Attaching %d instances to ASG %s", len(instanceIDs), asgName)
+	attachArgs := []string{
+		"autoscaling", "attach-instances",
+		"--auto-scaling-group-name", asgName,
+		"--instance-ids",
+	}
+	attachArgs = append(attachArgs, instanceIDs...)
+	attachArgs = append(attachArgs, "--region", region)
+
+	if _, err := p.runCommandWithContext(ctx, l, attachArgs); err != nil {
+		return nil, errors.Wrapf(err, "failed to attach instances to ASG")
+	}
+
+	// Add the managed label to the new instances
+	newVMs, err := p.waitForIPs(ctx, l, names, []string{region}, providerOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the managed label
+	if err := p.AddLabels(l, newVMs, map[string]string{ManagedLabel: "true"}); err != nil {
+		l.Printf("Warning: failed to add managed label to new VMs: %v", err)
+	}
+
+	// Copy labels from existing VMs to new VMs
+	labelsToAdd := make(map[string]string)
+	for key, value := range existingVMs[0].Labels {
+		// Skip name, instance-specific labels, and AWS-reserved tags (aws:* prefix)
+		if key == "Name" || key == ManagedLabel || strings.HasPrefix(key, "aws:") {
+			continue
+		}
+		labelsToAdd[key] = value
+	}
+	if len(labelsToAdd) > 0 {
+		if err := p.AddLabels(l, newVMs, labelsToAdd); err != nil {
+			l.Printf("Warning: failed to copy labels to new VMs: %v", err)
+		}
+	}
+
+	l.Printf("Successfully added %d VMs to cluster %s", len(names), clusterName)
+	return newVMs, nil
+}
+
+// Shrink removes VMs from a managed cluster.
+// For AWS, we use terminate-instance-in-auto-scaling-group to remove specific instances.
+// This decrements the ASG's desired capacity and terminates the specified instances.
+func (p *Provider) Shrink(l *logger.Logger, vmsToDelete vm.List, clusterName string) error {
+	if !isManaged(vmsToDelete) {
+		return errors.New("shrinking is only supported for managed clusters (created with --aws-managed)")
+	}
+
+	if len(vmsToDelete) == 0 {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	// Group VMs by region
+	byRegion, err := regionMap(vmsToDelete)
+	if err != nil {
+		return err
+	}
+
+	// Terminate instances in each region
+	g := ctxgroup.WithContext(ctx)
+	for region, regionVMs := range byRegion {
+		asgName := autoScalingGroupName(clusterName, region)
+
+		// Terminate each instance
+		for _, v := range regionVMs {
+			instanceID := v.ProviderID
+			g.GoCtx(func(ctx context.Context) error {
+				l.Printf("Terminating instance %s from ASG %s", instanceID, asgName)
+
+				// Use terminate-instance-in-auto-scaling-group to properly remove from ASG
+				// and decrement desired capacity
+				args := []string{
+					"autoscaling", "terminate-instance-in-auto-scaling-group",
+					"--instance-id", instanceID,
+					"--should-decrement-desired-capacity",
+					"--region", region,
+				}
+
+				if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+					return errors.Wrapf(err, "failed to terminate instance %s", instanceID)
+				}
+
+				return nil
+			})
+		}
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Wait for instances to be terminated
+	l.Printf("Waiting for instances to terminate...")
+	waitRetry := retry.Start(retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     30,
+	})
+
+	allInstanceIDs := vmsToDelete.ProviderIDs()
+	for waitRetry.Next() {
+		allTerminated := true
+
+		for region, regionVMs := range byRegion {
+			descArgs := []string{
+				"ec2", "describe-instances",
+				"--instance-ids",
+			}
+			descArgs = append(descArgs, regionVMs.ProviderIDs()...)
+			descArgs = append(descArgs, "--region", region)
+
+			var descOutput DescribeInstancesOutput
+			if err := p.runJSONCommandWithContext(ctx, l, descArgs, &descOutput); err != nil {
+				// If instances not found, they're terminated
+				if strings.Contains(err.Error(), "InvalidInstanceID.NotFound") {
+					continue
+				}
+				l.Printf("Warning: failed to describe instances: %v", err)
+				allTerminated = false
+				continue
+			}
+
+			for _, res := range descOutput.Reservations {
+				for _, inst := range res.Instances {
+					if inst.State.Name != "terminated" && inst.State.Name != "shutting-down" {
+						allTerminated = false
+					}
+				}
+			}
+		}
+
+		if allTerminated {
+			l.Printf("All %d instances terminated", len(allInstanceIDs))
+			return nil
+		}
+
+		l.Printf("Waiting for instances to terminate...")
+	}
+
+	return errors.New("timed out waiting for instances to terminate")
 }
 
 // waitForIPs waits until AWS reports both internal and external IP addresses
@@ -921,9 +1458,15 @@ func (p *Provider) waitForIPs(
 
 // Delete is part of vm.Provider.
 // This will delete all instances in a single AWS command.
+// For managed clusters, it also deletes the ASG and launch template.
 func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	if len(vms) == 0 {
 		return nil
+	}
+
+	// For managed clusters, delete the ASG and launch template in addition to instances.
+	if isManaged(vms) {
+		return p.deleteManagedCluster(l, vms)
 	}
 
 	// clean up any load balancers that may exist.
@@ -959,45 +1502,38 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	return g.Wait()
 }
 
-// DeleteCluster implements the vm.DeleteCluster interface.
-// This deletes all cluster resources including load balancers and instances.
-func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
-	// First, list all VMs in the cluster to get their details.
+// deleteManagedCluster deletes a managed cluster's ASG, launch template, and instances.
+func (p *Provider) deleteManagedCluster(l *logger.Logger, vms vm.List) error {
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return err
+	}
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
-	regions, err := p.allRegions(p.Config.availabilityZoneNames())
-	if err != nil {
-		return err
+	g := ctxgroup.WithContext(ctx)
+
+	for region := range byRegion {
+		g.GoCtx(func(ctx context.Context) error {
+			// Delete the ASG first (this terminates instances)
+			if err := p.deleteAutoScalingGroup(ctx, l, clusterName, region); err != nil {
+				l.Printf("Warning: failed to delete ASG: %v", err)
+			}
+
+			// Delete the launch template
+			if err := p.deleteLaunchTemplate(ctx, l, clusterName, region); err != nil {
+				l.Printf("Warning: failed to delete launch template: %v", err)
+			}
+
+			return nil
+		})
 	}
 
-	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	vms, err := p.listRegions(ctx, l, regions, *defaultOpts, vm.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	// Filter to only VMs belonging to this cluster.
-	var clusterVMs vm.List
-	for _, v := range vms {
-		clusterName, err := v.ClusterName()
-		if err != nil {
-			continue
-		}
-		if clusterName == name {
-			clusterVMs = append(clusterVMs, v)
-		}
-	}
-
-	if len(clusterVMs) == 0 {
-		return nil
-	}
-
-	// Delete load balancers first (NLBs, target groups, listeners).
-	if err := p.DeleteLoadBalancer(l, clusterVMs, 0); err != nil {
-		l.Printf("Warning: failed to delete load balancers: %v", err)
-	}
-
-	// Delete the instances.
-	return p.Delete(l, clusterVMs)
+	return g.Wait()
 }
 
 // Reset is part of vm.Provider.
@@ -2313,23 +2849,41 @@ func (p *Provider) createRegionalLoadBalancer(
 	}
 	tgArn := tgOutput.TargetGroups[0].TargetGroupArn
 
-	// Step 2: Register targets (EC2 instances)
-	l.Printf("Registering %d targets with target group", len(vms))
-	targets := make([]string, 0, len(vms))
-	for _, v := range vms {
-		targets = append(targets, fmt.Sprintf("Id=%s", v.ProviderID))
-	}
+	// Step 2: Register targets with the target group.
+	// For managed clusters, attach the target group to the ASG so new instances
+	// are automatically registered. For non-managed clusters, manually register
+	// each instance.
+	if isManaged(vms) {
+		asgName := autoScalingGroupName(clusterName, region)
+		l.Printf("Attaching target group to ASG %s for automatic instance registration", asgName)
+		args = []string{
+			"autoscaling", "attach-load-balancer-target-groups",
+			"--auto-scaling-group-name", asgName,
+			"--target-group-arns", tgArn,
+			"--region", region,
+		}
+		if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+			return errors.Wrapf(err, "failed to attach target group to ASG")
+		}
+	} else {
+		// For non-managed clusters, manually register each instance
+		l.Printf("Registering %d targets with target group", len(vms))
+		targets := make([]string, 0, len(vms))
+		for _, v := range vms {
+			targets = append(targets, fmt.Sprintf("Id=%s", v.ProviderID))
+		}
 
-	args = []string{
-		"elbv2", "register-targets",
-		"--target-group-arn", tgArn,
-		"--targets",
-	}
-	args = append(args, targets...)
-	args = append(args, "--region", region)
+		args = []string{
+			"elbv2", "register-targets",
+			"--target-group-arn", tgArn,
+			"--targets",
+		}
+		args = append(args, targets...)
+		args = append(args, "--region", region)
 
-	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
-		return errors.Wrapf(err, "failed to register targets")
+		if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+			return errors.Wrapf(err, "failed to register targets")
+		}
 	}
 
 	// Step 3: Create Network Load Balancer
@@ -2489,6 +3043,7 @@ func (p *Provider) deleteLoadBalancerResources(
 }
 
 // deleteClusterTargetGroups deletes all target groups for a cluster in a region.
+// For managed clusters, it first detaches target groups from the ASG before deleting.
 func (p *Provider) deleteClusterTargetGroups(
 	ctx context.Context, l *logger.Logger, clusterName, region string,
 ) error {
@@ -2517,12 +3072,71 @@ func (p *Provider) deleteClusterTargetGroups(
 		return errors.Wrap(err, "could not get target group tags")
 	}
 
+	// Collect target group ARNs belonging to this cluster for potential ASG detachment
+	var clusterTgArns []string
 	for tgArn, tgTags := range tgTagsByArn {
 		// Match by cluster name and roachprod tag
 		if tgTags[vm.TagCluster] != clusterName || tgTags[vm.TagRoachprod] != "true" {
 			continue
 		}
+		clusterTgArns = append(clusterTgArns, tgArn)
+	}
 
+	// For managed clusters, check which target groups are actually attached to the ASG
+	// before attempting to detach them. This avoids spurious errors when no load balancer
+	// was created.
+	if len(clusterTgArns) > 0 {
+		asgName := autoScalingGroupName(clusterName, region)
+
+		// Query the ASG to get its attached target group ARNs
+		descASGArgs := []string{
+			"autoscaling", "describe-auto-scaling-groups",
+			"--auto-scaling-group-names", asgName,
+			"--region", region,
+		}
+
+		var descASGOutput struct {
+			AutoScalingGroups []struct {
+				TargetGroupARNs []string `json:"TargetGroupARNs"`
+			} `json:"AutoScalingGroups"`
+		}
+
+		attachedTgArns := make(map[string]struct{})
+		if err := p.runJSONCommandWithContext(ctx, l, descASGArgs, &descASGOutput); err == nil {
+			if len(descASGOutput.AutoScalingGroups) > 0 {
+				for _, arn := range descASGOutput.AutoScalingGroups[0].TargetGroupARNs {
+					attachedTgArns[arn] = struct{}{}
+				}
+			}
+		}
+
+		// Only detach target groups that are actually attached to the ASG
+		var tgArnsToDetach []string
+		for _, tgArn := range clusterTgArns {
+			if _, attached := attachedTgArns[tgArn]; attached {
+				tgArnsToDetach = append(tgArnsToDetach, tgArn)
+			}
+		}
+
+		if len(tgArnsToDetach) > 0 {
+			l.Printf("Detaching %d target groups from ASG %s", len(tgArnsToDetach), asgName)
+			detachArgs := []string{
+				"autoscaling", "detach-load-balancer-target-groups",
+				"--auto-scaling-group-name", asgName,
+				"--target-group-arns",
+			}
+			detachArgs = append(detachArgs, tgArnsToDetach...)
+			detachArgs = append(detachArgs, "--region", region)
+
+			if _, err := p.runCommandWithContext(ctx, l, detachArgs); err != nil {
+				// Log warning but continue - ASG may have been deleted already
+				l.Printf("Warning: failed to detach target groups from ASG: %v", err)
+			}
+		}
+	}
+
+	// Now delete the target groups
+	for _, tgArn := range clusterTgArns {
 		if err := p.deleteTargetGroup(l, tgArn, region); err != nil {
 			l.Printf("Warning: failed to delete target group: %v", err)
 		}
@@ -2644,6 +3258,422 @@ func (p *Provider) listClusterLoadBalancers(
 	}
 
 	return clusterLBs, clusterTagsByArn, nil
+}
+
+// instanceConfig holds the configuration needed to create EC2 instances,
+// either directly via run-instances or via a launch template.
+type instanceConfig struct {
+	imageID       string
+	machineType   string
+	keyName       string
+	securityGroup string
+	iamProfile    string
+	ebsVolumes    ebsVolumeList
+	cpuOptions    string
+}
+
+// getInstanceConfig builds the common instance configuration from the given options.
+// This is used by both runInstance (for unmanaged clusters) and createLaunchTemplate
+// (for managed clusters).
+func (p *Provider) getInstanceConfig(
+	l *logger.Logger, zone string, machineType string, opts vm.CreateOpts, providerOpts *ProviderOpts,
+) (*instanceConfig, *availabilityZone, error) {
+	az, ok := p.Config.AZByName[zone]
+	if !ok {
+		return nil, nil, fmt.Errorf("no region in %v corresponds to availability zone %v",
+			p.Config.regionNames(), zone)
+	}
+
+	keyName, err := p.sshKeyName(l)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Determine the AMI to use based on machine type and architecture
+	withFlagOverride := func(cfg string, fl *string) string {
+		if *fl == "" {
+			return cfg
+		}
+		return *fl
+	}
+	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
+		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1 ||
+		strings.Index(machineType, "8g.") == 1 || strings.Index(machineType, "8gd.") == 1
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return nil, nil, errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+	}
+	if useArmAMI {
+		imageID = withFlagOverride(az.Region.AMI_ARM64, &providerOpts.ImageAMI)
+	}
+	if opts.Arch == string(vm.ArchFIPS) {
+		imageID = withFlagOverride(az.Region.AMI_FIPS, &providerOpts.ImageAMI)
+	}
+
+	ebsVolumes := assignEBSVolumes(&opts, providerOpts)
+
+	return &instanceConfig{
+		imageID:       imageID,
+		machineType:   machineType,
+		keyName:       keyName,
+		securityGroup: az.Region.SecurityGroup,
+		iamProfile:    providerOpts.IAMProfile,
+		ebsVolumes:    ebsVolumes,
+		cpuOptions:    providerOpts.CPUOptions,
+	}, az, nil
+}
+
+// launchTemplateName returns the name of the launch template for a cluster.
+func launchTemplateName(clusterName string) string {
+	return fmt.Sprintf("%s-lt", clusterName)
+}
+
+// autoScalingGroupName returns the name of the auto scaling group for a cluster in a region.
+// AWS ASGs are regional (can span multiple AZs within a region).
+func autoScalingGroupName(clusterName, region string) string {
+	return fmt.Sprintf("%s-%s-asg", clusterName, region)
+}
+
+// isManaged returns true if the VMs belong to a managed cluster (created with --aws-managed).
+// A managed cluster uses launch templates and auto scaling groups.
+func isManaged(vms vm.List) bool {
+	if len(vms) == 0 {
+		return false
+	}
+	return vms[0].Labels[ManagedLabel] == "true"
+}
+
+// createLaunchTemplateOutput represents the output of create-launch-template.
+type createLaunchTemplateOutput struct {
+	LaunchTemplate struct {
+		LaunchTemplateID   string `json:"LaunchTemplateId"`
+		LaunchTemplateName string `json:"LaunchTemplateName"`
+	} `json:"LaunchTemplate"`
+}
+
+// createLaunchTemplate creates an EC2 launch template for the cluster.
+// The launch template captures all instance configuration (AMI, instance type,
+// security groups, volumes, etc.) so that the ASG can launch identical instances.
+func (p *Provider) createLaunchTemplate(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	region string,
+	cfg *instanceConfig,
+	az *availabilityZone,
+	opts vm.CreateOpts,
+	providerOpts *ProviderOpts,
+) (string, error) {
+	ltName := launchTemplateName(clusterName)
+
+	// Create startup script for user-data
+	extraMountOpts := ""
+	if opts.SSDOpts.UseLocalSSD {
+		if opts.SSDOpts.NoExt4Barrier && opts.SSDOpts.FileSystem == vm.Ext4 {
+			extraMountOpts = "nobarrier"
+		}
+	}
+
+	// For launch templates, we use a generic name since instances will be named by ASG
+	filename, err := writeStartupScript(
+		clusterName,
+		extraMountOpts,
+		opts.SSDOpts.FileSystem,
+		providerOpts.UseMultipleDisks,
+		opts.Arch == string(vm.ArchFIPS),
+		providerOpts.RemoteUserName,
+		providerOpts.BootDiskOnly,
+	)
+	if err != nil {
+		return "", errors.Wrapf(err, "could not write AWS startup script to temp file")
+	}
+	defer func() {
+		_ = os.Remove(filename)
+	}()
+
+	// Read the startup script content
+	userData, err := os.ReadFile(filename)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read startup script")
+	}
+
+	// Build launch template data as JSON
+	// We need to use a JSON file for complex launch template configurations
+	ltData := map[string]interface{}{
+		"ImageId":      cfg.imageID,
+		"InstanceType": cfg.machineType,
+		"KeyName":      cfg.keyName,
+		"SecurityGroupIds": []string{
+			cfg.securityGroup,
+		},
+		"UserData": userData,
+		"TagSpecifications": []map[string]interface{}{
+			{
+				"ResourceType": "instance",
+				"Tags": []map[string]string{
+					{"Key": vm.TagCluster, "Value": clusterName},
+					{"Key": vm.TagRoachprod, "Value": "true"},
+					{"Key": ManagedLabel, "Value": "true"},
+					{"Key": "Cluster", "Value": clusterName}, // Legacy tag for cost analysis
+				},
+			},
+			{
+				"ResourceType": "volume",
+				"Tags": []map[string]string{
+					{"Key": vm.TagCluster, "Value": clusterName},
+					{"Key": vm.TagRoachprod, "Value": "true"},
+				},
+			},
+		},
+		"BlockDeviceMappings": cfg.ebsVolumes,
+	}
+
+	if cfg.iamProfile != "" {
+		ltData["IamInstanceProfile"] = map[string]string{
+			"Name": cfg.iamProfile,
+		}
+	}
+
+	if cfg.cpuOptions != "" {
+		// Parse cpuOptions string (format: "CoreCount=X,ThreadsPerCore=Y")
+		ltData["CpuOptions"] = cfg.cpuOptions
+	}
+
+	// Write launch template data to a temp file
+	ltDataJSON, err := json.Marshal(ltData)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to marshal launch template data")
+	}
+
+	ltDataFile, err := os.CreateTemp("", "aws-launch-template-data")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create temp file for launch template data")
+	}
+	defer func() {
+		ltDataFile.Close()
+		_ = os.Remove(ltDataFile.Name())
+	}()
+
+	if _, err := ltDataFile.Write(ltDataJSON); err != nil {
+		return "", errors.Wrap(err, "failed to write launch template data")
+	}
+	ltDataFile.Close()
+
+	l.Printf("Creating launch template %s in region %s", ltName, region)
+	args := []string{
+		"ec2", "create-launch-template",
+		"--launch-template-name", ltName,
+		"--launch-template-data", "file://" + ltDataFile.Name(),
+		"--tag-specifications",
+		fmt.Sprintf("ResourceType=launch-template,Tags=[{Key=%s,Value=%s},{Key=%s,Value=true},{Key=%s,Value=true}]",
+			vm.TagCluster, clusterName, vm.TagRoachprod, ManagedLabel),
+		"--region", region,
+	}
+
+	var output createLaunchTemplateOutput
+	if err := p.runJSONCommandWithContext(ctx, l, args, &output); err != nil {
+		return "", errors.Wrapf(err, "failed to create launch template")
+	}
+
+	l.Printf("Created launch template: %s (ID: %s)", ltName, output.LaunchTemplate.LaunchTemplateID)
+	return output.LaunchTemplate.LaunchTemplateID, nil
+}
+
+// createAutoScalingGroup creates an Auto Scaling Group for the cluster in a region.
+// The ASG manages the desired number of instances using the launch template.
+func (p *Provider) createAutoScalingGroup(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	region string,
+	launchTemplateID string,
+	zones []string,
+	desiredCapacity int,
+	opts vm.CreateOpts,
+) error {
+	asgName := autoScalingGroupName(clusterName, region)
+
+	// Collect subnet IDs for the zones
+	var subnetIDs []string
+	for _, zone := range zones {
+		az, ok := p.Config.AZByName[zone]
+		if ok && az.SubnetID != "" {
+			subnetIDs = append(subnetIDs, az.SubnetID)
+		}
+	}
+
+	if len(subnetIDs) == 0 {
+		return errors.Errorf("no subnets found for zones %v", zones)
+	}
+
+	l.Printf("Creating Auto Scaling Group %s in region %s with %d instances", asgName, region, desiredCapacity)
+
+	// Build tags for the ASG
+	tags := []string{
+		fmt.Sprintf("Key=%s,Value=%s,PropagateAtLaunch=true", vm.TagCluster, clusterName),
+		fmt.Sprintf("Key=%s,Value=true,PropagateAtLaunch=true", vm.TagRoachprod),
+		fmt.Sprintf("Key=%s,Value=true,PropagateAtLaunch=true", ManagedLabel),
+		fmt.Sprintf("Key=%s,Value=%s,PropagateAtLaunch=true", vm.TagLifetime, opts.Lifetime.String()),
+		fmt.Sprintf("Key=Cluster,Value=%s,PropagateAtLaunch=true", clusterName), // Legacy tag
+	}
+
+	args := []string{
+		"autoscaling", "create-auto-scaling-group",
+		"--auto-scaling-group-name", asgName,
+		"--launch-template", fmt.Sprintf("LaunchTemplateId=%s,Version=$Latest", launchTemplateID),
+		"--min-size", "0",
+		"--max-size", strconv.Itoa(desiredCapacity * 2), // Allow room for growth
+		"--desired-capacity", strconv.Itoa(desiredCapacity),
+		"--vpc-zone-identifier", strings.Join(subnetIDs, ","),
+		"--tags",
+	}
+	args = append(args, tags...)
+	args = append(args, "--region", region)
+
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to create auto scaling group")
+	}
+
+	l.Printf("Created Auto Scaling Group: %s", asgName)
+
+	// When desiredCapacity is 0, we don't need to wait for instances.
+	// The caller will create and attach instances separately to preserve
+	// roachprod naming conventions (AWS ASG doesn't support custom instance names).
+	if desiredCapacity == 0 {
+		return nil
+	}
+
+	// Wait for instances to be running
+	l.Printf("Waiting for %d instances to launch...", desiredCapacity)
+	waitRetry := retry.Start(retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     60, // Wait up to ~10 minutes
+	})
+
+	for waitRetry.Next() {
+		// Check ASG status
+		descArgs := []string{
+			"autoscaling", "describe-auto-scaling-groups",
+			"--auto-scaling-group-names", asgName,
+			"--region", region,
+		}
+
+		var descOutput struct {
+			AutoScalingGroups []struct {
+				Instances []struct {
+					InstanceID     string `json:"InstanceId"`
+					LifecycleState string `json:"LifecycleState"`
+				} `json:"Instances"`
+			} `json:"AutoScalingGroups"`
+		}
+
+		if err := p.runJSONCommandWithContext(ctx, l, descArgs, &descOutput); err != nil {
+			l.Printf("Warning: failed to describe ASG: %v", err)
+			continue
+		}
+
+		if len(descOutput.AutoScalingGroups) == 0 {
+			continue
+		}
+
+		inServiceCount := 0
+		for _, inst := range descOutput.AutoScalingGroups[0].Instances {
+			if inst.LifecycleState == "InService" {
+				inServiceCount++
+			}
+		}
+
+		if inServiceCount >= desiredCapacity {
+			l.Printf("All %d instances are InService", inServiceCount)
+			return nil
+		}
+
+		l.Printf("Waiting for instances: %d/%d InService", inServiceCount, desiredCapacity)
+	}
+
+	return errors.Errorf("timed out waiting for ASG instances to become InService")
+}
+
+// deleteLaunchTemplate deletes the launch template for a cluster.
+func (p *Provider) deleteLaunchTemplate(
+	ctx context.Context, l *logger.Logger, clusterName, region string,
+) error {
+	ltName := launchTemplateName(clusterName)
+
+	l.Printf("Deleting launch template %s in region %s", ltName, region)
+	args := []string{
+		"ec2", "delete-launch-template",
+		"--launch-template-name", ltName,
+		"--region", region,
+	}
+
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		// Ignore "not found" errors
+		if !strings.Contains(err.Error(), "InvalidLaunchTemplateName.NotFoundException") {
+			return errors.Wrapf(err, "failed to delete launch template")
+		}
+		l.Printf("Launch template %s not found, skipping", ltName)
+	}
+
+	return nil
+}
+
+// deleteAutoScalingGroup deletes the Auto Scaling Group for a cluster in a region.
+func (p *Provider) deleteAutoScalingGroup(
+	ctx context.Context, l *logger.Logger, clusterName, region string,
+) error {
+	asgName := autoScalingGroupName(clusterName, region)
+
+	l.Printf("Deleting Auto Scaling Group %s in region %s (with force-delete)", asgName, region)
+	args := []string{
+		"autoscaling", "delete-auto-scaling-group",
+		"--auto-scaling-group-name", asgName,
+		"--force-delete", // Terminates all instances
+		"--region", region,
+	}
+
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		// Ignore "not found" errors
+		if !strings.Contains(err.Error(), "AutoScalingGroup name not found") {
+			return errors.Wrapf(err, "failed to delete auto scaling group")
+		}
+		l.Printf("Auto Scaling Group %s not found, skipping", asgName)
+	}
+
+	// Wait for ASG to be deleted
+	l.Printf("Waiting for Auto Scaling Group deletion...")
+	waitRetry := retry.Start(retry.Options{
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     30 * time.Second,
+		MaxRetries:     30, // Wait up to ~5 minutes
+	})
+
+	for waitRetry.Next() {
+		descArgs := []string{
+			"autoscaling", "describe-auto-scaling-groups",
+			"--auto-scaling-group-names", asgName,
+			"--region", region,
+		}
+
+		var descOutput struct {
+			AutoScalingGroups []struct {
+				AutoScalingGroupName string `json:"AutoScalingGroupName"`
+			} `json:"AutoScalingGroups"`
+		}
+
+		if err := p.runJSONCommandWithContext(ctx, l, descArgs, &descOutput); err != nil {
+			l.Printf("Warning: failed to describe ASG: %v", err)
+			continue
+		}
+
+		if len(descOutput.AutoScalingGroups) == 0 {
+			l.Printf("Auto Scaling Group %s deleted", asgName)
+			return nil
+		}
+	}
+
+	return errors.Errorf("timed out waiting for ASG deletion")
 }
 
 // String returns a human-readable string representation of the Provider.
