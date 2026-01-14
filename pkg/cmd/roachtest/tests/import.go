@@ -315,6 +315,13 @@ var tests = []importTestSpec{
 		datasetNames: FromFunc(anyDataset),
 		preTestHook:  makeColumnFamilies,
 	},
+	// Test pause and resume of import jobs.
+	{
+		subtestName:  "pause",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: importPauseRunner,
+	},
 }
 
 func registerImport(r registry.Registry) {
@@ -736,6 +743,106 @@ func importCancellationRunner(
 	// Restore GC TTLs so we don't interfere with post-import table validation.
 	_, err = conn.ExecContext(ctx, ttl_stmt, 60*60*4 /* 4 hours */)
 	return err
+}
+
+// importPauseRunner() is the test runner for the import pause test.
+// This test starts an import job, pauses it multiple times during execution,
+// resumes it, and verifies successful completion.
+func importPauseRunner(
+	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, rng *rand.Rand, ds dataset,
+) error {
+	conn := c.Conn(ctx, l, 1)
+	defer conn.Close()
+
+	// Start async import job
+	jobID, err := runAsyncImportJob(ctx, conn, ds)
+	if err != nil {
+		return err
+	}
+
+	// Wait for job to start running
+	if err := WaitForRunning(ctx, conn, jobID, time.Minute); err != nil {
+		return errors.Wrapf(err, "waiting for job %d to start running", jobID)
+	}
+
+	// Determine number of pause cycles (2-4 times)
+	numPauses := randutil.RandIntInRange(rng, 2, 5)
+	t.WorkerStatus(fmt.Sprintf("will pause/resume job %d %d times", jobID, numPauses))
+
+	// Perform multiple pause/resume cycles
+	for i := 0; i < numPauses; i++ {
+		// Wait before pausing (random duration)
+		var waitBeforePause time.Duration
+		if c.IsLocal() {
+			// Local tests run faster, shorter wait
+			waitBeforePause = time.Duration(randutil.RandIntInRange(rng, 5, 15)) * time.Second
+		} else {
+			// Longer wait for roachprod clusters
+			waitBeforePause = time.Duration(randutil.RandIntInRange(rng, 10, 45)) * time.Second
+		}
+
+		select {
+		case <-time.After(waitBeforePause):
+			// Continue to pause
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		// Check if job already completed (might finish before all pauses)
+		var status string
+		err = conn.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
+		if err != nil {
+			return errors.Wrapf(err, "checking job status before pause %d", i+1)
+		}
+		if status == "succeeded" {
+			t.WorkerStatus(fmt.Sprintf("job %d completed before pause %d/%d", jobID, i+1, numPauses))
+			return nil
+		}
+
+		// Pause the job
+		t.WorkerStatus(fmt.Sprintf("pausing job %d (pause %d/%d)", jobID, i+1, numPauses))
+		_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+		if err != nil {
+			return errors.Wrapf(err, "pausing job %d", jobID)
+		}
+
+		// Wait for paused state
+		if err := WaitForPaused(ctx, conn, jobID, 2*time.Minute); err != nil {
+			return errors.Wrapf(err, "waiting for job %d to pause", jobID)
+		}
+
+		// Keep paused for a bit
+		var pauseDuration time.Duration
+		if c.IsLocal() {
+			pauseDuration = time.Duration(randutil.RandIntInRange(rng, 3, 10)) * time.Second
+		} else {
+			pauseDuration = time.Duration(randutil.RandIntInRange(rng, 5, 20)) * time.Second
+		}
+		t.WorkerStatus(fmt.Sprintf("job %d paused, keeping paused for %v", jobID, pauseDuration))
+		time.Sleep(pauseDuration)
+
+		// Resume the job
+		t.WorkerStatus(fmt.Sprintf("resuming job %d (pause %d/%d)", jobID, i+1, numPauses))
+		_, err = conn.ExecContext(ctx, `RESUME JOB $1`, jobID)
+		if err != nil {
+			return errors.Wrapf(err, "resuming job %d", jobID)
+		}
+
+		// Wait for job to be running again
+		if err := WaitForResume(ctx, conn, jobID, 2*time.Minute); err != nil {
+			return errors.Wrapf(err, "waiting for job %d to resume", jobID)
+		}
+		t.WorkerStatus(fmt.Sprintf("job %d resumed successfully", jobID))
+	}
+
+	// Wait for final completion
+	t.WorkerStatus(fmt.Sprintf("waiting for job %d to complete after %d pause cycles", jobID, numPauses))
+	if err := WaitForSucceeded(ctx, conn, jobID, 30*time.Minute); err != nil {
+		return errors.Wrapf(err, "waiting for job %d to succeed", jobID)
+	}
+
+	t.WorkerStatus(fmt.Sprintf("job %d completed successfully after %d pause/resume cycles", jobID, numPauses))
+	return nil
 }
 
 // makeColumnFamilies() is a pre-test hook that changes the tables
