@@ -26,13 +26,29 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 6)
 # - [1-2) and [2-3) are on node 2
 # - [3-4) and [4-5) are on node 3
 # - [5-6) and [6-7) are on node 1.
+retry
 statement ok
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1';
-ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2';
-ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%3';
-ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%4';
-ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%5';
-ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%6';
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%1'
+
+retry
+statement ok
+ALTER RANGE RELOCATE LEASE TO 2 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%2'
+
+retry
+statement ok
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%3'
+
+retry
+statement ok
+ALTER RANGE RELOCATE LEASE TO 3 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%4'
+
+retry
+statement ok
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%5'
+
+retry
+statement ok
+ALTER RANGE RELOCATE LEASE TO 1 FOR SELECT range_id FROM crdb_internal.ranges WHERE start_pretty LIKE '%Tenant%6'
 
 # Populate the range cache.
 statement ok
