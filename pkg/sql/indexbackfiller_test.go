@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"os"
+	"regexp"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -53,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
@@ -1044,6 +1046,129 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 	require.GreaterOrEqual(t, manifestCountByIteration[1], 12)
 	require.GreaterOrEqual(t, manifestCountByIteration[2], 12)
 	require.GreaterOrEqual(t, manifestCountByIteration[3], 12)
+}
+
+// TestDistributedMergeAcrossNodes verifies that the distributed merge pipeline
+// involves multiple nodes. It creates a multi-node cluster, distributes data
+// across nodes via split/scatter, and verifies that multiple nodes participate
+// in the merge process by checking both the storage prefixes in the job payload
+// and the manifests produced during merge iterations.
+func TestDistributedMergeAcrossNodes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+
+	// Track which nodes produced manifests during each merge iteration.
+	// Maps iteration number -> set of node IDs that produced manifests.
+	var mu syncutil.Mutex
+	nodesByIteration := make(map[int]map[string]struct{})
+
+	const numNodes = 3
+
+	// Create separate temp directories for each node to avoid file collisions.
+	tempDirs := make([]string, numNodes)
+	for i := 0; i < numNodes; i++ {
+		tempDirs[i] = t.TempDir()
+	}
+
+	// Shared testing knobs for all nodes.
+	testingKnobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		DistSQL: &execinfra.TestingKnobs{
+			AfterDistributedMergeIteration: func(_ context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
+				// Extract node IDs from manifest URIs (format: nodelocal://<nodeID>/...).
+				nodeIDRegex := regexp.MustCompile(`^nodelocal://(\d+)/`)
+				mu.Lock()
+				defer mu.Unlock()
+				if nodesByIteration[iteration] == nil {
+					nodesByIteration[iteration] = make(map[string]struct{})
+				}
+				for _, m := range manifests {
+					if matches := nodeIDRegex.FindStringSubmatch(m.URI); len(matches) > 1 {
+						nodesByIteration[iteration][matches[1]] = struct{}{}
+					}
+				}
+			},
+		},
+	}
+
+	// Configure each node with its own isolated external storage directory.
+	serverArgsPerNode := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: tempDirs[i],
+			Knobs:         testingKnobs,
+		}
+	}
+
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgsPerNode,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 25`)
+	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
+
+	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v TEXT)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, repeat('x', 100) || i::text FROM generate_series(1, 10000) AS g(i)`)
+	tdb.Exec(t, `ALTER TABLE t SPLIT AT SELECT i*1000 FROM generate_series(1, 9) AS g(i)`)
+	tdb.Exec(t, `ALTER TABLE t SCATTER`)
+
+	// Verify ranges are distributed across multiple nodes.
+	var nodeCount int
+	tdb.QueryRow(t, `SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM TABLE t WITH DETAILS]`).Scan(&nodeCount)
+	require.Greater(t, nodeCount, 1, "expected ranges on multiple nodes, got %d", nodeCount)
+	t.Logf("ranges distributed across %d nodes", nodeCount)
+
+	// Create an index to trigger the distributed merge pipeline.
+	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
+
+	// Find the schema change job that was created.
+	var jobID int64
+	tdb.QueryRow(t, `
+		SELECT job_id FROM crdb_internal.jobs
+		WHERE job_type = 'NEW SCHEMA CHANGE'
+		AND description LIKE '%CREATE INDEX idx%'
+		ORDER BY created DESC
+		LIMIT 1
+	`).Scan(&jobID)
+	require.NotZero(t, jobID, "expected to find schema change job")
+
+	// Read the job payload to check for storage prefixes from multiple nodes.
+	var payloadBytes []byte
+	tdb.QueryRow(t, `SELECT payload FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&payloadBytes)
+
+	payload := &jobspb.Payload{}
+	require.NoError(t, protoutil.Unmarshal(payloadBytes, payload))
+	schemaChangeDetails := payload.Details.(*jobspb.Payload_NewSchemaChange).NewSchemaChange
+	require.NotNil(t, schemaChangeDetails)
+	require.NotEmpty(t, schemaChangeDetails.BackfillProgress)
+	backfillProgress := schemaChangeDetails.BackfillProgress[0]
+	require.Greater(t, len(backfillProgress.SSTStoragePrefixes), 1,
+		"expected storage prefixes from multiple nodes, but only found prefixes from 1 nodes: %v",
+		backfillProgress.SSTStoragePrefixes)
+
+	// Verify that at least one merge iteration produced manifests from multiple nodes.
+	// This confirms that merge work is distributed across the cluster.
+	var foundMultiNodeIteration bool
+	mu.Lock()
+	for iteration, nodes := range nodesByIteration {
+		t.Logf("iteration %d: nodes that produced manifests: %v", iteration, nodes)
+		if len(nodes) > 1 {
+			foundMultiNodeIteration = true
+		}
+	}
+	mu.Unlock()
+
+	require.True(t, foundMultiNodeIteration,
+		"expected at least one merge iteration to produce manifests from multiple nodes, "+
+			"but all iterations only had manifests from a single node")
 }
 
 // pauseResumeTestState encapsulates shared state used by testing hooks

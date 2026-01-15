@@ -381,6 +381,7 @@ go_library(
         "//pkg/sql/auditlogging",
         "//pkg/sql/auditlogging/auditevents",
         "//pkg/sql/backfill",
+        "//pkg/sql/bulksst",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
