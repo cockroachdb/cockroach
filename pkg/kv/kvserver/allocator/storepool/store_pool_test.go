@@ -691,12 +691,14 @@ func TestStorePoolSuspected(t *testing.T) {
 		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 
-	// Verify that if the store is considered unreachable in StoreLiveness, then
-	// the returned status is storeStatusDead.
+	// Verify that if the store is considered unreachable in StoreLiveness, we
+	// do NOT mark it as dead. This is because support may be withdrawn for
+	// legitimate reasons (e.g., no replicas with leaders on the remote store)
+	// that do not warrant marking the store as dead.
 	msl.SetIsUnreachable(true)
 	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
 		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
-	require.Equal(t, s, StoreStatusDead)
+	require.Equal(t, s, StoreStatusAvailable)
 
 	// Verify that the store is considered suspect by virtue of its last support
 	// withdrawn timestamp in StoreLiveness by setting the last withdrawn
