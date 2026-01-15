@@ -1020,6 +1020,19 @@ func (tc *Collection) GetDescriptorsInSpans(
 	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
+// GetAllTableIDsInDatabaseFromStorage scans the system.descriptor table and
+// returns the IDs of all tables whose parent database ID matches the given ID.
+// This includes dropped tables that don't have namespace entries. Unlike
+// GetAll(), this reads only from storage and does not include uncommitted,
+// synthetic, or virtual descriptors. It uses lightweight proto parsing to
+// extract the parent_id without full unmarshaling, making it efficient for
+// large clusters.
+func (tc *Collection) GetAllTableIDsInDatabaseFromStorage(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	return tc.cr.ScanAllTableIDsInDatabase(ctx, txn, parentDBID)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
