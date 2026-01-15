@@ -394,6 +394,20 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// PartitionAlgEnabled enables the partition_alg changefeed option.
+// TODO(#126991): delete reference to changefeed.new_kafka_sink_enabled
+// when enabled everywhere.
+var PartitionAlgEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.partition_alg.enabled",
+	"if enabled, allows specifying the partition_alg changefeed option to "+
+		"choose between fnv-1a (default) and murmur2 hash functions for "+
+		"Kafka partitioning. Only affects changefeeds using a kafka sink "+
+		"with changefeed.new_kafka_sink_enabled set to true.",
+	false,
+	settings.WithPublic,
+)
+
 // UseBareTableNames is used to enable and disable the use of bare table names
 // in changefeed topics.
 var UseBareTableNames = settings.RegisterBoolSetting(

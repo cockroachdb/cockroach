@@ -7918,6 +7918,71 @@ func TestChangefeedErrors(t *testing.T) {
 
 }
 
+// TestChangefeedOptionPartitionAlg validates the changefeed option partition_alg.
+func TestChangefeedOptionPartitionAlg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := cluster.Server(1)
+
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.SucceedsSoonDuration = 5 * time.Second
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.partition_alg.enabled = false`)
+
+	// Validate that the cluster setting is required.
+	sqlDB.ExpectErrWithTimeout(
+		t, `option "partition_alg" requires cluster setting "changefeed.partition_alg.enabled" to be enabled`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH partition_alg = 'fnv-1a'`, `kafka://`,
+	)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.partition_alg.enabled = true`)
+
+	t.Run("invalid", func(t *testing.T) {
+		nonKafkaSinks := []string{"https://", "s3://bucket/path"}
+
+		for _, sink := range nonKafkaSinks {
+			sqlDB.ExpectErrWithTimeout(
+				t, `this sink is incompatible with option partition_alg`,
+				`CREATE CHANGEFEED FOR foo INTO $1 WITH partition_alg = 'murmur2'`, sink,
+			)
+		}
+
+		sqlDB.ExpectErrWithTimeout(
+			t, `unknown partition_alg: invalid, valid values are 'fnv-1a' and 'murmur2'`,
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH partition_alg = 'invalid'`, `kafka://`,
+		)
+
+		sqlDB.ExpectErrWithTimeout(
+			t, `option "partition_alg" requires a value`,
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH partition_alg`, `kafka://`,
+		)
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo INTO 'kafka://does.not.matter/' WITH partition_alg = 'murmur2'`)
+		defer closeFeed(t, testFeed)
+		testFeed2 := feed(t, f, `CREATE CHANGEFEED FOR foo INTO 'kafka://does.not.matter/' WITH partition_alg = 'fnv-1a'`)
+		defer closeFeed(t, testFeed2)
+	})
+}
+
 func TestChangefeedDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -13363,7 +13428,7 @@ func TestDatabaseLevelChangefeedHibernationPollingFrequency(t *testing.T) {
 			Type: jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
 		}},
 	}
-	if err := validateDetailsAndOptions(tableDetails, opts); err == nil {
+	if err := validateDetailsAndOptions(tableDetails, opts, cluster.MakeTestingClusterSettings()); err == nil {
 		t.Fatalf("expected error when %q is set for table-level changefeed",
 			changefeedbase.OptHibernationPollingFrequency)
 	}
@@ -13373,7 +13438,7 @@ func TestDatabaseLevelChangefeedHibernationPollingFrequency(t *testing.T) {
 			Type: jobspb.ChangefeedTargetSpecification_DATABASE,
 		}},
 	}
-	if err := validateDetailsAndOptions(dbDetails, opts); err != nil {
+	if err := validateDetailsAndOptions(dbDetails, opts, cluster.MakeTestingClusterSettings()); err != nil {
 		t.Fatalf("unexpected error for db-level changefeed: %v", err)
 	}
 }

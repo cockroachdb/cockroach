@@ -2817,7 +2817,7 @@ func TestAlterChangefeedAddDropSameTarget(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO bar VALUES(2)`)
 		assertPayloads(t, testFeed, []string{
 			// TODO(#144032): This row should be produced.
-			//`bar: [1]->{"after": {"a": 1}}`,
+			// `bar: [1]->{"after": {"a": 1}}`,
 			`bar: [2]->{"after": {"a": 2}}`,
 		})
 	}
@@ -2999,6 +2999,48 @@ func TestAlterChangefeedRandomizedTargetChanges(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+}
+
+func TestAlterChangefeedSetPartitionAlgOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.partition_alg.enabled = true`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH partition_alg='murmur2'`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET partition_alg='fnv-1a'`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobState(sqlDB, t, feed.JobID(), `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+
+		// When disabled, unable to set partition_alg option.
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.partition_alg.enabled = false`)
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobState(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.ExpectErr(t,
+			`option "partition_alg" requires cluster setting "changefeed.partition_alg.enabled" to be enabled`,
+			fmt.Sprintf(`ALTER CHANGEFEED %d SET partition_alg='murmur2'`, feed.JobID()),
+		)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 // makeSet returns a new set with the elements in the provided slice.
