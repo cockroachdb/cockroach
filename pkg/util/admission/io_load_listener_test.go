@@ -490,6 +490,10 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	fmt.Fprintf(&g.buf, "\n")
 }
 
+func (g *testGranterWithIOTokens) hasExhaustedDiskTokens() bool {
+	return false
+}
+
 func tokensForTokenTickDurationToString(tokens int64) string {
 	if tokens >= unlimitedTokens/loadedDuration.ticksInAdjustmentInterval() {
 		return "unlimited"
@@ -542,6 +546,10 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 	require.LessOrEqual(g.t, 1.0, writeAmpLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), writeAmpLM.constant)
+}
+
+func (g *testGranterNonNegativeTokens) hasExhaustedDiskTokens() bool {
+	return false
 }
 
 // Tests if the tokenAllocationTicker produces correct adjustment interval
