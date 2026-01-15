@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "inspect",
     srcs = [
+        "check_helpers.go",
         "cluster_runner.go",
         "index_consistency_check.go",
         "inspect_job_entry.go",
