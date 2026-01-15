@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -1074,7 +1073,11 @@ func maybeUpgradeDescriptorsInBackupManifests(
 // them to be suitable for displaying in the jobs' description.
 // This includes redacting secrets from external storage URIs.
 func resolveOptionsForRestoreJobDescription(
-	ctx context.Context, opts tree.RestoreOptions, intoDB string, newDBName string, kmsURIs []string,
+	ctx context.Context,
+	exprEval exprutil.Evaluator,
+	opts tree.RestoreOptions,
+	intoDB string,
+	newDBName string,
 ) (tree.RestoreOptions, error) {
 	if opts.IsDefault() {
 		return opts, nil
@@ -1111,13 +1114,21 @@ func resolveOptionsForRestoreJobDescription(
 		newOpts.NewDBName = tree.NewDString(newDBName)
 	}
 
-	for _, uri := range kmsURIs {
-		redactedURI, err := cloud.RedactKMSURI(uri)
+	if opts.DecryptionKMSURI != nil {
+		kmsURIs, err := exprEval.StringArray(
+			ctx, tree.Exprs(opts.DecryptionKMSURI),
+		)
 		if err != nil {
 			return tree.RestoreOptions{}, err
 		}
-		newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
-		logSanitizedKmsURI(ctx, redactedURI)
+		for _, uri := range kmsURIs {
+			redactedURI, err := cloud.RedactKMSURI(uri)
+			if err != nil {
+				return tree.RestoreOptions{}, err
+			}
+			newOpts.DecryptionKMSURI = append(newOpts.DecryptionKMSURI, tree.NewDString(redactedURI))
+			logSanitizedKmsURI(ctx, redactedURI)
+		}
 	}
 
 	return newOpts, nil
@@ -1126,12 +1137,12 @@ func resolveOptionsForRestoreJobDescription(
 func restoreJobDescription(
 	ctx context.Context,
 	p sql.PlanHookState,
+	exprEval exprutil.Evaluator,
 	restore *tree.Restore,
 	from []string,
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
-	kmsURIs []string,
 	resolvedSubdir string,
 ) (string, error) {
 	r := &tree.Restore{
@@ -1143,8 +1154,9 @@ func restoreJobDescription(
 
 	var options tree.RestoreOptions
 	var err error
-	if options, err = resolveOptionsForRestoreJobDescription(ctx, opts, intoDB, newDBName,
-		kmsURIs); err != nil {
+	if options, err = resolveOptionsForRestoreJobDescription(
+		ctx, exprEval, opts, intoDB, newDBName,
+	); err != nil {
 		return "", err
 	}
 	r.Options = options
@@ -1234,29 +1246,6 @@ func restorePlanHook(
 	from, err := exprEval.StringArray(ctx, tree.Exprs(restoreStmt.From))
 	if err != nil {
 		return nil, nil, false, err
-	}
-
-	var pw string
-	if restoreStmt.Options.EncryptionPassphrase != nil {
-		var err error
-		pw, err = exprEval.String(ctx, restoreStmt.Options.EncryptionPassphrase)
-		if err != nil {
-			return nil, nil, false, err
-		}
-	}
-
-	var kms []string
-	if restoreStmt.Options.DecryptionKMSURI != nil {
-		if restoreStmt.Options.EncryptionPassphrase != nil {
-			return nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
-		}
-		var err error
-		kms, err = exprEval.StringArray(
-			ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
-		)
-		if err != nil {
-			return nil, nil, false, err
-		}
 	}
 
 	var intoDB string
@@ -1390,8 +1379,8 @@ func restorePlanHook(
 		}
 
 		return doRestorePlan(
-			ctx, restoreStmt, &exprEval, p, from, pw, kms, intoDB,
-			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir, execLocality,
+			ctx, restoreStmt, exprEval, p, from, intoDB, newDBName, newTenantID,
+			newTenantName, endTime, resultsCh, subdir, execLocality,
 		)
 	}
 
@@ -1621,11 +1610,9 @@ func checkBackupManifestVersionCompatability(
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
-	exprEval *exprutil.Evaluator,
+	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
 	from []string,
-	passphrase string,
-	kms []string,
 	intoDB string,
 	newDBName string,
 	newTenantID *roachpb.TenantID,
@@ -1703,44 +1690,12 @@ func doRestorePlan(
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings, &ioConf, p.ExecCfg().InternalDB, p.User(),
 	)
-
-	var encryption *jobspb.BackupEncryptionOptions
-	if restoreStmt.Options.EncryptionPassphrase != nil {
-		opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStores[0])
-		if err != nil {
-			return err
-		}
-		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
-		encryption = &jobspb.BackupEncryptionOptions{
-			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  encryptionKey,
-		}
-	} else if restoreStmt.Options.DecryptionKMSURI != nil {
-		opts, err := backupencryption.ReadEncryptionOptions(ctx, baseStores[0])
-		if err != nil {
-			return err
-		}
-
-		// A backup could have been encrypted with multiple KMS keys that
-		// are stored across ENCRYPTION-INFO files. Iterate over all
-		// ENCRYPTION-INFO files to check if the KMS passed in during
-		// restore has been used to encrypt the backup at least once.
-		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
-		for _, encFile := range opts {
-			defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(ctx, kms,
-				backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
-				&kmsEnv)
-			if err == nil {
-				break
-			}
-		}
-		if err != nil {
-			return err
-		}
-		encryption = &jobspb.BackupEncryptionOptions{
-			Mode:    jobspb.EncryptionMode_KMS,
-			KMSInfo: defaultKMSInfo,
-		}
+	encryption, err := backupencryption.ResolveEncryptionOptionsFromExpr(
+		ctx, p, exprEval, baseStores[0],
+		restoreStmt.Options.EncryptionPassphrase, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
+	)
+	if err != nil {
+		return err
 	}
 
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
@@ -1959,12 +1914,12 @@ func doRestorePlan(
 	description, err := restoreJobDescription(
 		ctx,
 		p,
+		exprEval,
 		restoreStmt,
 		from,
 		restoreStmt.Options,
 		intoDB,
 		newDBName,
-		kms,
 		fullyResolvedSubdir,
 	)
 	if err != nil {

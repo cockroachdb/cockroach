@@ -271,15 +271,15 @@ func legacyCollectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
-	baseStores := make([]cloud.ExternalStorage, len(fullyResolvedDest))
-	for j := range fullyResolvedDest {
-		baseStores[j], err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, fullyResolvedDest[j], p.User())
-		if err != nil {
-			return backupInfo{}, 0, errors.Wrapf(err, "make storage")
-		}
-		//nolint:deferloop
-		defer baseStores[j].Close()
+	baseStores, cleanup, err := backupdest.MakeBackupDestinationStores(
+		ctx, p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, fullyResolvedDest,
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
 	}
+	defer besteffort.Error(ctx, "cleanup-backup-stores", func(_ context.Context) error {
+		return cleanup()
+	})
 
 	encStore := baseStores[0]
 	if stmt.Options.EncryptionInfoDir != nil {
