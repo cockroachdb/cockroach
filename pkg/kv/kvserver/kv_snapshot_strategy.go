@@ -226,7 +226,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					}
 				}
 
-				if err := msstw.ReadOne(ctx, ek, header.SharedReplicate, batchReader); err != nil {
+				if err := msstw.ReadOne(
+					ctx, ek, header.SharedReplicate || header.ExternalReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
