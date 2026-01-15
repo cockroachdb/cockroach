@@ -201,7 +201,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 			timingTag.start("sst")
 			verifyCheckSum := snapshotChecksumVerification.Get(&s.ClusterSettings().SV)
-			// All batch operations are guaranteed to be point key or range key puts.
+			// All batch operations are guaranteed to be point keys or range keys. When
+			//
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. putInternalPointKey) can use the decoded engine key here as input.
@@ -219,7 +220,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, err
 				}
 				// Verify value checksum to catch data corruption.
-				if verifyCheckSum {
+				if verifyCheckSum && batchReader.IsPointValue() {
 					if err = ek.Verify(batchReader.Value()); err != nil {
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}

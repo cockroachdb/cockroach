@@ -123,6 +123,12 @@ func (r *BatchReader) EngineKey() (EngineKey, error) {
 	return key, nil
 }
 
+// IsPointValue returns true if the key is a point key that represents a
+// value.
+func (r *BatchReader) IsPointValue() bool {
+	return r.kind == pebble.InternalKeyKindSet || r.kind == pebble.InternalKeyKindSetWithDelete
+}
+
 // Value returns the value of the current batch entry. Value panics if the
 // kind is a point key deletion.
 func (r *BatchReader) Value() []byte {
