@@ -130,8 +130,6 @@ type snapWriteBuilder struct {
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
 	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
 	subsume []kvstorage.DestroyReplicaInfo
-
-	clearEnd roachpb.RKey
 }
 
 // prepareSnapApply prepares the storage write that represents applying a
@@ -172,60 +170,17 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 		log.KvDistribution.Fatalf(ctx, "%v", err)
 		return err
 	}
-	s.clearEnd = clearEnd
+	_ = applySnapshotTODO
 
 	// TODO(pav-kv): assert that our replica already exists in storage. Note that
 	// it can be either uninitialized or initialized.
-	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
-	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
+	// TODO(sep-raft-log): RewriteRaftState now only touches raft engine keys, so
 	// it will be convenient to redirect it to a raft engine batch.
 	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
 	}); err != nil {
 		return err
 	}
-	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
-	if err := s.clearSubsumedReplicaDiskData(ctx); err != nil {
-		return err
-	}
-
-	_ = applySnapshotTODO // 2.3 (split)
-	return s.clearResidualDataOnNarrowSnapshot(ctx)
-}
-
-// clearSubsumedReplicaDiskData clears the on disk data of the subsumed
-// replicas by creating SSTs with range deletion tombstones. We have to be
-// careful here not to have overlapping ranges with the SSTs we have already
-// created since that will throw an error while we are ingesting them. This
-// method requires that each of the subsumed replicas raftMu is held, and that
-// the Reader reflects the latest I/O each of the subsumed replicas has done
-// (i.e. Reader was instantiated after all raftMu were acquired).
-//
-// NB: does nothing if there are no subsumed replicas.
-func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) error {
-	// In the common case, the subsumed replicas' end key does not extend beyond
-	// the snapshot end key (sn <= b):
-	//
-	//	   subsumed: [a---s1---...---sn)
-	//	   snapshot: [a---------------b)
-	//	or snapshot: [a-------------------b)
-	//
-	// In this case, we do not need to clear the range-local, lock table, and user
-	// keys owned by subsumed replicas, since clearing [a, b) will cover it. We
-	// only need to clear the per-replica RangeID-local key spans here.
-	//
-	// This leaves the only other case, where the subsumed replicas extend past
-	// the snapshot's end key (s[n-1] < b < sn):
-	//
-	//	subsumed: [a---s1---...---s[n-1]---sn)
-	//	snapshot: [a--------------------b)
-	//
-	// This is only possible if we're not only learning about merges through the
-	// snapshot, but also a split -- that's the only way the bounds of the
-	// snapshot can be narrower than the bounds of all the subsumed replicas. In
-	// this case, we do need to clear range-local, lock table, and user keys in
-	// the span [b, sn). We do this in
-	// clearResidualDataOnNarrowSnapshot, not here.
 
 	// TODO(sep-raft-log): need different readers for raft and state engine.
 	reader := storage.Reader(s.todoEng)
@@ -237,59 +192,22 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 			return err
 		}
 	}
-	return nil
-}
 
-// clearResidualDataOnNarrowSnapshot clears the overlapping replicas' data not
-// covered by the snapshot. Specifically, the data between the snapshot's end
-// key and that of the keyspace covered by s.origDesc + s.subsume.descs, if the
-// former is lower (i.e. the snapshot is "narrower"). Note that the start keys
-// of the snapshot and s.origDesc[^1] match, so the residual data may only exist
-// between the end keys. clearResidualDataOnNarrowSnapshot is a no-op if there
-// is no narrowing business to speak of.
-//
-// Visually, the picture looks as follows:
-//
-// The simplest case is when the snapshot isn't subsuming any replicas.
-// original descriptor: [a-----------------------------c)
-// snapshot descriptor: [a---------------------b)
-// cleared: [b, c)
-//
-// In the more general case[^2]:
-//
-// store descriptors:   [a----------------s1---...---sn)
-// snapshot descriptor: [a---------------------b)
-// cleared: [b, sn)
-//
-// Practically speaking, the simple case above corresponds to a replica learning
-// about a split through a snapshot. The more general case corresponds to a
-// replica learning about a series of merges and at least one split through the
-// snapshot.
-//
-// [1] Assuming s.origDesc is initialized. If it isn't, and we're applying an
-// initial snapshot, the snapshot may still be narrower than the end key of the
-// right-most subsumed replica.
-//
-// [2] In the diagram , S1...Sn correspond to subsumed replicas with end keys
-// s1...sn respectively. These are all replicas on the store that overlap with
-// the snapshot descriptor, covering the range [a,b), and the right-most
-// descriptor is that of replica Sn.
-func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context) error {
-	// Return early if the snapshot does not narrow the keyspace.
-	if s.clearEnd == nil {
+	// If the snapshot is narrower than the replica+subsumed keyspace that it
+	// overrides, clear the remainder.
+	if clearEnd == nil {
 		return nil
 	}
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: s.clearEnd},
+			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: clearEnd},
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,
 		},
 	}) {
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+			// TODO(sep-raft-log): read from the state machine engine here.
 			return storage.ClearRangeWithHeuristic(
 				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
 			)
