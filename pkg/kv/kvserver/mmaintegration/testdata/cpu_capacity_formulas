@@ -1,0 +1,145 @@
+# This file explores the CPU capacity formula for MMA.
+#
+# The current formula assumes ALL node CPU usage is caused by MMA-tracked work.
+# This is problematic when MMA tracks little load but the node has significant
+# CPU usage from other sources (SQL, RPC, GC, etc.).
+#
+# The proposed "capped" formula limits the multiplier (default max_mult=2), so
+# MMA only assumes responsibility for a bounded amount of "other" load.
+
+# User's motivating example: MMA uses 1 core, node uses 4 of 16 cores.
+# Current formula: MMA is at 25% util (same as node).
+# Capped formula (max_mult=2): MMA is at 16.7% util, recognizing 2 cores of background.
+compute stores_cpu=1 node_usage=4 node_capacity=16
+----
+cur    capped
+04.00  02.00  mult
+04.00  07.00  cap
+25.00% 14.29% util
+
+# Most extreme case: MMA tracks zero load, but node is at 40%.
+# Current formula can't handle this (division by zero).
+# Capped formula: MMA attributes 0 of the node usage to itself (all is background),
+# so it gets the idle capacity (16-6.4=9.6) divided by max_mult: 9.6/2 = 4.8 cores.
+compute stores_cpu=0 node_usage=6.4 node_capacity=16
+----
+cur    capped
+ +Inf  02.00  mult
+00.00  04.80  cap
+ 0.00%  0.00% util
+
+# Extreme case: MMA tracks almost nothing (0.1 core), node at 40% (6.4 cores).
+# Current formula: MMA gets tiny capacity, ~40% util (pathological!).
+# Capped formula: MMA gets much higher capacity, low util (reasonable).
+compute stores_cpu=0.1 node_usage=6.4 node_capacity=16
+----
+cur    capped
+64.00  02.00  mult
+00.25  04.90  cap
+40.00%  2.04% util
+
+# Normal case: MMA load proportional to node usage (2x overhead).
+# mult = 2 = max_mult, so both formulas give same result.
+compute stores_cpu=4 node_usage=8 node_capacity=16
+----
+cur    capped
+02.00  02.00  mult
+08.00  08.00  cap
+50.00% 50.00% util
+
+# High MMA load, low background: MMA is most of the node's work.
+# mult = 1.33 < max_mult, so both formulas agree.
+compute stores_cpu=6 node_usage=8 node_capacity=16
+----
+cur    capped
+01.33  01.33  mult
+12.00  12.00  cap
+50.00% 50.00% util
+
+# Multiple stores: capacity is divided evenly.
+compute stores_cpu=2 node_usage=8 node_capacity=16 num_stores=4
+----
+cur    capped
+04.00  02.00  mult
+01.00  01.50  cap
+50.00% 33.33% util
+
+# Near idle: low load across the board.
+compute stores_cpu=0.1 node_usage=0.5 node_capacity=16
+----
+cur    capped
+05.00  02.00  mult
+03.20  07.85  cap
+ 3.12%  1.27% util
+
+# Near full: node close to capacity.
+compute stores_cpu=8 node_usage=15 node_capacity=16
+----
+cur    capped
+01.88  01.88  mult
+08.53  08.53  cap
+93.75% 93.75% util
+
+# Edge case: MMA load exceeds node usage (shouldn't happen normally).
+# Current formula: mult < 1, giving MMA MORE capacity than the node has.
+# Capped formula: mult clamped to 1, so capacity = node capacity.
+compute stores_cpu=5 node_usage=4 node_capacity=16
+----
+cur    capped
+00.80  01.00  mult
+20.00  16.00  cap
+25.00% 31.25% util
+
+# More extreme: MMA tracks 8 cores but node only reports 2 cores used.
+# This could happen due to measurement lag or accounting bugs.
+# Current formula: mult=0.25 gives capacity=64 (way more than node has!).
+# Capped formula: mult clamped to 1, capacity = node capacity = 16.
+compute stores_cpu=8 node_usage=2 node_capacity=16
+----
+cur    capped
+00.25  01.00  mult
+64.00  16.00  cap
+12.50% 50.00% util
+
+# Most extreme: MMA tracks load but node reports zero CPU usage.
+# Current formula: mult=0, giving infinite capacity (division by zero).
+# Capped formula: mult clamped to 1, capacity = node capacity.
+compute stores_cpu=4 node_usage=0 node_capacity=16
+----
+cur    capped
+00.00  01.00  mult
+00.00  16.00  cap
+ 0.00% 25.00% util
+
+# Edge case: very high utilization with capping active.
+compute stores_cpu=4 node_usage=15 node_capacity=16
+----
+cur    capped
+03.75  02.00  mult
+04.27  04.50  cap
+93.75% 88.89% util
+
+# Test with different max_mult values.
+# Higher max_mult = less aggressive capping.
+compute stores_cpu=1 node_usage=8 node_capacity=16 max_mult=3
+----
+cur    capped
+08.00  03.00  mult
+02.00  03.67  cap
+50.00% 27.27% util
+
+# Even higher max_mult = even less capping.
+compute stores_cpu=1 node_usage=8 node_capacity=16 max_mult=5
+----
+cur    capped
+08.00  05.00  mult
+02.00  02.60  cap
+50.00% 38.46% util
+
+# Effectively uncapped (max_mult=100): should match current formula.
+compute stores_cpu=1 node_usage=8 node_capacity=16 max_mult=100
+----
+cur    capped
+08.00  08.00  mult
+02.00  02.00  cap
+50.00% 50.00% util
