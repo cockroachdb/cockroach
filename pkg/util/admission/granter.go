@@ -299,7 +299,7 @@ type kvStoreTokenGranter struct {
 		// exhaustedStart is the time when the corresponding availableIOTokens
 		// became <= 0. Ignored when the corresponding availableIOTokens is > 0.
 		exhaustedStart [admissionpb.NumWorkClasses]time.Time
-		// startingIOTokens is the number of tokens set by setAvailableTokens for
+		// startingIOTokens is the number of tokens set by addAvailableTokens for
 		// regular work. It is used to compute the tokens used, by computing
 		// startingIOTokens-availableIOTokens[RegularWorkClass].
 		startingIOTokens int64
@@ -649,8 +649,8 @@ func (sg *kvStoreTokenGranter) tryGrantLockedOne() bool {
 	return false
 }
 
-// setAvailableTokens implements granterWithIOTokens.
-func (sg *kvStoreTokenGranter) setAvailableTokens(
+// addAvailableTokens implements granterWithIOTokens.
+func (sg *kvStoreTokenGranter) addAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
 	diskWriteTokens int64,
@@ -704,10 +704,17 @@ func (sg *kvStoreTokenGranter) setAvailableTokens(
 	if sg.mu.diskTokensAvailable.writeByteTokens > diskWriteTokensCapacity {
 		sg.mu.diskTokensAvailable.writeByteTokens = diskWriteTokensCapacity
 	}
-	// NB: We don't cap the disk read tokens as they are only deducted during the
-	// error accounting loop. So essentially, we give reads the "burst" capacity
-	// of the error accounting interval. See `adjustDiskTokenErrorLocked` for the
-	// error accounting logic, and where we reset this bucket to 0.
+	// The read tokens are not added to a token bucket, and instead are
+	// considered "already deducted" since they were pre-deducted when computing
+	// the write tokens in the diskBandwidthLimiter. The actual observed reads
+	// in the error accounting loop will be compared against these pre-deducted
+	// tokens to compute read error.
+	//
+	// NB: We don't cap the disk read tokens as they are only compared during
+	// the error accounting loop. So essentially, we give reads the "burst"
+	// capacity of the error accounting interval. See
+	// `adjustDiskTokenErrorLocked` for the error accounting logic, and where we
+	// reset this bucket to 0.
 	sg.mu.diskTokensError.diskReadTokensAlreadyDeducted += diskReadTokens
 
 	return ioTokensUsed, ioTokensUsedByElasticWork

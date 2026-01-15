@@ -336,7 +336,7 @@ func TestStoreGranterBasic(t *testing.T) {
 				loop--
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
-				coord.granter.setAvailableTokens(
+				coord.granter.addAvailableTokens(
 					int64(ioTokens),
 					int64(ioTokens),
 					int64(elasticDiskWriteTokens),
@@ -377,7 +377,7 @@ func TestStoreGranterBasic(t *testing.T) {
 
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granter.setAvailableTokens(
+			coord.granter.addAvailableTokens(
 				int64(ioTokens),
 				int64(elasticIOTokens),
 				int64(elasticDiskWriteTokens),

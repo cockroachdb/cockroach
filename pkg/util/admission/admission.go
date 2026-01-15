@@ -300,25 +300,27 @@ type granterWithLockedCalls interface {
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
-	// setAvailableTokens bounds the available {io,elastic disk bandwidth} tokens
-	// that can be granted to the value provided in the
-	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens bounds
-	// what can be granted to elastic work, and is based on disk bandwidth being a
-	// bottleneck resource. These are not tight bounds when the callee has negative
-	// available tokens, due to the use of granter.tookWithoutPermission, since in
-	// that the case the callee increments that negative value with the value
-	// provided by tokens. This method needs to be called periodically.
-	// {io, elasticDiskBandwidth}TokensCapacity is the ceiling up to which we allow
-	// elastic or disk bandwidth tokens to accumulate. The return value is the
-	// number of used tokens in the interval since the prior call to this method
-	// (and the tokens used by elastic work). Note that tokensUsed* can be
-	// negative, though that will be rare, since it is possible for tokens to be
-	// returned.
-	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64, elasticDiskReadTokens int64,
-		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
+	// addAvailableTokens adds the values provided in {io, elasticIO, diskWrite,
+	// diskRead}Tokens parameters to the corresponding token buckets. This
+	// method needs to be called periodically at a high frequency, to
+	// incrementally replenish the token buckets. The {io, elasticIO,
+	// diskWrite}TokensCapacity is the ceiling up to which we allow tokens to
+	// accumulate.
+	//
+	// NB: The "IO" tokens represent flush/compaction capacity into/out of L0
+	// (see kvStoreTokenGranter which is the only non-test implementation of
+	// this interface). It is a made-up term to distinguish it from real disk
+	// write bytes (the latter are after incurring write-amplification).
+	//
+	// The return value is the number of used IO tokens in the interval since
+	// the prior call to this method (and the tokens used by elastic work). Note
+	// that ioTokensUsed* can be negative, though that will be rare, since it is
+	// possible for tokens to be returned.
+	addAvailableTokens(
+		ioTokens int64, elasticIOTokens int64, diskWriteTokens int64, diskReadTokens int64,
+		ioTokensCapacity int64, elasticIOTokenCapacity int64, diskWriteTokensCapacity int64,
 		lastTick bool,
-	) (tokensUsed int64, tokensUsedByElasticWork int64)
+	) (ioTokensUsed int64, ioTokensUsedByElasticWork int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
 	// last such call.
 	getDiskTokensUsedAndReset() [admissionpb.NumStoreWorkTypes]diskTokens

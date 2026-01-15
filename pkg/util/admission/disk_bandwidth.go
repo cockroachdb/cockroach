@@ -49,27 +49,26 @@ import (
 // - The disk bandwidth limiter estimates disk write byte tokens using the
 //   provisioned value and subtracts away reads seen in the previous interval.
 //
-// - We estimate the write amplification using a model of the incoming 	 writes
+// - We estimate the write amplification using a model of the incoming writes
 //   and actual bytes written to disk in the previous interval. We then use this
 //   model when deducting tokens for disk writes.
 //
-// Since we are using a simple approach that is somewhat coarse in its behavior,
-// we start by limiting its application to two kinds of writes (the second one
-// is future work, and not yet implemented):
+// - We try to keep some headroom in the disk bandwidth utilization since the
+//   control mechanism is coarse. Specifically, see the cluster setting
+//   kvadmission.store.elastic_disk_bandwidth_max_util. Our primary goal is
+//   for the mean usage to be close this goal utilization, with the secondary
+//   goal to avoid exceeding by a huge amount. We have had implementations
+//   that significantly undershoot the goal (see
+//   https://github.com/cockroachdb/cockroach/issues/160964), which is
+//   undesirable as it is wasteful and causes users to turn off this
+//   functionality.
 //
-// - Incoming writes that are deemed "elastic": This can be done by
-//   introducing a work-class (in addition to admissionpb.WorkPriority), or by
-//   implying a work-class from the priority (e.g. priorities < NormalPri are
-//   deemed elastic).
-//
-// - Optional compactions: We assume that the LSM store is configured with a
-//   ceiling on number of regular concurrent compactions, and if it needs more
-//   it can request resources for additional (optional) compactions. These
-//   latter compactions can be limited by this approach. See
-//   https://github.com/cockroachdb/pebble/issues/1329 for motivation.
-//   TODO(sumeer): this compaction control is not yet done, though how to do
-//   it is included in the prototype in
-//   https://github.com/cockroachdb/cockroach/pull/82813
+// Since we are using a simple approach that is somewhat coarse in its
+// behavior, we start by limiting its application to incoming writes that are
+// deemed "elastic". In practice this is done by implying a work-class from
+// the priority (e.g. priorities < NormalPri are deemed elastic).
+// Additionally, incoming range snapshots writing to disk can also be limited
+// using this mechanism.
 //
 // Extending this to all incoming writes is future work.
 
@@ -79,22 +78,32 @@ type intervalDiskLoadInfo struct {
 	intReadBytes int64
 	// intWriteBytes represents measured write bytes in a given interval.
 	intWriteBytes int64
-	// intProvisionedDiskBytes represents the disk writes (in bytes) available in
-	// an adjustmentInterval.
+	// intProvisionedDiskBytes represents the combined disk reads + writes (in
+	// bytes) available in an adjustmentInterval.
 	intProvisionedDiskBytes int64
-	// elasticBandwidthMaxUtil sets the maximum disk bandwidth utilization for
-	// elastic requests
+	// elasticBandwidthMaxUtil sets the maximum disk bandwidth utilization. It
+	// guides disk write bandwidth token allocation that is used to shape
+	// elastic write requests.
 	elasticBandwidthMaxUtil float64
 }
 
 // diskBandwidthLimiterState is used as auxiliary information for logging
 // purposes and keeping past state.
 type diskBandwidthLimiterState struct {
-	tokens     diskTokens
+	// tokens represents the token count for the latest (ongoing)
+	// adjustmentInterval.
+	tokens diskTokens
+	// prevTokens is the token count for the previous adjustmentInterval.
 	prevTokens diskTokens
-	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens
-	diskBWUtil float64
-	diskLoad   intervalDiskLoadInfo
+	// The tokens used in the previous adjustmentInterval, per work type.
+	prevUsedTokens [admissionpb.NumStoreWorkTypes]diskTokens
+	// prevWriteTokenUtil is the fraction of prevTokens.writeByteTokens used
+	// across the sum of prevUsedTokens[i].writeByteTokens (for all work types
+	// i).
+	prevWriteTokenUtil float64
+	// prevDiskLoad represents the disk load info for the previous
+	// adjustmentInterval.
+	prevDiskLoad intervalDiskLoadInfo
 }
 
 // diskBandwidthLimiter produces tokens for elastic work.
@@ -112,36 +121,50 @@ func newDiskBandwidthLimiter() *diskBandwidthLimiter {
 
 // getProvisionedBandwidth returns the provisioned disk bandwidth in bytes/second.
 func (d *diskBandwidthLimiter) getProvisionedBandwidth() int64 {
-	return d.state.diskLoad.intProvisionedDiskBytes / adjustmentInterval
+	return d.state.prevDiskLoad.intProvisionedDiskBytes / adjustmentInterval
 }
 
-// diskTokens tokens represent actual bytes and IO on physical disks. Currently,
-// these are used to impose disk bandwidth limits on elastic traffic, but
-// regular traffic will also deduct from these buckets.
+// diskTokens represents tokens corresponding to bytes and IO on physical
+// disks.
+//
+// Even though the provisioned limit is on combined read and write bandwidth,
+// we track read and write tokens separately, since it allows us to reserve
+// read tokens based on activity in the previous adjustment interval.
 type diskTokens struct {
 	readByteTokens  int64
 	writeByteTokens int64
-	readIOPSTokens  int64
-	writeIOPSTokens int64
+
+	// TODO(sumeer): add tokens corresponding to IOPS
+	// https://github.com/cockroachdb/cockroach/issues/107623).
+	//
+	// readIOPSTokens int64
+	// writeIOPSTokens int64
 }
 
-// computeElasticTokens is called every adjustmentInterval.
+// computeElasticTokens is called every adjustmentInterval, and computes state
+// for the next adjustmentInterval. It returns the disk tokens to allocate
+// over the next adjustmentInterval.
 func (d *diskBandwidthLimiter) computeElasticTokens(
 	id intervalDiskLoadInfo, usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
 ) diskTokens {
 	// TODO(aaditya): Include calculation for read and IOPS.
 	// Issue: https://github.com/cockroachdb/cockroach/issues/107623
 
-	// We are using disk read bytes over the previous adjustment interval as a
-	// proxy for future reads. This is a bad estimate, but we account for errors
-	// in this estimate separately at a higher frequency. See
-	// kvStoreTokenGranter.adjustDiskTokenErrorLocked.
+	// We use disk read bytes over the previous adjustment interval as a proxy
+	// for future reads. This is a conservative choice that allows us to set
+	// aside tokens for reads up front, rather than only react when we observe
+	// the read (which could be late, if reads happen after writes have consumed
+	// all the available tokens). Admittedly, this estimate can be poor, but we
+	// account for errors in this estimate separately at a higher frequency (1s
+	// intervals), in kvStoreTokenGranter.adjustDiskTokenErrorLocked.
 	const alpha = 0.5
-	smoothedReadBytes := alpha*float64(id.intReadBytes) + alpha*float64(d.state.diskLoad.intReadBytes)
+	smoothedReadBytes := alpha*float64(id.intReadBytes) + alpha*float64(d.state.prevDiskLoad.intReadBytes)
 	// Pessimistic approach using the max value between the smoothed and current
 	// reads.
 	intReadBytes := int64(math.Max(smoothedReadBytes, float64(id.intReadBytes)))
 	intReadBytes = int64(math.Max(0, float64(intReadBytes)))
+	// Write tokens are simply the goal utilization times the provisioned bytes
+	// with the bytes set aside for reads subtracted.
 	diskWriteTokens := int64(float64(id.intProvisionedDiskBytes)*id.elasticBandwidthMaxUtil) - intReadBytes
 	// TODO(aaditya): consider setting a different floor to avoid starving out
 	// elastic writes completely due to out-sized reads from above.
@@ -151,20 +174,18 @@ func (d *diskBandwidthLimiter) computeElasticTokens(
 	tokens := diskTokens{
 		readByteTokens:  intReadBytes,
 		writeByteTokens: diskWriteTokens,
-		readIOPSTokens:  0,
-		writeIOPSTokens: 0,
 	}
 	prevState := d.state
-	diskBWUtil := 0.0
+	writeTokenUtil := 0.0
 	if prevState.tokens.writeByteTokens > 0 {
-		diskBWUtil = float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens)
+		writeTokenUtil = float64(totalUsedTokens.writeByteTokens) / float64(prevState.tokens.writeByteTokens)
 	}
 	d.state = diskBandwidthLimiterState{
-		tokens:     tokens,
-		prevTokens: prevState.tokens,
-		usedTokens: usedTokens,
-		diskBWUtil: diskBWUtil,
-		diskLoad:   id,
+		tokens:             tokens,
+		prevTokens:         prevState.tokens,
+		prevUsedTokens:     usedTokens,
+		prevWriteTokenUtil: writeTokenUtil,
+		prevDiskLoad:       id,
 	}
 	return tokens
 }
@@ -175,21 +196,21 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	if d.unlimitedTokensOverride {
 		unlimitedPrefix = " (unlimited)"
 	}
-	p.Printf("diskBandwidthLimiter%s (tokenUtilization %.2f, tokensUsed (elastic %s, "+
+	p.Printf("diskBandwidthLimiter%s (writeUtil %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
 		"readBW %s/s, provisioned %s/s)",
 		redact.SafeString(unlimitedPrefix),
-		d.state.diskBWUtil,
-		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
-		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
-		ib(d.state.usedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
+		d.state.prevWriteTokenUtil,
+		ib(d.state.prevUsedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
+		ib(d.state.prevUsedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
+		ib(d.state.prevUsedTokens[admissionpb.RegularStoreWorkType].writeByteTokens),
 		ib(d.state.tokens.writeByteTokens),
 		ib(d.state.prevTokens.writeByteTokens),
 		ib(d.state.tokens.readByteTokens),
 		ib(d.state.prevTokens.readByteTokens),
-		ib(d.state.diskLoad.intWriteBytes/adjustmentInterval),
-		ib(d.state.diskLoad.intReadBytes/adjustmentInterval),
-		ib(d.state.diskLoad.intProvisionedDiskBytes/adjustmentInterval),
+		ib(d.state.prevDiskLoad.intWriteBytes/adjustmentInterval),
+		ib(d.state.prevDiskLoad.intReadBytes/adjustmentInterval),
+		ib(d.state.prevDiskLoad.intProvisionedDiskBytes/adjustmentInterval),
 	)
 }
 
@@ -202,8 +223,6 @@ func sumDiskTokens(tokens [admissionpb.NumStoreWorkTypes]diskTokens) diskTokens 
 	for i := 0; i < admissionpb.NumStoreWorkTypes; i++ {
 		sumTokens.readByteTokens += tokens[i].readByteTokens
 		sumTokens.writeByteTokens += tokens[i].writeByteTokens
-		sumTokens.readIOPSTokens += tokens[i].readIOPSTokens
-		sumTokens.writeIOPSTokens += tokens[i].writeIOPSTokens
 	}
 	return sumTokens
 }

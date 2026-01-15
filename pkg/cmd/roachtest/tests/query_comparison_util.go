@@ -179,8 +179,11 @@ func runOneRoundQueryComparison(
 		fmt.Fprint(failureLog, "\n")
 	}
 
+	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
+	setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
+
+	// connSetup needs to be kept in sync with connSetupForLog.
 	connSetup := func(conn *gosql.DB) {
-		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 		t.Status("setting statement_timeout")
 		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 		if _, err := conn.Exec(setStmtTimeout); err != nil {
@@ -188,7 +191,6 @@ func runOneRoundQueryComparison(
 		}
 		logStmt(setStmtTimeout)
 
-		setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
 		t.Status("setting unconstrained_non_covering_index_scan_enabled")
 		t.L().Printf("\n%s", setUnconstrainedStmt)
 		if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
@@ -196,6 +198,15 @@ func runOneRoundQueryComparison(
 			t.Fatal(err)
 		}
 		logStmt(setUnconstrainedStmt)
+	}
+	// connSetupForLog mirrors what connSetup does so that we can log all
+	// necessary SET statements after having opened a new connection (when using
+	// different nodes to execute the queries).
+	connSetupForLog := func() []string {
+		return []string{
+			setStmtTimeout,
+			setUnconstrainedStmt,
+		}
 	}
 
 	node := 1
@@ -293,13 +304,14 @@ func runOneRoundQueryComparison(
 				logTest(finalStmt, "Valid Query")
 
 				h := queryComparisonHelper{
-					conn1:      conn,
-					conn2:      conn,
-					logStmt:    logStmt,
-					logFailure: logFailure,
-					printStmt:  printStmt,
-					stmtNo:     0,
-					rnd:        rnd,
+					conn1:           conn,
+					conn2:           conn,
+					connSetupForLog: connSetupForLog,
+					logStmt:         logStmt,
+					logFailure:      logFailure,
+					printStmt:       printStmt,
+					stmtNo:          0,
+					rnd:             rnd,
 				}
 
 				workloadqg := workloadReplayGenerator{finalStmt}
@@ -395,15 +407,16 @@ func runOneRoundQueryComparison(
 			}
 
 			h := queryComparisonHelper{
-				conn1:      conn,
-				conn2:      conn2,
-				node1:      node,
-				node2:      node2,
-				logStmt:    logStmt,
-				logFailure: logFailure,
-				printStmt:  printStmt,
-				stmtNo:     i,
-				rnd:        rnd,
+				conn1:           conn,
+				conn2:           conn2,
+				node1:           node,
+				node2:           node2,
+				connSetupForLog: connSetupForLog,
+				logStmt:         logStmt,
+				logFailure:      logFailure,
+				printStmt:       printStmt,
+				stmtNo:          i,
+				rnd:             rnd,
 			}
 
 			// Run `numInitialMutations` mutations first so that the tables have rows.
@@ -462,13 +475,14 @@ type sqlAndOutput struct {
 type queryComparisonHelper struct {
 	// There are two different connections so that we sometimes execute the
 	// queries on different nodes.
-	conn1, conn2 *gosql.DB
-	node1, node2 int
-	logStmt      func(string)
-	logFailure   func(string, [][]string)
-	printStmt    func(string)
-	stmtNo       int
-	rnd          *rand.Rand
+	conn1, conn2    *gosql.DB
+	node1, node2    int
+	connSetupForLog func() []string
+	logStmt         func(string)
+	logFailure      func(string, [][]string)
+	printStmt       func(string)
+	stmtNo          int
+	rnd             *rand.Rand
 
 	statements            []string
 	statementsAndExplains []sqlAndOutput
@@ -487,10 +501,10 @@ func (h *queryComparisonHelper) chooseConn() (conn *gosql.DB, connInfo string) {
 	defaultFirstPort, _ := strconv.Atoi(base.DefaultPort)
 	if h.rnd.Intn(2) == 0 {
 		conn = h.conn1
-		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node1-1)
+		connInfo = fmt.Sprintf("\\connect - - - %d\n%s\n", defaultFirstPort+h.node1-1, strings.Join(h.connSetupForLog(), "\n"))
 	} else {
 		conn = h.conn2
-		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node2-1)
+		connInfo = fmt.Sprintf("\\connect - - - %d\n%s\n", defaultFirstPort+h.node2-1, strings.Join(h.connSetupForLog(), "\n"))
 	}
 	return conn, connInfo
 }
@@ -502,10 +516,7 @@ func (h *queryComparisonHelper) chooseConn() (conn *gosql.DB, connInfo string) {
 //
 //	stmt - the query to run
 //	conn - the connection to use
-//	connInfo - a string to identify the connection for debugging purposes
-func (h *queryComparisonHelper) runQuery(
-	stmt string, conn *gosql.DB, connInfo string,
-) ([][]string, error) {
+func (h *queryComparisonHelper) runQuery(stmt string, conn *gosql.DB) ([][]string, error) {
 	// Log this statement with a timestamp but commented out. This will help in
 	// cases when the stmt will get stuck and the whole test will time out (in
 	// such a scenario, since the stmt didn't execute successfully, it won't get
@@ -515,7 +526,7 @@ func (h *queryComparisonHelper) runQuery(
 		// stmt as a single line. This way this auxiliary logging takes up less
 		// space (if the stmt executes successfully, it'll still get logged with the
 		// usual formatting below).
-		strconv.Quote(connInfo+stmt+";"),
+		strconv.Quote(stmt+";"),
 	))
 
 	runQueryImpl := func(stmt string, conn *gosql.DB) ([][]string, error) {
@@ -553,13 +564,17 @@ func (h *queryComparisonHelper) runQuery(
 	// Only save the stmt on success - this makes it easier to reproduce the
 	// log. The caller still can include it into the statements later if
 	// necessary.
-	h.addStmtForLogging(connInfo+stmt, rows)
+	h.addStmtForLogging(stmt, rows)
 	return rows, nil
 }
 
 // addStmtForLogging includes the provided stmt (as well as optional output
 // rows) to be included into logging later.
 func (h *queryComparisonHelper) addStmtForLogging(stmt string, rows [][]string) {
+	if stmt == "" && rows == nil {
+		// Special case to no-op when called with ("" /* connInfo */, nil /* rows */)
+		return
+	}
 	h.statements = append(h.statements, stmt)
 	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt, output: rows})
 }
@@ -569,9 +584,8 @@ func (h *queryComparisonHelper) addStmtForLogging(stmt string, rows [][]string) 
 //
 //	stmt - the statement to execute
 //	conn - the connection to use
-//	connInfo - a string to identify the connection for debugging purposes
-func (h *queryComparisonHelper) execStmt(stmt string, conn *gosql.DB, connInfo string) error {
-	h.addStmtForLogging(connInfo+stmt, nil /* rows */)
+func (h *queryComparisonHelper) execStmt(stmt string, conn *gosql.DB) error {
+	h.addStmtForLogging(stmt, nil /* rows */)
 	_, err := conn.Exec(stmt)
 	return err
 }
