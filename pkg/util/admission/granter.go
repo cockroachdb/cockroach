@@ -854,7 +854,7 @@ var (
 	kvSlotsExhaustedDuration = metric.Metadata{
 		Name: "admission.granter.slots_exhausted_duration.kv",
 		Help: "Total duration when KV slots were exhausted, as observed by the slot " +
-			"granter (not waiters). This is repored in nanoseconds from 26.1 onwards, " +
+			"granter (not waiters). This is reported in nanoseconds from 26.1 onwards, " +
 			"and was microseconds before that.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,

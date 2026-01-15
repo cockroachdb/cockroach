@@ -345,7 +345,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 			tableName = tblDesc.GetName()
-			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc)
+			expectedRowCount := uint64(r.res.Rows)
+			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
 			return err

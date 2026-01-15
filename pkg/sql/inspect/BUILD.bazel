@@ -84,6 +84,7 @@ go_test(
         "issue_test.go",
         "main_test.go",
         "progress_test.go",
+        "row_count_check_test.go",
         "runner_test.go",
         "table_sink_test.go",
     ],
