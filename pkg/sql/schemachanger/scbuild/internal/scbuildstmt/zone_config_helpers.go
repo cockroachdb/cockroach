@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -1547,6 +1548,30 @@ func configureZoneConfigForReplacementIndexPartitioning(
 // configureZoneConfigForNewIndexPartitioning configures the zone config for any
 // new index in a REGIONAL BY ROW table.
 // This *must* be done after the index ID has been allocated.
+func configureZoneConfigForNewTableLocality(
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
+) error {
+	// Synthesize the region config for the database
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := applyZoneConfigForMultiRegionTable(
+		b,
+		regionConfig,
+		tableID,
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes(localityConfig),
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// configureZoneConfigForNewIndexPartitioning configures the zone config for any
+// new index in a REGIONAL BY ROW table.
+// This *must* be done after the index ID has been allocated.
 func configureZoneConfigForNewIndexPartitioning(
 	b BuildCtx, tableID catid.DescID, indexID descpb.IndexID,
 ) error {
@@ -1645,7 +1670,8 @@ func applyZoneConfigForMultiRegionTable(
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
 	if deleteZoneConfig {
-		return nil
+		currentZoneConfigElem := b.QueryByID(tableID).FilterTableZoneConfig().MustGetZeroOrOneElement()
+		b.Drop(currentZoneConfigElem)
 	}
 	if !rewriteZoneConfig {
 		return nil
@@ -1740,6 +1766,40 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 			}
 		}
 		return zoneConfig, nil
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOptionTableAndIndexes applies table zone configs
+// on the entire table as well as its indexes, replacing multi-region related zone
+// configuration fields.
+func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+	localityConfig catpb.LocalityConfig,
+) applyZoneConfigForMultiRegionTableOption {
+
+	return func(
+		zc zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (zonepb.ZoneConfig, error) {
+		localityZoneConfig, err := regions.ZoneConfigForMultiRegionTable(
+			localityConfig,
+			regionConfig,
+		)
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+
+		// Wipe out the subzone multi-region fields before we copy over the
+		// multi-region fields to the zone config down below. We have to do this to
+		// handle the case where users have set a zone config on an index and we're
+		// ALTERing to a table locality that doesn't lay down index zone
+		// configurations (e.g. GLOBAL or REGIONAL BY TABLE). Since the user will
+		// have to override to perform the ALTER, we want to wipe out the index
+		// zone config so that the user won't have to override again the next time
+		// the want to ALTER the table locality.
+		zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+		zc.CopyFromZone(localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
+		return zc, nil
 	}
 }
 
