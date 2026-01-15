@@ -568,7 +568,6 @@ func NewNode(
 	txnMetrics kvcoord.TxnMetrics,
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,

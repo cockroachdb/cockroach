@@ -226,7 +226,7 @@ type controllerImpl struct {
 
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
-	kvAdmissionQ               *admission.WorkQueue
+	cpuGrantCoords             *admission.CPUGrantCoordinators
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
 	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles
@@ -250,6 +250,7 @@ type Handle struct {
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
 
 	cpuStart            time.Duration
+	cpuAdmissionQueue   *admission.WorkQueue
 	cpuKVAdmissionQResp admission.AdmitResponse
 }
 
@@ -269,7 +270,7 @@ func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 // nil or non-nil.
 func MakeController(
 	nodeID *base.NodeIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
+	cpuGrantCoords *admission.CPUGrantCoordinators,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	kvflowHandles kvflowcontrol.ReplicationAdmissionHandles,
@@ -277,7 +278,7 @@ func MakeController(
 ) Controller {
 	return &controllerImpl{
 		nodeID:                     nodeID,
-		kvAdmissionQ:               kvAdmissionQ,
+		cpuGrantCoords:             cpuGrantCoords,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
 		kvflowHandles:              kvflowHandles,
@@ -296,7 +297,7 @@ func (n *controllerImpl) AdmitKVWork(
 	rangeTenantID roachpb.TenantID,
 	ba *kvpb.BatchRequest,
 ) (_ Handle, retErr error) {
-	if n.kvAdmissionQ == nil {
+	if n.cpuGrantCoords == nil {
 		return Handle{}, nil
 	}
 	admissionInfo := workInfoForBatch(n.settings, requestTenantID, rangeTenantID, ba)
@@ -365,6 +366,7 @@ func (n *controllerImpl) AdmitKVWork(
 			}
 		}
 	}
+	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue(admissionInfo.TenantID.IsSystem())
 	if admissionEnabled {
 		// - Backups generate batches with single export requests, which we
 		//   admit through the elastic CPU work queue. We grant this
@@ -418,7 +420,7 @@ func (n *controllerImpl) AdmitKVWork(
 			}()
 		} else {
 			// Use the slots-based mechanism for everything else.
-			resp, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			resp, err := cpuAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
 				return Handle{}, err
 			}
@@ -427,6 +429,7 @@ func (n *controllerImpl) AdmitKVWork(
 				// since it is acceptable to charge them to the tenant.
 				ah.cpuStart = grunning.Time()
 			}
+			ah.cpuAdmissionQueue = cpuAdmissionQ
 			ah.cpuKVAdmissionQResp = resp
 		}
 	}
@@ -447,7 +450,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			}
 			cpuTime = 1
 		}
-		n.kvAdmissionQ.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
+		ah.cpuAdmissionQueue.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
 		var doneInfo admission.StoreWorkDoneInfo
@@ -509,7 +512,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 				if kvDisabled {
 					weights.Node = nil
 				}
-				n.kvAdmissionQ.SetTenantWeights(weights.Node)
+				n.cpuGrantCoords.SetTenantWeights(weights.Node)
 				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {

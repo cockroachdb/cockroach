@@ -575,6 +575,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if !ok {
 		admissionKnobs = &admission.TestingKnobs{}
 	}
+	admissionOptions.CPUMetricsProvider = &cpuMetricsProvider{}
 	gcoords := admission.NewGrantCoordinators(
 		cfg.AmbientCtx,
 		st,
@@ -583,11 +584,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storesForRACv2,
 		admissionKnobs,
 	)
-	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetWorkQueue(admission.SQLKVResponseWork)
+	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetSQLWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
-		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.RegularCPU.CPULoad)
+		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.RegularCPU.GetRunnableCountCallback())
 		stopper.AddCloser(stop.CloserFn(func() {
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
@@ -605,7 +606,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	admissionControl.racHandles = kvserver.MakeRACHandles(stores)
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
 		nodeIDContainer,
-		gcoords.RegularCPU.GetWorkQueue(admission.KVWork),
+		gcoords.RegularCPU,
 		gcoords.ElasticCPU,
 		gcoords.Stores,
 		admissionControl.racHandles,
@@ -1027,7 +1028,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		txnMetrics,
 		stores,
 		cfg.ClusterIDContainer,
-		gcoords.RegularCPU.GetWorkQueue(admission.KVWork),
 		gcoords.ElasticCPU,
 		gcoords.Stores,
 		tenantUsage,
@@ -1219,7 +1219,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
-			sqlSQLResponseAdmissionQ: gcoords.RegularCPU.GetWorkQueue(admission.SQLSQLResponseWork),
+			sqlSQLResponseAdmissionQ: gcoords.RegularCPU.GetSQLWorkQueue(admission.SQLSQLResponseWork),
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 			inspectzServer:           inspectzServer,
@@ -2576,4 +2576,20 @@ func MakeServerOptionsForURL(
 		DefaultDatabase: catalogkeys.DefaultDatabaseName,
 	}
 	return clientConnOptions, serverParams
+}
+
+type cpuMetricsProvider struct{}
+
+var _ admission.CPUMetricsProvider = &cpuMetricsProvider{}
+
+func (p *cpuMetricsProvider) GetCPUUsage() (totalCPUTimeMillis int64, err error) {
+	userMillis, systemMillis, err := status.GetProcCPUTime(context.Background())
+	if err != nil {
+		return 0, errors.Wrap(err, "fetching cumulative CPU time failed")
+	}
+	return userMillis + systemMillis, nil
+}
+
+func (p *cpuMetricsProvider) GetCPUCapacity() (cpuCapacity float64) {
+	return status.GetCPUCapacity()
 }
