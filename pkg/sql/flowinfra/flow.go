@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,18 +41,18 @@ const (
 
 // Startable is any component that can be started (a router or an outbox).
 type Startable interface {
-	Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc)
+	Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) error
 }
 
-// StartableFn is an adapter when a customer function (i.e. a custom goroutine)
+// StartableFn is an adapter when a custom function (i.e. a custom goroutine)
 // needs to become Startable.
-type StartableFn func(context.Context, *sync.WaitGroup, context.CancelFunc)
+type StartableFn func(context.Context, *sync.WaitGroup, context.CancelFunc) error
 
 // Start is a part of the Startable interface.
 func (f StartableFn) Start(
 	ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc,
-) {
-	f(ctx, wg, flowCtxCancel)
+) error {
+	return f(ctx, wg, flowCtxCancel)
 }
 
 // FuseOpt specifies options for processor fusing at Flow.Setup() time.
@@ -506,18 +507,28 @@ func (f *FlowBase) StartInternal(
 		// Note that it is safe to pass the context cancellation function
 		// directly since the main goroutine of the Flow will block until all
 		// startable goroutines exit.
-		s.Start(ctx, &f.waitGroup, f.mu.ctxCancel)
+		if err := s.Start(ctx, &f.waitGroup, f.mu.ctxCancel); err != nil {
+			return err
+		}
 	}
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
-		go func(i int) {
+		// This goroutine doesn't use the Stopper handle since if we start at
+		// least one processor goroutine, we must start all of them. If we were
+		// to start only _some_ processor goroutines (e.g. due to the Stopper
+		// quiescing in the "middle"), then we could get into a deadlock because
+		// RowChannels don't respect the context cancellation.
+		//
+		// Thus, we use the "bare" go func while reporting the panics.
+		go func(ctx context.Context, i int) { // nolint:baregofunc
+			defer logcrash.RecoverAndReportPanic(ctx, &f.Cfg.Settings.SV)
+			defer f.waitGroup.Done()
 			if cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
 			}
 			processors[i].Run(ctx, outputs[i])
-			f.waitGroup.Done()
-		}(i)
+		}(ctx, i)
 	}
 	// Note that we might have already set f.startedGoroutines to true if it is
 	// a vectorized flow with a parallel unordered synchronizer. That component

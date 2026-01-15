@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,6 +103,8 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 	// Simulate the production vectorized flow setup where each input gets its
 	// own streaming allocator, etc.
 	memAccs := [2]mon.BoundAccount{
@@ -140,7 +143,7 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 				inputs[i].(colexectestutils.AllocatorHolder).SetAllocator(allocators[i])
 				parallelUnorderedSynchronizerInputs[i].Root = inputs[i]
 			}
-			input = colexec.NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, inputTypes, parallelUnorderedSynchronizerInputs, &wg)
+			input = colexec.NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, testAllocator, inputTypes, parallelUnorderedSynchronizerInputs, &wg)
 			input = colexecbase.NewSimpleProjectOp(input, len(inputTypes), []uint32{0})
 			return colexecbase.NewConstOp(testAllocator, input, types.Int, constVal, 1)
 		})

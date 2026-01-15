@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -121,9 +122,11 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	}
 
 	ctx, cancelFn := context.WithCancel(context.Background())
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 
 	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
@@ -194,6 +197,8 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	const expectedErr = "first input error"
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	inputs := make([]colexecargs.OpWithMetaInfo, 6)
 	inputs[0].Root = &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
@@ -233,7 +238,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	var streamingMeta []execinfrapb.ProducerMetadata
 	for {
@@ -271,7 +276,9 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()

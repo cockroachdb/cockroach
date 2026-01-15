@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -308,10 +309,18 @@ func (rb *routerBase) init(
 }
 
 // Start must be called after init.
-func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
-	wg.Add(len(rb.outputs))
+func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) error {
 	for i := range rb.outputs {
+		ctx, hdl, err := rb.flowCtx.Stopper().GetHandle(ctx, stop.TaskOpts{
+			TaskName: "router output",
+			SpanOpt:  stop.FollowsFromSpan,
+		})
+		if err != nil {
+			return err
+		}
+		wg.Add(1)
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+			defer hdl.Activate(ctx).Release(ctx)
 			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
@@ -408,6 +417,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			ro.rowBufToPushFromAcc.Close(ctx)
 		}(ctx, rb, &rb.outputs[i])
 	}
+	return nil
 }
 
 // ProducerDone is part of the RowReceiver interface.

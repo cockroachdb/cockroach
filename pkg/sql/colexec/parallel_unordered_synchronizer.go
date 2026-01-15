@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -258,15 +259,31 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 	s.setState(parallelUnorderedSynchronizerStateWorkersBlocked)
 	for i := range s.inputs {
 		var inputCtx context.Context
-		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(
-			s.Ctx, s.flowCtx, fmt.Sprintf("parallel unordered sync input %d", i), s.processorID,
-		)
+		spanName := fmt.Sprintf("parallel unordered sync input %d", i)
+		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, s.flowCtx, spanName, s.processorID)
 		if s.cancelInputsOnDrain != nil {
 			inputCtx, s.cancelInputsOnDrain[i] = context.WithCancel(inputCtx)
+		}
+		spanOpt := stop.CallerProvidedSpan
+		if s.tracingSpans[i] == nil {
+			spanOpt = stop.FollowsFromSpan
+		}
+		inputCtx, hdl, err := s.flowCtx.Stopper().GetHandle(
+			inputCtx,
+			stop.TaskOpts{
+				TaskName: spanName,
+				SpanOpt:  spanOpt,
+				Span:     s.tracingSpans[i],
+			},
+		)
+		if err != nil {
+			s.workerSendErr(err)
+			return
 		}
 		s.externalWaitGroup.Add(1)
 		s.internalWaitGroup.Add(1)
 		go func(ctx context.Context, inputIdx int) {
+			defer hdl.Activate(ctx).Release(ctx)
 			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)

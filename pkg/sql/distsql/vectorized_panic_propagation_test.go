@@ -73,13 +73,14 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 	// asynchronous components that haven't been signaled to exit. To simulate
 	// this we just create a mock startable.
 	flow.AddStartable(
-		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) {
+		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, _ context.CancelFunc) error {
 			wg.Add(1)
 			go func() {
 				// Ensure context is canceled.
 				<-ctx.Done()
 				wg.Done()
 			}()
+			return nil
 		}),
 	)
 

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,6 +122,10 @@ func intCols(numCols int) []*types.T {
 //	     +------------+
 func TestDrainOnlyInputDAG(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
 
 	const (
 		numInputTypesToOutbox       = 3
@@ -215,7 +220,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			require.Len(t, input.MetadataSources, 1)
 			inbox := colexec.MaybeUnwrapInvariantsChecker(input.MetadataSources[0].(colexecop.Operator)).(*colrpc.Inbox)
 			require.Len(t, inboxToNumInputTypes[inbox], numInputTypesToOutbox)
-			return colrpc.NewOutbox(&execinfra.FlowCtx{Gateway: false}, 0 /* processorID */, allocator, converterMemAcc, input, typs, nil /* getStats */)
+			return colrpc.NewOutbox(&execinfra.FlowCtx{Gateway: false, Cfg: &execinfra.ServerConfig{Stopper: stopper}}, 0 /* processorID */, allocator, converterMemAcc, input, typs, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(allocator, typs, streamID)
@@ -226,7 +231,6 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowBase := flowinfra.NewFlowBase(
 		execinfra.FlowCtx{

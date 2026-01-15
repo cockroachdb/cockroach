@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // staticAddressResolver maps StaticSQLInstanceID to the given address.
@@ -86,7 +87,7 @@ func TestOutbox(t *testing.T) {
 
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
-	outbox.Start(ctx, &outboxWG, cancel)
+	require.NoError(t, outbox.Start(ctx, &outboxWG, cancel))
 
 	// Start a producer. It will send one row 0, then send rows -1 until a drain
 	// request is observed, then send row 2 and some metadata.
@@ -250,7 +251,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	outbox.Init(types.OneIntCol)
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
-	outbox.Start(ctx, &outboxWG, cancel)
+	require.NoError(t, outbox.Start(ctx, &outboxWG, cancel))
 
 	streamNotification := <-mockServer.InboundStreams
 	serverStream := streamNotification.Stream
@@ -326,7 +327,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			defer cancel()
 			outbox = flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 			outbox.Init(types.OneIntCol)
-			outbox.Start(ctx, &wg, cancel)
+			require.NoError(t, outbox.Start(ctx, &wg, cancel))
 
 			// Wait for the outbox to connect the stream.
 			streamNotification := <-mockServer.InboundStreams
@@ -412,7 +413,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	outbox = flowinfra.NewOutbox(&flowCtx, 0 /* processorID */, execinfra.StaticSQLInstanceID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
 	outbox.Init(types.OneIntCol)
-	outbox.Start(ctx, &wg, mockCancel)
+	require.NoError(t, outbox.Start(ctx, &wg, mockCancel))
 
 	// Wait for the outbox to connect the stream.
 	streamNotification := <-mockServer.InboundStreams
@@ -479,7 +480,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	}()
 
 	// This outbox will fail to connect, because it has a nil nodeDialer.
-	outbox.Start(ctx, &wg, cancel)
+	require.NoError(t, outbox.Start(ctx, &wg, cancel))
 
 	wg.Wait()
 	// Also, make sure that pushing to the outbox after its failed shows that
@@ -538,7 +539,7 @@ func BenchmarkOutbox(b *testing.B) {
 			defer cancel()
 			// Start the outbox. This should cause the stream to connect, even though
 			// we're not sending any rows.
-			outbox.Start(ctx, &outboxWG, cancel)
+			require.NoError(b, outbox.Start(ctx, &outboxWG, cancel))
 
 			// Wait for the outbox to connect the stream.
 			streamNotification := <-mockServer.InboundStreams
