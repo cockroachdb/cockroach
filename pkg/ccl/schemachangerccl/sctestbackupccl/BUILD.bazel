@@ -15,6 +15,7 @@ go_test(
     shard_count = 48,
     tags = ["cpu:4"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/schemachangerccl",
         "//pkg/security/securityassets",
