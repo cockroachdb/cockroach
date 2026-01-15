@@ -31,7 +31,7 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "disk-stalled/wal-failover/among-stores",
 		Owner:               registry.OwnerStorage,
-		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.SSD(2)),
+		Cluster:             r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.ReuseNone(), spec.Disks(2)),
 		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Timeout:             3 * time.Hour,
