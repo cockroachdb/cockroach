@@ -220,7 +220,6 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/appstatspb",
         "//pkg/sql/auditlogging",
-        "//pkg/sql/bulkingest",
         "//pkg/sql/bulkmerge",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
