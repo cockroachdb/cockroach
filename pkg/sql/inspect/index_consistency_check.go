@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -446,77 +444,53 @@ func (c *indexConsistencyCheck) RowCount() uint64 {
 // eligible for consistency checking. If the index is valid, it stores the
 // descriptor and index metadata in the indexConsistencyCheck struct.
 func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
-	return c.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		if !c.asOf.IsEmpty() {
-			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
-				return err
-			}
+	tableDesc, err := loadTableDesc(ctx, c.execCfg, c.tableID, c.tableVersion, c.asOf)
+	if err != nil {
+		return err
+	}
+	c.tableDesc = tableDesc
+
+	c.priIndex = c.tableDesc.GetPrimaryIndex()
+
+	for _, idx := range c.tableDesc.PublicNonPrimaryIndexes() {
+		if idx.GetID() != c.indexID {
+			continue
 		}
 
-		byIDGetter := txn.Descriptors().ByIDWithLeased(txn.KV())
-		if !c.asOf.IsEmpty() {
-			byIDGetter = txn.Descriptors().ByIDWithoutLeased(txn.KV())
+		// We can only check a secondary index that has a 1-to-1 mapping between
+		// keys in the primary index. Unsupported indexes should be filtered out
+		// when the job is created.
+		// TODO(154862): support partial indexes
+		if idx.IsPartial() {
+			return errors.AssertionFailedf(
+				"unsupported index type for consistency check: partial index",
+			)
 		}
-
-		var err error
-		c.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, c.tableID)
-		if err != nil {
-			return err
+		// TODO(154762): support hash sharded indexes
+		if idx.IsSharded() {
+			return errors.AssertionFailedf(
+				"unsupported index type for consistency check: hash-sharded index",
+			)
 		}
-		if c.tableVersion != 0 && c.tableDesc.GetVersion() != c.tableVersion {
-			return errors.WithHintf(
-				errors.Newf(
-					"table %s [%d] has had a schema change since the job has started at %s",
-					c.tableDesc.GetName(),
-					c.tableDesc.GetID(),
-					c.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
-				),
-				"use AS OF SYSTEM TIME to avoid schema changes during inspection",
+		// TODO(154772): support expression indexes
+		if c.tableDesc.IsExpressionIndex(idx) {
+			return errors.AssertionFailedf(
+				"unsupported index type for consistency check: expression index",
+			)
+		}
+		switch idx.GetType() {
+		// TODO(154860): support inverted indexes
+		case idxtype.INVERTED, idxtype.VECTOR:
+			return errors.AssertionFailedf(
+				"unsupported index type for consistency check: %s", idx.GetType(),
 			)
 		}
 
-		c.priIndex = c.tableDesc.GetPrimaryIndex()
-
-		for _, idx := range c.tableDesc.PublicNonPrimaryIndexes() {
-			if idx.GetID() != c.indexID {
-				continue
-			}
-
-			// We can only check a secondary index that has a 1-to-1 mapping between
-			// keys in the primary index. Unsupported indexes should be filtered out
-			// when the job is created.
-			// TODO(154862): support partial indexes
-			if idx.IsPartial() {
-				return errors.AssertionFailedf(
-					"unsupported index type for consistency check: partial index",
-				)
-			}
-			// TODO(154762): support hash sharded indexes
-			if idx.IsSharded() {
-				return errors.AssertionFailedf(
-					"unsupported index type for consistency check: hash-sharded index",
-				)
-			}
-			// TODO(154772): support expression indexes
-			if c.tableDesc.IsExpressionIndex(idx) {
-				return errors.AssertionFailedf(
-					"unsupported index type for consistency check: expression index",
-				)
-			}
-			switch idx.GetType() {
-			// TODO(154860): support inverted indexes
-			case idxtype.INVERTED, idxtype.VECTOR:
-				return errors.AssertionFailedf(
-					"unsupported index type for consistency check: %s", idx.GetType(),
-				)
-			}
-
-			// We found the index and it is valid for checking.
-			c.secIndex = idx
-			return nil
-		}
-		return errors.AssertionFailedf("no index with ID %d found in table %d", c.indexID, c.tableID)
-	})
+		// We found the index and it is valid for checking.
+		c.secIndex = idx
+		return nil
+	}
+	return errors.AssertionFailedf("no index with ID %d found in table %d", c.indexID, c.tableID)
 }
 
 // createIndexCheckQuery will make the index check query for a given
