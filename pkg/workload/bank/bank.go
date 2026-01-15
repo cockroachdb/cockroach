@@ -117,8 +117,9 @@ func (b *bank) ConnFlags() *workload.ConnFlags { return b.connFlags }
 func (b *bank) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if b.rows < 2 {
+			if b.rows != 0 && b.rows < 2 {
 				// We need at least two rows to do any transfers.
+				// Allow rows=0 for schema-only initialization (e.g., workload init --rows=0).
 				return errors.Errorf(`Value of rows must be greater than one; was %d`, b.rows)
 			}
 			if b.rows < b.ranges {
