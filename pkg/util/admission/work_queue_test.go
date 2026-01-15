@@ -192,14 +192,25 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "init":
 				closeFn()
 				tg = &testGranter{buf: &buf}
-				opts := makeWorkQueueOptions(KVWork)
+				st = cluster.MakeTestingClusterSettings()
+				workKind := KVWork
+				if d.HasArg("sql-kv") {
+					workKind = SQLKVResponseWork
+				} else if d.HasArg("sql-sql") {
+					workKind = SQLSQLResponseWork
+				}
+				if d.HasArg("cpu-time-token-ac-enabled") {
+					cpuTimeTokenACEnabled.Override(context.Background(), &st.SV, true)
+				} else {
+					cpuTimeTokenACEnabled.Override(context.Background(), &st.SV, false)
+				}
+				opts := makeWorkQueueOptions(workKind)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
 				opts.disableGCTenantsAndResetUsed = true
-				st = cluster.MakeTestingClusterSettings()
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					KVWork, tg, st, metrics, opts).(*WorkQueue)
+					workKind, tg, st, metrics, opts).(*WorkQueue)
 				tg.r = q
 				wrkMap.resetMap()
 				return ""

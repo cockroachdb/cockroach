@@ -93,9 +93,10 @@ func TestCPUGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+			knobs := &TestingKnobs{DisableCPUTimeTokenFillerGoroutine: true}
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 			defer coords.Close()
-			coord = coords.RegularCPU
+			coord = coords.RegularCPU.slotsCoord
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -460,7 +461,8 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+	knobs := &TestingKnobs{DisableCPUTimeTokenFillerGoroutine: true}
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
