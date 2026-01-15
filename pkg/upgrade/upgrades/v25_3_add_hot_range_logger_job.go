@@ -16,13 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-// addHotRangeLoggerJob creates the hot range logger job.
-func addHotRangeLoggerJob(
-	ctx context.Context, version clusterversion.ClusterVersion, d upgrade.TenantDeps,
-) error {
-	return createHotRangesLoggerJob(ctx, version, d)
-}
-
 func createHotRangesLoggerJob(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
