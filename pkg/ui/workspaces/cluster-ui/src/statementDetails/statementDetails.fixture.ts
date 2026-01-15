@@ -828,17 +828,16 @@ export const getStatementDetailsPropsFixture = (
   return {
     history,
     location: {
-      pathname: "/statement/true/4705782015019656142",
+      pathname: "/statement/4705782015019656142",
       search: "",
       hash: "",
       state: null,
     },
     match: {
-      path: "/statement/:implicitTxn/:statement",
-      url: "/statement/true/4705782015019656142",
+      path: "/statement/:statement",
+      url: "/statement/4705782015019656142",
       isExact: true,
       params: {
-        implicitTxn: "true",
         statement: "4705782015019656142",
       },
     },

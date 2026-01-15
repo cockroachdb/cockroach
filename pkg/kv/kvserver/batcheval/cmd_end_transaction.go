@@ -168,11 +168,11 @@ func declareKeysEndTxn(
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
+				// NB: the RHS LastReplicaGCTimestampKey, to which the LHS timestamp is
+				// copied, is covered above by the SpanReadWrite for the entire RHS
+				// unreplicated RangeID-local span.
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
-				})
-				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
 				})
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
