@@ -688,7 +688,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			panic(errors.AssertionFailedf("unexpected ReplicatedWrite.Enabled in mode %v", q.mode))
 		}
 	}
-	if info.BypassAdmission && q.workKind == KVWork {
+	// CPU time token AC currently only supports Serverless. In Serverless,
+	// SQL pods do not run admission control, and the vast majority of work
+	// on a KV pod is KVWork. So, for now, we allow all SQLKVResponseWork &
+	// SQLSQLResponseWork to bypass AC.
+	if cpuTimeTokenACEnabled.Get(&q.settings.SV) && q.workKind != KVWork {
+		info.BypassAdmission = true
+	}
+	if info.BypassAdmission {
 		tenant.used += uint64(info.RequestedCount)
 		if isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
