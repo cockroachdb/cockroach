@@ -1548,7 +1548,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigForMultiRegionTable(tc.localityConfig, tc.regionConfig)
+			zc, err := regions.ZoneConfigForMultiRegionTable(tc.localityConfig, tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})
