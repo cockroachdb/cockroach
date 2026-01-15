@@ -11097,6 +11097,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.granter.disk_write_byte_tokens_exhausted_duration.kv
+      exported_name: admission_granter_disk_write_byte_tokens_exhausted_duration_kv
+      description: Total duration (in nanos) when disk write byte tokens were exhausted, as observed by the token granter (not waiters)
+      y_axis_label: Nanoseconds
+      type: COUNTER
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.granter.elastic_io_tokens_available.kv
       exported_name: admission_granter_elastic_io_tokens_available_kv
       description: Number of tokens available
