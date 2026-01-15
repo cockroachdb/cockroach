@@ -243,11 +243,26 @@ func (sd *StoreDetailMu) status(
 		return updateLastUnavailableAndReturnStatusRLocked(now, StoreStatusDraining)
 	}
 
-	// Also check whether the store is considered unreachable in StoreLiveness.
-	isUnreachable, supportWithdrawnTS := sl(sd.Desc.Node.NodeID, sd.Desc.StoreID)
-	if isUnreachable {
-		return returnStatusRLocked(StoreStatusDead)
-	}
+	// NB: We do not check if the store is considered unreachable in
+	// StoreLiveness or not, because support may be withdrawn for legit reasons
+	// that do not warrant marking the store as dead. For instance, if our store
+	// no longer has any replicas whose leaders reside on the remote store, the
+	// remote store will stop heartbeating us. Treating the remote store as dead
+	// in this case would be incorrect. We could change this behavior in the
+	// future by having store-to-store StoreLiveness heartbeats unconditionally,
+	// but until then, we simply ignore the current StoreLiveness support status
+	// here.
+	//
+	// There is some benefit to checking StoreLiveness support here, over the
+	// signal we get from NodeLiveness. Consider the case where the remote store
+	// is being considered as a lease transfer target. More often than not, we
+	// (our store) is both the leader and leaseholder. By checking direct
+	// StoreLiveness support here, we can avoid transferring the lease to a
+	// store that is partitioned from us. Put another way, it helps avoid
+	// unavailability induced by a leader/leaseholder split. NodeLiveness
+	// doesn't give is this signal as it doesn't say much about the current
+	// store (leader's) connectivity to the remote store (incoming leaseholder).
+	_, supportWithdrawnTS := sl(sd.Desc.Node.NodeID, sd.Desc.StoreID)
 
 	// A store is throttled if it has missed receiving snapshots recently.
 	if sd.ThrottledUntil.After(now) {
