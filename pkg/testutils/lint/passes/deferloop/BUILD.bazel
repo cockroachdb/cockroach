@@ -17,6 +17,8 @@ go_test(
     data = glob(["testdata/**"]) + [
         "@go_sdk//:files",
     ],
+    exec_properties = {"test.Pool": "large"},
+    tags = ["cpu:2"],
     deps = [
         ":deferloop",
         "//pkg/build/bazel",
