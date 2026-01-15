@@ -135,11 +135,6 @@ func (d *TestStaticDirectoryServer) WatchPods(
 		return status.Errorf(codes.FailedPrecondition, "directory server has not been started")
 	}
 
-	addListener := func(ch chan *tenant.WatchPodsResponse) *list.Element {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		return d.mu.podEventListeners.PushBack(ch)
-	}
 	removeListener := func(e *list.Element) chan *tenant.WatchPodsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
@@ -158,11 +153,17 @@ func (d *TestStaticDirectoryServer) WatchPods(
 	// Construct the channel with a small buffer to allow for a burst of
 	// notifications, and a slow receiver.
 	c := make(chan *tenant.WatchPodsResponse, 10)
-	chElement := addListener(c)
 
+	// Capture the initial pods and add the listener atomically within the same
+	// lock hold. This prevents a race where a pod update occurs after the
+	// listener is added but before we capture the initial state, which would
+	// cause duplicate events (the update notification and the initial snapshot
+	// would both contain the same pod).
+	var chElement *list.Element
 	initialPods := func() (result []tenant.WatchPodsResponse) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
+		chElement = d.mu.podEventListeners.PushBack(c)
 		for _, pods := range d.mu.tenantPods {
 			for _, pod := range pods {
 				result = append(result, tenant.WatchPodsResponse{
@@ -265,11 +266,6 @@ func (d *TestStaticDirectoryServer) WatchTenants(
 		return status.Errorf(codes.FailedPrecondition, "directory server has not been started")
 	}
 
-	addListener := func(ch chan *tenant.WatchTenantsResponse) *list.Element {
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		return d.mu.tenantEventListeners.PushBack(ch)
-	}
 	removeListener := func(e *list.Element) chan *tenant.WatchTenantsResponse {
 		d.mu.Lock()
 		defer d.mu.Unlock()
@@ -288,11 +284,16 @@ func (d *TestStaticDirectoryServer) WatchTenants(
 	// Construct the channel with a small buffer to allow for a burst of
 	// notifications, and a slow receiver.
 	c := make(chan *tenant.WatchTenantsResponse, 10)
-	chElement := addListener(c)
 
+	// Capture the initial tenants and add the listener atomically within the
+	// same lock hold. This prevents a race where a tenant update occurs after
+	// the listener is added but before we capture the initial state, which
+	// would cause duplicate events.
+	var chElement *list.Element
 	initialTenants := func() (result []tenant.WatchTenantsResponse) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
+		chElement = d.mu.tenantEventListeners.PushBack(c)
 		for id := range d.mu.tenants {
 			result = append(result, tenant.WatchTenantsResponse{
 				Type:   tenant.EVENT_ADDED,
