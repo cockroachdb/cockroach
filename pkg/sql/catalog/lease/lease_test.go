@@ -1170,16 +1170,23 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 
 	var params base.TestServerArgs
 	errChan := make(chan error, 1)
+	// Use an atomic to track when Publish has completed. We only care about
+	// lease acquisitions that happen after Publish, since the WaitForInitialVersion
+	// feature may trigger an automatic acquisition of version 1 during CREATE TABLE.
+	var afterPublish atomic.Bool
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
 				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
-					if desc.GetName() == "kv" {
+					if desc.GetName() == "kv" && afterPublish.Load() {
 						var err error
 						if desc.GetVersion() < 2 {
 							err = errors.Errorf("not seeing latest version")
 						}
-						errChan <- err
+						select {
+						case errChan <- err:
+						default:
+						}
 					}
 				},
 			},
@@ -1225,6 +1232,7 @@ INSERT INTO t.sc1.timestamp VALUES ('a', 'b');
 				}, nil); err != nil {
 				t.Fatal(err)
 			}
+			afterPublish.Store(true)
 			updated = true
 		}
 		// This select will see version 1 of the table. It will first
