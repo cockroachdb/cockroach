@@ -340,6 +340,7 @@ export const TablesPageV2 = () => {
           error={error}
           columns={colsWithSort}
           dataSource={tableData}
+          dataTest="tables-table"
           pagination={{
             size: "small",
             current: params.pagination.page,
