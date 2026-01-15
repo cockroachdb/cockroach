@@ -208,7 +208,7 @@ func NewDistSQLPlanner(
 		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
 	}
 
-	dsp.runnerCoordinator.init(ctx, stopper, &st.SV)
+	dsp.runnerCoordinator.init(ctx, stopper, &st.SV, distSQLSrv.Metrics.RunnerReqParallelCount)
 	dsp.initCancelingWorkers(ctx)
 	return dsp
 }
