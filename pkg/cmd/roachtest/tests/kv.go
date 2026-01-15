@@ -348,7 +348,7 @@ func registerKV(r registry.Registry) {
 			spec.CPU(opts.cpus),
 			spec.WorkloadNode(),
 			spec.WorkloadNodeCPU(workloadNodeCPUs),
-			spec.SSD(opts.ssds),
+			spec.Disks(opts.ssds),
 			spec.RAID0(opts.raid0),
 			spec.RandomizeVolumeType(),
 			spec.RandomlyUseXfs(),
