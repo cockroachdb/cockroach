@@ -34,18 +34,13 @@ type inspectCheckRowCount interface {
 type rowCountCheck struct {
 	rowCountCheckApplicability
 
-	execCfg *sql.ExecutorConfig
-	// tableVersion is the descriptor version recorded when the check was planned.
-	// It is used to detect concurrent schema changes for non-AS OF inspections.
-	tableVersion descpb.DescriptorVersion
-	asOf         hlc.Timestamp
+	tableLoader // Embeds table loading logic.
 
 	state checkState // State of the check when run on a span.
 
 	expected uint64
 
-	tableDesc catalog.TableDescriptor // Populated from the tableID for the cluster check.
-	rowCount  uint64                  // Populated from the job progress for the cluster check.
+	rowCount uint64 // Populated from the job progress for the cluster check.
 
 	clusterState checkClusterState // State of the check when run as a cluster-level check.
 }
@@ -142,7 +137,7 @@ func (c *rowCountCheck) StartCluster(
 ) error {
 	c.clusterState = clusterCheckRunning
 
-	if err := c.loadTableDesc(ctx); err != nil {
+	if err := c.loadTableDesc(ctx, c.tableID); err != nil {
 		return err
 	}
 	c.rowCount = checkData.RowCount
@@ -150,31 +145,43 @@ func (c *rowCountCheck) StartCluster(
 	return nil
 }
 
-func (c *rowCountCheck) loadTableDesc(ctx context.Context) error {
-	return c.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		if !c.asOf.IsEmpty() {
-			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
+// tableLoader is a composition type used to share table loading logic between
+// inspect checks.
+type tableLoader struct {
+	execCfg *sql.ExecutorConfig
+	// tableVersion is the descriptor version recorded when the check was planned.
+	// It is used to detect concurrent schema changes for non-AS OF inspections.
+	tableVersion descpb.DescriptorVersion
+	asOf         hlc.Timestamp
+
+	tableDesc catalog.TableDescriptor
+}
+
+func (l *tableLoader) loadTableDesc(ctx context.Context, tableID descpb.ID) error {
+	return l.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if !l.asOf.IsEmpty() {
+			if err := txn.KV().SetFixedTimestamp(ctx, l.asOf); err != nil {
 				return err
 			}
 		}
 
 		byIDGetter := txn.Descriptors().ByIDWithLeased(txn.KV())
-		if !c.asOf.IsEmpty() {
+		if !l.asOf.IsEmpty() {
 			byIDGetter = txn.Descriptors().ByIDWithoutLeased(txn.KV())
 		}
 
 		var err error
-		c.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, c.tableID)
+		l.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
-		if c.tableVersion != 0 && c.tableDesc.GetVersion() != c.tableVersion {
+		if l.tableVersion != 0 && l.tableDesc.GetVersion() != l.tableVersion {
 			return errors.WithHintf(
 				errors.Newf(
 					"table %s [%d] has had a schema change since the job has started at %s",
-					c.tableDesc.GetName(),
-					c.tableDesc.GetID(),
-					c.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
+					l.tableDesc.GetName(),
+					l.tableDesc.GetID(),
+					l.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
 				),
 				"use AS OF SYSTEM TIME to avoid schema changes during inspection",
 			)

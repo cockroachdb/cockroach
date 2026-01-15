@@ -535,9 +535,11 @@ func buildInspectCheckFactories(
 					rowCountCheckApplicability: rowCountCheckApplicability{
 						tableID: tableID,
 					},
-					execCfg:      execCfg,
-					tableVersion: tableVersion,
-					asOf:         asOf,
+					tableLoader: tableLoader{
+						execCfg:      execCfg,
+						tableVersion: tableVersion,
+						asOf:         asOf,
+					},
 
 					expected: specCheck.RowCount,
 				}
