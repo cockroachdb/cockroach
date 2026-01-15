@@ -240,6 +240,13 @@ func (b *bank) Ops(
 		hists := reg.GetHandle()
 
 		workerFn := func(ctx context.Context) error {
+			// N.B. We allow initializing the bank workload with zero rows as many tests
+			// unfortunately depend on this behavior to quickly create schema only tables.
+			// However, throw an error if we attempt to run the workload with zero rows.
+			if b.rows == 0 {
+				return errors.Errorf("attempting to run bank workload with zero rows")
+			}
+
 			tableIdx := rng.IntN(b.tables)
 			updateStmt := updateStmts[tableIdx]
 
