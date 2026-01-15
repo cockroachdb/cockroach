@@ -50,7 +50,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_table-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-), Value: us-east2}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
@@ -77,7 +77,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
- │         └── 70 Mutation operations
+ │         └── 71 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -87,6 +87,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
@@ -190,7 +191,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
  │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 108 (table_regional_by_table-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
- │    │    │    ├── ABSENT  → PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-), Value: us-east2}
  │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
@@ -260,7 +261,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_table-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_table-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 105 (public-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108 (table_regional_by_table-), ReferencedDescID: 106 (crdb_internal_region-), Value: us-east2}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_table-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_table-), ColumnID: 1 (a-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_table-), Name: "a", ColumnID: 1 (a-)}
@@ -287,7 +288,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_table-), Name: "table_regional_by_table_pkey", IndexID: 1 (table_regional_by_table_pkey-)}
  │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_table-), SeqNum: 0}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_table-)}
- │         └── 77 Mutation operations
+ │         └── 78 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
  │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
@@ -297,6 +298,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
