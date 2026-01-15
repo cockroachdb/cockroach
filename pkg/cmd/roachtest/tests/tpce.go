@@ -280,7 +280,7 @@ func registerTPCE(r registry.Registry) {
 		Owner:            registry.OwnerTestEng,
 		Benchmark:        true,
 		Timeout:          4 * time.Hour,
-		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
+		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(smallNightly.cpus), spec.Disks(smallNightly.ssds)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		// Never run with runtime assertions as this makes this test take
@@ -306,7 +306,7 @@ func registerTPCE(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          8 * time.Hour,
-		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(largeWeekly.cpus), spec.Disks(largeWeekly.ssds)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, largeWeekly)
 		},
