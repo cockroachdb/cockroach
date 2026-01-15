@@ -189,7 +189,11 @@ func checkType(typ, exp reflect.Type) error {
 			return errors.Errorf("%v does not implement %v", typ, exp)
 		}
 	default:
-		if typ != exp {
+		// Check if types are incompatible. Types that differ are acceptable if they
+		// share the same underlying kind and typ is convertible to exp. This allows
+		// named types like "type RegionName string" to satisfy as "string", but
+		// "int8" to not satisfy as "int32".
+		if typ != exp && (typ.Kind() != exp.Kind() || !typ.ConvertibleTo(exp)) {
 			return errors.Errorf("%v is not %v", typ, exp)
 		}
 	}
