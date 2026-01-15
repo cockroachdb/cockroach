@@ -59,68 +59,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.TODO_Delete_V25_3_Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"add 'payload' column to system.eventlog table and add new index on eventType column",
-		clusterversion.TODO_Delete_V25_3_AddEventLogColumnAndIndex.Version(),
-		upgrade.NoPrecondition,
-		eventLogTableMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add 'estimated_last_login_time' column to system.users table",
-		clusterversion.TODO_Delete_V25_3_AddEstimatedLastLoginTime.Version(),
-		upgrade.NoPrecondition,
-		usersLastLoginTimeTableMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add new hot range logger job",
-		clusterversion.TODO_Delete_V25_3_AddHotRangeLoggerJob.Version(),
-		upgrade.NoPrecondition,
-		addHotRangeLoggerJob,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
-	),
-
-	newFirstUpgrade(clusterversion.TODO_Delete_V25_4_Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"add new system.inspect_errors table",
-		clusterversion.TODO_Delete_V25_4_InspectErrorsTable.Version(),
-		upgrade.NoPrecondition,
-		createInspectErrorsTable,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"add transaction diagnostics tables and update statement_diagnostics table",
-		clusterversion.TODO_Delete_V25_4_TransactionDiagnosticsSupport.Version(),
-		upgrade.NoPrecondition,
-		createTransactionDiagnosticsTables,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"set autostats fraction for system stats tables",
-		clusterversion.TODO_Delete_V25_4_SystemStatsTablesAutostatsFraction.Version(),
-		upgrade.NoPrecondition,
-		systemStatsTablesAutostatsFractionMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore table storage parameters"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"create statement_hints table",
-		clusterversion.TODO_Delete_V25_4_AddSystemStatementHintsTable.Version(),
-		upgrade.NoPrecondition,
-		createStatementHintsTable,
-		upgrade.RestoreActionNotRequired(
-			"restore for a cluster predating this table can leave it empty",
-		),
-	),
-
 	newFirstUpgrade(clusterversion.V26_1_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
