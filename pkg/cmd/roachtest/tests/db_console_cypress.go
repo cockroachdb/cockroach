@@ -223,6 +223,18 @@ func registerDbConsoleCypress(r registry.Registry) {
 		Run:              runDbConsoleCypress,
 		Timeout:          1 * time.Hour,
 	})
+	r.Add(registry.TestSpec{
+		Name:    "db-console/cypress-pages",
+		Owner:   registry.OwnerObservability,
+		Cluster: r.MakeClusterSpec(1, spec.WorkloadNode()),
+		// Disabled on IBM because of some nodejs dependencies that are not
+		// available on s390x.
+		CompatibleClouds: registry.AllClouds.NoIBM(),
+		Suites:           registry.Suites(registry.Nightly),
+		Randomized:       false,
+		Run:              runDbConsoleCypressPages,
+		Timeout:          30 * time.Minute,
+	})
 }
 
 // runDbConsoleCypress runs cypress health-check tests against the db-console
@@ -235,6 +247,27 @@ func runDbConsoleCypress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	cypressTest := newDbConsoleCypressTest(t, c, "cypress/e2e/health-check/*.ts", seedQueries)
+	db, err := c.ConnE(ctx, t.L(), cypressTest.testCluster.CRDBNodes()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	cypressTest.SetupTest(ctx, db)
+	for _, targetNode := range c.CRDBNodes() {
+		cypressTest.RunTest(ctx, targetNode, t.L())
+	}
+}
+
+// runDbConsoleCypressPages runs cypress page tests against the db-console
+// for each node in the cluster without requiring authentication.
+func runDbConsoleCypressPages(ctx context.Context, t test.Test, c cluster.Cluster) {
+	if c.IsLocal() {
+		t.Fatal("cannot be run in local mode")
+	}
+
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+
+	cypressTest := newDbConsoleCypressTest(t, c, "cypress/e2e/pages/*.ts", seedQueries)
 	db, err := c.ConnE(ctx, t.L(), cypressTest.testCluster.CRDBNodes()[0])
 	if err != nil {
 		t.Fatal(err)

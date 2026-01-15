@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { SQLPrivilege } from "../../support/types";
+import { isTextGreaterThanZero } from "../../support/e2e";
 
 describe("health check: authenticated user", () => {
   it("serves a DB Console overview page", () => {
@@ -40,9 +41,3 @@ describe("health check: authenticated user", () => {
     });
   });
 });
-
-const isTextGreaterThanZero = (ele: JQuery<HTMLElement>) => {
-  const text = ele.get()[0].innerText;
-  const textAsFloat = parseFloat(text);
-  expect(textAsFloat).to.be.greaterThan(0);
-};
