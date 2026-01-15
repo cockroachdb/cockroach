@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,6 +48,7 @@ func TestCPUTimeTokenFiller(t *testing.T) {
 		return str
 	}
 
+	ctx := context.Background()
 	tickCh := make(chan struct{})
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_filler"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -56,7 +59,7 @@ func TestCPUTimeTokenFiller(t *testing.T) {
 				timeSource: testTime,
 				tickCh:     &tickCh,
 			}
-			filler.start()
+			filler.start(ctx)
 			return flushAndReset()
 		case "advance":
 			var dur time.Duration
@@ -79,7 +82,7 @@ type testTokenAllocator struct {
 
 func (m *testTokenAllocator) init() {}
 
-func (a *testTokenAllocator) resetInterval() {
+func (a *testTokenAllocator) resetInterval(context.Context) {
 	fmt.Fprintf(a.buf, "resetInterval()\n")
 }
 
@@ -94,7 +97,7 @@ type testModel struct {
 
 func (m *testModel) init() {}
 
-func (m *testModel) fit(targets targetUtilizations) rates {
+func (m *testModel) fit(_ context.Context, targets targetUtilizations) rates {
 	// targets uses float64, which when written to golden file can lead to
 	// test reproducibility issues. Here, we multiply by 100 & then round to
 	// the nearest integer.
@@ -156,6 +159,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 		model:    model,
 	}
 
+	ctx := context.Background()
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_allocator"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "resetInterval":
@@ -167,7 +171,7 @@ func TestCPUTimeTokenAllocator(t *testing.T) {
 				model.rates[testTier1][canBurst] += increaseRatesBy
 				model.rates[testTier1][noBurst] += increaseRatesBy
 			}
-			allocator.resetInterval()
+			allocator.resetInterval(ctx)
 			return flushAndReset()
 		case "allocate":
 			var remainingTicks int64
@@ -211,18 +215,18 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	model := cpuTimeTokenLinearModel{
 		timeSource:               testTime,
 		lastFitTime:              testTime.Now(),
-		totalCPUTimeMillis:       0,
+		totalCPUTime:             0,
 		tokenToCPUTimeMultiplier: 1,
 	}
 	tokenCPUTime := &testTokenUsageTracker{}
 	model.granter = tokenCPUTime
-	actualCPUTime := &testCPUMetricProvider{
+	actualCPUTime := &testCPUMetricsProvider{
 		capacity: 10,
 	}
-	model.cpuMetricProvider = actualCPUTime
+	model.cpuMetricsProvider = actualCPUTime
 
 	dur := 5 * time.Second
-	actualCPUTime.append(dur.Nanoseconds(), 1) // appended value ignored by init
+	actualCPUTime.append(dur, 1) // appended value ignored by init
 
 	var targets targetUtilizations
 	targets[testTier1][noBurst] = 0.8
@@ -233,7 +237,8 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// The first call to fit inits the model, by setting tokenToCPUTimeMultiplier
 	// to one, since in prod on the first call to fit, there will be no CPU
 	// usage data to use to determine tokenToCPUTimeMultiplier.
-	refillRates := model.fit(targets)
+	ctx := context.Background()
+	refillRates := model.fit(ctx, targets)
 	require.Equal(t, float64(1), model.tokenToCPUTimeMultiplier)
 	// Given that tokenToCPUTimeMultiplier equals one, refillRates is equal
 	// to target utilization for the bucket * the vCPU count (10 vCPUs in this
@@ -259,10 +264,10 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// Token time is half of actual time, so tokenToCPUTimeMultiplier is two.
 	// 100 data points are appended, to give the filter time to converge on two.
 	tokenCPUTime.append(dur.Nanoseconds()/2, 100)
-	actualCPUTime.append(dur.Milliseconds(), 100)
+	actualCPUTime.append(dur, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	tolerance := 0.01
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
@@ -271,20 +276,20 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// Token time is one fourth of actual time, so tokenToCPUTimeMultiplier is
 	// four.
 	tokenCPUTime.append(dur.Nanoseconds()/2, 100)
-	actualCPUTime.append(dur.Milliseconds()*2, 100)
+	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 4, model.tokenToCPUTimeMultiplier, tolerance)
 
 	// 1x
 	// Token time is one equal to actual time, so tokenToCPUTimeMultiplier is one.
 	tokenCPUTime.append(dur.Nanoseconds()*2, 100)
-	actualCPUTime.append(dur.Milliseconds()*2, 100)
+	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 1, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -292,10 +297,10 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// tokenToCPUTimeMultiplier should be 40, based on the data, but the model caps
 	// tokenToCPUTimeMultiplier at 20.
 	tokenCPUTime.append(dur.Nanoseconds(), 100)
-	actualCPUTime.append(dur.Milliseconds()*40, 100)
+	actualCPUTime.append(dur*40, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -303,20 +308,20 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// tokenToCPUTimeMultiplier should be 0.5, based on the data, but the model caps
 	// tokenToCPUTimeMultiplier at 1.
 	tokenCPUTime.append(dur.Nanoseconds()*2, 100)
-	actualCPUTime.append(dur.Milliseconds(), 100)
+	actualCPUTime.append(dur, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 1, model.tokenToCPUTimeMultiplier, tolerance)
 
 	// 2x
 	// Token time is half of actual time, so tokenToCPUTimeMultiplier is two.
 	tokenCPUTime.append(dur.Nanoseconds(), 100)
-	actualCPUTime.append(dur.Milliseconds()*2, 100)
+	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -332,20 +337,20 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	//
 	// Leave existing tokenToCPUTimeMultiplier multiplier as is, since 2 <= 3.6.
 	tokenCPUTime.append(dur.Nanoseconds()/5, 100)
-	actualCPUTime.append(dur.Milliseconds()/5, 100)
+	actualCPUTime.append(dur/5, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
 
 	// Leave low vCPU mode, in order to set tokenToCPUTimeMultiplier equal to 20,
 	// which is set up for the next test case.
 	tokenCPUTime.append(dur.Nanoseconds(), 100)
-	actualCPUTime.append(dur.Milliseconds()*100, 100)
+	actualCPUTime.append(dur*100, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(targets)
+		_ = model.fit(ctx, targets)
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -358,13 +363,13 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	//            = 0.8 / 0.25
 	//            = 3.2
 	tokenCPUTime.append(dur.Nanoseconds()/5, 100)
-	actualCPUTime.append(dur.Milliseconds()/5, 100)
+	actualCPUTime.append(dur/5, 100)
 	{
 		lastMult := model.tokenToCPUTimeMultiplier
 		for i := 0; ; i++ {
 			require.Less(t, i, 100)
 			testTime.Advance(time.Second)
-			refillRates = model.fit(targets)
+			refillRates = model.fit(ctx, targets)
 			mult := model.tokenToCPUTimeMultiplier
 			if mult == lastMult {
 				break
@@ -386,6 +391,17 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	require.Equal(t, int64(2812500000), refillRates[testTier0][noBurst])
 	// 95% -> 10 vCPUs * .95 * 1s = 9.5s -> 9.5s / 3.2 = 2.96875s
 	require.Equal(t, int64(2968750000), refillRates[testTier0][canBurst])
+
+	// We do not expect the syscall that fetches CPU usage to ever fail.
+	// Verify that log.Fatalf is called when GetCPUUsage returns an error.
+	actualCPUTime.retErr = errors.New("test goes boom")
+	var exited bool
+	log.SetExitFunc(true /* hideStack */, func(_ exit.Code) {
+		exited = true
+	})
+	defer log.ResetExitFunc()
+	_ = model.fit(ctx, targets)
+	require.True(t, exited, "expected log.Fatalf to be called")
 }
 
 type testTokenUsageTracker struct {
@@ -405,22 +421,30 @@ func (t *testTokenUsageTracker) resetTokensUsedInInterval() int64 {
 	return ret
 }
 
-type testCPUMetricProvider struct {
-	i        int
-	cum      int64
-	millis   []int64
-	capacity float64
+type testCPUMetricsProvider struct {
+	i          int
+	cumulative time.Duration
+	durations  []time.Duration
+	capacity   float64
+	retErr     error
 }
 
-func (m *testCPUMetricProvider) GetCPUInfo() (int64, float64) {
-	cycle := m.millis[m.i]
-	m.i++
-	m.cum += cycle
-	return m.cum, m.capacity
+func (p *testCPUMetricsProvider) GetCPUUsage() (totalCPUTime time.Duration, err error) {
+	if p.retErr != nil {
+		return 0, p.retErr
+	}
+	cycle := p.durations[p.i]
+	p.i++
+	p.cumulative += cycle
+	return p.cumulative, nil
 }
 
-func (t *testCPUMetricProvider) append(millis int64, count int) {
+func (p *testCPUMetricsProvider) GetCPUCapacity() (cpuCapacity float64) {
+	return p.capacity
+}
+
+func (p *testCPUMetricsProvider) append(dur time.Duration, count int) {
 	for i := 0; i < count; i++ {
-		t.millis = append(t.millis, millis)
+		p.durations = append(p.durations, dur)
 	}
 }

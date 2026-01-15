@@ -81,6 +81,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",
