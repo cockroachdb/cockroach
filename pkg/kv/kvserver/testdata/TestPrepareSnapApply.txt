@@ -1,3 +1,6 @@
+# snapshot: [a---------------)k
+#  replica: [a---)c
+#	 subsume:      [c---)e [f---------)z
 echo
 ----
 >> sst:
