@@ -106,18 +106,6 @@ func WriteInitialReplicaState(
 	return newMS, nil
 }
 
-// WriteInitialTruncState writes the initial truncated state.
-//
-// TODO(arul): this can be removed once no longer call this from the split
-// evaluation path.
-func WriteInitialTruncState(ctx context.Context, raftWO RaftWO, rangeID roachpb.RangeID) error {
-	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(
-		ctx, raftWO, &kvserverpb.RaftTruncatedState{
-			Index: RaftInitialLogIndex,
-			Term:  RaftInitialLogTerm,
-		})
-}
-
 // WriteInitialRangeState writes the initial range state. It's called during
 // bootstrap.
 func WriteInitialRangeState(
