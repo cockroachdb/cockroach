@@ -116,6 +116,7 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 }
 
 // DumpNow requests a goroutine dump on demand.
+// nolint:deferunlockcheck
 func (gd *GoroutineDumper) DumpNow(
 	ctx context.Context, reason redact.RedactableString,
 ) (didDump bool, _ error) {
