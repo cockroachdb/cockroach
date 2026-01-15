@@ -178,6 +178,47 @@ func TestNewGoroutineDumper(t *testing.T) {
 	})
 }
 
+func TestDumpNowRateLimit(t *testing.T) {
+	const dumpDir = "dump_dir"
+	st := &cluster.Settings{}
+
+	ctx := context.Background()
+	onDemandMinInterval.Override(ctx, &st.SV, 10*time.Second)
+
+	baseTime := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)
+	now := baseTime
+	dumpsTaken := 0
+
+	gd := GoroutineDumper{
+		currentTime: func() time.Time {
+			return now
+		},
+		takeGoroutineDump: func(string) error {
+			dumpsTaken++
+			return nil
+		},
+		store: dumpstore.NewStore(dumpDir, nil, nil),
+		st:    st,
+	}
+
+	didDump, err := gd.DumpNow(ctx, "first")
+	assert.NoError(t, err)
+	assert.True(t, didDump)
+	assert.Equal(t, 1, dumpsTaken)
+
+	now = baseTime.Add(9 * time.Second)
+	didDump, err = gd.DumpNow(ctx, "second")
+	assert.NoError(t, err)
+	assert.False(t, didDump)
+	assert.Equal(t, 1, dumpsTaken)
+
+	now = baseTime.Add(10 * time.Second)
+	didDump, err = gd.DumpNow(ctx, "third")
+	assert.NoError(t, err)
+	assert.True(t, didDump)
+	assert.Equal(t, 2, dumpsTaken)
+}
+
 func TestTakeGoroutineDump(t *testing.T) {
 	t.Run("fails because dump already exists as a directory", func(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)

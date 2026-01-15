@@ -780,11 +780,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
+		goroutineDumper, err := maybeNewGoroutineDumper(workersCtx, s.sqlServer.cfg.GoroutineDumpDirName, s.ClusterSettings())
+		if err != nil {
+			return err
+		}
 		if err := startSampleEnvironment(workersCtx,
 			s.sqlServer.cfg,
 			0, /* pebbleCacheSize */
 			s.stopper,
 			s.runtime,
+			goroutineDumper,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
 		); err != nil {

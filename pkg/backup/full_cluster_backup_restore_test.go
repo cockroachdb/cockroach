@@ -610,7 +610,7 @@ func TestCreateDBAndTableIncrementalFullClusterBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)

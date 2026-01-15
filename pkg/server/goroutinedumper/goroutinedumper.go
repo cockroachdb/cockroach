@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -17,14 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
 	goroutineDumpPrefix = "goroutine_dump"
 	timeFormat          = "2006-01-02T15_04_05.000"
 )
+
+func dumpFilename(now time.Time, reason string, goroutines int) string {
+	return fmt.Sprintf("%s.%s.%s.%09d", goroutineDumpPrefix, now.Format(timeFormat), reason, goroutines)
+}
 
 var (
 	numGoroutinesThreshold = settings.RegisterIntSetting(
@@ -41,6 +48,13 @@ var (
 			"Dumps are GC'ed in the order of creation time. The latest dump is "+
 			"always kept even if its size exceeds the limit.",
 		500<<20, // 500MiB
+	)
+	onDemandMinInterval = settings.RegisterDurationSettingWithExplicitUnit(
+		settings.ApplicationLevel,
+		"server.goroutine_dump.on_demand.min_interval",
+		"minimum amount of time that must pass between two on-demand goroutine dumps (0 disables rate limiting)",
+		10*time.Second,
+		settings.DurationWithMinimum(0),
 	)
 )
 
@@ -62,6 +76,11 @@ var doubleSinceLastDumpHeuristic = heuristic{
 // GoroutineDumper stores relevant functions and stats to take goroutine dumps
 // if an abnormal change in number of goroutines is detected.
 type GoroutineDumper struct {
+	mu struct {
+		syncutil.Mutex
+		lastOnDemandDumpTime time.Time
+	}
+
 	goroutines          int64
 	goroutinesThreshold int64
 	maxGoroutinesDumped int64
@@ -84,14 +103,7 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 	for _, h := range gd.heuristics {
 		if h.isTrue(gd) {
 			now := gd.currentTime()
-			filename := fmt.Sprintf(
-				"%s.%s.%s.%09d",
-				goroutineDumpPrefix,
-				now.Format(timeFormat),
-				h.name,
-				goroutines,
-			)
-			path := gd.store.GetFullPath(filename)
+			path := gd.store.GetFullPath(dumpFilename(now, h.name, int(goroutines)))
 			if err := gd.takeGoroutineDump(path); err != nil {
 				log.Dev.Warningf(ctx, "error dumping goroutines: %s", err)
 				continue
@@ -101,6 +113,37 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 			break
 		}
 	}
+}
+
+// DumpNow requests a goroutine dump on demand.
+// nolint:deferunlockcheck
+func (gd *GoroutineDumper) DumpNow(
+	ctx context.Context, reason redact.RedactableString,
+) (didDump bool, _ error) {
+	minInterval := onDemandMinInterval.Get(&gd.st.SV)
+	now := gd.currentTime()
+
+	gd.mu.Lock()
+	rateLimited := minInterval > 0 && now.Sub(gd.mu.lastOnDemandDumpTime) < minInterval
+	if !rateLimited {
+		gd.mu.lastOnDemandDumpTime = now
+	}
+	gd.mu.Unlock()
+
+	if rateLimited {
+		log.Ops.VEventfDepth(ctx, 1, 1, "on-demand goroutine dump suppressed by rate limit: %s", reason)
+		return false, nil
+	}
+
+	filename := dumpFilename(now, "on_demand", runtime.NumGoroutine())
+	log.Ops.Infof(ctx, "taking on-demand goroutine dump: %s [%s]", reason, filename)
+	path := gd.store.GetFullPath(filename)
+	if err := gd.takeGoroutineDump(path); err != nil {
+		return false, err
+	}
+
+	gd.gcDumps(ctx, now)
+	return true, nil
 }
 
 // NewGoroutineDumper returns a GoroutineDumper which enables
@@ -134,12 +177,14 @@ func (gd *GoroutineDumper) gcDumps(ctx context.Context, now time.Time) {
 }
 
 // PreFilter is part of the dumpstore.Dumper interface.
+//
+// GC is intentionally heuristic-agnostic: all dumps share the same size budget
+// and the most recent dump is preserved regardless of which heuristic created it.
 func (gd *GoroutineDumper) PreFilter(
 	ctx context.Context, files []os.DirEntry, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, _ error) {
 	preserved = make(map[int]bool)
 	for i := len(files) - 1; i >= 0; i-- {
-		// Always preserve the last dump in chronological order.
 		if gd.CheckOwnsFile(ctx, files[i]) {
 			preserved[i] = true
 			break
