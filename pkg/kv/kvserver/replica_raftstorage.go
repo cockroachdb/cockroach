@@ -618,19 +618,19 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		}
 	}
 
-	sb := snapWriteBuilder{
+	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
+	sw := snapWriter{
 		todoEng:  r.store.TODOEngine(),
-		sl:       r.raftMu.stateLoader.StateLoader,
 		writeSST: writeSST,
-
+	}
+	if err := sw.prepareSnapApply(ctx, snapWrite{
+		sl:         r.raftMu.stateLoader.StateLoader,
 		truncState: truncState,
 		hardState:  hs,
 		desc:       desc,
 		origDesc:   r.shMu.state.Desc,
 		subsume:    subsume, // NB: ordered by StartKey
-	}
-	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
-	if err := sb.prepareSnapApply(ctx); err != nil {
+	}); err != nil {
 		return err
 	}
 
