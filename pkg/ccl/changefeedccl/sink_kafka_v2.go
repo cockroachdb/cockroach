@@ -68,6 +68,7 @@ func newKafkaSinkClientV2(
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
+	partitionAlg string,
 ) (*kafkaSinkClientV2, error) {
 	bootstrapBrokers := strings.Split(bootstrapAddrsStr, `,`)
 
@@ -77,7 +78,7 @@ func newKafkaSinkClientV2(
 
 		kgo.SeedBrokers(bootstrapBrokers...),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
-		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
+		kgo.RecordPartitioner(newKgoChangefeedPartitioner(partitionAlg)),
 		// 256MiB. This is the max this library allows. Note that v1 sets the sarama equivalent to math.MaxInt32.
 		kgo.ProducerBatchMaxBytes(256 << 20), // 256MiB
 		kgo.BrokerMaxWriteBytes(1 << 30),     // 1GiB
@@ -355,6 +356,7 @@ func makeKafkaSinkV2(
 	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
 	jsonConfig changefeedbase.SinkSpecificJSONConfig,
+	partitionAlg string,
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
@@ -400,7 +402,8 @@ func makeKafkaSinkV2(
 	}
 
 	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck)
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg,
+		u.Host, settings, knobs, mb, topicsForConnectionCheck, partitionAlg)
 	if err != nil {
 		return nil, err
 	}
@@ -600,15 +603,25 @@ var _ kgo.Logger = kgoLogAdapter{}
 // newKgoChangefeedPartitioner returns a new kgo.Partitioner that wraps the
 // recommended sarama compat approach to pass thru record partitions when key is
 // nil, like the v1 implementation.
-func newKgoChangefeedPartitioner() kgo.Partitioner {
-	return &kgoChangefeedPartitioner{
-		inner: kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(bs []byte) uint32 {
-			// Make a new hasher each time, as the partitioner may be called concurrently.
-			hasher := fnv.New32a()
-			_, _ = hasher.Write(bs)
-			return hasher.Sum32()
-		})),
+// hashMethod specifies the hash function to use: "fnv-1a" (default) or "murmur2".
+func newKgoChangefeedPartitioner(hashMethod string) kgo.Partitioner {
+	if strings.ToLower(hashMethod) == "murmur2" {
+		// murmur2 is the franz-go default. StickyKeyPartitioner creates a
+		// new murmur2 hasher every call. If the default were to change,
+		// TestPartitionAlg should fail.
+		inner := kgo.StickyKeyPartitioner(nil /* hasher */)
+		return &kgoChangefeedPartitioner{inner: inner}
 	}
+	// Use fnv-1a by default. fnv-1a is the sarama default hashing
+	// algorithm and is compatible with the v1 kafka sink.
+	inner := kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(
+		bs []byte) uint32 {
+		hasher := fnv.New32a()
+		_, _ = hasher.Write(bs)
+		return hasher.Sum32()
+	}))
+
+	return &kgoChangefeedPartitioner{inner: inner}
 }
 
 type kgoChangefeedPartitioner struct {
