@@ -116,15 +116,16 @@ func verifySnap(
 	return nil, nil
 }
 
-// snapWriteBuilder contains the data needed to prepare the on-disk state for a
-// snapshot.
-//
-// TODO(pav-kv): move this struct to kvstorage package.
-type snapWriteBuilder struct {
+// snapWriter helps preparing the snapshot write to storage.
+// TODO(pav-kv): move this and other structs in this file to kvstorage package.
+type snapWriter struct {
 	todoEng  storage.Engine
-	sl       logstore.StateLoader
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+}
 
+// snapWrite contains the data needed to prepare a snapshot write to storage.
+type snapWrite struct {
+	sl         logstore.StateLoader
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
 	desc       *roachpb.RangeDescriptor // corresponds to the range descriptor in the snapshot
@@ -165,8 +166,8 @@ type snapWriteBuilder struct {
 // choices here: the writes are decomposed into non-overlapping SSTables, and
 // each one is written in key order. We also avoid overlapping with the already
 // written replicated keys of the snapshot.
-func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
-	clearEnd, err := verifySnap(s.origDesc, s.desc, s.subsume)
+func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
+	clearEnd, err := verifySnap(sw.origDesc, sw.desc, sw.subsume)
 	if err != nil {
 		log.KvDistribution.Fatalf(ctx, "%v", err)
 		return err
@@ -178,14 +179,14 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	// TODO(sep-raft-log): RewriteRaftState now only touches raft engine keys, so
 	// it will be convenient to redirect it to a raft engine batch.
 	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
 	}); err != nil {
 		return err
 	}
 
 	// TODO(sep-raft-log): need different readers for raft and state engine.
 	reader := storage.Reader(s.todoEng)
-	for _, sub := range s.subsume {
+	for _, sub := range sw.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
@@ -201,7 +202,7 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	}
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: clearEnd},
+			RSpan:      roachpb.RSpan{Key: sw.desc.EndKey, EndKey: clearEnd},
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,
