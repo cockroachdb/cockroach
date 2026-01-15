@@ -415,7 +415,6 @@ go_test(
         "//pkg/backup",
         "//pkg/base",
         "//pkg/build",
-        "//pkg/ccl/storageccl/engineccl",
         "//pkg/cli/clicfg",
         "//pkg/cli/clienturl",
         "//pkg/cli/clierror",

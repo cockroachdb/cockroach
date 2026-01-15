@@ -74,7 +74,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			numWorkers := (len(c.All()) - 1) * 10
+			// Cap the total number of workers based on the number of
+			// nodes and CPUs on them.
+			numTotalWorkers := len(c.All()) - 1
 			// Number of tables per-database from the TPCC template.
 			const numTablesForTPCC = 9
 			// Active databases will continually execute a mix of TPCC + ORM
@@ -217,8 +219,12 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			for urlIdx := range webConsoleURLs {
 				webConsoleURLs[urlIdx] = "https://" + webConsoleURLs[urlIdx]
 			}
-			// Next startup the workload for our list of databases from earlier.
-			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
+			// Next, start up the workload for our list of databases from earlier.
+			tpccDatabaseLists := [][]string{activeDBList, inactiveDBList}
+			// Since we will spawn two sets of TPCC clients, split the
+			// total workers between them.
+			numWorkers := numTotalWorkers / len(tpccDatabaseLists)
+			for dbListType, dbList := range tpccDatabaseLists {
 				dbList := dbList
 				dbListType := dbListType
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)

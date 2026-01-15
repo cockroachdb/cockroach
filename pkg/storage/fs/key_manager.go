@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package engineccl
+package fs
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -529,7 +528,7 @@ func (m *DataKeyManager) rotateDataKeyAndWrite(
 	// number to ensure we're not overwriting the existing registry.
 	filename := fmt.Sprintf(
 		"%s_%06d_%s", keyRegistryFilename, m.writeMu.marker.NextIter(), registryFormatMonolith)
-	f, err := m.fs.Create(m.fs.PathJoin(m.dbDir, filename), fs.EncryptionRegistryWriteCategory)
+	f, err := m.fs.Create(m.fs.PathJoin(m.dbDir, filename), EncryptionRegistryWriteCategory)
 	if err != nil {
 		return err
 	}

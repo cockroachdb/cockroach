@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package engineccl
+package fs
 
 import (
 	"bytes"
@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,7 +31,7 @@ import (
 )
 
 func writeToFile(t *testing.T, vfs vfs.FS, filename string, b []byte) {
-	f, err := vfs.Create(filename, fs.UnspecifiedWriteCategory)
+	f, err := vfs.Create(filename, UnspecifiedWriteCategory)
 	require.NoError(t, err)
 	breader := bytes.NewReader(b)
 	_, err = io.Copy(f, breader)
@@ -471,107 +470,13 @@ func TestDataKeyManagerIO(t *testing.T) {
 		})
 }
 
-type loggingFS struct {
-	vfs.FS
-	w io.Writer
-}
-
-func (fs loggingFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File, error) {
-	fmt.Fprintf(fs.w, "create(%q)\n", name)
-	f, err := fs.FS.Create(name, category)
-	if err != nil {
-		return nil, err
-	}
-	return loggingFile{f, name, fs.w}, nil
-}
-
-func (fs loggingFS) Link(oldname, newname string) error {
-	fmt.Fprintf(fs.w, "link(%q, %q)\n", oldname, newname)
-	return fs.FS.Link(oldname, newname)
-}
-
-func (fs loggingFS) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
-	fmt.Fprintf(fs.w, "open(%q)\n", name)
-	f, err := fs.FS.Open(name, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return loggingFile{f, name, fs.w}, nil
-}
-
-func (fs loggingFS) OpenDir(name string) (vfs.File, error) {
-	fmt.Fprintf(fs.w, "open-dir(%q)\n", name)
-	f, err := fs.FS.OpenDir(name)
-	if err != nil {
-		return nil, err
-	}
-	return loggingFile{f, name, fs.w}, nil
-}
-
-func (fs loggingFS) Remove(name string) error {
-	fmt.Fprintf(fs.w, "remove(%q)\n", name)
-	return fs.FS.Remove(name)
-}
-
-func (fs loggingFS) Rename(oldname, newname string) error {
-	fmt.Fprintf(fs.w, "rename(%q, %q)\n", oldname, newname)
-	return fs.FS.Rename(oldname, newname)
-}
-
-func (fs loggingFS) ReuseForWrite(
-	oldname, newname string, category vfs.DiskWriteCategory,
-) (vfs.File, error) {
-	fmt.Fprintf(fs.w, "reuseForWrite(%q, %q)\n", oldname, newname)
-	f, err := fs.FS.ReuseForWrite(oldname, newname, category)
-	if err == nil {
-		f = loggingFile{f, newname, fs.w}
-	}
-	return f, err
-}
-
-func (fs loggingFS) Stat(path string) (vfs.FileInfo, error) {
-	fmt.Fprintf(fs.w, "stat(%q)\n", path)
-	return fs.FS.Stat(path)
-}
-
-func (fs loggingFS) MkdirAll(dir string, perm os.FileMode) error {
-	fmt.Fprintf(fs.w, "mkdir-all(%q, %#o)\n", dir, perm)
-	return fs.FS.MkdirAll(dir, perm)
-}
-
-func (fs loggingFS) Lock(name string) (io.Closer, error) {
-	fmt.Fprintf(fs.w, "lock: %q\n", name)
-	return fs.FS.Lock(name)
-}
-
-type loggingFile struct {
-	vfs.File
-	name string
-	w    io.Writer
-}
-
-func (f loggingFile) Write(p []byte) (n int, err error) {
-	fmt.Fprintf(f.w, "write(%q, <...%d bytes...>)\n", f.name, len(p))
-	return f.File.Write(p)
-}
-
-func (f loggingFile) Close() error {
-	fmt.Fprintf(f.w, "close(%q)\n", f.name)
-	return f.File.Close()
-}
-
-func (f loggingFile) Sync() error {
-	fmt.Fprintf(f.w, "sync(%q)\n", f.name)
-	return f.File.Sync()
-}
-
 func TestDataKeyManagerBlockedWriteAllowsRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	mem := vfs.NewMem()
-	fs := &fs.BlockingWriteFSForTesting{FS: mem}
+	fs := &BlockingWriteFSForTesting{FS: mem}
 	dkm := &DataKeyManager{fs: fs, dbDir: "", rotationPeriod: 10000}
 	require.NoError(t, dkm.Load(ctx))
 	require.Equal(t, "", setActiveStoreKey(dkm, "foo", enginepb.EncryptionType_AES128_CTR))

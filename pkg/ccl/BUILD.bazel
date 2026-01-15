@@ -24,7 +24,6 @@ go_library(
         "//pkg/ccl/pgcryptoccl",
         "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/storageccl",
-        "//pkg/ccl/storageccl/engineccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/crosscluster/logical",
