@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/multiregion",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 

@@ -189,7 +189,7 @@ func checkType(typ, exp reflect.Type) error {
 			return errors.Errorf("%v does not implement %v", typ, exp)
 		}
 	default:
-		if typ != exp {
+		if typ != exp && typ.Kind() != exp.Kind() {
 			return errors.Errorf("%v is not %v", typ, exp)
 		}
 	}

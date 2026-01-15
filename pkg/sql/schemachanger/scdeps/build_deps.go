@@ -474,6 +474,11 @@ func (d *buildDeps) IncrementSchemaChangeIndexCounter(counterType string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeIndexCounter(counterType))
 }
 
+// IncrementAlterTableLocalityCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementAlterTableLocalityCounter(counterTypeFrom, counterTypeTo string) {
+	telemetry.Inc(sqltelemetry.AlterTableLocalityCounter(counterTypeFrom, counterTypeTo))
+}
+
 func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
 	return d.descsCollection
 }
