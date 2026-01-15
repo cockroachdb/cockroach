@@ -394,6 +394,17 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// HashAlgEnabled enables the hash_alg changefeed option.
+var HashAlgEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.hash_alg.enabled",
+	"if enabled, allows specifying the hash_alg changefeed option to"+
+		" choose between fnv-1a (default) and murmur2 hash functions for"+
+		"Kafka partitioning",
+	false,
+	settings.WithPublic,
+)
+
 // UseBareTableNames is used to enable and disable the use of bare table names
 // in changefeed topics.
 var UseBareTableNames = settings.RegisterBoolSetting(

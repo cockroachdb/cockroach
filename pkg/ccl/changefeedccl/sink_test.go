@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -983,6 +984,8 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	settings := cluster.MakeTestingClusterSettings()
+
 	// We test that these arbitrary strings get mapped to these
 	// arbitrary partitions to ensure that if an upgrade occurs
 	// while a changefeed is running, partitioning remains the same
@@ -1002,7 +1005,7 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 	referencePartitions[longString2] = 592
 
 	partitioner := newChangefeedPartitioner("topic1")
-	kgoPartitioner := newKgoChangefeedPartitioner().ForTopic("topic1")
+	kgoPartitioner := newKgoChangefeedPartitioner("" /* hashMethod */, settings).ForTopic("topic1")
 
 	for key, expected := range referencePartitions {
 		actual, err := partitioner.Partition(&sarama.ProducerMessage{Key: sarama.ByteEncoder(key)}, 1031)

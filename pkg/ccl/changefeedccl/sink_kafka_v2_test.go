@@ -582,7 +582,9 @@ func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kp := newKgoChangefeedPartitioner().ForTopic("t")
+	settings := cluster.MakeTestingClusterSettings()
+
+	kp := newKgoChangefeedPartitioner("" /* hashMethod */, settings).ForTopic("t")
 	sp := newChangefeedPartitioner("t")
 
 	rng, _ := randutil.NewTestRand()
@@ -607,6 +609,41 @@ func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
 
 		})
 	}
+}
+
+// TestHashAlgPartitions tests that different hash methods
+// map to the expected partitions for the same keys.
+func TestHashAlgPartitions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	settings := cluster.MakeTestingClusterSettings()
+	changefeedbase.HashAlgEnabled.Override(t.Context(), &settings.SV, true)
+
+	defaultPartitioner := newKgoChangefeedPartitioner("", settings).ForTopic("test-topic")
+	fnvPartitioner := newKgoChangefeedPartitioner("fnv-1a", settings).ForTopic("test-topic")
+	murmur2Partitioner := newKgoChangefeedPartitioner("murmur2", settings).ForTopic("test-topic")
+
+	// Test 2 keys for better odds of catching a change in behavior.
+	key1 := []byte(strconv.Itoa(42))
+	key2 := []byte(strconv.Itoa(43))
+	numPartitions := 100
+
+	fnvPart1 := fnvPartitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	fnvPart2 := fnvPartitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 85, fnvPart1)
+	require.Equal(t, 4, fnvPart2)
+
+	// Default is fnv-1a.
+	defaultPart1 := defaultPartitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	defaultPart2 := defaultPartitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 85, defaultPart1)
+	require.Equal(t, 4, defaultPart2)
+
+	murmur2Part1 := murmur2Partitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	murmur2Part2 := murmur2Partitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 72, murmur2Part1)
+	require.Equal(t, 94, murmur2Part2)
 }
 
 // kafkaSinkV2Fx is a test fixture for testing the v2 kafka sink. It supports a
@@ -726,7 +763,9 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 
 	var err error
-	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder, nil, nil)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts,
+		fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder,
+		nil, nil, "" /* hashMethod */)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
