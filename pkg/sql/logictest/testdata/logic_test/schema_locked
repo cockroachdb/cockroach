@@ -318,11 +318,11 @@ t_150484  CREATE TABLE public.t_150484 (
 
 # In the declarative schema changer, the above statements are allowed, as we
 # take care to always unlock the table first.
-skipif config local-legacy-schema-changer local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
 
-skipif config local-legacy-schema-changer local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 query TT
 SHOW CREATE TABLE t_150484
 ----
@@ -333,15 +333,15 @@ t_150484  CREATE TABLE public.t_150484 (
             FAMILY fam_0_n_m_rowid (m, rowid)
           );
 
-skipif config local-legacy-schema-changer local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 ALTER TABLE t_150484 SET (schema_locked=true)
 
-skipif config local-legacy-schema-changer local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
 
-skipif config local-legacy-schema-changer local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 query TT
 SHOW CREATE TABLE t_150484
 ----
