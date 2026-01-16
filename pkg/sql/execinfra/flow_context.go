@@ -51,7 +51,8 @@ type FlowCtx struct {
 	// higher-level txn (like backfills).
 	Txn *kv.Txn
 
-	// MakeLeafTxn returns a new LeafTxn, different from Txn.
+	// MakeLeafTxn returns a new LeafTxn, different from Txn. MakeLeafTxn could be
+	// unset if it's not possible to create a leaf transaction.
 	MakeLeafTxn func(context.Context) (*kv.Txn, error)
 
 	// Descriptors is used to look up leased table descriptors and to construct
