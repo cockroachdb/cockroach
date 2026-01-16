@@ -531,6 +531,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Strip off the explain node to execute the inner statement.
 		stmt.AST = e.Statement
 		ast = e.Statement
+		if e2, ok := stmt.ASTWithInjectedHints.(*tree.ExplainAnalyze); ok {
+			stmt.ASTWithInjectedHints = e2.Statement
+		}
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
@@ -1433,6 +1436,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// Strip off the explain node to execute the inner statement.
 		vars.stmt.AST = e.Statement
 		vars.ast = e.Statement
+		if e2, ok := vars.stmt.ASTWithInjectedHints.(*tree.ExplainAnalyze); ok {
+			vars.stmt.ASTWithInjectedHints = e2.Statement
+		}
 		// TODO(radu): should we trim the "EXPLAIN ANALYZE (DEBUG)" part from
 		// stmt.SQL?
 
