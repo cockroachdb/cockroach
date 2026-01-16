@@ -135,16 +135,27 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	}
 	useDistributedMerge := mode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
-	// addStoragePrefix records a storage prefix before any SST is written to that
-	// location, ensuring cleanup can occur even if the job fails mid-backfill or
+	// addStoragePrefix records storage prefixes before any SST is written to those
+	// locations, ensuring cleanup can occur even if the job fails mid-backfill or
 	// mid-merge. Duplicates are skipped by checking the existing prefixes.
-	addStoragePrefix := func(ctx context.Context, prefix string) error {
+	addStoragePrefix := func(ctx context.Context, prefixes []string) error {
+		existingSet := make(map[string]struct{}, len(progress.SSTStoragePrefixes))
 		for _, existing := range progress.SSTStoragePrefixes {
-			if existing == prefix {
-				return nil // Already recorded.
+			existingSet[existing] = struct{}{}
+		}
+
+		var newPrefixes []string
+		for _, prefix := range prefixes {
+			if _, exists := existingSet[prefix]; !exists {
+				newPrefixes = append(newPrefixes, prefix)
+				existingSet[prefix] = struct{}{}
 			}
 		}
-		progress.SSTStoragePrefixes = append(progress.SSTStoragePrefixes, prefix)
+
+		if len(newPrefixes) == 0 {
+			return nil
+		}
+		progress.SSTStoragePrefixes = append(progress.SSTStoragePrefixes, newPrefixes...)
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 
@@ -279,7 +290,7 @@ func (ib *IndexBackfillPlanner) plan(
 	sourceIndexID descpb.IndexID,
 	useDistributedMerge bool,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
-	addStoragePrefix func(ctx context.Context, prefix string) error,
+	addStoragePrefix func(ctx context.Context, prefixes []string) error,
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
@@ -303,18 +314,27 @@ func (ib *IndexBackfillPlanner) plan(
 			indexesToBackfill, sourceIndexID,
 		)
 		if useDistributedMerge {
-			// Record the storage prefix before any SSTs are written.
-			storagePrefix := fmt.Sprintf("nodelocal://%d/", ib.execCfg.NodeInfo.NodeID.SQLInstanceID())
-			backfill.EnableDistributedMergeIndexBackfillSink(storagePrefix, jobID, &spec)
-			if err := addStoragePrefix(ctx, storagePrefix); err != nil {
-				return err
-			}
+			backfill.EnableDistributedMergeIndexBackfillSink(jobID, &spec)
 		}
 		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
 	}); err != nil {
 		return nil, err
+	}
+
+	// Pre-register storage prefixes for all nodes that will run processors.
+	// This must happen before any SSTs are written to ensure cleanup can find
+	// orphaned files if the job fails mid-write.
+	if useDistributedMerge {
+		prefixes := make([]string, 0, len(p.Processors))
+		for i := range p.Processors {
+			prefix := fmt.Sprintf("nodelocal://%d/", p.Processors[i].SQLInstanceID)
+			prefixes = append(prefixes, prefix)
+		}
+		if err := addStoragePrefix(ctx, prefixes); err != nil {
+			return nil, err
+		}
 	}
 
 	return func(ctx context.Context) error {
@@ -353,8 +373,8 @@ func getIndexBackfillDistributedMergeMode(
 // progress with the new manifests; the final iteration ingests the files directly
 // into KV and clears the manifests.
 //
-// The addStoragePrefix callback is invoked before any SST is written to a new
-// storage location, allowing the caller to persist the prefix for cleanup.
+// The addStoragePrefix callback is invoked before any SST is written to new
+// storage locations, allowing the caller to persist the prefixes for cleanup.
 func (ib *IndexBackfillPlanner) runDistributedMerge(
 	ctx context.Context,
 	job *jobs.Job,
@@ -364,7 +384,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	manifests []jobspb.IndexBackfillSSTManifest,
 	startIteration int,
 	maxIterations int,
-	addStoragePrefix func(ctx context.Context, prefix string) error,
+	addStoragePrefix func(ctx context.Context, prefixes []string) error,
 ) error {
 	if len(manifests) == 0 {
 		return nil
@@ -428,7 +448,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			// only needed during the lifetime of the job. Record the storage prefix
 			// for cleanup on job completion - this must happen before writing any SST.
 			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
-			if err := addStoragePrefix(ctx, prefix); err != nil {
+			if err := addStoragePrefix(ctx, []string{prefix}); err != nil {
 				return "", err
 			}
 			// The '/job/<jobID>' prefix allows for easy cleanup in the event of job

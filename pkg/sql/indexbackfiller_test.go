@@ -799,25 +799,61 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 func TestDistributedMergeStoragePrefixTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 
-	// Create a temp directory for nodelocal storage used by distributed merge.
-	tempDir := t.TempDir()
+	// Track which nodes wrote manifests during the map phase.
+	var manifestNodeIDs syncutil.Map[string, struct{}]
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		ExternalIODir: tempDir,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	const numNodes = 3
+
+	// Create separate temp directories for each node to avoid file collisions.
+	tempDirs := make([]string, numNodes)
+	for i := 0; i < numNodes; i++ {
+		tempDirs[i] = t.TempDir()
+	}
+
+	// Shared testing knobs for all nodes.
+	testingKnobs := base.TestingKnobs{
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		DistSQL: &execinfra.TestingKnobs{
+			AfterDistributedMergeMapPhase: func(_ context.Context, manifests []jobspb.IndexBackfillSSTManifest) {
+				// Extract node IDs from manifest URIs (format: nodelocal://<nodeID>/...).
+				nodeIDRegex := regexp.MustCompile(`^nodelocal://(\d+)/`)
+				for _, m := range manifests {
+					if matches := nodeIDRegex.FindStringSubmatch(m.URI); len(matches) > 1 {
+						manifestNodeIDs.Store(matches[1], &struct{}{})
+					}
+				}
+			},
 		},
-	})
-	defer srv.Stopper().Stop(ctx)
+	}
 
+	// Configure each node with its own isolated external storage directory.
+	serverArgsPerNode := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		serverArgsPerNode[i] = base.TestServerArgs{
+			ExternalIODir: tempDirs[i],
+			Knobs:         testingKnobs,
+		}
+	}
+
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgsPerNode: serverArgsPerNode,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
 	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v INT)`)
-	tdb.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+	tdb.Exec(t, `INSERT INTO t SELECT i, i*10 FROM generate_series(1, 10000) AS g(i)`)
+
+	// Split and scatter the table to distribute data across nodes.
+	tdb.Exec(t, `ALTER TABLE t SPLIT AT SELECT i*1000 FROM generate_series(1, 9) AS g(i)`)
+	tdb.Exec(t, `ALTER TABLE t SCATTER`)
 
 	// Create a non-unique index. This triggers the distributed merge pipeline.
 	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
@@ -843,13 +879,35 @@ func TestDistributedMergeStoragePrefixTracking(t *testing.T) {
 	require.NotNil(t, schemaChangeDetails)
 	require.NotEmpty(t, schemaChangeDetails.BackfillProgress)
 	backfillProgress := schemaChangeDetails.BackfillProgress[0]
-	require.NotEmpty(t, backfillProgress.SSTStoragePrefixes)
 
-	// Verify the prefix format matches nodelocal://<nodeID>/.
+	// Collect unique node IDs from the storage prefixes.
+	prefixNodeIDs := make(map[string]struct{})
 	for _, prefix := range backfillProgress.SSTStoragePrefixes {
 		t.Logf("found storage prefix: %s", prefix)
 		require.Regexp(t, `^nodelocal://\d+/$`, prefix,
 			"storage prefix should match nodelocal://<nodeID>/ format")
+		// Extract the node ID from the prefix.
+		nodeIDRegex := regexp.MustCompile(`^nodelocal://(\d+)/$`)
+		if matches := nodeIDRegex.FindStringSubmatch(prefix); len(matches) > 1 {
+			prefixNodeIDs[matches[1]] = struct{}{}
+		}
+	}
+
+	// Collect node IDs that wrote manifests during the map phase.
+	nodesWithManifests := make(map[string]struct{})
+	manifestNodeIDs.Range(func(nodeID string, _ *struct{}) bool {
+		nodesWithManifests[nodeID] = struct{}{}
+		t.Logf("node %s wrote manifests during map phase", nodeID)
+		return true
+	})
+
+	// Verify that every node that wrote manifests has a corresponding storage prefix.
+	require.Greater(t, len(nodesWithManifests), 1,
+		"expected more than one node to write manifests to verify multi-node behavior")
+	for nodeID := range nodesWithManifests {
+		_, hasPrefix := prefixNodeIDs[nodeID]
+		require.True(t, hasPrefix,
+			"node %s wrote manifests but has no storage prefix registered", nodeID)
 	}
 }
 

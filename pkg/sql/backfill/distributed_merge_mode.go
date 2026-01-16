@@ -103,14 +103,11 @@ func shouldEnableDistributedMergeIndexBackfill(
 }
 
 // EnableDistributedMergeIndexBackfillSink updates the backfiller spec to use the
-// distributed merge sink and file prefix for the provided storage prefix and job.
-// The storagePrefix should be in the form "nodelocal://<nodeID>/" and is used as
-// the base path for temporary SST files.
-func EnableDistributedMergeIndexBackfillSink(
-	storagePrefix string, jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec,
-) {
+// distributed merge sink. The file prefix stores just the path portion; each
+// processor constructs the full nodelocal URI using its own node ID at runtime.
+func EnableDistributedMergeIndexBackfillSink(jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec) {
 	spec.UseDistributedMergeSink = true
-	spec.DistributedMergeFilePrefix = fmt.Sprintf("%sjob/%d/map", storagePrefix, jobID)
+	spec.DistributedMergeFilePrefix = fmt.Sprintf("job/%d/map", jobID)
 }
 
 // DetermineDistributedMergeMode evaluates the cluster setting to decide
