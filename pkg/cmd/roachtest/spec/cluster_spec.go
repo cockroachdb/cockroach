@@ -396,12 +396,7 @@ func getGCEOpts(
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
 	opts.MachineType = machineType
-	if arch == vm.ArchARM64 {
-		// ARM64 machines don't support minCPUPlatform.
-		opts.MinCPUPlatform = ""
-	} else if minCPUPlatform != "" {
-		opts.MinCPUPlatform = minCPUPlatform
-	}
+	opts.MinCPUPlatform = minCPUPlatform
 	if volumeSize != 0 {
 		opts.PDVolumeSize = volumeSize
 	}

@@ -23,6 +23,7 @@ go_library(
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
+        "//pkg/roachprod/vm/gce/gcedb",
         "//pkg/util/randutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",

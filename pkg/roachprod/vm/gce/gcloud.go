@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/gcedb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -54,10 +56,6 @@ const (
 	// limits were determined through empirical testing.
 	MaxConcurrentCommands = 100
 	MaxConcurrentHosts    = 100
-)
-
-var (
-	armMachineTypes = []string{"a4x", "c4a-", "n4a", "t2a-"}
 )
 
 type VolumeType string
@@ -1254,10 +1252,11 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
 		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
-	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
-		"Type of the boot disk volume")
-	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
-		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform)")
+	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "auto",
+		"Type of the boot disk volume; defaults to pd-ssd if supported, otherwise hyperdisk-balanced")
+	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "best",
+		"Minimum CPU platform (see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform); "+
+			"defaults to the latest platform for the machine type")
 	flags.StringVar(&o.Image, ProviderName+"-image", DefaultImage,
 		"Image to use to create the vm, "+
 			"use `gcloud compute images list --filter=\"family=ubuntu-2004-lts\"` to list available images. "+
@@ -1265,9 +1264,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 	flags.IntVar(&o.SSDCount, ProviderName+"-local-ssd-count", 1,
 		"Number of local SSDs to create, only used if local-ssd=true")
-	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "pd-ssd",
+	flags.StringVar(&o.PDVolumeType, ProviderName+"-pd-volume-type", "auto",
 		"Type of the persistent disk volume, only used if local-ssd=false "+
-			"(pd-ssd, pd-balanced, pd-extreme, pd-standard, hyperdisk-balanced)")
+			"(pd-ssd, pd-balanced, pd-extreme, pd-standard, "+"hyperdisk-balanced; defaults to pd-ssd if supported, "+
+			"otherwise hyperdisk-balanced)")
 	flags.IntVar(&o.PDVolumeSize, ProviderName+"-pd-volume-size", 500,
 		"Size in GB of persistent disk volume, only used if local-ssd=false")
 	flags.IntVar(&o.PDVolumeCount, ProviderName+"-pd-volume-count", 1,
@@ -1378,95 +1378,68 @@ func newLimitedErrorGroup() *errgroup.Group {
 
 // useArmAMI returns true if the machine type is an arm64 machine type.
 func (o *ProviderOpts) useArmAMI() bool {
-	for _, armType := range armMachineTypes {
-		if strings.HasPrefix(strings.ToLower(o.MachineType), armType) {
-			return true
-		}
-	}
-	return false
+	info, err := gcedb.GetMachineInfo(o.MachineType)
+	return err == nil && info.Architecture == gcedb.ArchARM64
 }
 
 func (o *ProviderOpts) machineTypeSupportsLocalSSD() bool {
-	machineType := strings.ToLower(o.MachineType)
+	info, err := gcedb.GetMachineInfo(o.MachineType)
+	return err == nil && len(info.AllowedLocalSSDCount) > 0
+}
 
-	// A2 support local SSDs.
-	if strings.HasPrefix(machineType, "a2") {
-		return true
+// autoStorageType returns "pd-ssd" if the machine type supports it, otherwise
+// returns "hyperdisk-balanced".
+func autoStorageType(machineType string) string {
+	info, err := gcedb.GetMachineInfo(machineType)
+	switch {
+	case err != nil:
+		// Unknown machine.
+		return "pd-ssd"
+	case slices.Contains(info.StorageTypes, "pd-ssd"):
+		return "pd-ssd"
+	case slices.Contains(info.StorageTypes, "hyperdisk-balanced"):
+		return "hyperdisk-balanced"
+	default:
+		// All known machine support either "pd-ssd" or "hyperdisk-balanced",
+		// but leave a fallback in case that changes.
+		return info.StorageTypes[0]
 	}
+}
 
-	// A3 support local SSDs.
-	if strings.HasPrefix(machineType, "a3") {
-		return true
+// bootDiskType returns the boot disk storage type.
+func (o *ProviderOpts) bootDiskType() string {
+	if o.BootDiskType == "auto" {
+		return autoStorageType(o.MachineType)
 	}
+	return o.BootDiskType
+}
 
-	// A4, A4X support local SSDs.
-	if strings.HasPrefix(machineType, "a4") {
-		return true
+// pdVolumeType returns the attached storage volume type.
+func (o *ProviderOpts) pdVolumeType() string {
+	if o.PDVolumeType == "auto" {
+		return autoStorageType(o.MachineType)
 	}
+	return o.PDVolumeType
+}
 
-	// C2, C2D support local SSDs.
-	if strings.HasPrefix(machineType, "c2") {
-		return true
+// minCPUPlatform returns the minimum CPU platform to request, if necessary.
+func (p *ProviderOpts) minCPUPlatform() string {
+	switch p.MinCPUPlatform {
+	case "", "any":
+		return ""
+
+	case "best":
+		// By default, we choose the latest CPU platform available for the machine
+		// type. This ensures run-to-run consistency.
+		info, err := gcedb.GetMachineInfo(p.MachineType)
+		if err != nil || len(info.CPUPlatforms) < 2 {
+			return ""
+		}
+		return info.CPUPlatforms[len(info.CPUPlatforms)-1]
+
+	default:
+		return p.MinCPUPlatform
 	}
-
-	// C3, C4D support local SSDs only with the -lssd suffix.
-	if strings.HasPrefix(machineType, "c3") && strings.HasSuffix(machineType, "-lssd") {
-		return true
-	}
-
-	// C4, C4A, C4D support local SSDs only with the -lssd suffix.
-	if strings.HasPrefix(machineType, "c4") && strings.HasSuffix(machineType, "-lssd") {
-		return true
-	}
-
-	// G2 support local SSDs.
-	if strings.HasPrefix(machineType, "g2") {
-		return true
-	}
-
-	// G4 support local SSDs.
-	if strings.HasPrefix(machineType, "g4") {
-		return true
-	}
-
-	// H4D support local SSDs with suffix -lssd.
-	if strings.HasPrefix(machineType, "h4d-") && strings.HasSuffix(machineType, "-lssd") {
-		return true
-	}
-
-	// M1 partially support local SSDs.
-	if strings.HasPrefix(machineType, "m1") {
-		return true
-	}
-
-	// M3 support local SSDs.
-	if strings.HasPrefix(machineType, "m3") {
-		return true
-	}
-
-	// N1 support local SSDs.
-	if strings.HasPrefix(machineType, "n1") {
-		return true
-	}
-
-	// N2, N2D support local SSDs
-	if strings.HasPrefix(machineType, "n2") {
-		return true
-	}
-
-	// Z3 support local SSDs with suffix -(standard|high)ssd.
-	if strings.HasPrefix(machineType, "z3") {
-		return true
-	}
-
-	// E2 do not support local SSDs.
-	// H3 do not support local SSDs.
-	// M2, M4 do not support local SSDs.
-	// N4, N4A, N4D do not support local SSDs.
-	// T2A, T2D don't support local SSDs.
-
-	// We return false by default until we manually allowlist new machine types.
-	return false
 }
 
 // ConfigureClusterCleanupFlags is part of ProviderOpts. This implementation is a no-op.
@@ -1612,8 +1585,8 @@ func computeZones(opts vm.CreateOpts, providerOpts *ProviderOpts) ([]string, err
 
 // computeInstanceArgs computes the arguments to be passed to the gcloud command
 // to create a VM or create an instance template for a VM. This function must
-// ensure that it returns arguments compatible with both the `gcloud compute
-// instances create` and `gcloud compute instance-templates create` commands.
+// ensure that it returns arguments compatible with both the `gcloud compute instances create` and `gcloud compute
+// instance-templates create` commands.
 func (p *Provider) computeInstanceArgs(
 	l *logger.Logger, opts vm.CreateOpts, providerOpts *ProviderOpts,
 ) (args []string, cleanUpFn func(), err error) {
@@ -1635,11 +1608,6 @@ func (p *Provider) computeInstanceArgs(
 		return nil, cleanUpFn, errors.Errorf("local SSDs are not supported with %s instance types, use --local-ssd=false", providerOpts.MachineType)
 	}
 	if providerOpts.useArmAMI() {
-		if providerOpts.MinCPUPlatform != "" {
-			l.Printf("WARNING: --gce-min-cpu-platform is ignored for ARM64 instances")
-			providerOpts.MinCPUPlatform = ""
-		}
-		// TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
 		image = ARM64Image
 		l.Printf("Using ARM64 AMI: %s for machine type: %s", image, providerOpts.MachineType)
 	}
@@ -1654,7 +1622,7 @@ func (p *Provider) computeInstanceArgs(
 		"--scopes", "cloud-platform",
 		"--image", image,
 		"--image-project", imageProject,
-		"--boot-disk-type", providerOpts.BootDiskType,
+		"--boot-disk-type", providerOpts.bootDiskType(),
 	}
 
 	if project == p.defaultProject && providerOpts.ServiceAccount == "" {
@@ -1740,7 +1708,7 @@ func (p *Provider) computeInstanceArgs(
 			// create the "PDVolumeCount" number of persistent disks with the same configuration
 			for i := 0; i < providerOpts.PDVolumeCount; i++ {
 				pdProps := []string{
-					fmt.Sprintf("type=%s", providerOpts.PDVolumeType),
+					fmt.Sprintf("type=%s", providerOpts.pdVolumeType()),
 					fmt.Sprintf("size=%dGB", providerOpts.PDVolumeSize),
 					"auto-delete=yes",
 				}
@@ -1774,12 +1742,10 @@ func (p *Provider) computeInstanceArgs(
 	}
 
 	args = append(args, "--machine-type", providerOpts.MachineType)
-	if providerOpts.MinCPUPlatform != "" {
-		if strings.HasPrefix(providerOpts.MachineType, "n2d-") && strings.HasPrefix(providerOpts.MinCPUPlatform, "Intel") {
-			l.Printf("WARNING: MinCPUPlatform=%q is not supported for MachineType=%q, falling back to AMD Milan", providerOpts.MinCPUPlatform, providerOpts.MachineType)
-			providerOpts.MinCPUPlatform = "AMD Milan"
-		}
-		args = append(args, "--min-cpu-platform", providerOpts.MinCPUPlatform)
+	if platform := providerOpts.minCPUPlatform(); platform != "" {
+		l.Printf("Requesting platform %q for machine type %q; if you get an insufficient capacity error, "+
+			"disable using --gce-min-cpu-platform=any", platform, providerOpts.MachineType)
+		args = append(args, "--min-cpu-platform", platform)
 	}
 
 	args = append(args, "--metadata-from-file", fmt.Sprintf("startup-script=%s", filename))
@@ -2706,323 +2672,18 @@ func (p *Provider) ListLoadBalancers(_ *logger.Logger, vms vm.List) ([]vm.Servic
 	return addresses, nil
 }
 
-// parseMachineType parses a GCE machine type string into its components.
-// Returns family, specialization, number of CPUs, memory in MB, SSD option, error.
-// For example:
-// - Input: "n2-standard-4" -> Output: ("n2", "standard", 4, 0, "", nil)
-// - Input: "n2-custom-8-16384" -> Output: ("n2", "custom", 8, 16384, "", nil)
-// - Input: "c4d-standard-384-metal" -> Output: ("c4d", "standard", 384, 0, "", nil)
-// - Input: "c4a-standard-8-lssd" -> Output: ("c4a", "standard", 8, 0, "lssd", nil)
-// - Input: "c4-standard-288-lssd-metal" -> Output: ("c4", "standard", 288, 0, "lssd", nil)
-// The SSD option corresponds to the newest nomenclature for machine types
-// with Titanium SSDs support.
-func parseMachineType(
-	machineType string,
-) (family string, specialization string, numCPUs int, memMb int, ssdOption string, err error) {
-	// E.g., n2-standard-4, n2-custom-8-16384, c4d-standard-384-metal, c4a-standard-8-lssd, c4-standard-288-lssd-metal.
-	machineTypes := regexp.MustCompile(`^([a-z]+\d+[a-z]*)-(standard|highcpu|highmem|highgpu|ultragpu|edgegpu|custom)-(\d+)(?:-(\d+))?(.*)$`)
-	matches := machineTypes.FindStringSubmatch(machineType)
-
-	// Regexp captures the following informations:
-	// - matches[1]: machine family (n1, n2, h4d, ...)
-	// - matches[2]: machine type (standard|highcpu|highmem|custom)
-	// - matches[3]: number of CPUs
-	// - matches[4]: memory size in MB (only for custom types)
-	// - matches[5]: optional suffixes (e.g., "-lssd-metal", "-metal", "-lssd")
-
-	if len(matches) >= 3 {
-		family = matches[1]
-		specialization = matches[2]
-		numCPUs, err = strconv.Atoi(matches[3])
-		if err != nil {
-			return "", "", 0, 0, "", err
-		}
-		if specialization == "custom" {
-			if len(matches) >= 4 && matches[4] != "" {
-				memMb, err = strconv.Atoi(matches[4])
-				if err != nil {
-					return "", "", 0, 0, "", err
-				}
-			} else {
-				return "", "", 0, 0, "", fmt.Errorf("custom machine type %q missing memory size", machineType)
-			}
-		}
-		if len(matches) >= 6 && matches[5] != "" {
-			// Parse the suffixes (e.g., "-lssd-metal" -> ["lssd", "metal"])
-			suffixes := matches[5]
-			// Split by dashes and check each part
-			for _, suffix := range strings.Split(suffixes, "-") {
-				if suffix == "" {
-					continue
-				}
-				// Only return SSD options, ignore other suffixes like "metal"
-				switch suffix {
-				case "highssd", "standardlssd", "lssd":
-					ssdOption = suffix
-				}
-			}
-		}
-	}
-	return family, specialization, numCPUs, memMb, ssdOption, nil
-}
-
-// Given a machine type, return the allowed number (> 0) of local SSDs, sorted in ascending order.
-// N.B. Only n1, n2, n2d and c2 instances are supported since we don't typically use other instance types.
-// Consult https://cloud.google.com/compute/docs/disks/#local_ssd_machine_type_restrictions for other types of instances.
+// AllowedLocalSSDCount returns allowed numbers (> 0) of local SSDs, sorted in ascending order.
+//
+// Returns an error if the machine type is unknown or does not support local SSDs.
 func AllowedLocalSSDCount(machineType string) ([]int, error) {
-
-	family, _, numCPU, _, ssdOption, err := parseMachineType(machineType)
+	info, err := gcedb.GetMachineInfo(machineType)
 	if err != nil {
 		return nil, err
 	}
-
-	switch family {
-	case "c3":
-		if ssdOption != "lssd" {
-			return nil, fmt.Errorf("unsupported local SSD option %q for machine type %q", ssdOption, machineType)
-		}
-		switch numCPU {
-		case 4:
-			return []int{1}, nil
-		case 8:
-			return []int{2}, nil
-		case 22:
-			return []int{4}, nil
-		case 44:
-			return []int{8}, nil
-		case 88:
-			return []int{16}, nil
-		case 176:
-			return []int{32}, nil
-		}
-
-	case "c3d":
-		if ssdOption != "lssd" {
-			return nil, fmt.Errorf("unsupported local SSD option %q for machine type %q", ssdOption, machineType)
-		}
-		switch numCPU {
-		case 8, 16:
-			return []int{1}, nil
-		case 30:
-			return []int{2}, nil
-		case 60:
-			return []int{4}, nil
-		case 90:
-			return []int{8}, nil
-		case 180:
-			return []int{16}, nil
-		case 360:
-			return []int{32}, nil
-		}
-
-	case "c4":
-		if ssdOption != "lssd" {
-			return nil, fmt.Errorf("unsupported local SSD option %q for machine type %q", ssdOption, machineType)
-		}
-		switch numCPU {
-		case 4, 8:
-			return []int{1}, nil
-		case 16:
-			return []int{2}, nil
-		case 24:
-			return []int{4}, nil
-		case 32:
-			return []int{5}, nil
-		case 48:
-			return []int{8}, nil
-		case 96:
-			return []int{16}, nil
-		case 144:
-			return []int{24}, nil
-		case 192:
-			return []int{32}, nil
-		case 288:
-			return []int{48}, nil
-		}
-
-	case "c4a":
-		if ssdOption != "lssd" {
-			return nil, fmt.Errorf("unsupported local SSD option %q for machine type %q", ssdOption, machineType)
-		}
-		switch numCPU {
-		case 4:
-			return []int{1}, nil
-		case 8:
-			return []int{2}, nil
-		case 16:
-			return []int{4}, nil
-		case 32:
-			return []int{6}, nil
-		case 48:
-			return []int{10}, nil
-		case 64:
-			return []int{14}, nil
-		case 72:
-			return []int{16}, nil
-		}
-
-	case "c4d":
-		if ssdOption != "lssd" {
-			return nil, fmt.Errorf("unsupported local SSD option %q for machine type %q", ssdOption, machineType)
-		}
-		switch numCPU {
-		case 8, 16:
-			return []int{1}, nil
-		case 32:
-			return []int{2}, nil
-		case 48:
-			return []int{4}, nil
-		case 64:
-			return []int{6}, nil
-		case 96:
-			return []int{8}, nil
-		case 192:
-			return []int{16}, nil
-		case 384:
-			return []int{32}, nil
-		}
-
-	case "h4d":
-		return []int{10}, nil
-
-	case "z3":
-		switch numCPU {
-		case 8, 14:
-			return []int{1}, nil
-		case 16:
-			return []int{2}, nil
-		case 22:
-			switch ssdOption {
-			case "standardlssd":
-				return []int{2}, nil
-			case "highlssd":
-				return []int{3}, nil
-			}
-		case 32:
-			return []int{4}, nil
-		case 44:
-			switch ssdOption {
-			case "standardlssd":
-				return []int{3}, nil
-			case "highlssd":
-				return []int{6}, nil
-			}
-		case 88:
-			switch ssdOption {
-			case "standardlssd":
-				return []int{6}, nil
-			case "highlssd":
-				return []int{12}, nil
-			}
-		case 176, 192:
-			return []int{12}, nil
-
-		}
-
-	case "n1":
-		return []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, nil
-
-	case "n2":
-		if numCPU <= 10 {
-			return []int{1, 2, 4, 8, 16, 24}, nil
-		}
-		if numCPU <= 20 {
-			return []int{2, 4, 8, 16, 24}, nil
-		}
-		if numCPU <= 40 {
-			return []int{4, 8, 16, 24}, nil
-		}
-		if numCPU <= 80 {
-			return []int{8, 16, 24}, nil
-		}
-		if numCPU <= 128 {
-			return []int{16, 24}, nil
-		}
-
-	case "n2d":
-		if numCPU <= 16 {
-			return []int{1, 2, 4, 8, 16, 24}, nil
-		}
-		if numCPU <= 48 {
-			return []int{2, 4, 8, 16, 24}, nil
-		}
-		if numCPU <= 80 {
-			return []int{4, 8, 16, 24}, nil
-		}
-		if numCPU <= 224 {
-			return []int{8, 16, 24}, nil
-		}
-
-	case "c2":
-		if numCPU <= 8 {
-			return []int{1, 2, 4, 8}, nil
-		}
-		if numCPU <= 16 {
-			return []int{2, 4, 8}, nil
-		}
-		if numCPU <= 30 {
-			return []int{4, 8}, nil
-		}
-		if numCPU <= 60 {
-			return []int{8}, nil
-		}
-
-	case "c2d":
-		if numCPU <= 16 {
-			return []int{1, 2, 4, 8}, nil
-		}
-		if numCPU <= 32 {
-			return []int{2, 4, 8}, nil
-		}
-		if numCPU <= 56 {
-			return []int{4, 8}, nil
-		}
-		if numCPU <= 112 {
-			return []int{8}, nil
-		}
-
-	case "g2":
-		switch numCPU {
-		case 4, 8, 12, 16, 32:
-			return []int{1}, nil
-		case 24:
-			return []int{2}, nil
-		case 48:
-			return []int{4}, nil
-		case 96:
-			return []int{8}, nil
-		}
-
-	case "g4":
-		switch numCPU {
-		case 48:
-			return []int{4}, nil
-		case 96:
-			return []int{8}, nil
-		case 192:
-			return []int{16}, nil
-		case 384:
-			return []int{32}, nil
-		}
-
-	case "m1":
-		switch numCPU {
-		case 40:
-			return []int{1, 2, 3, 4, 5}, nil
-		case 80:
-			return []int{1, 2, 3, 4, 5, 6, 7, 8}, nil
-		}
-
-	case "m3":
-		switch numCPU {
-		case 32, 64:
-			return []int{4, 8}, nil
-		case 128:
-			return []int{8}, nil
-		}
+	if len(info.AllowedLocalSSDCount) == 0 {
+		return nil, fmt.Errorf("machine type %q does not support local SSD", machineType)
 	}
-
-	return nil, fmt.Errorf("unsupported machine type: %q", machineType)
+	return info.AllowedLocalSSDCount, nil
 }
 
 // N.B. neither boot disk nor additional persistent disks are assigned VM labels by default.
