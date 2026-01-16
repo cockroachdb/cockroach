@@ -22,7 +22,7 @@ const (
 	PrometheusVersion = "2.27.1"
 	// NodeExporterVersion is the version of NodeExporter installed on each node
 	// in the startup script and during the grafana-start command.
-	NodeExporterVersion = "1.2.2"
+	NodeExporterVersion = "1.10.2"
 	// NodeExporterPort is the port that NodeExporter listens on.
 	NodeExporterPort = 9100
 	// NodeExporterMetricsPath is the path that NodeExporter serves metrics on.

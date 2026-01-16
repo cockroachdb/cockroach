@@ -376,7 +376,7 @@ sudo service ssh restart
 export ARCH=$(dpkg --print-architecture)
 export DEFAULT_USER_HOME="/home/$(id -nu 1000)"
 mkdir -p ${DEFAULT_USER_HOME}/node_exporter && curl -fsSL \
-	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-${ARCH}.tar.gz |
+	https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.10.2.linux-${ARCH}.tar.gz |
 	tar zxv --strip-components 1 -C ${DEFAULT_USER_HOME}/node_exporter \
 	&& chown -R 1000:1000 ${DEFAULT_USER_HOME}/node_exporter
 
