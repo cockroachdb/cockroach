@@ -73,6 +73,8 @@ cockroachdb/jobs:
   # see .github/workflows/add-issues-to-project.yml
   label: T-jobs
 cockroachdb/cloud-identity:
+cockroachdb/code-systems-prs:
+  label: T-code-sys
 cockroachdb/unowned:
   aliases:
     cockroachdb/rfc-prs: other
