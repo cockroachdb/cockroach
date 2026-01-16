@@ -1284,6 +1284,7 @@ var disabledSystemTables = map[string]struct{}{
 	"system.statement_bundle_chunks":        {},
 	"system.statement_execution_insights":   {},
 	"system.statement_statistics":           {},
+	"system.statements":                     {},
 	"system.transaction_activity":           {},
 	"system.transaction_execution_insights": {},
 	"system.transaction_statistics":         {},
