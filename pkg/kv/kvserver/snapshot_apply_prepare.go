@@ -122,6 +122,13 @@ type snapWriter struct {
 	// eng encapsulates the storage engines of the Store. It knows whether the
 	// raft/log and state engines are separated, or the same engine must be used.
 	eng kvstorage.Engines
+	// batch is the pending write batch when the snapshot is applied using a batch
+	// rather than ingestion, or nil if the snapshot is applied using ingestion.
+	//
+	// The batch is scoped only to the state machine engine when engines are
+	// separated. Under a single engine, the batch contains the entire mutation
+	// spanning both logical engines.
+	batch storage.WriteBatch
 	// raftWO is the pending write batch into the raft engine. Not nil iff
 	// separated engines are enabled. If nil, the raft state is written into the
 	// combined engine using writeSST.
@@ -139,6 +146,37 @@ type snapWriter struct {
 	// is simple/small and applying it as a batch is more efficient, the Writer is
 	// backed by a shared Pebble batch (one for the entire snapshot application).
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+}
+
+// applyAsBatch instructs the snapWriter that the snapshot application is going
+// to be written as a Pebble batch rather than ingestion.
+//
+// Must be called at most once.
+func (s *snapWriter) applyAsBatch() kvstorage.StateWO {
+	if s.batch != nil {
+		panic("applyAsBatch called twice")
+	}
+	if s.eng.Separated() {
+		s.batch = s.eng.StateEngine().NewWriteBatch()
+	} else {
+		s.batch = s.eng.Engine().NewWriteBatch()
+	}
+	// Redirect all writes to the newly created batch.
+	s.writeSST = func(ctx context.Context, w func(context.Context, storage.Writer) error) error {
+		return w(ctx, s.batch)
+	}
+	return s.batch
+}
+
+// close closes the underlying storage batches, if any. Must be called exactly
+// once, at the end of the snapWriter lifetime.
+func (s *snapWriter) close() {
+	if s.batch != nil {
+		s.batch.Close()
+	}
+	if s.raftWO != nil {
+		s.raftWO.Close()
+	}
 }
 
 // snapWrite contains the data needed to prepare a snapshot write to storage.
