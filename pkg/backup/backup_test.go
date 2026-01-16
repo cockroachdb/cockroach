@@ -3866,6 +3866,8 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 161220)
+
 	const numAccounts = 10
 	ctx := context.Background()
 	args := base.TestClusterArgs{}
