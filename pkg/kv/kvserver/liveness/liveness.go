@@ -38,8 +38,9 @@ import (
 )
 
 const (
-	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
-	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
+	timeUntilNodeDeadSettingName                    = "server.time_until_store_dead"
+	timeAfterNodeSuspectSettingName                 = "server.time_after_store_suspect"
+	timeAfterStoreSuspectInStoreLivenessSettingName = "server.time_after_store_suspect_in_store_liveness"
 )
 
 // Setting this to less than the interval for gossiping stores is a big
@@ -75,6 +76,17 @@ var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	timeAfterNodeSuspectSettingName,
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
+	30*time.Second,
+	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
+)
+
+// TimeAfterStoreSuspectInStoreLiveness measures how long we consider a store
+// suspect after its support is withdrawn in the StoreLiveness fabric.
+var TimeAfterStoreSuspectInStoreLiveness = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	timeAfterStoreSuspectInStoreLivenessSettingName,
+	"the amount of time we consider a store suspect for after its support is withdrawn in StoreLiveness."+
+		" A suspect store is typically treated the same as an unavailable store.",
 	30*time.Second,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
 )

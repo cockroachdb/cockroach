@@ -613,10 +613,12 @@ func TestStorePoolSuspected(t *testing.T) {
 	now := sp.clock.Now()
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
+	timeAfterStoreSuspectInStoreLiveness := liveness.TimeAfterStoreSuspectInStoreLiveness.Get(&sp.st.SV)
 
 	// Verify a store that we haven't seen yet is unknown status.
 	detail := sp.GetStoreDetail(0)
-	s := detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s := detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusUnknown)
 	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
@@ -629,79 +631,95 @@ func TestStorePoolSuspected(t *testing.T) {
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
 	detail = sp.GetStoreDetail(store.StoreID)
 
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 	require.Equal(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions to unavailable, its status changes to temporarily unknown.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_UNAVAILABLE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusUnknown)
 	require.NotEqual(t, hlc.Timestamp{}, detail.LastUnavailable)
 
 	// When the store transitions back to live, it passes through suspect for a period.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Once the window has passed, it will return to available.
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 
 	// Return a liveness of dead.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_DEAD)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusDead)
 
 	// When the store transitions back to live, it passes through suspect for a period.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Verify it also returns correctly to available after suspect time.
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 
 	// Verify that restart after draining also makes it temporarily suspect.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_DRAINING)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusDraining)
 
 	// Verify suspect when restarting after a drain.
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
 	mnl.SetNodeStatus(store.Node.NodeID, livenesspb.NodeLivenessStatus_LIVE)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 
-	// Verify that if the store is considered unreachable in StoreLiveness, then
-	// the returned status is storeStatusDead.
+	// Verify that if the store is considered unreachable in StoreLiveness, we
+	// do NOT mark it as dead. This is because support may be withdrawn for
+	// legitimate reasons (e.g., no replicas with leaders on the remote store)
+	// that do not warrant marking the store as dead.
 	msl.SetIsUnreachable(true)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
-	require.Equal(t, s, StoreStatusDead)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
+	require.Equal(t, s, StoreStatusAvailable)
 
 	// Verify that the store is considered suspect by virtue of its last support
 	// withdrawn timestamp in StoreLiveness by setting the last withdrawn
 	// timestamp to within the suspect duration.
 	msl.SetIsUnreachable(false)
 	msl.SetLastSupportWithdrawnTime(hlc.ClockTimestamp(now.AddDuration(-timeAfterNodeSuspect).AddDuration(time.Millisecond)))
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Set the last withdrawn timestamp to now.
 	msl.SetLastSupportWithdrawnTime(hlc.ClockTimestamp(now))
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusSuspect)
 
 	// Verify the store returns to available after the suspect duration has
 	// passed.
 	now = now.AddDuration(timeAfterNodeSuspect).AddDuration(time.Millisecond)
-	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn, timeAfterNodeSuspect)
+	s = detail.status(now, timeUntilNodeDead, sp.NodeLivenessFn, sp.StoreLivenessFn,
+		timeAfterNodeSuspect, timeAfterStoreSuspectInStoreLiveness)
 	require.Equal(t, s, StoreStatusAvailable)
 }
 
