@@ -10,11 +10,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/linkedin/goavro/v2"
@@ -682,4 +686,112 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(
 		b, runParallelImport(ctx, avro.importContext, &importFileContext{}, limitStream, consumer))
 	close(kvCh)
+}
+
+// TestAvroReadNativeInfiniteLoop demonstrates that readNative() can enter an
+// infinite loop when a non-EOF error occurs and the buffer is empty or contains
+// incomplete data.
+//
+// The bug: readNative() loop checks canReadMoreData() which only looks at r.eof,
+// not r.err. When fill() sets r.err (but not r.eof), the loop continues forever.
+func TestAvroReadNativeInfiniteLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	const numRecords = 100
+	th := newTestHelper(ctx, t)
+
+	var avroData bytes.Buffer
+	opts := roachpb.AvroOptions{
+		Format:          roachpb.AvroOptions_BIN_RECORDS,
+		RecordSeparator: '\n',
+		SchemaJSON:      th.schemaJSON,
+	}
+	th.genRecordsData(t, opts.Format, numRecords, opts.RecordSeparator, &avroData)
+
+	expectedErr := fmt.Errorf("simulated S3 read error")
+
+	subTests := []struct {
+		Name     string
+		MaxBytes int
+	}{
+		{Name: "error_before_any_data", MaxBytes: 0},
+		{Name: "error_with_incomplete_data", MaxBytes: 10},
+	}
+
+	for _, subTest := range subTests {
+		t.Run(subTest.Name, func(t *testing.T) {
+			readerFactory := func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
+				reader := &failingReader{
+					data:      bytes.NewBuffer(avroData.Bytes()[pos:]),
+					failAfter: subTest.MaxBytes,
+					failErr:   expectedErr,
+				}
+				return io.NopCloser(reader), int64(len(avroData.Bytes())), nil
+			}
+
+			resumingReader := cloud.NewResumingReader(
+				ctx,
+				readerFactory,
+				nil,
+				0,
+				int64(len(avroData.Bytes())),
+				"test.avro",
+				cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.ClusterSettings()),
+				nil,
+			)
+
+			source := ioctx.ReaderCtxAdapter(ctx, resumingReader)
+			counter := &byteCounter{r: source}
+			fileReader := &fileReader{
+				Reader:  counter,
+				total:   int64(len(avroData.Bytes())),
+				counter: counter,
+			}
+
+			semaCtx := tree.MakeSemaContext(nil)
+			kvCh := make(chan row.KVBatch, 10)
+			defer close(kvCh)
+
+			avroReader, err := newAvroInputReader(
+				&semaCtx,
+				kvCh,
+				th.schemaTable,
+				opts,
+				0,
+				1,
+				&th.evalCtx,
+				s.DB(),
+			)
+			require.NoError(t, err)
+
+			producer, _, err := newImportAvroPipeline(avroReader, fileReader)
+			require.NoError(t, err)
+
+			// Expect Scan() to hang and timeout
+			type scanResult struct {
+				hasMore bool
+				err     error
+			}
+			resultCh := make(chan scanResult, 1)
+			go func() {
+				hasMore := producer.Scan()
+				resultCh <- scanResult{hasMore: hasMore, err: producer.Err()}
+			}()
+
+			select {
+			case result := <-resultCh:
+				// Scan completed - the bug is NOT present (or has been fixed)
+				require.Error(t, result.err)
+				require.False(t, result.hasMore)
+			case <-time.After(5 * time.Second):
+				// Expected: Scan() hangs because readNative() is in infinite loop
+				t.Fatalf("Scan() hung when error occurred with incomplete data in buffer")
+			}
+		})
+	}
 }
