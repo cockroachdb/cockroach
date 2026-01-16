@@ -10,11 +10,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,8 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
 	"github.com/stretchr/testify/require"
 )
@@ -616,4 +621,251 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 	require.NoError(
 		b, runParallelImport(ctx, avro.importContext, &importFileContext{}, limitStream, consumer))
 	close(kvCh)
+}
+
+// TestAvroReadNativeInfiniteLoop demonstrates that readNative() can enter an
+// infinite loop when a non-EOF error occurs and the buffer is empty or contains
+// incomplete data.
+//
+// The bug: readNative() loop checks canReadMoreData() which only looks at r.eof,
+// not r.err. When fill() sets r.err (but not r.eof), the loop continues forever.
+func TestAvroReadNativeInfiniteLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	const numRecords = 100
+	th := newTestHelper(ctx, t)
+
+	var avroData bytes.Buffer
+	opts := roachpb.AvroOptions{
+		Format:          roachpb.AvroOptions_BIN_RECORDS,
+		RecordSeparator: '\n',
+		SchemaJSON:      th.schemaJSON,
+	}
+	th.genRecordsData(t, opts.Format, numRecords, opts.RecordSeparator, &avroData)
+
+	t.Run("error_before_any_data", func(t *testing.T) {
+		// Test infinite loop when error occurs before any data is buffered.
+		// Expected behavior: readNative() should return the error.
+		// Actual buggy behavior: infinite loop because:
+		// - fill() returns immediately (r.err set, but r.eof remains false)
+		// - len(r.buf) == 0, so decode() not called
+		// - r.row remains nil
+		// - canReadMoreData() returns true (only checks r.eof, not r.err)
+		// - Loop continues forever
+
+		readerFactory := func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
+			reader := &trackingReader{
+				data: avroData.Bytes()[pos:],
+				onRead: func(n int) error {
+					// Return error immediately on first read, before any data
+					return errors.New("stream error: CANCEL")
+				},
+			}
+			return io.NopCloser(reader), int64(len(avroData.Bytes())), nil
+		}
+
+		resumingReader := cloud.NewResumingReader(
+			ctx,
+			readerFactory,
+			nil,
+			0,
+			int64(len(avroData.Bytes())),
+			"test.avro",
+			cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.ClusterSettings()),
+			nil,
+		)
+
+		source := ioctx.ReaderCtxAdapter(ctx, resumingReader)
+		counter := &byteCounter{r: source}
+		fileReader := &fileReader{
+			Reader:  counter,
+			total:   int64(len(avroData.Bytes())),
+			counter: counter,
+		}
+
+		semaCtx := tree.MakeSemaContext(nil)
+		kvCh := make(chan row.KVBatch, 10)
+		defer close(kvCh)
+
+		avroReader, err := newAvroInputReader(
+			&semaCtx,
+			kvCh,
+			th.schemaTable,
+			opts,
+			0,
+			1,
+			&th.evalCtx,
+			s.DB(),
+		)
+		require.NoError(t, err)
+
+		producer, _, err := newImportAvroPipeline(avroReader, fileReader)
+		require.NoError(t, err)
+
+		// Expect Scan() to hang and timeout
+		type scanResult struct {
+			hasMore bool
+			err     error
+		}
+		resultCh := make(chan scanResult, 1)
+		go func() {
+			hasMore := producer.Scan()
+			resultCh <- scanResult{hasMore: hasMore, err: producer.Err()}
+		}()
+
+		select {
+		case result := <-resultCh:
+			// Scan completed - the bug is NOT present (or has been fixed)
+			require.Error(t, result.err)
+			require.False(t, result.hasMore)
+		case <-time.After(5 * time.Second):
+			// Expected: Scan() hangs because readNative() is in infinite loop
+			t.Fatalf("Scan() hung when error occurred before any data was buffered")
+		}
+	})
+
+	t.Run("error_with_incomplete_data", func(t *testing.T) {
+		// Test infinite loop when error occurs after buffering incomplete AVRO record.
+		// Expected behavior: readNative() should return the decode error.
+		// Actual buggy behavior: infinite loop because:
+		// - First read succeeds: 10 bytes in buffer (less than one complete record)
+		// - Second read fails: fill() returns immediately (r.err set, r.eof remains false)
+		// - decode() called on 10 bytes, fails (incomplete record)
+		// - Break condition not met: r.eof is false and buffer < 4MB
+		// - Loop continues trying to decode same incomplete data forever
+
+		readerFactory := func(ctx context.Context, pos int64) (io.ReadCloser, int64, error) {
+			reader := &limitedErrorReader{
+				data:     avroData.Bytes()[pos:],
+				maxBytes: 10, // Only allow 10 bytes before error
+			}
+			return io.NopCloser(reader), int64(len(avroData.Bytes())), nil
+		}
+
+		resumingReader := cloud.NewResumingReader(
+			ctx,
+			readerFactory,
+			nil,
+			0,
+			int64(len(avroData.Bytes())),
+			"test.avro",
+			cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.ClusterSettings()),
+			nil,
+		)
+
+		source := ioctx.ReaderCtxAdapter(ctx, resumingReader)
+		counter := &byteCounter{r: source}
+		fileReader := &fileReader{
+			Reader:  counter,
+			total:   int64(len(avroData.Bytes())),
+			counter: counter,
+		}
+
+		semaCtx := tree.MakeSemaContext(nil)
+		kvCh := make(chan row.KVBatch, 10)
+		defer close(kvCh)
+
+		avroReader, err := newAvroInputReader(
+			&semaCtx,
+			kvCh,
+			th.schemaTable,
+			opts,
+			0,
+			1,
+			&th.evalCtx,
+			s.DB(),
+		)
+		require.NoError(t, err)
+
+		producer, _, err := newImportAvroPipeline(avroReader, fileReader)
+		require.NoError(t, err)
+
+		// Expect Scan() to hang and timeout
+		type scanResult struct {
+			hasMore bool
+			err     error
+		}
+		resultCh := make(chan scanResult, 1)
+		go func() {
+			hasMore := producer.Scan()
+			resultCh <- scanResult{hasMore: hasMore, err: producer.Err()}
+		}()
+
+		select {
+		case result := <-resultCh:
+			// Scan completed - the bug is NOT present (or has been fixed)
+			require.Error(t, result.err)
+			require.False(t, result.hasMore)
+		case <-time.After(5 * time.Second):
+			// Expected: Scan() hangs because readNative() is in infinite loop
+			t.Fatalf("Scan() hung when error occurred with incomplete data in buffer")
+		}
+	})
+}
+
+// trackingReader wraps a byte slice and tracks reads with a callback
+type trackingReader struct {
+	data   []byte
+	pos    int
+	onRead func(n int) error
+}
+
+func (r *trackingReader) Read(p []byte) (int, error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+
+	// Check if we should inject an error BEFORE reading
+	if r.onRead != nil {
+		// Call with 0 to check if error should be injected
+		if err := r.onRead(0); err != nil {
+			// Don't read any data, just return the error
+			return 0, err
+		}
+	}
+
+	n := copy(p, r.data[r.pos:])
+	r.pos += n
+
+	// Notify about bytes read and check if error should be injected
+	// Note: Per io.Reader contract, we can return both n > 0 and an error.
+	// The error will typically be acted upon on the next Read() call.
+	var err error
+	if r.onRead != nil {
+		err = r.onRead(n)
+	}
+
+	return n, err
+}
+
+// limitedErrorReader reads up to maxBytes then returns an error
+type limitedErrorReader struct {
+	data      []byte
+	bytesRead int
+	maxBytes  int
+}
+
+func (r *limitedErrorReader) Read(p []byte) (int, error) {
+	if r.bytesRead >= r.maxBytes {
+		return 0, errors.New("stream error: CANCEL")
+	}
+
+	remaining := r.maxBytes - r.bytesRead
+	n := copy(p, r.data[r.bytesRead:])
+	if n > remaining {
+		n = remaining
+	}
+
+	r.bytesRead += n
+
+	if r.bytesRead >= r.maxBytes {
+		// Return the data AND the error on the last read
+		return n, errors.New("stream error: CANCEL")
+	}
+	return n, nil
 }
