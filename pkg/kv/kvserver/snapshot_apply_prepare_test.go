@@ -132,24 +132,25 @@ func TestPrepareSnapApply(t *testing.T) {
 	descB := desc(102, "f", "z")
 
 	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
-	eng := storage.NewDefaultInMemForTesting()
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 	defer eng.Close()
 
-	createRangeData(t, eng, *descA)
-	createRangeData(t, eng, *descB)
+	createRangeData(t, eng.TODOEngine(), *descA)
+	createRangeData(t, eng.TODOEngine(), *descB)
 
 	sl := kvstorage.MakeStateLoader(id.RangeID)
 	ctx := context.Background()
-	require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id.ReplicaID))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, eng.StateEngine(), id.ReplicaID))
 	for _, rID := range []roachpb.RangeID{descA.RangeID, descB.RangeID} {
-		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(
+			ctx, eng.StateEngine(), replicaID))
 	}
 
 	var sb redact.StringBuilder
 	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
-		b := eng.NewWriteBatch()
+		b := eng.TODOEngine().NewWriteBatch()
 		defer b.Close()
 		if err := write(ctx, b); err != nil {
 			return err
@@ -165,7 +166,7 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 
 	sw := snapWriter{
-		todoEng:  eng,
+		eng:      eng,
 		writeSST: writeSST,
 	}
 	require.NoError(t, sw.prepareSnapApply(ctx, snapWrite{
