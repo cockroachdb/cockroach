@@ -31,6 +31,8 @@
 /.github/                    @cockroachdb/dev-inf
 #!/.github/CODEOWNERS          @cockroachdb/unowned
 
+/.trunk/                     @cockroachdb/code-systems-prs
+
 /build/                      @cockroachdb/dev-inf
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
