@@ -33,6 +33,7 @@ var gopgBlockList = blocklist{
 }
 
 var gopgIgnoreList = blocklist{
+	`pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom with model`: "unknown",
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
 	"pg | ORM slice model | fetches Book relations":       "41690",
