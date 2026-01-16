@@ -950,6 +950,47 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	return g.Wait()
 }
 
+// DeleteCluster implements the vm.DeleteCluster interface.
+// This deletes all cluster resources including load balancers and instances.
+func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
+	// First, list all VMs in the cluster to get their details.
+	ctx := context.Background()
+	regions, err := p.allRegions(p.Config.availabilityZoneNames())
+	if err != nil {
+		return err
+	}
+
+	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
+	vms, err := p.listRegions(ctx, l, regions, *defaultOpts, vm.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Filter to only VMs belonging to this cluster.
+	var clusterVMs vm.List
+	for _, v := range vms {
+		clusterName, err := v.ClusterName()
+		if err != nil {
+			continue
+		}
+		if clusterName == name {
+			clusterVMs = append(clusterVMs, v)
+		}
+	}
+
+	if len(clusterVMs) == 0 {
+		return nil
+	}
+
+	// Delete load balancers first (NLBs, target groups, listeners).
+	if err := p.DeleteLoadBalancer(l, clusterVMs, 0); err != nil {
+		l.Printf("Warning: failed to delete load balancers: %v", err)
+	}
+
+	// Delete the instances.
+	return p.Delete(l, clusterVMs)
+}
+
 // Reset is part of vm.Provider.
 func (p *Provider) Reset(l *logger.Logger, vms vm.List) error {
 	byRegion, err := regionMap(vms)
