@@ -12,10 +12,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/metrics"
 )
+
+// EnableAssertions is a convenient entry point to enable/disable spanset
+// assertions in all places that wrap storage types into spanset types. It also
+// helps discover all those places (users of this constant).
+const EnableAssertions = util.RaceEnabled
 
 // spanSetEngine wraps an Engine and asserts that it does not access spans that
 // do not belong to it.

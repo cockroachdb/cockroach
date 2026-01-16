@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
@@ -131,7 +130,7 @@ type Engines struct {
 // MakeEngines creates an Engines handle in which both state machine and log
 // engine reside in the same physical engine.
 func MakeEngines(eng storage.Engine) Engines {
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		// Wrap the engines with span set engines to catch incorrect engine
 		// accesses.
 		return Engines{
@@ -154,7 +153,7 @@ func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
 	if !buildutil.CrdbTestBuild {
 		panic("separated engines are not supported")
 	}
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		// Wrap the engines with span set engines to catch incorrect engine
 		// accesses.
 		return Engines{

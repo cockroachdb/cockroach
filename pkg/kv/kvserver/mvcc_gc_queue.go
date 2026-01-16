@@ -695,7 +695,7 @@ func (mgcq *mvccGCQueue) process(
 	}
 
 	snap := repl.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		ss := rditer.MakeReplicatedKeySpanSet(desc)
 		defer ss.Release()
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
