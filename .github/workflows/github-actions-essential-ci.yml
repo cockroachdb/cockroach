@@ -30,6 +30,7 @@ on:
       - "release-*"
       - "staging-*"
       - "staging"
+      - "trunk-merge/**"
       - "trying"
       - "!release-1.0*"
       - "!release-1.1*"
