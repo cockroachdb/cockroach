@@ -134,7 +134,38 @@ type snapWriteBuilder struct {
 	clearEnd roachpb.RKey
 }
 
-// prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
+// prepareSnapApply prepares the storage write that represents applying a
+// snapshot to a replica. The replicated keyspace of the snapshot is already
+// prepared, and this method extends it with unreplicated/raft keyspace tweaks,
+// as well as destroying the subsumed replicas if any.
+//
+// The pre-snapshot replica can be initialized or uninitialized, and will become
+// initialized after this write is applied. A snapshot catches up the replica,
+// so multiple splits and merges could have happened since its pre-snapshot
+// state. In general, its EndKey can change (replica shrunk or expanded), and in
+// the expand case the snapshot can overlap other ranges' replicas on our Store.
+//
+// In order to maintain the Store invariant (all replicas don't overlap), the
+// overlapping replicas are destroyed ("subsumed") by this write. This is a
+// valid transition because the overlap signifies that these ranges were merged
+// into ours at some point.
+//
+// See verifySnap for more details on the possible combinations of the snapshot,
+// pre-snapshot replica, and subsumed replicas. Consider the most general case:
+//
+//	[----- snapshot -----)[        )
+//	[----- replica & subsumed -----)
+//
+// If the already written keyspace of the snapshot is narrower than the entire
+// overridden keyspace (the pre-snapshot replica and the subsumed replicas), we
+// additionally clear the remainder. This includes the MVCC, lock table and
+// system keyspace derived from the "user keys" span.
+//
+// The constructed write is either a Pebble batch or ingestion (depending on the
+// size and other factors). Ingesting is more restrictive, so it shapes the code
+// choices here: the writes are decomposed into non-overlapping SSTables, and
+// each one is written in key order. We also avoid overlapping with the already
+// written replicated keys of the snapshot.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	clearEnd, err := verifySnap(s.origDesc, s.desc, s.subsume)
 	if err != nil {
