@@ -20,6 +20,8 @@ go_test(
         "//pkg/testutils/lint/passes/unconvert:testdata",
         "@go_sdk//:files",
     ],
+    exec_properties = {"test.Pool": "large"},
+    tags = ["cpu:2"],
     deps = [
         "//pkg/build/bazel",
         "//pkg/testutils/lint/passes/forbiddenmethod",
