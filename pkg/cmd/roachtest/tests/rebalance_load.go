@@ -241,6 +241,70 @@ func registerRebalanceLoad(r registry.Registry) {
 			},
 		},
 	)
+
+	// Added a copy of the above for testing MMA+count rebalancing,
+	// mixed version testing was ignored since MMA does not exist on
+	// earlier versions
+	r.Add(
+		registry.TestSpec{
+			Name:             `rebalance/by-load-mmc/leases`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(ctx, t, c, "multi-metric and count", leaseOnlyRebalanceDuration, concurrency, false /* mixedVersion */)
+			},
+		},
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:             `rebalance/by-load-mmc/replicas`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					concurrency = 32
+					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "multi-metric and count", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
+				)
+			},
+		},
+	)
+	r.Add(
+		registry.TestSpec{
+			Name:  `rebalance/by-load-mmc/replicas/ssds=2`,
+			Owner: registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(7,
+				// When using ssd > 1, only local SSDs on AMD64 arch are compatible
+				// currently. See #121951.
+				spec.SSD(2),
+				spec.Arch(spec.OnlyAMD64),
+				spec.PreferLocalSSD(),
+			), // the last node is just used to generate load
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				if c.IsLocal() {
+					t.Fatal("cannot run multi-store in local mode")
+				}
+				rebalanceLoadRun(
+					ctx, t, c, "multi-metric and count", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
+				)
+			},
+		},
+	)
 }
 
 func rebalanceByLoad(
