@@ -34,7 +34,6 @@ func TriggerJob(
 	checks []*jobspb.InspectDetails_Check,
 	asOf hlc.Timestamp,
 ) (*jobs.StartableJob, error) {
-	// TODO(sql-queries): add row count check when that is implemented.
 	record := jobs.Record{
 		JobID:       execCfg.JobRegistry.MakeJobID(),
 		Description: jobRecordDescription,

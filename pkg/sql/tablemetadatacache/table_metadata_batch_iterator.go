@@ -228,13 +228,31 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 // system.table_metadata.
 func newBatchQueryStatement(aostClause string) string {
 	return fmt.Sprintf(`
-SELECT 
-    n.id,
-    n.name,
-    n."parentID",
-    db_name.name as db_name,
-    n."parentSchemaID",
-    schema_name.name as schema_name,
+WITH cte (n_id, n_name, "n_parentID", db_name, "n_parentSchemaID", schema_name, d) AS (
+   SELECT
+       n.id,
+       n.name,
+       n."parentID",
+       db_name.name,
+       n."parentSchemaID",
+       schema_name.name,
+       crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', enc_desc.descriptor)
+   FROM system.namespace n
+   JOIN system.descriptor enc_desc ON n.id = enc_desc.id
+   JOIN system.namespace db_name ON n."parentID" = db_name.id AND db_name."parentID" = 0
+   JOIN system.namespace schema_name ON n."parentSchemaID" = schema_name.id AND schema_name."parentID" = n."parentID"
+   WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3)
+     AND n."parentSchemaID" != 0
+   ORDER BY n."parentID", n."parentSchemaID", n.name
+   LIMIT $4
+)
+SELECT
+    n_id AS id,
+    n_name AS name,
+    "n_parentID" AS "parentID",
+    db_name,
+    "n_parentSchemaID" AS "parentSchemaID",
+    schema_name,
     json_array_length(d->'table' -> 'columns') as columns,
     COALESCE(json_array_length(d->'table' -> 'indexes'), 0) as indexes,
     CASE
@@ -244,22 +262,15 @@ SELECT
         ELSE 'TABLE'
     END as table_type,
     (d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
-    ts.last_updated as stats_last_updated,
-    crdb_internal.table_span(n.id) as span
-FROM system.namespace n
-JOIN system.descriptor enc_desc ON n.id = enc_desc.id
-CROSS JOIN LATERAL crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', enc_desc.descriptor) AS d
-JOIN system.namespace db_name ON n."parentID" = db_name.id AND db_name."parentID" = 0
-JOIN system.namespace schema_name ON n."parentSchemaID" = schema_name.id AND schema_name."parentID" = n."parentID"
-LEFT JOIN (
-    SELECT "tableID", max("createdAt") as last_updated 
-    FROM system.table_statistics 
-    GROUP BY "tableID"
-) ts ON ts."tableID" = n.id
+    (
+        SELECT max("createdAt") as stats_last_updated
+        FROM system.table_statistics
+        WHERE "tableID" = n_id
+        GROUP BY "tableID"
+    ),
+    crdb_internal.table_span(n_id) as span
+FROM
+    cte
 %[1]s
-WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) 
-  AND n."parentSchemaID" != 0
-ORDER BY n."parentID", n."parentSchemaID", n.name
-LIMIT $4
 `, aostClause)
 }
