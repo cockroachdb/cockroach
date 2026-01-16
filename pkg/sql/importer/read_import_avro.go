@@ -390,10 +390,11 @@ func (r *avroRecordStream) readNative() {
 	r.row = nil
 
 	canReadMoreData := func() bool {
-		return !r.eof && len(r.buf) < r.maxBufSize
+		return !r.eof && r.err == nil && len(r.buf) < r.maxBufSize
 	}
 
-	for sz := r.readSize; r.row == nil && (len(r.buf) > 0 || canReadMoreData()); sz *= 2 {
+	// Loop until we either have a row or we we have a an incomplete row and can't read more data.
+	for sz := r.readSize; r.row == nil; sz *= 2 {
 		r.fill(sz)
 
 		if r.trimLeft {
@@ -403,11 +404,15 @@ func (r *avroRecordStream) readNative() {
 		if len(r.buf) > 0 {
 			r.row, remaining, decodeErr = r.decode()
 		}
-		// If we've already read all we can (either to eof or to max size), then
-		// any error during decoding should just be returned as an error.
-		if decodeErr != nil && (r.eof || len(r.buf) > r.maxBufSize) {
+
+		// If we have a partial or empty row and can't read more data, bail out.
+		if (decodeErr != nil || len(r.buf) == 0) && !canReadMoreData() {
 			break
 		}
+	}
+
+	if r.err != nil {
+		return
 	}
 
 	if decodeErr != nil {
