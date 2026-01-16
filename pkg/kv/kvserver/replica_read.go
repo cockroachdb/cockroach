@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -94,9 +93,8 @@ func (r *Replica) executeReadOnlyBatch(
 	if err := rw.PinEngineStateForIterators(readCategory); err != nil {
 		return nil, g, nil, kvpb.NewError(err)
 	}
-	if util.RaceEnabled {
-		spans := g.LatchSpans()
-		rw = spanset.NewReadWriterAt(rw, spans, ba.Timestamp)
+	if spanset.EnableAssertions {
+		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
 	}
 	defer rw.Close()
 

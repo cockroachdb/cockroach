@@ -295,6 +295,13 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return err
 	}
 
+	// Call the BeforeProcessorStart hook for test synchronization.
+	if knobs.BeforeProcessorStart != nil {
+		if err := knobs.BeforeProcessorStart(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := t.progressTracker.initJobProgress(ctx, int64(jobSpanCount)); err != nil {
 		return err
 	}

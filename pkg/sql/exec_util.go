@@ -2210,6 +2210,12 @@ type TTLTestingKnobs struct {
 	// ExtraStatsQuery is an additional query to run while gathering stats if
 	// the ttl_row_stats_poll_interval is set. It is always run first.
 	ExtraStatsQuery string
+	// BeforeProcessorStart is called in the TTL job coordinator before the
+	// DistSQL plan is executed. This can be used for test synchronization. The
+	// context is the job's context, which will be canceled when the job is
+	// canceled. Return an error to abort the job (e.g., ctx.Err() when context
+	// is canceled).
+	BeforeProcessorStart func(ctx context.Context) error
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.

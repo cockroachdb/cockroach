@@ -87,6 +87,7 @@ func newRowLevelTTLTestJobTestHelper(
 		return st
 	}
 
+	jobsInterval := 2 * time.Second
 	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
@@ -101,6 +102,10 @@ func newRowLevelTTLTestJobTestHelper(
 		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
+			IntervalOverrides: jobs.TestingIntervalOverrides{
+				Adopt:  &jobsInterval,
+				Cancel: &jobsInterval,
+			},
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 				th.executeSchedules = func() error {
 					th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
@@ -1337,6 +1342,153 @@ func TestMakeTTLJobDescription(t *testing.T) {
 			require.Len(t, rows, 1)
 			row := rows[0]
 			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
+		})
+	}
+}
+
+// TestRowLevelTTLJobCancelPrivileges verifies the privileges required to cancel
+// TTL jobs. TTL jobs are owned by the user who created the schedule (not the
+// node user), so the standard job privilege model applies:
+//   - Admin users can cancel any TTL job
+//   - Users with CONTROLJOB privilege can cancel any TTL job
+//   - The job owner can cancel their own job
+//   - Users without privileges cannot cancel TTL jobs
+func TestRowLevelTTLJobCancelPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type testCase struct {
+		name string
+		// cancelUser is the user that will attempt to cancel the job.
+		cancelUser string
+		// cancelUserPrivileges are the privileges to grant to cancelUser.
+		cancelUserPrivileges []string
+		// expectCancel indicates whether the cancel should succeed.
+		expectCancel bool
+	}
+
+	testCases := []testCase{
+		{
+			name:                 "admin can cancel any TTL job",
+			cancelUser:           "adminuser",
+			cancelUserPrivileges: []string{"GRANT admin TO adminuser"},
+			expectCancel:         true,
+		},
+		{
+			name:                 "user with CONTROLJOB can cancel any TTL job",
+			cancelUser:           "controljobuser",
+			cancelUserPrivileges: []string{"GRANT SYSTEM CONTROLJOB TO controljobuser"},
+			expectCancel:         true,
+		},
+		{
+			name:                 "job owner can cancel own job",
+			cancelUser:           "ttluser",
+			cancelUserPrivileges: nil, // ttluser owns the job, which is sufficient
+			expectCancel:         true,
+		},
+		{
+			name:                 "user without privileges cannot cancel TTL job",
+			cancelUser:           "noprivuser",
+			cancelUserPrivileges: nil,
+			expectCancel:         false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Use a channel to signal when the job has started.
+			jobStarted := make(chan struct{})
+
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+					// Use BeforeProcessorStart to synchronize with the job. The hook
+					// signals that the job has started, then blocks until the job's
+					// context is canceled (which happens when the job is canceled).
+					BeforeProcessorStart: func(ctx context.Context) error {
+						close(jobStarted)
+						<-ctx.Done()
+						return ctx.Err()
+					},
+				},
+				1,     /* numNodes */
+				false, /* runMinActiveVersion */
+			)
+			defer cleanupFunc()
+
+			// Create ttluser who will own the table/schedule.
+			th.sqlDB.Exec(t, `CREATE USER ttluser WITH PASSWORD 'password'`)
+			th.sqlDB.Exec(t, `GRANT admin TO ttluser`)
+
+			// Create the cancel user if different from ttluser.
+			if tc.cancelUser != "ttluser" {
+				th.sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'password'`, tc.cancelUser))
+			}
+
+			// Grant privileges to the cancel user.
+			for _, priv := range tc.cancelUserPrivileges {
+				th.sqlDB.Exec(t, priv)
+			}
+
+			// Connect as ttluser and create a table with TTL.
+			ttlUserConn := th.server.SQLConn(t, serverutils.UserPassword("ttluser", "password"), serverutils.ClientCerts(false))
+			ttlUserDB := sqlutils.MakeSQLRunner(ttlUserConn)
+			ttlUserDB.Exec(t, `CREATE TABLE t (
+				id INT PRIMARY KEY,
+				expire_at TIMESTAMPTZ
+			) WITH (ttl_expiration_expression = 'expire_at')`)
+			ttlUserDB.Exec(t, `INSERT INTO t (id, expire_at) VALUES (1, '2000-01-01')`)
+
+			// Revoke admin from ttluser now that the table is created.
+			th.sqlDB.Exec(t, `REVOKE admin FROM ttluser`)
+
+			// Execute the schedule to create a TTL job.
+			require.NoError(t, th.executeSchedules())
+
+			// Wait for the job to start and reach the synchronization point.
+			select {
+			case <-jobStarted:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for TTL job to start")
+			}
+
+			// Find the job ID.
+			rows := th.sqlDB.QueryStr(t, `
+				SELECT job_id FROM [SHOW JOBS]
+				WHERE job_type = 'ROW LEVEL TTL' AND status = 'running'
+			`)
+			require.Len(t, rows, 1, "expected exactly one running TTL job")
+			jobID, err := strconv.ParseInt(rows[0][0], 10, 64)
+			require.NoError(t, err)
+
+			// Verify the job is owned by ttluser, not node.
+			var jobOwner string
+			th.sqlDB.QueryRow(t, `SELECT user_name FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&jobOwner)
+			require.Equal(t, "ttluser", jobOwner, "TTL job should be owned by the user who created the schedule")
+
+			// Connect as the cancel user.
+			cancelConn := th.server.SQLConn(t, serverutils.UserPassword(tc.cancelUser, "password"), serverutils.ClientCerts(false))
+
+			// Attempt to cancel the job.
+			_, err = cancelConn.Exec(fmt.Sprintf(`CANCEL JOB %d`, jobID))
+
+			if tc.expectCancel {
+				require.NoError(t, err, "expected %s to be able to cancel the job", tc.cancelUser)
+
+				// Wait for the job to reach canceled status.
+				testutils.SucceedsWithin(t, func() error {
+					var status string
+					th.sqlDB.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
+					if status != "canceled" {
+						return errors.Newf("job status is %q, waiting for 'canceled'", status)
+					}
+					return nil
+				}, 30*time.Second)
+			} else {
+				require.Errorf(t, err, "expected %s to not be able to cancel the job", tc.cancelUser)
+				require.ErrorContains(t, err, "does not have privileges")
+			}
 		})
 	}
 }

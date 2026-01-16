@@ -146,7 +146,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		// TableID is not sensitive.
 		redact.SafeString(fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID)),
 		txn.KV(),
-		username.NodeUserName(),
+		sj.Owner(),
 	)
 	defer cleanup()
 
@@ -162,6 +162,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		*args,
 		execCfg.SV(),
 		execCfg.Settings,
+		sj.Owner(),
 	); err != nil {
 		s.metrics.NumFailed.Inc(1)
 		return err
@@ -280,6 +281,7 @@ func createRowLevelTTLJob(
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 	sv *settings.Values,
 	st *cluster.Settings,
+	owner username.SQLUsername,
 ) (jobspb.JobID, error) {
 	descsCol := descs.FromTxn(txn)
 	tableID := ttlArgs.TableID
@@ -303,7 +305,7 @@ func createRowLevelTTLJob(
 
 	record := jobs.Record{
 		Description: description,
-		Username:    username.NodeUserName(),
+		Username:    owner,
 		Details: jobspb.RowLevelTTLDetails{
 			TableID:      tableID,
 			Cutoff:       timeutil.Now(),

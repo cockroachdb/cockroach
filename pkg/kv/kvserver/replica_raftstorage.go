@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -226,7 +225,7 @@ func (r *Replica) GetSnapshot(
 	startKey := r.shMu.state.Desc.StartKey
 	spans := rditer.MakeReplicatedKeySpans(r.shMu.state.Desc)
 	snap := r.store.StateEngine().NewSnapshot(spans...)
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		ss := rditer.MakeReplicatedKeySpanSet(r.shMu.state.Desc)
 		defer ss.Release()
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})

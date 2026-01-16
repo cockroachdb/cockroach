@@ -712,7 +712,7 @@ func (r *Replica) computeChecksumPostApply(
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(&desc)...)
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		ss := rditer.MakeReplicatedKeySpanSet(&desc)
 		defer ss.Release()
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
