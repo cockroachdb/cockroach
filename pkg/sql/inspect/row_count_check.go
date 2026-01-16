@@ -7,14 +7,12 @@ package inspect
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/inspect/inspectpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -142,46 +140,15 @@ func (c *rowCountCheck) StartCluster(
 ) error {
 	c.clusterState = clusterCheckRunning
 
-	if err := c.loadTableDesc(ctx); err != nil {
+	tableDesc, err := loadTableDesc(ctx, c.execCfg, c.tableID, c.tableVersion, c.asOf)
+	if err != nil {
 		return err
 	}
+	c.tableDesc = tableDesc
+
 	c.rowCount = checkData.RowCount
 
 	return nil
-}
-
-func (c *rowCountCheck) loadTableDesc(ctx context.Context) error {
-	return c.execCfg.DistSQLSrv.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		if !c.asOf.IsEmpty() {
-			if err := txn.KV().SetFixedTimestamp(ctx, c.asOf); err != nil {
-				return err
-			}
-		}
-
-		byIDGetter := txn.Descriptors().ByIDWithLeased(txn.KV())
-		if !c.asOf.IsEmpty() {
-			byIDGetter = txn.Descriptors().ByIDWithoutLeased(txn.KV())
-		}
-
-		var err error
-		c.tableDesc, err = byIDGetter.WithoutNonPublic().Get().Table(ctx, c.tableID)
-		if err != nil {
-			return err
-		}
-		if c.tableVersion != 0 && c.tableDesc.GetVersion() != c.tableVersion {
-			return errors.WithHintf(
-				errors.Newf(
-					"table %s [%d] has had a schema change since the job has started at %s",
-					c.tableDesc.GetName(),
-					c.tableDesc.GetID(),
-					c.tableDesc.GetModificationTime().GoTime().Format(time.RFC3339),
-				),
-				"use AS OF SYSTEM TIME to avoid schema changes during inspection",
-			)
-		}
-
-		return nil
-	})
 }
 
 // NextCluster implements the inspectClusterCheck interface.

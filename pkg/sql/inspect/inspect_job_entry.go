@@ -144,7 +144,25 @@ func ChecksForTable(
 			}
 		}
 
-		// If none of the previous checks provide a row count, skip the check.
+		// If none of the previous checks provide a row count, insert a check that'll provide one.
+		if !includesRowCounterCheck {
+			primaryIndex := table.GetPrimaryIndex()
+
+			if !isUnsupportedIndexForIndexConsistencyCheck(primaryIndex, table) {
+				// A consistency check on the primary index is a no-op that
+				// exposes a row count.
+				check := jobspb.InspectDetails_Check{
+					Type:         jobspb.InspectCheckIndexConsistency,
+					TableID:      table.GetID(),
+					IndexID:      primaryIndex.GetID(),
+					TableVersion: table.GetVersion(),
+				}
+				checks = append(checks, &check)
+
+				includesRowCounterCheck = true
+			}
+		}
+
 		if includesRowCounterCheck {
 			checks = append(checks, &jobspb.InspectDetails_Check{
 				Type:     jobspb.InspectCheckRowCount,
@@ -154,7 +172,7 @@ func ChecksForTable(
 		} else {
 			if p != nil {
 				p.BufferClientNotice(ctx, pgnotice.Newf(
-					"skipping row count on table %q: no other checks provide a row count", table.GetName()))
+					"skipping row count on table %q: none of the indexes are supported for index consistency checking", table.GetName()))
 			}
 		}
 	}
@@ -205,10 +223,6 @@ func checksByIndexNames(
 func isUnsupportedIndexForIndexConsistencyCheck(
 	index catalog.Index, table catalog.TableDescriptor,
 ) bool {
-	if index.Primary() {
-		return true
-	}
-
 	if index.IsPartial() {
 		return true
 	} else if index.IsSharded() {
