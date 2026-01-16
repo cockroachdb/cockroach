@@ -155,7 +155,15 @@ var defaultRaftSchedulerMinConcurrencyPerStore = envutil.EnvOrDefaultInt(
 // per CPU core, capped at 128, so 16 is equivalent to 2 CPUs per shard, or a
 // maximum of 8 shards. This significantly relieves contention at high core
 // counts, while also avoiding starvation by excessive sharding.
-var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt("COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+var defaultRaftSchedulerShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_SCHEDULER_SHARD_SIZE", 16)
+
+// defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
+// scheduler priority shard, used for certain system ranges. This shard is
+// always fully populated with workers that don't count towards the concurrency
+// limit, and is thus effectively the number of priority workers per store.
+var defaultRaftSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
 
 // defaultRaftEntryCacheSize is the default size in bytes for the Raft entry
 // cache, divided evenly between stores. The Raft entry cache is shared by all
@@ -183,13 +191,6 @@ var defaultRaftEntryCacheSize = func() int64 {
 	}
 	return envutil.EnvOrDefaultBytes("COCKROACH_RAFT_ENTRY_CACHE_SIZE", cacheSize)
 }()
-
-// defaultRaftSchedulerPriorityShardSize specifies the default size of the Raft
-// scheduler priority shard, used for certain system ranges. This shard is
-// always fully populated with workers that don't count towards the concurrency
-// limit, and is thus effectively the number of priority workers per store.
-var defaultRaftSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
-	"COCKROACH_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
