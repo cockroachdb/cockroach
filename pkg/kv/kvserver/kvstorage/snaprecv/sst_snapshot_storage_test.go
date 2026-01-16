@@ -597,3 +597,140 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	}
 	return cleanup, eng
 }
+
+// TestMultiSSTWriterReadOneSharedOrExternal tests the ReadOne method with
+// sharedOrExternal=true, which allows internal key kinds like DEL, RangeDEL,
+// RangeKeyUnset, and RangeKeyDelete. This is required for shared/external SST
+// snapshots where such internal keys can be overlaid over points in those
+// SSTs.
+func TestMultiSSTWriterReadOneSharedOrExternal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testRangeID := roachpb.RangeID(1)
+	testSnapUUID := uuid.Must(uuid.FromBytes([]byte("foobar1234567890")))
+	testLimiter := rate.NewLimiter(rate.Inf, 0)
+
+	cleanup, eng := newOnDiskEngine(ctx, t)
+	defer cleanup()
+	defer eng.Close()
+
+	sstSnapshotStorage := NewSSTSnapshotStorage(eng, testLimiter)
+	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID, nil)
+	desc := roachpb.RangeDescriptor{
+		RangeID:  100,
+		StartKey: roachpb.RKey("d"),
+		EndKey:   roachpb.RKeyMax,
+	}
+	keySpans := rditer.MakeReplicatedKeySpans(&desc)
+	localSpans := keySpans[:len(keySpans)-1]
+	mvccSpan := keySpans[len(keySpans)-1]
+
+	st := cluster.MakeTestingClusterSettings()
+
+	msstw, err := NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
+	require.NoError(t, err)
+
+	now := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	// Helper to create a batch with a single entry and return the BatchReader.
+	// Uses the engine to create a WriteBatch and get its Repr().
+	makeBatchReader := func(fn func(storage.WriteBatch)) *storage.BatchReader {
+		batch := eng.NewWriteBatch()
+		defer batch.Close()
+		fn(batch)
+		repr := batch.Repr()
+		// Make a copy since the batch repr may be invalidated when the batch is closed.
+		reprCopy := make([]byte, len(repr))
+		copy(reprCopy, repr)
+		br, err := storage.NewBatchReader(reprCopy)
+		require.NoError(t, err)
+		return br
+	}
+
+	// Test 1: Normal point SET should work with sharedOrExternal=false.
+	t.Run("point-set", func(t *testing.T) {
+		mvccKey := storage.MVCCKey{Key: roachpb.Key("e"), Timestamp: now}
+		encodedKey := storage.EncodeMVCCKey(mvccKey)
+		br := makeBatchReader(func(b storage.WriteBatch) {
+			ik := pebble.InternalKey{
+				UserKey: encodedKey,
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindSet),
+			}
+			require.NoError(t, b.PutInternalPointKey(&ik, []byte("value")))
+		})
+		require.True(t, br.Next())
+		ek, err := br.EngineKey()
+		require.NoError(t, err)
+		require.NoError(t, msstw.ReadOne(ctx, ek, false /* sharedOrExternal */, br))
+	})
+
+	// Test 2: Point DELETE should fail with sharedOrExternal=false.
+	t.Run("point-delete-fails-without-shared", func(t *testing.T) {
+		mvccKey := storage.MVCCKey{Key: roachpb.Key("f"), Timestamp: now}
+		encodedKey := storage.EncodeMVCCKey(mvccKey)
+		br := makeBatchReader(func(b storage.WriteBatch) {
+			ik := pebble.InternalKey{
+				UserKey: encodedKey,
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindDelete),
+			}
+			require.NoError(t, b.PutInternalPointKey(&ik, nil))
+		})
+		require.True(t, br.Next())
+		ek, err := br.EngineKey()
+		require.NoError(t, err)
+		err = msstw.ReadOne(ctx, ek, false /* sharedOrExternal */, br)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unexpected batch entry key kind")
+	})
+
+	// Test 3: Point DELETE should succeed with sharedOrExternal=true.
+	t.Run("point-delete-succeeds-with-shared", func(t *testing.T) {
+		mvccKey := storage.MVCCKey{Key: roachpb.Key("g"), Timestamp: now}
+		encodedKey := storage.EncodeMVCCKey(mvccKey)
+		br := makeBatchReader(func(b storage.WriteBatch) {
+			ik := pebble.InternalKey{
+				UserKey: encodedKey,
+				Trailer: pebble.MakeInternalKeyTrailer(0, pebble.InternalKeyKindDelete),
+			}
+			require.NoError(t, b.PutInternalPointKey(&ik, nil))
+		})
+		require.True(t, br.Next())
+		ek, err := br.EngineKey()
+		require.NoError(t, err)
+		require.NoError(t, msstw.ReadOne(ctx, ek, true /* sharedOrExternal */, br))
+	})
+
+	// Test 4: RangeDelete should fail with sharedOrExternal=false.
+	t.Run("range-delete-fails-without-shared", func(t *testing.T) {
+		startKey := storage.EncodeMVCCKey(storage.MVCCKey{Key: roachpb.Key("h")})
+		endKey := storage.EncodeMVCCKey(storage.MVCCKey{Key: roachpb.Key("i")})
+		br := makeBatchReader(func(b storage.WriteBatch) {
+			require.NoError(t, b.ClearRawEncodedRange(startKey, endKey))
+		})
+		require.True(t, br.Next())
+		ek, err := br.EngineKey()
+		require.NoError(t, err)
+		err = msstw.ReadOne(ctx, ek, false /* sharedOrExternal */, br)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unexpected batch entry key kind")
+	})
+
+	// Test 5: RangeDelete should succeed with sharedOrExternal=true.
+	t.Run("range-delete-succeeds-with-shared", func(t *testing.T) {
+		startKey := storage.EncodeMVCCKey(storage.MVCCKey{Key: roachpb.Key("j")})
+		endKey := storage.EncodeMVCCKey(storage.MVCCKey{Key: roachpb.Key("k")})
+		br := makeBatchReader(func(b storage.WriteBatch) {
+			require.NoError(t, b.ClearRawEncodedRange(startKey, endKey))
+		})
+		require.True(t, br.Next())
+		ek, err := br.EngineKey()
+		require.NoError(t, err)
+		require.NoError(t, msstw.ReadOne(ctx, ek, true /* sharedOrExternal */, br))
+	})
+
+	// Finish the writer to ensure the SSTs are valid.
+	_, _, err = msstw.Finish(ctx)
+	require.NoError(t, err)
+}
