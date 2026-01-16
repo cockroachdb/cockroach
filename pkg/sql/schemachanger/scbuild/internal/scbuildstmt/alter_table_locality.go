@@ -54,17 +54,17 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 		panic(pgerror.Newf(pgcode.AssertFailure, "table %s has undefined locality", tableName))
 	}
 
-	// return if two localities are the same
-	if isTargetLocalitySameAsCurrent(currentLocality, targetLocality) {
-		return
-	}
-
 	if isLocalityRegionalByRow(currentLocality) || isLocalityRegionalByRow(targetLocality) {
 		panic(scerrors.NotImplementedErrorf(t, "alter locality to or from RBR not implemented yet"))
 	}
 
 	// Increase telemetry stats
 	incrementAlterTableLocalityTelemetry(b, currentLocality, targetLocality)
+
+	// return if two localities are the same
+	if isTargetLocalitySameAsCurrent(currentLocality, targetLocality) {
+		return
+	}
 
 	// Drop the old locality element and add a new one
 	b.Drop(currentLocalityElem)
@@ -118,15 +118,6 @@ func getDatabaseMultiRegionEnumTypeID(b BuildCtx, tableID catid.DescID) catid.De
 		))
 	}
 	return dbRegionConfig.RegionEnumTypeID
-}
-
-func getDatabasePrimaryRegionName(b BuildCtx, tableID catid.DescID) catpb.RegionName {
-	namespace := mustRetrieveNamespaceElem(b, tableID)
-	regionConfig, err := b.SynthesizeRegionConfig(b, namespace.DatabaseID)
-	if err != nil {
-		panic(err)
-	}
-	return regionConfig.PrimaryRegion()
 }
 
 // getCurrentTableLocality determines the current locality configuration of a table
@@ -191,7 +182,7 @@ func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName stri
 		// of ownership as well.
 		if err != nil {
 			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s must be owner of %s or have %s privilege on table %s",
+				"user %s must be owner of %s or have %s privilege on relation %s",
 				b.SessionData().User(),
 				tableName,
 				privilege.CREATE,
@@ -199,39 +190,6 @@ func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName stri
 			))
 		}
 	}
-}
-
-func panicIfTableLocalityRegionalByRowUsingConstraint(
-	b BuildCtx, tableID catid.DescID, currentLocality *tree.Locality, targetColName tree.Name,
-) {
-	if currentLocality.LocalityLevel != tree.LocalityLevelRow {
-		return
-	}
-	currColName := explicitRegionColName(currentLocality.RegionalByRowColumn)
-	rbrUsingConstaint := b.QueryByID(tableID).FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
-	if rbrUsingConstaint != nil && currColName != targetColName {
-		panic(pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			`cannot change the REGIONAL BY ROW column from %s to %s when "%s" is set`,
-			currColName, targetColName, catpb.RBRUsingConstraintTableSettingName,
-		))
-	}
-}
-
-func regionColNameNotSpecified(colName tree.Name) bool {
-	return colName == tree.PrimaryRegionNotSpecifiedName
-}
-
-func explicitRegionColName(regionColName tree.Name) tree.Name {
-	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
-		return tree.RegionalByRowRegionDefaultColName
-	}
-	return regionColName
-}
-
-func isTargetRegionColSameAsCurrent(b BuildCtx, tableID catid.DescID, partColName tree.Name) bool {
-	localityElem := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
-	return localityElem != nil && localityElem.As == string(partColName)
 }
 
 // buildLocalityConfig converts a tree.Locality to catpb.LocalityConfig

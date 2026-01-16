@@ -91,7 +91,9 @@ func (d *deferredVisitor) CreateRowLevelTTLSchedule(
 	return d.DeferredMutationStateUpdater.CreateRowLevelTTLSchedule(ctx, op.TableID)
 }
 
-func (i *immediateVisitor) SetTableLocalityGlobal(ctx context.Context, op scop.SetTableLocalityGlobal) error {
+func (i *immediateVisitor) SetTableLocalityGlobal(
+	ctx context.Context, op scop.SetTableLocalityGlobal,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -100,7 +102,9 @@ func (i *immediateVisitor) SetTableLocalityGlobal(ctx context.Context, op scop.S
 	return nil
 }
 
-func (i *immediateVisitor) SetTableLocalityPrimaryRegion(ctx context.Context, op scop.SetTableLocalityPrimaryRegion) error {
+func (i *immediateVisitor) SetTableLocalityPrimaryRegion(
+	ctx context.Context, op scop.SetTableLocalityPrimaryRegion,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -109,7 +113,9 @@ func (i *immediateVisitor) SetTableLocalityPrimaryRegion(ctx context.Context, op
 	return nil
 }
 
-func (i *immediateVisitor) SetTableLocalitySecondaryRegion(ctx context.Context, op scop.SetTableLocalitySecondaryRegion) error {
+func (i *immediateVisitor) SetTableLocalitySecondaryRegion(
+	ctx context.Context, op scop.SetTableLocalitySecondaryRegion,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -118,7 +124,9 @@ func (i *immediateVisitor) SetTableLocalitySecondaryRegion(ctx context.Context, 
 	return nil
 }
 
-func (i *immediateVisitor) SetTableLocalityRegionalByRow(ctx context.Context, op scop.SetTableLocalityRegionalByRow) error {
+func (i *immediateVisitor) SetTableLocalityRegionalByRow(
+	ctx context.Context, op scop.SetTableLocalityRegionalByRow,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
@@ -128,7 +136,9 @@ func (i *immediateVisitor) SetTableLocalityRegionalByRow(ctx context.Context, op
 	return nil
 }
 
-func (i *immediateVisitor) UnsetTableLocality(ctx context.Context, op scop.UnsetTableLocality) error {
+func (i *immediateVisitor) UnsetTableLocality(
+	ctx context.Context, op scop.UnsetTableLocality,
+) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
