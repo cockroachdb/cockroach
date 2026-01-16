@@ -36,6 +36,7 @@ state offset=60
 /Table/7{5-6}                              database system (host)
 /Table/7{6-7}                              database system (host)
 /Table/7{7-8}                              database system (host)
+/Table/7{8-9}                              database system (host)
 /Tenant/11{-\x00}                          database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
@@ -64,6 +65,7 @@ state offset=61 limit=3
 state offset=104
 ----
 ...
+/Tenant/11/Table/3{3-4}                    database system (tenant)
 /Tenant/11/Table/3{4-5}                    database system (tenant)
 /Tenant/11/Table/3{5-6}                    database system (tenant)
 /Tenant/11/Table/3{6-7}                    database system (tenant)
@@ -106,6 +108,7 @@ state offset=104
 /Tenant/11/Table/7{5-6}                    database system (tenant)
 /Tenant/11/Table/7{6-7}                    database system (tenant)
 /Tenant/11/Table/7{7-8}                    database system (tenant)
+/Tenant/11/Table/7{8-9}                    database system (tenant)
 /Tenant/12{-\x00}                          database system (tenant)
 
 # Just another view of what the tenant's reconciler actually did. It got rid of
@@ -182,6 +185,7 @@ upsert /Tenant/11/Table/7{4-5}             database system (tenant)
 upsert /Tenant/11/Table/7{5-6}             database system (tenant)
 upsert /Tenant/11/Table/7{6-7}             database system (tenant)
 upsert /Tenant/11/Table/7{7-8}             database system (tenant)
+upsert /Tenant/11/Table/7{8-9}             database system (tenant)
 
 # Initialize a new tenant, tenant=10, that DOES have a pre-existing tenant,
 # tenant=11, next to it.
