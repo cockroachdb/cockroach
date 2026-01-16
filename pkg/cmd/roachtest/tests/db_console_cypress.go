@@ -226,7 +226,7 @@ func registerDbConsoleCypress(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "db-console/cypress-pages",
 		Owner:   registry.OwnerObservability,
-		Cluster: r.MakeClusterSpec(1, spec.WorkloadNode()),
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
 		// Disabled on IBM because of some nodejs dependencies that are not
 		// available on s390x.
 		CompatibleClouds: registry.AllClouds.NoIBM(),
