@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -847,6 +848,10 @@ func (sc *systemTableContents) scheduledJobsHandler(
 ) ([]interface{}, error) {
 	return newSystemTableRow(sc.table, values, columns).
 		WithSentinelIfExists("next_run", "schedule_details", "schedule_state").
+		// Skip row-level TTL jobs to avoid false-positives, as they are reinserted
+		// with new scheduled job IDs on restore.
+		Matches("executor_type", tree.ScheduledRowLevelTTLExecutor.InternalName()).
+		Delete().
 		Values()
 }
 
