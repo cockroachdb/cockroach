@@ -639,22 +639,29 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		}
 	}
 
-	// TODO(sep-raft-log): if engines are separated, commit the log engine batch.
-	// TODO(sep-raft-log): move the commit logic into the snapWriter type.
+	// Commit the raft engine batch, if engines are separated, and the state
+	// machine / combined batch if the snapshot is being written as a batch.
+	if err := sw.commit(); err != nil {
+		return errors.Wrapf(err, "while committing snapshot batch for %s",
+			inSnap.SSTStorageScratch.SSTs())
+	}
+
+	// TODO(sep-raft-log): move the rest of the commit logic to snapWriter.
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
 	if applyAsIngest {
+		ingestTo := sw.eng.StateEngine()
+		if !sw.eng.Separated() {
+			ingestTo = sw.eng.Engine()
+		}
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+		if ingestStats, err = ingestTo.IngestAndExciseFiles(
 			ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan,
 		); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
-	} else if sw.batch != nil {
-		if err := sw.batch.Commit(true /* sync */); err != nil {
-			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
-		}
+	} else {
 		// Admission control wants the writeBytes to be roughly equivalent to
 		// the bytes in the SST when these writes are eventually flushed. We use
 		// the SST size of the incoming snapshot as that approximation. We've
@@ -662,8 +669,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		// but we ignore those since the bulk of the data is in the incoming
 		// snapshot.
 		writeBytes = uint64(inSnap.SSTSize)
-	} else {
-		panic("batch must not be nil when applyAsIngest is false")
 	}
 	// The snapshot is visible, so finalize the truncation.
 	ls.finalizeApplySnapshotRaftMuLocked(ctx)

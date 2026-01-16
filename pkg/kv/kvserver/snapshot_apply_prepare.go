@@ -168,6 +168,26 @@ func (s *snapWriter) applyAsBatch() kvstorage.StateWO {
 	return s.batch
 }
 
+// commit commits the snapshot application to storage. If engines are separated,
+// it first commits/syncs the raft engine batch, and then commits the state
+// machine mutation.
+func (s *snapWriter) commit() error {
+	if s.eng.Separated() {
+		if err := s.raftWO.Commit(true /* sync */); err != nil {
+			return err
+		}
+	}
+	if s.batch == nil {
+		// TODO(sep-raft-log): move the ingestion code here.
+		return nil
+	}
+	// If engines are separated then the raft engine batch will contain a WAG node
+	// that guarantees durability of the state machine write, so we don't need so
+	// sync the state machine batch.
+	// TODO(sep-raft-log): populate the WAG node.
+	return s.batch.Commit(!s.eng.Separated())
+}
+
 // close closes the underlying storage batches, if any. Must be called exactly
 // once, at the end of the snapWriter lifetime.
 func (s *snapWriter) close() {
