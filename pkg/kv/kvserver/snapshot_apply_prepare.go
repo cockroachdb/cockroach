@@ -122,6 +122,10 @@ type snapWriter struct {
 	// eng encapsulates the storage engines of the Store. It knows whether the
 	// raft/log and state engines are separated, or the same engine must be used.
 	eng kvstorage.Engines
+	// raftWO is the pending write batch into the raft engine. Not nil iff
+	// separated engines are enabled. If nil, the raft state is written into the
+	// combined engine using writeSST.
+	raftWO storage.WriteBatch
 	// writeSST provides a Writer which the caller uses to populate a subset of
 	// the pending snapshot write. One writeSST call corresponds to one keys
 	// subspace (such as replicated RangeID-local) and/or one range.
@@ -181,9 +185,6 @@ type snapWrite struct {
 // each one is written in key order. We also avoid overlapping with the already
 // written replicated keys of the snapshot.
 func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
-	if s.eng.Separated() {
-		panic("separated engines not supported") // TODO(sep-raft-log): support
-	}
 	clearEnd, err := verifySnap(sw.origDesc, sw.desc, sw.subsume)
 	if err != nil {
 		log.KvDistribution.Fatalf(ctx, "%v", err)
@@ -191,24 +192,19 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 	}
 	_ = applySnapshotTODO
 
-	// TODO(pav-kv): assert that our replica already exists in storage. Note that
-	// it can be either uninitialized or initialized.
-	// TODO(sep-raft-log): RewriteRaftState now only touches raft engine keys, so
-	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
-	}); err != nil {
-		return err
+	// With separated engines, redirect the raft/log engine writes into a
+	// dedicated batch.
+	if s.eng.Separated() {
+		s.raftWO = s.eng.LogEngine().NewWriteBatch()
 	}
 
+	// TODO(pav-kv): assert that our replica already exists in storage. Note that
+	// it can be either uninitialized or initialized.
+	if err := s.rewriteRaftState(ctx, &sw); err != nil {
+		return err
+	}
 	for _, sub := range sw.subsume {
-		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
-				State: kvstorage.State{RO: s.eng.StateEngine(), WO: w},
-				Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: w},
-			}, sub)
-		}); err != nil {
+		if err := s.subsumeReplica(ctx, sub); err != nil {
 			return err
 		}
 	}
@@ -236,4 +232,44 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 		}
 	}
 	return nil
+}
+
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log.
+//
+// The method knows how to handle separated and single engine, so that the
+// caller is not concerned about it.
+func (s *snapWriter) rewriteRaftState(ctx context.Context, sw *snapWrite) error {
+	// If engines are separated, write directly to the raft engine batch.
+	if s.raftWO != nil {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(s.raftWO), sw.sl, sw.hardState, sw.truncState)
+	}
+	// Otherwise, write to an SSTable in the state machine engine, or s.batch if
+	// applying the snapshot as a batch.
+	return s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
+	})
+}
+
+// subsumeReplica destroys the given "subsumed" replica, except it leaves its
+// "user keys" spans intact which are inherited and overridden by the caller.
+//
+// The method knows how to handle separated and single engine, so that the
+// caller is not concerned about it.
+func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyReplicaInfo) error {
+	// Create an SST for the subsumed replica's RangeID-local keys. Note that it's
+	// redirected to s.batch if the snapshot is written as a batch.
+	return s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		// If engines are separated, write the relevant subset of keys directly to
+		// the raft engine batch, instead of the combined SST/batch.
+		raftWO := kvstorage.RaftWO(s.raftWO)
+		if raftWO == nil {
+			raftWO = w
+		}
+		return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+			State: kvstorage.State{RO: s.eng.StateEngine(), WO: kvstorage.StateWO(w)},
+			Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: raftWO},
+		}, sub)
+	})
 }
