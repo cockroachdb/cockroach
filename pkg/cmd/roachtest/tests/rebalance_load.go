@@ -93,8 +93,16 @@ func registerRebalanceLoad(r registry.Registry) {
 		}
 
 		settings := install.MakeClusterSettings()
-		settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = rebalanceMode
 		settings.ClusterSettings["kv.range_split.by_load_enabled"] = "false"
+		if rebalanceMode == "leases" {
+			settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = "leases"
+		} else if rebalanceMode == "replicas" {
+			settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = "leases and replicas"
+		} else if rebalanceMode == "mmc" {
+			settings.ClusterSettings["kv.allocator.load_based_rebalancing"] = "multi-metric and count"
+		} else {
+			t.L().Printf("unknown setting for load_based_rebalancing: %s\n", rebalanceMode)
+		}
 
 		// Take a 10s profile every minute.
 		settings.ClusterSettings["server.cpu_profile.duration"] = "10s"
@@ -137,174 +145,91 @@ func registerRebalanceLoad(r registry.Registry) {
 		}
 
 	}
-	concurrency := 128
-	r.Add(
-		registry.TestSpec{
-			Name:             `rebalance/by-load/leases`,
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-				}
-				rebalanceLoadRun(ctx, t, c, "leases", leaseOnlyRebalanceDuration, concurrency, false /* mixedVersion */)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
-			Name:    `rebalance/by-load/leases/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
-			// Disabled on IBM because s390x is only built on master and mixed-version
-			// is impossible to test as of 05/2025.
-			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-			Monitor:          true,
-			Randomized:       true,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-				}
-				rebalanceLoadRun(ctx, t, c, "leases", leaseOnlyRebalanceDuration, concurrency, true /* mixedVersion */)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
-			Name:             `rebalance/by-load/replicas`,
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-				}
-				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
-				)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
-			Name:    `rebalance/by-load/replicas/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
-			// Disabled on IBM because s390x is only built on master and mixed-version
-			// is impossible to test as of 05/2025.
-			CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-			Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-			Monitor:          true,
-			Randomized:       true,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					t.L().Printf("lowering concurrency to %d in local testing", concurrency)
-				}
-				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, true, /* mixedVersion */
-				)
-			},
-		},
-	)
 
-	r.Add(
-		registry.TestSpec{
-			Name:  `rebalance/by-load/replicas/ssds=2`,
-			Owner: registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7,
-				// When using ssd > 1, only local SSDs on AMD64 arch are compatible
-				// currently. See #121951.
-				spec.SSD(2),
-				spec.Arch(spec.OnlyAMD64),
-				spec.PreferLocalSSD(),
-			), // the last node is just used to generate load
-			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					t.Fatal("cannot run multi-store in local mode")
-				}
-				rebalanceLoadRun(
-					ctx, t, c, "leases and replicas", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
-				)
-			},
-		},
-	)
+	// Add the tests to the registry based on the rebalance mode and the kind of test
+	for _, rebalanceMode := range []string{"leases", "replicas", "mmc"} {
+		for _, testKind := range []string{"simple", "mixed-version", "multi-store"} {
+			// Skip the multi-store tests when rebalance mode is set to leases only
+			if rebalanceMode == "leases" && testKind == "multi-store" {
+				continue
+			}
 
-	// Added a copy of the above for testing MMA+count rebalancing,
-	// mixed version testing was ignored since MMA does not exist on
-	// earlier versions
-	r.Add(
-		registry.TestSpec{
-			Name:             `rebalance/by-load-mmc/leases`,
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-				}
-				rebalanceLoadRun(ctx, t, c, "multi-metric and count", leaseOnlyRebalanceDuration, concurrency, false /* mixedVersion */)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
-			Name:             `rebalance/by-load-mmc/replicas`,
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					concurrency = 32
-					fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
-				}
-				rebalanceLoadRun(
-					ctx, t, c, "multi-metric and count", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
+			// Configure the variables for the test specification
+			clusterSpec := r.MakeClusterSpec(7) // the last node is just used to generate load
+			suites := registry.Suites(registry.Nightly)
+			clouds := registry.AllExceptAWS
+			leases := registry.MetamorphicLeases
+			duration := leaseAndReplicaRebalanceDuration
+			monitor := false
+			randomized := false
+			concurrency := 128
+
+			// Configure the name for the test
+			var name string
+			if testKind == "simple" {
+				name = fmt.Sprintf("rebalance/by-load/mode=%s", rebalanceMode)
+			} else {
+				name = fmt.Sprintf("rebalance/by-load/mode=%s/%s", rebalanceMode, testKind)
+			}
+
+			// Use fewer nodes for the lease-only test
+			if rebalanceMode == "leases" {
+				clusterSpec = r.MakeClusterSpec(4)
+				duration = leaseOnlyRebalanceDuration
+			}
+
+			// When running mixed-version tests, disable IBM cloud,
+			// add the test to the MixedVersion registry, set the
+			// leases to be DefaultLeases, and enable monitoring and
+			// randomization
+			if testKind == "mixed-version" {
+				// Disabled on IBM because s390x is only built on master and mixed-version
+				// is impossible to test as of 05/2025.
+				clouds = registry.AllClouds.NoAWS().NoIBM()
+				suites = registry.Suites(registry.MixedVersion, registry.Nightly)
+				leases = registry.DefaultLeases
+				monitor = true
+				randomized = true
+			}
+
+			// When running multi-store tests, switch to GCE and configure
+			// the cluster to have multiple SSDs
+			if testKind == "multi-store" {
+				clouds = registry.OnlyGCE
+				clusterSpec = r.MakeClusterSpec(7,
+					// When using ssd > 1, only local SSDs on AMD64 arch are compatible
+					// currently. See #121951.
+					spec.SSD(2),
+					spec.Arch(spec.OnlyAMD64),
+					spec.PreferLocalSSD(),
 				)
-			},
-		},
-	)
-	r.Add(
-		registry.TestSpec{
-			Name:  `rebalance/by-load-mmc/replicas/ssds=2`,
-			Owner: registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7,
-				// When using ssd > 1, only local SSDs on AMD64 arch are compatible
-				// currently. See #121951.
-				spec.SSD(2),
-				spec.Arch(spec.OnlyAMD64),
-				spec.PreferLocalSSD(),
-			), // the last node is just used to generate load
-			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           registry.MetamorphicLeases,
-			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.IsLocal() {
-					t.Fatal("cannot run multi-store in local mode")
-				}
-				rebalanceLoadRun(
-					ctx, t, c, "multi-metric and count", leaseAndReplicaRebalanceDuration, concurrency, false, /* mixedVersion */
-				)
-			},
-		},
-	)
+			}
+
+			// Add the test to the registry
+			r.Add(
+				registry.TestSpec{
+					Name:             name,
+					Owner:            registry.OwnerKV,
+					Cluster:          clusterSpec,
+					CompatibleClouds: clouds,
+					Suites:           suites,
+					Leases:           leases,
+					Monitor:          monitor,
+					Randomized:       randomized,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						if c.IsLocal() {
+							if testKind == "multi-store" {
+								t.Fatal("cannot run multi-store in local mode")
+							}
+							concurrency = 32
+							t.L().Printf("lowering concurrency to %d in local testing\n", concurrency)
+						}
+						rebalanceLoadRun(ctx, t, c, rebalanceMode, duration, concurrency, testKind == "mixed-version")
+					},
+				},
+			)
+		}
+	}
 }
 
 func rebalanceByLoad(
