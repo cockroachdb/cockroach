@@ -144,19 +144,25 @@ func ChecksForTable(
 			}
 		}
 
-		// If none of the previous checks provide a row count, skip the check.
-		if includesRowCounterCheck {
-			checks = append(checks, &jobspb.InspectDetails_Check{
-				Type:     jobspb.InspectCheckRowCount,
-				TableID:  table.GetID(),
-				RowCount: *expectedRowCount,
-			})
-		} else {
-			if p != nil {
-				p.BufferClientNotice(ctx, pgnotice.Newf(
-					"skipping row count on table %q: no other checks provide a row count", table.GetName()))
+		// If none of the previous checks provide a row count, insert a check that'll provide one.
+		if !includesRowCounterCheck {
+			// A consistency check on the primary index is a no-op but it
+			// exposes a row count.
+			check := jobspb.InspectDetails_Check{
+				Type:         jobspb.InspectCheckIndexConsistency,
+				TableID:      table.GetID(),
+				IndexID:      table.GetPrimaryIndexID(),
+				TableVersion: table.GetVersion(),
 			}
+			checks = append(checks, &check)
 		}
+
+		checks = append(checks, &jobspb.InspectDetails_Check{
+			Type:     jobspb.InspectCheckRowCount,
+			TableID:  table.GetID(),
+			RowCount: *expectedRowCount,
+		})
+
 	}
 
 	return checks, nil
