@@ -119,8 +119,9 @@ func verifySnap(
 // snapWriter helps preparing the snapshot write to storage.
 // TODO(pav-kv): move this and other structs in this file to kvstorage package.
 type snapWriter struct {
-	todoEng storage.Engine
-
+	// eng encapsulates the storage engines of the Store. It knows whether the
+	// raft/log and state engines are separated, or the same engine must be used.
+	eng kvstorage.Engines
 	// writeSST provides a Writer which the caller uses to populate a subset of
 	// the pending snapshot write. One writeSST call corresponds to one keys
 	// subspace (such as replicated RangeID-local) and/or one range.
@@ -180,6 +181,9 @@ type snapWrite struct {
 // each one is written in key order. We also avoid overlapping with the already
 // written replicated keys of the snapshot.
 func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
+	if s.eng.Separated() {
+		panic("separated engines not supported") // TODO(sep-raft-log): support
+	}
 	clearEnd, err := verifySnap(sw.origDesc, sw.desc, sw.subsume)
 	if err != nil {
 		log.KvDistribution.Fatalf(ctx, "%v", err)
@@ -197,12 +201,13 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 		return err
 	}
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
 	for _, sub := range sw.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
+			return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+				State: kvstorage.State{RO: s.eng.StateEngine(), WO: w},
+				Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: w},
+			}, sub)
 		}); err != nil {
 			return err
 		}
@@ -222,9 +227,9 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 		},
 	}) {
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			// TODO(sep-raft-log): read from the state machine engine here.
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.eng.StateEngine(), w, span.Key, span.EndKey,
+				kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err

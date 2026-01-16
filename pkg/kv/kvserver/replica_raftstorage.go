@@ -620,7 +620,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
 	sw := snapWriter{
-		todoEng:  r.store.TODOEngine(),
+		eng:      r.store.internalEngines,
 		writeSST: writeSST,
 	}
 	if err := sw.prepareSnapApply(ctx, snapWrite{
