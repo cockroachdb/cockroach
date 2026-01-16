@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -121,7 +122,7 @@ func verifySnap(
 // TODO(pav-kv): move this struct to kvstorage package.
 type snapWriteBuilder struct {
 	todoEng  storage.Engine
-	sl       kvstorage.StateLoader
+	sl       logstore.StateLoader
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
 	truncState kvserverpb.RaftTruncatedState
