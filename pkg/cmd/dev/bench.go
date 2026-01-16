@@ -7,9 +7,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -76,6 +76,10 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	// Enumerate all benches to run.
 	if len(pkgs) == 0 {
 		// Empty `dev bench` does the same thing as `dev bench pkg/...`
+		// TODO: pkg/... is a ton of stuff, most of which is not
+		// benchmarks. Maybe we should be searching for all occurrences
+		// of `func Bench` in the repo to enumerate the correct
+		// packages.
 		pkgs = append(pkgs, "pkg/...")
 	}
 
@@ -88,22 +92,15 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 
 	var testTargets []string
 	for _, pkg := range pkgs {
-		pkg = strings.TrimPrefix(pkg, "//")
-		pkg = strings.TrimPrefix(pkg, "./")
-		pkg = strings.TrimRight(pkg, "/")
-
-		if !strings.HasPrefix(pkg, "pkg/") {
-			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+		labels, err := d.getTestTargets(ctx, pkg)
+		if err != nil {
+			return err
 		}
-
-		var target string
-		if strings.Contains(pkg, ":") {
-			// For parity with bazel, we allow specifying named build targets.
-			target = pkg
-		} else {
-			target = fmt.Sprintf("%s:all", pkg)
+		if len(labels) == 0 {
+			log.Printf("WARNING: no test targets were found matching %s", pkg)
+			continue
 		}
-		testTargets = append(testTargets, target)
+		testTargets = append(testTargets, labels...)
 	}
 
 	args = append(args, testTargets...)
