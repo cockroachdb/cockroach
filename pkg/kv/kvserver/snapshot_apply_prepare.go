@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 // verifySnap verifies that the replica descriptor before and after the
@@ -171,21 +172,37 @@ func (s *snapWriter) applyAsBatch() kvstorage.StateWO {
 // commit commits the snapshot application. If engines are separated, it first
 // commits/syncs the raft engine batch, and then commits the state machine batch
 // (if applying as batch).
-func (s *snapWriter) commit() error {
+func (s *snapWriter) commit(
+	ctx context.Context, ing snapIngestion,
+) (pebble.IngestOperationStats, error) {
 	if s.eng.Separated() {
+		// TODO(sep-raft-log): populate the WAG node.
 		if err := s.raftWO.Commit(true /* sync */); err != nil {
-			return err
+			return pebble.IngestOperationStats{}, err
 		}
 	}
-	if s.batch == nil {
-		// TODO(sep-raft-log): move the ingestion code here.
-		return nil
+	if s.batch != nil {
+		// If engines are separated then the raft engine batch will contain a WAG
+		// node that guarantees durability of the state machine write, so we don't
+		// need so sync the state machine batch.
+		if err := s.batch.Commit(!s.eng.Separated()); err != nil {
+			return pebble.IngestOperationStats{}, err
+		}
+		// TODO(pav-kv): return stats instead of managing them in the caller.
+		return pebble.IngestOperationStats{}, nil
 	}
-	// If engines are separated then the raft engine batch will contain a WAG node
-	// that guarantees durability of the state machine write, so we don't need so
-	// sync the state machine batch.
-	// TODO(sep-raft-log): populate the WAG node.
-	return s.batch.Commit(!s.eng.Separated())
+
+	ingestTo := s.eng.StateEngine()
+	if !s.eng.Separated() {
+		ingestTo = s.eng.Engine()
+	}
+	stats, err := ingestTo.IngestAndExciseFiles(
+		ctx, ing.paths, ing.shared, ing.external, ing.exciseSpan)
+	if err != nil {
+		return pebble.IngestOperationStats{}, errors.Wrapf(err,
+			"while ingesting %s and excising %v", ing.paths, ing.exciseSpan)
+	}
+	return stats, nil
 }
 
 // close closes the underlying storage batches, if any. Must be called exactly
@@ -313,4 +330,16 @@ func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyRe
 			Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: raftWO},
 		}, sub)
 	})
+}
+
+// snapIngestion encodes the parameters needed to run a Pebble ingestion for
+// applying a snapshot.
+//
+// TODO(sep-raft-log): this information needs to be stored in the corresponding
+// WAG node. Use the proto counterparts of this type (see wagpb.Ingestion).
+type snapIngestion struct {
+	paths      []string
+	shared     []pebble.SharedSSTMeta
+	external   []pebble.ExternalFile
+	exciseSpan roachpb.Span
 }
