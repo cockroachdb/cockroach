@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -21,6 +22,7 @@ func init() {
 }
 
 func declareKeysBarrier(
+	_ *cluster.Settings,
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	req kvpb.Request,

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -81,7 +82,7 @@ func TestRequestsSerializeWithAllKeys(t *testing.T) {
 				Sequence: 0,
 			})
 
-			err := command.DeclareKeys(desc, &header, otherRequest, &otherLatchSpans, &otherLockSpans, 0)
+			err := command.DeclareKeys(cluster.MakeTestingClusterSettings(), desc, &header, otherRequest, &otherLatchSpans, &otherLockSpans, 0)
 			if err != nil {
 				t.Error(err)
 			}

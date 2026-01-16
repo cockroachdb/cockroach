@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -25,6 +26,7 @@ import (
 
 // DefaultDeclareKeys is the default implementation of Command.DeclareKeys.
 func DefaultDeclareKeys(
+	cs *cluster.Settings,
 	_ ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -46,6 +48,7 @@ func DefaultDeclareKeys(
 // ensures that the commands are fully isolated from conflicting transactions
 // when it evaluated.
 func DefaultDeclareIsolatedKeys(
+	cs *cluster.Settings,
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -151,6 +154,7 @@ func DefaultDeclareIsolatedKeys(
 // behavior during migrations, check for WaitPolicy_Error before declaring locks.
 // TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
 func DeclareKeysForRefresh(
+	cs *cluster.Settings,
 	irs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -159,9 +163,9 @@ func DeclareKeysForRefresh(
 	dur time.Duration,
 ) error {
 	if header.WaitPolicy == lock.WaitPolicy_Error {
-		return DefaultDeclareIsolatedKeys(irs, header, req, latchSpans, lss, dur)
+		return DefaultDeclareIsolatedKeys(cs, irs, header, req, latchSpans, lss, dur)
 	} else {
-		return DefaultDeclareKeys(irs, header, req, latchSpans, lss, dur)
+		return DefaultDeclareKeys(cs, irs, header, req, latchSpans, lss, dur)
 	}
 }
 

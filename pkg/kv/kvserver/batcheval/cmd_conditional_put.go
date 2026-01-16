@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,6 +26,7 @@ func init() {
 }
 
 func declareKeysConditionalPut(
+	cs *cluster.Settings,
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -34,9 +36,9 @@ func declareKeysConditionalPut(
 ) error {
 	args := req.(*kvpb.ConditionalPutRequest)
 	if args.Inline {
-		return DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareKeys(cs, rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
-		return DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareIsolatedKeys(cs, rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
 }
 
