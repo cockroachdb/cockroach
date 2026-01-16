@@ -1260,7 +1260,7 @@ func restorePlanHook(
 		}
 	}
 
-	subdir, err := exprEval.String(ctx, restoreStmt.Subdir)
+	backupToken, err := exprEval.String(ctx, restoreStmt.Subdir)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -1380,7 +1380,7 @@ func restorePlanHook(
 
 		return doRestorePlan(
 			ctx, restoreStmt, exprEval, p, from, intoDB, newDBName, newTenantID,
-			newTenantName, endTime, resultsCh, subdir, execLocality,
+			newTenantName, endTime, resultsCh, backupToken, execLocality,
 		)
 	}
 
@@ -1619,7 +1619,7 @@ func doRestorePlan(
 	newTenantName *roachpb.TenantName,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
-	subdir string,
+	backupToken string,
 	execLocality roachpb.Locality,
 ) error {
 	if len(from) == 0 {
@@ -1633,8 +1633,6 @@ func doRestorePlan(
 			return err
 		}
 	}
-
-	var fullyResolvedSubdir string
 
 	if restoreStmt.Options.OnlineImpl() {
 		// validate that from uris are allowed in online restore
@@ -1650,16 +1648,11 @@ func doRestorePlan(
 		return err
 	}
 
-	if strings.EqualFold(subdir, backupbase.LatestFileName) {
-		// set subdir to content of latest file
-		latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
-			p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
-		if err != nil {
-			return err
-		}
-		fullyResolvedSubdir = latest
-	} else {
-		fullyResolvedSubdir = subdir
+	fullyResolvedSubdir, endTime, err := resolveRestoreSubdirAndEndTime(
+		ctx, p, defaultCollectionURI, backupToken, endTime,
+	)
+	if err != nil {
+		return err
 	}
 
 	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[:], fullyResolvedSubdir)
@@ -2032,7 +2025,7 @@ func doRestorePlan(
 			return err
 		}
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
-		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
+		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, backupToken, restoreStmt,
 			descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 		return nil
 	}
@@ -2079,7 +2072,7 @@ func doRestorePlan(
 	// releasing leases assumes that that does not happen during statement
 	// execution.
 	p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
-	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, subdir, restoreStmt,
+	collectRestoreTelemetry(ctx, sj.ID(), restoreDetails, intoDB, newDBName, backupToken, restoreStmt,
 		descsByTablePattern, restoreDBs, p.SessionData().ApplicationName)
 	if err := sj.Start(ctx); err != nil {
 		return err
@@ -2401,6 +2394,88 @@ func restoreCreateDefaultPrimaryRegionEnums(
 		return nil, nil, err
 	}
 	return regionEnum, regionArrayEnum, nil
+}
+
+// resolveRestoreSubdirAndEndTime takes a backup token (either a subdir, an ID,
+// or LATEST) along with any user-specified AOST and returns the fully resolved
+// subdir and end time to use for the restore.
+func resolveRestoreSubdirAndEndTime(
+	ctx context.Context,
+	p sql.PlanHookState,
+	defaultCollectionURI string,
+	backupToken string,
+	aost hlc.Timestamp,
+) (string, hlc.Timestamp, error) {
+	useIDs := p.SessionData().UseBackupsWithIDs
+	if !useIDs {
+		// Revert to legacy behavior, backupToken is either a subdir or using the
+		// legacy interpretation of LATEST (latest full backup).
+		subdir := backupToken
+		if strings.EqualFold(backupToken, backupbase.LatestFileName) {
+			// set subdir to content of latest file
+			latest, err := backupdest.ReadLatestFile(ctx, defaultCollectionURI,
+				p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+			if err != nil {
+				return "", hlc.Timestamp{}, err
+			}
+			subdir = latest
+		}
+		return subdir, aost, nil
+	}
+
+	defaultRootStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
+		ctx, defaultCollectionURI, p.User(),
+	)
+	if err != nil {
+		return "", hlc.Timestamp{}, err
+	}
+
+	var backupIdx backuppb.BackupIndexMetadata
+	backupID := backupToken
+	if strings.EqualFold(backupToken, backupbase.LatestFileName) {
+		backupIdx, backupID, err = backupinfo.FindLatestBackup(ctx, defaultRootStore)
+		if err != nil {
+			return "", hlc.Timestamp{}, err
+		}
+	} else {
+		backupIdx, err = backupinfo.ResolveBackupIDtoIndex(ctx, defaultRootStore, backupToken)
+		if err != nil {
+			return "", hlc.Timestamp{}, err
+		}
+	}
+	fullSubdir, err := backupinfo.BackupIDToFullSubdir(backupID)
+	if err != nil {
+		return "", hlc.Timestamp{}, err
+	}
+
+	if !aost.IsEmpty() {
+		// If an AOST is specified, the user is attempting to do a revision history
+		// restore. We validate that the backup ID they specified contains the AOST.
+		//
+		// NB: `ValidateEndTimeAndTruncate` already performs this validation, but
+		// prior to the introduction of backup IDs, users would only specify the
+		// chain that they would want to use for the revision history restore. As a
+		// consequence, the existing framework only validates that the chain covers
+		// the requested AOST, not that a specific backup covers it. It is easier to
+		// perform the validation here than to overhaul the existing logic.
+		if backupIdx.MVCCFilter != backuppb.MVCCFilter_All {
+			return "", hlc.Timestamp{}, errors.Errorf(
+				"backup %s is not a revision history backup and cannot be used for AS OF SYSTEM TIME restores. "+
+					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a revision history backup.",
+				backupID,
+			)
+		} else if aost.Less(backupIdx.RevisionStartTime) || backupIdx.EndTime.Less(aost) {
+			return "", hlc.Timestamp{}, errors.Errorf(
+				"backup %s does not cover the specified AS OF SYSTEM TIME. "+
+					"Please use 'SHOW BACKUPS IN ... WITH REVISION START TIME' to find a backup that covers the desired time.",
+				backupID,
+			)
+		}
+		return fullSubdir, aost, nil
+	}
+
+	// AOST is not specified, use the end time specified by the backup ID.
+	return fullSubdir, backupIdx.EndTime, nil
 }
 
 func init() {
