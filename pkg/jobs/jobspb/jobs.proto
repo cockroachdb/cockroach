@@ -903,6 +903,7 @@ message IndexBackfillSSTManifest {
   uint64 file_size = 3;
   bytes row_sample = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
   util.hlc.Timestamp write_timestamp = 5;
+  uint64 key_count = 6;
 }
 
 // MergeProgress is used to track index merge progress in the declarative
