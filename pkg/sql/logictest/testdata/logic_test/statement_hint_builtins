@@ -2,6 +2,8 @@
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 # knob-opt: sync-event-log
 
+# TODO(michae2): move explain tests into execbuilder
+
 # Speed up the rangefeed.
 user host-cluster-root
 
@@ -21,6 +23,12 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
 
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b));
+
+statement ok
+INSERT INTO xy VALUES (10, 10)
+
+statement ok
+INSERT INTO ab VALUES (10, 10)
 
 query I
 SELECT count(*) FROM system.statement_hints;
@@ -312,6 +320,35 @@ statement hints count: 1
       table: abc@abc_b_idx
       spans: FULL SCAN
 
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT a FROM abc WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• filter
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ filter: a = 10
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 0
+      actual row count: 0
+      missing stats
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+
 # Try injecting a join hint.
 
 onlyif config local
@@ -376,6 +413,48 @@ statement hints count: 1
       table: xy@xy_pkey
       spans: FULL SCAN
 
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• hash join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (b) = (y)
+│ left cols are key
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     actual row count: 0
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 1
+      actual row count: 1
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN
+
 # Try removing a hint.
 
 statement ok
@@ -412,6 +491,28 @@ distribution: local
 statement hints count: 1
 ·
 • scan
+  missing stats
+  table: abc@abc_b_idx
+  spans: [/10 - /10]
+
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT a FROM abc@abc_pkey WHERE b = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  KV time: 0µs
+  KV rows decoded: 0
+  actual row count: 0
   missing stats
   table: abc@abc_b_idx
   spans: [/10 - /10]
@@ -456,6 +557,30 @@ statement hints count: 1
 • render
 │
 └── • scan
+      missing stats
+      table: abc@abc_pkey
+      spans: [/10 - /10]
+
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT a + 1 FROM abc WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• render
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 0
+      actual row count: 0
       missing stats
       table: abc@abc_pkey
       spans: [/10 - /10]
@@ -511,6 +636,48 @@ statement hints count: 1
       table: xy@xy_pkey
       spans: [/10 - /10]
 
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT c FROM xy JOIN abc ON c = y WHERE x = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+statement hints count: 1
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• hash join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (c) = (y)
+│ right cols are key
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     actual row count: 0
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 1
+      actual row count: 1
+      missing stats
+      table: xy@xy_pkey
+      spans: [/10 - /10]
+
 # Try a prepared statement with an injected hint.
 
 let $hint_p1
@@ -543,6 +710,35 @@ injected hints from external statement hint x
 injected hints from external statement hint x
 trying preparing with injected hints
 trying planning with injected hints
+
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p1 (5)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• filter
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ filter: b > 5
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 0
+      actual row count: 0
+      missing stats
+      table: abc@abc_pkey
+      spans: FULL SCAN
 
 # Try injecting a hint between prepare and execute.
 
@@ -586,6 +782,37 @@ WHERE message LIKE '%injected hints%'
 injected hints from external statement hint x
 trying planning with injected hints
 
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p2 (5)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• render
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: b > 5
+    │
+    └── • revscan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
 # Try removing an injected hint between prepare and execute.
 
 # (Re-use p1.)
@@ -608,6 +835,34 @@ query empty
 SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
 FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%injected hints%'
+
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p1 (6)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+regions: <hidden>
+·
+• filter
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ filter: b > 6
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 0
+      actual row count: 0
+      missing stats
+      table: abc@abc_pkey
+      spans: FULL SCAN
 
 # Check that we do not use an invalid index hint injected into a prepared
 # statement.
@@ -647,6 +902,41 @@ trying planning with injected hints
 planning with injected hints failed with: index "abc_foo" not found
 falling back to planning without injected hints
 
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p3 (5)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• group (scalar)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: c = 5
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
+
 # Check that we do not use an unsatisfiable hint injected into a prepared
 # statement.
 
@@ -682,6 +972,49 @@ trying preparing with injected hints
 trying planning with injected hints
 planning with injected hints failed with: could not produce a query plan conforming to the FORCE_ZIGZAG hint
 falling back to planning without injected hints
+
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p4 (5, 6)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• group (scalar)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 1
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: c = 6
+    │
+    └── • index join (streamer)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ KV time: 0µs
+        │ KV rows decoded: 0
+        │ actual row count: 0
+        │ table: abc@abc_pkey
+        │
+        └── • scan
+              sql nodes: <hidden>
+              kv nodes: <hidden>
+              regions: <hidden>
+              KV time: 0µs
+              KV rows decoded: 0
+              actual row count: 0
+              missing stats
+              table: abc@abc_b_idx
+              spans: [/5 - /5]
 
 # Check that we can inject hints into generic query plans.
 
@@ -723,6 +1056,37 @@ trying preparing with injected hints
 trying planning with injected hints
 optimizing (generic)
 trying planning with injected hints
+
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p5 (6)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, reused
+statement hints count: 1
+regions: <hidden>
+·
+• render
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: b > 6
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
 
 # Check that we can inject hints when using plan_cache_mode=auto.
 
@@ -784,6 +1148,37 @@ trying planning with injected hints
 trying planning with injected hints
 optimizing (generic)
 trying planning with injected hints
+
+onlyif config local
+query T
+EXPLAIN ANALYZE EXECUTE p6 (11)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, reused
+statement hints count: 1
+regions: <hidden>
+·
+• render
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: b = 11
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
+          missing stats
+          table: abc@abc_pkey
+          spans: FULL SCAN
 
 statement ok
 RESET plan_cache_mode
@@ -879,6 +1274,49 @@ statement hints count: 1
       table: xy@xy_pkey
       spans: FULL SCAN
 
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• hash join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (b) = (x)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     actual row count: 0
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 1
+      actual row count: 1
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN
+
 statement ok
 SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT y FROM abc JOIN xy ON x = b WHERE a = _',
@@ -904,6 +1342,46 @@ statement hints count: 1
     │ filter: a = 10
     │
     └── • scan
+          missing stats
+          table: abc@abc_b_idx
+          spans: FULL SCAN
+
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+statement hints count: 1
+regions: <hidden>
+·
+• lookup join (streamer)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: xy@xy_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│
+└── • filter
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ filter: a = 10
+    │
+    └── • scan
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          KV time: 0µs
+          KV rows decoded: 0
+          actual row count: 0
           missing stats
           table: abc@abc_b_idx
           spans: FULL SCAN
@@ -956,6 +1434,39 @@ statement hints count: 1
       table: abc@abc_pkey
       spans: [/10 - /10]
 
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+statement hints count: 1
+regions: <hidden>
+·
+• lookup join (streamer)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: xy@xy_pkey
+│ equality: (b) = (x)
+│ equality cols are key
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 0
+      actual row count: 0
+      missing stats
+      table: abc@abc_pkey
+      spans: [/10 - /10]
+
 # If there are multiple hint rewrites for the same fingerprint added in the
 # same transaction, we should pick the last one added.
 
@@ -998,6 +1509,49 @@ statement hints count: 1
 │     spans: [/10 - /10]
 │
 └── • scan
+      missing stats
+      table: xy@xy_pkey
+      spans: FULL SCAN
+
+onlyif config local
+query T
+EXPLAIN ANALYZE SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+statement hints count: 1
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+regions: <hidden>
+·
+• merge join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (b) = (x)
+│ left cols are key
+│ right cols are key
+│
+├── • scan
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     actual row count: 0
+│     missing stats
+│     table: abc@abc_pkey
+│     spans: [/10 - /10]
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 1
+      actual row count: 1
       missing stats
       table: xy@xy_pkey
       spans: FULL SCAN
@@ -1053,7 +1607,7 @@ onlyif config local
 query T
 EXPLAIN
 SELECT * FROM abc
-JOIN (SELECT i FROM generate_series(1, 10000) g(i))
+JOIN (SELECT i FROM generate_series(1, 1) g(i))
 ON b = i
 ----
 distribution: local
@@ -1078,6 +1632,66 @@ statement hints count: 1
         │ estimated row count: 10
         │
         └── • emptyrow
+
+onlyif config local
+query T
+EXPLAIN ANALYZE
+SELECT * FROM abc
+JOIN (SELECT i FROM generate_series(1, 1) g(i))
+ON b = i
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+statement hints count: 1
+regions: <hidden>
+·
+• merge join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ equality: (b) = (generate_series)
+│
+├── • sort
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ execution time: 0µs
+│   │ actual row count: 0
+│   │ order: +b
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 0
+│         actual row count: 0
+│         missing stats
+│         table: abc@abc_pkey
+│         spans: FULL SCAN
+│
+└── • sort
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ execution time: 0µs
+    │ actual row count: 1
+    │ estimated row count: 10
+    │ order: +generate_series
+    │
+    └── • project set
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ execution time: 0µs
+        │ actual row count: 1
+        │ estimated row count: 10
+        │
+        └── • emptyrow
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
 
 # Test the sql.query.with_statement_hints.count metric.
 

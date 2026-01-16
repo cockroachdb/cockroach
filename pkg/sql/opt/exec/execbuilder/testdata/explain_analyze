@@ -236,15 +236,23 @@ execution time: 100µs
 distribution: <hidden>
 plan type: custom
 statement hints count: 1
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
-• scan
-  sql nodes: <hidden>
-  kv nodes: <hidden>
-  regions: <hidden>
-  KV time: 0µs
-  KV rows decoded: 0
-  actual row count: 0
-  missing stats
-  table: kv@kv_pkey
-  spans: [/100 - ]
+• filter
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ execution time: 0µs
+│ actual row count: 0
+│ filter: k >= 100
+│
+└── • scan
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      KV time: 0µs
+      KV rows decoded: 1
+      actual row count: 1
+      missing stats
+      table: kv@kv_v_idx
+      spans: FULL SCAN
