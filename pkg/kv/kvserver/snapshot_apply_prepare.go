@@ -119,7 +119,20 @@ func verifySnap(
 // snapWriter helps preparing the snapshot write to storage.
 // TODO(pav-kv): move this and other structs in this file to kvstorage package.
 type snapWriter struct {
-	todoEng  storage.Engine
+	todoEng storage.Engine
+
+	// writeSST provides a Writer which the caller uses to populate a subset of
+	// the pending snapshot write. One writeSST call corresponds to one keys
+	// subspace (such as replicated RangeID-local) and/or one range.
+	//
+	// Writes within one writeSST call are sorted by key. Distinct writeSST calls
+	// write into non-overlapping spans. Both requirements are dictated by the
+	// common case in which the snapshot is applied as a Pebble ingestion.
+	//
+	// Commonly, writeSST provides a Writer backed by a newly created SSTable
+	// which will be part of a Pebble ingestion. Less commonly, when the snapshot
+	// is simple/small and applying it as a batch is more efficient, the Writer is
+	// backed by a shared Pebble batch (one for the entire snapshot application).
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 }
 
