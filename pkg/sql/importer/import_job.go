@@ -342,6 +342,15 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 			tableName = tblDesc.GetName()
+
+			// TODO(bghal): Get the initial row count so it can be included in the expected.
+			if !details.Table.WasEmpty {
+				log.Eventf(ctx, "skipping row count check on table %q: non-empty tables are not supported", tableName)
+
+				checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, nil /* expectedRowCount */)
+				return err
+			}
+
 			expectedRowCount := uint64(r.res.Rows)
 			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, &expectedRowCount)
 			return err
