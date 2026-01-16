@@ -332,11 +332,15 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			n, readErr := r.Reader.Read(p[read:])
 			read += n
 			r.Pos += int64(n)
+
 			if readErr == nil || readErr == io.EOF {
 				return read, readErr
 			}
 			if r.Size > 0 && r.Pos == r.Size {
 				log.Dev.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
+				// Debug logging for AVRO import data loss investigation.
+				log.Dev.Warningf(ctx, "IMPORT_DEBUG: ResumingReader[%s] EOF_CONVERSION pos=%d size=%d ignoring err=%v",
+					r.Filename, r.Pos, r.Size, readErr)
 				return read, io.EOF
 			}
 			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)

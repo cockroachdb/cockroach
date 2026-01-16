@@ -708,6 +708,9 @@ func runParallelImport(
 		if producer.Err() == nil {
 			return importer.close(ctx)
 		}
+		// Debug logging for AVRO import data loss investigation.
+		log.Dev.Infof(ctx, "IMPORT_DEBUG: runParallelImport() PRODUCER_ERROR source=%d err=%v",
+			fileCtx.source, producer.Err())
 		return producer.Err()
 	})
 

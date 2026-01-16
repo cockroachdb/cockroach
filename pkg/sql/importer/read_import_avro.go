@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
@@ -353,10 +354,19 @@ func (r *avroRecordStream) fill(sz int) {
 	// To avoid this unpleasant situation, we never reset the head of our
 	// buffer.
 	sink := bytes.NewBuffer(r.buf)
-	_, r.err = io.CopyN(sink, r.input, int64(sz))
+	n, err := io.CopyN(sink, r.input, int64(sz))
 	r.buf = sink.Bytes()
 
+	// Debug logging for AVRO import data loss investigation.
+	if err != nil && err != io.EOF {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: AVRO fill() requested=%d copied=%d err=%v",
+			sz, n, err)
+	}
+
+	r.err = err
 	if r.err == io.EOF {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: AVRO fill() EOF copied=%d buflen=%d",
+			n, len(r.buf))
 		r.eof = true
 		r.err = nil
 	}
@@ -369,7 +379,15 @@ func (r *avroRecordStream) Scan() bool {
 	}
 
 	r.readNative()
-	return r.err == nil && (!r.eof || r.row != nil)
+	result := r.err == nil && (!r.eof || r.row != nil)
+
+	// Debug logging for AVRO import data loss investigation.
+	if !result {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: Scan() RETURNING_FALSE eof=%t err=%v",
+			r.eof, r.err)
+	}
+
+	return result
 }
 
 // Err implements importRowProducer interface.
@@ -412,11 +430,17 @@ func (r *avroRecordStream) readNative() {
 	}
 
 	if r.err != nil {
+		// Debug logging for AVRO import data loss investigation.
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: readNative() EXIT_WITH_READ_ERROR buflen=%d eof=%t err=%v",
+			len(r.buf), r.eof, r.err)
 		return
 	}
 
 	if decodeErr != nil {
 		r.err = decodeErr
+		// Debug logging for AVRO import data loss investigation.
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: readNative() EXIT_WITH_DECODE_ERROR buflen=%d eof=%t err=%v",
+			len(r.buf), r.eof, decodeErr)
 		return
 	}
 
