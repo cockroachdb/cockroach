@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,6 +43,12 @@ import (
 // RestoreOptions struct.
 func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	sc := tree.MakeSemaContext(nil /* resolver */)
+	s := cluster.MakeTestingClusterSettings()
+	exprEval := exprutil.MakeEvaluator(
+		"test", &sc, eval.NewTestingEvalContext(s),
+	)
 
 	// The input struct must have a non-zero value for every
 	// element of the struct.
@@ -84,14 +92,13 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 	ensureAllStructFieldsSet(input, "input")
 	output, err := resolveOptionsForRestoreJobDescription(
 		context.Background(),
+		exprEval,
 		input,
 		"into_db",
 		"newDBName",
-		[]string{"http://example.com"},
 	)
 	require.NoError(t, err)
 	ensureAllStructFieldsSet(output, "output")
-
 }
 
 func TestBackupManifestVersionCompatibility(t *testing.T) {

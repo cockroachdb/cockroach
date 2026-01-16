@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -236,7 +237,7 @@ func RemoveStaleRHSFromSplit(
 func RewriteRaftState(
 	ctx context.Context,
 	raftWO RaftWO,
-	sl StateLoader,
+	sl logstore.StateLoader,
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
 ) error {

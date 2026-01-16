@@ -121,11 +121,11 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
 	map[LBRebalancingMode]string{
-		LBRebalancingOff:                 "off",
-		LBRebalancingLeasesOnly:          "leases",
-		LBRebalancingLeasesAndReplicas:   "leases and replicas",
-		LBRebalancingMultiMetricOnly:     "multi-metric only",
-		LBRebalancingMultiMetricAndCount: "multi-metric and count",
+		LBRebalancingOff:                 LBRebalancingOff.String(),
+		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
+		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
+		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
+		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
 	},
 	settings.WithPublic,
 )
@@ -163,6 +163,28 @@ const (
 	// replica counts goal may be in conflict with the store-level load goal.
 	LBRebalancingMultiMetricAndCount
 )
+
+func (m LBRebalancingMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch m {
+	case LBRebalancingOff:
+		w.Print("off")
+	case LBRebalancingLeasesOnly:
+		w.Print("leases")
+	case LBRebalancingLeasesAndReplicas:
+		w.Print("leases and replicas")
+	case LBRebalancingMultiMetricOnly:
+		w.Print("multi-metric only")
+	case LBRebalancingMultiMetricAndCount:
+		w.Print("multi-metric and count")
+	default:
+		w.Printf("unknown(%d)", int64(m))
+	}
+}
 
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
 // when accessed from kvcoord.
