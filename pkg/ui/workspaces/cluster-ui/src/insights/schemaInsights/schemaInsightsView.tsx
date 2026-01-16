@@ -223,6 +223,7 @@ export const SchemaInsightsView: React.FC = () => {
                   />
                 }
                 tableWrapperClassName={insightTableCx("sorted-table")}
+                dataTestId="schema-insights-table"
               />
             </section>
             <Pagination

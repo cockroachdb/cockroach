@@ -330,6 +330,7 @@ const HotRangesTable = ({
             }
           />
         }
+        dataTestId="top-ranges-table"
       />
       <Pagination
         pageSize={pagination.pageSize}
