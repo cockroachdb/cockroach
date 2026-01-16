@@ -52,6 +52,7 @@ scheduled_jobs table full
 schema schema full
 settings table full
 statement_hints table full
+statements table full
 system database full
 ui table full
 userfiles_root_upload_files table full
