@@ -161,7 +161,7 @@ func TestPrepareSnapApply(t *testing.T) {
 
 	swb := snapWriteBuilder{
 		todoEng:  eng,
-		sl:       sl,
+		sl:       sl.StateLoader,
 		writeSST: writeSST,
 
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
