@@ -6633,6 +6633,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.get_record.failed
+      exported_name: kv_protectedts_get_record_failed
+      description: number of failed GetRecord operations (ErrNotExists, parsing errors, or execution errors)
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.get_record.success
+      exported_name: kv_protectedts_get_record_success
+      description: number of successful GetRecord operations
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.protect.failed
+      exported_name: kv_protectedts_protect_failed
+      description: number of failed Protect operations (ErrExists, validation errors, or execution errors)
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.protect.success
+      exported_name: kv_protectedts_protect_success
+      description: number of successful Protect operations creating protected timestamp records
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: kv.protectedts.reconciliation.errors
       exported_name: kv_protectedts_reconciliation_errors
       description: number of errors encountered during reconciliation runs on this node
@@ -6661,6 +6693,38 @@ layers:
       exported_name: kv_protectedts_reconciliation_records_removed
       description: number of records removed during reconciliation runs on this node
       y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.release.failed
+      exported_name: kv_protectedts_release_failed
+      description: number of failed Release operations (ErrNotExists or execution errors)
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.release.success
+      exported_name: kv_protectedts_release_success
+      description: number of successful Release operations removing protected timestamp records
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.update_timestamp.failed
+      exported_name: kv_protectedts_update_timestamp_failed
+      description: number of failed UpdateTimestamp operations (ErrNotExists or execution errors)
+      y_axis_label: Operations
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: kv.protectedts.update_timestamp.success
+      exported_name: kv_protectedts_update_timestamp_success
+      description: number of successful UpdateTimestamp operations
+      y_axis_label: Operations
       type: COUNTER
       unit: COUNT
       aggregation: AVG
