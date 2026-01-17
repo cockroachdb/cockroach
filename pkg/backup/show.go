@@ -1490,7 +1490,7 @@ func showBackupsInCollectionPlanHook(
 				return err
 			}
 			res, exceededMax, err := backupinfo.ListRestorableBackups(
-				ctx, store, newerThan, olderThan, maxCount,
+				ctx, store, newerThan, olderThan, maxCount, showStmt.Options.RevisionStartTime,
 			)
 			if err != nil {
 				return err
@@ -1513,9 +1513,9 @@ func showBackupsInCollectionPlanHook(
 					return err
 				}
 				revStartTime := tree.DNull
-				if i.MVCCFilter == backuppb.MVCCFilter_All {
+				if i.OpenedIndex() && i.MVCCFilter(ctx, p.ExecCfg().SV()) == backuppb.MVCCFilter_All {
 					revStartTime, err = tree.MakeDTimestampTZ(
-						timeutil.Unix(0, i.RevisionStartTime.WallTime), time.Second,
+						timeutil.Unix(0, i.RevisionStartTime(ctx, p.ExecCfg().SV()).WallTime), time.Second,
 					)
 					if err != nil {
 						return err

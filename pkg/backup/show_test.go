@@ -1002,6 +1002,50 @@ func TestShowBackupsWithIDs(t *testing.T) {
 	})
 }
 
+func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup"
+
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, collectionURI)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, collectionURI)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, collectionURI)
+
+	t.Run("WITH REVISION START TIME", func(t *testing.T) {
+		revStartTimes := sqlDB.QueryStr(
+			t,
+			fmt.Sprintf(
+				`SELECT revision_start_time FROM [SHOW BACKUPS IN '%s' WITH REVISION START TIME]`,
+				collectionURI,
+			),
+		)
+		require.Len(t, revStartTimes, 3, "expected 3 backups")
+		for idx, row := range revStartTimes {
+			require.NotEqual(t, "NULL", row[0], "expected non-empty revision start time (row %d)", idx)
+		}
+	})
+
+	t.Run("WITHOUT REVISION START TIME", func(t *testing.T) {
+		revStartTimes := sqlDB.QueryStr(
+			t,
+			fmt.Sprintf(
+				`SELECT revision_start_time FROM [SHOW BACKUPS IN '%s']`,
+				collectionURI,
+			),
+		)
+		require.Len(t, revStartTimes, 3, "expected 3 backups")
+		for idx, row := range revStartTimes {
+			require.Equal(t, "NULL", row[0], "expected empty revision start time (row %d)", idx)
+		}
+	})
+}
+
 func TestShowBackupWithIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
