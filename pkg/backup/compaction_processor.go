@@ -164,11 +164,19 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if !ok {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(p.spec.DefaultURI, user)
+
+	uri, destLocalityKV, err := selectLocalityMatchingURI(
+		p.spec.DefaultURI, p.spec.URIsByLocalityKV,
+		p.spec.StrictLocality, p.FlowCtx.EvalCtx.Locality,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "error selecting locality matching uri")
+	}
+	conf, err := cloud.ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return errors.Wrapf(err, "export configuration")
 	}
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	store, err := execCfg.DistSQLSrv.ExternalStorage(ctx, conf)
 	if err != nil {
 		return errors.Wrapf(err, "external storage")
 	}
@@ -224,7 +232,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			return p.processSpanEntries(
-				ctx, execCfg, entryCh, encryption, defaultStore,
+				ctx, execCfg, entryCh, encryption, destLocalityKV, store,
 			)
 		},
 	}
@@ -239,6 +247,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	execCfg *sql.ExecutorConfig,
 	entryCh chan execinfrapb.RestoreSpanEntry,
 	encryption *jobspb.BackupEncryptionOptions,
+	localityKV string,
 	store cloud.ExternalStorage,
 ) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
@@ -252,7 +261,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 		Settings:  &execCfg.Settings.SV,
 		ElideMode: p.spec.ElideMode,
 	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store)
+	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, localityKV)
 	if err != nil {
 		return err
 	}
