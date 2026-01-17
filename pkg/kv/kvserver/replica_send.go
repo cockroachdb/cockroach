@@ -1203,7 +1203,7 @@ func (r *Replica) collectSpans(
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			err := cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
+			err := cmd.DeclareKeys(r.ClusterSettings(), desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
 			if err != nil {
 				return nil, nil, concurrency.PessimisticEval, err
 			}

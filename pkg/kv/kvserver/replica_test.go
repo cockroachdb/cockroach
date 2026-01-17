@@ -2703,6 +2703,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 	var spans spanset.SpanSet
 	cmd, _ := batcheval.LookupCommand(kvpb.EndTxn)
 	err := cmd.DeclareKeys(
+		cluster.MakeTestingClusterSettings(),
 		&roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("e")},
 		&kvpb.Header{},
 		&kvpb.EndTxnRequest{

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -23,6 +24,7 @@ func init() {
 }
 
 func declareKeysRangeStats(
+	cs *cluster.Settings,
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -30,7 +32,7 @@ func declareKeysRangeStats(
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
 ) error {
-	err := DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	err := DefaultDeclareKeys(cs, rs, header, req, latchSpans, lockSpans, maxOffset)
 	if err != nil {
 		return err
 	}

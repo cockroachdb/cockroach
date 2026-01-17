@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -22,6 +23,7 @@ import (
 // set. It then adds all key spans within which that the command expects to have
 // isolation from conflicting transactions to the lockSpans set.
 type DeclareKeysFunc func(
+	cs *cluster.Settings,
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	request kvpb.Request,

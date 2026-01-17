@@ -186,7 +186,7 @@ func TestCmdClearRange(t *testing.T) {
 				var latchSpans spanset.SpanSet
 				var lockSpans lockspanset.LockSpanSet
 				require.NoError(t,
-					declareKeysClearRange(&desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0),
+					declareKeysClearRange(cluster.MakeTestingClusterSettings(), &desc, &cArgs.Header, cArgs.Args, &latchSpans, &lockSpans, 0),
 				)
 				batch := &wrappedBatch{Batch: spanset.NewBatchAt(eng.NewBatch(), &latchSpans, cArgs.Header.Timestamp)}
 				defer batch.Close()
