@@ -1107,7 +1107,24 @@ for_control:
 	    }
 	    $$.val = forLoopControl
 	  case LOOP:
-	    return unimplemented(plpgsqllex, "for loop over query or cursor")
+	  	// This is a cursor or query for loop.c
+	  	t1 := plpgsqllex.(*lexer).Peek()
+	  	t2 := plpgsqllex.(*lexer).PeekN(2)
+
+	  	if t1.id == IDENT && t2.id == LOOP {
+	  		// This is a cursor for loop.
+	  		// TODO: Cursor for loops should be able to support parameterization,
+	  		// once implemented.
+	  		forLoopControl, err := plpgsqllex.(*lexer).ReadCursorForLoopControl()
+	  		if err != nil { return setErr(plpgsqllex, err) }
+	  		$$.val = forLoopControl
+	  	} else {
+	  		// This is a query for loop.
+	  		return unimplemented(plpgsqllex, "for loop over query")
+				//forLoopControl, err := plpgsqllex.(*lexer).ReadQueryForLoopControl()
+				//if err != nil { return setErr(plpgsqllex, err) }
+	  		//$$.val = forLoopControl
+	  	}
 	  default:
 	    return setErr(plpgsqllex, errors.New("unterminated FOR loop definition"))
 	  }
