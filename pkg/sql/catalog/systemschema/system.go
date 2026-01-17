@@ -129,6 +129,14 @@ CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 	contentionTimeComputeExpr       = `(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8`
 	totalEstimatedExecutionTimeExpr = `((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8`
 	p99LatencyComputeExpr           = `(((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8`
+	execStatsExecCountComputeExpr   = `((statistics->'execution_statistics':::STRING)->'cnt':::STRING)::INT8`
+
+	// sqDiff (squared differences) expressions for variance/stddev calculations
+	svcLatSqDiffComputeExpr         = `(((statistics->'statistics':::STRING)->'svcLat':::STRING)->'sqDiff':::STRING)::FLOAT8`
+	cpuSqlNanosSqDiffComputeExpr    = `(((statistics->'execution_statistics':::STRING)->'cpuSQLNanos':::STRING)->'sqDiff':::STRING)::FLOAT8`
+	contentionTimeSqDiffComputeExpr = `(((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'sqDiff':::STRING)::FLOAT8`
+	kvCpuTimeNanosComputeExpr       = `(((statistics->'statistics':::STRING)->'kvCPUTimeNanos':::STRING)->'mean':::STRING)::FLOAT8`
+	kvCpuTimeNanosSqDiffComputeExpr = `(((statistics->'statistics':::STRING)->'kvCPUTimeNanos':::STRING)->'sqDiff':::STRING)::FLOAT8`
 )
 
 var indexUsageComputeExprStr = indexUsageComputeExpr
@@ -138,6 +146,20 @@ var cpuSqlNanosComputeExprStr = cpuSqlNanosComputeExpr
 var contentionTimeComputeExprStr = contentionTimeComputeExpr
 var totalEstimatedExecutionTimeExprStr = totalEstimatedExecutionTimeExpr
 var p99LatencyComputeExprStr = p99LatencyComputeExpr
+var execSampleCountComputeExprStr = execStatsExecCountComputeExpr
+var svcLatSumComputeExprStr = serviceLatencyComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
+var cpuSqlNanosSumComputeExprStr = cpuSqlNanosComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8"
+var contentionTimeSumComputeExprStr = contentionTimeComputeExpr + " * " + execStatsExecCountComputeExpr + "::FLOAT8"
+
+// sum_sq expressions: sqDiff + count * mean^2 (enables aggregation for stddev calculation)
+var svcLatSumSqComputeExprStr = svcLatSqDiffComputeExpr + " + " + executionCountComputeExpr + "::FLOAT8 * " + serviceLatencyComputeExpr + " * " + serviceLatencyComputeExpr
+var cpuSqlNanosSumSqComputeExprStr = cpuSqlNanosSqDiffComputeExpr + " + " + execStatsExecCountComputeExpr + "::FLOAT8 * " + cpuSqlNanosComputeExpr + " * " + cpuSqlNanosComputeExpr
+var contentionTimeSumSqComputeExprStr = contentionTimeSqDiffComputeExpr + " + " + execStatsExecCountComputeExpr + "::FLOAT8 * " + contentionTimeComputeExpr + " * " + contentionTimeComputeExpr
+
+// kv_cpu_time_nanos expressions
+var kvCpuTimeNanosComputeExprStr = kvCpuTimeNanosComputeExpr
+var kvCpuTimeNanosSumComputeExprStr = kvCpuTimeNanosComputeExpr + " * " + executionCountComputeExpr + "::FLOAT8"
+var kvCpuTimeNanosSumSqComputeExprStr = kvCpuTimeNanosSqDiffComputeExpr + " + " + executionCountComputeExpr + "::FLOAT8 * " + kvCpuTimeNanosComputeExpr + " * " + kvCpuTimeNanosComputeExpr
 
 // These system tables are not part of the system config.
 const (
@@ -672,7 +694,19 @@ CREATE TABLE system.statement_statistics (
     total_estimated_execution_time FLOAT AS (` + totalEstimatedExecutionTimeExpr + `) STORED,
     p99_latency FLOAT8 AS (` + p99LatencyComputeExpr + `) STORED,
 
-    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
+    exec_sample_count INT8 AS (` + execStatsExecCountComputeExpr + `) STORED,
+    svc_lat_sum FLOAT8 AS (` + serviceLatencyComputeExpr + ` * ` + executionCountComputeExpr + `::FLOAT8) STORED,
+    cpu_sql_nanos_sum FLOAT8 AS (` + cpuSqlNanosComputeExpr + ` * ` + execStatsExecCountComputeExpr + `::FLOAT8) STORED,
+    contention_time_sum FLOAT8 AS (` + contentionTimeComputeExpr + ` * ` + execStatsExecCountComputeExpr + `::FLOAT8) STORED,
+
+    svc_lat_sum_sq FLOAT8 AS (` + svcLatSqDiffComputeExpr + ` + ` + executionCountComputeExpr + `::FLOAT8 * ` + serviceLatencyComputeExpr + ` * ` + serviceLatencyComputeExpr + `) STORED,
+    cpu_sql_nanos_sum_sq FLOAT8 AS (` + cpuSqlNanosSqDiffComputeExpr + ` + ` + execStatsExecCountComputeExpr + `::FLOAT8 * ` + cpuSqlNanosComputeExpr + ` * ` + cpuSqlNanosComputeExpr + `) STORED,
+    contention_time_sum_sq FLOAT8 AS (` + contentionTimeSqDiffComputeExpr + ` + ` + execStatsExecCountComputeExpr + `::FLOAT8 * ` + contentionTimeComputeExpr + ` * ` + contentionTimeComputeExpr + `) STORED,
+    kv_cpu_time_nanos FLOAT8 AS (` + kvCpuTimeNanosComputeExpr + `) STORED,
+    kv_cpu_time_nanos_sum FLOAT8 AS (` + kvCpuTimeNanosComputeExpr + ` * ` + executionCountComputeExpr + `::FLOAT8) STORED,
+    kv_cpu_time_nanos_sum_sq FLOAT8 AS (` + kvCpuTimeNanosSqDiffComputeExpr + ` + ` + executionCountComputeExpr + `::FLOAT8 * ` + kvCpuTimeNanosComputeExpr + ` * ` + kvCpuTimeNanosComputeExpr + `) STORED,
+
+    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transacti  on_fingerprint_id, plan_hash, app_name, node_id)
       USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
     INVERTED INDEX "indexes_usage_idx" (indexes_usage),
@@ -682,6 +716,7 @@ CREATE TABLE system.statement_statistics (
     INDEX "contention_time_idx" (aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "total_estimated_execution_time_idx" (aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "p99_latency_idx" (aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE '$ internal%',
+    INDEX "stmt_fp_ts_cov_counts" (fingerprint_id, aggregated_ts DESC) STORING (execution_count, exec_sample_count, svc_lat_sum, cpu_sql_nanos_sum, contention_time_sum, kv_cpu_time_nanos_sum, svc_lat_sum_sq, cpu_sql_nanos_sum_sq, contention_time_sum_sq, kv_cpu_time_nanos_sum_sq) WHERE app_name NOT LIKE '$ internal%',
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
 			aggregated_ts,
@@ -700,7 +735,17 @@ CREATE TABLE system.statement_statistics (
 			cpu_sql_nanos,
 			contention_time,
 			total_estimated_execution_time,
-			p99_latency
+			p99_latency,
+      exec_sample_count,
+      svc_lat_sum,
+      cpu_sql_nanos_sum,
+      contention_time_sum,
+      svc_lat_sum_sq,
+      cpu_sql_nanos_sum_sq,
+      contention_time_sum_sq,
+      kv_cpu_time_nanos,
+      kv_cpu_time_nanos_sum,
+      kv_cpu_time_nanos_sum_sq
 		)
 ) WITH (sql_stats_automatic_collection_fraction_stale_rows = 4, sql_stats_automatic_partial_collection_fraction_stale_rows = 1);
 `
@@ -3222,6 +3267,16 @@ var (
 				{Name: "contention_time", ID: 17, Type: types.Float, Nullable: true, ComputeExpr: &contentionTimeComputeExprStr},
 				{Name: "total_estimated_execution_time", ID: 18, Type: types.Float, Nullable: true, ComputeExpr: &totalEstimatedExecutionTimeExprStr},
 				{Name: "p99_latency", ID: 19, Type: types.Float, Nullable: true, ComputeExpr: &p99LatencyComputeExprStr},
+				{Name: "exec_sample_count", ID: 20, Type: types.Int, Nullable: true, ComputeExpr: &execSampleCountComputeExprStr},
+				{Name: "svc_lat_sum", ID: 21, Type: types.Float, Nullable: true, ComputeExpr: &svcLatSumComputeExprStr},
+				{Name: "cpu_sql_nanos_sum", ID: 22, Type: types.Float, Nullable: true, ComputeExpr: &cpuSqlNanosSumComputeExprStr},
+				{Name: "contention_time_sum", ID: 23, Type: types.Float, Nullable: true, ComputeExpr: &contentionTimeSumComputeExprStr},
+				{Name: "svc_lat_sum_sq", ID: 24, Type: types.Float, Nullable: true, ComputeExpr: &svcLatSumSqComputeExprStr},
+				{Name: "cpu_sql_nanos_sum_sq", ID: 25, Type: types.Float, Nullable: true, ComputeExpr: &cpuSqlNanosSumSqComputeExprStr},
+				{Name: "contention_time_sum_sq", ID: 26, Type: types.Float, Nullable: true, ComputeExpr: &contentionTimeSumSqComputeExprStr},
+				{Name: "kv_cpu_time_nanos", ID: 27, Type: types.Float, Nullable: true, ComputeExpr: &kvCpuTimeNanosComputeExprStr},
+				{Name: "kv_cpu_time_nanos_sum", ID: 28, Type: types.Float, Nullable: true, ComputeExpr: &kvCpuTimeNanosSumComputeExprStr},
+				{Name: "kv_cpu_time_nanos_sum_sq", ID: 29, Type: types.Float, Nullable: true, ComputeExpr: &kvCpuTimeNanosSumSqComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -3232,9 +3287,11 @@ var (
 						"aggregated_ts", "fingerprint_id", "transaction_fingerprint_id", "plan_hash", "app_name", "node_id",
 						"agg_interval", "metadata", "statistics", "plan", "index_recommendations", "execution_count",
 						"service_latency", "cpu_sql_nanos", "contention_time", "total_estimated_execution_time",
-						"p99_latency",
+						"p99_latency", "exec_sample_count", "svc_lat_sum", "cpu_sql_nanos_sum", "contention_time_sum",
+						"svc_lat_sum_sq", "cpu_sql_nanos_sum_sq", "contention_time_sum_sq",
+						"kv_cpu_time_nanos", "kv_cpu_time_nanos_sum", "kv_cpu_time_nanos_sum_sq",
 					},
-					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 19},
+					ColumnIDs:       []descpb.ColumnID{11, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29},
 					DefaultColumnID: 0,
 				},
 			},
@@ -3424,6 +3481,26 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{1, 5, 19},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 2, 3, 4, 6},
 				CompositeColumnIDs: []descpb.ColumnID{19},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
+			},
+			descpb.IndexDescriptor{
+				Name:   "stmt_fp_ts_cov_counts",
+				ID:     10,
+				Unique: false,
+				KeyColumnNames: []string{
+					"fingerprint_id",
+					"aggregated_ts",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2, 1},
+				KeySuffixColumnIDs: []descpb.ColumnID{11, 3, 4, 5, 6},
+				StoreColumnIDs:     []descpb.ColumnID{14, 20, 21, 22, 23, 28, 24, 25, 26, 29},
+				StoreColumnNames:   []string{"execution_count", "exec_sample_count", "svc_lat_sum", "cpu_sql_nanos_sum", "contention_time_sum", "kv_cpu_time_nanos_sum", "svc_lat_sum_sq", "cpu_sql_nanos_sum_sq", "contention_time_sum_sq", "kv_cpu_time_nanos_sum_sq"},
+				CompositeColumnIDs: []descpb.ColumnID{21, 22, 23, 24, 25, 26, 28, 29},
 				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 				Predicate:          "app_name NOT LIKE '$ internal%':::STRING",
 			},

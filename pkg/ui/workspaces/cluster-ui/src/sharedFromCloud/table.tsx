@@ -119,9 +119,8 @@ function mapTableColumnsToAntDesignColumns<T>(
       mapCol.sorter = tc.sorter;
       mapCol.sortDirections = tc.sortDirections || ["ascend", "descend"];
       mapCol.defaultSortOrder = tc.defaultSortOrder;
-      if (tc.sortOrder) {
-        mapCol.sortOrder = tc.sortOrder;
-      }
+      // Always set sortOrder (even if undefined) for controlled sorting
+      mapCol.sortOrder = tc.sortOrder;
     }
 
     return mapCol;
