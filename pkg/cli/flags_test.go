@@ -866,6 +866,39 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 	}
 }
 
+func TestCertSANFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args []string
+	}{
+		{[]string{"start", "--root-cert-san", "DNS=example.com"}},
+		{[]string{"start", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "URI=spiffe://example.org/root"}},
+		{[]string{"start", "--node-cert-san", "IP=192.168.1.1"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com,URI=spiffe://example.org"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "DNS=*.example.com,IP=192.168.1.1,URI=spiffe://example.org/service"}},
+	}
+
+	for _, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatalf("extraServerFlagInit() got unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestLocalityFileFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
