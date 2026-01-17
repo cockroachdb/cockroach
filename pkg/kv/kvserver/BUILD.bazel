@@ -319,6 +319,7 @@ go_test(
         "gossip_test.go",
         "helpers_test.go",
         "intent_resolver_integration_test.go",
+        "kv_snapshot_strategy_test.go",
         "lease_history_test.go",
         "lease_queue_test.go",
         "main_test.go",
@@ -451,6 +452,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
+        "//pkg/kv/kvserver/kvstorage/snaprecv",
         "//pkg/kv/kvserver/leases",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -590,6 +592,7 @@ go_test(
         "@org_golang_x_exp//slices",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
+        "@org_golang_x_time//rate",
     ],
 )
 
