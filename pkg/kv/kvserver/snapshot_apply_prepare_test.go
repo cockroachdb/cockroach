@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -109,10 +110,10 @@ func TestVerifySnap(t *testing.T) {
 //
 // Note that the key span covered by the pre-snapshot replica and the subsumed
 // replicas is wider than the snapshot's.
-func TestPrepareSnapApply(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
+//
+// If separateEngines is true, the raft engine write is separated from the rest.
+// TODO(sep-raft-log): test the "apply as batch" variation as well.
+func testPrepareSnapApply(t *testing.T, separateEngines bool) {
 	const replicaID = 4
 	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: replicaID}
 
@@ -131,41 +132,58 @@ func TestPrepareSnapApply(t *testing.T) {
 	descA := desc(101, "c", "e")
 	descB := desc(102, "f", "z")
 
-	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
-	eng := storage.NewDefaultInMemForTesting()
+	var eng kvstorage.Engines
+	if separateEngines {
+		e := storage.NewDefaultInMemForTesting()
+		eng = kvstorage.MakeSeparatedEnginesForTesting(e, e)
+	} else {
+		eng = kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	}
 	defer eng.Close()
 
-	createRangeData(t, eng, *descA)
-	createRangeData(t, eng, *descB)
+	createRangeData(t, eng.StateEngine(), *descA)
+	createRaftState(t, eng.LogEngine(), descA.RangeID)
+	createRangeData(t, eng.StateEngine(), *descB)
+	createRaftState(t, eng.LogEngine(), descB.RangeID)
 
 	sl := kvstorage.MakeStateLoader(id.RangeID)
 	ctx := context.Background()
-	require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id.ReplicaID))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, eng.StateEngine(), id.ReplicaID))
 	for _, rID := range []roachpb.RangeID{descA.RangeID, descB.RangeID} {
-		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(
+			ctx, eng.StateEngine(), replicaID))
 	}
 
+	printBatch := func(b storage.WriteBatch) string {
+		str, err := print.DecodeWriteBatch(b.Repr())
+		require.NoError(t, err)
+		return str
+	}
 	var sb redact.StringBuilder
 	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
-		b := eng.NewWriteBatch()
+		var b storage.WriteBatch
+		if eng.Separated() {
+			b = eng.StateEngine().NewWriteBatch()
+		} else {
+			b = eng.Engine().NewWriteBatch()
+		}
 		defer b.Close()
 		if err := write(ctx, b); err != nil {
 			return err
 		}
-		str, err := print.DecodeWriteBatch(b.Repr())
-		if err != nil {
-			return err
-		} else if str == "" {
+		str := printBatch(b)
+		if str == "" {
 			return nil
 		}
-		_, err = sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
-		return err
+		_, err := sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
+		require.NoError(t, err)
+		return nil
 	}
 
 	sw := snapWriter{
-		todoEng:  eng,
+		eng:      eng,
 		writeSST: writeSST,
 	}
 	require.NoError(t, sw.prepareSnapApply(ctx, snapWrite{
@@ -179,6 +197,9 @@ func TestPrepareSnapApply(t *testing.T) {
 			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
 		},
 	}))
+	if eng.Separated() {
+		sb.Printf(">> raft:\n%s", printBatch(sw.raftWO))
+	}
 
 	// The snapshot construction code is spread across MultiSSTWriter and
 	// snapWriteBuilder. We only test the latter here, but for information also
@@ -191,10 +212,11 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 	sb.Printf(">> excise: %v\n", snapDesc.KeySpan().AsRawSpanWithNoLocals())
 
-	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()+".txt"))
+	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()))
 }
 
-func createRangeData(t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor) {
+// createRangeData writes some state machine state for the given range.
+func createRangeData(t *testing.T, stateWO kvstorage.StateWO, desc roachpb.RangeDescriptor) {
 	ts := hlc.Timestamp{WallTime: 1}
 	for _, k := range []roachpb.Key{
 		keys.RangeDescriptorKey(desc.StartKey), // system
@@ -202,33 +224,43 @@ func createRangeData(t *testing.T, eng storage.Engine, desc roachpb.RangeDescrip
 		roachpb.Key(desc.EndKey).Prevish(2),    // user
 	} {
 		// Put something under the system or user key.
-		require.NoError(t, eng.PutMVCC(
+		require.NoError(t, stateWO.PutMVCC(
 			storage.MVCCKey{Key: k, Timestamp: ts}, storage.MVCCValue{},
 		))
 		// Put something under the corresponding lock key.
 		ek, _ := storage.LockTableKey{
 			Key: k, Strength: lock.Intent, TxnUUID: uuid.UUID{},
 		}.ToEngineKey(nil)
-		require.NoError(t, eng.PutEngineKey(ek, nil))
+		require.NoError(t, stateWO.PutEngineKey(ek, nil))
 	}
+}
 
-	// Add some raft state: HardState, TruncatedState and log entries.
+// createRaftState writes some raft state for the given range: HardState,
+// RaftTruncatedState, and log entries.
+func createRaftState(t *testing.T, raftWO kvstorage.RaftWO, rangeID roachpb.RangeID) {
 	const truncIndex, numEntries = 10, 3
 	ctx := context.Background()
 
-	sl := logstore.NewStateLoader(desc.RangeID)
+	sl := logstore.NewStateLoader(rangeID)
 	require.NoError(t, sl.SetRaftTruncatedState(
-		ctx, eng, &kvserverpb.RaftTruncatedState{Index: truncIndex, Term: 5},
+		ctx, raftWO, &kvserverpb.RaftTruncatedState{Index: truncIndex, Term: 5},
 	))
 	require.NoError(t, sl.SetHardState(
-		ctx, eng, raftpb.HardState{Term: 6, Commit: truncIndex + numEntries},
+		ctx, raftWO, raftpb.HardState{Term: 6, Commit: truncIndex + numEntries},
 	))
 	for i := truncIndex + 1; i <= truncIndex+numEntries; i++ {
 		require.NoError(t, storage.MVCCBlindPutProto(
-			ctx, eng,
+			ctx, raftWO,
 			sl.RaftLogKey(kvpb.RaftIndex(i)), hlc.Timestamp{},
 			&raftpb.Entry{Index: uint64(i), Term: 6},
 			storage.MVCCWriteOptions{},
 		))
 	}
+}
+
+func TestPrepareSnapApply(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
+	testutils.RunTrueAndFalse(t, "sep-eng", testPrepareSnapApply)
 }
