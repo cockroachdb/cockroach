@@ -504,7 +504,7 @@ func (m replicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 	return nil
 }
 
-func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
+func loadReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
 	s := replicaMap{}
 
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
@@ -515,7 +515,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	{
 		var lastDesc roachpb.RangeDescriptor
 		if err := IterateRangeDescriptorsFromDisk(
-			ctx, eng, func(desc roachpb.RangeDescriptor) error {
+			ctx, eng.StateEngine(), func(desc roachpb.RangeDescriptor) error {
 				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
@@ -543,7 +543,34 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	logEvery := log.Every(10 * time.Second)
 	var i int
-	if err := iterateRangeIDKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+
+	// If engines are separated, scan the LogEngine to learn the HardState of each
+	// replica. Otherwise, it will be loaded as part of the other loop below.
+	if eng.Separated() {
+		logEng := disableAccessAssertions(eng.LogEngine())
+		if err := iterateRangeIDKeys(ctx, logEng, func(id roachpb.RangeID, get readKeyFn) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", i, len(s))
+			}
+			i++
+			var hs raftpb.HardState
+			if ok, err := get(keys.RaftHardStateKey(id), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", len(s), len(s))
+		i = 0 // reset counter for the second scan
+	}
+
+	// Scan the StateEngine to learn RangeTombstone and RaftReplicaID keys. If
+	// engines are not separated, also read the HardState keys.
+	stateEng := disableAccessAssertions(eng.StateEngine())
+	if err := iterateRangeIDKeys(ctx, stateEng, func(id roachpb.RangeID, get readKeyFn) error {
 		if logEvery.ShouldLog() && i > 0 { // only log if slow
 			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
 		}
@@ -557,11 +584,13 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 			ts = kvserverpb.RangeTombstone{} // just in case it was mutated
 		}
 		// NB: the keys must be requested in sorted order here.
-		var hs raftpb.HardState
-		if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
-			return err
-		} else if ok {
-			s.setHardState(id, hs)
+		if !eng.Separated() {
+			var hs raftpb.HardState
+			if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
 		}
 		// NB: the keys must be requested in sorted order here.
 		var rID kvserverpb.RaftReplicaID
@@ -584,13 +613,14 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	return sl, nil
 }
 
-// LoadAndReconcileReplicas loads the Replicas present on this
-// store. It reconciles inconsistent state and runs validation checks.
-// The returned slice is sorted by ReplicaID.
+// LoadAndReconcileReplicas loads the Replicas present on this store from the
+// engine(s). It reconciles inconsistent state and runs validation checks. The
+// returned slice is sorted by ReplicaID.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
-	ident, err := ReadStoreIdent(ctx, eng)
+// TODO(sep-raft-log): implement WAG replay.
+func LoadAndReconcileReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err != nil {
 		return nil, err
 	}
