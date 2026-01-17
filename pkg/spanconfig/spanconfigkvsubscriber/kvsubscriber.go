@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -169,19 +170,34 @@ func (k *Metrics) MetricStruct() {}
 
 var _ metric.Struct = &Metrics{}
 
-// spanConfigurationsTableRowSize is an estimate of the size of a single row in
-// the system.span_configurations table (size of start/end key, and size of a
-// marshaled span config proto). The value used here was pulled out of thin air
-// -- it only serves to coarsely limit how large the KVSubscriber's underlying
-// rangefeed buffer can get.
-const spanConfigurationsTableRowSize = 5 << 10 // 5 KB
+// spanConfigurationsTableRowSize is an estimate of the size of a single
+// BufferEvent in the KVSubscriber's rangefeed buffer. This is used to calculate
+// the buffer capacity from the memory limit. The estimate is based on:
+//   - Target.Span (start/end keys): ~80 bytes (two encoded table prefix keys)
+//   - roachpb.SpanConfig proto: ~150 bytes (mostly default values, empty slices
+//     for constraints/lease_preferences, plus fixed fields like range_min_bytes,
+//     range_max_bytes, gc_policy, num_replicas, etc.)
+//   - hlc.Timestamp: 16 bytes
+//   - Go slice/pointer overhead: ~50 bytes
+//
+// Total: ~300 bytes per entry. We round up to 512 bytes to be conservative and
+// account for variations in key length and non-default SpanConfig fields.
+// Configurable via COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_ROW_SIZE.
+var spanConfigurationsTableRowSize = envutil.EnvOrDefaultInt64(
+	"COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_ROW_SIZE", 512)
+
+// bufferMemLimit is the memory limit for the KVSubscriber's rangefeed buffer.
+// The buffer capacity is calculated by dividing this limit by the estimated
+// entry size (spanConfigurationsTableRowSize). Configurable via
+// COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_SIZE.
+var bufferMemLimit = envutil.EnvOrDefaultInt64(
+	"COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_SIZE", 4<<20 /* 4 MB */)
 
 // New instantiates a KVSubscriber.
 func New(
 	clock *hlc.Clock,
 	rangeFeedFactory *rangefeed.Factory,
 	spanConfigurationsTableID uint32,
-	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
 	boundsReader spanconfigstore.BoundsReader,

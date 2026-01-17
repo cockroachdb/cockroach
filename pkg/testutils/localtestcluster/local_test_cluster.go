@@ -266,7 +266,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		clock,
 		rangeFeedFactory,
 		keys.SpanConfigurationsTableID,
-		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
 		cfg.Settings,
 		spanconfigstore.NewEmptyBoundsReader(),
