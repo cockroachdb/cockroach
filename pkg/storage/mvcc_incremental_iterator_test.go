@@ -1549,7 +1549,7 @@ func runIncrementalBenchmark(b *testing.B, ts hlc.Timestamp, opts mvccBenchData)
 		// Pull all of the sstables into the cache.  This
 		// probably defeats a lot of the benefits of the
 		// time-based optimization.
-		_, err := ComputeStats(context.Background(), eng, keys.LocalMax, roachpb.KeyMax, 0)
+		_, err := ComputeStats(context.Background(), eng, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, 0)
 		if err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}

@@ -22,6 +22,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/storage/fs",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/iterutil",
