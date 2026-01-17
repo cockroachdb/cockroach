@@ -861,16 +861,25 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv := store.TODOEngine().MinVersion()
-	if cv == (roachpb.Version{}) {
+	// NB: both engines have the same MinVersion, check any.
+	if cv := store.StateEngine().MinVersion(); cv == (roachpb.Version{}) {
 		// The store should have had a version written to it during the store
 		// initialization process.
 		log.Dev.Fatal(ctx, "attempting to add a store without a version")
 	}
-	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
+	// Register slow disk callbacks for both engines.
+	store.StateEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
 		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
 	})
-	store.TODOEngine().RegisterLowDiskSpaceCallback(func(info pebble.LowDiskSpaceInfo) {
+	if store.EnginesSeparated() {
+		store.LogEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
+			n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
+		})
+	}
+	// Register low disk space only on the StateEngine. Assuming that the
+	// LogEngine resides in the same FS, and the signal from it is based on the
+	// same infromation.
+	store.StateEngine().RegisterLowDiskSpaceCallback(func(info pebble.LowDiskSpaceInfo) {
 		n.onLowDiskSpace(n.AnnotateCtx(context.Background()), store.StoreID(), info)
 	})
 	n.stores.AddStore(store)

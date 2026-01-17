@@ -3073,6 +3073,11 @@ func (s *Store) StoreID() roachpb.StoreID { return s.Ident.StoreID }
 // Clock accessor.
 func (s *Store) Clock() *hlc.Clock { return s.cfg.Clock }
 
+// EnginesSeparated returns true iff the Store uses separated engines.
+func (s *Store) EnginesSeparated() bool {
+	return s.internalEngines.Separated()
+}
+
 // StateEngine returns the state machine engine.
 func (s *Store) StateEngine() storage.Engine {
 	return s.internalEngines.StateEngine()
