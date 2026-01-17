@@ -151,6 +151,8 @@ type Restore struct {
 	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
 	// ... FROM 'subdir' IN 'from'...`. Alternatively, restore_planning.go will set
 	// it for the query `RESTORE ... FROM LATEST IN 'from'...`
+	// TODO (kev-cao): Once we fully switch to using backup IDs (or LATEST) for
+	// RESTORE, come back and rename this field. (BackupToken?)
 	Subdir Expr
 }
 
