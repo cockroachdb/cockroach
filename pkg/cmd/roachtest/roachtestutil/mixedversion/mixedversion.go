@@ -94,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -614,9 +615,11 @@ func (t *Test) supportsSkipUpgradeTo(pred, v *clusterupgrade.Version) bool {
 		return false
 	}
 
-	// If there's only one supported previous version, we can't skip.
+	// If there's only one supported previous version for the current version, we can't skip.
 	// This happens during the version bump process when MinSupported == PreviousRelease.
-	if len(clusterversion.SupportedPreviousReleases()) <= 1 {
+	r := clusterversion.Latest.ReleaseSeries()
+	currentMajor := version.MajorVersion{Year: int(r.Major), Ordinal: int(r.Minor)}
+	if currentMajor.Equals(v.Version.Major()) && len(clusterversion.SupportedPreviousReleases()) <= 1 {
 		return false
 	}
 
