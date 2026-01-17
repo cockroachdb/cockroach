@@ -558,9 +558,7 @@ func TestParsingErrorHandling(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			select {
 			case <-next:
-				t.Fatal("should not have gotten a new controller")
-				// We need to return something to make the compiler happy, but t.Fatal will end execution.
-				return nil
+				return fmt.Errorf("Received new controller; discarding")
 			default:
 				errorCount := errorCountMetric.Value()
 				// If error count isn't one, then it hasn't happened yet.
