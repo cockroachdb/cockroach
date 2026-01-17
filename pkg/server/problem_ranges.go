@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,7 +44,7 @@ func (s *systemStatusServer) ProblemRanges(
 
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
-		resp   *serverpb.RangesResponse
+		resp   *serverpb.ProblemRangesLocalResponse
 		err    error
 	}
 
@@ -54,17 +53,17 @@ func (s *systemStatusServer) ProblemRanges(
 	for nodeID := range isLiveMap {
 		nodeID := nodeID
 		if err := s.stopper.RunAsyncTask(
-			ctx, "server.statusServer: requesting remote ranges",
+			ctx, "server.statusServer: requesting problem ranges",
 			func(ctx context.Context) {
 				status, err := s.dialNode(ctx, nodeID)
-				var rangesResponse *serverpb.RangesResponse
+				var problemsResponse *serverpb.ProblemRangesLocalResponse
 				if err == nil {
-					req := &serverpb.RangesRequest{}
-					rangesResponse, err = status.Ranges(ctx, req)
+					req := &serverpb.ProblemRangesLocalRequest{}
+					problemsResponse, err = status.ProblemRangesLocal(ctx, req)
 				}
 				response := nodeResponse{
 					nodeID: nodeID,
-					resp:   rangesResponse,
+					resp:   problemsResponse,
 					err:    err,
 				}
 
@@ -88,70 +87,27 @@ func (s *systemStatusServer) ProblemRanges(
 				}
 				continue
 			}
-			var problems serverpb.ProblemRangesResponse_NodeProblems
-			for _, info := range resp.resp.Ranges {
-				if len(info.ErrorMessage) != 0 {
-					response.ProblemsByNodeID[resp.nodeID] = serverpb.ProblemRangesResponse_NodeProblems{
-						ErrorMessage: info.ErrorMessage,
-					}
-					continue
+			if len(resp.resp.ErrorMessage) != 0 {
+				response.ProblemsByNodeID[resp.nodeID] = serverpb.ProblemRangesResponse_NodeProblems{
+					ErrorMessage: resp.resp.ErrorMessage,
 				}
-				if info.Problems.Unavailable {
-					problems.UnavailableRangeIDs =
-						append(problems.UnavailableRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.LeaderNotLeaseHolder {
-					problems.RaftLeaderNotLeaseHolderRangeIDs =
-						append(problems.RaftLeaderNotLeaseHolderRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.NoRaftLeader {
-					problems.NoRaftLeaderRangeIDs =
-						append(problems.NoRaftLeaderRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.Underreplicated {
-					problems.UnderreplicatedRangeIDs =
-						append(problems.UnderreplicatedRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.Overreplicated {
-					problems.OverreplicatedRangeIDs =
-						append(problems.OverreplicatedRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.NoLease {
-					problems.NoLeaseRangeIDs =
-						append(problems.NoLeaseRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.QuiescentEqualsTicking {
-					problems.QuiescentEqualsTickingRangeIDs =
-						append(problems.QuiescentEqualsTickingRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.RaftLogTooLarge {
-					problems.RaftLogTooLargeRangeIDs =
-						append(problems.RaftLogTooLargeRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.CircuitBreakerError {
-					problems.CircuitBreakerErrorRangeIDs =
-						append(problems.CircuitBreakerErrorRangeIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.PausedFollowers {
-					problems.PausedReplicaIDs =
-						append(problems.PausedReplicaIDs, info.State.Desc.RangeID)
-				}
-				if info.Problems.RangeTooLarge {
-					problems.TooLargeRangeIds =
-						append(problems.TooLargeRangeIds, info.State.Desc.RangeID)
-				}
+				continue
 			}
-			slices.Sort(problems.UnavailableRangeIDs)
-			slices.Sort(problems.RaftLeaderNotLeaseHolderRangeIDs)
-			slices.Sort(problems.NoRaftLeaderRangeIDs)
-			slices.Sort(problems.NoLeaseRangeIDs)
-			slices.Sort(problems.UnderreplicatedRangeIDs)
-			slices.Sort(problems.OverreplicatedRangeIDs)
-			slices.Sort(problems.QuiescentEqualsTickingRangeIDs)
-			slices.Sort(problems.RaftLogTooLargeRangeIDs)
-			slices.Sort(problems.CircuitBreakerErrorRangeIDs)
-			slices.Sort(problems.PausedReplicaIDs)
-			slices.Sort(problems.TooLargeRangeIds)
+			// Copy the problem range IDs from the local response. The IDs are
+			// already sorted by ProblemRangesLocal since it visits replicas in order.
+			problems := serverpb.ProblemRangesResponse_NodeProblems{
+				UnavailableRangeIDs:              resp.resp.UnavailableRangeIDs,
+				RaftLeaderNotLeaseHolderRangeIDs: resp.resp.RaftLeaderNotLeaseHolderRangeIDs,
+				NoRaftLeaderRangeIDs:             resp.resp.NoRaftLeaderRangeIDs,
+				NoLeaseRangeIDs:                  resp.resp.NoLeaseRangeIDs,
+				UnderreplicatedRangeIDs:          resp.resp.UnderreplicatedRangeIDs,
+				OverreplicatedRangeIDs:           resp.resp.OverreplicatedRangeIDs,
+				QuiescentEqualsTickingRangeIDs:   resp.resp.QuiescentEqualsTickingRangeIDs,
+				RaftLogTooLargeRangeIDs:          resp.resp.RaftLogTooLargeRangeIDs,
+				CircuitBreakerErrorRangeIDs:      resp.resp.CircuitBreakerErrorRangeIDs,
+				PausedReplicaIDs:                 resp.resp.PausedReplicaIDs,
+				TooLargeRangeIds:                 resp.resp.TooLargeRangeIds,
+			}
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
 			return nil, status.Error(codes.DeadlineExceeded, ctx.Err().Error())
