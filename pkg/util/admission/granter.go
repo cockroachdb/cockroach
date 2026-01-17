@@ -335,9 +335,6 @@ type kvStoreTokenGranter struct {
 			//   naturally decrease, and both account for positive and negative
 			//   errors.
 			//
-			// TODO(sumeer): actually implement the fix mentioned in the previous
-			// paragraph.
-			//
 			// Example: A disk with provisioned bandwidth of 80MiB/s and due to
 			// kvadmission.store.elastic_disk_bandwidth_max_util=0.8, the goal is to
 			// achieve 0.8*80=64MiB/s. For simplicity, assume that all reads are
@@ -372,8 +369,6 @@ type kvStoreTokenGranter struct {
 			// which in the above example means at time 2s, we would add back 48MiB
 			// to available tokens. This did not significantly improve the
 			// under-utilization, and we still had significant oscillations.
-			//
-			// TODO(sumeer): implement the "current solution".
 			//
 			// The current solution is to only account for part of the cumError, and
 			// track what is accounted for in the accountedForError field. At each
@@ -631,11 +626,15 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writ
 			absIntError = -absIntError
 		}
 		*absError += absIntError
-		if intError > 0 {
-			*accountedError += intError
+		// Account for a fraction of the unaccounted error accumulated so far.
+		// This is a heuristic to reduce fluctuations in available tokens.
+		cumUnaccountedError := *cumError - *accountedError
+		intErrorToAccount := cumUnaccountedError / adjustmentInterval
+		if intErrorToAccount != 0 {
+			*accountedError += intErrorToAccount
 			// NB: the following also updates alreadyDeductedTokens.writeByteTokens,
 			// which is harmless, since we reset it to 0 later in this function.
-			sg.subtractDiskWriteTokensLocked(intError, false)
+			sg.subtractDiskWriteTokensLocked(intErrorToAccount, false)
 		}
 	}
 	// Compensate for error due to writes.
