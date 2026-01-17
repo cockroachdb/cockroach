@@ -4435,6 +4435,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | statement_statistics_per_aggregated_ts | [StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs) | repeated | statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics separated by the aggregated timestamp. | [reserved](#support-status) |
 | statement_statistics_per_plan_hash | [StatementDetailsResponse.CollectedStatementGroupedByPlanHash](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByPlanHash) | repeated | statement_statistics_per_plan_hash returns the same statement from above, but with its statistics separated by the plan hash. | [reserved](#support-status) |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
+| statement_statistics_per_aggregated_ts_and_plan_hash | [StatementDetailsResponse.StatementPlanDistribution](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution) | repeated | statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both aggregated timestamp and plan hash for visualizing plan distribution over time. | [reserved](#support-status) |
 
 
 
@@ -4485,6 +4486,22 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | explain_plan | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
 | plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
 | index_recommendations | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution"></a>
+#### StatementDetailsResponse.StatementPlanDistribution
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  |  | [reserved](#support-status) |
+| aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
 
 
 

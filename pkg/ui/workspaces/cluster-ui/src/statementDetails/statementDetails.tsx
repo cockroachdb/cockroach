@@ -92,6 +92,7 @@ import {
   generateRowsProcessedTimeseries,
   generateCPUTimeseries,
   generateClientWaitTimeseries,
+  generatePlanDistributionTimeseries,
 } from "./timeseriesUtils";
 
 type StatementDetailsResponse =
@@ -977,8 +978,35 @@ export class StatementDetails extends React.Component<
     }
     const statementStatisticsPerPlanHash =
       this.props.statementDetails.statement_statistics_per_plan_hash;
+    const statementStatisticsPerAggregatedTsAndPlanHash =
+      this.props.statementDetails
+        .statement_statistics_per_aggregated_ts_and_plan_hash;
     const formattedQuery =
       this.props.statementDetails.statement.metadata.formatted_query;
+
+    // Generate plan distribution data for the chart
+    const { alignedData: planDistData, planGists } =
+      generatePlanDistributionTimeseries(
+        statementStatisticsPerAggregatedTsAndPlanHash || [],
+      );
+
+    const planDistOps: Partial<Options> = {
+      axes: [{}, { label: "Execution Count" }],
+      series: [
+        {},
+        ...planGists.map(gist => ({
+          label: `Plan ${gist}`,
+          stroke: undefined, // Let the default color palette handle it
+        })),
+      ],
+    };
+
+    const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
+    const xScale = {
+      graphTsStartMillis: chartsStart.valueOf(),
+      graphTsEndMillis: chartsEnd.valueOf(),
+    } as XScale;
+
     return (
       <>
         <PageConfig>
@@ -1010,6 +1038,29 @@ export class StatementDetails extends React.Component<
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
+          {planGists.length > 0 && (
+            <>
+              <Row gutter={24}>
+                <Col className="gutter-row" span={24}>
+                  <BarGraphTimeSeries
+                    title="Plan Distribution Over Time"
+                    tooltip={
+                      <>
+                        Shows which execution plans were used during each time
+                        period. Each color represents a different plan hash.
+                        Stacked bars show the total execution count broken down
+                        by plan.
+                      </>
+                    }
+                    alignedData={planDistData}
+                    uPlotOptions={planDistOps}
+                    yAxisUnits={AxisUnits.Count}
+                    xScale={xScale}
+                  />
+                </Col>
+              </Row>
+            </>
+          )}
           <PlanDetails
             statementFingerprintID={this.props.statementFingerprintID}
             plans={statementStatisticsPerPlanHash}
