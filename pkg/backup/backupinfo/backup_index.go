@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -226,10 +227,49 @@ func ListIndexes(
 
 // RestorableBackup represents a row in the `SHOW BACKUPS` output
 type RestorableBackup struct {
-	ID                string
-	EndTime           hlc.Timestamp
-	MVCCFilter        backuppb.MVCCFilter
-	RevisionStartTime hlc.Timestamp
+	ID string
+	// EndTime is the exact end time of the backup if .OpenedIndex() is true.
+	// Otherwise, it will only be as precise as backup end times encoded in the
+	// index filename, e.g. tens of milliseconds.
+	EndTime hlc.Timestamp
+
+	// The following fields are only set if `SHOW BACKUPS` was ran with WITH
+	// REVISION START TIME.
+	openedIndex       bool
+	mvccFilter        backuppb.MVCCFilter
+	revisionStartTime hlc.Timestamp
+}
+
+// OpenedIndex returns whether the backup index was opened to populate additional
+// metadata about the backup.
+func (b RestorableBackup) OpenedIndex() bool {
+	return b.openedIndex
+}
+
+// RevisionStartTime returns the revision start time of the backup. You must
+// call .OpenedIndex() first to ensure that the index was opened; otherwise, this
+// method will panic.
+func (b RestorableBackup) RevisionStartTime(
+	ctx context.Context, sv *settings.Values,
+) hlc.Timestamp {
+	if !b.openedIndex {
+		logcrash.ReportOrPanic(
+			ctx, sv, "backup index was not opened; cannot retrieve revision start time",
+		)
+	}
+	return b.revisionStartTime
+}
+
+// MVCCFilter returns the MVCC filter used for the backup. You must call
+// .OpenedIndex() first to ensure that the index was opened; otherwise, this
+// method will panic.
+func (b RestorableBackup) MVCCFilter(ctx context.Context, sv *settings.Values) backuppb.MVCCFilter {
+	if !b.openedIndex {
+		logcrash.ReportOrPanic(
+			ctx, sv, "backup index was not opened; cannot retrieve MVCC filter",
+		)
+	}
+	return b.mvccFilter
 }
 
 // ListRestorableBackups lists all restorable backups from the backup index
@@ -238,8 +278,10 @@ type RestorableBackup struct {
 // `metadata/` directory). A maxCount of 0 indicates no limit on the number
 // of backups to return, otherwise, if the number of backups found exceeds
 // maxCount, iteration will stop early and the boolean return value will be
-// set to true.
-
+// set to true. If withRevStartTime is true, the index files will be opened to
+// populate revision history metadata about the backup as well as fetch the
+// exact end time of the backup.
+//
 // NB: Duplicate end times within a chain are elided, as IDs only identify
 // unique end times within a chain. For the purposes of determining which
 // backup's metadata we use to populate the fields, we always pick the backup
@@ -252,7 +294,11 @@ type RestorableBackup struct {
 // milliseconds. As such, it is possible that a backup with an end time slightly
 // ahead of `before` may be included in the results.
 func ListRestorableBackups(
-	ctx context.Context, store cloud.ExternalStorage, newerThan, olderThan time.Time, maxCount uint,
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	newerThan, olderThan time.Time,
+	maxCount uint,
+	withRevStartTime bool,
 ) ([]RestorableBackup, bool, error) {
 	ctx, trace := tracing.ChildSpan(ctx, "backupinfo.ListRestorableBackups")
 	defer trace.Finish()
@@ -297,9 +343,20 @@ func ListRestorableBackups(
 		filteredIdxs = filteredIdxs[:maxCount]
 	}
 
-	ctx, readTrace := tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
-	defer readTrace.Finish()
+	if withRevStartTime {
+		var readTrace *tracing.Span
+		ctx, readTrace = tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
+		defer readTrace.Finish()
+	}
+
 	backups, err := util.MapE(filteredIdxs, func(index parsedIndex) (RestorableBackup, error) {
+		if !withRevStartTime {
+			return RestorableBackup{
+				ID:      encodeBackupID(index.fullEnd, index.end),
+				EndTime: hlc.Timestamp{WallTime: index.end.UnixNano()},
+			}, nil
+		}
+
 		idxMeta, err := readIndexFile(ctx, store, index.filePath)
 		if err != nil {
 			return RestorableBackup{}, err
@@ -307,8 +364,9 @@ func ListRestorableBackups(
 		return RestorableBackup{
 			ID:                encodeBackupID(index.fullEnd, index.end),
 			EndTime:           idxMeta.EndTime,
-			MVCCFilter:        idxMeta.MVCCFilter,
-			RevisionStartTime: idxMeta.RevisionStartTime,
+			openedIndex:       true,
+			mvccFilter:        idxMeta.MVCCFilter,
+			revisionStartTime: idxMeta.RevisionStartTime,
 		}, nil
 	})
 	if err != nil {

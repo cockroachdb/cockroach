@@ -183,6 +183,39 @@ SHOW BACKUPS IN ($1) NEWER THAN ($3) OLDER THAN ($2) -- fully parenthesized
 SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 -- literals removed
 SHOW BACKUPS IN $1 NEWER THAN $3 OLDER THAN $2 -- identifiers removed
 
+parse
+SHOW BACKUPS IN 'bar' WITH REVISION START TIME
+----
+SHOW BACKUPS IN '*****' WITH OPTIONS (revision_start_time) -- normalized!
+SHOW BACKUPS IN ('*****') WITH OPTIONS (revision_start_time) -- fully parenthesized
+SHOW BACKUPS IN '_' WITH OPTIONS (revision_start_time) -- literals removed
+SHOW BACKUPS IN '*****' WITH OPTIONS (revision_start_time) -- identifiers removed
+SHOW BACKUPS IN 'bar' WITH OPTIONS (revision_start_time) -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 WITH REVISION START TIME
+----
+SHOW BACKUPS IN $1 WITH OPTIONS (revision_start_time) -- normalized!
+SHOW BACKUPS IN ($1) WITH OPTIONS (revision_start_time) -- fully parenthesized
+SHOW BACKUPS IN $1 WITH OPTIONS (revision_start_time) -- literals removed
+SHOW BACKUPS IN $1 WITH OPTIONS (revision_start_time) -- identifiers removed
+
+parse
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' WITH REVISION START TIME
+----
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (revision_start_time) -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') WITH OPTIONS (revision_start_time) -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' WITH OPTIONS (revision_start_time) -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (revision_start_time) -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (revision_start_time) -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH REVISION START TIME
+----
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH OPTIONS (revision_start_time) -- normalized!
+SHOW BACKUPS IN ($1) NEWER THAN ($2) OLDER THAN ($3) WITH OPTIONS (revision_start_time) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 WITH OPTIONS (revision_start_time) -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH OPTIONS (revision_start_time) -- identifiers removed
 
 parse
 SHOW BACKUP 'foo' IN 'bar'
