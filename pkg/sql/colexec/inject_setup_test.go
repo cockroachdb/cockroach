@@ -6,6 +6,7 @@
 package colexec_test
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
@@ -19,4 +20,5 @@ func init() {
 	// Inject a testing helper for OrderedDistinctColsToOperators so colexec tests
 	// can use OrderedDistinctColsToOperators without an import cycle.
 	colexectestutils.OrderedDistinctColsToOperators = colexecbase.OrderedDistinctColsToOperators
+	colexectestutils.NewInvariantsChecker = colexec.NewInvariantsChecker
 }
