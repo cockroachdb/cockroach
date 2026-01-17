@@ -179,7 +179,18 @@ func backupRestoreRoundTrip(
 		if err != nil {
 			return err
 		}
-		defer stopBackgroundCommands()
+		defer func() {
+			if stopBackgroundCommands != nil {
+				// We specifically must defer stopBackgroundCommands in an IIFE here
+				// because we swap out stopBackgroundCommands in the loop below if a full
+				// backup is being validated. If we defer it directly, it will
+				// specifically defer the version of stopBackgroundCommands from the
+				// initial runBackgroundWorkload call. If we replace runBackgroundWorkload
+				// after a full restore and then encounter an error, we would still
+				// attempt to stop the original call and the new call would leak.
+				stopBackgroundCommands()
+			}
+		}()
 
 		for i := 0; i < numFullBackups; i++ {
 			allNodes := labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()}
@@ -238,7 +249,6 @@ func backupRestoreRoundTrip(
 				}
 			}
 		}
-		stopBackgroundCommands()
 		return nil
 	})
 
