@@ -32,6 +32,7 @@ go_test(
     name = "mmaintegration_test",
     srcs = [
         "mma_conversion_test.go",
+        "store_load_msg_test.go",
         "store_status_test.go",
     ],
     data = glob(["testdata/**"]),
