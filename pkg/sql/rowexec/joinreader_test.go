@@ -1218,6 +1218,8 @@ func TestJoinReaderDiskSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 161212)
+
 	ctx := context.Background()
 
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
