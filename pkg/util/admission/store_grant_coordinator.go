@@ -420,6 +420,12 @@ func (coord *storeGrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 		g.mu.availableIOTokens[admissionpb.RegularWorkClass],
 		g.mu.availableIOTokens[admissionpb.ElasticWorkClass],
 		g.mu.diskTokensAvailable.writeByteTokens,
-		g.mu.diskTokensError.diskReadTokensAlreadyDeducted,
+		g.mu.diskTokensError.alreadyDeductedTokens.readByteTokens,
 	)
+	if g.mu.diskTokensError.absError != (diskTokens{}) {
+		s.Printf(" disk-tokens-error: cum-error(write=%d, read=%d), abs-error(write=%d, read=%d), accounted-for-error(write=%d, read=%d)",
+			g.mu.diskTokensError.cumError.writeByteTokens, g.mu.diskTokensError.cumError.readByteTokens,
+			g.mu.diskTokensError.absError.writeByteTokens, g.mu.diskTokensError.absError.readByteTokens,
+			g.mu.diskTokensError.accountedForError.writeByteTokens, g.mu.diskTokensError.accountedForError.readByteTokens)
+	}
 }

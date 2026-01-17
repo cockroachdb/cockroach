@@ -284,7 +284,15 @@ type kvStoreTokenGranter struct {
 		availableIOTokens            [admissionpb.NumWorkClasses]int64
 		elasticIOTokensUsedByElastic int64
 		// TODO(aaditya): add support for read/IOPS tokens.
-		// Disk tokens available.
+		//
+		// Disk tokens available represents the current size of the token bucket.
+		// The diskTokens.readByteTokens is currently unused, since estimated
+		// future reads are added to the diskReadTokensAlreadyDeducted directly
+		// and then compared with observed reads. That is, we are pretending as if
+		// we observed token deductions from (the non-existent) read token bucket,
+		// corresponding to reads observed in the last adjustment interval. We
+		// need to do this since read code is not instrumented to interface with
+		// admission control.
 		diskTokensAvailable diskTokens
 		// The capacity of the token bucket for disk write bytes.
 		diskWriteByteTokensCapacity int64
@@ -292,10 +300,111 @@ type kvStoreTokenGranter struct {
 			// prevObserved{Writes,Reads} is the observed disk metrics in the last
 			// call to adjustDiskTokenErrorLocked. These are used to compute the
 			// delta.
-			prevObservedWrites             uint64
-			prevObservedReads              uint64
-			diskWriteTokensAlreadyDeducted int64
-			diskReadTokensAlreadyDeducted  int64
+			prevObservedWrites uint64
+			prevObservedReads  uint64
+			// alreadyDeductedTokens is the number of tokens deducted that can be
+			// used to partially explain the observed writes and reads. The write
+			// tokens here correspond to deductions from
+			// diskTokensAvailable.writeByteTokens. These are used for error
+			// correction on each error tick (1s interval) and reset on that tick,
+			// so they represent a 1s interval.
+			alreadyDeductedTokens diskTokens
+			// Error details for the latest adjustmentInterval, across the various
+			// adjustDiskTokenErrorLocked calls (which happen every 1s over the
+			// adjustmentInterval of 15s). We don't track beyond an
+			// adjustmentInterval since the last adjustmentInterval's observations
+			// of disk reads/writes are already used in the modeling (of write
+			// amplification and the alreadyDeductedTokens.readByteTokens).
+			//
+			// - cumError is the error summed across the various
+			//   adjustDiskTokenErrorLocked calls. Since errors can be positive and
+			//   negative, they can cancel out.
+			//
+			// - absError is the sum of absolute values of error across these calls,
+			//   so they don't cancel out. This is only used for observability since
+			//   large positive and negative errors becomes observable here, and
+			//   helps with understanding the system behavior.
+			//
+			// - accountedForError is the part of the cumError that has been
+			//   accounted for. The code prior to the fix for
+			//   https://github.com/cockroachdb/cockroach/issues/160964 would
+			//   immediately account for the full positive error in each call to
+			//   adjustDiskTokenErrorLocked. This resulted in large token
+			//   fluctuations, and under-utilization. We now only partially account
+			//   for the error under the assumption that the error cumError can
+			//   naturally decrease, and both account for positive and negative
+			//   errors.
+			//
+			// TODO(sumeer): actually implement the fix mentioned in the previous
+			// paragraph.
+			//
+			// Example: A disk with provisioned bandwidth of 80MiB/s and due to
+			// kvadmission.store.elastic_disk_bandwidth_max_util=0.8, the goal is to
+			// achieve 0.8*80=64MiB/s. For simplicity, assume that all reads are
+			// being satisfied from caches. The write tokens for the 15s adjustment
+			// interval will be 64*15=960MiB, and are given out at 1ms intervals,
+			// with the burst budget of the bucket equal to 250ms of tokens (so
+			// 960/60 = 16MiB). We observe the following write errors at time 1s,
+			// 2s, 3s: 32MiB, -48MiB, 32MiB. The meaning of these errors is that in
+			// the interval (0s,1s] the actual observed disk write usage was 32MiB
+			// higher than the tokens deducted, and over the interval (1s,2s] the
+			// actual observed disk write usage was 48MiB lower than the tokens
+			// deducted, and so on.
+			// The cumError and absError at time 1s, 2s, 3s will be:
+			// Time 1s: cumError=32MiB, absError=32MiB
+			// Time 2s: cumError=-16MiB, absError=80MiB
+			// Time 3s: cumError=16MiB, absError=112MiB
+			//
+			// Prior to the fix to the aforementioned issue, at time 1s the error
+			// accounting code would immediately deduct 32MiB from available tokens
+			// to account for the positive error, at time 2s it would ignore the
+			// error, and at time 3s it would deduct another 16MiB from available
+			// tokens to account for the positive error. This of course results in
+			// under-utilization (the system is significantly below the goal of
+			// 64MiB/s). Additionally, it resulted in big oscillations, since the
+			// abrupt changes in tokens would not be immediately matched by changes
+			// to disk usage (because of the delayed effect on compactions),
+			// resulting in bad write-amp modeling (both higher and lower than
+			// actual).
+			//
+			// We attempted various approaches to improve this behavior. The most
+			// obvious one being to also account for negative errors immediately,
+			// which in the above example means at time 2s, we would add back 48MiB
+			// to available tokens. This did not significantly improve the
+			// under-utilization, and we still had significant oscillations.
+			//
+			// TODO(sumeer): implement the "current solution".
+			//
+			// The current solution is to only account for part of the cumError, and
+			// track what is accounted for in the accountedForError field. At each
+			// error tick, we deduct (cumError - accountedForError)/15 from the
+			// available tokens (the 15 denominator is because there are 15 such
+			// error accounting ticks in the adjustmentInterval). This deducted
+			// value is added to the accountedForError.
+			//
+			// Using the above example, the error accounting at time 1s, 2s, 3s is:
+			//
+			// Time 1s: cumError=32MiB, absError=32MiB, deduct=2.13MiB, accountedForError=2.13MiB
+			// Time 2s: cumError=-16MiB, absError=80MiB, deduct=-1.208MiB, accountedForError=0.92MiB
+			// Time 3s: cumError=16MiB, absError=112MiB, deduct=1.00MiB, accountedForError=1.92MiB
+			//
+			// This approach dampens the deductions and reduces oscillations. It
+			// does have the con that it takes longer to react to a workload shift.
+			// For example, if the error at each tick was 32MiB (because say the
+			// write-amp model was no longer correct), then the sequence would be:
+			//
+			// Time 1s: cumError=32MiB, absError=32MiB, deduct=2.13MiB, accountedForError=2.13MiB
+			// Time 2s: cumError=64MiB, absError=64MiB, deduct=4.13MiB, accountedForError=6.26MiB
+			// Time 3s: cumError=96MiB, absError=96MiB, deduct=5.98MiB, accountedForError=12.24MiB
+			// Time 4s: cumError=128MiB, absError=128MiB, deduct=7.72MiB, accountedForError=19.96MiB
+			// Time 5s: cumError=160MiB, absError=160MiB, deduct=9.34MiB, accountedForError=29.30MiB
+			// ...
+			//
+			// That is, we are slowly growing what we deduct and by around 8s, we will start deducting
+			// half of the error observed at each tick, ~16MiB.
+			cumError          diskTokens
+			absError          diskTokens
+			accountedForError diskTokens
 		}
 		diskTokensUsed [admissionpb.NumStoreWorkTypes]diskTokens
 		// exhaustedStart is the time when the corresponding availableIOTokens
@@ -506,36 +615,41 @@ func (sg *kvStoreTokenGranter) adjustDiskTokenError(m StoreMetrics) {
 // same interval as write tokens. Any additional reads in the interval are
 // considered error and are subtracted from the available disk write tokens.
 //
-// For both reads, and writes, we reset the
-// disk{read,write}TokensAlreadyDeducted to 0 for the next adjustment interval.
-// For writes, we do this so that we are accounting for errors only in the given
-// interval, and not across them. For reads, this is so that we don't grow
-// arbitrarily large "burst" tokens, since they are not capped to an allocation
-// period.
+// For both reads and writes, we reset the alreadyDeductedTokens to 0 for the
+// next error tick interval, since we will use those to compare with the
+// observed disk reads and writes for the next error tick interval.
 func (sg *kvStoreTokenGranter) adjustDiskTokenErrorLocked(readBytes uint64, writeBytes uint64) {
 	intWrites := int64(writeBytes - sg.mu.diskTokensError.prevObservedWrites)
 	intReads := int64(readBytes - sg.mu.diskTokensError.prevObservedReads)
 
-	// Compensate for error due to writes.
-	writeError := intWrites - sg.mu.diskTokensError.diskWriteTokensAlreadyDeducted
-	if writeError > 0 {
-		// NB: the following also updates diskWriteTokensAlreadyDeducted, which is
-		// harmless, since we reset it to 0 later in this function.
-		sg.subtractDiskWriteTokensLocked(writeError, false)
+	errorAdjFunc := func(
+		intObserved int64, intTokensDeducted int64, cumError *int64, absError *int64, accountedError *int64) {
+		intError := intObserved - intTokensDeducted
+		*cumError += intError
+		absIntError := intError
+		if absIntError < 0 {
+			absIntError = -absIntError
+		}
+		*absError += absIntError
+		if intError > 0 {
+			*accountedError += intError
+			// NB: the following also updates alreadyDeductedTokens.writeByteTokens,
+			// which is harmless, since we reset it to 0 later in this function.
+			sg.subtractDiskWriteTokensLocked(intError, false)
+		}
 	}
+	// Compensate for error due to writes.
+	errorAdjFunc(intWrites, sg.mu.diskTokensError.alreadyDeductedTokens.writeByteTokens,
+		&sg.mu.diskTokensError.cumError.writeByteTokens, &sg.mu.diskTokensError.absError.writeByteTokens,
+		&sg.mu.diskTokensError.accountedForError.writeByteTokens)
 
 	// Compensate for error due to reads.
-	readError := intReads - sg.mu.diskTokensError.diskReadTokensAlreadyDeducted
-	if readError > 0 {
-		// NB: the following also updates diskWriteTokensAlreadyDeducted, which is
-		// harmless, since we reset it to 0 later in this function.
-		sg.subtractDiskWriteTokensLocked(readError, false)
-	}
+	errorAdjFunc(intReads, sg.mu.diskTokensError.alreadyDeductedTokens.readByteTokens,
+		&sg.mu.diskTokensError.cumError.readByteTokens, &sg.mu.diskTokensError.absError.readByteTokens,
+		&sg.mu.diskTokensError.accountedForError.readByteTokens)
 
-	// We have compensated for error, if any, in this interval, so we reset the
-	// deducted count for the next compensation interval.
-	sg.mu.diskTokensError.diskWriteTokensAlreadyDeducted = 0
-	sg.mu.diskTokensError.diskReadTokensAlreadyDeducted = 0
+	// Reset the deducted count for the next compensation interval.
+	sg.mu.diskTokensError.alreadyDeductedTokens = diskTokens{}
 
 	sg.mu.diskTokensError.prevObservedWrites = writeBytes
 	sg.mu.diskTokensError.prevObservedReads = readBytes
@@ -606,7 +720,7 @@ func (sg *kvStoreTokenGranter) subtractDiskWriteTokensLocked(
 		sg.mu.diskTokensAvailable.writeByteTokens = sg.mu.diskWriteByteTokensCapacity
 	}
 	if !settingAvailableTokens {
-		sg.mu.diskTokensError.diskWriteTokensAlreadyDeducted += count
+		sg.mu.diskTokensError.alreadyDeductedTokens.writeByteTokens += count
 	}
 	if count > 0 && avail > 0 && sg.mu.diskTokensAvailable.writeByteTokens <= 0 {
 		// Transition from > 0 to <= 0.
@@ -747,14 +861,26 @@ func (sg *kvStoreTokenGranter) addAvailableTokens(
 	// capacity of the error accounting interval. See
 	// `adjustDiskTokenErrorLocked` for the error accounting logic, and where we
 	// reset this bucket to 0.
-	sg.mu.diskTokensError.diskReadTokensAlreadyDeducted += diskReadTokens
+	sg.mu.diskTokensError.alreadyDeductedTokens.readByteTokens += diskReadTokens
 
 	return ioTokensUsed, ioTokensUsedByElasticWork
 }
 
-// getDiskTokensUsedAndResetLocked implements granterWithIOTokens.
+// diskErrorStats holds various error stats for disk token accounting. See the
+// corresponding fields in kvStoreTokenGranter.mu.diskTokensError for the
+// explanation.
+type diskErrorStats struct {
+	cumError          diskTokens
+	absError          diskTokens
+	accountedForError diskTokens
+}
+
+// getDiskTokensUsedAndResetLocked implements granterWithIOTokens. It is
+// called at the start of each adjustment interval to get various stats useful
+// for calculating the next interval's token allocation.
 func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	_ diskErrorStats,
 ) {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
@@ -762,7 +888,15 @@ func (sg *kvStoreTokenGranter) getDiskTokensUsedAndReset() (
 		usedTokens[i] = sg.mu.diskTokensUsed[i]
 		sg.mu.diskTokensUsed[i] = diskTokens{}
 	}
-	return usedTokens
+	diskErrStats := diskErrorStats{
+		cumError:          sg.mu.diskTokensError.cumError,
+		absError:          sg.mu.diskTokensError.absError,
+		accountedForError: sg.mu.diskTokensError.accountedForError,
+	}
+	sg.mu.diskTokensError.cumError = diskTokens{}
+	sg.mu.diskTokensError.absError = diskTokens{}
+	sg.mu.diskTokensError.accountedForError = diskTokens{}
+	return usedTokens, diskErrStats
 }
 
 // setAdmittedModelsLocked implements granterWithIOTokens.
