@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -170,25 +171,30 @@ func splitPreApply(
 
 	// The RHS replica exists and is uninitialized. We are initializing it here.
 	// This is the common case.
-	//
-	// Update the raft HardState with the new Commit index (taken from the applied
-	// state in the write batch), and use existing[*] or default Term and Vote.
-	// Also write the initial RaftTruncatedState.
-	//
-	// [*] Note that uninitialized replicas may cast votes, and if they have, we
-	// can't load the default Term and Vote values.
-	if err := rsl.SynthesizeRaftState(ctx, stateRW, raftRW); err != nil {
+	as, err := rsl.LoadRangeAppliedState(ctx, stateRW)
+	if err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
-	if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &kvserverpb.RaftTruncatedState{
-		Index: kvstorage.RaftInitialLogIndex,
-		Term:  kvstorage.RaftInitialLogTerm,
+	// Update the RHS applied state with the computed closed timestamp.
+	as.RaftClosedTimestamp = in.initClosedTimestamp
+	if err := rsl.SetRangeAppliedState(ctx, stateRW, as); err != nil {
+		log.KvExec.Fatalf(ctx, "%s", err)
+	}
+
+	// Update raft HardState and truncated state to reflect the replica
+	// initialization. Take into account the existing HardState since the
+	// uninitialized replica could have already moved it forward.
+	if hs, err := rsl.LoadHardState(ctx, raftRW.RO); err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
+	} else if newHS, initTS, err := kvstorage.SynthesizeRaftState(hs, logstore.EntryID{
+		Index: as.RaftAppliedIndex,
+		Term:  as.RaftAppliedIndexTerm,
 	}); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
-	}
-	// Persist the closed timestamp.
-	if err := rsl.SetClosedTimestamp(ctx, stateRW, in.initClosedTimestamp); err != nil {
-		log.KvExec.Fatalf(ctx, "%s", err)
+	} else if err := rsl.SetHardState(ctx, raftRW.WO, newHS); err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
+	} else if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &initTS); err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
