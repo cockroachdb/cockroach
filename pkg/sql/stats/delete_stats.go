@@ -125,9 +125,7 @@ func DeleteOldStatsForOtherColumns(
 func deleteStatsForDroppedTables(ctx context.Context, db isql.DB, limit int64) error {
 	_, err := db.Executor().Exec(
 		ctx, "delete-statistics-for-dropped-tables", nil, /* txn */
-		fmt.Sprintf(`DELETE FROM system.table_statistics
-                            WHERE "tableID" NOT IN (SELECT table_id FROM crdb_internal.tables)
-                            LIMIT %d`, limit),
+		fmt.Sprintf(`DELETE FROM system.table_statistics WHERE "tableID" NOT IN (SELECT id FROM system.descriptor) LIMIT %d;`, limit),
 	)
 	return err
 }
