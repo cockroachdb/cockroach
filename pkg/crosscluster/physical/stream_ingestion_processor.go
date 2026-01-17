@@ -1436,6 +1436,9 @@ func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, erro
 	if !cutoverTime.IsEmpty() && cutoverTime.LessEq(replicatedTime) {
 		return true, nil
 	}
+	if !cutoverTime.IsEmpty() {
+		log.Dev.Infof(ctx, "replicated time %s not yet reached cutover time %s", replicatedTime, cutoverTime)
+	}
 
 	return false, nil
 }
