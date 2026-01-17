@@ -162,10 +162,6 @@ func (cb *ColumnBackfiller) init(
 		return err
 	}
 
-	// Create a bound account associated with the column backfiller.
-	if mon == nil {
-		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
-	}
 	cb.mon = mon
 	cb.rowMetrics = rowMetrics
 
@@ -977,9 +973,6 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	mon *mon.BytesMonitor,
 	vecIndexManager *vecindex.Manager,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)
@@ -1134,9 +1127,6 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)
