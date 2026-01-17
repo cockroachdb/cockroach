@@ -239,7 +239,7 @@ type ScalarAncestors byte
 const (
 	// FuncExprAncestor is temporarily added to ScalarAncestors while type
 	// checking the parameters of a function. Used to process
-	// RejectNestedGenerators properly.
+	// RejectNestedGenerators properly as well as some special constant cases.
 	FuncExprAncestor ScalarAncestors = 1 << iota
 
 	// WindowFuncAncestor is temporarily added to ScalarAncestors while type

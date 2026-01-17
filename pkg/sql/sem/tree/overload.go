@@ -1034,11 +1034,26 @@ func (s *overloadTypeChecker) typeCheckOverloadedExprs(
 		}
 	}
 
+	var inFuncExpr bool
+	if semaCtx != nil && semaCtx.Properties.Ancestors.Has(FuncExprAncestor) {
+		inFuncExpr = true
+	}
 	// Filter out overloads which constants cannot become.
 	for i, ok := s.constIdxs.Next(0); ok; i, ok = s.constIdxs.Next(i + 1) {
 		constExpr := s.exprs[i].(Constant)
 		filter := makeFilter(i, func(params TypeList, ordinal int) bool {
-			return canConstantBecome(constExpr, params.GetAt(ordinal))
+			typ := params.GetAt(ordinal)
+			if inFuncExpr {
+				// Special case for empty array parsed as a string without explicit
+				// type casts nor type hints within builtins. This is ugly, but it's
+				// unclear how to do better.
+				if val, isStrVal := constExpr.(*StrVal); isStrVal {
+					if val.s == "{}" && typ.Family() == types.ArrayFamily {
+						return false
+					}
+				}
+			}
+			return canConstantBecome(constExpr, typ)
 		})
 		s.overloadIdxs = filterParams(s.overloadIdxs, s.overloads, s.params, filter)
 	}
