@@ -131,20 +131,20 @@ func TestTablesetBasic(t *testing.T) {
 
 			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
-
-			mkTable("exclude_me")
+			db.Exec(t, "CREATE SCHEMA foo")
+			mkTable("foo.exclude_me")
 
 			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.NotEmpty(t, diffs)
+			assert.False(t, unchanged)
 
-			db.Exec(t, "DROP TABLE exclude_me")
+			db.Exec(t, "DROP TABLE foo.exclude_me")
 
 			unchanged, diffs, err = watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.NotEmpty(t, diffs)
+			assert.False(t, unchanged)
 		})
 
 		t.Run("add watched table", func(t *testing.T) {
