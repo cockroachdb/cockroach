@@ -878,6 +878,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.TableStatisticsLocksTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.StatementsTable.GetName(): {
+		shouldIncludeInClusterBackup: optInToClusterBackup,
+	},
 }
 
 func rekeySystemTable(
