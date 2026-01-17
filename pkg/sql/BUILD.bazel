@@ -229,6 +229,7 @@ go_library(
         "set_transaction.go",
         "set_var.go",
         "set_zone_config.go",
+        "show_changefeed_job.go",
         "show_cluster_setting.go",
         "show_create.go",
         "show_create_clauses.go",
