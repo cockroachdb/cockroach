@@ -119,8 +119,8 @@ type Engines struct {
 	//   particular write, or there is a candidate, but it needs to be verified.
 	todoEngine storage.Engine
 	// logEngine is the engine holding mainly the raft state, such as HardState
-	// and logs, and the Store-local keys. This engine provides timely durability,
-	// by frequent and on-demand syncing.
+	// and logs, and the Store-local keys. This engine provides timely
+	// durability, by frequent and on-demand syncing.
 	logEngine storage.Engine
 	// separated is true iff the engines are logically or physically separated.
 	// Can be true only in tests.

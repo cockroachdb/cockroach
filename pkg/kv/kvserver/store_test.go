@@ -4060,6 +4060,57 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
 }
 
+// TestSplitPreApplyWithSeparatedEngines ensures that splitPreApply writes
+// Raft state to the correct engine when running with separated engines.
+func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stateEng := storage.NewDefaultInMemForTesting()
+	raftEng := storage.NewDefaultInMemForTesting()
+	e := kvstorage.MakeSeparatedEnginesForTesting(stateEng, raftEng)
+	defer e.Close()
+
+	rhsRangeID := roachpb.RangeID(123)
+	rhsDesc := roachpb.RangeDescriptor{
+		RangeID:  rhsRangeID,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+	}
+	rhsDesc.AddReplica(1, 1, roachpb.VOTER_FULL)
+
+	in := splitPreApplyInput{
+		destroyed:           false,
+		rhsDesc:             rhsDesc,
+		initClosedTimestamp: hlc.Timestamp{WallTime: 100},
+	}
+
+	stateBatch := e.StateEngine().NewBatch()
+	defer stateBatch.Close()
+	raftBatch := e.LogEngine().NewBatch()
+	defer raftBatch.Close()
+
+	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+
+	require.NoError(t, stateBatch.Commit(false /* sync */))
+	require.NoError(t, raftBatch.Commit(false /* sync */))
+
+	rsl := kvstorage.MakeStateLoader(rhsRangeID)
+
+	// Check that the RaftTruncatedState is written to the raft engine.
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, raftEng)
+	require.NoError(t, err)
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
+
+	// Sanity check that the RaftTruncatedState is not written to the state
+	// engine.
+	truncStateFromState, err := rsl.LoadRaftTruncatedState(ctx, stateEng)
+	require.NoError(t, err)
+	require.Equal(t, kvserverpb.RaftTruncatedState{}, truncStateFromState)
+}
+
 func BenchmarkStoreGetReplica(b *testing.B) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
