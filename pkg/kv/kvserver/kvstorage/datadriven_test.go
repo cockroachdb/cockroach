@@ -162,7 +162,7 @@ func TestDataDriven(t *testing.T) {
 				e.handleRangeTombstone(t, ctx, rangeID, nextID)
 
 			case "load-and-reconcile":
-				replicas, err := LoadAndReconcileReplicas(ctx, e.eng.TODOEngine())
+				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
 					fmt.Fprintln(&buf, err)
 					break
