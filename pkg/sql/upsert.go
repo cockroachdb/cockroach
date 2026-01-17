@@ -9,11 +9,25 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 var upsertNodePool = sync.Pool{
@@ -49,94 +63,37 @@ type upsertRun struct {
 	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *upsertRun) init(params runParams) error {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *upsertRun) init(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn) error {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
-	return r.tw.init(params.ctx, params.p.txn, params.EvalContext())
+	return r.tw.init(ctx, txn, evalCtx)
 }
 
 func (n *upsertNode) startExec(params runParams) error {
-	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	if err := n.run.init(params); err != nil {
-		return err
-	}
-
-	// Run the mutation to completion.
-	for {
-		lastBatch, err := n.processBatch(params)
-		if err != nil || lastBatch {
-			return err
-		}
-	}
+	panic("upsertNode cannot be run in local mode")
 }
 
 // Next implements the planNode interface.
 func (n *upsertNode) Next(_ runParams) (bool, error) {
-	return n.run.tw.next(), nil
+	panic("upsertNode cannot be run in local mode")
 }
 
 // Values implements the planNode interface.
 func (n *upsertNode) Values() tree.Datums {
-	return n.run.tw.values()
-}
-
-func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) {
-	// Consume/accumulate the rows for this batch.
-	lastBatch = false
-	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				return false, err
-			}
-			break
-		}
-
-		// Process the insertion for the current input row, potentially
-		// accumulating the result row for later.
-		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current SQL-level batch?
-		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize ||
-			n.run.tw.b.ApproximateMutationBytes() >= n.run.tw.maxBatchByteSize {
-			break
-		}
-	}
-
-	if n.run.tw.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err = n.run.tw.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		n.run.tw.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = n.run.tw.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.tw.tableDesc(), int(n.run.tw.rowsAffected()))
-	}
-	return lastBatch, nil
+	panic("upsertNode cannot be run in local mode")
 }
 
 // processSourceRow processes one row from the source for upsertion.
 // The table writer is in charge of accumulating the result rows.
-func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
+func (r *upsertRun) processSourceRow(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	execCfg *ExecutorConfig,
+	rowVals tree.Datums,
+) error {
 	// Check for NOT NULL constraint violations.
 	if r.tw.canaryOrdinal != -1 && rowVals[r.tw.canaryOrdinal] != tree.DNull {
 		// When there is a canary column and its value is not NULL, then an
@@ -170,7 +127,7 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			ctx, evalCtx, semaCtx, sessionData,
 			r.tw.tableDesc(), r.checkOrds, rowVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -200,14 +157,14 @@ func (r *upsertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 
 	if buildutil.CrdbTestBuild {
 		// This testing knob allows us to suspend execution to force a race condition.
-		if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-			fn(params.p.stmt.SQL)
+		if fn := execCfg.TestingKnobs.AfterArbiterRead; fn != nil {
+			fn(evalCtx.Planner.(*planner).stmt.SQL)
 		}
 	}
 
 	// Process the row. This is also where the tableWriter will accumulate
 	// the row for later.
-	return r.tw.row(params.ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
+	return r.tw.row(ctx, upsertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV)
 }
 
 func (n *upsertNode) Close(ctx context.Context) {
@@ -217,26 +174,239 @@ func (n *upsertNode) Close(ctx context.Context) {
 	upsertNodePool.Put(n)
 }
 
-func (n *upsertNode) rowsWritten() int64 {
-	return n.run.tw.rowsAffected()
-}
-
-func (n *upsertNode) indexRowsWritten() int64 {
-	return n.run.tw.indexRowsWritten
-}
-
-func (n *upsertNode) indexBytesWritten() int64 {
-	return n.run.tw.indexBytesWritten
-}
-
 func (n *upsertNode) returnsRowsAffected() bool {
 	return !n.run.tw.rowsNeeded
 }
 
-func (n *upsertNode) kvCPUTime() int64 {
-	return n.run.tw.kvCPUTime
-}
-
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
+}
+
+// upsertProcessor is a LocalProcessor that wraps upsertNode execution logic.
+type upsertProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *upsertNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+
+	cancelChecker cancelchecker.CancelChecker
+}
+
+var _ execinfra.LocalProcessor = &upsertProcessor{}
+var _ execopnode.OpNode = &upsertProcessor{}
+
+// Init initializes the upsertProcessor.
+func (u *upsertProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowCtx.Txn != nil {
+			u.node.run.tw.contentionEventsListener.Init(flowCtx.Txn.ID())
+		}
+		u.ExecStatsForTrace = u.execStatsForTrace
+	}
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("upsert-mem"))
+	return u.InitWithEvalCtx(
+		ctx, u, post, u.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				metrics := execinfrapb.GetMetricsMeta()
+				metrics.RowsWritten = u.node.run.tw.rowsAffected()
+				metrics.IndexRowsWritten = u.node.run.tw.indexRowsWritten
+				metrics.IndexBytesWritten = u.node.run.tw.indexBytesWritten
+				metrics.KVCPUTime = u.node.run.tw.kvCPUTime
+				meta := []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+				u.close()
+				return meta
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the upsertProcessor.
+func (u *upsertProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	if execstats.ShouldCollectStats(ctx, u.FlowCtx.CollectStats) {
+		input = rowexec.NewInputStatCollector(input)
+	}
+	u.input = input
+	u.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the upsertProcessor.
+func (u *upsertProcessor) Start(ctx context.Context) {
+	u.StartInternal(ctx, "upsertProcessor",
+		&u.node.run.tw.contentionEventsListener, &u.node.run.tw.tenantConsumptionListener,
+	)
+	u.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
+	u.input.Start(ctx)
+	u.node.run.traceKV = u.FlowCtx.TraceKV
+	if err := u.node.run.init(u.Ctx(), u.FlowCtx.EvalCtx, u.FlowCtx.Txn); err != nil {
+		u.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := u.processBatch()
+		if err != nil {
+			u.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch implements the batch processing logic moved from upsertNode.processBatch.
+func (u *upsertProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = u.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		inputRow, meta := u.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			continue
+		}
+		if inputRow == nil {
+			lastBatch = true
+			break
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(u.datumScratch) < len(inputRow) {
+			u.datumScratch = make(tree.Datums, len(inputRow))
+		}
+		datumRow := u.datumScratch[:len(inputRow)]
+		err := rowenc.EncDatumRowToDatums(u.input.OutputTypes(), datumRow, inputRow, &u.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the upsert of the current input row.
+		execCfg := u.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)
+		if err = u.node.run.processSourceRow(u.Ctx(), u.FlowCtx.EvalCtx, &u.SemaCtx, u.FlowCtx.EvalCtx.SessionData(), execCfg, datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current SQL-level batch?
+		if u.node.run.tw.currentBatchSize >= u.node.run.tw.maxBatchSize ||
+			u.node.run.tw.b.ApproximateMutationBytes() >= u.node.run.tw.maxBatchByteSize {
+			break
+		}
+	}
+
+	if u.node.run.tw.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err = u.node.run.tw.flushAndStartNewBatch(u.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		u.node.run.tw.setRowsWrittenLimit(u.FlowCtx.EvalCtx.SessionData())
+		if err = u.node.run.tw.finalize(u.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		u.FlowCtx.Cfg.StatsRefresher.NotifyMutation(u.Ctx(), u.node.run.tw.tableDesc(), int(u.node.run.tw.rowsAffected()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (u *upsertProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if u.State != execinfra.StateRunning {
+		return nil, u.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	var err error
+	for u.node.run.tw.next() {
+		datumRow := u.node.run.tw.values()
+		if cap(u.encDatumScratch) < len(datumRow) {
+			u.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := u.encDatumScratch[:len(datumRow)]
+		for i, datum := range datumRow {
+			encRow[i], err = rowenc.DatumToEncDatum(u.outputTypes[i], datum)
+			if err != nil {
+				u.MoveToDraining(err)
+				return nil, u.DrainHelper()
+			}
+		}
+		if outRow := u.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows to return.
+	u.MoveToDraining(nil)
+	return nil, u.DrainHelper()
+}
+
+func (u *upsertProcessor) close() {
+	if u.InternalClose() {
+		u.node.run.tw.close(u.Ctx())
+		u.MemMonitor.Stop(u.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (u *upsertProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	u.close()
+}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (u *upsertProcessor) ChildCount(verbose bool) int {
+	if _, ok := u.input.(execopnode.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (u *upsertProcessor) Child(nth int, verbose bool) execopnode.OpNode {
+	if nth == 0 {
+		if n, ok := u.input.(execopnode.OpNode); ok {
+			return n
+		}
+		panic("input to upsertProcessor is not an execopnode.OpNode")
+	}
+	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (u *upsertProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := rowexec.GetInputStats(u.input)
+	if !ok {
+		return nil
+	}
+	ret := &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: u.OutputHelper.Stats(),
+	}
+	u.node.run.tw.populateExecStatsForTrace(ret)
+	return ret
 }

@@ -8,6 +8,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -24,6 +26,11 @@ type mutationOutputHelper struct {
 	// rowIdx and currentRow are used to track the next row to output.
 	rowIdx     int
 	currentRow tree.Datums
+
+	// contentionEventsListener and tenantConsumptionListener are used to
+	// collect execution events related to contention and RU consumption.
+	contentionEventsListener  execstats.ContentionEventsListener
+	tenantConsumptionListener execstats.TenantConsumptionListener
 }
 
 // onModifiedRow increments the number of affected rows. It should be called
@@ -37,18 +44,6 @@ func (h *mutationOutputHelper) onModifiedRow() {
 // This is intended for metadata/metrics, and may be called multiple times.
 func (h *mutationOutputHelper) rowsAffected() int64 {
 	return h.rowsAffectedHelper.rowsAffected()
-}
-
-// reset clears the state of the helper, dropping any accumulated rows and
-// resetting the counter.
-//
-// TODO(drewk): consider adding an init method as well so that users aren't
-// directly assigning to mutationOutputHelper fields.
-func (h *mutationOutputHelper) reset(ctx context.Context) {
-	if h.rows != nil {
-		h.rows.Clear(ctx)
-	}
-	*h = mutationOutputHelper{rows: h.rows}
 }
 
 // addRow adds a mutated row to the row container. It is a no-op if the operator
@@ -87,6 +82,27 @@ func (h *mutationOutputHelper) close(ctx context.Context) {
 	if h.rows != nil {
 		h.rows.Close(ctx)
 		h.rows = nil
+	}
+}
+
+// populateExecStatsForTrace populates a mutation processor's exec stats related
+// to contention and RU consumption using events gathered from the trace.
+func (h *mutationOutputHelper) populateExecStatsForTrace(stats *execinfrapb.ComponentStats) {
+	contentionTime := h.contentionEventsListener.GetContentionTime()
+	lockWaitTime := h.contentionEventsListener.GetLockWaitTime()
+	latchWaitTime := h.contentionEventsListener.GetLatchWaitTime()
+	consumedRU := h.tenantConsumptionListener.GetConsumedRU()
+	if contentionTime > 0 {
+		stats.KV.ContentionTime.Add(h.contentionEventsListener.GetContentionTime())
+	}
+	if lockWaitTime > 0 {
+		stats.KV.LockWaitTime.Add(h.contentionEventsListener.GetLockWaitTime())
+	}
+	if latchWaitTime > 0 {
+		stats.KV.LatchWaitTime.Add(h.contentionEventsListener.GetLatchWaitTime())
+	}
+	if consumedRU > 0 {
+		stats.Exec.ConsumedRU.Add(int64(h.tenantConsumptionListener.GetConsumedRU()))
 	}
 }
 

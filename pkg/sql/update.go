@@ -11,10 +11,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,8 +88,10 @@ type updateRun struct {
 	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *updateRun) init(
+	evalCtx *eval.Context, mon *mon.BytesMonitor, columns colinfo.ResultColumns,
+) {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 
@@ -85,7 +99,7 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 		return
 	}
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		mon.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))
@@ -95,88 +109,28 @@ func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 }
 
 func (u *updateNode) startExec(params runParams) error {
-	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	u.run.init(params, u.columns)
-
-	if err := u.run.tu.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
-		return err
-	}
-
-	// Run the mutation to completion.
-	for {
-		lastBatch, err := u.processBatch(params)
-		if err != nil || lastBatch {
-			return err
-		}
-	}
+	panic("updateNode cannot be run in local mode")
 }
 
 // Next implements the planNode interface.
 func (u *updateNode) Next(_ runParams) (bool, error) {
-	return u.run.next(), nil
+	panic("updateNode cannot be run in local mode")
 }
 
 // Values implements the planNode interface.
 func (u *updateNode) Values() tree.Datums {
-	return u.run.values()
-}
-
-func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) {
-	// Consume/accumulate the rows for this batch.
-	lastBatch = false
-	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := u.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				return false, err
-			}
-			break
-		}
-
-		// Process the update for the current input row, potentially
-		// accumulating the result row for later.
-		if err = u.run.processSourceRow(params, u.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current SQL-level batch?
-		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
-			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
-			break
-		}
-	}
-
-	if u.run.tu.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err = u.run.tu.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		u.run.tu.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = u.run.tu.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, u.run.tu.tableDesc(), int(u.run.rowsAffected()))
-	}
-	return lastBatch, nil
+	panic("updateNode cannot be run in local mode")
 }
 
 // processSourceRow processes one row from the source for update and, if
 // result rows are needed, saves it in the result row container.
-func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) error {
+func (r *updateRun) processSourceRow(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	sourceVals tree.Datums,
+) error {
 	// sourceVals contains values for the columns from the table, in the order of the
 	// table descriptor. (One per column in u.tw.ru.FetchCols)
 	//
@@ -209,7 +163,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 	// contain the results of evaluation.
 	if !r.checkOrds.Empty() {
 		if err := checkMutationInput(
-			params.ctx, params.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			ctx, evalCtx, semaCtx, sessionData,
 			r.tu.tableDesc(), r.checkOrds, sourceVals[:r.checkOrds.Len()],
 		); err != nil {
 			return err
@@ -246,7 +200,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	)
 	if err != nil {
 		return err
@@ -283,7 +237,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 		r.resultRowBuffer[largestRetIdx] = passthroughValues[i]
 	}
 
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(ctx, r.resultRowBuffer)
 }
 
 func (u *updateNode) Close(ctx context.Context) {
@@ -293,28 +247,208 @@ func (u *updateNode) Close(ctx context.Context) {
 	updateNodePool.Put(u)
 }
 
-func (u *updateNode) rowsWritten() int64 {
-	return u.run.rowsAffected()
-}
-
-func (u *updateNode) indexRowsWritten() int64 {
-	return u.run.tu.indexRowsWritten
-}
-
-func (u *updateNode) indexBytesWritten() int64 {
-	return u.run.tu.indexBytesWritten
-}
-
 func (u *updateNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
 
-func (u *updateNode) kvCPUTime() int64 {
-	return u.run.tu.kvCPUTime
-}
-
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
+}
+
+// updateProcessor is a LocalProcessor that wraps updateNode execution logic.
+type updateProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *updateNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+
+	cancelChecker cancelchecker.CancelChecker
+}
+
+var _ execinfra.LocalProcessor = &updateProcessor{}
+var _ execopnode.OpNode = &updateProcessor{}
+
+// Init initializes the updateProcessor.
+func (u *updateProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowCtx.Txn != nil {
+			u.node.run.contentionEventsListener.Init(flowCtx.Txn.ID())
+		}
+		u.ExecStatsForTrace = u.execStatsForTrace
+	}
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("update-mem"))
+	return u.InitWithEvalCtx(
+		ctx, u, post, u.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				metrics := execinfrapb.GetMetricsMeta()
+				metrics.RowsWritten = u.node.run.rowsAffected()
+				metrics.IndexRowsWritten = u.node.run.tu.indexRowsWritten
+				metrics.IndexBytesWritten = u.node.run.tu.indexBytesWritten
+				metrics.KVCPUTime = u.node.run.tu.kvCPUTime
+				meta := []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+				u.close()
+				return meta
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the updateProcessor.
+func (u *updateProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	if execstats.ShouldCollectStats(ctx, u.FlowCtx.CollectStats) {
+		input = rowexec.NewInputStatCollector(input)
+	}
+	u.input = input
+	u.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the updateProcessor.
+func (u *updateProcessor) Start(ctx context.Context) {
+	u.StartInternal(ctx, "updateProcessor",
+		&u.node.run.contentionEventsListener, &u.node.run.tenantConsumptionListener,
+	)
+	u.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
+	u.input.Start(ctx)
+	u.node.run.traceKV = u.FlowCtx.TraceKV
+	u.node.run.init(u.FlowCtx.EvalCtx, u.MemMonitor, u.node.columns)
+	if err := u.node.run.tu.init(u.Ctx(), u.FlowCtx.Txn, u.FlowCtx.EvalCtx); err != nil {
+		u.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := u.processBatch()
+		if err != nil {
+			u.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch implements the batch processing logic moved from updateNode.processBatch.
+func (u *updateProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = u.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		inputRow, meta := u.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			continue
+		}
+		if inputRow == nil {
+			lastBatch = true
+			break
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(u.datumScratch) < len(inputRow) {
+			u.datumScratch = make(tree.Datums, len(inputRow))
+		}
+		datumRow := u.datumScratch[:len(inputRow)]
+		err = rowenc.EncDatumRowToDatums(u.input.OutputTypes(), datumRow, inputRow, &u.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the update of the current input row.
+		if err = u.node.run.processSourceRow(u.Ctx(), u.FlowCtx.EvalCtx, &u.SemaCtx, u.FlowCtx.EvalCtx.SessionData(), datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current SQL-level batch?
+		if u.node.run.tu.currentBatchSize >= u.node.run.tu.maxBatchSize ||
+			u.node.run.tu.b.ApproximateMutationBytes() >= u.node.run.tu.maxBatchByteSize {
+			break
+		}
+	}
+
+	if u.node.run.tu.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err = u.node.run.tu.flushAndStartNewBatch(u.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		u.node.run.tu.setRowsWrittenLimit(u.FlowCtx.EvalCtx.SessionData())
+		if err = u.node.run.tu.finalize(u.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		u.FlowCtx.Cfg.StatsRefresher.NotifyMutation(u.Ctx(), u.node.run.tu.tableDesc(), int(u.node.run.rowsAffected()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (u *updateProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if u.State != execinfra.StateRunning {
+		return nil, u.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	var err error
+	for u.node.run.next() {
+		datumRow := u.node.run.values()
+		if cap(u.encDatumScratch) < len(datumRow) {
+			u.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := u.encDatumScratch[:len(datumRow)]
+		for i, datum := range datumRow {
+			encRow[i], err = rowenc.DatumToEncDatum(u.outputTypes[i], datum)
+			if err != nil {
+				u.MoveToDraining(err)
+				return nil, u.DrainHelper()
+			}
+		}
+		if outRow := u.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows, move to draining.
+	u.MoveToDraining(nil)
+	return nil, u.DrainHelper()
+}
+
+func (u *updateProcessor) close() {
+	if u.InternalClose() {
+		u.node.run.close(u.Ctx())
+		u.MemMonitor.Stop(u.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (u *updateProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	u.close()
 }
 
 // enforceNotNullConstraints enforces NOT NULL column constraints. row and cols
@@ -330,4 +464,37 @@ func enforceNotNullConstraints(row tree.Datums, cols []catalog.Column) error {
 		}
 	}
 	return nil
+}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (u *updateProcessor) ChildCount(verbose bool) int {
+	if _, ok := u.input.(execopnode.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (u *updateProcessor) Child(nth int, verbose bool) execopnode.OpNode {
+	if nth == 0 {
+		if n, ok := u.input.(execopnode.OpNode); ok {
+			return n
+		}
+		panic("input to updateProcessor is not an execopnode.OpNode")
+	}
+	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (u *updateProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := rowexec.GetInputStats(u.input)
+	if !ok {
+		return nil
+	}
+	ret := &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: u.OutputHelper.Stats(),
+	}
+	u.node.run.populateExecStatsForTrace(ret)
+	return ret
 }
