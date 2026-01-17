@@ -711,8 +711,8 @@ var _ RangeController = &rangeController{}
 func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v creating range controller", o.RangeID)
 	}
 	if o.RaftMaxInflightBytes == 0 {
 		o.RaftMaxInflightBytes = math.MaxUint64
@@ -1574,8 +1574,8 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 	if replica == rc.leaseholder {
 		return
 	}
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	}
 	rc.leaseholder = replica
 	rc.updateWaiterSetsRaftMuLocked()
@@ -1593,8 +1593,8 @@ func (rc *rangeController) ForceFlushIndexChangedLocked(ctx context.Context, ind
 // Requires replica.raftMu to be held.
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v closing range controller", rc.opts.RangeID)
 	}
 	func() {
 		rc.mu.Lock()
@@ -2321,8 +2321,8 @@ func (rs *replicaState) createReplicaSendStreamRaftMuLocked(
 ) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Must be in StateReplicate on creation.
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v creating send stream %v for replica %v",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v creating send stream %v for replica %v",
 			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream = &replicaSendStream{
@@ -2710,8 +2710,8 @@ func (rs *replicaState) scheduledRaftMuLocked(
 
 func (rs *replicaState) closeSendStreamRaftMuLocked(ctx context.Context) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v closing send stream %v for replica %v",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v closing send stream %v for replica %v",
 			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream.mu.Lock()
@@ -3111,8 +3111,8 @@ func (rss *replicaSendStream) changeToProbeRaftMuAndStreamLocked(
 ) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v:%v stream %v changing to probe",
 			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
 	}
 	// This is the first time we've seen the replica change to StateProbe,

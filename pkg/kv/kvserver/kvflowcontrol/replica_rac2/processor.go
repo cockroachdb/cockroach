@@ -889,7 +889,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 		}
 
-		if log.V(1) {
+		if log.V(2) {
 			if isV2Encoding {
 				log.KvDistribution.Infof(ctx,
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
