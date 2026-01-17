@@ -1188,3 +1188,24 @@ statement ok
 SET autocommit_before_ddl=on;
 
 subtest end
+
+subtest metadata
+
+# Test that the is_vector column in crdb_internal.table_indexes correctly identifies vector indexes.
+statement ok
+CREATE TABLE metadata_test (id INT PRIMARY KEY, v VECTOR(512), VECTOR INDEX (v))
+
+query B
+SELECT is_vector FROM crdb_internal.table_indexes WHERE descriptor_name = 'metadata_test' AND index_name = 'metadata_test_v_idx'
+----
+true
+
+query B
+SELECT is_vector FROM crdb_internal.table_indexes WHERE descriptor_name = 'metadata_test' AND index_name = 'metadata_test_pkey'
+----
+false
+
+statement ok
+DROP TABLE metadata_test
+
+subtest end
