@@ -265,7 +265,6 @@ var _ importRowConsumer = &avroConsumer{}
 type ocfStream struct {
 	ocf      *goavro.OCFReader
 	progress func() float32
-	err      error
 }
 
 var _ importRowProducer = &ocfStream{}
@@ -285,7 +284,7 @@ func (o *ocfStream) Scan() bool {
 
 // Err implements importRowProducer interface.
 func (o *ocfStream) Err() error {
-	return o.err
+	return o.ocf.Err()
 }
 
 // Row implements importRowProducer interface.
@@ -295,8 +294,8 @@ func (o *ocfStream) Row() (interface{}, error) {
 
 // Skip implements importRowProducer interface.
 func (o *ocfStream) Skip() error {
-	_, o.err = o.ocf.Read()
-	return o.err
+	_, err := o.ocf.Read()
+	return err
 }
 
 // A scanner over a file containing avro records in json or binary format.
