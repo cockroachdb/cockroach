@@ -168,6 +168,35 @@ func (ct *cdcTester) startStatsCollection() func() {
 	}
 }
 
+func (ct *cdcTester) exportLatencyToRoachperf(value time.Duration, startTime time.Time) {
+	if ct.promCfg == nil {
+		ct.t.Error("prometheus configuration is nil")
+	}
+	promClient, err := clusterstats.SetupCollectorPromClient(ct.ctx, ct.cluster, ct.t.L(), ct.promCfg)
+	if err != nil {
+		ct.t.Errorf("error creating prometheus client for stats collector: %s", err)
+	}
+
+	statsCollector := clusterstats.NewStatsCollector(ct.ctx, promClient)
+	endTime := timeutil.Now()
+	if _, err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t, false, /* dryRun */
+		startTime,
+		endTime,
+		[]clusterstats.AggQuery{},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:             "Max latency (s)",
+				Value:            roachtestutil.MetricPoint(value.Seconds()),
+				Unit:             "seconds",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
+		},
+	); err != nil {
+		ct.t.Errorf("error exporting stats file: %s", err)
+	}
+}
+
 type AuthorizationRuleKeys struct {
 	KeyName    string `json:"keyName"`
 	PrimaryKey string `json:"primaryKey"`
@@ -666,6 +695,18 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
 		defer close(finished)
+
+		// If the feed is not an initial scan, it will not finish but will
+		// indefinitely poll the latency in pollLatencyUntilJobSucceeds. So that
+		// we can still report a single time to roachperf, we report the max
+		// latency to roachperf inside this defer.
+		defer func() {
+			if targets.reportSteadyLatency == nil {
+				return
+			}
+			targets.reportSteadyLatency(verifier.maxSeenSteadyLatency)
+		}()
+
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
@@ -830,8 +871,9 @@ func (ct *cdcTester) startGrafana() {
 }
 
 type latencyTargets struct {
-	initialScanLatency time.Duration
-	steadyLatency      time.Duration
+	initialScanLatency  time.Duration
+	steadyLatency       time.Duration
+	reportSteadyLatency func(duration time.Duration)
 }
 
 type cdcBankConfig struct {
@@ -2620,6 +2662,7 @@ CONFIGURE ZONE USING
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
+			startTime := timeutil.Now()
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
 
 			feed := ct.newChangefeed(feedArgs{
@@ -2628,7 +2671,9 @@ CONFIGURE ZONE USING
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
-				steadyLatency:      time.Minute,
+				reportSteadyLatency: func(value time.Duration) {
+					ct.exportLatencyToRoachperf(value, startTime)
+				},
 			})
 
 			ct.waitForWorkload()
