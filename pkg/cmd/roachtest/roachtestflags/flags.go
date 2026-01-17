@@ -96,6 +96,12 @@ var (
 		Usage: `The percent of test that should be selected from the tests that have been running successfully as per test selection. Default is 0.35`,
 	})
 
+	RoachtestVModule string
+	_                = registerRunFlag(&RoachtestVModule, FlagInfo{
+		Name:  "vmodule",
+		Usage: `Per-module verbosity for roachtest modules"`,
+	})
+
 	Username string = os.Getenv("ROACHPROD_USER")
 	_               = registerRunFlag(&Username, FlagInfo{
 		Name:      "user",
