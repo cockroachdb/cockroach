@@ -7615,6 +7615,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.distsql.parallel_runner.count
+      exported_name: sql_distsql_parallel_runner_count
+      description: Number of SetupFlowRequest RPCs executed concurrently via DistSQL runners
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.distsql.queries.active
       exported_name: sql_distsql_queries_active
       description: Number of invocations of the execution engine currently active (multiple of which may occur for a single SQL statement)
@@ -7667,6 +7675,14 @@ layers:
       exported_name: sql_distsql_select_distributed_exec_count_internal
       description: Number of SELECT statements that were distributed (internal queries)
       y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.distsql.sequential_runner.count
+      exported_name: sql_distsql_sequential_runner_count
+      description: Number of SetupFlowRequest RPCs executed sequentially via the main gateway goroutine
+      y_axis_label: Requests
       type: COUNTER
       unit: COUNT
       aggregation: AVG
