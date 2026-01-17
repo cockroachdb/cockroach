@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -154,7 +155,12 @@ type runnerCoordinator struct {
 	}
 }
 
-func (c *runnerCoordinator) init(ctx context.Context, stopper *stop.Stopper, sv *settings.Values) {
+func (c *runnerCoordinator) init(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	sv *settings.Values,
+	parallelCountMetric *metric.Counter,
+) {
 	// This channel has to be unbuffered because we want to only be able to send
 	// requests if a worker is actually there to receive them.
 	c.runnerChan = make(chan runnerRequest)
@@ -163,6 +169,7 @@ func (c *runnerCoordinator) init(ctx context.Context, stopper *stop.Stopper, sv 
 		for {
 			select {
 			case req := <-c.runnerChan:
+				parallelCountMetric.Inc(1)
 				_ = req.run()
 			case <-stopWorkerChan:
 				return
@@ -613,6 +620,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		case dsp.runnerCoordinator.runnerChan <- runReq:
 			usedWorker = true
 		default:
+			dsp.distSQLSrv.Metrics.RunnerReqSequentialCount.Inc(1)
 			// Use the context of the local flow since we're executing this
 			// SetupFlow RPC synchronously.
 			runReq.ctx = ctx
