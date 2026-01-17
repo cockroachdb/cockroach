@@ -7,8 +7,9 @@ package stats
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -18,14 +19,11 @@ import (
 
 // InsertNewStats inserts a slice of statistics at the current time into the
 // system table.
-func InsertNewStats(
-	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tableStats []*TableStatisticProto,
-) error {
+func InsertNewStats(ctx context.Context, txn isql.Txn, tableStats []*TableStatisticProto) error {
 	var err error
 	for _, statistic := range tableStats {
 		err = InsertNewStat(
 			ctx,
-			settings,
 			txn,
 			statistic.TableID,
 			statistic.Name,
@@ -37,6 +35,8 @@ func InsertNewStats(
 			statistic.HistogramData,
 			statistic.PartialPredicate,
 			statistic.FullStatisticID,
+			"", /* createdAt */
+			0,  /* statisticID */
 		)
 		if err != nil {
 			return err
@@ -45,13 +45,14 @@ func InsertNewStats(
 	return nil
 }
 
-// InsertNewStat inserts a new statistic in the system table.
-//
-// The stats cache will automatically update asynchronously (as well as the
-// stats caches on all other nodes).
-func InsertNewStat(
+// WriteStatsWithOldDeleted implements the "DELETE stale stats -> INSERT
+// new stats" retention rule. It deletes old statistics for the given
+// columns if the new statistics is not partial and then inserts the new
+// statistic. For createdAt and statisticID, if the provided values are
+// empty, we use the default values defined in the
+// system.table_statistics schema for the INSERT.
+func WriteStatsWithOldDeleted(
 	ctx context.Context,
-	settings *cluster.Settings,
 	txn isql.Txn,
 	tableID descpb.ID,
 	name string,
@@ -60,6 +61,56 @@ func InsertNewStat(
 	h *HistogramData,
 	partialPredicate string,
 	fullStatisticID uint64,
+	createdAt string,
+	statisticID uint64,
+) error {
+	// Delete old stats that have been superseded, if the new statistic
+	// is not partial.
+	if partialPredicate == "" {
+		if err := DeleteOldStatsForColumns(
+			ctx,
+			txn,
+			tableID,
+			columnIDs,
+		); err != nil {
+			return err
+		}
+	}
+
+	return InsertNewStat(
+		ctx,
+		txn,
+		tableID,
+		name,
+		columnIDs,
+		rowCount,
+		distinctCount,
+		nullCount,
+		avgSize,
+		h,
+		partialPredicate,
+		fullStatisticID,
+		createdAt,
+		statisticID,
+	)
+}
+
+// InsertNewStat inserts a new statistic in the system table.
+//
+// The stats cache will automatically update asynchronously (as well as the
+// stats caches on all other nodes).
+func InsertNewStat(
+	ctx context.Context,
+	txn isql.Txn,
+	tableID descpb.ID,
+	name string,
+	columnIDs []descpb.ColumnID,
+	rowCount, distinctCount, nullCount, avgSize int64,
+	h *HistogramData,
+	partialPredicate string,
+	fullStatisticID uint64,
+	createdAt string,
+	statisticID uint64,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
 	var nameVal, histogramVal interface{}
@@ -87,20 +138,20 @@ func InsertNewStat(
 		predicateValue = partialPredicate
 	}
 
-	_, err := txn.Exec(
-		ctx, "insert-statistic", txn.KV(),
-		`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram,
-					"partialPredicate",
-					"fullStatisticID"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+	paramList := []string{
+		`"tableID"`,
+		`"name"`,
+		`"columnIDs"`,
+		`"rowCount"`,
+		`"distinctCount"`,
+		`"nullCount"`,
+		`"avgSize"`,
+		`histogram`,
+		`"partialPredicate"`,
+		`"fullStatisticID"`,
+	}
+
+	valList := []interface{}{
 		tableID,
 		nameVal,
 		columnIDsVal,
@@ -111,6 +162,31 @@ func InsertNewStat(
 		histogramVal,
 		predicateValue,
 		fullStatisticID,
+	}
+
+	if createdAt != "" {
+		paramList = append(paramList, `"createdAt"`)
+		valList = append(valList, createdAt)
+	}
+
+	if statisticID != 0 {
+		paramList = append(paramList, `"statisticID"`)
+		valList = append(valList, statisticID)
+	}
+
+	var placeholdersStr strings.Builder
+	for i := range paramList {
+		placeholdersStr.WriteString(fmt.Sprintf("$%d", i+1))
+		if i != len(paramList)-1 {
+			placeholdersStr.WriteString(", ")
+		}
+	}
+
+	stmt := fmt.Sprintf(
+		"INSERT INTO system.table_statistics (%s) VALUES (%s)",
+		strings.Join(paramList, ","),
+		placeholdersStr.String(),
 	)
+	_, err := txn.Exec(ctx, "insert-statistic", txn.KV(), stmt, valList...)
 	return err
 }
