@@ -552,6 +552,72 @@ func BenchmarkBinaryJSONImport(b *testing.B) {
 	}, datapathutils.TestDataPath(b, "avro", "stock-10000.bjson"))
 }
 
+// failingReader simulates an S3/storage error after reading a certain number of
+// bytes.
+type failingReader struct {
+	data      *bytes.Buffer
+	failAfter int
+	bytesRead int
+	failErr   error
+}
+
+func (f *failingReader) Read(p []byte) (n int, err error) {
+	if f.failErr != nil && f.bytesRead >= f.failAfter {
+		return 0, f.failErr
+	}
+	n, err = f.data.Read(p)
+	f.bytesRead += n
+	if f.failErr != nil && f.bytesRead >= f.failAfter {
+		return n, f.failErr
+	}
+	return n, err
+}
+
+// TestOcfStreamCapturesUnderlyingErrors tests that ocfStream properly captures
+// errors from the underlying goavro.OCFReader, such as when S3 returns an error
+// during read. This test reproduces the bug where such errors were silently
+// ignored, leading to incomplete data being imported.
+func TestOcfStreamCapturesUnderlyingErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	th := newTestHelper(ctx, t)
+
+	ocfData := bytes.NewBuffer(nil)
+	th.genOcfData(t, 10, ocfData)
+	ocfBytes := ocfData.Bytes()
+
+	// Create a failing reader that will error after reading after half the
+	// data.
+	failAfter := len(ocfBytes) / 2
+	expectedErr := fmt.Errorf("simulated S3 read error")
+
+	failingInput := &failingReader{
+		data:      bytes.NewBuffer(ocfBytes),
+		failAfter: failAfter,
+		failErr:   expectedErr,
+	}
+
+	ocf, err := goavro.NewOCFReader(failingInput)
+	require.NoError(t, err)
+	stream := &ocfStream{ocf: ocf}
+
+	var recordCount int
+	for stream.Scan() {
+		_, err := stream.Row()
+		if err != nil {
+			break
+		}
+		recordCount++
+	}
+
+	// The bug: stream.Err() returns nil even though the underlying reader
+	// failed - it should return the error.
+	err = stream.Err()
+	require.Error(t, err, "ocfStream should capture underlying read errors")
+	require.Less(t, recordCount, 10, "should not have read all records due to the error")
+}
+
 func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData string) {
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
