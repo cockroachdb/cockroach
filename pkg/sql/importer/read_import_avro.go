@@ -280,7 +280,16 @@ func (o *ocfStream) Progress() float32 {
 
 // Scan implements importRowProducer interface.
 func (o *ocfStream) Scan() bool {
-	return o.ocf.Scan()
+	if o.ocf.Scan() {
+		return true
+	}
+	// Scan returned false - check if it's due to an error from the underlying
+	// reader. This ensures that errors from S3 or other storage backends are
+	// properly captured and reported, preventing silent data loss.
+	if err := o.ocf.Err(); err != nil {
+		o.err = err
+	}
+	return false
 }
 
 // Err implements importRowProducer interface.
