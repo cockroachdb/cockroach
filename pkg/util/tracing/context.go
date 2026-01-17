@@ -7,8 +7,10 @@ package tracing
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 )
 
 var activeSpanKey = ctxutil.RegisterFastValueKey()
@@ -65,4 +67,25 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 	ctx, _ = maybeWrapCtx(ctx, sp)
 	return ctx
+}
+
+// InjectCompletedSpan adds a span to the current trace that represents work
+// that already happened. The span is recorded as already finished with the
+// specified start time and duration. It cannot have children and no Span
+// pointer is returned.
+//
+// This is useful for recording delays that happened in library or runtime code
+// where a span couldn't be created before the work started.
+//
+// If ctx doesn't contain a recording span, this is a no-op.
+func InjectCompletedSpan(
+	ctx context.Context, name string, start time.Time, duration time.Duration,
+) {
+	sp := SpanFromContext(ctx)
+	if sp == nil || sp.RecordingType() == tracingpb.RecordingOff {
+		return
+	}
+	// Create a child span with the custom start time, then immediately finish it.
+	child := sp.Tracer().StartSpan(name, WithParent(sp), WithStartTime(start))
+	child.FinishAt(start.Add(duration))
 }
