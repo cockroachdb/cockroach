@@ -399,7 +399,10 @@ func (r *Replica) adminSplitWithDescriptor(
 				); err != nil {
 					return reply, errors.Wrap(err, "unable to determine split key")
 				} else if foundSplitKey == nil {
-					return reply, unsplittableRangeError{}
+					return reply, errors.Wrap(
+						unsplittableRangeError{},
+						"unable to find an existing key between desired split key and range boundaries",
+					)
 				}
 			} else {
 				foundSplitKey = args.SplitKey
