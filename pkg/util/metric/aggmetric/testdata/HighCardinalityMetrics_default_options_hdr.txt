@@ -1,6 +1,5 @@
 echo
 ----
-default_options_counter 10
 default_options_counter{database="db1",application_name="0"} 1
 default_options_counter{database="db1",application_name="1"} 1
 default_options_counter{database="db1",application_name="2"} 1
@@ -11,7 +10,6 @@ default_options_counter{database="db1",application_name="6"} 1
 default_options_counter{database="db1",application_name="7"} 1
 default_options_counter{database="db1",application_name="8"} 1
 default_options_counter{database="db1",application_name="9"} 1
-default_options_gauge 55
 default_options_gauge{database="db1",application_name="0"} 1
 default_options_gauge{database="db1",application_name="1"} 2
 default_options_gauge{database="db1",application_name="2"} 3
@@ -42,18 +40,6 @@ default_options_histogram_bucket{database="db1",application_name="8",le="+Inf"} 
 default_options_histogram_bucket{database="db1",application_name="8",le="9"} 1
 default_options_histogram_bucket{database="db1",application_name="9",le="+Inf"} 1
 default_options_histogram_bucket{database="db1",application_name="9",le="10"} 1
-default_options_histogram_bucket{le="+Inf"} 10
-default_options_histogram_bucket{le="1"} 1
-default_options_histogram_bucket{le="10"} 10
-default_options_histogram_bucket{le="2"} 2
-default_options_histogram_bucket{le="3"} 3
-default_options_histogram_bucket{le="4"} 4
-default_options_histogram_bucket{le="5"} 5
-default_options_histogram_bucket{le="6"} 6
-default_options_histogram_bucket{le="7"} 7
-default_options_histogram_bucket{le="8"} 8
-default_options_histogram_bucket{le="9"} 9
-default_options_histogram_count 10
 default_options_histogram_count{database="db1",application_name="0"} 1
 default_options_histogram_count{database="db1",application_name="1"} 1
 default_options_histogram_count{database="db1",application_name="2"} 1
@@ -64,7 +50,6 @@ default_options_histogram_count{database="db1",application_name="6"} 1
 default_options_histogram_count{database="db1",application_name="7"} 1
 default_options_histogram_count{database="db1",application_name="8"} 1
 default_options_histogram_count{database="db1",application_name="9"} 1
-default_options_histogram_sum 55
 default_options_histogram_sum{database="db1",application_name="0"} 1
 default_options_histogram_sum{database="db1",application_name="1"} 2
 default_options_histogram_sum{database="db1",application_name="2"} 3
