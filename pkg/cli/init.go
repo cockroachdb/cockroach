@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,6 +46,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 	// Wait for the node to be ready for initialization.
 	if err := dialAndCheckHealth(ctx); err != nil {

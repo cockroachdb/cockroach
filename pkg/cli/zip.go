@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -224,6 +225,10 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Enable DRPC for inter-node communication if needed.
+	// By default it is off.
+	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &serverCfg.Settings.SV, useDRPC)
 
 	zr := zipCtx.newZipReporter("cluster")
 	// Interpret the deprecated `--redact-logs` the same as the new `--redact` flag.
