@@ -856,3 +856,81 @@ func TestFrontierQuantizationRand(t *testing.T) {
 	require.LessOrEqual(t, quantizedEntries, entries)
 	require.True(t, quantizedHW.LessEq(hw))
 }
+
+// TestCheckCopyBoundaryShallowCopies is a regression test for a potential data
+// race in this function when a RangeFeedCheckpoint event is shared across
+// invocations, which can happen in the presence of our local request
+// optimizations.
+//
+// # This test fails under the race detector in the presence of the previous bug
+//
+// ==================
+// WARNING: DATA RACE
+// Write at 0x00c00196c4b0 by goroutine 37:
+//
+//	github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed.checkCopyBoundary()
+//	    pkg/ccl/changefeedccl/kvfeed/kv_feed.go:878 +0x3c4
+//	github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed.TestCheckCopyBoundaryShallowCopies.func1()
+//	    pkg/ccl/changefeedccl/kvfeed/kv_feed_test.go:889 +0x1e0
+//	github.com/cockroachdb/cockroach/pkg/util/ctxgroup.GroupWorkers.func1()
+//	    pkg/util/ctxgroup/ctxgroup.go:209 +0x4c
+//	github.com/cockroachdb/cockroach/pkg/util/ctxgroup.GroupWorkers.Group.GoCtx.func2()
+//	    pkg/util/ctxgroup/ctxgroup.go:200 +0xc8
+//	golang.org/x/sync/errgroup.(*Group).Go.func1()
+//	    external/org_golang_x_sync/errgroup/errgroup.go:93 +0x70
+//
+// Previous read at 0x00c00196c4b0 by goroutine 48:
+//
+//	github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent.(*Event).Resolved()
+//	    pkg/ccl/changefeedccl/kvevent/event.go:197 +0x21c
+//	github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed.checkCopyBoundary()
+//	    pkg/ccl/changefeedccl/kvfeed/kv_feed.go:860 +0x17c
+//	github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed.TestCheckCopyBoundaryShallowCopies.func1()
+//	    pkg/ccl/changefeedccl/kvfeed/kv_feed_test.go:889 +0x1e0
+//	github.com/cockroachdb/cockroach/pkg/util/ctxgroup.GroupWorkers.func1()
+//	    pkg/util/ctxgroup/ctxgroup.go:209 +0x4c
+//	github.com/cockroachdb/cockroach/pkg/util/ctxgroup.GroupWorkers.Group.GoCtx.func2()
+//	    pkg/util/ctxgroup/ctxgroup.go:200 +0xc8
+//	golang.org/x/sync/errgroup.(*Group).Go.func1()
+//	    external/org_golang_x_sync/errgroup/errgroup.go:93 +0x70
+//
+// See #159166 for more details.
+func TestCheckCopyBoundaryShallowCopies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	checkpointEvent := &kvpb.RangeFeedCheckpoint{
+		Span: roachpb.Span{
+			Key:    keys.MinKey,
+			EndKey: keys.MaxKey,
+		},
+		ResolvedTS: hlc.Timestamp{WallTime: 50},
+	}
+
+	f := func(_ context.Context, _ int) error {
+		rfEvent := &kvpb.RangeFeedEvent{}
+		rfEvent.MustSetValue(checkpointEvent)
+		frontier, err := span.MakeFrontier(roachpb.Span{
+			Key:    keys.MinKey,
+			EndKey: keys.MaxKey,
+		})
+		if err != nil {
+			return err
+		}
+		boundary := &errEndTimeReached{endTime: hlc.Timestamp{WallTime: 40}}
+		ev := kvevent.MakeResolvedEvent(rfEvent, jobspb.ResolvedSpan_NONE)
+		skipEvent, stopCopying, err := checkCopyBoundary(&ev, boundary, frontier, TestingKnobs{})
+		if err != nil {
+			return err
+		}
+		if skipEvent {
+			return errors.Errorf("expected skipEvent (%v) to be false", skipEvent)
+		}
+		if !stopCopying {
+			return errors.Errorf("expected stopCopying (%v) to be true", stopCopying)
+		}
+		return nil
+	}
+
+	require.NoError(t, ctxgroup.GroupWorkers(context.Background(), 16, f))
+}
