@@ -292,10 +292,10 @@ npm_import(
         """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
         """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
     ]),
-    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
+    integrity = "sha512-hFGWAmqrHMPwmKBHS2TfurKv56G06R3YaJXY5Koyp6bQMEni0K13C75N4COnEi+2jBodbg0DPHB2CF+dXUgA1A==",
     package = "pnpm",
-    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
-    version = "8.5.1",
+    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-9.15.5.tgz",
+    version = "9.15.5",
 )
 
 npm_translate_lock(

@@ -9,16 +9,14 @@
   "license": "CockroachDB Software License",
   "private": true,
   "scripts": {
-    "build": "tsc",
-    "test": "jest"
+    "build": "tsc"
   },
   "devDependencies": {
     "@bazel/typescript": "5.5.0",
     "@bazel/worker": "5.5.0",
     "@types/eslint": "^8.4.2",
+    "@types/node": "^22.0.0",
     "eslint": "^8.16.0",
-    "jest": "^28.1.0",
-    "ts-jest": "^28.0.3",
     "typescript": "5.1.6"
   },
   "peerDependencies": {
