@@ -27,7 +27,7 @@ import {
 
 import "./debug.styl";
 
-const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
+const COMMUNITY_URL = "https://forum.cockroachlabs.com/";
 
 export function DebugTableLink(props: {
   name: string;

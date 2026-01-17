@@ -538,7 +538,7 @@ efficient than retrieving each histogram separately).
   data retrieved by the query could also be used to update the
   statistics, though this complicates normal query execution. See also
   [self-tuning
-  histograms](https://ashraf.aboulnaga.me/pubs/sigmod99sthist.pdf).
+  histograms](https://web.archive.org/web/20240413134934/https://ashraf.aboulnaga.me/pubs/sigmod99sthist.pdf).
 
 * If the stats haven't been updated in a long time and we happen to be
   doing a full table-range scan for some query, we might as well
