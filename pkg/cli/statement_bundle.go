@@ -108,6 +108,9 @@ func loadStatementBundle(zipdir string) (*statementBundle, error) {
 		if !strings.HasPrefix(d.Name(), "stats-") {
 			return nil
 		}
+		if !strings.HasSuffix(d.Name(), ".sql") {
+			return nil
+		}
 		f, err := os.ReadFile(path)
 		if err != nil {
 			return err
