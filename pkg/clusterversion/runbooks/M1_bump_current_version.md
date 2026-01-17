@@ -523,35 +523,7 @@ These are logic errors in code that references version gates OR new regression t
 
 These are straightforward test output updates that happen because version numbers and URLs changed. **Do NOT modify production code for these failures.**
 
-##### A. Documentation URL Updates (v25.4 → dev)
-
-**Pattern:** After bumping from X.Y to next major version, all doc URLs referencing `vX.Y` must change to `dev`.
-
-**Files typically affected:**
-- `pkg/sql/logictest/testdata/logic_test/*`
-- `pkg/sql/pgwire/testdata/pgtest/*`
-- `pkg/ccl/logictestccl/testdata/logic_test/*`
-
-**Changes needed:**
-```bash
-# Documentation URLs
-www.cockroachlabs.com/docs/v25.4/* → www.cockroachlabs.com/docs/dev/*
-
-# Issue tracker URLs
-go.crdb.dev/issue-v/*/v25.4 → go.crdb.dev/issue-v/*/dev
-```
-
-**Quick fix:**
-```bash
-# Find all files with v25.4 references
-grep -r "v25\.4" pkg/sql pkg/ccl --include="*.md" --include="logic_test*" --include="pgtest*"
-
-# Replace with sed (example for URLs)
-sed -i '' 's|www.cockroachlabs.com/docs/v25.4|www.cockroachlabs.com/docs/dev|g' <file>
-sed -i '' 's|go.crdb.dev/issue-v/\([0-9]*\)/v25.4|go.crdb.dev/issue-v/\1/dev|g' <file>
-```
-
-##### B. Version Number Updates in Test Outputs
+##### A. Version Number Updates in Test Outputs
 
 **Pattern:** Tests that query version information expect the new version number.
 
@@ -575,7 +547,7 @@ sed -i '' 's|go.crdb.dev/issue-v/\([0-9]*\)/v25.4|go.crdb.dev/issue-v/\1/dev|g' 
 sed -i '' 's/^25\.4$/26.1/' <file>
 ```
 
-##### C. systemDatabaseSchemaVersion Update
+##### B. systemDatabaseSchemaVersion Update
 
 **Pattern:** After bumping to version X.Y, the systemDatabaseSchemaVersion must reflect `VX_Y_Start`.
 
@@ -608,7 +580,7 @@ sed -i '' 's/^25\.4$/26.1/' <file>
 ./dev test pkg/sql/logictest --filter='TestReadCommittedLogic/crdb_internal_catalog'
 ```
 
-##### D. Bootstrap Schema Hash Mismatches
+##### C. Bootstrap Schema Hash Mismatches
 
 **Pattern:** Bootstrap hash values change when system schema versions change.
 
@@ -635,7 +607,7 @@ bazel test //pkg/sql/catalog/bootstrap:bootstrap_test \
 ./dev test pkg/sql/catalog/bootstrap -f='TestInitialValuesToString'
 ```
 
-##### E. Mixedversion Test Failures (TRICKY!)
+##### D. Mixedversion Test Failures (TRICKY!)
 
 **Pattern:** Tests show unexpected upgrade paths or version selections.
 

@@ -3937,6 +3937,19 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	return t.finishExecQuery(query, rowses, execErr)
 }
 
+var docsRE = regexp.MustCompile(`(https://www\.cockroachlabs\.com/docs/)([^/]+)(/.*)?`)
+
+// Replace all binary versions except for stable.
+func sanitizeDocsURL(input string) string {
+	return docsRE.ReplaceAllStringFunc(input, func(match string) string {
+		parts := docsRE.FindStringSubmatch(match)
+		if parts[2] == "stable" {
+			return match
+		}
+		return parts[1] + "..." + parts[3]
+	})
+}
+
 func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, execErr error) error {
 	if execErr == nil {
 		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
@@ -3991,6 +4004,11 @@ func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, exec
 			_ = rows.Close()
 		}
 		actualResultsRaw = t.noticeBuffer
+		// Sanitize the output a bit to delete the binary version from the docs
+		// link.
+		for i, row := range actualResultsRaw {
+			actualResultsRaw[i] = sanitizeDocsURL(row)
+		}
 	} else {
 		// foundCols is set to true once we've found the first statement that
 		// actually returns columns.
