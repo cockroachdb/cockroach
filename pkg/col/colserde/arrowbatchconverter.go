@@ -265,8 +265,8 @@ func (c *ArrowBatchConverter) BatchToArrow(
 
 			case types.TimestampTZFamily:
 				timestamps := vec.Timestamp()[:n]
-				// See implementation of time.MarshalBinary.
-				const timestampSize = 14
+				// See implementation of time.AppendBinary.
+				const timestampSize = 16
 				if cap(values) < n*timestampSize {
 					values = make([]byte, 0, n*timestampSize)
 				}
@@ -275,11 +275,11 @@ func (c *ArrowBatchConverter) BatchToArrow(
 					if nulls != nil && nulls.NullAt(i) {
 						continue
 					}
-					marshaled, err := timestamps[i].MarshalBinary()
+					var err error
+					values, err = timestamps[i].AppendBinary(values)
 					if err != nil {
 						return nil, err
 					}
-					values = append(values, marshaled...)
 				}
 				offsets = append(offsets, int32(len(values)))
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
