@@ -22,6 +22,8 @@ type DistSQLMetrics struct {
 	CumulativeContentionNanos   *aggmetric.SQLCounter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
+	RunnerReqParallelCount      *metric.Counter
+	RunnerReqSequentialCount    *metric.Counter
 	MaxBytesHist                metric.IHistogram
 	CurBytesCount               *metric.Gauge
 	VecOpenFDs                  *metric.Gauge
@@ -83,6 +85,18 @@ var (
 		Name:        "sql.distsql.flows.total",
 		Help:        "Number of distributed SQL flows executed",
 		Measurement: "Flows",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRunnerReqParallelCount = metric.Metadata{
+		Name:        "sql.distsql.parallel_runner.count",
+		Help:        "Number of SetupFlowRequest RPCs executed concurrently via DistSQL runners",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRunnerReqSequentialCount = metric.Metadata{
+		Name:        "sql.distsql.sequential_runner.count",
+		Help:        "Number of SetupFlowRequest RPCs executed sequentially via the main gateway goroutine",
+		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaMemMaxBytes = metric.Metadata{
@@ -161,6 +175,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		CumulativeContentionNanos: aggmetric.NewSQLCounter(metaCumulativeContentionNanos),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
 		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
+		RunnerReqParallelCount:    metric.NewCounter(metaRunnerReqParallelCount),
+		RunnerReqSequentialCount:  metric.NewCounter(metaRunnerReqSequentialCount),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
 			Metadata:     metaMemMaxBytes,
 			Duration:     histogramWindow,
