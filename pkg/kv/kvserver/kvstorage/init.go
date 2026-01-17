@@ -443,7 +443,7 @@ func (r Replica) ID() roachpb.FullReplicaID {
 
 // Load loads the state necessary to instantiate a replica in memory.
 func (r Replica) Load(
-	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+	ctx context.Context, stateRO StateRO, raftRO RaftRO, storeID roachpb.StoreID,
 ) (LoadedReplicaState, error) {
 	ls := LoadedReplicaState{
 		ReplicaID: r.ReplicaID,
@@ -451,13 +451,13 @@ func (r Replica) Load(
 	}
 	sl := MakeStateLoader(r.Desc.RangeID)
 	var err error
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, eng, ls.TruncState); err != nil {
+	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, raftRO, ls.TruncState); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateRO, r.Desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
