@@ -301,13 +301,22 @@ func (*txnHeartbeater) importLeafFinalState(context.Context, *roachpb.LeafTxnFin
 func (h *txnHeartbeater) epochBumpedLocked() {}
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (*txnHeartbeater) createSavepointLocked(context.Context, *savepoint) {}
+//
+// NB: txnHeartbeater is above the txnSeqNumAllocator in the stack. You almost
+// surely do not want to add logic here.
+func (*txnHeartbeater) createSavepointLocked(context.Context, *savepoint) error { return nil }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
+//
+// NB: txnHeartbeater is above the txnSeqNumAllocator in the stack. You almost
+// surely do not want to add logic here.
 func (*txnHeartbeater) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (*txnHeartbeater) rollbackToSavepointLocked(context.Context, savepoint) {}
+//
+// NB: txnHeartbeater is above the txnSeqNumAllocator in the stack. You almost
+// surely do not want to add logic here.
+func (*txnHeartbeater) rollbackToSavepointLocked(context.Context, savepoint) error { return nil }
 
 // closeLocked is part of the txnInterceptor interface.
 func (h *txnHeartbeater) closeLocked() {
