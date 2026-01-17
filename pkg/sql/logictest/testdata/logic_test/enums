@@ -1479,7 +1479,6 @@ CREATE TABLE table_ifne (x INT)
 statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
-
 subtest enum_array_cast
 
 statement ok
@@ -1539,7 +1538,6 @@ query T
 SELECT * from arr_t5
 ----
 {a,b}
-
 
 # Test that if an enum value is being used by a default expression
 # or computed column, we disallow dropping it.
@@ -1627,7 +1625,6 @@ ALTER TYPE computed_abc2 DROP VALUE 'a'
 
 statement error could not remove enum value "b" as it is being used in a computed column of "t7"
 ALTER TYPE computed_abc2 DROP VALUE 'b'
-
 
 # Test that types used in arrays can be renamed.
 subtest rename_type_in_array
@@ -1921,7 +1918,6 @@ USE "DB➕➕"
 statement ok
 CREATE SCHEMA "➖➖"
 
-
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY);
 CREATE TYPE "➖➖"."MixedCase" AS ENUM ('mixed', 'Case');
@@ -1944,7 +1940,6 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 );
 
-
 skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
@@ -1955,7 +1950,6 @@ CREATE TABLE public.t (
   🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
-
 
 # Ensure that there's a database qualification on the enum type in
 # SHOW CREATE TABLE.
@@ -2037,6 +2031,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 3,
     "histo_buckets": [
         {
@@ -2095,6 +2090,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 2,
     "histo_buckets": [
         {

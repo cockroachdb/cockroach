@@ -71,6 +71,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V26_2_Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"add delayDelete column to system.table_statistics",
+		clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn.Version(),
+		upgrade.NoPrecondition,
+		tableStatisticsDelayDeleteColumnMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
