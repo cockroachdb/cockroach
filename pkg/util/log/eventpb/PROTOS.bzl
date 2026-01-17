@@ -14,6 +14,7 @@ EVENTPB_PROTOS = [
     "role_events.proto",
     "session_events.proto",
     "sql_audit_events.proto",
+    "sql_stats_events.proto",
     "cluster_events.proto",
     "job_events.proto",
     "health_events.proto",

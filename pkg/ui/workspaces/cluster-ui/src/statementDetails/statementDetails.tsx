@@ -93,6 +93,7 @@ import {
   generateCPUTimeseries,
   generateClientWaitTimeseries,
 } from "./timeseriesUtils";
+import { TableStatsTimeline } from "./tableStatsTimeline";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -963,6 +964,30 @@ export class StatementDetails extends React.Component<
               />
             </Col>
           </Row>
+
+          {/* Table Stats Collection Events Timeline */}
+          {this.props.statementDetails.table_stats_collection_events &&
+            this.props.statementDetails.table_stats_collection_events.length > 0 && (
+            <>
+              <p className={summaryCardStylesCx("summary--card__divider")} />
+              <Row gutter={24}>
+                <Col className="gutter-row" span={24}>
+                  <div className={summaryCardStylesCx("summary--card")}>
+                    <div className={summaryCardStylesCx("summary--card__title")}>
+                      Table Stats Collection Timeline
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <TableStatsTimeline
+                        tableStatsCollectionEvents={this.props.statementDetails.table_stats_collection_events}
+                        width={cardWidth * 2 + 24}
+                        height={300}
+                      />
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            </>
+          )}
         </section>
       </>
     );

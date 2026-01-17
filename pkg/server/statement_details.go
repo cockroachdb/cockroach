@@ -7,9 +7,11 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -138,11 +140,18 @@ func getStatementDetails(
 		statementTotal.Metadata.TotalCount += planStats.Metadata.TotalCount
 	}
 
+	// Get all stats collection events for all tables
+	tableStatsEvents, err := rb.getAllStatsEventForAllTables(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
 	response := &serverpb.StatementDetailsResponse{
 		Statement:                          statementTotal,
 		StatementStatisticsPerAggregatedTs: statementStatisticsPerAggregatedTs,
 		StatementStatisticsPerPlanHash:     statementStatisticsPerPlanHash,
 		InternalAppNamePrefix:              catconstants.InternalAppNamePrefix,
+		TableStatsCollectionEvents:         tableStatsEvents,
 	}
 
 	return response, nil
@@ -492,6 +501,222 @@ func getIdxAndTableName(ctx context.Context, ie *sql.InternalExecutor, indexInfo
 	tableName := tree.MustBeDString(row[0])
 	indexName := tree.MustBeDString(row[1])
 	return fmt.Sprintf("%s@%s", tableName, indexName)
+}
+
+// getAllTableDescriptorIDs extracts all unique table descriptor IDs from the statement's index usage.
+// Each element in metadata.Stats.Indexes has the format "table_oid@index_id".
+// This function returns all unique table_oid values found in the statement.
+func (rb *statementDetailsRespBuilder) getAllTableDescriptorIDs(indexes []string) []string {
+	tableIDSet := make(map[string]struct{})
+	var tableIDs []string
+
+	for _, indexInfo := range indexes {
+		parts := strings.Split(indexInfo, "@")
+		if len(parts) >= 2 {
+			tableID := parts[0]
+			if _, exists := tableIDSet[tableID]; !exists {
+				tableIDSet[tableID] = struct{}{}
+				tableIDs = append(tableIDs, tableID)
+			}
+		}
+	}
+
+	return tableIDs
+}
+
+// getAllStatsEventForAllTables returns a list of table stats collection events
+// for tables involved in the statement, sorted by info.Timestamp (oldest first).
+func (rb *statementDetailsRespBuilder) getAllStatsEventForAllTables(
+	ctx context.Context,
+) ([]*serverpb.TableStatsCollectionEvents, error) {
+	var result []*serverpb.TableStatsCollectionEvents
+	// First get the indexes used by this statement from the statistics
+	const queryFormat = `
+SELECT merge_statement_stats(statistics) AS statistics
+FROM %s %s
+GROUP BY fingerprint_id
+LIMIT 1`
+
+	var row tree.Datums
+	var err error
+
+	if rb.activityHasData {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-activity", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(`
+SELECT merge_statement_stats(statistics) AS statistics
+FROM crdb_internal.statement_activity %s
+GROUP BY fingerprint_id
+LIMIT 1`, rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If there are no results from the activity table, retrieve the data from the persisted table.
+	if row == nil || row.Len() == 0 {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-persisted", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, "crdb_internal.statement_statistics_persisted", rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If there are no results from the persisted table, retrieve the data from the combined view
+	// with data in-memory.
+	if row.Len() == 0 {
+		row, err = rb.ie.QueryRowEx(ctx, "get-statement-indexes-from-combined", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, rb.whereClause), rb.qargs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// If there are no results, return empty slice
+	if row.Len() == 0 {
+		return result, nil
+	}
+
+	// Parse the statistics to get the indexes
+	var statistics appstatspb.StatementStatistics
+	statsJSON := tree.MustBeDJSON(row[0]).JSON
+	if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &statistics); err != nil {
+		return nil, err
+	}
+
+	// Extract table descriptor IDs from the indexes used by this statement
+	tableIDStrings := rb.getAllTableDescriptorIDs(statistics.Indexes)
+	if len(tableIDStrings) == 0 {
+		return result, nil
+	}
+
+	// Convert string table IDs to uint32
+	var tableIDs []uint32
+	for _, tableIDStr := range tableIDStrings {
+		tableID, err := strconv.ParseUint(tableIDStr, 10, 32)
+		if err != nil {
+			continue // Skip invalid table IDs
+		}
+		tableIDs = append(tableIDs, uint32(tableID))
+	}
+
+	// Query events for each table
+	for _, tableID := range tableIDs {
+		var singleTableStatsCollection []serverpb.StatsCollection
+		eventRows, err := rb.ie.QueryIteratorEx(ctx, "get-stats-events-for-table", nil,
+			sessiondata.NodeUserSessionDataOverride,
+			`SELECT timestamp, "eventType", info, "uniqueID" 
+			 FROM system.eventlog 
+			 WHERE "eventType" = 'stats_collected' 
+			 AND (info::JSONB->>'DescriptorID')::INT = $1 
+			 ORDER BY (info::JSONB->>'Timestamp')::BIGINT ASC`,
+			tableID,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		var eventsPerTimestamp serverpb.StatsCollection
+		scanner := makeResultScanner(eventRows.Types())
+		var ok bool
+		for ok, err = eventRows.Next(ctx); ok; ok, err = eventRows.Next(ctx) {
+			row := eventRows.Cur()
+			if row == nil {
+				_ = eventRows.Close()
+				return nil, errors.New("unexpected null row when getting stats events")
+			}
+
+			var ts time.Time
+			if err := scanner.ScanIndex(row, 0, &ts); err != nil {
+				_ = eventRows.Close()
+				return nil, err
+			}
+
+			if len(eventsPerTimestamp.Events) == 0 {
+				eventsPerTimestamp.Timestamp = ts
+				eventsPerTimestamp.Events = make([]*serverpb.StatsCollection_Event, 0)
+			} else if eventsPerTimestamp.Timestamp.Compare(ts) < 0 {
+				singleTableStatsCollection = append(singleTableStatsCollection, eventsPerTimestamp)
+				eventsPerTimestamp = serverpb.StatsCollection{Timestamp: ts}
+				eventsPerTimestamp.Events = make([]*serverpb.StatsCollection_Event, 0)
+			}
+
+			statsEvent := &serverpb.StatsCollection_Event{}
+			statsEvent.Timestamp = ts
+
+			if err := scanner.ScanIndex(row, 1, &statsEvent.EventType); err != nil {
+				_ = eventRows.Close()
+				return nil, err
+			}
+			if err := scanner.ScanIndex(row, 2, &statsEvent.Info); err != nil {
+				_ = eventRows.Close()
+				return nil, err
+			}
+			if err := scanner.ScanIndex(row, 3, &statsEvent.UniqueID); err != nil {
+				_ = eventRows.Close()
+				return nil, err
+			}
+
+			// Parse the JSON info field to extract stats name, column IDs, and timestamp
+			var infoMap map[string]interface{}
+			if err := json.Unmarshal([]byte(statsEvent.Info), &infoMap); err != nil {
+				_ = eventRows.Close()
+				return nil, fmt.Errorf("failed to parse info JSON: %w", err)
+			}
+
+			// Extract StatsName
+			if statsName, ok := infoMap["StatsName"].(string); ok {
+				statsEvent.StatsName = statsName
+			}
+
+			// Extract ColumnIds
+			if columnIds, ok := infoMap["ColumnIds"].([]interface{}); ok {
+				statsEvent.ColumnIDs = make([]uint32, len(columnIds))
+				for i, colID := range columnIds {
+					if id, ok := colID.(float64); ok {
+						statsEvent.ColumnIDs[i] = uint32(id)
+					}
+				}
+			}
+
+			// Extract Timestamp from info
+			if timestamp, ok := infoMap["Timestamp"].(float64); ok {
+				// Timestamp is in nanoseconds since Unix epoch
+				statsEvent.InfoTimestamp = time.Unix(0, int64(timestamp))
+			}
+
+			if statsID, ok := infoMap["StatsID"].(int64); ok {
+				statsEvent.StatsID = statsID
+			}
+
+			if rowCount, ok := infoMap["RowCount"].(int64); ok {
+				statsEvent.RowCount = rowCount
+			}
+			eventsPerTimestamp.Events = append(eventsPerTimestamp.Events, statsEvent)
+		}
+
+		// Finished on all the events of the given table.
+		if err != nil {
+			return nil, err
+		}
+
+		if err := eventRows.Close(); err != nil {
+			return nil, err
+		}
+
+		if len(eventsPerTimestamp.Events) > 0 {
+			singleTableStatsCollection = append(singleTableStatsCollection, eventsPerTimestamp)
+		}
+
+		result = append(result, &serverpb.TableStatsCollectionEvents{
+			TableId:     tableID,
+			Collections: singleTableStatsCollection,
+		})
+	}
+
+	return result, nil
 }
 
 // getStatementDetailsPerPlanHash returns the list of statements

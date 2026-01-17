@@ -3736,6 +3736,59 @@ func (m *MVCCIteratorStats) AppendJSONFields(printComma bool, b redact.Redactabl
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *NewStatsCollected) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.StatsName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatsName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.StatsName)))
+		b = append(b, '"')
+	}
+
+	if len(m.ColumnIds) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ColumnIds\":["...)
+		for i, v := range m.ColumnIds {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendUint(b, uint64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	if m.StatsId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"StatsId\":"...)
+		b = strconv.AppendInt(b, int64(m.StatsId), 10)
+	}
+
+	if m.RowCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RowCount\":"...)
+		b = strconv.AppendInt(b, int64(m.RowCount), 10)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *NodeDecommissioned) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

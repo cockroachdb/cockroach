@@ -6668,3 +6668,278 @@ func (loggerKvExec) VEventf(ctx context.Context, level Level, format string, arg
 func (loggerKvExec) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_EXEC, format, args...)
 }
+
+// loggerSqlStats is the logger type for the SQL_STATS channel.
+type loggerSqlStats struct{}
+
+// SqlStats is a logger that logs to the SQL_STATS channel.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+var SqlStats loggerSqlStats
+
+// SqlStats and loggerSqlStats implement ChannelLogger.
+//
+// We do not force use of ChannelLogger when instantiating the logger
+// object above (e.g. by giving it the interface type), to ensure
+// the calls to the API methods remain inlinable in the common case.
+var _ ChannelLogger = SqlStats
+
+// Infof logs to the SQL_STATS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlStats) Infof(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_STATS, format, args...)
+}
+
+// VInfof logs to the SQL_STATS channel with severity INFO,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlStats) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.INFO, channel.SQL_STATS, format, args...)
+	}
+}
+
+// Info logs to the SQL_STATS channel with severity INFO.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlStats) Info(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.INFO, channel.SQL_STATS, msg)
+}
+
+// InfofDepth logs to the SQL_STATS channel with severity INFO,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `INFO` severity is used for informational messages that do not
+// require action.
+func (loggerSqlStats) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_STATS, format, args...)
+}
+
+// Warningf logs to the SQL_STATS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlStats) Warningf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_STATS, format, args...)
+}
+
+// VWarningf logs to the SQL_STATS channel with severity WARNING,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlStats) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.WARNING, channel.SQL_STATS, format, args...)
+	}
+}
+
+// Warning logs to the SQL_STATS channel with severity WARNING.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlStats) Warning(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.WARNING, channel.SQL_STATS, msg)
+}
+
+// WarningfDepth logs to the SQL_STATS channel with severity WARNING,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
+func (loggerSqlStats) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_STATS, format, args...)
+}
+
+// Errorf logs to the SQL_STATS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlStats) Errorf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_STATS, format, args...)
+}
+
+// VErrorf logs to the SQL_STATS channel with severity ERROR,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlStats) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.ERROR, channel.SQL_STATS, format, args...)
+	}
+}
+
+// Error logs to the SQL_STATS channel with severity ERROR.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlStats) Error(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.ERROR, channel.SQL_STATS, msg)
+}
+
+// ErrorfDepth logs to the SQL_STATS channel with severity ERROR,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
+// Other operations can continue mostly unaffected.
+func (loggerSqlStats) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_STATS, format, args...)
+}
+
+// Fatalf logs to the SQL_STATS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlStats) Fatalf(ctx context.Context, format string, args ...interface{}) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_STATS, format, args...)
+}
+
+// VFatalf logs to the SQL_STATS channel with severity FATAL,
+// if logging has been enabled for the source file where the call is
+// performed at the provided verbosity level, via the vmodule setting.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlStats) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
+	if VDepth(level, 1) {
+		logfDepth(ctx, 1, severity.FATAL, channel.SQL_STATS, format, args...)
+	}
+}
+
+// Fatal logs to the SQL_STATS channel with severity FATAL.
+// It extracts log tags from the context and logs them along with the given
+// message.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlStats) Fatal(ctx context.Context, msg string) {
+	logfDepth(ctx, 1, severity.FATAL, channel.SQL_STATS, msg)
+}
+
+// FatalfDepth logs to the SQL_STATS channel with severity FATAL,
+// offsetting the caller's stack frame by 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+//
+// The `FATAL` severity is used for situations that require an immedate, hard
+// server shutdown. A report is also sent to telemetry if telemetry
+// is enabled.
+func (loggerSqlStats) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
+	logfDepth(ctx, depth+1, severity.FATAL, channel.SQL_STATS, format, args...)
+}
+
+// Shout logs to channel SQL_STATS, and also to the real stderr if logging
+// is currently redirected to a file.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+func (loggerSqlStats) Shout(ctx context.Context, sev Severity, msg string) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_STATS, msg)
+}
+
+// Shoutf logs to channel SQL_STATS, and also to the real stderr if
+// logging is currently redirected to a file. Arguments are handled in
+// the manner of fmt.Printf.
+//
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+func (loggerSqlStats) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
+	shoutfDepth(ctx, 1, sev, channel.SQL_STATS, format, args...)
+}
+
+// VEvent either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+func (loggerSqlStats) VEvent(ctx context.Context, level Level, msg string) {
+	vEvent(ctx, false /* isErr */, 1, level, channel.SQL_STATS, msg)
+}
+
+// VEventf either logs a message to the channel (which also outputs to the
+// active trace) or to the trace alone, depending on whether the specified
+// verbosity level is active.
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+func (loggerSqlStats) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_STATS, format, args...)
+}
+
+// VEventfDepth performs the same as VEventf but checks the verbosity level
+// at the given depth in the call stack.
+// The `SQL_STATS` channel is used to report SQL statistics collection events
+func (loggerSqlStats) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
+	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_STATS, format, args...)
+}

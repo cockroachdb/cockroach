@@ -23,7 +23,7 @@ func InsertNewStats(
 ) error {
 	var err error
 	for _, statistic := range tableStats {
-		err = InsertNewStat(
+		_, _, err = InsertNewStat(
 			ctx,
 			settings,
 			txn,
@@ -60,7 +60,7 @@ func InsertNewStat(
 	h *HistogramData,
 	partialPredicate string,
 	fullStatisticID uint64,
-) error {
+) (int64, int64, error) {
 	// We must pass a nil interface{} if we want to insert a NULL.
 	var nameVal, histogramVal interface{}
 	if name != "" {
@@ -70,14 +70,14 @@ func InsertNewStat(
 		var err error
 		histogramVal, err = protoutil.Marshal(h)
 		if err != nil {
-			return err
+			return 0, 0, err
 		}
 	}
 
 	columnIDsVal := tree.NewDArray(types.Int)
 	for _, c := range columnIDs {
 		if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
-			return err
+			return 0, 0, err
 		}
 	}
 
@@ -87,7 +87,7 @@ func InsertNewStat(
 		predicateValue = partialPredicate
 	}
 
-	_, err := txn.Exec(
+	res, err := txn.QueryRow(
 		ctx, "insert-statistic", txn.KV(),
 		`INSERT INTO system.table_statistics (
 					"tableID",
@@ -100,7 +100,7 @@ func InsertNewStat(
 					histogram,
 					"partialPredicate",
 					"fullStatisticID"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING "createdAt", "statisticID"`,
 		tableID,
 		nameVal,
 		columnIDsVal,
@@ -112,5 +112,8 @@ func InsertNewStat(
 		predicateValue,
 		fullStatisticID,
 	)
-	return err
+
+	ts := res[0].(*tree.DTimestamp)
+	statsID := res[1].(*tree.DInt)
+	return ts.UnixNano(), int64(*statsID), err
 }

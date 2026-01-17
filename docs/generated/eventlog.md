@@ -3190,6 +3190,44 @@ mutation statements within the transaction that haven't been executed yet.
 | `SessionID` | SessionID is the ID of the session that initiated the transaction. | no |
 | `NumRows` | NumRows is the number of rows written/read (depending on the event type) by the transaction that reached the corresponding guardrail. | no |
 
+## SQL Statistics events
+
+Events in this category report SQL statistics collection events.
+
+They are relative to a particular SQL tenant.
+In a multi-tenant setup, copies of these statistics events are
+preserved in each tenant's own system.eventlog table.
+
+Events in this category are logged to the `SQL_STATS` channel.
+
+
+### `new_stats_collected`
+
+An event of type `new_stats_collected` is recorded when new table statistics are collected.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatsName` | The name of the table for which statistics were collected. | no |
+| `ColumnIds` |  | yes |
+| `StatsId` |  | no |
+| `RowCount` |  | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
 ## SQL User and Role operations
 
 Events in this category pertain to SQL statements that modify the

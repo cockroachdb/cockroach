@@ -228,6 +228,20 @@ func (iu *IndexesUsed) Strings() []string {
 	return res
 }
 
+// TableIDs returns the unique table IDs from all indexes used.
+func (iu *IndexesUsed) TableIDs() []cat.StableID {
+	seen := make(map[cat.StableID]struct{})
+	var tables []cat.StableID
+	for _, idx := range iu.indexes {
+		if _, exists := seen[idx.tableID]; !exists {
+			seen[idx.tableID] = struct{}{}
+			tables = append(tables, idx.tableID)
+		}
+	}
+	return tables
+}
+
+
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
