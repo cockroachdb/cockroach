@@ -1126,3 +1126,7 @@ func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val b
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }
+
+func (m *SessionDataMutator) SetDisableEmptyArrayTypeCheckingFix(val bool) {
+	m.Data.DisableEmptyArrayTypeCheckingFix = val
+}

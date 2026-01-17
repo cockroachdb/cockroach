@@ -80,6 +80,10 @@ type SemaContext struct {
 	// variadic builtins behavior.
 	UsePre_25_2VariadicBuiltins bool
 
+	// DisableEmptyArrayTypeCheckingFix, if set, indicates that we don't handle
+	// empty arrays parsed as a string in a special way during type checking.
+	DisableEmptyArrayTypeCheckingFix bool
+
 	// TestingKnobs only has effect under buildutil.CrdbTestBuild.
 	TestingKnobs struct {
 		// DisallowAlwaysNullShortCut, if set, disables short-circuiting logic
@@ -239,7 +243,7 @@ type ScalarAncestors byte
 const (
 	// FuncExprAncestor is temporarily added to ScalarAncestors while type
 	// checking the parameters of a function. Used to process
-	// RejectNestedGenerators properly.
+	// RejectNestedGenerators properly as well as some special constant cases.
 	FuncExprAncestor ScalarAncestors = 1 << iota
 
 	// WindowFuncAncestor is temporarily added to ScalarAncestors while type
