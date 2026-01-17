@@ -8,6 +8,7 @@ package backupinfo
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -937,7 +938,325 @@ func TestConvertIndexSubdirToSubdir(t *testing.T) {
 	}
 }
 
-// intToTimeWithNano converts the integer time an easy to read hlc.Timestamp
+func TestFindLatestBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	execCfg := &sql.ExecutorConfig{Settings: st}
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	testcases := []struct {
+		name       string
+		collection fakeBackupCollection
+		// expectedFullEnd is the end time of the full backup of the chain the latest
+		// backup is from.
+		expectedFullEnd int
+		expectedTimes   [2]int
+	}{
+		{
+			name: "single chain/full backup only",
+			collection: fakeBackupCollection{
+				chain(b(0, 2)),
+			},
+			expectedFullEnd: 2,
+			expectedTimes:   [2]int{0, 2},
+		},
+		{
+			name: "single chain/multiple backups",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6)),
+			},
+			expectedFullEnd: 2,
+			expectedTimes:   [2]int{4, 6},
+		},
+		{
+			name: "single chain/choose non-compacted-backup",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6), b(2, 8), b(6, 8)),
+			},
+			expectedFullEnd: 2,
+			expectedTimes:   [2]int{6, 8},
+		},
+		{
+			name: "multiple chains/latest is latest full",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4)),
+				chain(b(0, 6)),
+			},
+			expectedFullEnd: 6,
+			expectedTimes:   [2]int{0, 6},
+		},
+		{
+			name: "multiple chains/latest is latest incremental",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 8)),
+				chain(b(0, 6), b(6, 10)),
+			},
+			expectedFullEnd: 6,
+			expectedTimes:   [2]int{6, 10},
+		},
+		{
+			name: "multiple chains/latest in previous chain",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 8), b(8, 10)),
+				chain(b(0, 6)),
+			},
+			expectedFullEnd: 2,
+			expectedTimes:   [2]int{8, 10},
+		},
+		{
+			name: "multiple chains/full and inc+compacted tie",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(2, 8), b(4, 8)),
+				chain(b(0, 8)),
+			},
+			expectedFullEnd: 8,
+			expectedTimes:   [2]int{0, 8},
+		},
+		{
+			name: "multiple chains/choose non-compacted-backup in older chain",
+			collection: fakeBackupCollection{
+				chain(b(0, 2), b(2, 4), b(4, 6), b(2, 10), b(6, 10)),
+				chain(b(0, 8)),
+			},
+			expectedFullEnd: 2,
+			expectedTimes:   [2]int{6, 10},
+		},
+	}
+
+	for idx, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			collectionURI := fmt.Sprintf("%s/%d", collectionURI, idx)
+			externalStorage, err := cloud.ExternalStorageFromURI(
+				ctx,
+				collectionURI,
+				base.ExternalIODirConfig{},
+				st,
+				blobs.TestBlobServiceClient(dir),
+				username.RootUserName(),
+				nil, /* db */
+				nil, /* limiters */
+				cloud.NilMetrics,
+			)
+			require.NoError(t, err)
+			makeExternalStorage := func(
+				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+			) (cloud.ExternalStorage, error) {
+				return externalStorage, nil
+			}
+
+			tc.collection.writeIndexes(t, ctx, execCfg, makeExternalStorage, collectionURI)
+			latest, id, err := FindLatestBackup(ctx, externalStorage)
+			require.NoError(t, err)
+			expectedStart := intToTimeWithNano(tc.expectedTimes[0])
+			expectedEnd := intToTimeWithNano(tc.expectedTimes[1])
+			require.Equal(t, expectedStart, latest.StartTime, "start time mismatch")
+			require.Equal(t, expectedEnd, latest.EndTime, "end time mismatch")
+			fullEnd, _, err := DecodeBackupID(id)
+			require.NoError(t, err)
+			expectedFullEnd := intToTime(tc.expectedFullEnd).GoTime()
+			require.Equal(t, expectedFullEnd, fullEnd, "full backup end time mismatch")
+		})
+	}
+}
+
+func TestEncodeDecodeBackupID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We truncate to 10ms precision since that's the precision we use in the ID.
+	precision := 10 * time.Millisecond
+	fullEnd := time.Now().UTC().Truncate(precision)
+
+	t.Run("full backup ID", func(t *testing.T) {
+		endTime := fullEnd
+		id := encodeBackupID(fullEnd, endTime)
+		decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+		require.NoError(t, err)
+		require.Equal(t, fullEnd, decodedFullEnd)
+		require.Equal(t, endTime, decodedEnd)
+	})
+
+	t.Run("incremental backup ID", func(t *testing.T) {
+		// We test in increasing differences up to one week to stress test the
+		// XOR encoding.
+		var delta time.Duration
+		for i := 0; i < 8; i++ {
+			// This effectively adds one more random digit to the delta starting at
+			// the minimum precision.
+			delta += time.Duration(int(math.Pow10(i))*rand.Intn(10)) * precision
+			t.Run(fmt.Sprintf("delta=%s", delta), func(t *testing.T) {
+				endTime := fullEnd.Add(delta)
+				id := encodeBackupID(fullEnd, endTime)
+				decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+				require.NoError(t, err)
+				require.Equal(t, fullEnd, decodedFullEnd)
+				require.Equal(t, endTime, decodedEnd)
+			})
+		}
+	})
+
+	t.Run("invalid ID", func(t *testing.T) {
+		invalidIDs := map[string]string{
+			"empty":          "",
+			"invalid base64": "#!@($*%!)",
+			"too long":       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+		}
+		for name, id := range invalidIDs {
+			t.Run(name, func(t *testing.T) {
+				_, _, err := DecodeBackupID(id)
+				require.Error(t, err)
+			})
+		}
+	})
+}
+
+func TestResolveBackupIDtoIndex(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	execCfg := &sql.ExecutorConfig{Settings: st}
+	const collectionURI = "nodelocal://1/backup"
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	externalStorage, err := cloud.ExternalStorageFromURI(
+		ctx,
+		collectionURI,
+		base.ExternalIODirConfig{},
+		st,
+		blobs.TestBlobServiceClient(dir),
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	require.NoError(t, err)
+	makeExternalStorage := func(
+		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return externalStorage, nil
+	}
+
+	fakeBackupCollection{
+		{
+			// Simple chain.
+			b(0, 2), b(2, 4), b(4, 6),
+		},
+		{
+			// Single compacted backup.
+			b(0, 8), b(8, 10), b(10, 12), b(8, 14), b(12, 14),
+		},
+		{
+			// Double compacted backup, same end time.
+			b(0, 16), b(16, 18), b(18, 20), b(20, 22), b(18, 26), b(20, 26), b(22, 26), b(26, 28),
+		},
+		{
+			// Duplicate end time from previous chain.
+			b(0, 28),
+		},
+	}.writeIndexes(t, ctx, execCfg, makeExternalStorage, collectionURI)
+
+	testcases := []struct {
+		name string
+		// endTimesToID is a tuple of [fullEnd, end] times to construct the ID from.
+		endTimesToID [2]int
+		// expectedTimes is the tuple of [start, end] times expected in the resolved
+		// index.
+		expectedTimes [2]int
+	}{
+		{
+			name:          "simple chain/full backup",
+			endTimesToID:  [2]int{2, 2},
+			expectedTimes: [2]int{0, 2},
+		},
+		{
+			name:          "simple chain/incremental backup",
+			endTimesToID:  [2]int{2, 4},
+			expectedTimes: [2]int{2, 4},
+		},
+		{
+			name:          "single compacted backup",
+			endTimesToID:  [2]int{8, 14},
+			expectedTimes: [2]int{12, 14},
+		},
+		{
+			name:          "doubly compacted backup",
+			endTimesToID:  [2]int{16, 26},
+			expectedTimes: [2]int{22, 26},
+		},
+		{
+			name:          "incremental covered by compacted backup",
+			endTimesToID:  [2]int{8, 12},
+			expectedTimes: [2]int{10, 12},
+		},
+		{
+			name:          "duplicate end time from prev chain chain (choose prev)",
+			endTimesToID:  [2]int{16, 28},
+			expectedTimes: [2]int{26, 28},
+		},
+		{
+			name:          "duplicate end time from prev chain chain (choose new)",
+			endTimesToID:  [2]int{28, 28},
+			expectedTimes: [2]int{0, 28},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			fullEnd := intToTime(tc.endTimesToID[0]).GoTime()
+			endTime := intToTime(tc.endTimesToID[1]).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			index, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.NoError(t, err)
+
+			expectedTS := [2]hlc.Timestamp{
+				intToTimeWithNano(tc.expectedTimes[0]),
+				intToTimeWithNano(tc.expectedTimes[1]),
+			}
+			actualTS := [2]hlc.Timestamp{index.StartTime, index.EndTime}
+			require.Equal(t, expectedTS, actualTS)
+		})
+	}
+
+	t.Run("bad IDs", func(t *testing.T) {
+		t.Run("no matching full subdir", func(t *testing.T) {
+			fullEnd := intToTime(100).GoTime()
+			endTime := intToTime(200).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
+		})
+
+		t.Run("no matching backup end time", func(t *testing.T) {
+			fullEnd := intToTime(28).GoTime()
+			endTime := intToTime(30).GoTime()
+			id := encodeBackupID(fullEnd, endTime)
+
+			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
+		})
+	})
+}
+
+// intToTime converts the integer time to an easy-to-read hlc.Timestamp
+// (i.e. XX000000000). We use ints to more easily write times for test cases.
+func intToTime(t int) hlc.Timestamp {
+	if t == 0 {
+		return hlc.Timestamp{}
+	}
+	// Value needs to be large enough to be represented in milliseconds and be
+	// larger than GoTime zero.
+	return hlc.Timestamp{WallTime: int64(t) * 1e9}
+}
+
+// intToTimeWithNano converts the integer time to an easy-to-read hlc.Timestamp
 // (i.e. XX000000000XX). Note that the int is also added as nanoseconds to
 // stress backup's handling of nanosecond precision timestamps. We use ints to
 // more easily write times for test cases.
@@ -945,9 +1264,9 @@ func intToTimeWithNano(t int) hlc.Timestamp {
 	if t == 0 {
 		return hlc.Timestamp{}
 	}
-	// Value needs to be large enough to be represented in milliseconds and be
-	// larger than GoTime zero.
-	return hlc.Timestamp{WallTime: int64(t)*1e9 + int64(t)}
+	ts := intToTime(t)
+	ts.WallTime += int64(t)
+	return ts
 }
 
 // chain is a helper to concisely create a fakeBackupChain.
