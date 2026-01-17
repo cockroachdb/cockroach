@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
@@ -352,10 +353,19 @@ func (r *avroRecordStream) fill(sz int) {
 	// To avoid this unpleasant situation, we never reset the head of our
 	// buffer.
 	sink := bytes.NewBuffer(r.buf)
-	_, r.err = io.CopyN(sink, r.input, int64(sz))
+	n, err := io.CopyN(sink, r.input, int64(sz))
 	r.buf = sink.Bytes()
 
+	// Debug logging for AVRO import data loss investigation.
+	if err != nil && err != io.EOF {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: AVRO fill() requested=%d copied=%d err=%v",
+			sz, n, err)
+	}
+
+	r.err = err
 	if r.err == io.EOF {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: AVRO fill() EOF copied=%d buflen=%d",
+			n, len(r.buf))
 		r.eof = true
 		r.err = nil
 	}
@@ -368,7 +378,15 @@ func (r *avroRecordStream) Scan() bool {
 	}
 
 	r.readNative()
-	return r.err == nil && (!r.eof || r.row != nil)
+	result := r.err == nil && (!r.eof || r.row != nil)
+
+	// Debug logging for AVRO import data loss investigation.
+	if !result {
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: Scan() RETURNING_FALSE eof=%t err=%v",
+			r.eof, r.err)
+	}
+
+	return result
 }
 
 // Err implements importRowProducer interface.
@@ -389,10 +407,11 @@ func (r *avroRecordStream) readNative() {
 	r.row = nil
 
 	canReadMoreData := func() bool {
-		return !r.eof && len(r.buf) < r.maxBufSize
+		return !r.eof && r.err == nil && len(r.buf) < r.maxBufSize
 	}
 
-	for sz := r.readSize; r.row == nil && (len(r.buf) > 0 || canReadMoreData()); sz *= 2 {
+	// Loop until we either have a row or we we have a an incomplete row and can't read more data.
+	for sz := r.readSize; r.row == nil; sz *= 2 {
 		r.fill(sz)
 
 		if r.trimLeft {
@@ -402,15 +421,25 @@ func (r *avroRecordStream) readNative() {
 		if len(r.buf) > 0 {
 			r.row, remaining, decodeErr = r.decode()
 		}
-		// If we've already read all we can (either to eof or to max size), then
-		// any error during decoding should just be returned as an error.
-		if decodeErr != nil && (r.eof || len(r.buf) > r.maxBufSize) {
+
+		// If we have a partial or empty row and can't read more data, bail out.
+		if (decodeErr != nil || len(r.buf) == 0) && !canReadMoreData() {
 			break
 		}
 	}
 
+	if r.err != nil {
+		// Debug logging for AVRO import data loss investigation.
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: readNative() EXIT_WITH_READ_ERROR buflen=%d eof=%t err=%v",
+			len(r.buf), r.eof, r.err)
+		return
+	}
+
 	if decodeErr != nil {
 		r.err = decodeErr
+		// Debug logging for AVRO import data loss investigation.
+		log.Dev.Infof(context.TODO(), "IMPORT_DEBUG: readNative() EXIT_WITH_DECODE_ERROR buflen=%d eof=%t err=%v",
+			len(r.buf), r.eof, decodeErr)
 		return
 	}
 
