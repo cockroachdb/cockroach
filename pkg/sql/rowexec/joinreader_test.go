@@ -1218,8 +1218,6 @@ func TestJoinReaderDiskSpill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 161212)
-
 	ctx := context.Background()
 
 	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1230,7 +1228,7 @@ func TestJoinReaderDiskSpill(t *testing.T) {
 	// a disk spill.
 	key := 0
 	stringColVal := "0123456789"
-	numRows := 100
+	numRows := 1000
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE test;
 CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
