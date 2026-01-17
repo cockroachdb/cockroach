@@ -63,6 +63,7 @@ var goMemLimit int64
 var tenantIDFile string
 var localityFile string
 var encryptionSpecs encryptionSpecList
+var useDRPC bool
 
 // initPreFlagsDefaults initializes the values of the global variables
 // defined above.
@@ -96,6 +97,8 @@ func initPreFlagsDefaults() {
 
 	tenantIDFile = ""
 	localityFile = ""
+
+	useDRPC = false
 }
 
 // AddPersistentPreRunE add 'fn' as a persistent pre-run function to 'cmd'.
@@ -464,7 +467,7 @@ func init() {
 
 		cliflagcfg.BoolFlag(f, &serverCfg.AcceptProxyProtocolHeaders, cliflags.AcceptProxyProtocolHeaders)
 
-		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
 		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 
 		// Certificates directory. Use a server-specific flag and value to ignore environment
@@ -623,6 +626,8 @@ func init() {
 		f := initCmd.Flags()
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualized, cliflags.Virtualized)
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualizedEmpty, cliflags.VirtualizedEmpty)
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -778,6 +783,8 @@ func init() {
 	// Zip command.
 	{
 		f := debugZipCmd.Flags()
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 		cliflagcfg.BoolFlag(f, &zipCtx.redactLogs, cliflags.ZipRedactLogs)
 		_ = f.MarkDeprecated(cliflags.ZipRedactLogs.Name, "use --"+cliflags.ZipRedact.Name+" instead")
 		cliflagcfg.BoolFlag(f, &zipCtx.redact, cliflags.ZipRedact)
@@ -787,6 +794,12 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
+	}
+	// List-files command
+	{
+		f := debugListFilesCmd.Flags()
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
@@ -806,10 +819,13 @@ func init() {
 	cliflagcfg.VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionChecks, cliflags.NodeDecommissionChecks)
 	cliflagcfg.BoolFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionDryRun, cliflags.NodeDecommissionDryRun)
 
-	// Decommission and recommission share --self.
+	// Decommission and recommission share --self and --use-new-rpc.
 	for _, cmd := range []*cobra.Command{decommissionNodeCmd, recommissionNodeCmd} {
 		f := cmd.Flags()
 		cliflagcfg.BoolFlag(f, &nodeCtx.nodeDecommissionSelf, cliflags.NodeDecommissionSelf)
+
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// node drain command.
@@ -818,6 +834,9 @@ func init() {
 		cliflagcfg.DurationFlag(f, &drainCtx.drainWait, cliflags.DrainWait)
 		cliflagcfg.BoolFlag(f, &drainCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 		cliflagcfg.BoolFlag(f, &drainCtx.shutdown, cliflags.NodeDrainShutdown)
+
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// Commands that establish a SQL connection.
@@ -995,6 +1014,8 @@ func init() {
 	{
 		f := debugGossipValuesCmd.Flags()
 		cliflagcfg.StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile)
+		cliflagcfg.BoolFlag(f, &useDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	{
 		f := debugBallastCmd.Flags()
