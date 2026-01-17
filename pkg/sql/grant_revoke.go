@@ -168,6 +168,7 @@ type changePrivilegesNode struct {
 
 type changeDescriptorBackedPrivilegesNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	changePrivilegesNode
 	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, username.SQLUsername) (changed bool, retErr error)
 }

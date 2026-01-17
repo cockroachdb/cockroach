@@ -20,6 +20,7 @@ import (
 type cancelQueriesNode struct {
 	singleInputPlanNode
 	rowsAffectedOutputHelper
+	nonReusablePlanNode
 	ifExists bool
 }
 

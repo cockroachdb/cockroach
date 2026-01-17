@@ -307,6 +307,7 @@ func (p CDCExpressionPlan) CollectPlanColumns(
 // (verified below).
 type cdcValuesNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	source   execinfra.RowSource
 	datumRow []tree.Datum
 	colOrd   []int

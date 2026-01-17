@@ -31,6 +31,7 @@ import (
 // the output of EXPLAIN given an explain.Plan.
 type explainPlanNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	options *tree.ExplainOptions

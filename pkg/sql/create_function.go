@@ -36,6 +36,7 @@ type functionDependencies map[catid.DescID]struct{}
 
 type createFunctionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	cf *tree.CreateRoutine
 
 	dbDesc       catalog.DatabaseDescriptor

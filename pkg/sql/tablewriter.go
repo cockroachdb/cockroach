@@ -108,12 +108,10 @@ func (tb *tableWriterBase) init(
 	if txn.Type() != kv.RootTxn {
 		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
 	}
-	tb.txn = txn
-	tb.desc = tableDesc
-	tb.lockTimeout = 0
-	tb.deadlockTimeout = 0
-	tb.originID = 0
-	tb.originTimestamp = hlc.Timestamp{}
+	*tb = tableWriterBase{
+		txn:  txn,
+		desc: tableDesc,
+	}
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout

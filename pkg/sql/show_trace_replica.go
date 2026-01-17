@@ -30,6 +30,7 @@ import (
 // this then.
 type showTraceReplicaNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	run struct {
