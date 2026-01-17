@@ -726,24 +726,41 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	}
 
 	for _, p := range priorities {
-		testutils.SucceedsSoon(t, func() error {
+		// We combine running the transaction and querying for the insight into a
+		// single retry loop. This handles the case where the transaction
+		// experiences accidental contention, causing the insight to be filtered
+		// out (contention insights require resolved blocking txn fingerprints).
+		// By retrying both together, we get a fresh transaction that hopefully
+		// won't experience contention.
+		testutils.SucceedsWithin(t, func() error {
 			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, p.setPriorityQuery)
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, p.query)
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.1);")
-			require.NoError(t, errTxn)
-			errTxn = tx.Commit()
-			require.NoError(t, errTxn)
-			return nil
-		})
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
-		testutils.SucceedsSoon(t, func() error {
+			errTxn = tx.Commit()
+			if errTxn != nil {
+				return errTxn
+			}
+
 			row := conn.QueryRowContext(ctx, "SELECT "+
 				"query, "+
 				"priority, "+
@@ -772,7 +789,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 			}
 
 			return nil
-		})
+		}, time.Minute)
 	}
 }
 
