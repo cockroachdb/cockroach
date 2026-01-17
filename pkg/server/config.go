@@ -798,21 +798,31 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
+		// For now, apply for the most part identical options to both engines.
+		// TODO(#97610): make these configurable.
+		//
 		// TODO(sep-raft-log): store Attributes only in the LogEngine or the
 		// overarching kvstorage.Engines.
-		storageConfigOpts := []storage.ConfigOption{
+		var storageConfigOpts []storage.ConfigOption
+		var logStorageConfigOpts []storage.ConfigOption
+		addStateOpt := func(opt ...storage.ConfigOption) {
+			storageConfigOpts = append(storageConfigOpts, opt...)
+		}
+		addLogOpt := func(opt ...storage.ConfigOption) {
+			logStorageConfigOpts = append(logStorageConfigOpts, opt...)
+		}
+		addCfgOpt := func(opt ...storage.ConfigOption) {
+			addStateOpt(opt...)
+			addLogOpt(opt...)
+		}
+		addCfgOpt(
 			walFailoverConfig,
 			storage.Attributes(roachpb.Attributes{Attrs: spec.Attributes}),
 			storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 			storage.BlockConcurrencyLimitDivisor(len(cfg.Stores.Specs)),
 			storage.MemTableStopWritesThreshold(stopWritesThreshold),
-		}
-		if len(storeKnobs.EngineKnobs) > 0 {
-			storageConfigOpts = append(storageConfigOpts, storeKnobs.EngineKnobs...)
-		}
-		addCfgOpt := func(opt storage.ConfigOption) {
-			storageConfigOpts = append(storageConfigOpts, opt)
-		}
+		)
+		addCfgOpt(storeKnobs.EngineKnobs...)
 
 		if spec.InMemory {
 			var sizeInBytes int64
@@ -895,18 +905,48 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}))
 			}
 		}
+		const logEngEnvVar = "COCKROACH_LOG_ENGINE_PATH_UNSAFE"
+		logEngPath := envutil.EnvOrDefaultString(logEngEnvVar, "")
+		enabled := logEngPath != ""
+		if enabled {
+			addStateOpt(storage.DisableWAL())
+		}
+
 		eng, err := storage.Open(ctx, storeEnvs[i], cfg.Settings, storageConfigOpts...)
 		if err != nil {
 			return Engines{}, err
+		}
+		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
+
+		if enabled {
+			if len(cfg.Stores.Specs) != 1 {
+				panic("separate engines not supported for multi-store") // TODO(sep-raft-log): support
+			}
+			spec := spec
+			spec.Path = logEngPath
+			env, err := fs.InitEnvFromStoreSpec(ctx, spec, fs.EnvConfig{
+				RW:      fs.ReadWrite,
+				Version: cfg.Settings.Version,
+			}, stickyRegistry, cfg.DiskWriteStats)
+			if err != nil {
+				return Engines{}, err
+			}
+
+			logEng, err := storage.Open(ctx, env, cfg.Settings, logStorageConfigOpts...)
+			if err != nil {
+				env.Close()
+				return Engines{}, err
+			}
+			detail(redact.Sprintf("store %d: log engine %+v", i, logEng.Properties()))
+			engines = append(engines, kvstorage.MakeSeparatedEnginesForTesting(eng, logEng))
+		} else {
+			engines = append(engines, kvstorage.MakeEngines(eng))
 		}
 		// Nil out the store env; the engine has taken responsibility for Closing
 		// it.
 		// TODO(jackson): Refactor to either reference count references to the env,
 		// or leave ownership with the caller of Open.
 		storeEnvs[i] = nil
-		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
-
-		engines = append(engines, kvstorage.MakeEngines(eng))
 	}
 
 	if fileCache != nil {
