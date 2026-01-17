@@ -56,6 +56,10 @@ type SupportManagerMetrics struct {
 
 	ReceiveQueueSize  *metric.Gauge
 	ReceiveQueueBytes *metric.Gauge
+
+	HeartbeatPersistDuration       metric.IHistogram
+	MessageHandlePersistDuration   metric.IHistogram
+	SupportWithdrawPersistDuration metric.IHistogram
 }
 
 func newSupportManagerMetrics() *SupportManagerMetrics {
@@ -78,6 +82,30 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		SupportForStores:  metric.NewGauge(metaSupportForStores),
 		ReceiveQueueSize:  metric.NewGauge(metaReceiveQueueSize),
 		ReceiveQueueBytes: metric.NewGauge(metaReceiveQueueBytes),
+		HeartbeatPersistDuration: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaHeartbeatPersistDuration,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+			},
+		),
+		MessageHandlePersistDuration: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaMessageHandlePersistDuration,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+			},
+		),
+		SupportWithdrawPersistDuration: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaSupportWithdrawPersistDuration,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+			},
+		),
 	}
 }
 
@@ -205,6 +233,24 @@ var (
 	metaCallbacksProcessingDuration = metric.Metadata{
 		Name:        "storeliveness.callbacks.processing_duration",
 		Help:        "Duration of support withdrawal callback processing",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaHeartbeatPersistDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat.persist_duration",
+		Help:        "Latency of persisting Store Liveness requester meta before sending heartbeats",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaMessageHandlePersistDuration = metric.Metadata{
+		Name:        "storeliveness.message_handle.persist_duration",
+		Help:        "Latency of persisting Store Liveness state when handling incoming messages",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSupportWithdrawPersistDuration = metric.Metadata{
+		Name:        "storeliveness.support_withdraw.persist_duration",
+		Help:        "Latency of persisting Store Liveness state when withdrawing support",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
