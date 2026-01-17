@@ -865,7 +865,7 @@ use_stmt ::=
 	'USE' var_value
 
 show_backup_stmt ::=
-	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list opt_show_backup_time_filter_clause
+	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list opt_show_backups_time_filter_clause opt_with_show_backups_options
 	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
 
@@ -1478,6 +1478,7 @@ unreserved_keyword ::=
 	| 'RETENTION'
 	| 'RETURN'
 	| 'RETURNS'
+	| 'REVISION'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'ROLE'
@@ -2212,11 +2213,16 @@ var_value ::=
 	a_expr
 	| extra_var_value
 
-opt_show_backup_time_filter_clause ::=
+opt_show_backups_time_filter_clause ::=
 	'NEWER' 'THAN' a_expr
 	| 'OLDER' 'THAN' a_expr
 	| 'NEWER' 'THAN' a_expr 'OLDER' 'THAN' a_expr
 	| 'OLDER' 'THAN' a_expr 'NEWER' 'THAN' a_expr
+	| 
+
+opt_with_show_backups_options ::=
+	'WITH' show_backups_options
+	| 'WITH' 'OPTIONS' '(' show_backups_options ')'
 	| 
 
 show_backup_details ::=
@@ -3158,6 +3164,9 @@ extra_var_value ::=
 	'ON'
 	| 'NONE'
 	| cockroachdb_extra_reserved_keyword
+
+show_backups_options ::=
+	'REVISION' 'START' 'TIME'
 
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
@@ -4473,6 +4482,7 @@ bare_label_keywords ::=
 	| 'RETENTION'
 	| 'RETURN'
 	| 'RETURNS'
+	| 'REVISION'
 	| 'REVISION_HISTORY'
 	| 'REVOKE'
 	| 'RIGHT'
