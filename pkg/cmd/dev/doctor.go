@@ -160,6 +160,10 @@ Please run ` + "`xcode-select --install`."
 			if _, err := os.Stat("bin/.submodules-initialized"); err == nil {
 				return ""
 			}
+			// If this is a jj workspace (has .jj/working_copy), skip git submodule check
+			if _, err := os.Stat(".jj/working_copy"); err == nil {
+				return ""
+			}
 			if output, err := d.exec.CommandContextSilent(ctx, "git", "submodule", "update", "--init", "--recursive"); err != nil {
 				return fmt.Sprintf("failed to run `git submodule update --init --recursive`: %+v: got output %s", err, string(output))
 			}
@@ -176,6 +180,10 @@ Please run ` + "`xcode-select --install`."
 		name: "githooks",
 		check: func(d *dev, ctx context.Context, cfg doctorConfig) string {
 			if _, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--is-inside-work-tree"); err != nil {
+				// If this is a jj workspace (has .jj/working_copy), skip git hooks setup
+				if _, jjErr := os.Stat(".jj/working_copy"); jjErr == nil {
+					return ""
+				}
 				return err.Error()
 			}
 			stdout, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-path", "hooks")
