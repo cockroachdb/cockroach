@@ -124,6 +124,7 @@ func (s *sstIndexBackfillSink) collectNewManifests() []jobspb.IndexBackfillSSTMa
 			FileSize:       f.FileSize,
 			RowSample:      append(roachpb.Key(nil), f.RowSample...),
 			WriteTimestamp: &ts,
+			KeyCount:       f.KeyCount,
 		}
 		outputs = append(outputs, output)
 	}

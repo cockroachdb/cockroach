@@ -107,7 +107,7 @@ func (m *manifestTrackingAllocator) AddFile(
 }
 
 func (m *manifestTrackingAllocator) CommitFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
 	m.files.SST = append(m.files.SST, &bulksst.SSTFileInfo{
 		URI:       uri,
@@ -115,6 +115,7 @@ func (m *manifestTrackingAllocator) CommitFile(
 		EndKey:    append([]byte(nil), span.EndKey...),
 		FileSize:  fileSize,
 		RowSample: append([]byte(nil), rowSample...),
+		KeyCount:  keyCount,
 	})
 	m.files.RowSamples = append(m.files.RowSamples, string(rowSample))
 }

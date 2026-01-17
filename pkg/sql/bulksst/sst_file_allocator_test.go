@@ -32,7 +32,7 @@ func TestRowSampleReservoirCapsSamples(t *testing.T) {
 		key := roachpb.Key(fmt.Sprintf("key-%04d", i))
 		expected[string(key)] = struct{}{}
 		span := roachpb.Span{Key: key, EndKey: key.Next()}
-		base.addFile(fmt.Sprintf("uri-%d", i), span, key, 1)
+		base.addFile(fmt.Sprintf("uri-%d", i), span, key, 1, 1)
 	}
 
 	require.Equal(t, total, base.totalRowSamples)
@@ -52,8 +52,8 @@ func TestRowSampleSkipsEmptyKeys(t *testing.T) {
 	key := roachpb.Key("some-key")
 	span := roachpb.Span{Key: key, EndKey: key.Next()}
 
-	base.addFile("uri-1", span, key, 1)
-	base.addFile("uri-2", span, nil, 1)
+	base.addFile("uri-1", span, key, 1, 1)
+	base.addFile("uri-2", span, nil, 1, 1)
 
 	require.Len(t, base.fileInfo.RowSamples, 1)
 	require.Equal(t, string(key), base.fileInfo.RowSamples[0])
@@ -95,9 +95,9 @@ func (m *mockFailingAllocator) AddFile(ctx context.Context) (objstorage.Writable
 }
 
 func (m *mockFailingAllocator) CommitFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
-	m.fileAllocatorBase.addFile(uri, span, rowSample, fileSize)
+	m.fileAllocatorBase.addFile(uri, span, rowSample, fileSize, keyCount)
 }
 
 type failingWritable struct {

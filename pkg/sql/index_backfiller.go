@@ -404,6 +404,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			EndKey:    append(roachpb.Key(nil), manifest.Span.EndKey...),
 			FileSize:  manifest.FileSize,
 			RowSample: append(roachpb.Key(nil), manifest.RowSample...),
+			KeyCount:  manifest.KeyCount,
 		})
 		if len(manifest.RowSample) > 0 {
 			rowSamples = append(rowSamples, string(manifest.RowSample))
@@ -506,8 +507,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 				EndKey: append([]byte(nil), sst.EndKey...),
 			}
 			newManifests = append(newManifests, jobspb.IndexBackfillSSTManifest{
-				URI:  sst.URI,
-				Span: &span,
+				URI:      sst.URI,
+				Span:     &span,
+				KeyCount: sst.KeyCount,
 			})
 		}
 		progress.SSTManifests = newManifests

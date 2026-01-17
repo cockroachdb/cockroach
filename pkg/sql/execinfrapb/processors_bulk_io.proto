@@ -620,6 +620,8 @@ message BulkMergeSpec {
     optional bytes start_key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     // end_key is the last key in the SST.
     optional bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    // key_count is the number of keys in this SST file.
+    optional uint64 key_count = 4 [(gogoproto.nullable) = false];
   };
 
   // ssts is the list of input SSTs to merge.

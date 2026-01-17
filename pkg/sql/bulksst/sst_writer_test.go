@@ -138,7 +138,7 @@ func (f *fakeFileAllocator) AddFile(ctx context.Context) (objstorage.Writable, s
 }
 
 func (f *fakeFileAllocator) CommitFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
 	f.spans = append(f.spans, span)
 }
