@@ -141,6 +141,6 @@ func (ex *connExecutor) execShowCommitTimestampInNoTxnState(
 func writeShowCommitTimestampRow(
 	ctx context.Context, res RestrictedCommandResult, ts hlc.Timestamp,
 ) error {
-	res.SetColumns(ctx, colinfo.ShowCommitTimestampColumns)
+	res.SetColumns(ctx, colinfo.ShowCommitTimestampColumns, false /* skipRowDescription */)
 	return res.AddRow(ctx, tree.Datums{eval.TimestampToDecimalDatum(ts)})
 }
