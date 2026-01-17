@@ -392,7 +392,7 @@ func TestKafkaTopicNameProvided(t *testing.T) {
 		t, noTopicPrefix, topicOverride, p, "particular0", "particular1")
 	defer cleanup()
 
-	//all messages go to the general topic
+	// all messages go to the general topic
 	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
 	m := <-p.inputCh
 	require.Equal(t, topicOverride, m.Topic)
@@ -410,7 +410,7 @@ func TestKafkaTopicNameWithPrefix(t *testing.T) {
 		t, topicPrefix, topicOverride, p, "particular0", "particular1")
 	defer clenaup()
 
-	//the prefix is applied and the name is escaped
+	// the prefix is applied and the name is escaped
 	require.NoError(t, sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc, nil))
 	m := <-p.inputCh
 	require.Equal(t, `prefix-_u2603_`, m.Topic)
@@ -1002,7 +1002,7 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 	referencePartitions[longString2] = 592
 
 	partitioner := newChangefeedPartitioner("topic1")
-	kgoPartitioner := newKgoChangefeedPartitioner().ForTopic("topic1")
+	kgoPartitioner := newKgoChangefeedPartitioner("").ForTopic("topic1")
 
 	for key, expected := range referencePartitions {
 		actual, err := partitioner.Partition(&sarama.ProducerMessage{Key: sarama.ByteEncoder(key)}, 1031)
