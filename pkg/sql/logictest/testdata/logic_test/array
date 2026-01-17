@@ -2501,3 +2501,21 @@ SELECT * FROM t95158 WHERE c !~ ANY (ARRAY['x']::STRING[])
 query I
 SELECT * FROM t95158 WHERE c !~ SOME (ARRAY['x']::STRING[])
 ----
+
+# Regression tests for internal errors on an empty array string (#89969).
+statement error unknown signature
+SELECT array_length('{}', 1);
+
+query I
+SELECT array_length('{}'::text[], 1);
+----
+NULL
+
+statement error unknown signature
+SELECT cardinality('{}');
+
+statement error unknown signature
+SELECT width_bucket(true, '{}');
+
+statement error unknown signature
+SELECT array_to_string('{}', 'foo');
