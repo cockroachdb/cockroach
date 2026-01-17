@@ -274,6 +274,10 @@ func ColVecToDatumAndDeselect(
 		ColVecToDatum(converted, col, length, sel, da)
 		return
 	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-col.Nulls().Count())
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		vecToDatum(converted, col, length, sel, da, true, true, true)
@@ -291,6 +295,10 @@ func ColVecToDatum(
 ) {
 	if length == 0 {
 		return
+	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-col.Nulls().Count())
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()

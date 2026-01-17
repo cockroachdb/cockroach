@@ -250,3 +250,20 @@ func TestNullsOr(t *testing.T) {
 		}
 	}
 }
+
+func TestNullsCount(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+	randomNulls := NewNulls(BatchSize())
+	for i := 0; i < BatchSize(); i++ {
+		if rng.Float64() < 0.5 {
+			randomNulls.SetNull(i)
+		}
+	}
+	var expected int
+	for i := 0; i < BatchSize(); i++ {
+		if randomNulls.NullAt(i) {
+			expected++
+		}
+	}
+	require.Equal(t, expected, randomNulls.Count())
+}
