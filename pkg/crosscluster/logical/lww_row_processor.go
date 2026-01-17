@@ -352,10 +352,14 @@ func (srp *sqlRowProcessor) ProcessRow(
 		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
 	}
 
-	row, err := srp.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+	row, status, err := srp.decoder.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		srp.lastRow = cdcevent.Row{}
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
+	}
+	if status != cdcevent.DecodeOK {
+		srp.lastRow = cdcevent.Row{}
+		return batchStats{}, errors.Newf("unexpected decode status: %v", status)
 	}
 	srp.lastRow = row
 
@@ -367,12 +371,15 @@ func (srp *sqlRowProcessor) processParsedRow(
 ) (batchStats, error) {
 	var parsedBeforeRow *cdcevent.Row
 	if srp.querier.RequiresParsedBeforeRow(row.TableID) {
-		before, err := srp.decoder.DecodeKV(ctx, roachpb.KeyValue{
+		before, beforeStatus, err := srp.decoder.DecodeKV(ctx, roachpb.KeyValue{
 			Key:   key,
 			Value: prevValue,
 		}, cdcevent.PrevRow, prevValue.Timestamp, false)
 		if err != nil {
 			return batchStats{}, err
+		}
+		if beforeStatus != cdcevent.DecodeOK {
+			return batchStats{}, errors.Newf("unexpected decode status: %v", beforeStatus)
 		}
 		parsedBeforeRow = &before
 	}
