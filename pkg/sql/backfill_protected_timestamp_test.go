@@ -353,9 +353,18 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 			for _, sql := range []string{
 				fmt.Sprintf("CREATE TABLE %s(n int primary key)", tc.tableName),
 				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5", tc.tableName),
-				fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(1, %d)", tc.tableName, initialRowCount),
 			} {
 				r.Exec(t, sql)
+			}
+			// Insert initial rows in batches to avoid long-running transactions
+			// that could be affected by the aggressive gc.ttlseconds setting.
+			const insertBatchSize = 10000
+			for i := 1; i <= initialRowCount; i += insertBatchSize {
+				end := i + insertBatchSize - 1
+				if end > initialRowCount {
+					end = initialRowCount
+				}
+				r.Exec(t, fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(%d, %d)", tc.tableName, i, end))
 			}
 
 			getTableID := func() (tableID uint32) {
