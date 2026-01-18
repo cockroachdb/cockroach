@@ -409,15 +409,17 @@ func runLargeSchemaIntrospectionBenchmark(
 	err = c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
 	require.NoError(t, err)
 
-	// Create the schema using tpccmultidb with minimal warehouses (1 warehouse
-	// to minimize data import while still creating the schema structure).
-	t.L().Printf("Starting schema creation with tpccmultidb (warehouses=1)")
+	// Create the schema using tpccmultidb with --data-loader=none to create
+	// only the table schema without loading any data. This significantly
+	// speeds up the setup phase since we don't need data for introspection
+	// benchmarks.
+	t.L().Printf("Starting schema creation with tpccmultidb (schema only, no data)")
 	options := tpccOptions{
 		WorkloadCmd: "tpccmultidb",
 		DB:          strings.Split(dbList[0], ".")[0],
 		SetupType:   usingInit,
-		Warehouses:  1, // Minimal warehouses to minimize data import
-		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --import-concurrency-limit=32",
+		Warehouses:  1, // Required for schema generation but no data will be loaded
+		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --data-loader=none",
 			populateFileName,
 		),
 		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {

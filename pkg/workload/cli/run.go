@@ -58,7 +58,7 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 var dataLoader = sharedFlags.String("data-loader", `AUTO`,
-	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available.")
+	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available. Use NONE to create schema without loading data.")
 var initConns = sharedFlags.Int("init-conns", 16,
 	"The number of connections to use during INSERT init")
 
@@ -373,6 +373,8 @@ func runInitImpl(
 		}
 	case `import`, `imports`:
 		l = workload.ImportDataLoader
+	case `none`:
+		l = workloadsql.SchemaOnlyDataLoader{}
 	default:
 		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
 	}

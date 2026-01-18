@@ -29,6 +29,97 @@ type InsertsDataLoader struct {
 	Concurrency int
 }
 
+// SchemaOnlyDataLoader is an InitialDataLoader implementation that only creates
+// tables without loading any data. This is useful for benchmarks that only need
+// the schema structure without any row data.
+type SchemaOnlyDataLoader struct{}
+
+// InitialDataLoad implements the InitialDataLoader interface.
+func (l SchemaOnlyDataLoader) InitialDataLoad(
+	ctx context.Context, db *gosql.DB, gen workload.Generator,
+) (int64, error) {
+	tables := gen.Tables()
+	var hooks workload.Hooks
+	if h, ok := gen.(workload.Hookser); ok {
+		hooks = h.Hooks()
+	}
+
+	if hooks.PreCreate != nil {
+		if err := hooks.PreCreate(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not precreate")
+		}
+	}
+
+	log.Dev.Infof(ctx, `creating %d tables (schema only, no data)`, len(tables))
+	startTime := timeutil.Now()
+
+	const maxTableBatchSize = 5000
+	const backoffBetweenBatches = 30 * time.Second
+	currentTable := 0
+	batchNum := 0
+	// When dealing with large number of tables, opt to use transactions
+	// to minimize the round trips involved, which can be bad on multi-region
+	// clusters.
+	for currentTable < len(tables) {
+		batchStart := timeutil.Now()
+		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
+		nextBatch := tables[currentTable:batchEnd]
+		batchNum++
+		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+			// Run the operations in a single txn so they complete more quickly.
+			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
+				return err
+			}
+			currentDatabase := ""
+			for _, table := range nextBatch {
+				// Switch databases if one is explicitly specified for multi-region
+				// configurations with multiple databases.
+				if table.ObjectPrefix != nil &&
+					table.ObjectPrefix.ExplicitCatalog &&
+					currentDatabase != table.ObjectPrefix.Catalog() {
+					_, err := tx.ExecContext(ctx, "USE $1", table.ObjectPrefix.Catalog())
+					if err != nil {
+						return err
+					}
+					currentDatabase = table.ObjectPrefix.Catalog()
+				}
+				tableName := table.GetResolvedName()
+				createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s %s`, tableName.String(), table.Schema)
+				if _, err := tx.ExecContext(ctx, createStmt); err != nil {
+					return errors.WithDetailf(errors.Wrapf(err, "could not create table: %q", table.Name),
+						"SQL: %s", createStmt)
+				}
+			}
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+		currentTable = batchEnd
+		log.Dev.Infof(ctx, `created %d/%d tables (batch %d, %d tables in %s); waiting %s before next batch`,
+			currentTable, len(tables), batchNum, len(nextBatch), timeutil.Since(batchStart).Round(time.Millisecond), backoffBetweenBatches)
+
+		// Add backoff between batches to reduce contention on system tables.
+		if currentTable < len(tables) {
+			select {
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			case <-time.After(backoffBetweenBatches):
+			}
+		}
+	}
+
+	if hooks.PreLoad != nil {
+		if err := hooks.PreLoad(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not preload")
+		}
+	}
+
+	// SchemaOnlyDataLoader does not load any data, so we return 0 bytes.
+	log.Dev.Infof(ctx, `finished creating %d tables in %s (schema only, no data loaded)`,
+		len(tables), timeutil.Since(startTime).Round(time.Second))
+	return 0, nil
+}
+
 // InitialDataLoad implements the InitialDataLoader interface.
 func (l InsertsDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
