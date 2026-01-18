@@ -26,6 +26,8 @@ func TestExtractTimestamp(t *testing.T) {
 		{"goroutine_dump.double_since_last_dump.2021-04-23T09_18_23.1231", "2021-04-23 09:18"},
 		// v20.x and later goroutine dumps.
 		{"goroutine_dump.2021-03-11T08_13_57.498.double_since_last_dump.000001137.txt", "2021-03-11 08:13"},
+		// v26.1 and later goroutine dumps.
+		{"goroutine_dump.2021-03-11T08_13_57.498.double_since_last_dump.000001137.pb.gz", "2021-03-11 08:13"},
 		// v20.1 and later memstats.
 		{"memstats.2021-04-22T18_31_54.413.371441664.txt", "2021-04-22 18:31"},
 		// v1.0 heap profile names.
