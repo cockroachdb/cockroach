@@ -1213,15 +1213,12 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 
 // zoneConfigForMultiRegionValidator is an interface representing
 // actions to take when validating a zone config for multi-region
-// purposes.
+// purposes. This extends the shared regions.ZoneConfigForMultiRegionValidator
+// with legacy-schema-changer-specific methods.
 type zoneConfigForMultiRegionValidator interface {
+	regions.ZoneConfigForMultiRegionValidator
 	getExpectedDatabaseZoneConfig() (zonepb.ZoneConfig, error)
 	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
-	transitioningRegions() catpb.RegionNames
-
-	newMismatchFieldError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
-	newMissingSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
-	newExtraSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
 }
 
 // zoneConfigForMultiRegionValidatorSetInitialRegion implements
@@ -1238,7 +1235,7 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) getExpectedDatabaseZ
 	return *zonepb.NewZoneConfig(), nil
 }
 
-func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) transitioningRegions() catpb.RegionNames {
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) TransitioningRegions() catpb.RegionNames {
 	// There are no transitioning regions at setup time.
 	return nil
 }
@@ -1262,7 +1259,7 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) wrapErr(err error) e
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) NewMismatchFieldError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1278,7 +1275,7 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMismatchFieldErro
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) NewMissingSubzoneError(
 	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	// There can never be a missing subzone as we only compare against
@@ -1290,7 +1287,7 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newMissingSubzoneErr
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) NewExtraSubzoneError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1333,7 +1330,7 @@ func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpected
 	return expectedZoneConfig, err
 }
 
-func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) transitioningRegions() catpb.RegionNames {
+func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) TransitioningRegions() catpb.RegionNames {
 	return v.regionConfig.TransitioningRegions()
 }
 
@@ -1345,7 +1342,7 @@ type zoneConfigForMultiRegionValidatorModifiedByUser struct {
 
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMismatchFieldError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1373,7 +1370,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) err
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMissingSubzoneError(
 	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1386,7 +1383,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewExtraSubzoneError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1410,7 +1407,7 @@ type zoneConfigForMultiRegionValidatorValidation struct {
 
 var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorValidation)(nil)
 
-func (v *zoneConfigForMultiRegionValidatorValidation) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorValidation) NewMismatchFieldError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
@@ -1424,7 +1421,7 @@ func (v *zoneConfigForMultiRegionValidatorValidation) newMismatchFieldError(
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorValidation) NewMissingSubzoneError(
 	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
@@ -1435,7 +1432,7 @@ func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorValidation) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorValidation) NewExtraSubzoneError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return pgerror.Newf(
@@ -1521,7 +1518,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	}
 	if !same {
 		dbName := tree.Name(dbDesc.GetName())
-		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
+		return zoneConfigForMultiRegionValidator.NewMismatchFieldError(
 			"database",
 			dbName.String(),
 			mismatch,
@@ -1632,8 +1629,8 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 
 	// Do not compare partitioning for these regions, as they may be in a
 	// transitioning state.
-	transitioningRegions := make(map[string]struct{}, len(zoneConfigForMultiRegionValidator.transitioningRegions()))
-	for _, transitioningRegion := range zoneConfigForMultiRegionValidator.transitioningRegions() {
+	transitioningRegions := make(map[string]struct{}, len(zoneConfigForMultiRegionValidator.TransitioningRegions()))
+	for _, transitioningRegion := range zoneConfigForMultiRegionValidator.TransitioningRegions() {
 		transitioningRegions[string(transitioningRegion)] = struct{}{}
 	}
 
@@ -1752,21 +1749,21 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		}
 
 		if mismatch.IsMissingSubzone {
-			return zoneConfigForMultiRegionValidator.newMissingSubzoneError(
+			return zoneConfigForMultiRegionValidator.NewMissingSubzoneError(
 				descType,
 				name,
 				mismatch,
 			)
 		}
 		if mismatch.IsExtraSubzone {
-			return zoneConfigForMultiRegionValidator.newExtraSubzoneError(
+			return zoneConfigForMultiRegionValidator.NewExtraSubzoneError(
 				descType,
 				name,
 				mismatch,
 			)
 		}
 
-		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
+		return zoneConfigForMultiRegionValidator.NewMismatchFieldError(
 			descType,
 			name,
 			mismatch,

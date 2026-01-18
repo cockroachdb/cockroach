@@ -1562,7 +1562,9 @@ func configureZoneConfigForNewTableLocality(
 		b,
 		regionConfig,
 		tableID,
-		applyZoneConfigForMultiRegionTableOptionTableAndIndexes(localityConfig),
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+			b, tableID,
+			localityConfig),
 	); err != nil {
 		return err
 	}
@@ -1773,7 +1775,7 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 // on the entire table as well as its indexes, replacing multi-region related zone
 // configuration fields.
 func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
-	localityConfig catpb.LocalityConfig,
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
 ) applyZoneConfigForMultiRegionTableOption {
 
 	return func(
@@ -1798,7 +1800,36 @@ func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 		// zone config so that the user won't have to override again the next time
 		// the want to ALTER the table locality.
 		zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
 		zc.CopyFromZone(localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
+
+		// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+		if localityRBR != nil {
+			dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+			regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+
+			indexIDs := []descpb.IndexID{}
+			b.QueryByID(tableID).FilterIndexName().
+				ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+					// Only include indexes that are public or being added
+					if status != scpb.Status_ABSENT && target == scpb.ToPublic {
+						indexIDs = append(indexIDs, e.IndexID)
+					}
+				})
+
+			if err := applyZoneConfigForMultiRegionTable(
+				b,
+				regionConfig,
+				tableID,
+				applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),
+			); err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+		}
 		return zc, nil
 	}
 }
@@ -1810,3 +1841,296 @@ type applyZoneConfigForMultiRegionTableOption func(
 	regionConfig multiregion.RegionConfig,
 	tableID catid.DescID,
 ) (newZoneConfig zonepb.ZoneConfig, err error)
+
+// zoneConfigForMultiRegionValidator is an interface representing
+// actions to take when validating a zone config for multi-region
+// purposes in the declarative schema changer. This extends the shared
+// regions.ZoneConfigForMultiRegionValidator with declarative-schema-changer-specific methods.
+type zoneConfigForMultiRegionValidator interface {
+	regions.ZoneConfigForMultiRegionValidator
+	getExpectedTableZoneConfig(
+		b BuildCtx,
+		tableID catid.DescID,
+		localityConfig catpb.LocalityConfig,
+	) (zonepb.ZoneConfig, error)
+}
+
+// zoneConfigForMultiRegionValidatorModifiedByUser implements
+// interface zoneConfigForMultiRegionValidator for the declarative schema changer.
+type zoneConfigForMultiRegionValidatorModifiedByUser struct {
+	regionConfig multiregion.RegionConfig
+}
+
+var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) getExpectedTableZoneConfig(
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
+) (zonepb.ZoneConfig, error) {
+	expectedZoneConfig, err := applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+		b, tableID, localityConfig,
+	)(
+		*zonepb.NewZoneConfig(),
+		v.regionConfig,
+		tableID,
+	)
+	if err != nil {
+		return zonepb.ZoneConfig{}, err
+	}
+	return expectedZoneConfig, nil
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) TransitioningRegions() catpb.RegionNames {
+	return v.regionConfig.TransitioningRegions()
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) error {
+	err = errors.WithDetail(
+		err,
+		"the attempted operation will overwrite a user modified field",
+	)
+	return errors.WithHint(
+		err,
+		"to proceed with the overwrite, SET override_multi_region_zone_config = true, "+
+			"and reissue the statement",
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMismatchFieldError(
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone configuration for %s %s which contains modified field %q (expected=%s actual=%s)",
+			descType,
+			descName,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
+		),
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMissingSubzoneError(
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which is missing an expected zone configuration for %s %s",
+			descType,
+			descName,
+		),
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewExtraSubzoneError(
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
+			descType,
+			descName,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
+		),
+	)
+}
+
+// validateZoneConfigForMultiRegionTable validates that the multi-region
+// fields of the table's zone configuration match what is expected for
+// the given table.
+func validateZoneConfigForMultiRegionTable(
+	b BuildCtx,
+	tableID catid.DescID,
+	tableName string,
+	currentZoneConfig *zonepb.ZoneConfig,
+	localityConfig catpb.LocalityConfig,
+	validator zoneConfigForMultiRegionValidator,
+) error {
+	if currentZoneConfig == nil {
+		currentZoneConfig = zonepb.NewZoneConfig()
+	}
+
+	expectedZoneConfig, err := validator.getExpectedTableZoneConfig(b, tableID, localityConfig)
+	if err != nil {
+		return err
+	}
+
+	// Build map of non-drop indexes for filtering subzones
+	subzoneIndexIDsToDiff := make(map[uint32]tree.Name)
+	b.QueryByID(tableID).FilterIndexName().
+		ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+			// Only include indexes that are public or being added
+			if status != scpb.Status_ABSENT && target == scpb.ToPublic {
+				subzoneIndexIDsToDiff[uint32(e.IndexID)] = tree.Name(e.Name)
+			}
+		})
+
+	// Do not compare partitioning for transitioning regions
+	transitioningRegions := make(map[string]struct{}, len(validator.TransitioningRegions()))
+	for _, transitioningRegion := range validator.TransitioningRegions() {
+		transitioningRegions[string(transitioningRegion)] = struct{}{}
+	}
+
+	// Filter current zone config subzones
+	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
+	for _, c := range currentZoneConfig.Subzones {
+		if c.PartitionName != "" {
+			if _, ok := transitioningRegions[c.PartitionName]; ok {
+				continue
+			}
+		}
+		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; !ok {
+			continue
+		}
+		filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
+	}
+	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
+
+	// Strip the placeholder status if there are no active subzones
+	if len(filteredCurrentZoneConfigSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
+		currentZoneConfig.NumReplicas = nil
+	}
+
+	// Filter expected zone config subzones
+	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
+	for _, c := range expectedZoneConfig.Subzones {
+		if c.PartitionName != "" {
+			if _, ok := transitioningRegions[c.PartitionName]; ok {
+				continue
+			}
+		}
+		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; !ok {
+			continue
+		}
+		filteredExpectedZoneConfigSubzones = append(filteredExpectedZoneConfigSubzones, c)
+	}
+	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
+
+	// Mark the expected NumReplicas as 0 if we have a placeholder
+	if currentZoneConfig.IsSubzonePlaceholder() && regions.IsPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
+		expectedZoneConfig.NumReplicas = proto.Int32(0)
+	}
+
+	// Synthesize lease preferences if there's a secondary region
+	regionConfig := validator.(*zoneConfigForMultiRegionValidatorModifiedByUser).regionConfig
+	if regionConfig.HasSecondaryRegion() {
+		var leasePreferences []zonepb.LeasePreference
+		// Check if this is a REGIONAL BY TABLE with a specific region
+		secondaryRegionElt := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+		if secondaryRegionElt != nil {
+			leasePreferences = regions.SynthesizeLeasePreferences(
+				secondaryRegionElt.RegionName,
+				regionConfig.SecondaryRegion(),
+			)
+		} else {
+			leasePreferences = regions.SynthesizeLeasePreferences(
+				regionConfig.PrimaryRegion(),
+				regionConfig.SecondaryRegion(),
+			)
+		}
+		expectedZoneConfig.LeasePreferences = leasePreferences
+	}
+
+	// Compare the two zone configs
+	same, mismatch, err := currentZoneConfig.DiffWithZone(
+		expectedZoneConfig,
+		zonepb.MultiRegionZoneConfigFields,
+	)
+	if err != nil {
+		return err
+	}
+	if !same {
+		descType := "table"
+		name := tableName
+		if mismatch.IndexID != 0 {
+			indexName, ok := subzoneIndexIDsToDiff[mismatch.IndexID]
+			if !ok {
+				return errors.AssertionFailedf(
+					"unexpected unknown index id %d on table %s (mismatch %#v)",
+					mismatch.IndexID,
+					tableName,
+					mismatch,
+				)
+			}
+
+			if mismatch.PartitionName != "" {
+				descType = "partition"
+				partitionName := tree.Name(mismatch.PartitionName)
+				name = fmt.Sprintf(
+					"%s of %s@%s",
+					partitionName.String(),
+					tableName,
+					indexName.String(),
+				)
+			} else {
+				descType = "index"
+				name = fmt.Sprintf("%s@%s", tableName, indexName.String())
+			}
+		}
+
+		if mismatch.IsMissingSubzone {
+			return validator.NewMissingSubzoneError(descType, name, mismatch)
+		}
+		if mismatch.IsExtraSubzone {
+			return validator.NewExtraSubzoneError(descType, name, mismatch)
+		}
+
+		return validator.NewMismatchFieldError(descType, name, mismatch)
+	}
+
+	return nil
+}
+
+// validateZoneConfigForMultiRegionTableWasNotModifiedByUser validates that
+// the table's zone configuration was not modified by the user. This function is
+// intended to be called when a multi-region operation will overwrite
+// the table's (or index's/partition's) zone configuration and we wish to warn
+// the user about that before it occurs (and require the
+// override_multi_region_zone_config session variable to be set).
+// This version is adapted for use in the declarative schema changer.
+func validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+	b BuildCtx, tableID catid.DescID, tableName string, currentLocalityConfig catpb.LocalityConfig,
+) error {
+	// If the user is overriding, or this is not a multi-region table, we're done
+	if b.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
+		return nil
+	}
+
+	// Get the current zone config for the table
+	currentZoneConfig, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	var currentZoneConfigProto *zonepb.ZoneConfig
+	if currentZoneConfig != nil {
+		currentZoneConfigProto = currentZoneConfig.ZoneConfigProto()
+	} else {
+		currentZoneConfigProto = zonepb.NewZoneConfig()
+	}
+
+	// Synthesize the region config for the database
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	regionConfig, err := b.SynthesizeRegionConfig(b, dbID, multiregion.SynthesizeRegionConfigOptionForValidation)
+	if err != nil {
+		return err
+	}
+
+	validator := &zoneConfigForMultiRegionValidatorModifiedByUser{
+		regionConfig: regionConfig,
+	}
+
+	return validateZoneConfigForMultiRegionTable(
+		b,
+		tableID,
+		tableName,
+		currentZoneConfigProto,
+		currentLocalityConfig,
+		validator,
+	)
+}

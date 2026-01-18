@@ -492,3 +492,25 @@ func AddConstraintsForSuperRegion(
 		return errors.AssertionFailedf("unknown survival goal: %v", regionConfig.SurvivalGoal())
 	}
 }
+
+// ZoneConfigForMultiRegionValidator is an interface representing
+// actions to take when validating a zone config for multi-region
+// purposes. This interface is used by both the legacy schema changer
+// and the declarative schema changer.
+type ZoneConfigForMultiRegionValidator interface {
+	// TransitioningRegions returns the list of regions that are currently
+	// transitioning and should be excluded from validation.
+	TransitioningRegions() catpb.RegionNames
+
+	// NewMismatchFieldError returns an error when a zone config field
+	// doesn't match the expected value.
+	NewMismatchFieldError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+
+	// NewMissingSubzoneError returns an error when an expected subzone
+	// is missing from the zone config.
+	NewMissingSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+
+	// NewExtraSubzoneError returns an error when an unexpected subzone
+	// is present in the zone config.
+	NewExtraSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
+}

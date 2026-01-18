@@ -61,6 +61,11 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	// Increase telemetry stats
 	incrementAlterTableLocalityTelemetry(b, currentLocality, targetLocality)
 
+	err := validateZoneConfigForMultiRegionTableWasNotModifiedByUser(b, tableID, tableName, buildLocalityConfig(currentLocality))
+	if err != nil {
+		panic(err)
+	}
+
 	// return if two localities are the same
 	if isTargetLocalitySameAsCurrent(currentLocality, targetLocality) {
 		return
@@ -71,7 +76,7 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	addTargetLocalityElements(b, tableID, regionEnumTypeID, targetLocality)
 
 	// Update the table zone config
-	err := configureZoneConfigForNewTableLocality(b, tableID, buildLocalityConfig(targetLocality))
+	err = configureZoneConfigForNewTableLocality(b, tableID, buildLocalityConfig(targetLocality))
 	if err != nil {
 		panic(err)
 	}
