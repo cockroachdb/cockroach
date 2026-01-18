@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "datadog",
+    srcs = ["datadog.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/registry",
+        "//pkg/cmd/roachtest/roachtestflags",
+        "//pkg/cmd/roachtest/roachtestutil/task",
+        "//pkg/cmd/roachtest/spec",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadogV2",
+    ],
+)
+
+go_test(
+    name = "datadog_test",
+    srcs = ["datadog_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":datadog"],
+    deps = [
+        "//pkg/cmd/roachtest/roachtestflags",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
+        "@com_github_datadog_datadog_api_client_go_v2//api/datadogV2",
+        "@com_github_stretchr_testify//require",
+    ],
+)
