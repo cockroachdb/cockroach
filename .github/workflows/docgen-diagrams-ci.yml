@@ -246,6 +246,81 @@ jobs:
             echo "No diagram changes detected"
           fi
 
+      - name: Setup Node.js for PNG generation
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate PNG previews
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          echo "::group::Generating PNG previews for changed diagrams"
+
+          # Install sharp for SVG to PNG conversion
+          npm install sharp --no-save
+
+          # Create PNG generation script inline
+          cat > /tmp/generate-pngs.js << 'SCRIPT_EOF'
+          const sharp = require('sharp');
+          const fs = require('fs');
+          const path = require('path');
+
+          const CSS_STYLE = `
+          <style>
+          .terminal { fill: #FFFFCC; stroke: #000000; stroke-width: 1; }
+          .nonterminal { fill: #FFCCCC; stroke: #000000; stroke-width: 1; }
+          .line { stroke: #000000; stroke-width: 1; fill: none; }
+          text { font-family: monospace; font-size: 12px; fill: #000000; }
+          polygon { fill: #000000; }
+          rect { stroke-width: 1; }
+          </style>`;
+
+          async function convertToPng(htmlFile, outputFile) {
+            const html = fs.readFileSync(htmlFile, 'utf8');
+            const svgMatch = html.match(/<svg[^>]*>[\s\S]*<\/svg>/);
+            if (!svgMatch) return null;
+
+            let svg = svgMatch[0];
+            svg = svg.replace(/<svg/, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"');
+            svg = svg.replace(/>/, `>${CSS_STYLE}`);
+
+            const png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+            fs.writeFileSync(outputFile, png);
+            return png.length;
+          }
+
+          async function main() {
+            const inputDir = process.argv[2];
+            const outputDir = process.argv[3];
+            const maxCount = parseInt(process.argv[4]) || 5;
+
+            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+            const files = fs.readdirSync(inputDir).filter(f => f.endsWith('.html')).slice(0, maxCount);
+            console.log(`Processing ${files.length} diagrams...`);
+
+            for (const file of files) {
+              const input = path.join(inputDir, file);
+              const output = path.join(outputDir, file.replace('.html', '.png'));
+              try {
+                const size = await convertToPng(input, output);
+                if (size) console.log(`Generated: ${output} (${size} bytes)`);
+              } catch (e) {
+                console.error(`Error processing ${file}: ${e.message}`);
+              }
+            }
+          }
+
+          main().catch(e => { console.error(e); process.exit(1); });
+          SCRIPT_EOF
+
+          # Generate PNGs from HTML diagrams
+          mkdir -p artifacts/diagrams/png
+          node /tmp/generate-pngs.js bazel-bin/docs/generated/sql/bnf artifacts/diagrams/png 5
+
+          echo "::endgroup::"
+
       - name: Package artifacts
         id: package
         run: |
@@ -315,6 +390,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
+      sync_branch: diagram-sync/${{ github.sha }}
+      png_files: ${{ steps.sync-files.outputs.png_files }}
     steps:
       - name: Download diagram artifacts
         uses: actions/download-artifact@v4
@@ -331,10 +408,12 @@ jobs:
           path: generated-diagrams
 
       - name: Sync diagram files
+        id: sync-files
         run: |
           # Create directories if they don't exist
           mkdir -p generated-diagrams/bnf
           mkdir -p generated-diagrams/grammar_svg
+          mkdir -p generated-diagrams/grammar_png
 
           # Copy BNF files
           cp artifacts/*.bnf generated-diagrams/bnf/ 2>/dev/null || echo "No BNF files to copy"
@@ -342,13 +421,23 @@ jobs:
           # Copy HTML/SVG files
           cp artifacts/*.html generated-diagrams/grammar_svg/ 2>/dev/null || echo "No HTML files to copy"
 
+          # Copy PNG preview files
+          cp artifacts/png/*.png generated-diagrams/grammar_png/ 2>/dev/null || echo "No PNG files to copy"
+
           # Copy manifest
           cp artifacts/manifest.json generated-diagrams/ 2>/dev/null || echo "No manifest to copy"
 
+          # List PNG files for the comment job
+          PNG_FILES=$(ls -1 generated-diagrams/grammar_png/*.png 2>/dev/null | xargs -I {} basename {} | head -5 || echo "")
+          echo "png_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$PNG_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
           # Show what was synced
           echo "Synced files:"
-          ls -la generated-diagrams/bnf/ 2>/dev/null | head -20 || true
-          ls -la generated-diagrams/grammar_svg/ 2>/dev/null | head -20 || true
+          ls -la generated-diagrams/bnf/ 2>/dev/null | head -10 || true
+          ls -la generated-diagrams/grammar_svg/ 2>/dev/null | head -10 || true
+          ls -la generated-diagrams/grammar_png/ 2>/dev/null | head -10 || true
 
       - name: Create PR in generated-diagrams
         id: create-pr
@@ -398,75 +487,18 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Download diagram artifacts
-        if: needs.generate-diagrams.outputs.diagrams_changed == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: sql-diagrams
-          path: artifacts/
-        continue-on-error: true
-
-      - name: Prepare diagram previews
-        id: prepare-previews
-        if: needs.generate-diagrams.outputs.diagrams_changed == 'true'
-        shell: bash
-        run: |
-          # CSS styling for railroad diagrams (inline in SVG)
-          CSS_STYLE='.terminal{fill:#FFFFCC;stroke:#000;stroke-width:1}.nonterminal{fill:#FFCCCC;stroke:#000;stroke-width:1}.line{stroke:#000;stroke-width:1;fill:none}text{font-family:monospace;font-size:12px;fill:#000}polygon{fill:#000}'
-
-          # Get list of changed HTML files
-          CHANGED_FILES='${{ needs.generate-diagrams.outputs.changed_files }}'
-
-          # Filter to only HTML files and limit to 5
-          HTML_FILES=$(echo "$CHANGED_FILES" | grep '\.html$' | head -5 || true)
-
-          # Initialize output file
-          : > /tmp/diagram_previews.md
-          PREVIEW_COUNT=0
-          TOTAL_HTML=$(echo "$CHANGED_FILES" | grep -c '\.html$' || echo "0")
-          MAX_SIZE=40000
-
-          for file in $HTML_FILES; do
-            BASENAME=$(basename "$file")
-
-            if [[ -f "artifacts/$BASENAME" ]]; then
-              FILE_SIZE=$(stat -c%s "artifacts/$BASENAME" 2>/dev/null || stat -f%z "artifacts/$BASENAME" 2>/dev/null || echo "0")
-
-              if [[ $FILE_SIZE -lt $MAX_SIZE ]]; then
-                # Read HTML and inject CSS into SVG
-                CONTENT=$(cat "artifacts/$BASENAME")
-                STYLED_CONTENT=$(echo "$CONTENT" | sed "s/<svg /<style>${CSS_STYLE}<\/style><svg /")
-
-                # Write to file using printf to avoid YAML issues
-                printf '\n#### %s\n\n%s\n\n' "$BASENAME" "$STYLED_CONTENT" >> /tmp/diagram_previews.md
-                PREVIEW_COUNT=$((PREVIEW_COUNT + 1))
-              else
-                SIZE_KB=$((FILE_SIZE / 1024))
-                printf '\n#### %s\n*Diagram too large for preview (%dKB). Download artifacts to view.*\n\n' "$BASENAME" "$SIZE_KB" >> /tmp/diagram_previews.md
-              fi
-            fi
-          done
-
-          REMAINING=$((TOTAL_HTML - PREVIEW_COUNT))
-
-          echo "preview_count=$PREVIEW_COUNT" >> $GITHUB_OUTPUT
-          echo "remaining_count=$REMAINING" >> $GITHUB_OUTPUT
-          echo "total_html=$TOTAL_HTML" >> $GITHUB_OUTPUT
-
       - name: Create PR comment
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-
             const validationStatus = '${{ needs.generate-diagrams.outputs.validation_status }}';
             const diagramsChanged = '${{ needs.generate-diagrams.outputs.diagrams_changed }}';
             const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
             const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
             const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
-            const previewCount = '${{ steps.prepare-previews.outputs.preview_count }}' || '0';
-            const remainingCount = '${{ steps.prepare-previews.outputs.remaining_count }}' || '0';
-            const totalHtml = '${{ steps.prepare-previews.outputs.total_html }}' || '0';
+            const syncBranch = '${{ needs.sync-to-generated-diagrams.outputs.sync_branch }}';
+            const pngFiles = `${{ needs.sync-to-generated-diagrams.outputs.png_files }}`;
+            const targetRepo = '${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}';
 
             let body = '## SQL Diagram Generation Report\n\n';
 
@@ -485,20 +517,20 @@ jobs:
                 body += 'A PR will be automatically opened in `generated-diagrams` to sync these changes.\n\n';
               }
 
-              // Add diagram previews if available
-              let previews = '';
-              try {
-                previews = fs.readFileSync('/tmp/diagram_previews.md', 'utf8');
-              } catch (e) {
-                // No previews available
-              }
+              // Add PNG diagram previews if available
+              if (pngFiles && pngFiles.trim() !== '' && syncBranch) {
+                body += '### Diagram Previews\n\n';
 
-              if (previews && previews.trim() !== '') {
-                body += '### Diagram Previews\n';
-                body += previews;
+                const files = pngFiles.trim().split('\n').filter(f => f.length > 0);
+                for (const file of files) {
+                  const diagramName = file.replace('.png', '');
+                  const imageUrl = `https://raw.githubusercontent.com/${targetRepo}/${syncBranch}/grammar_png/${file}`;
+                  body += `**${diagramName}**\n\n`;
+                  body += `![${diagramName}](${imageUrl})\n\n`;
+                }
 
-                if (parseInt(remainingCount) > 0) {
-                  body += `\n*Showing ${previewCount} of ${totalHtml} changed diagrams. Download artifacts to view all.*\n\n`;
+                if (files.length > 0) {
+                  body += `*Showing ${files.length} diagram preview(s).*\n\n`;
                 }
               } else {
                 // Fallback to listing changed files
