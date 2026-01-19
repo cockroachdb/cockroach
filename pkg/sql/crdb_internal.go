@@ -4099,9 +4099,10 @@ CREATE TABLE crdb_internal.index_columns (
 					// Report the stored columns.
 					for i := 0; i < idx.NumSecondaryStoredColumns(); i++ {
 						c := idx.GetStoredColumnID(i)
+						colName := tree.NewDString(idx.GetStoredColumnName(i))
 						if err := addRow(
 							tableID, tableName, idxID, idxName,
-							storing, tree.NewDInt(tree.DInt(c)), tree.DNull, tree.DNull,
+							storing, tree.NewDInt(tree.DInt(c)), colName, tree.DNull,
 							notImplicit,
 						); err != nil {
 							return err

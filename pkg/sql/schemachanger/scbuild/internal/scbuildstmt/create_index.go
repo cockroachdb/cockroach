@@ -456,26 +456,28 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 		n.PartitionByIndex = &tree.PartitionByIndex{
 			PartitionBy: &tree.PartitionBy{},
 		}
-		var indexImplicitCols []*scpb.IndexColumn
-		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
-			if e.IndexID == idxSpec.secondary.SourceIndexID && e.Implicit {
-				indexImplicitCols = append(indexImplicitCols, e)
-			}
-		})
-		sort.Slice(indexImplicitCols, func(i, j int) bool {
-			return indexImplicitCols[i].OrdinalInKind < indexImplicitCols[j].OrdinalInKind
-		})
-
-		for _, ic := range indexImplicitCols {
-			columnName := mustRetrieveColumnNameElem(b, ic.TableID, ic.ColumnID)
-			n.PartitionByIndex.Fields = append(n.PartitionByIndex.Fields, tree.Name(columnName.Name))
-		}
-		// Recover the rest from the partitioning data.
+		// Get the source index's partitioning to find NumColumns.
+		var sourcePartitioning *scpb.IndexPartitioning
 		scpb.ForEachIndexPartitioning(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
 			if e.IndexID == idxSpec.secondary.SourceIndexID {
-				idxSpec.partitioning = protoutil.Clone(e).(*scpb.IndexPartitioning)
+				sourcePartitioning = e
 			}
 		})
+		if sourcePartitioning != nil {
+			// Clone the partitioning for the new index.
+			idxSpec.partitioning = protoutil.Clone(sourcePartitioning).(*scpb.IndexPartitioning)
+			// Get the partition columns from the source index's key columns.
+			// We need the first NumColumns key columns, regardless of whether
+			// they're marked as Implicit (they won't be if they're explicitly
+			// part of the primary key).
+			numPartitionCols := int(sourcePartitioning.NumColumns)
+			sourceKeyColumns := getIndexColumns(relationElts, idxSpec.secondary.SourceIndexID, scpb.IndexColumn_KEY)
+			// Add the first numPartitionCols columns to the partition fields.
+			for i := 0; i < numPartitionCols && i < len(sourceKeyColumns); i++ {
+				columnName := mustRetrieveColumnNameElem(b, sourceKeyColumns[i].TableID, sourceKeyColumns[i].ColumnID)
+				n.PartitionByIndex.Fields = append(n.PartitionByIndex.Fields, tree.Name(columnName.Name))
+			}
+		}
 	}
 	if n.PartitionByIndex.ContainsPartitions() || idxSpec.partitioning != nil {
 		// Detect if the partitioning overlaps with any of the secondary index
@@ -507,6 +509,7 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 					&idxSpec.secondary.Index, idxSpec.columns, n.PartitionByIndex.PartitionBy),
 			}
 		} else {
+			idxSpec.partitioning.TableID = idxSpec.secondary.TableID
 			idxSpec.partitioning.IndexID = idxSpec.secondary.IndexID
 		}
 		var columnsToPrepend []*scpb.IndexColumn
@@ -537,6 +540,14 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			columnsToPrepend = append(columnsToPrepend, newIndexColumn)
 		}
 		idxSpec.columns = append(columnsToPrepend, idxSpec.columns...)
+		// Update NumImplicitColumns to reflect the columns we just prepended.
+		// This is needed when cloning partitioning from the source index where
+		// the partition columns are explicitly part of the primary key (and thus
+		// NumImplicitColumns is 0 there), but for this secondary index they are
+		// being prepended implicitly.
+		if idxSpec.partitioning != nil {
+			idxSpec.partitioning.NumImplicitColumns = uint32(len(columnsToPrepend))
+		}
 		switch n.Type {
 		case idxtype.INVERTED:
 			b.IncrementSchemaChangeIndexCounter("partitioned_inverted")

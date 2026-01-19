@@ -1031,3 +1031,630 @@ DELETE FROM t WHERE partition_by = 1 AND a = 1;
 
 statement ok
 CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
+
+subtest implicit_partitioning_edge_cases
+
+# ==============================================================================
+# Basic case: CREATE INDEX on PARTITION ALL BY table where partition column
+# is explicitly in the primary key.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t1 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+# Verify primary index columns - partition column is NOT implicit since it's explicit in PK.
+# Join with pg_index to order by position in index using indkey.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't1' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+t1_pkey     1    region       false
+t1_pkey     2    id           false
+
+statement ok
+CREATE INDEX idx1 ON t1 (data)
+
+# After creating secondary index, partition column should be implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't1' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx1        1    region       true
+idx1        2    data         false
+t1_pkey     1    region       false
+t1_pkey     2    id           false
+
+# Verify the partitioning descriptor on the primary and secondary indexes using pb_to_json.
+# The secondary index should have the same list partitions as the primary, but with numImplicitColumns=1.
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'primaryIndex'->'partitioning'
+FROM system.descriptor
+WHERE id = 't1'::regclass
+----
+{"list": [{"name": "us", "subpartitioning": {}, "values": ["BgJ1cw=="]}, {"name": "eu", "subpartitioning": {}, "values": ["BgJldQ=="]}], "numColumns": 1}
+
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'->0->'partitioning'
+FROM system.descriptor
+WHERE id = 't1'::regclass
+----
+{"list": [{"name": "us", "subpartitioning": {}, "values": ["BgJ1cw=="]}, {"name": "eu", "subpartitioning": {}, "values": ["BgJldQ=="]}], "numColumns": 1, "numImplicitColumns": 1}
+
+statement ok
+DROP TABLE t1
+
+# ==============================================================================
+# User explicitly includes partition column as first column
+# in the index definition.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t2 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+# User explicitly puts region first - should still work.
+statement ok
+CREATE INDEX idx2 ON t2 (region, data)
+
+# The partition column is explicitly specified, so it should NOT be implicit.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't2' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx2        1    region       false
+idx2        2    data         false
+t2_pkey     1    region       false
+t2_pkey     2    id           false
+
+statement ok
+DROP TABLE t2
+
+# ==============================================================================
+# Multi-column PARTITION ALL BY
+# ==============================================================================
+
+statement ok
+CREATE TABLE t3 (
+  region STRING NOT NULL,
+  zone STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, zone, id),
+  FAMILY (region, zone, id, data)
+) PARTITION ALL BY LIST (region, zone) (
+  PARTITION us_east VALUES IN (('us', 'east')),
+  PARTITION us_west VALUES IN (('us', 'west'))
+)
+
+statement ok
+CREATE INDEX idx3 ON t3 (data)
+
+# Both partition columns should be implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't3' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx3        1    region       true
+idx3        2    zone         true
+idx3        3    data         false
+t3_pkey     1    region       false
+t3_pkey     2    zone         false
+t3_pkey     3    id           false
+
+# Verify numImplicitColumns=2 for multi-column partition.
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'->0->'partitioning'->'numImplicitColumns'
+FROM system.descriptor
+WHERE id = 't3'::regclass
+----
+2
+
+statement ok
+DROP TABLE t3
+
+# ==============================================================================
+# User includes second partition column but not first
+# ==============================================================================
+
+statement ok
+CREATE TABLE t4 (
+  region STRING NOT NULL,
+  zone STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, zone, id),
+  FAMILY (region, zone, id, data)
+) PARTITION ALL BY LIST (region, zone) (
+  PARTITION us_east VALUES IN (('us', 'east')),
+  PARTITION us_west VALUES IN (('us', 'west'))
+)
+
+# User puts zone (second partition col) first, region should be prepended.
+statement ok
+CREATE INDEX idx4 ON t4 (zone, data)
+
+# region should be implicit (prepended), zone should not be (user-specified).
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't4' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx4        1    region       true
+idx4        2    zone         false
+idx4        3    data         false
+t4_pkey     1    region       false
+t4_pkey     2    zone         false
+t4_pkey     3    id           false
+
+statement ok
+DROP TABLE t4
+
+# ==============================================================================
+# Unique index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t5 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE UNIQUE INDEX idx5 ON t5 (data)
+
+# Unique index should also get partition column prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't5' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx5        1    region       true
+idx5        2    data         false
+t5_pkey     1    region       false
+t5_pkey     2    id           false
+
+statement ok
+DROP TABLE t5
+
+# ==============================================================================
+# Inverted index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t6 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data JSONB,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INVERTED INDEX idx6 ON t6 (data)
+
+# Inverted index should get partition column in key columns.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't6' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx6        1    region       true
+idx6        2    data         false
+t6_pkey     1    region       false
+t6_pkey     2    id           false
+
+statement ok
+DROP TABLE t6
+
+# ==============================================================================
+# Partial index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t7 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  active BOOL,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data, active)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx7 ON t7 (data) WHERE active = true
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't7' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx7        1    region       true
+idx7        2    data         false
+t7_pkey     1    region       false
+t7_pkey     2    id           false
+
+statement ok
+DROP TABLE t7
+
+# ==============================================================================
+# Expression index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t8 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx8 ON t8 (lower(data))
+
+# For expression indexes, use the simpler query since expression columns
+# have attnum=0 and don't join properly with pg_attribute.
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't8' AND column_type = 'key'
+ORDER BY index_name, column_id
+----
+index_name  column_name             implicit
+idx8        region                  true
+idx8        crdb_internal_idx_expr  false
+t8_pkey     region                  false
+t8_pkey     id                      false
+
+statement ok
+DROP TABLE t8
+
+# ==============================================================================
+# STORING clause on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t9 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  extra STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data, extra)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx9 ON t9 (data) STORING (extra)
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't9' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx9        1    region       true
+idx9        2    data         false
+t9_pkey     1    region       false
+t9_pkey     2    id           false
+
+# Verify stored column is present (stored columns aren't in indkey, use simple query).
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't9' AND column_type = 'storing'
+ORDER BY 1, 2
+----
+index_name  column_name  implicit
+idx9        extra        false
+
+statement ok
+DROP TABLE t9
+
+# ==============================================================================
+# Multiple indexes created on same table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t10 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data1 STRING,
+  data2 STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data1, data2)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx10a ON t10 (data1)
+
+statement ok
+CREATE INDEX idx10b ON t10 (data2)
+
+# Both indexes should have partition column implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't10' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx10a      1    region       true
+idx10a      2    data1        false
+idx10b      1    region       true
+idx10b      2    data2        false
+t10_pkey    1    region       false
+t10_pkey    2    id           false
+
+statement ok
+DROP TABLE t10
+
+# ==============================================================================
+# PARTITION ALL BY NOTHING (no partitioning)
+# ==============================================================================
+
+statement ok
+CREATE TABLE t11 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY NOTHING
+
+statement ok
+CREATE INDEX idx11 ON t11 (data)
+
+# With PARTITION ALL BY NOTHING, no implicit columns should be added.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't11' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx11       1    data         false
+t11_pkey    1    region       false
+t11_pkey    2    id           false
+
+statement ok
+DROP TABLE t11
+
+# ==============================================================================
+# RANGE partitioning instead of LIST
+# ==============================================================================
+
+statement ok
+CREATE TABLE t12 (
+  bucket INT NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (bucket, id),
+  FAMILY (bucket, id, data)
+) PARTITION ALL BY RANGE (bucket) (
+  PARTITION p1 VALUES FROM (MINVALUE) TO (100),
+  PARTITION p2 VALUES FROM (100) TO (MAXVALUE)
+)
+
+statement ok
+CREATE INDEX idx12 ON t12 (data)
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't12' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx12       1    bucket       true
+idx12       2    data         false
+t12_pkey    1    bucket       false
+t12_pkey    2    id           false
+
+statement ok
+DROP TABLE t12
+
+subtest end
