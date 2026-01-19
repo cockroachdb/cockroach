@@ -617,7 +617,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 		))
 
 		require.NoError(t, kvstorage.WriteClusterVersionToEngines(
-			ctx, []kvstorage.Engines{engines},
+			[]kvstorage.Engines{engines},
 			clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
 		))
 		wrapped.engines = engines

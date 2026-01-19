@@ -30,11 +30,10 @@ func TestCollectChecksStoreInfo(t *testing.T) {
 	engines := kvstorage.MakeEngines(eng)
 	defer engines.Close()
 
-	v := roachpb.Version{Major: 21, Minor: 2}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, []kvstorage.Engines{engines},
-		clusterversion.ClusterVersion{Version: v}); err != nil {
-		t.Fatalf("failed to populate test store cluster version: %v", err)
-	}
+	require.NoError(t, kvstorage.WriteClusterVersionToEngines(
+		[]kvstorage.Engines{engines},
+		clusterversion.ClusterVersion{Version: roachpb.Version{Major: 21, Minor: 2}}),
+	)
 
 	_, _, err = CollectStoresReplicaInfo(ctx, []kvstorage.Engines{engines})
 	require.ErrorContains(t, err, "is too old for running version",

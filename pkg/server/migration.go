@@ -126,7 +126,7 @@ func bumpClusterVersion(
 	// Whenever the version changes, we want to persist that update to
 	// wherever the CRDB process retrieved the initial version from
 	// (typically a collection of storage.Engines).
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, newCV); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(engines, newCV); err != nil {
 		return err
 	}
 

@@ -19,7 +19,7 @@ import (
 
 // WriteClusterVersion writes the given cluster version to the min version file,
 // for each logical engine.
-func WriteClusterVersion(ctx context.Context, eng Engines, cv clusterversion.ClusterVersion) error {
+func WriteClusterVersion(eng Engines, cv clusterversion.ClusterVersion) error {
 	if err := eng.StateEngine().SetMinVersion(cv.Version); err != nil {
 		return errors.Wrapf(err, "error writing version to engine %s", eng.StateEngine())
 	} else if !eng.Separated() {
@@ -36,11 +36,9 @@ func WriteClusterVersion(ctx context.Context, eng Engines, cv clusterversion.Clu
 //
 // At the time of writing this is used during bootstrap, initial server start
 // (to perhaps fill into additional stores), and during cluster version bumps.
-func WriteClusterVersionToEngines(
-	ctx context.Context, engines []Engines, cv clusterversion.ClusterVersion,
-) error {
+func WriteClusterVersionToEngines(engines []Engines, cv clusterversion.ClusterVersion) error {
 	for _, eng := range engines {
-		if err := WriteClusterVersion(ctx, eng, cv); err != nil {
+		if err := WriteClusterVersion(eng, cv); err != nil {
 			return err
 		}
 	}
