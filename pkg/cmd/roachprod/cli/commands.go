@@ -273,8 +273,10 @@ func (cr *commandRegistry) buildLoadBalancerCmd() *cobra.Command {
 	}
 	loadBalancerCmd.AddCommand(
 		buildCreateLoadBalancerCmd(),
+		buildDeleteLoadBalancerCmd(),
 		buildLoadBalancerPGUrl(),
 		buildLoadBalancerIP(),
+		buildLoadBalancerList(),
 	)
 	return loadBalancerCmd
 }
@@ -302,6 +304,22 @@ These resources will automatically be destroyed when the cluster is destroyed.
 	initFlagInsecureForCmd(createLoadBalancerCmd)
 	initFlagsClusterNSQLForCmd(createLoadBalancerCmd)
 	return createLoadBalancerCmd
+}
+
+func buildDeleteLoadBalancerCmd() *cobra.Command {
+	deleteLoadBalancerCmd := &cobra.Command{
+		Use:   "destroy <cluster>",
+		Short: "destroy all load balancers for a cluster",
+		Long: `Destroy all load balancers for the given cluster.
+
+The load balancers are deleted using the cloud provider's API.
+`,
+		Args: cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.DeleteLoadBalancer(config.Logger, args[0])
+		}),
+	}
+	return deleteLoadBalancerCmd
 }
 
 func buildLoadBalancerPGUrl() *cobra.Command {
@@ -355,6 +373,30 @@ func buildLoadBalancerIP() *cobra.Command {
 	}
 	initFlagsClusterNSQLForCmd(loadBalancerIP)
 	return loadBalancerIP
+}
+
+func buildLoadBalancerList() *cobra.Command {
+	loadBalancerList := &cobra.Command{
+		Use:   "list <cluster>",
+		Short: "list all load balancers for a cluster",
+		Long:  "List all load balancers and their addresses for the given cluster.",
+		Args:  cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			addresses, err := roachprod.ListLoadBalancers(config.Logger, args[0])
+			if err != nil {
+				return err
+			}
+			if len(addresses) == 0 {
+				fmt.Println("No load balancers found for cluster.")
+				return nil
+			}
+			for _, addr := range addresses {
+				fmt.Printf("%s:%d\n", addr.IP, addr.Port)
+			}
+			return nil
+		}),
+	}
+	return loadBalancerList
 }
 
 func (cr *commandRegistry) buildListCmd() *cobra.Command {
