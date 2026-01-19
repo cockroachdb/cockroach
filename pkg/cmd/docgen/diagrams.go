@@ -411,6 +411,7 @@ var specs = []stmtSpec{
 		inline: []string{"primary_region_clause", "opt_equal"},
 	},
 	{
+		// ALTER DATABASE DROP REGION statement diagram
 		name: "alter_database_drop_region",
 		stmt: "alter_database_drop_region_stmt",
 	},
