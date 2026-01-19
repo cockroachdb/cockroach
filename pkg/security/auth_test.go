@@ -366,6 +366,230 @@ func TestGetCertificateUsersMapped(t *testing.T) {
 	}
 }
 
+func TestSetSANsWithString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer func() {
+		security.UnsetRootSAN()
+		security.UnsetNodeSAN()
+	}()
+
+	testCases := []struct {
+		name        string
+		input       string
+		expectError string
+		expectedLen int
+		expected    []string
+	}{
+		{
+			name:        "empty string clears SANs",
+			input:       "",
+			expectError: "",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "single DNS SAN",
+			input:       "DNS=example.com",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:DNS:example.com"},
+		},
+		{
+			name:        "single URI SAN",
+			input:       "URI=spiffe://example.org/service",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:URI:spiffe://example.org/service"},
+		},
+		{
+			name:        "multiple SANs",
+			input:       "DNS=example.com,URI=spiffe://example.org/service",
+			expectError: "",
+			expectedLen: 2,
+			expected:    []string{"SAN:DNS:example.com", "SAN:URI:spiffe://example.org/service"},
+		},
+		{
+			name:        "multiple SANs with spaces",
+			input:       "DNS=example.com, URI=spiffe://example.org/service , DNS=*.example.com",
+			expectError: "",
+			expectedLen: 3,
+			expected:    []string{"SAN:DNS:example.com", "SAN:URI:spiffe://example.org/service", "SAN:DNS:*.example.com"},
+		},
+		{
+			name:        "attribute type with spaces",
+			input:       " DNS = example.com ",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:DNS:example.com"},
+		},
+		{
+			name:        "lowercase attribute type gets uppercased",
+			input:       "dns=example.com",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:DNS:example.com"},
+		},
+		{
+			name:        "mixed case attribute type gets uppercased",
+			input:       "DnS=example.com,uRi=spiffe://example.org",
+			expectError: "",
+			expectedLen: 2,
+			expected:    []string{"SAN:DNS:example.com", "SAN:URI:spiffe://example.org"},
+		},
+		{
+			name:        "entry without equals sign",
+			input:       "DNS example.com",
+			expectError: "invalid SAN entry format: \"DNS example.com\" (expected format: attribute-type=attribute-value)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "empty attribute type",
+			input:       "=example.com",
+			expectError: "invalid SAN entry format: \"=example.com\" (attribute type cannot be empty)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "empty attribute value",
+			input:       "DNS=",
+			expectError: "invalid SAN entry format: \"DNS=\" (attribute value cannot be empty)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "attribute type only spaces",
+			input:       "   =example.com",
+			expectError: "invalid SAN entry format: \"=example.com\" (attribute type cannot be empty)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "attribute value only spaces",
+			input:       "DNS=   ",
+			expectError: "invalid SAN entry format: \"DNS=\" (attribute value cannot be empty)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "whitespace-only entries are skipped",
+			input:       "DNS=example.com,  ,URI=spiffe://example.org",
+			expectError: "",
+			expectedLen: 2,
+			expected:    []string{"SAN:DNS:example.com", "SAN:URI:spiffe://example.org"},
+		},
+		{
+			name:        "all whitespace entries",
+			input:       " , , ",
+			expectError: "invalid SAN string: \" , , \" (no valid entries found)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "multiple equals signs uses first",
+			input:       "DNS=example.com=extra",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:DNS:example.com=extra"},
+		},
+		{
+			name:        "IP address SAN",
+			input:       "IP=192.168.1.1",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:IP:192.168.1.1"},
+		},
+		{
+			name:        "IP address SAN lowercase",
+			input:       "ip=192.168.1.1",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:IP:192.168.1.1"},
+		},
+		{
+			name:        "multiple allowed SAN types",
+			input:       "DNS=example.com,URI=spiffe://example.org,IP=192.168.1.1",
+			expectError: "",
+			expectedLen: 3,
+			expected:    []string{"SAN:DNS:example.com", "SAN:URI:spiffe://example.org", "SAN:IP:192.168.1.1"},
+		},
+		{
+			name:        "invalid attribute type - CUSTOM",
+			input:       "CUSTOM=value",
+			expectError: "invalid SAN attribute type: \"CUSTOM\" (only DNS, URI, and IP are allowed)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "invalid attribute type - EMAIL",
+			input:       "EMAIL=user@example.com",
+			expectError: "invalid SAN attribute type: \"EMAIL\" (only DNS, URI, and IP are allowed)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "invalid attribute type mixed with valid",
+			input:       "DNS=example.com,EMAIL=user@example.com",
+			expectError: "invalid SAN attribute type: \"EMAIL\" (only DNS, URI, and IP are allowed)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "value with special characters",
+			input:       "URI=https://example.com:8080/path?query=value&foo=bar",
+			expectError: "",
+			expectedLen: 1,
+			expected:    []string{"SAN:URI:https://example.com:8080/path?query=value&foo=bar"},
+		},
+		{
+			name:        "first entry invalid",
+			input:       "invalid,DNS=example.com",
+			expectError: "invalid SAN entry format: \"invalid\" (expected format: attribute-type=attribute-value)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+		{
+			name:        "second entry invalid",
+			input:       "DNS=example.com,invalid",
+			expectError: "invalid SAN entry format: \"invalid\" (expected format: attribute-type=attribute-value)",
+			expectedLen: 0,
+			expected:    nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test with SetRootSAN
+			err := security.SetRootSAN(tc.input)
+			if tc.expectError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectError)
+			} else {
+				require.NoError(t, err)
+				rootSANs := security.GetRootSANs()
+				require.Equal(t, tc.expectedLen, len(rootSANs))
+				require.Equal(t, tc.expected, rootSANs)
+			}
+
+			// Test with SetNodeSAN
+			err = security.SetNodeSAN(tc.input)
+			if tc.expectError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.expectError)
+			} else {
+				require.NoError(t, err)
+				nodeSANs := security.GetNodeSANs()
+				require.Equal(t, tc.expectedLen, len(nodeSANs))
+				require.Equal(t, tc.expected, nodeSANs)
+			}
+
+			// Clear for next test
+			security.UnsetRootSAN()
+			security.UnsetNodeSAN()
+		})
+	}
+}
+
 func TestAuthenticationHook(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer func() { _ = security.SetCertPrincipalMap(nil) }()
