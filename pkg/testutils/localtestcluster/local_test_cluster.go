@@ -252,7 +252,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng.LogEngine(), clusterversion.TestingClusterVersion); err != nil {
+	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatalf("unable to write cluster version: %s", err)
 	}
 	if err := kvstorage.InitEngine(

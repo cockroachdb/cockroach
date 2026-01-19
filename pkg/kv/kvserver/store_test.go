@@ -299,7 +299,7 @@ func createTestStoreWithoutStart(
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng.TODOEngine(), cv))
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
 	if err := kvstorage.InitEngine(
 		ctx, eng.TODOEngine(), storeIdent,
 	); err != nil {
