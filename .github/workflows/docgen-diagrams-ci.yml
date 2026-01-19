@@ -267,67 +267,46 @@ jobs:
           # Install sharp for SVG to PNG conversion
           npm install sharp --no-save
 
-          # Create PNG generation script in workspace (where node_modules is)
-          cat > generate-pngs.js << 'SCRIPT_EOF'
-const sharp = require('sharp');
-const fs = require('fs');
-const path = require('path');
-
-const CSS_STYLE = `
-<style>
-.terminal { fill: #FFFFCC; stroke: #000000; stroke-width: 1; }
-.nonterminal { fill: #FFCCCC; stroke: #000000; stroke-width: 1; }
-.line { stroke: #000000; stroke-width: 1; fill: none; }
-text { font-family: monospace; font-size: 12px; fill: #000000; }
-polygon { fill: #000000; }
-rect { stroke-width: 1; }
-</style>`;
-
-async function convertToPng(htmlFile, outputFile) {
-  const html = fs.readFileSync(htmlFile, 'utf8');
-  const svgMatch = html.match(/<svg[^>]*>[\s\S]*<\/svg>/);
-  if (!svgMatch) return null;
-
-  let svg = svgMatch[0];
-  svg = svg.replace(/<svg/, '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"');
-  svg = svg.replace(/>/, `>${CSS_STYLE}`);
-
-  const png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
-  fs.writeFileSync(outputFile, png);
-  return png.length;
-}
-
-async function main() {
-  const inputDir = process.argv[2];
-  const outputDir = process.argv[3];
-  const maxCount = parseInt(process.argv[4]) || 5;
-
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-  const files = fs.readdirSync(inputDir).filter(f => f.endsWith('.html')).slice(0, maxCount);
-  console.log(`Processing ${files.length} diagrams...`);
-
-  for (const file of files) {
-    const input = path.join(inputDir, file);
-    const output = path.join(outputDir, file.replace('.html', '.png'));
-    try {
-      const size = await convertToPng(input, output);
-      if (size) console.log(`Generated: ${output} (${size} bytes)`);
-    } catch (e) {
-      console.error(`Error processing ${file}: ${e.message}`);
-    }
-  }
-}
-
-main().catch(e => { console.error(e); process.exit(1); });
-SCRIPT_EOF
-
-          # Generate PNGs from HTML diagrams (run from workspace where node_modules is)
+          # Create PNG generation script using node -e with script passed as argument
           mkdir -p artifacts/diagrams/png
-          node generate-pngs.js bazel-bin/docs/generated/sql/bnf artifacts/diagrams/png 5
 
-          # Cleanup
-          rm generate-pngs.js
+          node -e '
+          const sharp = require("sharp");
+          const fs = require("fs");
+          const path = require("path");
+
+          const CSS_STYLE = "<style>.terminal{fill:#FFFFCC;stroke:#000;stroke-width:1}.nonterminal{fill:#FFCCCC;stroke:#000;stroke-width:1}.line{stroke:#000;stroke-width:1;fill:none}text{font-family:monospace;font-size:12px;fill:#000}polygon{fill:#000}rect{stroke-width:1}</style>";
+
+          async function convertToPng(htmlFile, outputFile) {
+            const html = fs.readFileSync(htmlFile, "utf8");
+            const svgMatch = html.match(/<svg[^>]*>[\s\S]*<\/svg>/);
+            if (!svgMatch) return null;
+            let svg = svgMatch[0];
+            svg = svg.replace(/<svg/, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"");
+            svg = svg.replace(/>/, ">" + CSS_STYLE);
+            const png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+            fs.writeFileSync(outputFile, png);
+            return png.length;
+          }
+
+          async function main() {
+            const inputDir = process.argv[1];
+            const outputDir = process.argv[2];
+            const maxCount = parseInt(process.argv[3]) || 5;
+            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+            const files = fs.readdirSync(inputDir).filter(f => f.endsWith(".html")).slice(0, maxCount);
+            console.log("Processing " + files.length + " diagrams...");
+            for (const file of files) {
+              const input = path.join(inputDir, file);
+              const output = path.join(outputDir, file.replace(".html", ".png"));
+              try {
+                const size = await convertToPng(input, output);
+                if (size) console.log("Generated: " + output + " (" + size + " bytes)");
+              } catch (e) { console.error("Error: " + e.message); }
+            }
+          }
+          main().catch(e => { console.error(e); process.exit(1); });
+          ' bazel-bin/docs/generated/sql/bnf artifacts/diagrams/png 5
 
           echo "::endgroup::"
 
