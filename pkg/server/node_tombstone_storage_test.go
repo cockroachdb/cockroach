@@ -35,7 +35,7 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	id := uuid.NewV4()
 	for i := range engs {
 		require.NoError(t, engs[i].SetMinVersion(clusterversion.TestingClusterVersion))
-		require.NoError(t, kvstorage.InitEngine(ctx, engs[i].TODOEngine(), roachpb.StoreIdent{
+		require.NoError(t, kvstorage.InitEngine(ctx, engs[i], roachpb.StoreIdent{
 			ClusterID: id,
 			NodeID:    1,
 			StoreID:   roachpb.StoreID(1 + i),

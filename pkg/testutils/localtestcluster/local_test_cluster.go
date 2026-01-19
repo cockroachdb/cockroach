@@ -254,11 +254,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
 	require.NoError(t, ltc.Eng.SetMinVersion(clusterversion.TestingClusterVersion))
-	if err := kvstorage.InitEngine(
-		ctx, ltc.Eng.TODOEngine(), roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
-	); err != nil {
-		t.Fatalf("unable to start local test cluster: %s", err)
-	}
+	require.NoError(t, kvstorage.InitEngine(
+		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
+	))
 
 	rangeFeedFactory, err := rangefeed.NewFactory(ltc.stopper, ltc.DB, cfg.Settings, nil /* knobs */)
 	if err != nil {

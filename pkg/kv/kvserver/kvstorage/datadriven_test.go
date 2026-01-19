@@ -41,7 +41,7 @@ func newEnv(t *testing.T) *env {
 	// moving a lot more code from kvserver. But then we could unit test
 	// all of it with the datadriven harness!
 	require.NoError(t, eng.SetMinVersion(clusterversion.TestingClusterVersion))
-	require.NoError(t, InitEngine(ctx, eng.TODOEngine(), roachpb.StoreIdent{
+	require.NoError(t, InitEngine(ctx, eng, roachpb.StoreIdent{
 		ClusterID: uuid.MakeV4(),
 		NodeID:    1,
 		StoreID:   1,

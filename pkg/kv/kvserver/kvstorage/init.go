@@ -41,20 +41,21 @@ const FirstStoreID = roachpb.StoreID(1)
 // should be completely empty save for a cluster version, which must
 // already have been persisted to it. Returns an error if this is not
 // the case.
-func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
-	exIdent, err := ReadStoreIdent(ctx, eng)
+func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) error {
+	exIdent, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err == nil {
-		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
+		return errors.Errorf("engine %s is already initialized with ident %s",
+			eng.LogEngine(), exIdent.String())
 	}
 	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return err
 	}
 
-	if err := checkCanInitializeEngine(ctx, eng); err != nil {
+	if err := checkCanInitializeEngine(ctx, eng.TODOEngine()); err != nil {
 		return errors.Wrap(err, "while trying to initialize engine")
 	}
 
-	batch := eng.NewBatch()
+	batch := eng.LogEngine().NewBatch()
 	if err := storage.MVCCPutProto(
 		ctx,
 		batch,
@@ -72,7 +73,7 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 	// We will set the store ID during start, but we want to set it as quickly as
 	// possible after creating a store (to initialize the shared object creator
 	// ID).
-	if err := eng.SetStoreID(ctx, int32(ident.StoreID)); err != nil {
+	if err := eng.TODOEngine().SetStoreID(ctx, int32(ident.StoreID)); err != nil {
 		return errors.Wrap(err, "setting store ID")
 	}
 
