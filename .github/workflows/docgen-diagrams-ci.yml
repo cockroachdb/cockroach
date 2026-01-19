@@ -146,11 +146,11 @@ jobs:
 
           # Check if HTML files were generated
           echo "Checking for generated HTML files..."
-          if ls bazel-bin/docs/generated/sql/bnf/*.html 2>/dev/null; then
+          if ls _bazel/bin/docs/generated/sql/bnf/*.html 2>/dev/null; then
             echo "✅ HTML files generated successfully!"
-            ls -la bazel-bin/docs/generated/sql/bnf/*.html | head -10
+            ls -la _bazel/bin/docs/generated/sql/bnf/*.html | head -10
           else
-            echo "⚠️ No HTML files found in bazel-bin/docs/generated/sql/bnf/"
+            echo "⚠️ No HTML files found in _bazel/bin/docs/generated/sql/bnf/"
             echo "Checking other possible locations..."
             find . -name "*.html" -path "*/bnf/*" 2>/dev/null | head -20
           fi
@@ -306,7 +306,7 @@ jobs:
             }
           }
           main().catch(e => { console.error(e); process.exit(1); });
-          ' bazel-bin/docs/generated/sql/bnf artifacts/diagrams/png 5
+          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png 5
 
           echo "::endgroup::"
 
@@ -320,7 +320,7 @@ jobs:
           cp -r docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
 
           # Copy HTML files (SVG diagrams)
-          cp -r bazel-bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
+          cp -r _bazel/bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
 
           # Create manifest with diagram diffs
           GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
