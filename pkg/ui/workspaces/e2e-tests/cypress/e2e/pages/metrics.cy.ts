@@ -11,6 +11,8 @@ describe("metrics page", () => {
     cy.getUserWithExactPrivileges([SQLPrivilege.ADMIN]).then((user) => {
       cy.login(user.username, user.password);
     });
+    // Wait for login redirect to complete before navigating further
+    cy.location("hash").should("equal", "#/");
     // make sure we deterministic start on a fixed set of configurations
     cy.visit("#/metrics/overview/cluster?preset=past-hour");
   });
@@ -58,34 +60,32 @@ describe("metrics page", () => {
   });
 
   it("can switch dashboards", () => {
-    const dashboards = [
-      "Hardware",
-      "Runtime",
-      "Networking",
-      "SQL",
-      "Storage",
-      "Replication",
-      "Distributed",
-      "Queues",
-      "Slow Requests",
-      "Changefeeds",
-      "Overload",
-      "TTL",
-      "Physical Cluster Replication",
-      "Logical Data Replication",
-    ];
+    const dashboards: { [key: string]: string } = {
+      Hardware: "hardware",
+      Runtime: "runtime",
+      Networking: "networking",
+      SQL: "sql",
+      Storage: "storage",
+      Replication: "replication",
+      Distributed: "distributed",
+      Queues: "queues",
+      "Slow Requests": "requests",
+      Changefeeds: "changefeeds",
+      Overload: "overload",
+      TTL: "ttl",
+      "Physical Cluster Replication": "crossClusterReplication",
+      "Logical Data Replication": "logicalDataReplication",
+    };
 
-    cy.wrap(dashboards).each((d, i) => {
-      const title = String(d);
-      const previous = i === 0 ? "Overview" : String(dashboards[i - 1]);
-
+    cy.wrap(Object.entries(dashboards)).each(([title, pathSegment]) => {
       cy.get('[class*="dropdown__title"]').contains("Dashboard:").click();
       cy.get(".Select-menu-outer .Select-option")
         .contains(title)
+        .scrollIntoView()
         .should("be.visible")
         .click();
-      cy.get(".Select-value-label").contains(title).should("exist");
-      cy.get(".Select-value-label").contains(previous).should("not.exist");
+
+      cy.location("hash").should("include", pathSegment);
     });
   });
 
