@@ -1067,6 +1067,30 @@ func buildNTypes(n int) string {
 	return b.String()
 }
 
+func buildNTablesWithIndexes(numTables, numIndexesPerTable int) []string {
+	// Estimate capacity: BEGIN + SET LOCAL + (1 table + numIndexesPerTable indexes) * numTables + COMMIT.
+	stmts := make([]string, 0, 2+numTables*(1+numIndexesPerTable)+1)
+	stmts = append(stmts, "BEGIN")
+	stmts = append(stmts, "SET LOCAL autocommit_before_ddl = false")
+	for i := 0; i < numTables; i++ {
+		// Build column list: a INT PRIMARY KEY, plus one column per index.
+		var cols strings.Builder
+		cols.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY", i))
+		for j := 0; j < numIndexesPerTable; j++ {
+			col := string(rune('b' + j))
+			cols.WriteString(fmt.Sprintf(", %s INT", col))
+		}
+		cols.WriteString(")")
+		stmts = append(stmts, cols.String())
+		for j := 0; j < numIndexesPerTable; j++ {
+			col := string(rune('b' + j))
+			stmts = append(stmts, fmt.Sprintf("CREATE INDEX idx%d_%d ON t%d (%s)", i, j, i, col))
+		}
+	}
+	stmts = append(stmts, "COMMIT")
+	return stmts
+}
+
 func buildNDatabasesWithMTables(amtDbs int, amtTbls int) ([]string, []string) {
 	setupEx := make([]string, amtDbs)
 	resetEx := make([]string, amtDbs)
