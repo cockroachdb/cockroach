@@ -29,7 +29,10 @@ go_library(
 go_test(
     name = "slinstance_test",
     size = "small",
-    srcs = ["slinstance_test.go"],
+    srcs = [
+        "slinstance_test.go",
+        "sqlliveness_bench_test.go",
+    ],
     deps = [
         ":slinstance",
         "//pkg/clusterversion",
