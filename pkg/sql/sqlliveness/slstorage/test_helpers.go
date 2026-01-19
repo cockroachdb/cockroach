@@ -7,6 +7,7 @@ package slstorage
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -108,4 +109,53 @@ func (s *FakeStorage) Delete(_ context.Context, sid sqlliveness.SessionID) error
 	defer s.mu.Unlock()
 	delete(s.mu.sessions, sid)
 	return nil
+}
+
+// InstrumentedStorage wraps FakeStorage to track concurrency metrics for
+// benchmarking. It tracks the total number of operations and peak concurrent
+// operations to measure thundering herd effects.
+type InstrumentedStorage struct {
+	*FakeStorage
+	totalUpdates atomic.Int64
+	currentConc  atomic.Int64
+	peakConc     atomic.Int64
+}
+
+func NewInstrumentedStorage() *InstrumentedStorage {
+	return &InstrumentedStorage{
+		FakeStorage: NewFakeStorage(),
+	}
+}
+
+// Update implements the slinstance.Writer interface with concurrency tracking.
+func (s *InstrumentedStorage) Update(
+	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
+) (bool, hlc.Timestamp, error) {
+	cur := s.currentConc.Add(1)
+	defer s.currentConc.Add(-1)
+	for {
+		peak := s.peakConc.Load()
+		if cur <= peak || s.peakConc.CompareAndSwap(peak, cur) {
+			break
+		}
+	}
+	s.totalUpdates.Add(1)
+	return s.FakeStorage.Update(ctx, sid, expiration)
+}
+
+// TotalUpdates returns the total number of Update operations.
+func (s *InstrumentedStorage) TotalUpdates() int64 {
+	return s.totalUpdates.Load()
+}
+
+// PeakConcurrency returns the peak number of concurrent storage operations.
+func (s *InstrumentedStorage) PeakConcurrency() int64 {
+	return s.peakConc.Load()
+}
+
+// ResetMetrics resets all concurrency tracking metrics.
+func (s *InstrumentedStorage) ResetMetrics() {
+	s.totalUpdates.Store(0)
+	s.currentConc.Store(0)
+	s.peakConc.Store(0)
 }

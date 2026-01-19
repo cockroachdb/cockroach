@@ -11,6 +11,7 @@ package slinstance
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -420,7 +421,10 @@ func NewSQLInstance(
 			return ttl
 		},
 		hb: func() time.Duration {
-			return slbase.DefaultHeartBeat.Get(&settings.SV)
+			defaultHB := slbase.DefaultHeartBeat.Get(&settings.SV)
+			hbJitter := slbase.HeartbeatJitter.Get(&settings.SV)
+			frac := 1 + (2*rand.Float64()-1)*hbJitter
+			return time.Duration(frac * float64(defaultHB.Nanoseconds()))
 		},
 		drain: make(chan struct{}),
 	}
