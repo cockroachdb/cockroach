@@ -40,7 +40,7 @@ func newEnv(t *testing.T) *env {
 	// TODO(tbg): ideally this would do full bootstrap, which requires
 	// moving a lot more code from kvserver. But then we could unit test
 	// all of it with the datadriven harness!
-	require.NoError(t, WriteClusterVersion(eng, clusterversion.TestingClusterVersion))
+	require.NoError(t, eng.SetMinVersion(clusterversion.TestingClusterVersion))
 	require.NoError(t, InitEngine(ctx, eng.TODOEngine(), roachpb.StoreIdent{
 		ClusterID: uuid.MakeV4(),
 		NodeID:    1,

@@ -17,19 +17,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// WriteClusterVersion writes the given cluster version to the min version file,
-// for each logical engine.
-func WriteClusterVersion(eng Engines, cv clusterversion.ClusterVersion) error {
-	if err := eng.StateEngine().SetMinVersion(cv.Version); err != nil {
-		return errors.Wrapf(err, "error writing version to engine %s", eng.StateEngine())
-	} else if !eng.Separated() {
-		return nil // there is only one engine
-	} else if err := eng.LogEngine().SetMinVersion(cv.Version); err != nil {
-		return errors.Wrapf(err, "error writing version to engine %s", eng.LogEngine())
-	}
-	return nil
-}
-
 // WriteClusterVersionToEngines writes the given version to the given engines,
 // Returns nil on success; otherwise returns first error encountered writing to
 // the stores. It makes no attempt to validate the supplied version.
@@ -38,7 +25,7 @@ func WriteClusterVersion(eng Engines, cv clusterversion.ClusterVersion) error {
 // (to perhaps fill into additional stores), and during cluster version bumps.
 func WriteClusterVersionToEngines(engines []Engines, cv clusterversion.ClusterVersion) error {
 	for _, eng := range engines {
-		if err := WriteClusterVersion(eng, cv); err != nil {
+		if err := eng.SetMinVersion(cv); err != nil {
 			return err
 		}
 	}

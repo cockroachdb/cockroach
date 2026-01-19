@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -252,9 +253,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvstorage.WriteClusterVersion(ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
-		t.Fatalf("unable to write cluster version: %s", err)
-	}
+	require.NoError(t, ltc.Eng.SetMinVersion(clusterversion.TestingClusterVersion))
 	if err := kvstorage.InitEngine(
 		ctx, ltc.Eng.TODOEngine(), roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
 	); err != nil {
