@@ -412,8 +412,9 @@ var specs = []stmtSpec{
 	},
 	{
 		// ALTER DATABASE DROP REGION statement diagram
-		name: "alter_database_drop_region",
-		stmt: "alter_database_drop_region_stmt",
+		name:   "alter_database_drop_region",
+		stmt:   "alter_database_drop_region_stmt",
+		unlink: []string{"region_name"},
 	},
 	{
 		name:    "alter_default_privileges_stmt",
