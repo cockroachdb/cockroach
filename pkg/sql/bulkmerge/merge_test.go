@@ -8,7 +8,6 @@ package bulkmerge
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,12 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskset"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,7 +129,11 @@ func TestDistributedMergeProcessorFailurePropagates(t *testing.T) {
 	writeTS := hlc.Timestamp{WallTime: 1}
 	_, err := Merge(ctx, jobExecCtx, ssts, spans, func(instanceID base.SQLInstanceID) (string, error) {
 		return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
-	}, 1 /* iteration */, 1 /* maxIterations */, &writeTS)
+	}, MergeOptions{
+		Iteration:      1,
+		MaxIterations:  1,
+		WriteTimestamp: &writeTS,
+	})
 	require.ErrorIs(t, err, injectedErr)
 }
 
@@ -141,9 +147,6 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		ExternalIODir: dir,
-		// These tests write directly into KV, so they must run against the system
-		// tenant.
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -163,23 +166,20 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 	const keyCount = 10
 	expected := make(map[string]string, keyCount)
 	for i := 0; i < keyCount; i++ {
-		key := fmt.Sprintf("%skey-%d", prefix, i)
+		keyStr := fmt.Sprintf("%skey-%d", prefix, i)
 		val := fmt.Sprintf("value-%d", i)
-		expected[key] = val
+		mvccKey := storageutils.PointKey(s.Codec(), keyStr, 1)
+		expected[string(mvccKey.Key)] = val
 
 		mvccVal := roachpb.MakeValueFromBytes([]byte(val))
 		encMVCCVal, err := storage.EncodeMVCCValue(storage.MVCCValue{Value: mvccVal})
 		require.NoError(t, err)
-		mvccKey := storage.MVCCKey{
-			Key:       []byte(key),
-			Timestamp: hlc.Timestamp{WallTime: 1},
-		}
 		require.NoError(t, batcher.AddMVCCKey(ctx, mvccKey, encMVCCVal))
 	}
 	require.NoError(t, batcher.CloseWithError(ctx))
 
 	inputSSTs := importToMerge(fileAllocator.GetFileList())
-	start := roachpb.Key(prefix)
+	start := append(s.Codec().TenantPrefix(), []byte(prefix)...)
 	end := start.PrefixEnd()
 	spans := []roachpb.Span{{Key: start, EndKey: end}}
 
@@ -192,9 +192,10 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		func(instanceID base.SQLInstanceID) (string, error) {
 			return fmt.Sprintf("nodelocal://%d/merge/iter-1/", instanceID), nil
 		},
-		1, /* iteration */
-		2, /* maxIterations */
-		nil,
+		MergeOptions{
+			Iteration:     1,
+			MaxIterations: 2,
+		},
 	)
 	require.NoError(t, err)
 	require.NotEmpty(t, iter1Out)
@@ -209,9 +210,11 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		func(instanceID base.SQLInstanceID) (string, error) {
 			return fmt.Sprintf("nodelocal://%d/merge/iter-2/", instanceID), nil
 		},
-		2, /* iteration */
-		2, /* maxIterations */
-		&writeTS,
+		MergeOptions{
+			Iteration:      2,
+			MaxIterations:  2,
+			WriteTimestamp: &writeTS,
+		},
 	)
 	require.NoError(t, err)
 	require.Nil(t, iter2Out, "final iteration should not produce SST outputs")
@@ -346,9 +349,10 @@ func testMergeProcessors(
 		func(instanceID base.SQLInstanceID) (string, error) {
 			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
 		},
-		1,   /* iteration */
-		2,   /* maxIterations */
-		nil, /* writeTS */
+		MergeOptions{
+			Iteration:     1,
+			MaxIterations: 2,
+		},
 	)
 	require.NoError(t, err)
 	defer plan.Release()
@@ -552,9 +556,11 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 		func(instanceID base.SQLInstanceID) (string, error) {
 			return fmt.Sprintf("nodelocal://%d/merge/out/", instanceID), nil
 		},
-		1,        /* iteration */
-		2,        /* maxIterations */
-		&writeTS, /* writeTS */
+		MergeOptions{
+			Iteration:      1,
+			MaxIterations:  2,
+			WriteTimestamp: &writeTS,
+		},
 	)
 	require.NoError(t, err)
 	defer plan.Release()
@@ -671,4 +677,118 @@ func TestMergeSSTsSplitsAtRowBoundaries(t *testing.T) {
 				"SST %d endKey should be at row boundary (safeKey.PrefixEnd())", i)
 		}
 	}
+}
+
+// TestKVWritePreexistingKeyConflictDetection verifies that duplicate keys are
+// detected during KV write when EnforceUniqueness is enabled and the key
+// already exists in KV.
+func TestKVWritePreexistingKeyConflictDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	jobExecCtx, jobCleanup := sql.MakeJobExecContext(
+		ctx, "test-uniqueness", username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+	)
+	defer jobCleanup()
+
+	tsa := newTestServerAllocator(t, ctx, execCfg)
+
+	// Step 1: First merge to populate KV with some keys.
+	// Write keys [key-0, key-1, key-2] to an SST and ingest into KV.
+	writeTS1 := hlc.Timestamp{WallTime: 1}
+	fileAllocator1 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	batcher1 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator1)
+	writeSpecificKeys(t, ctx, batcher1, []int{0, 1, 2}, writeTS1, s.Codec())
+
+	ssts1 := importToMerge(fileAllocator1.GetFileList())
+	spans := []roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}}
+
+	// First merge: ingest without uniqueness enforcement (initial data load).
+	mergeWriteTS1 := execCfg.Clock.Now()
+	_, err := Merge(
+		ctx,
+		jobExecCtx,
+		ssts1,
+		spans,
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/out1/", instanceID), nil
+		},
+		MergeOptions{
+			Iteration:         1,
+			MaxIterations:     1,
+			WriteTimestamp:    &mergeWriteTS1,
+			EnforceUniqueness: false,
+		},
+	)
+	require.NoError(t, err, "first merge should succeed")
+
+	// Step 2: Second merge with overlapping keys and EnforceUniqueness=true.
+	// Write keys [key-2, key-3, key-4] to an SST - key-2 overlaps with existing data.
+	writeTS2 := hlc.Timestamp{WallTime: 2}
+	fileAllocator2 := bulksst.NewExternalFileAllocator(tsa.es, tsa.prefixUri, s.Clock())
+	batcher2 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator2)
+	writeSpecificKeys(t, ctx, batcher2, []int{2, 3, 4}, writeTS2, s.Codec())
+
+	ssts2 := importToMerge(fileAllocator2.GetFileList())
+
+	// Second merge with uniqueness enforcement. This should detect that key-2
+	// already exists in KV and fail with a KeyCollisionError.
+	mergeWriteTS2 := execCfg.Clock.Now()
+	_, err = Merge(
+		ctx,
+		jobExecCtx,
+		ssts2,
+		spans,
+		func(instanceID base.SQLInstanceID) (string, error) {
+			return fmt.Sprintf("nodelocal://%d/merge/out2/", instanceID), nil
+		},
+		MergeOptions{
+			Iteration:         1,
+			MaxIterations:     1,
+			WriteTimestamp:    &mergeWriteTS2,
+			EnforceUniqueness: true,
+		},
+	)
+
+	// Verify that a uniqueness violation error was returned. The error should be
+	// a KeyCollisionError since the duplicate is detected during SST ingestion
+	// when DisallowShadowingBelow finds an existing key.
+	require.Error(t, err, "expected uniqueness violation error for duplicate key")
+	isCollisionErr := errors.HasType(err, &kvpb.KeyCollisionError{})
+	require.True(t, isCollisionErr,
+		"expected KeyCollisionError, got: %+v", err)
+}
+
+// writeSpecificKeys writes SST entries for the given key indices with properly
+// encoded MVCC values. Uses the codec to apply tenant-aware key encoding.
+func writeSpecificKeys(
+	t *testing.T,
+	ctx context.Context,
+	batcher *bulksst.Writer,
+	keyIndices []int,
+	ts hlc.Timestamp,
+	codec keys.SQLCodec,
+) {
+	t.Helper()
+	for _, i := range keyIndices {
+		keyStr := fmt.Sprintf("key-%d", i)
+		key := storageutils.PointKey(codec, keyStr, int(ts.WallTime))
+		// Properly encode the value as an MVCC value.
+		mvccVal := roachpb.MakeValueFromBytes([]byte(fmt.Sprintf("value-%d", i)))
+		encMVCCVal, err := storage.EncodeMVCCValue(storage.MVCCValue{Value: mvccVal})
+		require.NoError(t, err)
+		require.NoError(t, batcher.AddMVCCKey(ctx, key, encMVCCVal))
+	}
+	require.NoError(t, batcher.Flush(ctx))
 }

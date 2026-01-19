@@ -962,6 +962,16 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	return false
 }
 
+// ContainsUniqueIndex returns true if backfilling a unique index.
+func (ib *IndexBackfiller) ContainsUniqueIndex() bool {
+	for _, idx := range ib.added {
+		if idx.IsUnique() {
+			return true
+		}
+	}
+	return false
+}
+
 // InitForLocalUse initializes an IndexBackfiller for use during local execution
 // within a transaction. In this case, the entire backfill process is occurring
 // on the gateway as part of the user's transaction.
