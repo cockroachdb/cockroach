@@ -229,16 +229,23 @@ jobs:
       - name: Check for diagram changes
         id: check-changes
         run: |
-          # Compare generated files with what would be in the generated-diagrams repo
-          changed_files=$(git diff --name-only HEAD -- docs/generated/sql/bnf/ 2>/dev/null || echo "")
-          if [[ -n "$changed_files" ]]; then
+          # Compare generated BNF files with committed versions
+          bnf_changed=$(git diff --name-only HEAD -- docs/generated/sql/bnf/ 2>/dev/null || echo "")
+
+          # Also check if diagrams.go was modified (which affects HTML rendering even if BNF stays same)
+          # This catches changes like unlink, replace, nosplit that don't affect BNF
+          diagrams_go_changed=$(git diff --name-only origin/${{ github.event.pull_request.base.ref || 'master' }} -- pkg/cmd/docgen/diagrams.go 2>/dev/null || echo "")
+
+          if [[ -n "$bnf_changed" ]] || [[ -n "$diagrams_go_changed" ]]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Changed files:"
-            echo "$changed_files"
+            echo "Detected changes:"
+            [[ -n "$bnf_changed" ]] && echo "BNF files: $bnf_changed"
+            [[ -n "$diagrams_go_changed" ]] && echo "diagrams.go modified"
 
             # Generate detailed diff summary for manifest
+            all_changed="${bnf_changed}"
             echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-            echo "$changed_files" >> $GITHUB_OUTPUT
+            echo "$all_changed" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
