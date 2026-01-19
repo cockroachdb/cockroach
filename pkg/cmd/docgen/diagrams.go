@@ -6,6 +6,7 @@
 // diagrams.go contains the SQL grammar diagram generation logic.
 // This file is the single source of truth for diagram specifications.
 // See the docgen-diagrams-ci.yml workflow for the automated CI pipeline.
+// PNG previews are generated for diagrams modified in PRs.
 
 package main
 
