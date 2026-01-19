@@ -160,10 +160,6 @@ func determineDistributedMergeModeForStatement(
 	if incumbent.DistributedMergeMode != scpb.DistributedMergeModeUnset {
 		mode = incumbent.DistributedMergeMode
 	}
-	if mode == scpb.DistributedMergeModeEnabled &&
-		stmt != nil && !backfill.StatementAllowsDistributedMerge(stmt) {
-		mode = scpb.DistributedMergeModeDisabled
-	}
 	return mode, nil
 }
 

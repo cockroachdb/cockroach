@@ -463,6 +463,20 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			writeTS = &ts
 		}
 
+		// Determine if any destination indexes are unique. If so, we need to
+		// enforce uniqueness checking during the final merge iteration.
+		enforceUniqueness := false
+		for _, idxID := range progress.DestIndexIDs {
+			idx, err := catalog.MustFindIndexByID(descriptor, idxID)
+			if err != nil {
+				return err
+			}
+			if idx.IsUnique() {
+				enforceUniqueness = true
+				break
+			}
+		}
+
 		merged, err := invokeBulkMerge(
 			ctx,
 			jobExecCtx,
@@ -472,6 +486,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			iteration,
 			maxIterations,
 			writeTS,
+			enforceUniqueness,
 		)
 		if err != nil {
 			return err

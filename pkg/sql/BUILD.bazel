@@ -849,6 +849,7 @@ go_test(
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/sql/appstatspb",
         "//pkg/sql/backfill",
+        "//pkg/sql/bulkmerge",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",

@@ -644,11 +644,16 @@ message BulkMergeSpec {
   // directly into KV.
   optional util.hlc.Timestamp write_timestamp = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTimestamp"];
 
+  // enforce_uniqueness indicates whether to check for duplicate keys during the
+  // final merge iteration. Should be true when building unique indexes. Duplicate
+  // key errors will propagate as DuplicateKeyError or KeyCollisionError.
+  optional bool enforce_uniqueness = 7 [(gogoproto.nullable) = false];
+
   message Output {
     // output_ssts is the list of output SSTs.
     repeated SST ssts = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SSTs"];
   }
-  // NEXT ID: 7.
+  // NEXT ID: 8.
 }
 
 // IndexBackfillMapProgress is emitted by map-stage processors to describe newly

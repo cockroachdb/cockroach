@@ -133,7 +133,7 @@ func TestSSTFileNamingConvention(t *testing.T) {
 	writeTS := hlc.Timestamp{WallTime: 1000000000}
 
 	prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, spec.DistributedMergeFilePrefix)
-	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, prefix, writeTS, processorID)
+	sink, err := newSSTIndexBackfillSink(ctx, flowCtx, prefix, writeTS, processorID, false /* checkDuplicates */)
 	require.NoError(t, err)
 	defer sink.Close(ctx)
 
