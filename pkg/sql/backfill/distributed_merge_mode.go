@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -127,53 +126,4 @@ func DetermineDistributedMergeMode(
 		return jobspb.IndexBackfillDistributedMergeMode_Enabled, nil
 	}
 	return jobspb.IndexBackfillDistributedMergeMode_Disabled, nil
-}
-
-// StatementAllowsDistributedMerge reports whether this statement may use the
-// distributed merge pipeline. This only checks statement-level eligibility. It
-// does not decide whether the statement actually runs an index backfill.
-//
-// TODO(156934): everything is allowed except statements that create new unique
-// indexes. Unique index creation is blocked until the distributed merge path
-// supports enforcing uniqueness.
-func StatementAllowsDistributedMerge(stmt tree.Statement) bool {
-	switch s := stmt.(type) {
-	case *tree.CreateIndex:
-		if s.Unique {
-			return false
-		}
-	case *tree.AlterTable:
-		for _, cmd := range s.Cmds {
-			if alterTableCmdIntroducesUniqueness(cmd) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-// alterTableCmdIntroducesUniqueness reports whether this command adds a new
-// uniqueness requirement.
-func alterTableCmdIntroducesUniqueness(cmd tree.AlterTableCmd) bool {
-	switch c := cmd.(type) {
-	case *tree.AlterTableAddColumn:
-		col := c.ColumnDef
-		if col == nil {
-			return false
-		}
-		if col.PrimaryKey.IsPrimaryKey {
-			return true
-		}
-		if col.Unique.IsUnique && !col.Unique.WithoutIndex {
-			return true
-		}
-	case *tree.AlterTableAddConstraint:
-		if u, ok := c.ConstraintDef.(*tree.UniqueConstraintTableDef); ok {
-			return !u.WithoutIndex
-		}
-	case *tree.AlterTableAlterPrimaryKey:
-		// Primary keys are unique and always backed by an index.
-		return true
-	}
-	return false
 }

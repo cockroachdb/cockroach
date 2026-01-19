@@ -43,6 +43,7 @@ func newSSTIndexBackfillSink(
 	distributedMergeFilePrefix string,
 	writeAsOf hlc.Timestamp,
 	processorID int32,
+	checkDuplicates bool,
 ) (indexBackfillSink, error) {
 	if distributedMergeFilePrefix == "" {
 		return nil, errors.AssertionFailedf("distributed merge sink requires file prefix")
@@ -61,6 +62,7 @@ func newSSTIndexBackfillSink(
 	fileAllocator := bulksst.NewExternalFileAllocator(es, prefix, flowCtx.Cfg.DB.KV().Clock())
 	writer := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
 	writer.SetWriteTS(writeAsOf)
+	writer.SetCheckDuplicates(checkDuplicates)
 
 	return &sstIndexBackfillSink{
 		writer:    writer,

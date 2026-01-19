@@ -251,16 +251,19 @@ func (m *bulkMergeProcessor) mergeSSTs(
 	}
 	defer writer.Close(ctx)
 
-	return processMergedData(ctx, m.iter, mergeSpan, writer)
+	return m.processMergedData(ctx, m.iter, mergeSpan, writer)
 }
 
 // processMergedData is a unified function for iterating over merged data and
 // writing it using a mergeWriter implementation. The iterator must already be
 // positioned at or before the start of mergeSpan.
-func processMergedData(
+func (m *bulkMergeProcessor) processMergedData(
 	ctx context.Context, iter storage.SimpleMVCCIterator, mergeSpan roachpb.Span, writer mergeWriter,
 ) (execinfrapb.BulkMergeSpec_Output, error) {
+	knobs, _ := m.flowCtx.Cfg.TestingKnobs.BulkMergeTestingKnobs.(*TestingKnobs)
 	var endKey roachpb.Key
+	duplicateInjected := false
+
 	for {
 		ok, err := iter.Valid()
 		if err != nil {
@@ -305,7 +308,17 @@ func processMergedData(
 			endKey = safeKey.PrefixEnd()
 		}
 
+		// Testing hook: if duplicate requested and not already injected for this
+		// key, skip advancing the iterator so the key is processed again.
+		if !duplicateInjected && knobs != nil && knobs.InjectDuplicateKey != nil {
+			if knobs.InjectDuplicateKey(m.spec.Iteration, m.spec.MaxIterations) {
+				duplicateInjected = true
+				continue
+			}
+		}
+
 		iter.NextKey()
+		duplicateInjected = false
 	}
 
 	return writer.Finish(ctx, mergeSpan.EndKey)
@@ -319,6 +332,16 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		writeTS = m.flowCtx.Cfg.DB.KV().Clock().Now()
 	}
 
+	// For unique indexes, enable duplicate detection by setting
+	// disallowShadowingBelow to the write timestamp.
+	// TODO(161447): cross-SST duplicates within the same merge are NOT detected
+	// here; they are silently shadowed by ExternalSSTReader before reaching the
+	// batcher.
+	disallowShadowingBelow := hlc.Timestamp{}
+	if m.spec.EnforceUniqueness {
+		disallowShadowingBelow = writeTS
+	}
+
 	// Use SSTBatcher directly instead of BufferingAdder since the data is
 	// already sorted from the merge iterator. This avoids the unnecessary
 	// sorting overhead in BufferingAdder.
@@ -327,9 +350,9 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		"bulk-merge-final",
 		m.flowCtx.Cfg.DB.KV(),
 		m.flowCtx.EvalCtx.Settings,
-		hlc.Timestamp{}, // disallowShadowingBelow
-		false,           // writeAtBatchTs
-		false,           // scatterSplitRanges
+		disallowShadowingBelow,
+		false, // writeAtBatchTs
+		false, // scatterSplitRanges
 		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		m.flowCtx.Cfg.BulkSenderLimiter,
 		nil, // range cache
@@ -340,7 +363,7 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
-	return processMergedData(ctx, iter, mergeSpan, writer)
+	return m.processMergedData(ctx, iter, mergeSpan, writer)
 }
 
 // createIter builds an iterator over all input SSTs. Actual access to the SSTs
