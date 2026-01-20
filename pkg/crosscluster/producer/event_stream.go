@@ -272,9 +272,12 @@ func (s *eventStream) onInitialScanDone(ctx context.Context) {
 	log.Dev.VInfof(ctx, 2, "initial scan completed")
 }
 
-func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
+func (s *eventStream) onValues(ctx context.Context, values []kvpb.RangeFeedValue) {
 	for _, i := range values {
-		s.seb.addKV(streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: i.Key, Value: *i.Value}})
+		s.seb.addKV(streampb.StreamEvent_KV{
+			KeyValue:  roachpb.KeyValue{Key: i.Key, Value: i.Value},
+			PrevValue: i.PrevValue,
+		})
 	}
 	s.setErr(s.maybeFlushBatch(ctx))
 }

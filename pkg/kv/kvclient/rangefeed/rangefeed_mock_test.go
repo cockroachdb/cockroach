@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -48,7 +47,7 @@ type mockClient struct {
 		spans []roachpb.Span,
 		asOf hlc.Timestamp,
 		rowFn func(value roachpb.KeyValue),
-		rowsFn func(values []kv.KeyValue),
+		rowsFn func(values []kvpb.RangeFeedValue),
 		cfg rangefeed.ScanConfig,
 	) error
 }
@@ -77,7 +76,7 @@ func (m *mockClient) Scan(
 	spans []roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
-	rowsFn func(values []kv.KeyValue),
+	rowsFn func(values []kvpb.RangeFeedValue),
 	cfg rangefeed.ScanConfig,
 ) error {
 	return m.scan(ctx, spans, asOf, rowFn, rowsFn, cfg)
@@ -111,7 +110,7 @@ func TestRangeFeedMock(t *testing.T) {
 		const numFailures = 2
 		mc := mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), cfg rangefeed.ScanConfig) error {
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), cfg rangefeed.ScanConfig) error {
 				assert.Equal(t, ts, asOf)
 				assert.Equal(t, []roachpb.Span{sp}, spans)
 				rowFn(row)
@@ -172,7 +171,7 @@ func TestRangeFeedMock(t *testing.T) {
 		mc := mockClient{
 			scan: func(
 				ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
@@ -275,7 +274,7 @@ func TestRangeFeedMock(t *testing.T) {
 		}
 		mc := mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
@@ -331,7 +330,7 @@ func TestRangeFeedMock(t *testing.T) {
 		var called int
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig) error {
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), config rangefeed.ScanConfig) error {
 				return errors.New("boom")
 			},
 		}, nil /* knobs */)
@@ -387,7 +386,7 @@ func TestRangeFeedMock(t *testing.T) {
 		// call the usual rangefeed initial scan span complete callback.
 		f := rangefeed.NewFactoryWithDB(stopper, &mockClient{
 			scan: func(ctx context.Context, requested []roachpb.Span, _ hlc.Timestamp,
-				rowFn func(_ roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), cfg rangefeed.ScanConfig) error {
+				rowFn func(_ roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), cfg rangefeed.ScanConfig) error {
 				res := <-resultCh
 				if err := cfg.OnSpanDone(ctx, res); err != nil {
 					return err
@@ -470,7 +469,7 @@ func TestRangeFeedMock(t *testing.T) {
 		done := make(chan struct{})
 		mc := mockClient{
 			scan: func(ctx context.Context, spans []roachpb.Span, asOf hlc.Timestamp,
-				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kv.KeyValue), config rangefeed.ScanConfig,
+				rowFn func(value roachpb.KeyValue), rowsFn func(_ []kvpb.RangeFeedValue), config rangefeed.ScanConfig,
 			) error {
 				t.Error("this should not be called")
 				return nil
