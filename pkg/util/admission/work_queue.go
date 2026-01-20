@@ -887,12 +887,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
 		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
 			log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-			return AdmitResponse{}, errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+			return AdmitResponse{}, errors.Wrapf(ctx.Err(),
+				"deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
 				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
 		}
 		// This is a pure context cancellation.
 		log.Eventf(ctx, "context canceled, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
-		return AdmitResponse{}, errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
+		return AdmitResponse{}, errors.Wrapf(ctx.Err(),
+			"context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
 			q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
