@@ -195,7 +195,7 @@ func captureIndexUsageStats(
 		FROM crdb_internal.index_usage_statistics AS us
     JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
                                           AND us.table_id = ti.descriptor_id
-    JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
+    JOIN pg_catalog.pg_class AS c ON ti.descriptor_id::OID = c.oid
     JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
 ORDER BY total_reads ASC`
 
