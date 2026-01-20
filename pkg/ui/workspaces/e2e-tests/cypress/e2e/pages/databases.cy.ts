@@ -12,7 +12,7 @@ describe("databases page", () => {
       cy.login(user.username, user.password);
     });
     // Wait for login redirect to complete before navigating further
-    cy.location("hash").should("equal", "#/");
+    cy.location("hash").should("equal", "#/overview/list");
     cy.visit("#/databases");
   });
 
