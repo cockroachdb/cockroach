@@ -357,7 +357,7 @@ CREATE TABLE public.statement_statistics (
 	contention_time FLOAT8 NULL AS ((((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8) STORED,
 	total_estimated_execution_time FLOAT8 NULL AS (((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8) STORED,
 	p99_latency FLOAT8 NULL AS ((((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8) STORED,
-	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, transaction_fingerprint_id ASC, plan_hash ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8),
+	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, transaction_fingerprint_id ASC, plan_hash ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8, shard_columns=(aggregated_ts, app_name, fingerprint_id, node_id, plan_hash, transaction_fingerprint_id)),
 	INDEX fingerprint_stats_idx (fingerprint_id ASC, transaction_fingerprint_id ASC),
 	INVERTED INDEX indexes_usage_idx (indexes_usage),
 	INDEX execution_count_idx (aggregated_ts ASC, app_name ASC, execution_count DESC) WHERE app_name NOT LIKE '$ internal%':::STRING,
@@ -382,7 +382,7 @@ CREATE TABLE public.transaction_statistics (
 	contention_time FLOAT8 NULL AS ((((statistics->'execution_statistics':::STRING)->'contentionTime':::STRING)->'mean':::STRING)::FLOAT8) STORED,
 	total_estimated_execution_time FLOAT8 NULL AS (((statistics->'statistics':::STRING)->>'cnt':::STRING)::FLOAT8 * (((statistics->'statistics':::STRING)->'svcLat':::STRING)->>'mean':::STRING)::FLOAT8) STORED,
 	p99_latency FLOAT8 NULL AS ((((statistics->'statistics':::STRING)->'latencyInfo':::STRING)->'p99':::STRING)::FLOAT8) STORED,
-	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8),
+	CONSTRAINT "primary" PRIMARY KEY (aggregated_ts ASC, fingerprint_id ASC, app_name ASC, node_id ASC) USING HASH WITH (bucket_count=8, shard_columns=(aggregated_ts, app_name, fingerprint_id, node_id)),
 	INDEX fingerprint_stats_idx (fingerprint_id ASC),
 	INDEX execution_count_idx (aggregated_ts ASC, app_name ASC, execution_count DESC) WHERE app_name NOT LIKE '$ internal%':::STRING,
 	INDEX service_latency_idx (aggregated_ts ASC, app_name ASC, service_latency DESC) WHERE app_name NOT LIKE '$ internal%':::STRING,
@@ -584,7 +584,7 @@ CREATE TABLE public.mvcc_statistics (
 	index_id INT8 NOT NULL,
 	statistics JSONB NOT NULL,
 	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)) VIRTUAL,
-	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16)
+	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16, shard_columns=(created_at, database_id, index_id, table_id))
 );
 CREATE TABLE public.transaction_execution_insights (
 	transaction_id UUID NOT NULL,
@@ -612,7 +612,7 @@ CREATE TABLE public.transaction_execution_insights (
 	crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
 	CONSTRAINT "primary" PRIMARY KEY (transaction_id ASC),
 	INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id ASC),
-	INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16)
+	INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16, shard_columns=(end_time, start_time))
 );
 CREATE TABLE public.statement_execution_insights (
 	session_id STRING NOT NULL,
@@ -648,7 +648,7 @@ CREATE TABLE public.statement_execution_insights (
 	INDEX transaction_id_idx (transaction_id ASC),
 	INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id ASC, start_time DESC, end_time DESC),
 	INDEX statement_fingerprint_id_idx (statement_fingerprint_id ASC, start_time DESC, end_time DESC),
-	INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16)
+	INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16, shard_columns=(end_time, start_time))
 );
 CREATE TABLE public.table_metadata (
 	db_id INT8 NOT NULL,
@@ -675,7 +675,7 @@ CREATE TABLE public.table_metadata (
 	INDEX total_columns_table_id_idx (total_columns DESC, table_id ASC),
 	INDEX total_indexes_table_id_idx (total_indexes DESC, table_id ASC),
 	INDEX perc_live_data_id_idx (perc_live_data DESC, table_id ASC),
-	INDEX last_updated_idx (last_updated DESC, table_id ASC) USING HASH WITH (bucket_count=16),
+	INDEX last_updated_idx (last_updated DESC, table_id ASC) USING HASH WITH (bucket_count=16, shard_columns=(last_updated, table_id)),
 	INVERTED INDEX db_name_gin (db_name gin_trgm_ops),
 	INVERTED INDEX table_name_gin (table_name gin_trgm_ops),
 	INVERTED INDEX schema_name_gin (schema_name gin_trgm_ops),
