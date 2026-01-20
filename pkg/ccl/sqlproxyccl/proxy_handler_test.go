@@ -396,7 +396,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	}
 
 	t.Run("private connection allowed", func(t *testing.T) {
-		url := fmt.Sprintf("postgres://bob:builder@%s/my-tenant-10.defaultdb?sslmode=require", addrs.listenAddr)
+		url := fmt.Sprintf("postgres://bob:builder@%s/my-tenant-10.defaultdb?sslmode=require&sslrootcert=%s", addrs.listenAddr, datapathutils.TestDataPath(t, "testserver.crt"))
 		te.TestConnectWithPGConfig(
 			ctx, t, url,
 			func(c *pgx.ConnConfig) {
@@ -2798,6 +2798,51 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
 				require.Equal(t, int64(1), m.DatabaseRoutingMethodCount.Value())
 			},
+		},
+		{
+			name:                "new sni format with dot separator",
+			sniServerName:       "happy-seal.10.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:              map[string]string{},
+			expectedClusterName: "happy-seal",
+			expectedTenantID:    10,
+			expectedParams:      map[string]string{},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.SNIRoutingMethodCount.Value())
+			},
+		},
+		{
+			name:                "new sni format with longer cluster name",
+			sniServerName:       "palm-chamois.5829.jxf.gcp-us-east1.cockroachlabs.cloud",
+			params:              map[string]string{},
+			expectedClusterName: "palm-chamois",
+			expectedTenantID:    5829,
+			expectedParams:      map[string]string{},
+			expectedMetrics: func(t *testing.T, m *metrics) {
+				require.Equal(t, int64(1), m.RoutingMethodCount.Count())
+				require.Equal(t, int64(1), m.SNIRoutingMethodCount.Value())
+			},
+		},
+		{
+			name:          "new sni format with non-numeric second label falls back",
+			sniServerName: "happy-seal.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:          "new sni format with zero tenant ID",
+			sniServerName: "happy-seal.0.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
+		},
+		{
+			name:          "new sni format with short cluster name falls back to old parsing",
+			sniServerName: "short.10.abc.gcp-us-central1.cockroachlabs.cloud",
+			params:        map[string]string{},
+			expectedError: "missing cluster identifier",
+			expectedHint:  clusterIdentifierHint,
 		},
 	}
 	for _, tc := range testCases {

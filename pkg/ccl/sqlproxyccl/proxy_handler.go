@@ -776,12 +776,8 @@ func clusterNameAndTenantFromParams(
 	var tenID roachpb.TenantID
 	// No cluster identifiers were specified.
 	if clusterIdentifierDB == "" && clusterIdentifierOpt == "" {
-		var clusterIdentifierSNI string
-		if i := strings.Index(fe.SniServerName, "."); i >= 0 {
-			clusterIdentifierSNI = fe.SniServerName[:i]
-		}
-		if clusterIdentifierSNI != "" {
-			clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierSNI)
+		if fe.SniServerName != "" {
+			clusterName, tenID, err = parseClusterIdentifierFromSNI(ctx, fe.SniServerName)
 			if err == nil {
 				// Identifier provider via SNI is a bit different from the identifiers
 				// provided via DB (with dot) or options. With SNI it is possible that
@@ -814,9 +810,9 @@ func clusterNameAndTenantFromParams(
 	}
 
 	if clusterIdentifierDB != "" {
-		clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierDB)
+		clusterName, tenID, err = parseClusterIdentifierFromOldSNI(ctx, clusterIdentifierDB)
 	} else {
-		clusterName, tenID, err = parseClusterIdentifier(ctx, clusterIdentifierOpt)
+		clusterName, tenID, err = parseClusterIdentifierFromOldSNI(ctx, clusterIdentifierOpt)
 	}
 	if err != nil {
 		return fe.Msg, "", roachpb.MaxTenantID, err
@@ -853,9 +849,43 @@ func clusterNameAndTenantFromParams(
 	return outMsg, clusterName, tenID, nil
 }
 
-// parseClusterIdentifier will parse an identifier received via DB, opts or SNI
+// parseClusterIdentifierFromSNI parses the cluster name and tenant ID from an
+// SNI server name. It supports two formats:
+//
+//   - New format: <cluster-name>.<tenant-id>.<host>.<region>.<root>
+//     e.g. "happy-seal.10.abc.gcp-us-central1.cockroachlabs.cloud"
+//     The cluster name is the first DNS label, and the tenant ID is the second.
+//
+//   - Old format: <cluster-name>-<tenant-id>.<host>.<region>.<root>
+//     e.g. "happy-seal-10.abc.gcp-us-central1.cockroachlabs.cloud"
+//     The cluster name and tenant ID are both in the first DNS label, separated
+//     by a hyphen.
+//
+// The new format is tried first. If the second DNS label is a valid tenant ID
+// and the first label is a valid cluster name, the new format is used.
+// Otherwise, the old format is used as a fallback.
+func parseClusterIdentifierFromSNI(
+	ctx context.Context, sniServerName string,
+) (string, roachpb.TenantID, error) {
+	parts := strings.SplitN(sniServerName, ".", 3)
+	if len(parts) < 2 {
+		return "", roachpb.MaxTenantID, errors.New("invalid SNI server name")
+	}
+
+	// Try new format: first label = cluster name, second label = tenant ID.
+	if tenID, err := strconv.ParseUint(parts[1], 10, 64); err == nil &&
+		tenID >= roachpb.MinTenantID.ToUint64() &&
+		clusterNameRegex.MatchString(parts[0]) {
+		return parts[0], roachpb.MustMakeTenantID(tenID), nil
+	}
+
+	// Fall back to old format: first label = name-tenantID.
+	return parseClusterIdentifierFromOldSNI(ctx, parts[0])
+}
+
+// parseClusterIdentifierFromOldSNI will parse an identifier received via DB, opts or SNI
 // and extract the tenant cluster name and tenant ID.
-func parseClusterIdentifier(
+func parseClusterIdentifierFromOldSNI(
 	ctx context.Context, clusterIdentifier string,
 ) (string, roachpb.TenantID, error) {
 	sepIdx := strings.LastIndex(clusterIdentifier, clusterTenantSep)
