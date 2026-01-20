@@ -533,9 +533,10 @@ jobs:
             }
 
             if (skipDocWarnings && skipDocWarnings.trim() !== '') {
-              body += '### SKIP DOC Warnings\n\n';
+              body += '<details>\n<summary>SKIP DOC Warnings (click to expand)</summary>\n\n';
               body += 'The following grammar rules are suppressed from documentation:\n\n';
               body += '```\n' + skipDocWarnings + '\n```\n\n';
+              body += '</details>\n\n';
             }
 
             body += '---\n';
