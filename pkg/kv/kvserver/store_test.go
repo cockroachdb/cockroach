@@ -299,12 +299,8 @@ func createTestStoreWithoutStart(
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng.TODOEngine(), cv))
-	if err := kvstorage.InitEngine(
-		ctx, eng.TODOEngine(), storeIdent,
-	); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, eng.SetMinVersion(cv))
+	require.NoError(t, kvstorage.InitEngine(ctx, eng, storeIdent))
 	rangeProv.store = store
 	store.Ident = &storeIdent // would usually be set during Store.Start, but can't call that yet
 	stores.AddStore(store)
@@ -438,7 +434,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.ErrorIs(t, err, &kvstorage.NotBootstrappedError{})
 
 	// Bootstrap should fail on non-empty engine.
-	err = kvstorage.InitEngine(ctx, eng.TODOEngine(), testIdent)
+	err = kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "cannot be bootstrapped")
 
 	// Bootstrap should fail on MVCC range key in engine.
@@ -448,7 +444,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 		Timestamp: hlc.MinTimestamp,
 	}, storage.MVCCValue{}))
 
-	err = kvstorage.InitEngine(ctx, eng.TODOEngine(), testIdent)
+	err = kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "found mvcc range key")
 }
 

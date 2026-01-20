@@ -81,7 +81,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			const provisionedBandwidth = 128 << 20 // 128 MiB
 			t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", provisionedBandwidth))
 			staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-				false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
+				true /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 			staller.Setup(ctx)
 			staller.Slow(ctx, c.CRDBNodes(), provisionedBandwidth /* bytesPerSecond */)
 
@@ -103,7 +103,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 					"--max-block-bytes=4096 --min-block-bytes=4096"+backgroundDB+url)
 
 			// Run foreground kv workload, QoS="regular".
-			duration := 90 * time.Minute
+			duration := 45 * time.Minute
 			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
@@ -138,21 +138,29 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				return nil
 			})
 
-			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 30*time.Minute))
-			time.Sleep(60 * time.Minute)
+			t.Status(fmt.Sprintf("waiting for workload to start and ramp up (<%s)", 15*time.Minute))
+			time.Sleep(15 * time.Minute)
 
 			db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 			defer db.Close()
 
-			const bandwidthLimitMbs = 75
+			const bandwidthLimitMbs = 80 // 80 MiB
+			const maxUtilFraction = 0.8  // Also the default for the cluster setting.
 			if _, err := db.ExecContext(
 				// We intentionally set this to much lower than the provisioned value
 				// above to clearly show that the bandwidth limiter works.
 				ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
 				t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 			}
+			if _, err := db.ExecContext(
+				ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.elastic_disk_bandwidth_max_util = %f",
+					maxUtilFraction)); err != nil {
+				t.Fatalf("failed to set kvadmission.store.elastic_disk_bandwidth_max_util: %v", err)
+			}
 
-			t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
+			t.Status(fmt.Sprintf(
+				"setting bandwidth limit to %dMiB/s, and waiting for it to take effect. (<%s)",
+				bandwidthLimitMbs, 2*time.Minute))
 			time.Sleep(5 * time.Minute)
 
 			m.Go(func(ctx context.Context) error {
@@ -180,13 +188,17 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 					panic("unreachable")
 				}
 
-				// Allow a 5% room for error.
-				const bandwidthThreshold = bandwidthLimitMbs * 1.05
-				const sampleCountForBW = 12
+				// Allow a 30% upper bound room for error.
+				const bandwidthUpperThreshold = bandwidthLimitMbs * maxUtilFraction * 1.30
+				// Allow a 20% lower bound room for error.
+				const bandwidthLowerThreshold = bandwidthLimitMbs * maxUtilFraction * 0.8
+				// Mean over 30*10 = 300s = 5m
+				const sampleCountForBW = 30
 				const collectionIntervalSeconds = 10.0
 				// Loop for ~20 minutes.
 				const numIterations = int(20 / (collectionIntervalSeconds / 60))
 				var writeBWValues []float64
+				var totalBWValues []float64
 				numErrors := 0
 				numSuccesses := 0
 				for i := 0; i < numIterations; i++ {
@@ -203,14 +215,31 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 					}
 					totalBW := writeVal + readVal
 					writeBWValues = append(writeBWValues, writeVal)
-					// We want to use the mean of the last 2m of data to avoid short-lived
+					totalBWValues = append(totalBWValues, totalBW)
+					t.L().Printf("observed write BW: %f MiB/s, read BW: %f MiB/s, total BW: %f MiB/s",
+						writeVal, readVal, totalBW)
+					// We want to use the mean of the last 5m of data to avoid short-lived
 					// spikes causing failures.
 					if len(writeBWValues) >= sampleCountForBW {
+
 						// TODO(aaditya): We should be asserting on total bandwidth once reads
 						// are being paced.
-						latestSampleMeanForBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, writeBWValues)
-						if latestSampleMeanForBW > bandwidthThreshold {
-							t.Fatalf("mean write bandwidth over the last 2m %f (last iter: %f) exceeded threshold of %f, read bandwidth: %f, total bandwidth: %f", latestSampleMeanForBW, writeVal, bandwidthThreshold, readVal, totalBW)
+						latestSampleMeanForWriteBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, writeBWValues)
+						latestSampleMeanForTotalBW := roachtestutil.GetMeanOverLastN(sampleCountForBW, totalBWValues)
+						t.L().Printf("mean write BW %f MiB/s, total BW %f MiB/s",
+							latestSampleMeanForWriteBW, latestSampleMeanForTotalBW)
+
+						if latestSampleMeanForWriteBW > bandwidthUpperThreshold {
+							t.Fatalf("mean write bandwidth %f exceeded threshold of %f",
+								latestSampleMeanForWriteBW, bandwidthUpperThreshold)
+						}
+						if latestSampleMeanForTotalBW < bandwidthLowerThreshold {
+							t.Fatalf("mean total bandwidth %f below threshold of %f",
+								latestSampleMeanForTotalBW, bandwidthLowerThreshold)
+						}
+						if latestSampleMeanForTotalBW > bandwidthUpperThreshold {
+							t.L().Printf("WARNING: mean total bandwidth %f exceeded threshold of %f, possibly because of lack of read shaping",
+								latestSampleMeanForTotalBW, bandwidthUpperThreshold)
 						}
 					}
 					numSuccesses++

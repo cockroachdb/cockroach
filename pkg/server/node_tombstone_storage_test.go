@@ -34,8 +34,8 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	// We'll test uninited engines at the end of the test.
 	id := uuid.NewV4()
 	for i := range engs {
-		require.NoError(t, kvstorage.WriteClusterVersion(ctx, engs[i].LogEngine(), clusterversion.TestingClusterVersion))
-		require.NoError(t, kvstorage.InitEngine(ctx, engs[i].TODOEngine(), roachpb.StoreIdent{
+		require.NoError(t, engs[i].SetMinVersion(clusterversion.TestingClusterVersion))
+		require.NoError(t, kvstorage.InitEngine(ctx, engs[i], roachpb.StoreIdent{
 			ClusterID: id,
 			NodeID:    1,
 			StoreID:   roachpb.StoreID(1 + i),

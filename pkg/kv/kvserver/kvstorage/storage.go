@@ -6,6 +6,7 @@
 package kvstorage
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -213,6 +214,19 @@ func (e *Engines) Close() {
 	}
 	e.stateEngine.Close()
 	e.logEngine.Close()
+}
+
+// SetMinVersion signals both engines about the current minimum version that
+// they must maintain compatibility with.
+func (e *Engines) SetMinVersion(cv clusterversion.ClusterVersion) error {
+	if err := e.StateEngine().SetMinVersion(cv.Version); err != nil {
+		return errors.Wrapf(err, "error writing version to engine %s", e.StateEngine())
+	} else if !e.Separated() {
+		return nil // there is only one engine
+	} else if err := e.LogEngine().SetMinVersion(cv.Version); err != nil {
+		return errors.Wrapf(err, "error writing version to engine %s", e.LogEngine())
+	}
+	return nil
 }
 
 // validateIsStateEngineSpan asserts that the provided span only overlaps with

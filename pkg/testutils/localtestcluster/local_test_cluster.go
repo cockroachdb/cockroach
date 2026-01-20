@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -252,14 +253,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng.LogEngine(), clusterversion.TestingClusterVersion); err != nil {
-		t.Fatalf("unable to write cluster version: %s", err)
-	}
-	if err := kvstorage.InitEngine(
-		ctx, ltc.Eng.TODOEngine(), roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
-	); err != nil {
-		t.Fatalf("unable to start local test cluster: %s", err)
-	}
+	require.NoError(t, ltc.Eng.SetMinVersion(clusterversion.TestingClusterVersion))
+	require.NoError(t, kvstorage.InitEngine(
+		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
+	))
 
 	rangeFeedFactory, err := rangefeed.NewFactory(ltc.stopper, ltc.DB, cfg.Settings, nil /* knobs */)
 	if err != nil {

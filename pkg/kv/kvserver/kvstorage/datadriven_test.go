@@ -30,17 +30,17 @@ import (
 )
 
 type env struct {
-	eng storage.Engine
+	eng Engines
 	tr  *tracing.Tracer
 }
 
 func newEnv(t *testing.T) *env {
 	ctx := context.Background()
-	eng := storage.NewDefaultInMemForTesting()
+	eng := MakeEngines(storage.NewDefaultInMemForTesting())
 	// TODO(tbg): ideally this would do full bootstrap, which requires
 	// moving a lot more code from kvserver. But then we could unit test
 	// all of it with the datadriven harness!
-	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
+	require.NoError(t, eng.SetMinVersion(clusterversion.TestingClusterVersion))
 	require.NoError(t, InitEngine(ctx, eng, roachpb.StoreIdent{
 		ClusterID: uuid.MakeV4(),
 		NodeID:    1,
@@ -67,9 +67,9 @@ func (e *env) handleNewReplica(
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
 	sl := MakeStateLoader(id.RangeID)
-	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
+	require.NoError(t, sl.SetHardState(ctx, e.eng.LogEngine(), raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
-		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
+		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng.StateEngine(), id.ReplicaID))
 	}
 	if len(ek) == 0 {
 		return nil
@@ -88,7 +88,7 @@ func (e *env) handleNewReplica(
 	var v roachpb.Value
 	require.NoError(t, v.SetProto(desc))
 	ts := hlc.Timestamp{WallTime: 123}
-	require.NoError(t, e.eng.PutMVCC(storage.MVCCKey{
+	require.NoError(t, e.eng.StateEngine().PutMVCC(storage.MVCCKey{
 		Key:       keys.RangeDescriptorKey(desc.StartKey),
 		Timestamp: ts,
 	}, storage.MVCCValue{Value: v}))
@@ -99,7 +99,7 @@ func (e *env) handleRangeTombstone(
 	t *testing.T, ctx context.Context, rangeID roachpb.RangeID, next roachpb.ReplicaID,
 ) {
 	require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(
-		ctx, e.eng, kvserverpb.RangeTombstone{NextReplicaID: next},
+		ctx, e.eng.StateEngine(), kvserverpb.RangeTombstone{NextReplicaID: next},
 	))
 }
 
@@ -162,7 +162,7 @@ func TestDataDriven(t *testing.T) {
 				e.handleRangeTombstone(t, ctx, rangeID, nextID)
 
 			case "load-and-reconcile":
-				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
+				replicas, err := LoadAndReconcileReplicas(ctx, e.eng.TODOEngine())
 				if err != nil {
 					fmt.Fprintln(&buf, err)
 					break

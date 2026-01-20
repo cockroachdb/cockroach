@@ -481,7 +481,7 @@ func bootstrapCluster(
 
 	// We use our binary version to bootstrap the cluster.
 	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(engines, bootstrapVersion); err != nil {
 		return nil, err
 	}
 
@@ -497,7 +497,7 @@ func bootstrapCluster(
 
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
-		if err := kvstorage.InitEngine(ctx, eng.TODOEngine(), sIdent); err != nil {
+		if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
 			return nil, err
 		}
 
@@ -1006,7 +1006,7 @@ func (n *Node) initializeAdditionalStores(ctx context.Context, engines []kvstora
 			StoreID:   startID,
 		}
 		for _, eng := range engines {
-			if err := kvstorage.InitEngine(ctx, eng.TODOEngine(), sIdent); err != nil {
+			if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
 				return err
 			}
 
