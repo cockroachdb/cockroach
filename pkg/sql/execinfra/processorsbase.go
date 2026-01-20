@@ -557,7 +557,7 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 		// reflect that, making cancellation detectable by callers.
 		if pb.Ctx().Err() != nil {
 			if !errors.Is(err, pb.Ctx().Err()) {
-				log.Dev.Warningf(pb.Ctx(), "overriding non-cancelation emitted after context cancellation: %+v", err)
+				log.Dev.Warningf(pb.Ctx(), "overriding non-cancellation emitted after context cancellation: %+v", err)
 			}
 			err = pb.Ctx().Err()
 		}
