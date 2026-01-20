@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
@@ -452,45 +451,20 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 
 	c.priIndex = c.tableDesc.GetPrimaryIndex()
 
-	for _, idx := range c.tableDesc.PublicNonPrimaryIndexes() {
-		if idx.GetID() != c.indexID {
-			continue
-		}
-
-		// We can only check a secondary index that has a 1-to-1 mapping between
-		// keys in the primary index. Unsupported indexes should be filtered out
-		// when the job is created.
-		// TODO(154862): support partial indexes
-		if idx.IsPartial() {
-			return errors.AssertionFailedf(
-				"unsupported index type for consistency check: partial index",
-			)
-		}
-		// TODO(154762): support hash sharded indexes
-		if idx.IsSharded() {
-			return errors.AssertionFailedf(
-				"unsupported index type for consistency check: hash-sharded index",
-			)
-		}
-		// TODO(154772): support expression indexes
-		if c.tableDesc.IsExpressionIndex(idx) {
-			return errors.AssertionFailedf(
-				"unsupported index type for consistency check: expression index",
-			)
-		}
-		switch idx.GetType() {
-		// TODO(154860): support inverted indexes
-		case idxtype.INVERTED, idxtype.VECTOR:
-			return errors.AssertionFailedf(
-				"unsupported index type for consistency check: %s", idx.GetType(),
-			)
-		}
-
-		// We found the index and it is valid for checking.
-		c.secIndex = idx
-		return nil
+	idx, err := findIndexByID(c.tableDesc, c.indexID)
+	if err != nil {
+		return err
 	}
-	return errors.AssertionFailedf("no index with ID %d found in table %d", c.indexID, c.tableID)
+
+	if reason := isSupportedIndexForIndexConsistencyCheck(idx, tableDesc); reason != "" {
+		return errors.AssertionFailedf("unsupported index type for consistency check: %s", reason)
+	}
+
+	// We found the index and it is valid for checking.
+	c.secIndex = idx
+
+	return nil
+
 }
 
 // createIndexCheckQuery will make the index check query for a given
