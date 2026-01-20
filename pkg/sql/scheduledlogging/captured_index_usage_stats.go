@@ -161,25 +161,10 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 	})
 }
 
-func captureIndexUsageStats(
-	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
-) error {
-	allDatabaseNames, err := getAllDatabaseNames(ctx, ie)
-	if err != nil {
-		return err
-	}
-
-	// Capture index usage statistics for each database.
-	var ok bool
-	expectedNumDatums := 11
-	var allCapturedIndexUsageStats []logpb.EventPayload
-	for _, databaseName := range allDatabaseNames {
-		// Omit index usage statistics on the default databases 'system',
-		// 'defaultdb', and 'postgres'.
-		if databaseName == "system" || databaseName == "defaultdb" || databaseName == "postgres" {
-			continue
-		}
-		const stmt = `
+// CaptureIndexUsageStatsStmt is exported so that it can be used by the
+// benchmarks in the rttanalysis package, without needing to keep the benchmark
+// code in sync with any changes to this query.
+const CaptureIndexUsageStatsStmt = `
 		SELECT
 		 ti.descriptor_name as table_name,
 		 ti.descriptor_id as table_id,
@@ -199,6 +184,25 @@ func captureIndexUsageStats(
     INNER LOOKUP JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
 ORDER BY total_reads ASC`
 
+func captureIndexUsageStats(
+	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
+) error {
+	allDatabaseNames, err := getAllDatabaseNames(ctx, ie)
+	if err != nil {
+		return err
+	}
+
+	// Capture index usage statistics for each database.
+	var ok bool
+	expectedNumDatums := 11
+	var allCapturedIndexUsageStats []logpb.EventPayload
+	for _, databaseName := range allDatabaseNames {
+		// Omit index usage statistics on the default databases 'system',
+		// 'defaultdb', and 'postgres'.
+		if databaseName == "system" || databaseName == "defaultdb" || databaseName == "postgres" {
+			continue
+		}
+
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			"capture-index-usage-stats",
@@ -207,7 +211,7 @@ ORDER BY total_reads ASC`
 				User:     username.NodeUserName(),
 				Database: string(databaseName),
 			},
-			stmt,
+			CaptureIndexUsageStatsStmt,
 		)
 		if err != nil {
 			return err

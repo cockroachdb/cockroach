@@ -5,7 +5,11 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
+)
 
 func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
 func init() {
@@ -75,20 +79,12 @@ SELECT * FROM t2;`,
 			Setup: buildNTablesWithTriggers(100),
 			Stmt:  `SHOW CREATE ALL TRIGGERS;`,
 		},
-		// This test checks the performance of a query joining index_usage_statistics,
-		// table_indexes, and pg_catalog tables.
+		// This test checks the performance of the query to capture index usage
+		// stats that is executed by scheduled telemetry logging.
 		{
-			Name:    "index_usage_statistics_join",
+			Name:    "capture_index_usage_stats",
 			SetupEx: buildNTablesWithIndexes(20, 5),
-			Stmt: `
-SELECT ti.descriptor_name AS table_name, ti.descriptor_id AS table_id,
-       ti.index_name, ti.index_id, ti.index_type, ti.is_unique, ti.is_inverted,
-       total_reads, last_read, ti.created_at, ns.nspname::STRING
-FROM crdb_internal.index_usage_statistics AS us
-INNER LOOKUP JOIN crdb_internal.table_indexes AS ti ON (us.table_id = ti.descriptor_id) AND (us.index_id = ti.index_id)
-INNER LOOKUP JOIN pg_catalog.pg_class AS c ON ti.descriptor_id::OID = c.oid
-INNER LOOKUP JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
-ORDER BY total_reads ASC;`,
+			Stmt:    scheduledlogging.CaptureIndexUsageStatsStmt,
 		},
 	})
 }
