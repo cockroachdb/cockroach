@@ -24,10 +24,11 @@ cockroachdb/docs:
 cockroachdb/sql-foundations:
   aliases:
     cockroachdb/sql-syntax-prs: other
-    cockroachdb/sqlproxy-prs: other
     cockroachdb/sql-api-prs: other
   triage_column_id: 19467489
   label: T-sql-foundations
+cockroachdb/sqlproxy-prs:
+  label: T-cloud-platform
 cockroachdb/sql-queries:
   aliases:
     cockroachdb/sql-queries-prs: other
