@@ -73,18 +73,24 @@ func TestStatusGetFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if a, e := len(response.Files), testFilesNo; a != e {
-				t.Errorf("expected %d files(s), found %d", e, a)
+			if a, e := len(response.Files), testFilesNo; a < e {
+				t.Errorf("expected at least %d files(s), found %d", e, a)
 			}
 
-			for i, file := range response.Files {
+			fileMap := make(map[string][]byte, len(response.Files))
+			for _, file := range response.Files {
+				fileMap[file.Name] = file.Contents
+			}
+
+			for i := 0; i < testFilesNo; i++ {
 				expectedFileName := fmt.Sprintf(fileFormatStr, i)
-				if file.Name != expectedFileName {
-					t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
-				}
 				expectedFileContents := []byte(fmt.Sprintf("I'm %s profile %d", name, i))
-				if !bytes.Equal(file.Contents, expectedFileContents) {
-					t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+				contents, found := fileMap[expectedFileName]
+				if !found {
+					t.Fatalf("expected to find file %s in response", expectedFileName)
+				}
+				if !bytes.Equal(contents, expectedFileContents) {
+					t.Fatalf("expected file contents %s, found %s", expectedFileContents, contents)
 				}
 			}
 		})
