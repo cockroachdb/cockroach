@@ -144,6 +144,38 @@ describe("SQL Activity page - Statements Tab", () => {
     );
   });
 
+  it("clicks into sql statement details page", () => {
+    // should have at least one row
+    cy.get('[class*="statements-table"] tbody tr').within(() => {
+      cy.get("a").first().click();
+    });
+
+    cy.location("hash").should("include", "/statement/");
+
+    cy.get('[class*="summary--card"]').should("exist");
+    cy.get('[class*="summary--card"]').contains("Nodes");
+    cy.get('[class*="summary--card"]').contains("Regions");
+    cy.get('[class*="summary--card"]').contains("Database");
+    cy.get('[class*="summary--card"]').contains("Application Name");
+    cy.get('[class*="summary--card"]').contains("Fingerprint ID");
+
+    // switch tab to explain plan
+    cy.contains("Explain Plans").click();
+    cy.location("hash").should("include", "&tab=explain-plan");
+    cy.get('[class*="statements-table"]').should("exist");
+    cy.get('[class*="statements-table"]').within(() => {
+      cy.get("thead").within(() => {
+        cy.contains("Plan Gist");
+        cy.contains("Used Index");
+      });
+    });
+
+    // switch tab to diagnostics
+    cy.contains("Diagnostics").click();
+    cy.location("hash").should("include", "&tab=diagnostics");
+    cy.contains("Activate Diagnostics");
+  });
+
   it("switches to transactions tab", () => {
     cy.get('[data-node-key="Transactions"] .crdb-ant-tabs-tab-btn').click();
     cy.get('[data-node-key="Transactions"]').should(
@@ -271,6 +303,34 @@ describe("SQL Activity page - Transactions Tab", () => {
       });
     });
   });
+
+  it("clicks into sql transaction details page", () => {
+    // should have at least one row
+    cy.get('[class*="statements-table"] tbody tr').within(() => {
+      cy.get("a").first().click();
+    });
+
+    cy.location("hash").should("include", "/transaction/");
+
+    // transaction summary
+    cy.get('[class*="summary--card"]').should("exist");
+    cy.get('[class*="summary--card"]').contains("Mean transaction time");
+    cy.get('[class*="summary--card"]').contains("Application name");
+    cy.get('[class*="summary--card"]').contains("Fingerprint ID");
+
+    // statements in transaction
+    cy.get('[class*="statements-table"]').should("exist");
+    cy.get('[class*="statements-table"]').within(() => {
+      cy.get("thead").within(() => {
+        // Check for some column headers
+        cy.contains("Statements");
+        cy.contains("Execution Count");
+        cy.contains("Database");
+        cy.contains("Application Name");
+        cy.contains("Statement Time");
+      });
+    });
+  });
 });
 
 describe("SQL Activity page - Sessions Tab", () => {
@@ -307,5 +367,22 @@ describe("SQL Activity page - Sessions Tab", () => {
         cy.contains("Actions");
       });
     });
+  });
+
+  it("clicks into sql session details page", () => {
+    // should have at least one row
+    cy.get('[class*="sessions-table"] tbody tr').within(() => {
+      cy.get("a").first().click();
+    });
+
+    cy.location("hash").should("include", "/session/");
+
+    // session summary
+    cy.get('[class*="summary--card"]').should("exist");
+    cy.get('[class*="summary--card"]').contains("Session Start Time");
+    cy.get('[class*="summary--card"]').contains("Session Active Duration");
+    cy.get('[class*="summary--card"]').contains("Gateway Node");
+    cy.get('[class*="summary--card"]').contains("Application Name");
+    cy.get('[class*="summary--card"]').contains("Status");
   });
 });
