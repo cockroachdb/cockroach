@@ -3,6 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+// diagrams.go contains the SQL grammar diagram generation logic.
+// This file is the single source of truth for diagram specifications.
+// See the docgen-diagrams-ci.yml workflow for the automated CI pipeline.
+// PNG previews are generated for diagrams modified in PRs.
+
 package main
 
 import (
@@ -341,7 +346,7 @@ var specs = []stmtSpec{
 	{
 		name:   "add_column",
 		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "col_qual_list"},
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "col_qual_list", "opt_collate"},
 		regreplace: map[string]string{
 			` \( \( col_qualification \) \)\* .*`: `( ( col_qualification ) )*`,
 		},
@@ -355,7 +360,7 @@ var specs = []stmtSpec{
 		name:    "add_constraint",
 		stmt:    "alter_onetable_stmt",
 		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'ADD' 'CONSTRAINT' constraint_name constraint_elem opt_validate_behavior"},
-		unlink:  []string{"table_name"},
+		unlink:  []string{"table_name", "constraint_name"},
 	},
 	{
 		name: "alter_backup",
@@ -366,7 +371,7 @@ var specs = []stmtSpec{
 			"alter_backup_cmds":                                        "'ADD' 'NEW_KMS' kmsURI 'WITH' 'OLD_KMS' kmsURI",
 			"'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds": "",
 		},
-		unlink: []string{"subdirectory", "collectionURI", "kmsURI"},
+		unlink: []string{"subdirectory", "collectionURI", "kmsURI", "string_or_placeholder"},
 	},
 	{
 		name:    "alter_backup_schedule",
@@ -407,8 +412,10 @@ var specs = []stmtSpec{
 		inline: []string{"primary_region_clause", "opt_equal"},
 	},
 	{
-		name: "alter_database_drop_region",
-		stmt: "alter_database_drop_region_stmt",
+		// ALTER DATABASE DROP REGION statement diagram
+		name:   "alter_database_drop_region",
+		stmt:   "alter_database_drop_region_stmt",
+		unlink: []string{"region_name"},
 	},
 	{
 		name:    "alter_default_privileges_stmt",

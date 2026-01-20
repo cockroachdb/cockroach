@@ -1,0 +1,1177 @@
+first present me all the information from the github and use the current info we have to get full picture
+
+Streamline the SQL diagram update process from code to publication. Writers should only need to update the Go file that produces SQL diagrams, with all downstream processes automated.
+
+Key Deliverables:
+Automated pipeline from Go file changes to diagram generation
+
+PR creation automation for diagram updates
+
+Version control and change tracking system
+
+Clear ownership model and operational documentation
+
+Self-service diagram update capability for writers
+
+Optional: UI for quickly viewing generated diagrams and toggling visibility
+
+Current Pain Points Addressed:
+Manual process for diagram updates
+
+Unclear ownership of the existing tool
+
+Complex multi-step process from code to publication
+
+
+ We have two types of SQL grammar documentation:
+
+SQL diagrams
+Add a SQL diagram to a SQL reference page
+Add or update a SQL diagram
+Add a SQL diagram to a SQL reference page locally
+Interactive SQL help text
+Update help text
+SQL diagrams
+SQL diagrams describe the syntax of our SQL parser.  They are included in all SQL statement reference pages. For example, the diagram for DROP INDEX is:
+
+
+The full SQL syntax is shown in the SQL grammar page. The source is in sql.y.
+
+Add a SQL diagram to a SQL reference page
+The SQL diagrams included in SQL reference pages are generated automatically on master and any release-v* branches to which the definitions are backported, stored as HTML files in GitHub - cockroachdb/generated-diagrams, and referenced in the docs with remote_include. To add an existing diagram to a page:
+
+Open the .md file for the SQL statement and add the reference to the diagram:
+
+
+
+{% remote_include https://raw.githubusercontent.com/cockroachdb/generated-diagrams/{{ page.release_info.crdb_branch_name }}/grammar_svg/<statement>.html %}
+{{ page.release_info.crdb_branch_name }} is the release-v* branch that corresponds to the doc version.
+
+Do a local docs build and make sure the diagram looks correct. If the formatting looks wrong, try adding <div>...</div> around the remote_include.
+
+Open a PR and assign it to your reviewer.
+
+In rare cases, such as a Preview release not reflected in the main reference docs, it may be preferable to include the HTML for a diagram manually. For example, Added replacement `show backup` diagram as local by katmayb · Pull Request #15594 · cockroachdb/docs . Refer to Add a SQL diagram to a SQL reference page locally.
+
+Add or update a SQL diagram
+At a high level, the process for adding or updating a SQL diagram is as follows:
+
+Add or modify an entry in diagrams.go
+
+Ensure that the entry is represented in the four Bazel files
+
+Generate local BNF (and HTML, for greater certainty that your edits worked) files
+
+Open a cockroach PR with the docgen category that contains all of the preceding changes
+
+Once the changes are merged on cockroach, you can merge the corresponding docs PR to add the diagram to the docs, if not already present.
+
+Diagram source changes
+SQL diagrams are defined in diagrams.go in the block beginning specs = []stmtSpec. This block contains all of the modifications made to the generated diagrams. 
+
+Diagrams consist of SQL keywords and parameters. To make our SQL diagrams more usable, you will typically:
+
+inline parameters, such that they expose their embedded SQL syntax. For example:
+
+In this BEGIN diagram, the opt_transaction and begin_transaction parameters are not inlined:
+
+image-20241219-194809.png
+In this BEGIN diagram, nearly all parameters are inlined:
+
+image-20241219-194747.png
+replace parameter names with custom names and unlink them, so that the new names don't point to nonexistent syntax in the full SQL grammar and cause broken link errors. For example, proc_name is more appropriate than the default db_object_name for the ALTER PROCEDURE statement.
+
+You can define the following diagrams.go fields:
+
+Function
+
+Description
+
+name
+
+The name of the HTML file to generate.
+
+To generate an HTML file for a SQL diagram, this is the only element you need to include. 
+
+If the name ends in _stmt, the generated HTML filename will exclude _stmt. This can sometimes create unexpected results. See Update diagram source and generate diagram.
+
+Example: {name: "column_def"}  generates column_def.html but doesn't change the way column_def displays.
+
+stmt
+
+Use an existing grammar element as the base for the SQL diagram. Use with match, inline, exclude, or replace.
+
+Don't use stmt to change an existing element's display.
+
+Example: {name: "drop_database", stmt: "drop_stmt"... creates a new file, drop_database.html, that uses drop_stmt as its base.
+
+match
+
+Select sections of the element in stmt  using a regex. Use in conjunction with stmt.
+
+Example: {name: "drop_database", stmt: "drop_stmt", match: regexp.MustCompile("'DROP' 'DATABASE'")} creates a new file, drop_database.html, that uses drop_stmt as its base, but selects only the path in drop_stmt that goes through the path that includes DROP and then DATABASE.
+
+exclude
+
+Exclude sections of the element in stmt  using a regex. Use in conjunction with stmt.
+
+Example: {name: "create_regular_index", stmt: "create_index_stmt", exclude: regexp.MustCompile("'INVERTED'")} creates a new file, create_regular_index.html, that uses create_index_stmt as its base but excludes all paths that contain the phrase 'INVERTED'.
+
+inline
+
+A comma-separated list of the names of elements inside the stmt diagram to display instead of name. To traverse down levels, put the elements together in the list.
+
+Example: inline: []string{"alter_table_cmds", "alter_table_cmd"} surfaces the contents of alter_table_cmds, a list of alter_table_cmd, which then also has its contents surfaced. However, inline: []string{"alter_table_cmds"} surfaces the contents of alter_table_cmds but just displays the text alter_table_cmd and not its contents.
+
+replace
+
+A list of ordered pairs where for each ordered pair, any instance of the first element is replaced by the second element. The names you change them to must appear in unlink.
+
+Example:  replace: map[string]string{"'SCONST'": "encoding"} changes the string SCONST to encoding.
+
+regreplace
+
+A list of ordered pairs where for each ordered pair, any instance of the first element, which can be constructed using regex, is replaced by the second element.
+
+unlink
+
+A list of elements renamed with replace that must have their links to the SQL grammar removed because those elements do not exist in the grammar. If custom elements are not unlinked, they will break future docs builds.
+
+Example:  unlink: []string{"name", "encoding"}
+
+nosplit
+
+Prevent what appears to be infinite recursion when many elements appear in inline. 
+
+Note:  If you specify nosplit, match and exclude are ignored.
+
+Example: nosplit: true
+
+Example of parameter inlining
+By default, the diagrams show only the top level of the grammar element, which is usually its name, but can also be keywords. To surface the contents of elements instead of displaying only their names, use the inline parameter.
+
+For example, consider execute_stmt, which contains 3 elements:
+
+EXECUTE table_alias_name execute_param_clause
+
+EXECUTE is a keyword (hence all caps), but the other two are elements of the grammar, which display only their names.
+
+If you want to display the contents of  execute_param_clause, use the inline parameter:
+
+inline: []string{"execute_param_clause"}
+
+Looking at what's inside execute_param_clause is not very useful (just expr_list), so you also might want to surface its content:
+
+inline: []string{"execute_param_clause", "expr_list"}
+
+At this point you're showing execute_param_clause as an optional, parenthesis-enclosed list of a_expr. However, a_expr is a pretty knotted and unwieldy beast, so you might elect to stop traversing at that point.
+
+Bazel changes
+Any diagram defined in diagrams.go must also be represented in the four (4) following Bazel files. For example, when adding a new diagram with name: "alter_database" in diagrams.go, ensure that the following lines are in the respective .bzl files:
+
+docs/generated/sql/bnf/BUILD.bazel
+
+E.g., "alter_database",
+
+pkg/gen/bnf.bzl
+
+E.g., "//docs/generated/sql/bnf:alter_database.bnf",
+
+pkg/gen/diagrams.bzl
+
+E.g., "//docs/generated/sql/bnf:alter_database.html",
+
+pkg/gen/docs.bzl
+
+E.g., "//docs/generated/sql/bnf:alter_database.bnf",
+
+Any entry listed in docs/generated/sql/bnf/BUILD.bazel must also exist as a BNF file in docs/generated/sql/bnf. All BNF files are created or updated when you run dev generate bnf (refer to the following section).
+
+Update diagram source and generate diagram
+To generate SQL diagrams locally, we use dev. dev is a wrapper around Bazel, the build tool used in engineering. The following dev commands are relevant to docs: 
+
+./dev generate bnf generates local BNF files , using the definitions in diagrams.go. 
+
+./dev build docs/generated/sql/bnf:svg generates local HTML files that match what will be placed in cockroachdb/generated-diagrams.
+
+Set up environment
+Ensure that you have set up your machine to run Bazel builds as described in 
+Building from source on macOS
+. 
+
+Install crlfmt by running ./dev build crlfmt.
+
+Create a new branch in your cockroach fork against master:
+
+In GitHub, ensure you have synchronized the master branch on your fork to the master branch on the main cockroach repo.
+
+In your local fork, run git pull, then create a new branch off master.
+
+Remove any untracked files to ensure you have a clean working directory.
+
+Update Go and Bazel files
+Make the necessary changes in pkg/cmd/docgen/dia grams.go per the specifications in Diagram source changes. Remember to unlink any custom parameter names, or they will break builds in the docs repo.
+
+Verify the diagrams were generated correctly:
+
+Go to the cockroach root directory.
+
+Run the following command:
+
+
+
+./dev generate bnf
+Check that the diagram was generated in docs/generated/sql/bnf. 
+
+Go to Railroad Diagram Generator and paste the diagram BNF into the Edit Grammar tab.
+
+Click View Diagram and verify that the diagram looks correct. If you don’t see syntax that should be there, even after fully inlining the diagram, check sql.y for the line /* SKIP DOC */ near the corresponding functionality. After checking with an engineer, remove this line and rerun ./dev generate bnf.
+
+If you are adding, renaming, or removing a diagram, also make the corresponding changes to the files listed in Bazel changes earlier on this page. 
+
+Verify that the HTML to be loaded in cockroachdb/generated-diagrams is also correct:
+
+Go to the cockroach root directory.
+
+Run the following command:
+
+
+
+./dev build docs/generated/sql/bnf:svg
+Go to the _bazel/bin/docs/generated/sql/bnf/ directory.
+
+Check the diagram HTML by opening the file locally in your browser.
+
+If you are encountering errors with the dev build, read the output carefully. It often mentions a specific diagram name that is causing the error.
+
+Troubleshoot HTML generation
+The generated HTML file may not reflect the diagrams.go definition if the corresponding Go or Bazel entry uses the _stmt suffix. This behavior seems to be related to the generated HTML filename automatically dropping the _stmt suffix.
+
+If the diagram does not reflect the modifications in diagrams.go:
+
+In diagrams.go, ensure the name field does not use the _stmt suffix, even if the stmt field does. For example, name: alter_proc and stmt: alter_proc_stmt .
+
+In the four Bazel files, if the corresponding entry has the _stmt suffix, remove the suffix. For example, rename alter_proc_stmt to alter_proc. If both entries are present, remove the one with the _stmt suffix. 
+
+If there are generated BNF files in docs/generated/sql/bnf that have the _stmt naming, they must be removed or the TeamCity build will fail. For example, remove alter_proc_stmt.bnf and leave alter_proc.bnf (in this example scenario, the two BNF files should have identical content). Each Bazel entry needs exactly one (1) corresponding BNF file in docs/generated/sql/bnf.
+
+For an eventually successful example of these steps, see docs: properly generate HTML files for updated SQL diagrams by taroface · Pull Request #117937 · cockroachdb/cockroach .
+
+Open PRs
+To make sure your PR will build, format diagrams.go with crlfmt -w pkg/cmd/docgen/diagrams.go.
+
+Commit your changes, including any newly generated BNF files. You should have already run ./dev generate bnf as in the preceding steps.
+
+
+
+git status
+git add . 
+git commit
+with the commit message:
+
+
+
+docgen: add or update X diagram
+Epic: none
+Release note: none
+Release justification: non-production code change
+git push. 
+
+Open a PR and assign an engineer to review. By default, this updates master. However, you must add the corresponding backport label to the PR to ensure that the files are also built in the correct release branch (e.g., backport-24.3x).
+It’s strongly recommended to add screenshots of the resulting SQL diagrams (i.e., from Railroad Diagram Generator) in the PR description, as most reviewers will prefer to review the visual material rather than the docgen code changes.
+
+Once the main PR merges, a TeamCity build automatically generates the BNF and HTML files and writes them into cockroachdb/generated-diagrams.
+
+The backport PR will then open and require review. Once approved, you can merge it directly per the documented process.
+
+Add a SQL diagram to a SQL reference page locally
+There may be some cases where you do not want to merge the changes to a SQL diagram in the cockroach repo. For example, in some Preview features, we may not want to expose all parts of the SQL grammar for a particular statement. In these cases, you can add the diagram to an include in the docs repo instead.  Refer to this Virtual cluster SQL PR as an example. 
+
+Once you have followed, Add or update a SQL diagram in your local cockroach repo, you can take the next steps to prepare the diagram as a local file include:
+
+Run the BNF syntax computed in the SQL statement .bnf in the cockroach repo through the Edit Grammar tab at https://rr.red-dove.com/ui. Click on the View Diagram tab, and make adjustments to the BNF as needed.
+
+Once you are satisfied with the diagram, select HTML and SVG from the Download diagram box and ensure that embedded is unselected. Then, click Download.
+
+This will download a zip folder containing a few files. Click in the diagram subfolder and then rename the diagram file changing the file type to .html. For example, this will be downloaded as show_virtual_cluster_stmt.svg , rename to show-virtual-cluster-diagram.html.
+
+On your local working branch of the docs repo, add the diagram to an include subfolder.
+
+Open the file in your text editor. Remove the defs and style tags, and then encapsulate the svg block with <div style="overflow-x:auto;"></div>.
+
+Remove all the potential links from the diagram, if they are not needed. These would link to the SQL grammar, but to be safe, it’s better to remove the link tags as these could break builds. For example, remove the line: xlink:href="#virtual_cluster_spec".
+
+Add the diagram as an include to the necessary docs page within a <div></div> tags, e.g.,
+
+
+
+ <div>
+{% include {{ page.version.version }}/physical-replication/show-virtual-cluster-diagram.html %}
+</div>
+Check that the diagram is viewable on a local preview.
+
+Interactive SQL help text
+Interactive SQL help text is invoked by running > \h <command>.  For example:
+
+
+
+\h DROP TABLE
+Command:     DROP TABLE
+Description: remove a table
+Category:    schema manipulation
+Syntax:
+DROP TABLE [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
+See also:
+  SHOW TABLES
+  https://www.cockroachlabs.com/docs/v22.2/drop-table.html
+The SQL grammar source is the primary source file for the SQL syntax parser. This is the same file that contains the SQL syntax for generating BNF files for SQL diagrams. There are a couple annotations that are pertinent:
+
+unimplemented :  skip the keyword, unless FORCE DOCS is specified.
+
+FORCE DOC :  include the keyword, even if unimplemented is specified.
+
+SKIP DOC :  skip the keyword.
+
+When support for new SQL statements is added to cockroach, or existing SQL statement support is updated, cockroach/pkg/sql/parser/sql.y is updated. Part of this update to the grammar file includes adding or editing the help text that describes the syntax and behavior of the statement. 
+
+Update help text
+When you add a documentation page for a new SQL statement, or when you update the page name for a SQL statement, add or update the link to that page in the statement's help text in pkg/sql/parser/sql.y as follows:
+
+Create a branch on your fork of the cockroach repo.
+
+Open cockroach/pkg/sql/parser/sql.y, and find the <statement>  help text (it should start with // %Help: <statement>).
+
+Locate the end of the help text (i.e., a break in the lines starting with //), and insert the following two lines:
+
+
+
+//
+// %SeeAlso: WEBDOCS/<statement>.html
+where statement.md is the name of the Markdown file documenting <statement> . For example:
+
+
+
+
+// %Help: DROP TABLE - remove a table
+// %Category: DDL
+// %Text: DROP TABLE [IF EXISTS] <tablename> [, ...] [CASCADE | RESTRICT]
+// %SeeAlso: WEBDOCS/drop-table.html
+Save the file, stage and commit the change following the commit message guidelines (the commit title should begin with "docs:"), and then push the change to a new remote branch on your cockroach fork.
+
+Open a pull request from the remote branch on your cockroach fork. In the PR description, link to the docs issue for the new statement, and, if it makes sense, to the feature PR in cockroach.
+
+Tip: Look over the help text for a SQL statement before you start documenting the statement. This can help you come up with examples, better understand usage, and focus on which syntax and behavior aspects are the most important.
+
+Note: When you change the name of a SQL statement docs file (or any docs file for that matter), always add redirects from the file's previous name. See 
+Docs CI/CD with Netlify | Redirects
+.
+
+Related content
+
+
+
+Remaining pain points for SQL diagram generation are outlined below for future reference / projects:
+
+Making updates to docgen means merging into the cockroach repo
+No automated way to ensure diagrams.go matches the generated SQL diagrams
+Broken links originating in remote includes cannot be detected using make linkcheck
+Upstream changes to SQL source can change diagrams unexpectedly
+Unused diagrams can persist on the cockroach repo
+SKIP DOC transparently affects SQL diagram generation
+Writers working on SQL need to understand docgen syntax
+Note: Raw discussion notes here.
+
+Making updates to docgen means merging into the cockroach repo
+Current problem: When an update needs to be made to the docgen package (which has been frequent, lately), every PR needs to go through the strict review and approval process that Engineering PRs go through. This means that, depending on the stage the release is at, you have to wait for many dependencies and blockers (e.g., passing engineering-specific tests, backporting, approvals, etc.) to be resolved before your changes will be merged. Engineering reviewers are also generally unfamiliar with the docgen syntax, which likely results in 1) reviews taking longer to complete and 2) build issues being harder to troubleshoot.
+
+Possible solution: Move docgen out of the cockroach repo. Being able to own the repo and bypass Engineering checks would be a huge improvement to writers' workflow. This would also allow us to generate session variables easier and edit file templates for cluster settings.
+
+No automated way to ensure diagrams.go matches the generated SQL diagrams
+Current problem: There is no automated way to ensure that the content in diagrams.go matches the generated SQL diagram HTML in cockroachdb/generated-diagrams. This has to be manually verified using a combination of time-consuming local build commands and a third-party SQL diagram generator.
+
+Possible solution: Add a unit test to ensure the state of diagrams.go matches the generated SQL diagram HTML.
+
+Broken links originating in remote includes cannot be detected using make linkcheck
+Current problem: If a generated HTML diagram contains a broken link (due to a custom parameter not being unlinked in the docgen syntax), this is not discoverable until the generated result breaks docs repo builds. Because generation and backporting to release branches can take hours to complete, this can cause untimely issues.
+
+Possible solution: Add an automated link check to the docgen build.
+
+Upstream changes to SQL source can change diagrams unexpectedly
+Current problem: Any changes made to sql.y can and will alter the generated diagrams in cockroachdb/generated-diagrams without notice. This can cause unexpected issues such as parameters being renamed and no longer matching the tables in SQL statement docs (fairly common), diagrams becoming empty until discovered by a reader (potentially several versions later), or new syntax being introduced that causes blocking link check errors when we merge the new docs branch (as we saw with 25.1).
+
+Possible solution: Add automation that notifies the Docs team when any HTML file in any (supported) cockroachdb/generated-diagrams release branch or master is changed by a cockroach PR. (This might as well include routine work by docs writers updating the diagrams, for good measure.)
+
+Unused diagrams can persist on the cockroach repo
+Current problem: A number of BNF files in docs/generated/sql/bnf may not be referenced in our docs and may not be dependencies for other generated BNFs. This slows down build times and adds to potential confusion or faulty generation when there are redundant statements. Any cruft has to be manually identified and removed (see 1 and 2).
+
+Possible solution: If a BNF is 1) not referenced in docs and 2) not used to generate other BNF files that are in use (a somewhat big if), it should be flagged for potential removal from docs/generated/sql/bnf and from the Bazel files.
+
+SKIP DOC transparently affects SQL diagram generation
+Current problem: SKIP DOC in sql.y (intentionally) causes syntax to be excluded from SQL diagrams, at a lower level than diagrams.go. It’s easy for docs writers to forget to check this. Engineers can also forget to remove SKIP DOC when a feature is ready to be exposed in SQL diagrams and docs.
+
+Possible solution: Add lines in output when SKIP DOC affects SQL diagram generation.
+
+Writers working on SQL need to understand docgen syntax
+Current problem: Steep learning curve for understanding the docgen syntax.
+
+Possible solution: Docs / Product Operations Engineering needs to own the repo and edits that are made, not Engineering.
+
+Overview 
+Originally, SQL Grammar Diagram Generation was a tedious, manual, error-prone job that required the docs writer to remember to regenerate diagrams whenever the sql grammar was changed.
+
+A TeamCity job now automatically generates the SQL diagrams for the master, and release-v* branches.
+
+Original proposal: 
+SQL Syntax Docs Overhaul
+archived
+ 
+
+TeamCity Job / Automated Diagram Generation Process
+The TeamCity job titled Publish SQL Grammar Diagrams now automatically generates the docs and pushes them to the GitHub - cockroachdb/generated-diagrams repo. 
+
+The branches on the Github repo correspond to the branch on the GitHub - cockroachdb/cockroach: CockroachDB — the cloud native, distributed SQL database designed for high availability, effortless scale, and control over data placement. that the diagrams were generated from.
+
+Importantly, all the bnf files are listed under generated-diagrams/bnf folder and the SVGs are listed under generated-diagrams/grammar_svg
+
+The names of the diagrams are predictable and defined in cockroach/pkg/cmd/docgen/diagrams.go at master · cockroachdb/cockroach . The branches / filepaths are predictable and stable allowing docs writers to refer to the corresponding file depending on the version.
+
+Ie. The SVG file for the add_column SVG diagram for the corresponding grammar on the cockroachdb/cockroach master branch will always be at https://github.com/cockroachdb/generated-diagrams/blob/master/grammar_svg/add_column.html .
+
+Technical Details
+The TeamCity job only has one build step, which is to run build/teamcity-diagram-generation.sh (change Link once PR is merged), the build step must be run on a Linux docker image such that make bin/docgen can be done - docgen is used to create the grammar diagrams.
+
+
+Note: in the script, we grab a Railroad.jar file from gcloud, the JAR file is used to generate the SVG diagrams from the corresponding bnf grammar. The JAR lives here on gcloud https://console.cloud.google.com/storage/browser/cockroach-railroad-jar;tab=objects?forceOnBucketsSortingFiltering=false&project=cockroach-shared&prefix=&forceOnObjectsSortingFiltering=false 
+
+If for whatever reason the jar on gcloud is unavailable, a copy can be found on the internal Google Drive .
+
+We have several types of generated content in our docs:
+
+Currently Generated
+SQL grammar documentation
+Cluster settings
+SQL functions
+Logging
+Log formats
+Event log
+Candidates for Generation
+Metrics
+Session variables
+Supported TLS cipher suites
+crdb_internal tables
+CockroachDB Cloud available regions
+Errors and error codes
+CockroachDB Cloud cluster states
+Docs repo’s dependencies on the cockroach repo
+Currently Generated
+SQL grammar documentation
+SQL grammar documentation includes 
+
+SQL diagrams, which illustrate the grammar of our SQL parser and are include in the SQL reference docs.
+
+Interactive online help, which provides assistance with invoking SQL statements in the SQL client.
+
+The docs team maintains SQL diagrams and online help. See 
+SQL Grammar Documentation
+.
+
+Cluster settings
+Cluster settings are primarily documented on the Cluster Settings page. The cluster settings table is automatically generated to the file settings.html stored in the cockroach repo and referenced using remote_include. This file contains rows for all “public” cluster settings (i.e., cluster settings that won’t destabilize the cluster and that users are expected to change). 
+
+Engineering workflow for generating cluster settings
+Depending on the change being made, engineers will run dev generate in their branch prior to submitting a PR. dev generate includes the sub-job, dev generate docs, which performs bazel run pkg/gen:docs. dev generate docs will update both settings.html and settings-for-tenants.txt.
+
+You can simulate this by running cockroach gen settings-list.
+
+What the above command does is it searches for the various registered settings across the platform.
+
+If you wish to make an update to a description, you can search for the setting among the various .go files in the cockroach repo and update the description directly in there (e.g., pkg/util/tracing/tracer.go contains the description for trace.zipkin.collector) and pose a new PR against master and backport it to the versions you need, or you can log an enhancement with Engineering to make the update.
+
+PSR Consideration: This is changing as soon as CRDB releases a v22.2 binary that includes Nick’s PR  is released (which adds anchor link targets for each cluster setting as part of cockroach gen settings-list). Backports to v22.2 and v21.2 branch have been requested. Once merged, the above process instead becomes:
+
+- Run andf’s wrapper around cockroach gen settings-list --format=rawhtml to build a new _includes/v22.2/cluster-settings.md file. Wrapper needs a few tweaks once Nick's PR is live to accommodate (previously had to build our own anchor links)
+- Merge PR.
+- Repeat every minor and major …. every EA and LTS … every odd release and even release. Whatever we’re told.
+
+Note that currently there is no cluster-settings.md file in this location, it is instead inline on the main cluster settings page: v22.2/cluster-settings.md. This will change so that the setting list itself is stored as an include so that we can re-use it elsewhere, easily back/foreport between eventual-docs-branches, etc. Also greatly assists in limiting scope of automation to safely overwrite the include in its entirety each time (atomic, always true-updates, retry-safe, etc), rather than maintain any logic to try to identify what needs to be updated and what should be left alone. With auto-gen include: we always fully clobber the source include with its updated state (i.e. overwrite with confidence).
+
+Note that the recommendation to manually edit the description must not happen once this is automated. Descriptions are canonical from engineering. Typos in descriptions or defaults or whatnot must be corrected at their source. Please submit a bug report like this one.
+
+Deep dive into the code
+New settings are registered from within the pkg/settings package in the cockroach repo: cockroach/pkg/settings at master · cockroachdb/cockroach 
+
+There are different types of settings that can be used:
+
+Bool
+
+ByteSize
+
+Duration
+
+Enum
+
+Float
+
+Int
+
+Protobuf
+
+String
+
+Version
+
+You can find the setting definitions by doing a grep for settings.Register<type>Setting. The following example will return all setting declarations of type Bool:
+
+
+
+grep -r "settings.RegisterBoolSetting" <path to cockroach repo on your local machine>
+SQL functions
+SQL functions are documented on the Functions and Operators page. The built-in, aggregate, and windows function and operators tables are automatically generated to the files stored in the cockroach repo and referenced using remote_include.
+
+Similarly to cluster settings, you can either log a ticket with Engineering to update the descriptions or submit a PR with appropriate backports updating the various .go files where each SQL function is defined.
+
+PSR Consideration: Similar to cluster settings, mistakes in upstream’s descriptions must be addressed upstream. Ian: do you have time presently for the above best-effort good-faith process? Let’s have engineering lend us a hand, given that they are the authority on what the description should be in the first place, are nearest to the code that initially generated the description, and perhaps even were the one behind the PR in the first place. Docs edits to CRDB repo is not sustainable.
+
+Deep dive into the code
+The code starts in the pkg/cmd/docgen folder in the cockroach repo. The funcs.go file’s init() function contains each of the cmds for generating the built-in functions, aggregates, operators, and window functions.
+
+Built-in functions, window functions, aggregate functions
+In pkg/sql/sem/builtins/, there are various files containing built-in names. The builtins are defined in the various .go files in that folder. For example, geo_builtins.go contains a map of the gemoetry-related built-in functions and how they’re defined.
+
+Each function is made using makeBuiltIn, then subsequently added to a registry of built-ins (builtinsregistry) using registerBuiltIn. There are three different registries relevant here, one for each type: built-in functions, window functions, and aggregate functions.
+
+That registry is then consumed by the generateFunctions() function in funcs.go.
+
+Operators
+The generateOperators() function is responsible for generating the table HTML itself. It compiles all the available operators, which are defined in eval.go.
+
+Logging
+Log event types are documented on the Notable Event Types page.  The event type tables are automatically generated to the files stored in the cockroach repo and referenced using remote_include.  To make modifications to the way the Logging doc generates, make your adjustments inside of pkg/util/log/logpb/log.proto in the cockroach repo’s master branch and backport it to the necessary versions.
+
+Engineering maintains the descriptions in the pkg/util/log/logpb/log.proto file.
+
+Log formats
+Some of the text of vXY.Z/log-formats.md is stored in pkg/cmd/docgen/logformats.go.
+
+The Markdown template is stored, and then templating operations (very similar to Liquid in Jekyll) are performed to construct the include. 
+
+Event log
+The text of the vXY.Z/eventlog.md file is stored in pkg/util/log/eventpb/eventpbgen/gen.go.
+
+Similar to Log Formats above, the Markdown template is stored, and then templating operations (very similar to Liquid) are performed to construct the entirety of the document.
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+PSR Consideration: Most of the logging section is verbatim upstream:
+
+Logging Levels and Channels → 100% upstream include
+
+Log Formats  → 100% upstream include
+
+Notable Event Types  → 100% upstream include
+
+Note that with the 100% include approach like this, it is not possible “oh just fix the typo locally” because the docs side of things is a one-liner: “look up(stream)”. For this process – independent of the process smarts about it – all corrections to upstream mistakes must go through upstream.
+
+But don’t expect much help or feedback:
+
+Convert alert include to inline by andf-crl · Pull Request #82850 · cockroachdb/cockroach 
+
+Convert alert include to inline by andf-crl · Pull Request #82851 · cockroachdb/cockroach 
+
+Re-introduce alert inline by andf-crl · Pull Request #82852 · cockroachdb/cockroach 
+
+(note that my approach in the above three PRs above is incorrect, it was mad early in my time here, I should have updated to .go files directly indeed: but 0 response is the message here. With no help or guidance, there can be no teamwork between our teams. Makes it so easy for me to say: It’s engineering’s job to fix engineering typos and mistakes in engineering descriptions to engineering’s repo. Docs is downstream and already overwhelmed even solely in its downstream capacity.).
+
+Candidates for Generation
+Metrics
+A full metrics list (names, descriptions, units) is available from the cockroach repo and does result in a generated metrics.html table - better view here - but we do not directly use this; rather, we manually publish a small subset of metrics as a reference, and a further subset as Essential Metrics. (We sometimes also mention metrics in context on other doc pages and in release notes.) The set of metrics we publish, and their descriptions, merits review. For example, descriptions in the codebase vs. docs may differ, even for published metrics.
+
+A subset of the available metrics is available to Cloud customers, as indicated by some yaml files in the managed-service repo, so we could use that to provide a Cloud-specific resource (just for Standard and Advanced, as Basic clusters cannot access metrics). Not sure if we differentiate between metrics that apply to Standard, Advanced, or both, in any structured data.
+
+We have some issues for metric management to pull in here, but they do not cover the Cloud nuance. The former content from this section is outdated and needs review/refinement: 
+
+Similar to cluster settings, metrics list will soon be automated, generated from chartcatalog values (andf wrapper to generate easily: workflow/update_metrics at main · andf-crl/workflow . This is almost ready for merge, probably next week). Again, as with cluster settings, upstream canon makes downstream easier. Many metrics currently have typos or mistakes (my PR on this): it’s extremely important that I don’t go about editing descriptions wherever I guess a float is actually a rate …. and be wrong somewhere.
+
+PSR Consideration: Metrics will be new for Q1 2023., so this H2 of this doc is all new as of: soon.
+
+Session variables
+Session variables are documented within the SHOW SESSION VARIABLE and SET SESSION VARIABLE pages:
+
+SHOW {session variable} 
+
+SET {session variable} 
+
+The docs team maintains the session variables table included in both pages.
+
+There is a notion of public or private that’s made ad hoc by the Eng team and not stored in code; it merely influences whether to document the session var. Meanwhile, all session vars can be viewed via the SQL shell. 
+
+Any automation should include a way to flag session vars as public or non public, and we should have a related issue on whether to specify the distinction in the SQL shell output.
+
+PSR Consideration: Session variables are not generated … either from upstream (i.e. CRDB repo-hosted) or from local runs of cockroach (as with cluster settings and metrics shortly). Not sure why they’re here on the “Generated Docs” page, but there’s a possibility that we could automate / auto-gen these. ANDF to investigate Q1 2023.  Current status: 100% manual typing.
+
+Supported TLS cipher suites
+Likely to manually include in docs, though generation is preferred.
+
+See PR thread / Slack thread.
+
+crdb_internal tables
+See DOC-8402: Add `crdb_internal_expiration` to the crdb_internal table and list production usage
+Done
+ 
+
+See DOC-8675: description for some transaction_statistics metrics is missing from related doc page
+Backlog
+ 
+
+CockroachDB Cloud available regions
+Published at CockroachDB Cloud Regions 
+
+Available via CC API Use the CockroachDB Cloud API 
+
+Also available via managed-service codebase, or what is the source of truth?
+
+Automation would help avoid manual authoring and coordination across teams, such as in this PR.
+
+Errors and error codes
+GitHub 
+
+DOC-3185: Document complete list of CRDB error codes in one place for reference
+Backlog
+ 
+
+CockroachDB Cloud cluster states
+From the managed-service codebase (clusterListHelpers.tsx). Relevant thread.
+
+Note: As an alternative to fully automated generated docs, perhaps monitoring certain areas of the codebase for changes, and maintaining a prompt/ChatGPT thread link where it’s already set up to generate updated docs as a one off, will work.
+
+Docs repo’s dependencies on the cockroach repo
+These files are specified in the cockroach CODEOWNERS file in order to generate automated review requests of the docs-infra-prs group on any PR where they are modified. The review is assigned by Blathers and is non-blocking.
+
+Each of these files is referenced in docs via a remote include, which retrieves, on site build, for the applicable third-party tool that CockroachDB supports, the latest supported version number of that tool. The results are published here Third-Party Tools Supported by Cockroach Labs. This include, used in that page, has all of the .go file references.
+
+Given that this is a non-blocking review, it is more of a notification to the Docs team than an actual review request. It is unclear how helpful this CODEOWNERS entry may be in practice, and if there is a more efficient way of retrieving the data.
+
+Also, these includes are set up to pull from master. It’s unclear if we truly intended to update these version numbers on all supported CockroachDB versions to match what’s on master.
+
+These lines also require review from cockroachdb/sql-foundations so we could confer with that team about needs or expectations, as well.
+
+Additionally, the CODEOWNERS file has some items commented out. It is unclear what the intent was behind those lines.
+
+Path
+
+Dependency
+
+docs-infra-prs is a codeowner
+
+Additional codeowners
+
+/pkg/cmd/roachtest/tests/activerecord.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/asyncpg.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/django.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/gopg.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/gorm.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/hibernate.go
+
+Search docs repo
+
+Example
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/knex.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/libpq.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/npgsql.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/pgjdbc.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/pgx.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/ruby_pg.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/sequelize.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+/pkg/cmd/roachtest/tests/typeorm.go
+
+Search docs repo
+
+Yes
+
+sql-foundations
+
+#!/pkg/cmd/docgen/
+
+Search docs repo
+
+TBD
+(commented out)
+
+ 
+
+#!/pkg/cmd/urlcheck/
+
+Search docs repo
+
+TBD
+(commented out)
+
+ 
+
+#!/pkg/docs/
+
+Search docs repo
+
+TBD
+(commented out)
+
+ 
+
+ . Purpose
+This document describes the complete, automated system for generating SQL grammar diagrams used across CockroachDB documentation.
+
+The new process ensures:
+
+Docs writers only modify one file: pkg/cmd/docgen/diagrams.go
+
+All downstream steps are automated:
+
+BNF generation
+
+HTML/SVG diagram generation
+
+Validation
+
+Updating the cockroachdb/generated-diagrams repository
+
+Tracking changes and notifying Docs
+
+Writers only add a remote_include when a new diagram is added to a docs page
+
+This replaces the old, manual, multi-step, engineering-dependent workflow.
+
+1. Repositories and Responsibilities
+1.1 cockroachdb/cockroach
+Upstream source and generation logic:
+
+SQL grammar in pkg/sql/parser/sql.y
+
+Diagram definitions in pkg/cmd/docgen/diagrams.go
+
+Docgen tooling in pkg/cmd/docgen/**
+
+Bazel rules:
+
+pkg/gen/bnf.bzl
+
+pkg/gen/diagrams.bzl
+
+pkg/gen/docs.bzl
+
+docs/generated/sql/bnf/BUILD.bazel
+
+Dev commands for local generation:
+
+./dev generate bnf
+
+./dev build docs/generated/sql/bnf:svg
+
+1.2 cockroachdb/generated-diagrams
+Stores the generated artifacts per branch:
+
+bnf/ — grammar files
+
+grammar_svg/ — HTML diagrams
+
+Branches mirror CockroachDB branches (e.g., master, release-v25.1).
+
+This repo is updated by the diagram bot through PRs.
+
+1.3 cockroachdb/docs
+Documentation site:
+
+SQL reference pages
+
+Diagram inclusion via remote_include pointing to generated-diagrams
+
+Local includes used for preview-only or special cases
+
+2. How Diagrams Appear in the Docs
+Docs pages fetch diagrams using a Jekyll remote_include statement, for example:
+
+{% remote_include https://raw.githubusercontent.com/cockroachdb/generated-diagrams/{{ page.release_info.crdb_branch_name }}/grammar_svg/drop_index.html %}
+
+During each docs site build:
+
+The site fetches the diagram HTML directly from the generated-diagrams repo.
+
+The HTML is inserted into the page during build.
+
+When generated-diagrams is updated, diagrams automatically update on the docs site in the next build.
+
+3. What Changed (Old vs New)
+Previous workflow (for context)
+Writers had to:
+
+Edit diagrams.go
+
+Edit multiple Bazel files
+
+Run local BNF and HTML builds
+
+Validate diagrams manually
+
+Commit generated BNF files
+
+Open PRs requiring engineering review
+
+Wait for TeamCity to update generated-diagrams
+
+Add remote_include manually
+
+This was slow, error-prone, and required engineering coordination.
+
+New workflow
+Writers edit only diagrams.go
+
+CI:
+
+Generates all diagrams
+
+Validates correctness
+
+Prepares diff summaries
+
+Bot:
+
+Creates PR in generated-diagrams
+
+Docs Infra manually reviews and merges it
+
+Docs:
+
+Already reference diagrams via remote_include
+
+Automatically pick up updates after merge
+
+Writers only add remote_include when a brand new diagram is introduced
+
+4. Pain Points Solved
+The new architecture resolves:
+
+Manual generation steps
+
+Required Bazel edits
+
+No consistency checks
+
+Late discovery of broken diagram links
+
+Upstream grammar changes silently breaking diagrams
+
+Duplicate or unused BNFs
+
+Hidden SKIP DOC behavior
+
+High cognitive load on writers
+
+5. New Automated Pipeline
+5.1 Trigger Conditions
+CI runs the Diagram Pipeline when:
+
+pkg/cmd/docgen/diagrams.go is modified
+
+The PR is labeled docgen-diagram
+
+5.2 CI: Diagram Generation and Validation
+The CI pipeline:
+
+Runs diagram generation:
+
+./dev generate bnf
+
+./dev build docs/generated/sql/bnf:svg
+
+Validates:
+
+Every diagram name has matching BNF and HTML
+
+No _stmt naming conflicts
+
+All replace rules have corresponding unlink if needed
+
+Generated HTML contains no broken grammar links
+
+SKIP DOC suppressions are surfaced
+
+Unused BNFs and diagrams are detected
+
+Produces artifacts:
+
+BNFs and HTMLs
+
+Change summary
+
+SKIP DOC impact report
+
+Unused diagram warnings
+
+If issues exist, CI fails early with actionable messages.
+
+5.3 Bot PR to generated-diagrams
+If CI passes:
+
+The bot copies outputs into the correct branch of cockroachdb/generated-diagrams
+
+Updates a manifest recording:
+
+Cockroach commit SHA
+
+Diagram diffs
+
+Timestamp
+
+Opens or updates a PR
+
+IMPORTANT:
+Bot PRs are not auto-merged. Docs Infra manually reviews and merges them.
+
+5.4 Docs Repository Behavior
+Since docs use remote_include, they automatically render updated diagrams on the next site build after the PR merges.
+
+6. New Workflow for Writers (Simple, Approved)
+Writers now do only:
+Update pkg/cmd/docgen/diagrams.go
+
+Open a cockroach PR with the label docgen-diagram
+
+Wait for CI validation
+
+Docs Infra merges the bot-created PR in generated-diagrams
+
+Writer adds remote_include only if a brand new diagram is introduced
+
+Writers do NOT:
+Run any local BNF generation
+
+Run Bazel commands
+
+Commit BNF or HTML files
+
+Touch generated-diagrams directly
+
+Modify diagrams for existing pages
+
+7. Ownership Model
+Docs Infra owns:
+Docgen tooling and CI pipeline
+
+Bot automation
+
+generated-diagrams repo
+
+Documentation of this workflow
+
+SQL Foundations owns:
+SQL grammar (sql.y)
+
+SKIP DOC usage
+
+Ensuring grammar stability and correctness
+
+Docs Writers own:
+Edits to diagrams.go
+
+Placement of diagrams in docs using remote_include
+
+Reviewing visual changes in diagram PRs
+
+8. SKIP DOC Handling
+The pipeline provides visibility into SKIP DOC behavior:
+
+CI produces a SKIP DOC impact report
+
+The bot PR surfaces suppressed syntax
+
+CI can warn or fail if SKIP DOC hides grammar required in diagrams
+
+9. Unused Diagram Cleanup
+CI identifies diagrams that are:
+
+Not referenced in docs
+
+Not referenced by other diagrams
+
+Not required by grammar
+
+Bot PRs include cleanup suggestions.
+
+10. Migration Completed
+The new system is fully live:
+
+CI generation and validation active
+
+Bot PR approach implemented
+
+Writers only update diagrams.go
+
+Docs use remote_include
+
+Manual workflows are deprecated except for preview features
+
+11. Optional: Diagram Viewer UI (Future Work)
+A future lightweight UI could:
+
+Browse diagrams by branch
+
+Preview HTML diagrams
+
+Show version history
+
+Manage diagram visibility
+
+This is optional and not required for the  workflow.
+
+https://github.com/cockroachdb/cockroach/pull/158603
+
+This PR implements a complete automation pipeline for SQL diagram generation in CockroachDB. The goal is to simplify the workflow for technical writers so they only need to modify pkg/cmd/docgen/diagrams.go - everything else is automated.
+
+Changes
+CI Workflow (.github/workflows/docgen-diagrams-ci.yml):
+
+Triggers on changes to diagrams.go, sql.y, or docgen-diagram label
+Generates BNF files from sql.y
+Builds SVG diagrams via Railroad Diagram Generator
+Runs comprehensive validation tests
+Packages and uploads artifacts
+Triggers bot to sync diagrams to generated-diagrams repo
+Comments on PRs with validation status
+Validation Test Suite (pkg/cmd/docgen/tests/):
+
+TestMissingBNFFiles: Detects missing BNF files
+TestMissingHTMLDiagrams: Detects missing HTML output
+TestStmtNamingConflicts: Detects _stmt naming conflicts
+TestReplaceUnlinkMismatch: Warns about potential broken links
+TestBrokenGrammarLinks: Finds invalid grammar references
+TestUnusedDiagrams: Reports diagrams not used in docs
+TestSKIPDOCSuppressions: Reports SKIP DOC annotations
+Bot Sync Script (build/scripts/sync-diagrams-to-generated-repo.sh):
+
+Clones generated-diagrams repository
+Updates BNF and SVG files
+Creates PR with validation summary (no auto-merge)
+Assigns PR to docs-infra-prs team
+Documentation:
+
+Writer instructions (docs/generated/sql/bnf/README.md)
+Technical playbook (docs/tech-notes/sql-diagram-automation.md)
+New Writer Workflow
+Edit pkg/cmd/docgen/diagrams.go only
+Open PR with label docgen-diagram
+Add remote_include manually only for new diagrams
+No Bazel, no ./dev commands, no local generation required
+Impact
+Writers no longer need to run any Bazel commands
+CI fully generates and validates diagrams
+Bot opens PRs in generated-diagrams (no auto-merge for safety)
+Docs Infra reviews and merges the generated-diagrams PR
+Docs site uses updated diagrams via remote_include
+SKIP DOC effects are visible in PR comments
+Unused diagrams are detected
+No silent breakage from sql.y changes
+Requirements for Production
+Configure DIAGRAMS_BOT_TOKEN secret for bot service
+Set up bot service endpoint (or use the sync script directly)
+Ensure cockroachdb/generated-diagrams repo exists with proper structure
+Release Notes: None
+
+Epic: None

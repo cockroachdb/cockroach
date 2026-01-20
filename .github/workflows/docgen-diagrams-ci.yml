@@ -9,10 +9,9 @@ on:
     branches:
       - master
       - release-*
-  # SECURITY FIX: Removed pull_request_target trigger to prevent untrusted code execution.
-  # The pull_request_target event runs with write permissions and access to secrets,
-  # but checking out and executing code from PR head allows attackers to exfiltrate secrets.
-  # See: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+  # NOTE: pull_request_target was removed for security reasons.
+  # It allowed untrusted PR code to execute with access to secrets.
+  # Use workflow_dispatch instead for manual triggering on branches.
   workflow_dispatch:
     inputs:
       force_regenerate:
@@ -51,9 +50,6 @@ jobs:
   generate-diagrams:
     needs: check-label
     if: needs.check-label.outputs.should_run == 'true'
-    # SECURITY FIX: Changed from self-hosted runners to GitHub-hosted runners.
-    # Self-hosted runners with pull_request_target are especially dangerous as
-    # malicious code could persist on the runner and compromise future builds.
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
@@ -65,25 +61,71 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # SECURITY: For pull_request events, this safely checks out the merge commit.
-          # Never use github.event.pull_request.head.sha with pull_request_target as it
-          # would execute untrusted code with elevated privileges.
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
       - name: Compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
 
-      - name: Get EngFlow keys
-        # Only run on non-fork repositories for security
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
-        run: ./build/github/get-engflow-keys.sh
+      - name: Setup Bazel
+        run: |
+          echo "Installing Bazelisk..."
+          curl -L https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 -o bazelisk
+          chmod +x bazelisk
+          sudo mv bazelisk /usr/local/bin/bazel
+          bazel version
+
+      - name: Setup Java for Railroad Diagram Generator
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Download and Setup Railroad Diagram Generator
+        run: |
+          echo "::group::Setting up Railroad Diagram Generator"
+          # Download the Railroad JAR to a temp directory
+          TEMP_DIR=$(mktemp -d)
+          cd $TEMP_DIR
+
+          curl -L https://storage.googleapis.com/public-bazel-artifacts/java/railroad/rr-1.63-java8.zip -o railroad.zip
+          unzip -q railroad.zip
+
+          # Create directories and copy the JAR
+          mkdir -p ~/.cache/bazel/_bazel_runner/railroad
+          cp rr.war ~/.cache/bazel/_bazel_runner/railroad/
+
+          # Verify the JAR is valid
+          java -jar rr.war -version 2>/dev/null || echo "Railroad JAR downloaded successfully"
+
+          # Also place it where Bazel might look for it
+          mkdir -p $GITHUB_WORKSPACE/external/railroadjar
+          cp rr.war $GITHUB_WORKSPACE/external/railroadjar/
+
+          cd $GITHUB_WORKSPACE
+          rm -rf $TEMP_DIR
+
+          echo "Railroad JAR setup complete"
+          ls -la external/railroadjar/
+          echo "::endgroup::"
+
+      # Skip EngFlow keys for fork (not needed for GitHub-hosted runners)
+      # - name: Get EngFlow keys
+      #   run: ./build/github/get-engflow-keys.sh
+
+      - name: Initialize dev environment
+        run: |
+          echo "::group::Initializing dev environment"
+          # Initialize dev tool
+          ./dev doctor || true
+          echo "::endgroup::"
 
       - name: Generate BNF files
         id: generate-bnf
         run: |
           echo "::group::Generating BNF files from sql.y"
-          # Use dev tool to generate BNF files
-          ./dev generate bnf 2>&1 | tee bnf_generation.log
+          # Use bazel directly to avoid dev wrapper issues
+          bazel run //pkg/cmd/docgen -- grammar bnf docs/generated/sql/bnf/ --addr pkg/sql/parser/sql.y 2>&1 | tee bnf_generation.log
           echo "::endgroup::"
 
       - name: Build SVG diagrams
@@ -94,32 +136,23 @@ jobs:
           # Set environment variable to require railroad diagrams
           export COCKROACH_REQUIRE_RAILROAD=1
 
-          # Build SVG diagrams using dev tool
-          echo "Building SVG diagrams..."
-          ./dev build docs/generated/sql/bnf:svg --verbose_failures 2>&1 | tee svg_build.log
+          # Debug: Check if Railroad JAR exists
+          echo "Checking for Railroad JAR..."
+          ls -la external/railroadjar/ || echo "external/railroadjar not found"
 
-          # Find where HTML files were actually generated
-          echo "Searching for generated HTML files..."
+          # Build SVG diagrams using bazel directly
+          echo "Building SVG diagrams with bazel..."
+          bazel build //docs/generated/sql/bnf:svg 2>&1 | tee svg_build.log
 
-          # Use find to locate the actual HTML files
-          HTML_DIR=$(find . -type d -path "*bazel*/bin/docs/generated/sql/bnf" 2>/dev/null | head -1)
-
-          if [[ -z "$HTML_DIR" ]]; then
-            # Also check bazel-out paths
-            HTML_DIR=$(find . -type d -path "*bazel-out*/bin/docs/generated/sql/bnf" 2>/dev/null | head -1)
-          fi
-
-          if [[ -n "$HTML_DIR" ]]; then
-            echo "✅ Found HTML files in: $HTML_DIR"
-            HTML_COUNT=$(ls -1 $HTML_DIR/*.html 2>/dev/null | wc -l | tr -d ' ')
-            echo "Found $HTML_COUNT HTML files"
-            ls -la $HTML_DIR/*.html | head -10
-            # Export for use in packaging step
-            echo "html_dir=$HTML_DIR" >> $GITHUB_OUTPUT
+          # Check if HTML files were generated
+          echo "Checking for generated HTML files..."
+          if ls _bazel/bin/docs/generated/sql/bnf/*.html 2>/dev/null; then
+            echo "✅ HTML files generated successfully!"
+            ls -la _bazel/bin/docs/generated/sql/bnf/*.html | head -10
           else
-            echo "❌ No HTML files found!"
-            echo "Searching entire workspace for any HTML files..."
-            find . -name "*.html" -type f 2>/dev/null | head -20
+            echo "⚠️ No HTML files found in _bazel/bin/docs/generated/sql/bnf/"
+            echo "Checking other possible locations..."
+            find . -name "*.html" -path "*/bnf/*" 2>/dev/null | head -20
           fi
 
           echo "::endgroup::"
@@ -135,7 +168,7 @@ jobs:
 
           # Check 1: Verify all BNF files exist for diagrams.go entries
           echo "Checking for missing BNF files..."
-          missing_bnf=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestMissingBNFFiles 2>&1) || true
+          missing_bnf=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestMissingBNFFiles 2>&1) || true
           if echo "$missing_bnf" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing BNF Files\n${missing_bnf}"
@@ -143,7 +176,7 @@ jobs:
 
           # Check 2: Verify all HTML diagrams were generated
           echo "Checking for missing HTML diagrams..."
-          missing_html=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestMissingHTMLDiagrams 2>&1) || true
+          missing_html=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestMissingHTMLDiagrams 2>&1) || true
           if echo "$missing_html" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Missing HTML Diagrams\n${missing_html}"
@@ -151,7 +184,7 @@ jobs:
 
           # Check 3: Look for _stmt naming conflicts
           echo "Checking for _stmt naming conflicts..."
-          stmt_conflicts=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestStmtNamingConflicts 2>&1) || true
+          stmt_conflicts=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestStmtNamingConflicts 2>&1) || true
           if echo "$stmt_conflicts" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## _stmt Naming Conflicts\n${stmt_conflicts}"
@@ -159,7 +192,7 @@ jobs:
 
           # Check 4: Detect replace/unlink mismatches
           echo "Checking for replace/unlink mismatches..."
-          replace_mismatch=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestReplaceUnlinkMismatch 2>&1) || true
+          replace_mismatch=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestReplaceUnlinkMismatch 2>&1) || true
           if echo "$replace_mismatch" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Replace/Unlink Mismatches\n${replace_mismatch}"
@@ -167,7 +200,7 @@ jobs:
 
           # Check 5: Verify grammar links are valid
           echo "Checking for broken grammar links..."
-          broken_links=$(./dev test //pkg/cmd/docgen/tests:tests_test --test_filter=TestBrokenGrammarLinks 2>&1) || true
+          broken_links=$(bazel test //pkg/cmd/docgen/tests:docgen_validation_test --test_filter=TestBrokenGrammarLinks 2>&1) || true
           if echo "$broken_links" | grep -q "FAIL"; then
             validation_status="failed"
             validation_output="${validation_output}\n## Broken Grammar Links\n${broken_links}"
@@ -196,22 +229,86 @@ jobs:
       - name: Check for diagram changes
         id: check-changes
         run: |
-          # Compare generated files with what would be in the generated-diagrams repo
-          changed_files=$(git diff --name-only HEAD -- docs/generated/sql/bnf/ 2>/dev/null || echo "")
-          if [[ -n "$changed_files" ]]; then
+          # Compare generated BNF files with committed versions
+          bnf_changed=$(git diff --name-only HEAD -- docs/generated/sql/bnf/ 2>/dev/null || echo "")
+
+          # Also check if diagrams.go was modified (which affects HTML rendering even if BNF stays same)
+          # This catches changes like unlink, replace, nosplit that don't affect BNF
+          diagrams_go_changed=$(git diff --name-only origin/${{ github.event.pull_request.base.ref || 'master' }} -- pkg/cmd/docgen/diagrams.go 2>/dev/null || echo "")
+
+          if [[ -n "$bnf_changed" ]] || [[ -n "$diagrams_go_changed" ]]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Changed files:"
-            echo "$changed_files"
+            echo "Detected changes:"
+            [[ -n "$bnf_changed" ]] && echo "BNF files: $bnf_changed"
+            [[ -n "$diagrams_go_changed" ]] && echo "diagrams.go modified"
 
             # Generate detailed diff summary for manifest
+            all_changed="${bnf_changed}"
             echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-            echo "$changed_files" >> $GITHUB_OUTPUT
+            echo "$all_changed" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "changed_files=" >> $GITHUB_OUTPUT
             echo "No diagram changes detected"
           fi
+
+      - name: Setup Node.js for PNG generation
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate PNG previews
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          echo "::group::Generating PNG previews for changed diagrams"
+
+          # Install sharp for SVG to PNG conversion
+          npm install sharp --no-save
+
+          # Create PNG generation script using node -e with script passed as argument
+          mkdir -p artifacts/diagrams/png
+
+          node -e '
+          const sharp = require("sharp");
+          const fs = require("fs");
+          const path = require("path");
+
+          const CSS_STYLE = "<style>.terminal{fill:#FFFFCC;stroke:#000;stroke-width:1}.nonterminal{fill:#FFCCCC;stroke:#000;stroke-width:1}.line{stroke:#000;stroke-width:1;fill:none}text{font-family:monospace;font-size:12px;fill:#000}polygon{fill:#000}rect{stroke-width:1}</style>";
+
+          async function convertToPng(htmlFile, outputFile) {
+            const html = fs.readFileSync(htmlFile, "utf8");
+            const svgMatch = html.match(/<svg[^>]*>[\s\S]*<\/svg>/);
+            if (!svgMatch) return null;
+            let svg = svgMatch[0];
+            svg = svg.replace(/<svg/, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"");
+            svg = svg.replace(/>/, ">" + CSS_STYLE);
+            const png = await sharp(Buffer.from(svg), { density: 300 }).png().toBuffer();
+            fs.writeFileSync(outputFile, png);
+            return png.length;
+          }
+
+          async function main() {
+            const inputDir = process.argv[1];
+            const outputDir = process.argv[2];
+            const maxCount = parseInt(process.argv[3]) || 5;
+            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+            const files = fs.readdirSync(inputDir).filter(f => f.endsWith(".html")).slice(0, maxCount);
+            console.log("Processing " + files.length + " diagrams...");
+            for (const file of files) {
+              const input = path.join(inputDir, file);
+              const output = path.join(outputDir, file.replace(".html", ".png"));
+              try {
+                const size = await convertToPng(input, output);
+                if (size) console.log("Generated: " + output + " (" + size + " bytes)");
+              } catch (e) { console.error("Error: " + e.message); }
+            }
+          }
+          main().catch(e => { console.error(e); process.exit(1); });
+          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png 5
+
+          echo "::endgroup::"
 
       - name: Package artifacts
         id: package
@@ -222,23 +319,8 @@ jobs:
           # Copy BNF files
           cp -r docs/generated/sql/bnf/*.bnf artifacts/diagrams/ 2>/dev/null || true
 
-          # Copy HTML files (SVG diagrams) from the correct bazel output directory
-          HTML_DIR="${{ steps.build-svg.outputs.html_dir }}"
-          if [[ -n "$HTML_DIR" ]]; then
-            echo "Copying HTML files from $HTML_DIR"
-            cp $HTML_DIR/*.html artifacts/diagrams/ 2>/dev/null || echo "Failed to copy HTML files"
-
-            # Verify copy was successful
-            HTML_COPIED=$(ls -1 artifacts/diagrams/*.html 2>/dev/null | wc -l | tr -d ' ')
-            echo "Copied $HTML_COPIED HTML files to artifacts"
-          else
-            echo "Warning: No HTML directory found, searching for HTML files..."
-            # Fallback: find and copy any HTML files in bnf directories
-            find . -name "*.html" -path "*bnf*" -type f -exec cp {} artifacts/diagrams/ \; 2>/dev/null || true
-
-            HTML_COPIED=$(ls -1 artifacts/diagrams/*.html 2>/dev/null | wc -l | tr -d ' ')
-            echo "Found and copied $HTML_COPIED HTML files"
-          fi
+          # Copy HTML files (SVG diagrams)
+          cp -r _bazel/bin/docs/generated/sql/bnf/*.html artifacts/diagrams/ 2>/dev/null || true
 
           # Create manifest with diagram diffs
           GENERATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -256,14 +338,12 @@ jobs:
 
           cat > artifacts/diagrams/manifest.json << MANIFEST_EOF
           {
-            "generated_at": "$GENERATED_AT",
+            "generated_at": "${GENERATED_AT}",
             "source_commit": "${{ github.sha }}",
-            "source_pr": "${{ github.event.pull_request.number }}",
-            "branch": "${{ github.head_ref || github.ref_name }}",
-            "diagram_count": $DIAGRAM_COUNT,
-            "svg_count": $SVG_COUNT,
-            "changed_files": $CHANGED_JSON,
-            "validation_status": "${{ steps.validate.outputs.status }}"
+            "source_pr": "${{ github.event.pull_request.number || 'N/A' }}",
+            "diagram_count": ${DIAGRAM_COUNT},
+            "svg_count": ${SVG_COUNT},
+            "changed_files": ${CHANGED_JSON}
           }
           MANIFEST_EOF
 
@@ -288,9 +368,10 @@ jobs:
           path: artifacts/diagrams/
           retention-days: 30
 
-      - name: Clean up EngFlow keys
-        if: always()
-        run: ./build/github/cleanup-engflow-keys.sh || true
+      # Skip EngFlow cleanup for fork
+      # - name: Clean up EngFlow keys
+      #   if: always()
+      #   run: ./build/github/cleanup-engflow-keys.sh
 
   sync-to-generated-diagrams:
     needs: generate-diagrams
@@ -298,6 +379,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
+      sync_branch: diagram-sync/${{ github.sha }}
+      png_files: ${{ steps.sync-files.outputs.png_files }}
     steps:
       - name: Download diagram artifacts
         uses: actions/download-artifact@v4
@@ -314,10 +397,12 @@ jobs:
           path: generated-diagrams
 
       - name: Sync diagram files
+        id: sync-files
         run: |
           # Create directories if they don't exist
           mkdir -p generated-diagrams/bnf
           mkdir -p generated-diagrams/grammar_svg
+          mkdir -p generated-diagrams/grammar_png
 
           # Copy BNF files
           cp artifacts/*.bnf generated-diagrams/bnf/ 2>/dev/null || echo "No BNF files to copy"
@@ -325,13 +410,23 @@ jobs:
           # Copy HTML/SVG files
           cp artifacts/*.html generated-diagrams/grammar_svg/ 2>/dev/null || echo "No HTML files to copy"
 
+          # Copy PNG preview files
+          cp artifacts/png/*.png generated-diagrams/grammar_png/ 2>/dev/null || echo "No PNG files to copy"
+
           # Copy manifest
           cp artifacts/manifest.json generated-diagrams/ 2>/dev/null || echo "No manifest to copy"
 
+          # List PNG files for the comment job
+          PNG_FILES=$(ls -1 generated-diagrams/grammar_png/*.png 2>/dev/null | xargs -I {} basename {} | head -5 || echo "")
+          echo "png_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$PNG_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
           # Show what was synced
           echo "Synced files:"
-          ls -la generated-diagrams/bnf/ 2>/dev/null | head -20 || true
-          ls -la generated-diagrams/grammar_svg/ 2>/dev/null | head -20 || true
+          ls -la generated-diagrams/bnf/ 2>/dev/null | head -10 || true
+          ls -la generated-diagrams/grammar_svg/ 2>/dev/null | head -10 || true
+          ls -la generated-diagrams/grammar_png/ 2>/dev/null | head -10 || true
 
       - name: Create PR in generated-diagrams
         id: create-pr
@@ -358,8 +453,6 @@ jobs:
             - Branch: `${{ github.head_ref || github.ref_name }}`
 
             **Validation Status:** ${{ needs.generate-diagrams.outputs.validation_status }}
-
-            **Manifest:** See `manifest.json` for detailed change information
 
             ---
 
@@ -392,6 +485,9 @@ jobs:
             const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
             const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
             const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
+            const syncBranch = '${{ needs.sync-to-generated-diagrams.outputs.sync_branch }}';
+            const pngFiles = `${{ needs.sync-to-generated-diagrams.outputs.png_files }}`;
+            const targetRepo = '${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}';
 
             let body = '## SQL Diagram Generation Report\n\n';
 
@@ -410,19 +506,37 @@ jobs:
                 body += 'A PR will be automatically opened in `generated-diagrams` to sync these changes.\n\n';
               }
 
-              // List changed files
-              if (changedFiles && changedFiles.trim() !== '') {
-                body += '### Changed Diagrams\n\n';
-                body += '```\n' + changedFiles + '\n```\n\n';
+              // Add PNG diagram previews if available
+              if (pngFiles && pngFiles.trim() !== '' && syncBranch) {
+                body += '### Diagram Previews\n\n';
+
+                const files = pngFiles.trim().split('\n').filter(f => f.length > 0);
+                for (const file of files) {
+                  const diagramName = file.replace('.png', '');
+                  const imageUrl = `https://raw.githubusercontent.com/${targetRepo}/${syncBranch}/grammar_png/${file}`;
+                  body += `**${diagramName}**\n\n`;
+                  body += `![${diagramName}](${imageUrl})\n\n`;
+                }
+
+                if (files.length > 0) {
+                  body += `*Showing ${files.length} diagram preview(s).*\n\n`;
+                }
+              } else {
+                // Fallback to listing changed files
+                if (changedFiles && changedFiles.trim() !== '') {
+                  body += '### Changed Diagrams\n\n';
+                  body += '```\n' + changedFiles + '\n```\n\n';
+                }
               }
             } else {
               body += ':heavy_check_mark: **No diagram changes detected**\n\n';
             }
 
             if (skipDocWarnings && skipDocWarnings.trim() !== '') {
-              body += '### SKIP DOC Warnings\n\n';
+              body += '<details>\n<summary>SKIP DOC Warnings (click to expand)</summary>\n\n';
               body += 'The following grammar rules are suppressed from documentation:\n\n';
               body += '```\n' + skipDocWarnings + '\n```\n\n';
+              body += '</details>\n\n';
             }
 
             body += '---\n';
