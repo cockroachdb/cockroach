@@ -161,6 +161,29 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 	})
 }
 
+// CaptureIndexUsageStatsStmt is exported so that it can be used by the
+// benchmarks in the rttanalysis package, without needing to keep the benchmark
+// code in sync with any changes to this query.
+const CaptureIndexUsageStatsStmt = `
+		SELECT
+		 ti.descriptor_name as table_name,
+		 ti.descriptor_id as table_id,
+		 ti.index_name,
+		 ti.index_id,
+		 ti.index_type,
+		 ti.is_unique,
+		 ti.is_inverted,
+		 total_reads,
+		 last_read,
+		 ti.created_at,
+		 ns.nspname::string
+		FROM crdb_internal.index_usage_statistics AS us
+    INNER LOOKUP JOIN crdb_internal.table_indexes AS ti ON us.table_id = ti.descriptor_id
+                                          AND us.index_id = ti.index_id
+    INNER LOOKUP JOIN pg_catalog.pg_class AS c ON ti.descriptor_id::OID = c.oid
+    INNER LOOKUP JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+ORDER BY total_reads ASC`
+
 func captureIndexUsageStats(
 	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
 ) error {
@@ -179,25 +202,6 @@ func captureIndexUsageStats(
 		if databaseName == "system" || databaseName == "defaultdb" || databaseName == "postgres" {
 			continue
 		}
-		const stmt = `
-		SELECT
-		 ti.descriptor_name as table_name,
-		 ti.descriptor_id as table_id,
-		 ti.index_name,
-		 ti.index_id,
-		 ti.index_type,
-		 ti.is_unique,
-		 ti.is_inverted,
-		 total_reads,
-		 last_read,
-		 ti.created_at,
-		 ns.nspname::string
-		FROM crdb_internal.index_usage_statistics AS us
-    JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
-                                          AND us.table_id = ti.descriptor_id
-    JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
-    JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
-ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
 			ctx,
@@ -207,7 +211,7 @@ ORDER BY total_reads ASC`
 				User:     username.NodeUserName(),
 				Database: string(databaseName),
 			},
-			stmt,
+			CaptureIndexUsageStatsStmt,
 		)
 		if err != nil {
 			return err

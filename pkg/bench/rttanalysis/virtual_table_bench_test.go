@@ -5,7 +5,11 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
+)
 
 func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
 func init() {
@@ -74,6 +78,13 @@ SELECT * FROM t2;`,
 			Name:  "show_create_all_triggers",
 			Setup: buildNTablesWithTriggers(100),
 			Stmt:  `SHOW CREATE ALL TRIGGERS;`,
+		},
+		// This test checks the performance of the query to capture index usage
+		// stats that is executed by scheduled telemetry logging.
+		{
+			Name:    "capture_index_usage_stats",
+			SetupEx: buildNTablesWithIndexes(20, 5),
+			Stmt:    scheduledlogging.CaptureIndexUsageStatsStmt,
 		},
 	})
 }

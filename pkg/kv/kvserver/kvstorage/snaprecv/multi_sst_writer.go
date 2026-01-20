@@ -116,7 +116,7 @@ func NewMultiSSTWriter(
 func (msstw *MultiSSTWriter) ReadOne(
 	ctx context.Context,
 	ek storage.EngineKey,
-	shared bool, // may receive shared SSTs
+	sharedOrExternal bool, // may receive shared or external SSTs
 	batchReader *storage.BatchReader,
 ) error {
 	switch batchReader.KeyKind() {
@@ -125,14 +125,14 @@ func (msstw *MultiSSTWriter) ReadOne(
 			return errors.Wrapf(err, "writing sst for raft snapshot")
 		}
 	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindDeleteSized:
-		if !shared {
+		if !sharedOrExternal {
 			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 		}
 		if err := msstw.putInternalPointKey(ctx, batchReader.Key(), batchReader.KeyKind(), nil); err != nil {
 			return errors.Wrapf(err, "writing sst for raft snapshot")
 		}
 	case pebble.InternalKeyKindRangeDelete:
-		if !shared {
+		if !sharedOrExternal {
 			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 		}
 		start := batchReader.Key()
@@ -145,7 +145,7 @@ func (msstw *MultiSSTWriter) ReadOne(
 		}
 
 	case pebble.InternalKeyKindRangeKeyUnset, pebble.InternalKeyKindRangeKeyDelete:
-		if !shared {
+		if !sharedOrExternal {
 			return errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 		}
 		start := batchReader.Key()
