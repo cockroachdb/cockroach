@@ -188,6 +188,13 @@ func (b *replicaAppBatch) Stage(
 	return cmd, nil
 }
 
+func (b *replicaAppBatch) ReadWriter() kvstorage.ReadWriter {
+	return kvstorage.ReadWriter{
+		State: kvstorage.WrapState(b.batch),
+		Raft:  kvstorage.WrapRaft(b.RaftBatch()),
+	}
+}
+
 // changeRemovesStore returns true if any of the removals in this change have storeID.
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
@@ -466,7 +473,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(
-			ctx, kvstorage.TODOReadWriter(b.batch),
+			ctx, b.ReadWriter(),
 			b.r.destroyInfoRaftMuLocked(), change.NextReplicaID(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
