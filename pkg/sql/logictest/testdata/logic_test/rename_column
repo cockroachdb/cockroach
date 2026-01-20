@@ -332,8 +332,8 @@ tab1  CREATE TABLE public.tab1 (
         d INT8 NOT NULL,
         crdb_internal_a_b_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, d))), 16:::INT8)) VIRTUAL,
         crdb_internal_a_b_c_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, d))), 16:::INT8)) VIRTUAL,
-        CONSTRAINT tab1_pkey PRIMARY KEY (d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
-        UNIQUE INDEX tab1_d_b_a_c_key (d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        CONSTRAINT tab1_pkey PRIMARY KEY (d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a, b, d)),
+        UNIQUE INDEX tab1_d_b_a_c_key (d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16, shard_columns=(a, b, c, d)),
         FAMILY f1 (a, b, c, d)
       );
 
@@ -351,8 +351,8 @@ tab1  CREATE TABLE public.tab1 (
         rename_d INT8 NOT NULL,
         crdb_internal_a_b_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, rename_d))), 16:::INT8)) VIRTUAL,
         crdb_internal_a_b_c_rename_d_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c, rename_d))), 16:::INT8)) VIRTUAL,
-        CONSTRAINT tab1_pkey PRIMARY KEY (rename_d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16),
-        UNIQUE INDEX tab1_d_b_a_c_key (rename_d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16),
+        CONSTRAINT tab1_pkey PRIMARY KEY (rename_d ASC, b ASC, a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a, b, rename_d)),
+        UNIQUE INDEX tab1_d_b_a_c_key (rename_d ASC, b ASC, a ASC, c ASC) USING HASH WITH (bucket_count=16, shard_columns=(a, b, c, rename_d)),
         FAMILY f1 (a, b, c, rename_d)
       );
 

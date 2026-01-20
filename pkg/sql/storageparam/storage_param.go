@@ -59,6 +59,20 @@ func Set(
 		}
 		telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
 
+		// Special handling for parameters that are processed in the schema changer
+		// (EvalShardColumns, EvalShardBucketCount) and do not need evaluation here.
+		// This is necessary for 'shard_columns', as type checking will otherwise
+		// carry out column name resolution, and we do not currently have the table
+		// context needed for name resolution.
+		if key == `shard_columns` || key == `bucket_count` {
+			// Pass nil datum - these parameters are handled in the schema changer
+			// by accessing the raw expression from storageParams.
+			if err := setter.Set(ctx, semaCtx, evalCtx, key, nil); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Expressions may be an unresolved name.
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
