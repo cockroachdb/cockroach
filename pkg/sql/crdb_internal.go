@@ -3922,103 +3922,130 @@ CREATE TABLE crdb_internal.table_indexes (
   visibility          FLOAT NOT NULL,
   shard_bucket_count  INT,
   created_at          TIMESTAMP,
-  create_statement    STRING NOT NULL
+  create_statement    STRING NOT NULL,
+  INDEX (descriptor_id)
 )
 `,
-	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		primary := tree.NewDString("primary")
-		secondary := tree.NewDString("secondary")
-		const numDatums = 13
-		row := make([]tree.Datum, numDatums)
-		worker := func(ctx context.Context, pusher rowPusher) error {
-			alloc := &tree.DatumAlloc{}
-			opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
-			return forEachTableDesc(ctx, p, dbContext, opts,
-				func(ctx context.Context, descCtx tableDescContext) error {
-					sc, table := descCtx.schema, descCtx.table
-					tableID := tree.NewDInt(tree.DInt(table.GetID()))
-					tableName := tree.NewDString(table.GetName())
-					// We report the primary index of non-physical tables here. These
-					// indexes are not reported as a part of ForeachIndex.
-					return catalog.ForEachIndex(table, catalog.IndexOpts{
-						NonPhysicalPrimaryIndex: true,
-					}, func(idx catalog.Index) error {
-						idxType := secondary
-						if idx.Primary() {
-							idxType = primary
-						}
-						createdAt := tree.DNull
-						if ts := idx.CreatedAt(); !ts.IsZero() {
-							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
-							if err != nil {
-								log.Dev.Warningf(ctx, "failed to construct timestamp for index: %v", err)
-							} else {
-								createdAt = tsDatum
-							}
-						}
-						shardBucketCnt := tree.DNull
-						if idx.IsSharded() {
-							shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
-						}
-						idxInvisibility := idx.GetInvisibility()
-						namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
-						fullTableName := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
-						var partitionBuf bytes.Buffer
-						if err := ShowCreatePartitioning(
-							alloc,
-							p.ExecCfg().Codec,
-							table,
-							idx,
-							idx.GetPartitioning(),
-							&partitionBuf,
-							0,     /* indent */
-							0,     /* colOffset */
-							false, /* redactableValues */
-						); err != nil {
-							return err
-						}
-						createIndexStmt, err := catformat.IndexForDisplay(
-							ctx,
-							table,
-							&fullTableName,
-							idx,
-							partitionBuf.String(),
-							tree.FmtSimple,
-							p.EvalContext(),
-							p.SemaCtx(),
-							p.SessionData(),
-							catformat.IndexDisplayShowCreate,
-						)
-						if err != nil {
-							return err
-						}
-						row = append(row[:0],
-							tableID,
-							tableName,
-							tree.NewDInt(tree.DInt(idx.GetID())),
-							tree.NewDString(idx.GetName()),
-							idxType,
-							tree.MakeDBool(tree.DBool(idx.IsUnique())),
-							tree.MakeDBool(idx.GetType() == idxtype.INVERTED),
-							tree.MakeDBool(tree.DBool(idx.IsSharded())),
-							tree.MakeDBool(idxInvisibility == 0.0),
-							tree.NewDFloat(tree.DFloat(1-idxInvisibility)),
-							shardBucketCnt,
-							createdAt,
-							tree.NewDString(createIndexStmt),
-						)
-						if buildutil.CrdbTestBuild {
-							if len(row) != numDatums {
-								return errors.AssertionFailedf("expected %d datums, got %d", numDatums, len(row))
-							}
-						}
-						return pusher.pushRow(row...)
-					})
-				},
-			)
-		}
-		return setupGenerator(ctx, worker, stopper)
+	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		alloc := &tree.DatumAlloc{}
+		opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
+		return forEachTableDesc(ctx, p, dbContext, opts,
+			func(ctx context.Context, descCtx tableDescContext) error {
+				return generateTableIndexesRow(ctx, p, alloc, descCtx.schema, descCtx.table, addRow)
+			},
+		)
 	},
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				descID := catid.DescID(tree.MustBeDInt(constraint))
+				desc, err := p.byIDGetterBuilder().Get().Desc(ctx, descID)
+				if err != nil {
+					// If the descriptor doesn't exist, return no match.
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						return false, nil
+					}
+					return false, err
+				}
+				table, ok := desc.(catalog.TableDescriptor)
+				if !ok {
+					// If the descriptor is not a table, return no match.
+					return false, nil
+				}
+				sc, err := p.byIDGetterBuilder().Get().Schema(ctx, table.GetParentSchemaID())
+				if err != nil {
+					return false, err
+				}
+				alloc := &tree.DatumAlloc{}
+				return true, generateTableIndexesRow(ctx, p, alloc, sc, table, addRow)
+			},
+		},
+	},
+}
+
+// generateTableIndexesRow generates rows for crdb_internal.table_indexes for a single table.
+func generateTableIndexesRow(
+	ctx context.Context,
+	p *planner,
+	alloc *tree.DatumAlloc,
+	sc catalog.SchemaDescriptor,
+	table catalog.TableDescriptor,
+	addRow func(...tree.Datum) error,
+) error {
+	primary := tree.NewDString("primary")
+	secondary := tree.NewDString("secondary")
+	tableID := tree.NewDInt(tree.DInt(table.GetID()))
+	tableName := tree.NewDString(table.GetName())
+	// We report the primary index of non-physical tables here. These
+	// indexes are not reported as a part of ForeachIndex.
+	return catalog.ForEachIndex(table, catalog.IndexOpts{
+		NonPhysicalPrimaryIndex: true,
+	}, func(idx catalog.Index) error {
+		idxType := secondary
+		if idx.Primary() {
+			idxType = primary
+		}
+		createdAt := tree.DNull
+		if ts := idx.CreatedAt(); !ts.IsZero() {
+			tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+			} else {
+				createdAt = tsDatum
+			}
+		}
+		shardBucketCnt := tree.DNull
+		if idx.IsSharded() {
+			shardBucketCnt = tree.NewDInt(tree.DInt(idx.GetSharded().ShardBuckets))
+		}
+		idxInvisibility := idx.GetInvisibility()
+		namePrefix := tree.ObjectNamePrefix{SchemaName: tree.Name(sc.GetName()), ExplicitSchema: true}
+		fullTableName := tree.MakeTableNameFromPrefix(namePrefix, tree.Name(table.GetName()))
+		var partitionBuf bytes.Buffer
+		if err := ShowCreatePartitioning(
+			alloc,
+			p.ExecCfg().Codec,
+			table,
+			idx,
+			idx.GetPartitioning(),
+			&partitionBuf,
+			0,     /* indent */
+			0,     /* colOffset */
+			false, /* redactableValues */
+		); err != nil {
+			return err
+		}
+		createIndexStmt, err := catformat.IndexForDisplay(
+			ctx,
+			table,
+			&fullTableName,
+			idx,
+			partitionBuf.String(),
+			tree.FmtSimple,
+			p.EvalContext(),
+			p.SemaCtx(),
+			p.SessionData(),
+			catformat.IndexDisplayShowCreate,
+		)
+		if err != nil {
+			return err
+		}
+		return addRow(
+			tableID,
+			tableName,
+			tree.NewDInt(tree.DInt(idx.GetID())),
+			tree.NewDString(idx.GetName()),
+			idxType,
+			tree.MakeDBool(tree.DBool(idx.IsUnique())),
+			tree.MakeDBool(idx.GetType() == idxtype.INVERTED),
+			tree.MakeDBool(tree.DBool(idx.IsSharded())),
+			tree.MakeDBool(idxInvisibility == 0.0),
+			tree.NewDFloat(tree.DFloat(1-idxInvisibility)),
+			shardBucketCnt,
+			createdAt,
+			tree.NewDString(createIndexStmt),
+		)
+	})
 }
 
 // crdbInternalIndexColumnsTable exposes the index columns.
