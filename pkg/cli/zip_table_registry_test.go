@@ -120,25 +120,48 @@ func TestQueryForTable(t *testing.T) {
 	})
 }
 
-func TestNoForbiddenSystemTablesInDebugZip(t *testing.T) {
+func TestZipContainsAllSystemTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	forbiddenSysTables := []string{
-		"system.users",
-		"system.web_sessions",
-		"system.join_tokens",
-		"system.comments",
-		"system.ui",
-		"system.statement_bundle_chunks",
-		"system.statement_statistics",
-		"system.transaction_statistics",
-		"system.statement_activity",
-		"system.transaction_activity",
+	defer log.Scope(t).Close(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	rows := sqlDB.Query(t, `SELECT table_name FROM [SHOW TABLES FROM system] WHERE type = 'table' ORDER BY table_name`)
+	defer rows.Close()
+
+	var allSystemTables []string
+	for rows.Next() {
+		var tableName string
+		require.NoError(t, rows.Scan(&tableName))
+		allSystemTables = append(allSystemTables, "system."+tableName)
 	}
-	for _, forbiddenTable := range forbiddenSysTables {
-		tableQuery, err := zipSystemTables.QueryForTable(forbiddenTable, false /* redact */)
-		assert.Equal(t, "", tableQuery.query)
-		assert.Error(t, err)
-		assert.Equal(t, fmt.Sprintf("no entry found in table registry for: %s", forbiddenTable), err.Error())
+	require.NoError(t, rows.Err())
+
+	// Verify that every system table is either in zipSystemTables or in the
+	// disabled list.
+	var missingTables []string
+	for _, fullTableName := range allSystemTables {
+		if _, tbd := toBeTriaged[fullTableName]; tbd {
+			// TODO(yuzefovich): remove this.
+			continue
+		}
+		_, inRegistry := zipSystemTables[fullTableName]
+		_, inDisabled := disabledSystemTables[fullTableName]
+		if !inRegistry && !inDisabled {
+			missingTables = append(missingTables, fullTableName)
+		}
+		// Ensure tables are not in both lists (would be redundant).
+		require.Falsef(t, inRegistry && inDisabled, "system table %q is in both zipSystemTables and disabledSystemTables registries", fullTableName)
+	}
+	require.Falsef(t, len(missingTables) > 0, "the following system tables are neither in zipSystemTables nor in disabledSystemTables registries:\n%s", strings.Join(missingTables, "\n"))
+
+	// Verify that disabled tables are indeed not in the registry.
+	for disabledTable := range disabledSystemTables {
+		tableQuery, err := zipSystemTables.QueryForTable(disabledTable, false /* redact */)
+		require.Equal(t, "", tableQuery.query)
+		require.Error(t, err)
 	}
 }
 
