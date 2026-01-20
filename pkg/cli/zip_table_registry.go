@@ -1249,21 +1249,53 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	},
 }
 
-// NB: The following system tables explicitly forbidden:
-//   - system.users: avoid downloading passwords.
-//   - system.web_sessions: avoid downloading active session tokens.
-//   - system.join_tokens: avoid downloading secret join keys.
+// disabledSystemTables contains system tables that we don't include into the
+// debug.zip:
 //   - system.comments: avoid downloading noise from SQL schema.
-//   - system.ui: avoid downloading noise from UI customizations.
+//   - system.join_tokens: avoid downloading secret join keys.
+//   - system.statement_activity: historical data, usually too much to download.
 //   - system.statement_bundle_chunks: avoid downloading a large table that's
 //     hard to interpret currently.
 //   - system.statement_statistics: historical data, usually too much to
 //     download.
-//   - system.transaction_statistics: ditto
-//   - system.statement_activity: ditto
-//   - system.transaction_activity: ditto
-//
-// A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
+//   - system.transaction_activity: historical data, usually too much to
+//     download.
+//   - system.transaction_statistics: historical data, usually too much to
+//     download.
+//   - system.ui: avoid downloading noise from UI customizations.
+//   - system.users: avoid downloading passwords.
+//   - system.web_sessions: avoid downloading active session tokens.
+var disabledSystemTables = map[string]struct{}{
+	"system.comments":                {},
+	"system.join_tokens":             {},
+	"system.statement_activity":      {},
+	"system.statement_bundle_chunks": {},
+	"system.statement_statistics":    {},
+	"system.transaction_activity":    {},
+	"system.transaction_statistics":  {},
+	"system.ui":                      {},
+	"system.users":                   {},
+	"system.web_sessions":            {},
+}
+
+// TODO(yuzefovich): triage these tables and remove this map.
+var toBeTriaged = map[string]struct{}{
+	"system.inspect_errors":                   {},
+	"system.mvcc_statistics":                  {},
+	"system.prepared_transactions":            {},
+	"system.region_liveness":                  {},
+	"system.span_count":                       {},
+	"system.span_stats_buckets":               {},
+	"system.span_stats_samples":               {},
+	"system.span_stats_tenant_boundaries":     {},
+	"system.span_stats_unique_keys":           {},
+	"system.statement_execution_insights":     {},
+	"system.table_metadata":                   {},
+	"system.transaction_diagnostics":          {},
+	"system.transaction_diagnostics_requests": {},
+	"system.transaction_execution_insights":   {},
+}
+
 var zipSystemTables = DebugZipTableRegistry{
 	"system.database_role_settings": {
 		nonSensitiveCols: NonSensitiveColumns{
