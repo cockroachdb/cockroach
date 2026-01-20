@@ -81,7 +81,7 @@ func TestDestroyReplica(t *testing.T) {
 			r.createStateMachine(ctx, t, w)
 		}) + mutateSep("destroy", e, func(rw ReadWriter) {
 			require.NoError(t, DestroyReplica(
-				ctx, rw,
+				ctx, rw.State, rw.Raft,
 				DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
 			))
 		})

@@ -189,7 +189,8 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 	for _, sub := range sw.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
+			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w).State, 
+			kvstorage.TODOReaderWriter(reader, w).Raft, sub)
 		}); err != nil {
 			return err
 		}

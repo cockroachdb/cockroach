@@ -359,13 +359,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 
 				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
-					rw := kvstorage.ReadWriter{
-						State: kvstorage.WrapState(stateBatch),
-						Raft:  kvstorage.WrapRaft(raftBatch),
-					}
 					require.NoError(t, kvstorage.DestroyReplica(
 						ctx,
-						rw,
+						kvstorage.WrapState(stateBatch),
+						kvstorage.WrapRaft(raftBatch),
 						destroyInfo,
 						rs.desc.NextReplicaID,
 					))

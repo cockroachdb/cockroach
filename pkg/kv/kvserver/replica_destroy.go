@@ -91,7 +91,8 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 	// TODO(sep-raft-log): need both engines separately here.
 	if err := kvstorage.DestroyReplica(
-		ctx, kvstorage.TODOReaderWriter(r.store.TODOEngine(), batch),
+		ctx, kvstorage.TODOReaderWriter(r.store.TODOEngine(), batch).State, 
+		kvstorage.TODOReaderWriter(r.store.TODOEngine(), batch).Raft,
 		r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err
