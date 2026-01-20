@@ -1770,6 +1770,45 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
 			}
+
+			// Validate that shard columns are a valid subset of index key columns.
+			shardedDesc := idx.GetSharded()
+			if len(shardedDesc.ColumnNames) == 0 {
+				return errors.Newf("index %q has empty shard column names",
+					idx.GetName())
+			}
+
+			// Get the index key column names (excluding the shard column itself).
+			// For sharded indexes, the shard column is always first in key columns.
+			var indexColNames []string
+			for i := 0; i < idx.NumKeyColumns(); i++ {
+				colName := idx.GetKeyColumnName(i)
+				if colName != shardedDesc.Name {
+					indexColNames = append(indexColNames, colName)
+				}
+			}
+
+			// We avoid running this validation if the number of shard columns is
+			// the same as the number of index column names. This is because this
+			// validation is only intended for indexes that have opted into the
+			// behavior of explicitly defining shard columns instead of using the
+			// implicit behavior of sharding based on all the index columns.
+			if len(shardedDesc.ColumnNames) < len(indexColNames) {
+				// Validate that each shard column appears in the index columns.
+				// Build a set of index column names for efficient lookup.
+				indexColSet := make(map[string]struct{}, len(indexColNames))
+				for _, colName := range indexColNames {
+					indexColSet[colName] = struct{}{}
+				}
+
+				// Check that each shard column exists in the index.
+				for _, shardColName := range shardedDesc.ColumnNames {
+					if _, ok := indexColSet[shardColName]; !ok {
+						return errors.Newf("index %q shard column %q is not in the index columns",
+							idx.GetName(), shardColName)
+					}
+				}
+			}
 		}
 		if idx.IsPartial() {
 			expr, err := parserutils.ParseExpr(idx.GetPredicate())

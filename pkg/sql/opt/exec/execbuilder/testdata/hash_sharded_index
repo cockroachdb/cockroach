@@ -580,7 +580,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
 ) WITH (schema_locked = true);
 
 query T

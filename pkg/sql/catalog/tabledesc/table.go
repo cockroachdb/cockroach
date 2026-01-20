@@ -310,6 +310,101 @@ func EvalShardBucketCount(
 	return int32(buckets), nil
 }
 
+// EvalShardColumns extracts and validates the shard_columns storage parameter.
+// It returns the column names to use for sharding, which must be a prefix of
+// the index key. If not specified, returns nil which means all index columns
+// should be used for sharding.
+func EvalShardColumns(
+	storageParams tree.StorageParams, indexColumnNames []string,
+) ([]string, error) {
+	paramVal := storageParams.GetVal(`shard_columns`)
+	if paramVal == nil {
+		// No shard_columns specified, use all index columns (default behavior).
+		return nil, nil
+	}
+
+	// shard_columns can be either:
+	// - A single column identifier: shard_columns=c1
+	// - A tuple of identifiers: shard_columns=(c1, c2)
+	// Both delimited ("mixED CAse") and non-delimited (c1) identifiers are supported.
+	// We receive the raw unevaluated expression from storageParams.
+
+	var exprs tree.Exprs
+
+	// Handle single column case (UnresolvedName), parenthesized single column (ParenExpr),
+	// or multiple columns (Tuple).
+	switch expr := paramVal.(type) {
+	case *tree.UnresolvedName:
+		// Single column: shard_columns=c1
+		exprs = tree.Exprs{expr}
+	case *tree.ParenExpr:
+		// Parenthesized single column: shard_columns=(c1)
+		// Unwrap the parentheses to get the inner UnresolvedName.
+		unresolvedName, ok := expr.Expr.(*tree.UnresolvedName)
+		if !ok {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"shard_columns must be a column name or tuple of column names",
+			)
+		}
+		exprs = tree.Exprs{unresolvedName}
+	case *tree.Tuple:
+		// Multiple columns: shard_columns=(c1, c2, c3)
+		exprs = expr.Exprs
+	default:
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"shard_columns must be a column name or tuple of column names",
+		)
+	}
+
+	if len(exprs) == 0 {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"shard_columns must contain at least one column name",
+		)
+	}
+
+	if len(exprs) > len(indexColumnNames) {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"shard_columns cannot contain more columns than the index (%d > %d)",
+			len(exprs),
+			len(indexColumnNames),
+		)
+	}
+
+	shardColNames := make([]string, len(exprs))
+	for i, expr := range exprs {
+		unresolvedName, ok := expr.(*tree.UnresolvedName)
+		if !ok {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"shard_columns must contain only column identifiers, got %T",
+				expr,
+			)
+		}
+		// Extract the column name from the unresolved name.
+		// This preserves the exact case for delimited identifiers.
+		shardColNames[i] = unresolvedName.Parts[0]
+	}
+
+	// Validate that shard columns are a prefix of index columns.
+	for i, shardCol := range shardColNames {
+		if shardCol != indexColumnNames[i] {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"shard_columns must be a prefix of index columns; expected %q at position %d, got %q",
+				indexColumnNames[i],
+				i+1,
+				shardCol,
+			)
+		}
+	}
+
+	return shardColNames, nil
+}
+
 // DefaultHashShardedIndexBucketCount is the cluster setting of default bucket
 // count for hash sharded index when bucket count is not specified in index
 // definition.
