@@ -86,7 +86,7 @@ func (t *Tracker) Track(
 	t.tracked[pri].Push(tracked{id: id, tokens: tokens})
 	t.deducted[pri] += tokens
 
-	if log.V(1) {
+	if log.V(2) {
 		log.KvDistribution.Infof(ctx, "tracking %v flow control tokens for pri=%s stream=%s log-position=%d/%d",
 			tokens, pri, t.stream, id.term, id.index)
 	}
