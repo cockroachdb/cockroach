@@ -5636,6 +5636,30 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 		},
 	),
 
+	"crdb_internal.decode_key": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				keyBytes := []byte(tree.MustBeDBytes(args[0]))
+				res, err := evalCtx.CatalogBuiltins.DecodeTableIndexKey(ctx, keyBytes)
+				if err != nil {
+					return nil, err
+				}
+				if res == nil || res == json.NullJSONValue {
+					return tree.DNull, nil
+				}
+				return tree.NewDJSON(res), nil
+			},
+			Info:       "Decodes an encoded key and returns JSON with table, index, and column information.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"crdb_internal.redact_descriptor": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,

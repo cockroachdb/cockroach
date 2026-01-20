@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
@@ -133,6 +134,11 @@ type CatalogBuiltins interface {
 		nonTerminalJobIDMightExist func(id jobspb.JobID) bool,
 		roleExists func(username username.SQLUsername) bool,
 	) ([]byte, error)
+
+	// DecodeTableIndexKey decodes an encoded key and resolves it to
+	// table, index, and column information, returning the result as JSON.
+	// Returns null JSON if the key cannot be decoded.
+	DecodeTableIndexKey(ctx context.Context, key []byte) (json.JSON, error)
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.

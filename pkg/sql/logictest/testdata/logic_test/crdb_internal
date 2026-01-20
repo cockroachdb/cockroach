@@ -1801,3 +1801,52 @@ statement ok
 SELECT count(*) FROM crdb_internal.cluster_inspect_errors
 
 subtest end
+
+subtest decode_key
+
+# Test decode_key function - the inverse of encode_key
+
+statement ok
+CREATE TABLE decode_key_test (
+  id INT PRIMARY KEY,
+  name STRING,
+  INDEX idx_name (name)
+)
+
+let $decode_key_test_id
+SELECT id FROM system.namespace WHERE name='decode_key_test'
+
+# Test decoding a primary key
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'table_name'
+----
+decode_key_test
+
+# Test decoding with full column values
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (123,))
+)->'key_columns'->0->>'value'
+----
+123
+
+# Test that index_name is present
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (1,))
+)->>'index_name'
+----
+decode_key_test_pkey
+
+# Test with invalid key returns NULL
+query T
+SELECT crdb_internal.decode_key('\x00'::BYTES)
+----
+NULL
+
+statement ok
+DROP TABLE decode_key_test
+
+subtest end
