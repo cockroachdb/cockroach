@@ -267,7 +267,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
+	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
 );`,
 		},
 		// Check trigram inverted indexes.

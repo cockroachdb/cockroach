@@ -25,7 +25,7 @@ type UniqueConstraintParamContext struct {
 func ValidateUniqueConstraintParams(
 	params tree.StorageParams, ctx UniqueConstraintParamContext,
 ) error {
-	// Only `bucket_count` is allowed for primary key and unique index.
+	// Only `bucket_count` and `shard_columns` are allowed for primary key and unique index.
 	for _, param := range params {
 		switch param.Key {
 		case `bucket_count`:
@@ -35,6 +35,14 @@ func ValidateUniqueConstraintParams(
 			return pgerror.New(
 				pgcode.InvalidParameterValue,
 				`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
+			)
+		case `shard_columns`:
+			if ctx.IsSharded {
+				continue
+			}
+			return pgerror.New(
+				pgcode.InvalidParameterValue,
+				`"shard_columns" storage param should only be set with "USING HASH" for hash sharded index`,
 			)
 		default:
 			if ctx.IsPrimaryKey {
