@@ -922,6 +922,15 @@ func (p *Provider) waitForIPs(
 // Delete is part of vm.Provider.
 // This will delete all instances in a single AWS command.
 func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
+	if len(vms) == 0 {
+		return nil
+	}
+
+	// clean up any load balancers that may exist.
+	if err := p.DeleteLoadBalancer(l, vms, 0); err != nil {
+		l.Printf("Warning: failed to delete load balancers: %v", err)
+	}
+
 	byRegion, err := regionMap(vms)
 	if err != nil {
 		return err
@@ -2063,17 +2072,537 @@ func (p *Provider) DeleteVolumeSnapshots(l *logger.Logger, snapshots ...vm.Volum
 	return vm.UnimplementedError
 }
 
-func (p *Provider) CreateLoadBalancer(*logger.Logger, vm.List, int) error {
-	return vm.UnimplementedError
+// loadBalancerResourceName returns the name of a load balancer resource.
+// The format is {cluster}-{port}-{resource-type}-roachprod.
+// AWS has a 32-character limit for NLB and target group names, so the name
+// is truncated if necessary, ensuring it doesn't end with a hyphen.
+func loadBalancerResourceName(clusterName string, port int, resourceType string) string {
+	const maxLen = 32
+	suffix := fmt.Sprintf("-%d-%s-roachprod", port, resourceType)
+	maxClusterLen := maxLen - len(suffix)
+
+	if maxClusterLen <= 0 {
+		name := fmt.Sprintf("%s%s", clusterName, suffix)
+		return strings.TrimRight(name[:min(len(name), maxLen)], "-")
+	}
+
+	truncatedCluster := clusterName
+	if len(clusterName) > maxClusterLen {
+		truncatedCluster = strings.TrimRight(clusterName[:maxClusterLen], "-")
+	}
+
+	return fmt.Sprintf("%s%s", truncatedCluster, suffix)
 }
 
-func (p *Provider) DeleteLoadBalancer(*logger.Logger, vm.List, int) error {
-	return vm.UnimplementedError
+// elbv2TargetGroup represents an AWS ELBv2 target group.
+type elbv2TargetGroup struct {
+	TargetGroupArn  string `json:"TargetGroupArn"`
+	TargetGroupName string `json:"TargetGroupName"`
+	VpcId           string `json:"VpcId"`
+	Port            int    `json:"Port"`
 }
 
-func (p *Provider) ListLoadBalancers(*logger.Logger, vm.List) ([]vm.ServiceAddress, error) {
-	// This Provider has no concept of load balancers yet, return an empty list.
-	return nil, nil
+// elbv2LoadBalancer represents an AWS ELBv2 load balancer.
+type elbv2LoadBalancer struct {
+	LoadBalancerArn  string `json:"LoadBalancerArn"`
+	LoadBalancerName string `json:"LoadBalancerName"`
+	DNSName          string `json:"DNSName"`
+	State            struct {
+		Code string `json:"Code"`
+	} `json:"State"`
+	AvailabilityZones []struct {
+		ZoneName string `json:"ZoneName"`
+		SubnetId string `json:"SubnetId"`
+	} `json:"AvailabilityZones"`
+}
+
+// elbv2Listener represents an AWS ELBv2 listener.
+type elbv2Listener struct {
+	ListenerArn     string `json:"ListenerArn"`
+	LoadBalancerArn string `json:"LoadBalancerArn"`
+	Port            int    `json:"Port"`
+	Protocol        string `json:"Protocol"`
+}
+
+// describeTargetGroupsOutput represents the output of describe-target-groups.
+type describeTargetGroupsOutput struct {
+	TargetGroups []elbv2TargetGroup `json:"TargetGroups"`
+}
+
+// describeLoadBalancersOutput represents the output of describe-load-balancers.
+type describeLoadBalancersOutput struct {
+	LoadBalancers []elbv2LoadBalancer `json:"LoadBalancers"`
+}
+
+// describeListenersOutput represents the output of describe-listeners.
+type describeListenersOutput struct {
+	Listeners []elbv2Listener `json:"Listeners"`
+}
+
+// elbv2TagDescription represents the tags for a single ELBv2 resource.
+type elbv2TagDescription struct {
+	ResourceArn string `json:"ResourceArn"`
+	Tags        Tags   `json:"Tags"`
+}
+
+// describeTagsOutput represents the output of describe-tags.
+type describeTagsOutput struct {
+	TagDescriptions []elbv2TagDescription `json:"TagDescriptions"`
+}
+
+// getLoadBalancerTags fetches tags for the given load balancer ARNs and returns
+// a map from ARN to tag map.
+func (p *Provider) getLoadBalancerTags(
+	ctx context.Context, l *logger.Logger, region string, arns []string,
+) (map[string]map[string]string, error) {
+	if len(arns) == 0 {
+		return nil, nil
+	}
+
+	args := []string{
+		"elbv2", "describe-tags",
+		"--resource-arns",
+	}
+	args = append(args, arns...)
+	args = append(args, "--region", region)
+
+	var output describeTagsOutput
+	if err := p.runJSONCommandWithContext(ctx, l, args, &output); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[string]string)
+	for _, td := range output.TagDescriptions {
+		result[td.ResourceArn] = td.Tags.MakeMap()
+	}
+	return result, nil
+}
+
+// CreateLoadBalancer creates a Network Load Balancer (NLB) for the given cluster and port.
+// The NLB is created with a target group containing all the cluster's EC2 instances.
+func (p *Provider) CreateLoadBalancer(l *logger.Logger, vms vm.List, port int) error {
+	if len(vms) == 0 {
+		return errors.New("no VMs provided for load balancer creation")
+	}
+
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return err
+	}
+
+	// Group VMs by region - AWS NLBs are regional
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+
+	// For simplicity, create an NLB in each region where VMs exist.
+	// Use ctxgroup for cancellation support.
+	ctx := context.Background()
+	g := ctxgroup.WithContext(ctx)
+	for region, regionVMs := range byRegion {
+		g.GoCtx(func(ctx context.Context) error {
+			return p.createRegionalLoadBalancer(ctx, l, clusterName, region, regionVMs, port)
+		})
+	}
+
+	return g.Wait()
+}
+
+// createRegionalLoadBalancer creates an NLB in a specific region.
+// On failure, any partially created resources are left behind; the caller
+// (roachprod.CreateLoadBalancer) is expected to call DeleteLoadBalancer
+// to clean up.
+func (p *Provider) createRegionalLoadBalancer(
+	ctx context.Context, l *logger.Logger, clusterName, region string, vms vm.List, port int,
+) error {
+	if len(vms) == 0 {
+		return nil
+	}
+
+	vpcID := vms[0].VPC
+	if vpcID == "" {
+		return errors.New("VPC ID not found for VMs")
+	}
+
+	// Collect unique subnets from VMs
+	subnetSet := make(map[string]struct{})
+	for _, v := range vms {
+		az, ok := p.Config.AZByName[v.Zone]
+		if ok && az.SubnetID != "" {
+			subnetSet[az.SubnetID] = struct{}{}
+		}
+	}
+	if len(subnetSet) == 0 {
+		return errors.Errorf("no subnets found for VMs in region %s", region)
+	}
+	subnets := maps.Keys(subnetSet)
+
+	// Step 1: Create Target Group
+	tgName := loadBalancerResourceName(clusterName, port, "tg")
+
+	l.Printf("Creating target group %s in region %s", tgName, region)
+	args := []string{
+		"elbv2", "create-target-group",
+		"--name", tgName,
+		"--protocol", "TCP",
+		"--port", strconv.Itoa(port),
+		"--vpc-id", vpcID,
+		"--target-type", "instance",
+		"--health-check-protocol", "TCP",
+		"--health-check-port", strconv.Itoa(port),
+		"--health-check-interval-seconds", "30",
+		"--healthy-threshold-count", "3",
+		"--unhealthy-threshold-count", "3",
+		"--region", region,
+		"--tags",
+		fmt.Sprintf("Key=%s,Value=%s", vm.TagCluster, clusterName),
+		fmt.Sprintf("Key=%s,Value=true", vm.TagRoachprod),
+		fmt.Sprintf("Key=Port,Value=%d", port),
+	}
+
+	var tgOutput struct {
+		TargetGroups []elbv2TargetGroup `json:"TargetGroups"`
+	}
+	if err := p.runJSONCommandWithContext(ctx, l, args, &tgOutput); err != nil {
+		return errors.Wrapf(err, "failed to create target group")
+	}
+	if len(tgOutput.TargetGroups) == 0 {
+		return errors.New("no target group created")
+	}
+	tgArn := tgOutput.TargetGroups[0].TargetGroupArn
+
+	// Step 2: Register targets (EC2 instances)
+	l.Printf("Registering %d targets with target group", len(vms))
+	targets := make([]string, 0, len(vms))
+	for _, v := range vms {
+		targets = append(targets, fmt.Sprintf("Id=%s", v.ProviderID))
+	}
+
+	args = []string{
+		"elbv2", "register-targets",
+		"--target-group-arn", tgArn,
+		"--targets",
+	}
+	args = append(args, targets...)
+	args = append(args, "--region", region)
+
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to register targets")
+	}
+
+	// Step 3: Create Network Load Balancer
+	nlbName := loadBalancerResourceName(clusterName, port, "nlb")
+
+	l.Printf("Creating Network Load Balancer %s in region %s", nlbName, region)
+	args = []string{
+		"elbv2", "create-load-balancer",
+		"--name", nlbName,
+		"--type", "network",
+		"--scheme", "internet-facing",
+		"--subnets",
+	}
+	args = append(args, subnets...)
+	args = append(args,
+		"--tags",
+		fmt.Sprintf("Key=%s,Value=%s", vm.TagCluster, clusterName),
+		fmt.Sprintf("Key=%s,Value=true", vm.TagRoachprod),
+		fmt.Sprintf("Key=Port,Value=%d", port),
+		"--region", region,
+	)
+
+	var nlbOutput struct {
+		LoadBalancers []elbv2LoadBalancer `json:"LoadBalancers"`
+	}
+	if err := p.runJSONCommandWithContext(ctx, l, args, &nlbOutput); err != nil {
+		return errors.Wrapf(err, "failed to create load balancer")
+	}
+	if len(nlbOutput.LoadBalancers) == 0 {
+		return errors.New("no load balancer created")
+	}
+	nlbArn := nlbOutput.LoadBalancers[0].LoadBalancerArn
+
+	// Wait for NLB to be active
+	l.Printf("Waiting for load balancer to become active...")
+	args = []string{
+		"elbv2", "wait", "load-balancer-available",
+		"--load-balancer-arns", nlbArn,
+		"--region", region,
+	}
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		l.Printf("Warning: load balancer may not be fully active yet: %v", err)
+	}
+
+	// Step 4: Create Listener
+	l.Printf("Creating listener on port %d", port)
+	args = []string{
+		"elbv2", "create-listener",
+		"--load-balancer-arn", nlbArn,
+		"--protocol", "TCP",
+		"--port", strconv.Itoa(port),
+		"--default-actions", fmt.Sprintf("Type=forward,TargetGroupArn=%s", tgArn),
+		"--region", region,
+	}
+
+	if _, err := p.runCommandWithContext(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to create listener")
+	}
+
+	l.Printf("Load balancer created successfully: %s", nlbOutput.LoadBalancers[0].DNSName)
+	return nil
+}
+
+// DeleteLoadBalancer deletes all NLBs and associated resources for the given cluster.
+func (p *Provider) DeleteLoadBalancer(l *logger.Logger, vms vm.List, _ int) error {
+	if len(vms) == 0 {
+		return nil
+	}
+
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return err
+	}
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	g := ctxgroup.WithContext(ctx)
+	for region := range byRegion {
+		g.GoCtx(func(ctx context.Context) error {
+			return p.deleteLoadBalancerResources(ctx, l, clusterName, region)
+		})
+	}
+
+	return g.Wait()
+}
+
+// deleteLoadBalancerResources deletes all LB resources for a cluster in a region.
+// This function is lenient: it attempts to delete all resources and continues
+// even if some deletions fail, logging warnings for individual failures.
+// Target groups are always attempted even if load balancer operations fail.
+func (p *Provider) deleteLoadBalancerResources(
+	ctx context.Context, l *logger.Logger, clusterName, region string,
+) error {
+	// Find load balancers belonging to this cluster
+	lbs, _, err := p.listClusterLoadBalancers(ctx, l, clusterName, region)
+	if err != nil {
+		// Log the error but continue to try deleting target groups
+		l.Printf("Warning: failed to list load balancers in region %s: %v", region, err)
+	}
+
+	// Delete each load balancer
+	for _, lb := range lbs {
+		// Delete listeners first
+		listenerArgs := []string{
+			"elbv2", "describe-listeners",
+			"--load-balancer-arn", lb.LoadBalancerArn,
+			"--region", region,
+		}
+		var listenersOutput describeListenersOutput
+		if err := p.runJSONCommandWithContext(ctx, l, listenerArgs, &listenersOutput); err == nil {
+			for _, listener := range listenersOutput.Listeners {
+				l.Printf("Deleting listener %s", listener.ListenerArn)
+				deleteArgs := []string{
+					"elbv2", "delete-listener",
+					"--listener-arn", listener.ListenerArn,
+					"--region", region,
+				}
+				if _, err := p.runCommand(l, deleteArgs); err != nil {
+					l.Printf("Warning: failed to delete listener: %v", err)
+				}
+			}
+		}
+
+		// Delete the load balancer
+		l.Printf("Deleting load balancer %s", lb.LoadBalancerName)
+		deleteArgs := []string{
+			"elbv2", "delete-load-balancer",
+			"--load-balancer-arn", lb.LoadBalancerArn,
+			"--region", region,
+		}
+		if _, err := p.runCommand(l, deleteArgs); err != nil {
+			l.Printf("Warning: failed to delete load balancer: %v", err)
+		}
+
+		// Wait for deletion before deleting target group
+		l.Printf("Waiting for load balancer deletion...")
+		waitArgs := []string{
+			"elbv2", "wait", "load-balancers-deleted",
+			"--load-balancer-arns", lb.LoadBalancerArn,
+			"--region", region,
+		}
+		if _, err := p.runCommand(l, waitArgs); err != nil {
+			l.Printf("Warning: wait for load balancer deletion may have timed out: %v", err)
+		}
+	}
+
+	// Delete all target groups for this cluster
+	if err := p.deleteClusterTargetGroups(ctx, l, clusterName, region); err != nil {
+		l.Printf("Warning: failed to delete target groups: %v", err)
+	}
+
+	return nil
+}
+
+// deleteClusterTargetGroups deletes all target groups for a cluster in a region.
+func (p *Provider) deleteClusterTargetGroups(
+	ctx context.Context, l *logger.Logger, clusterName, region string,
+) error {
+	tgArgs := []string{
+		"elbv2", "describe-target-groups",
+		"--region", region,
+	}
+
+	var tgOutput describeTargetGroupsOutput
+	if err := p.runJSONCommandWithContext(ctx, l, tgArgs, &tgOutput); err != nil {
+		return errors.Wrap(err, "could not list target groups")
+	}
+
+	if len(tgOutput.TargetGroups) == 0 {
+		return nil
+	}
+
+	// Collect target group ARNs to fetch tags
+	tgArns := make([]string, len(tgOutput.TargetGroups))
+	for i, tg := range tgOutput.TargetGroups {
+		tgArns[i] = tg.TargetGroupArn
+	}
+
+	tgTagsByArn, err := p.getLoadBalancerTags(ctx, l, region, tgArns)
+	if err != nil {
+		return errors.Wrap(err, "could not get target group tags")
+	}
+
+	for tgArn, tgTags := range tgTagsByArn {
+		// Match by cluster name and roachprod tag
+		if tgTags[vm.TagCluster] != clusterName || tgTags[vm.TagRoachprod] != "true" {
+			continue
+		}
+
+		if err := p.deleteTargetGroup(l, tgArn, region); err != nil {
+			l.Printf("Warning: failed to delete target group: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// deleteTargetGroup deletes a target group by ARN.
+func (p *Provider) deleteTargetGroup(l *logger.Logger, tgArn, region string) error {
+	l.Printf("Deleting target group %s", tgArn)
+	args := []string{
+		"elbv2", "delete-target-group",
+		"--target-group-arn", tgArn,
+		"--region", region,
+	}
+	_, err := p.runCommand(l, args)
+	return err
+}
+
+// ListLoadBalancers returns the list of load balancer addresses for the given VMs.
+func (p *Provider) ListLoadBalancers(l *logger.Logger, vms vm.List) ([]vm.ServiceAddress, error) {
+	if len(vms) == 0 {
+		return nil, nil
+	}
+
+	clusterName, err := vms[0].ClusterName()
+	if err != nil {
+		return nil, err
+	}
+
+	byRegion, err := regionMap(vms)
+	if err != nil {
+		return nil, err
+	}
+
+	var mu syncutil.Mutex
+	addresses := make([]vm.ServiceAddress, 0)
+
+	ctx := context.Background()
+	g := ctxgroup.WithContext(ctx)
+	for region := range byRegion {
+		g.GoCtx(func(ctx context.Context) error {
+			// Find load balancers belonging to this cluster
+			lbs, tagsByArn, err := p.listClusterLoadBalancers(ctx, l, clusterName, region)
+			if err != nil {
+				return err
+			}
+
+			for _, lb := range lbs {
+				tags := tagsByArn[lb.LoadBalancerArn]
+
+				// Get port from the Port tag
+				port := 0
+				if portStr, ok := tags["Port"]; ok {
+					port, _ = strconv.Atoi(portStr)
+				}
+
+				mu.Lock()
+				addresses = append(addresses, vm.ServiceAddress{
+					IP:   lb.DNSName,
+					Port: port,
+				})
+				mu.Unlock()
+			}
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return addresses, nil
+}
+
+// listClusterLoadBalancers lists all load balancers belonging to the given cluster in a region.
+// It returns the load balancers and their tags (keyed by ARN).
+func (p *Provider) listClusterLoadBalancers(
+	ctx context.Context, l *logger.Logger, clusterName, region string,
+) ([]elbv2LoadBalancer, map[string]map[string]string, error) {
+	args := []string{
+		"elbv2", "describe-load-balancers",
+		"--region", region,
+	}
+
+	var output describeLoadBalancersOutput
+	if err := p.runJSONCommandWithContext(ctx, l, args, &output); err != nil {
+		return nil, nil, err
+	}
+
+	if len(output.LoadBalancers) == 0 {
+		return nil, nil, nil
+	}
+
+	// Collect all LB ARNs to fetch their tags
+	arns := make([]string, len(output.LoadBalancers))
+	arnToLB := make(map[string]elbv2LoadBalancer)
+	for i, lb := range output.LoadBalancers {
+		arns[i] = lb.LoadBalancerArn
+		arnToLB[lb.LoadBalancerArn] = lb
+	}
+
+	// Fetch tags for all load balancers
+	tagsByArn, err := p.getLoadBalancerTags(ctx, l, region, arns)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get load balancer tags")
+	}
+
+	// Filter to only include load balancers belonging to this cluster
+	var clusterLBs []elbv2LoadBalancer
+	clusterTagsByArn := make(map[string]map[string]string)
+	for arn, tags := range tagsByArn {
+		if tags[vm.TagCluster] == clusterName && tags[vm.TagRoachprod] == "true" {
+			clusterLBs = append(clusterLBs, arnToLB[arn])
+			clusterTagsByArn[arn] = tags
+		}
+	}
+
+	return clusterLBs, clusterTagsByArn, nil
 }
 
 // String returns a human-readable string representation of the Provider.
