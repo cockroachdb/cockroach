@@ -1213,12 +1213,23 @@ func ensureShardColAndMakeShardDesc(
 	if err != nil {
 		panic(err)
 	}
+
+	// Get shard columns from storage params, if specified.
+	shardColNames, err := tabledesc.EvalShardColumns(storageParams, columnNames)
+	if err != nil {
+		panic(err)
+	}
+	// If not specified, use all index columns (default behavior).
+	if shardColNames == nil {
+		shardColNames = columnNames
+	}
+
 	shardColName, shardColID := maybeCreateAndAddShardCol(b, int(buckets),
-		tbl, columnNames, n)
+		tbl, shardColNames, n)
 	return &catpb.ShardedDescriptor{
 		IsSharded:    true,
 		Name:         shardColName,
 		ShardBuckets: buckets,
-		ColumnNames:  columnNames,
+		ColumnNames:  shardColNames,
 	}, shardColID
 }
