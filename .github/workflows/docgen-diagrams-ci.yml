@@ -226,6 +226,14 @@ jobs:
           echo "::endgroup::"
           echo "All validation checks passed!"
 
+      - name: Fetch base branch for comparison
+        if: github.event_name == 'pull_request'
+        run: |
+          # Fetch the base branch so we can compare diagrams.go changes
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          echo "Fetching base branch: $BASE_REF"
+          git fetch origin "$BASE_REF" --depth=1 || echo "Could not fetch base branch"
+
       - name: Check for diagram changes
         id: check-changes
         run: |
@@ -234,7 +242,8 @@ jobs:
 
           # Also check if diagrams.go was modified (which affects HTML rendering even if BNF stays same)
           # This catches changes like unlink, replace, nosplit that don't affect BNF
-          diagrams_go_changed=$(git diff --name-only origin/${{ github.event.pull_request.base.ref || 'master' }} -- pkg/cmd/docgen/diagrams.go 2>/dev/null || echo "")
+          BASE_REF="${{ github.event.pull_request.base.ref || 'master' }}"
+          diagrams_go_changed=$(git diff --name-only "origin/${BASE_REF}" -- pkg/cmd/docgen/diagrams.go 2>/dev/null || echo "")
 
           if [[ -n "$bnf_changed" ]] || [[ -n "$diagrams_go_changed" ]]; then
             echo "changed=true" >> $GITHUB_OUTPUT
