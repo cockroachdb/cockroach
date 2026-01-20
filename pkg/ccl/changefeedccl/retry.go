@@ -17,6 +17,13 @@ import (
 var useFastRetry = envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
+// initialRetryBackoffOverride overrides the initial retry backoff for
+// changefeeds, useful for testing retry behavior near maximum backoff without
+// requiring many retries. For example, setting this to 30s means the backoff
+// reaches a 1m max after just one retry.
+var initialRetryBackoffOverride = envutil.EnvOrDefaultDuration(
+	"COCKROACH_CHANGEFEED_TESTING_INITIAL_RETRY_BACKOFF", 0)
+
 // getRetry returns retry object for changefeed.
 func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry {
 	opts := retry.Options{
@@ -25,7 +32,9 @@ func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry
 		MaxBackoff:     maxBackoff,
 	}
 
-	if useFastRetry {
+	if initialRetryBackoffOverride > 0 {
+		opts.InitialBackoff = initialRetryBackoffOverride
+	} else if useFastRetry {
 		opts = retry.Options{
 			InitialBackoff: 5 * time.Millisecond,
 			Multiplier:     2,
