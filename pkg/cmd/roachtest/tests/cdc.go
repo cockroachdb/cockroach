@@ -1289,6 +1289,256 @@ WITH initial_scan='only', min_checkpoint_frequency='1s'`, sinkURL),
 	}
 }
 
+type rollingRestartParams struct {
+	maxBackoff          string
+	doRestarts          bool
+	frontierPersistence bool
+	testDuration        time.Duration
+	restartDuration     time.Duration
+}
+
+// runCDCRollingRestart tests changefeed behavior during rolling node restarts.
+// It runs a kv workload while periodically draining and restarting nodes to
+// simulate rolling upgrades. The test parametrizes over:
+//   - maxBackoff: controls changefeed.max_retry_backoff (1m vs 10m)
+//   - doRestarts: whether to actually restart nodes (vs control without restarts)
+//   - frontierPersistence: whether frontier persistence is enabled (vs span checkpoints)
+//
+// The test monitors changefeed lag during the restart cycle to ensure the
+// changefeed can keep up with the workload.
+func runCDCRollingRestart(
+	ctx context.Context, t test.Test, c cluster.Cluster, params rollingRestartParams,
+) {
+	testDuration := params.testDuration
+	if testDuration == 0 {
+		testDuration = 20 * time.Minute
+	}
+	restartDuration := params.restartDuration
+	if restartDuration == 0 {
+		restartDuration = 17 * time.Minute
+	}
+	const restartInterval = 2 * time.Minute
+
+	startOpts := option.DefaultStartOpts()
+	racks := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
+	// Use the slow retries so that it doesn't take many retries to get the max
+	// backoff behavior.
+	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_SLOW_RETRY=true`)
+	c.Start(ctx, t.L(), startOpts, racks)
+	m := c.NewDeprecatedMonitor(ctx, c.All())
+
+	restart := func(n int) error {
+		t.L().Printf("draining and restarting node %d", n)
+		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d} --self", install.CockroachNodeCertsDir, n)
+		if err := c.RunE(ctx, option.WithNodes(c.Node(n)), cmd); err != nil {
+			return err
+		}
+		m.ExpectDeath()
+		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(n))
+		opts := startOpts
+		opts.RoachprodOpts.IsRestart = true
+		c.Start(ctx, t.L(), opts, racks, c.Node(n))
+		m.ResetDeaths()
+		t.L().Printf("node %d restarted successfully", n)
+		return nil
+	}
+
+	// Connect to node 4 (workload node) for queries since we'll be
+	// restarting nodes 1, 2, 3 during the test.
+	db := c.Conn(ctx, t.L(), 4)
+	defer db.Close()
+	t.L().Printf("setting up test with maxBackoff=%s, doRestarts=%t, frontierPersistence=%t",
+		params.maxBackoff, params.doRestarts, params.frontierPersistence)
+	setupStmts := []string{
+		`SET CLUSTER SETTING kv.rangefeed.enabled = 'true'`,
+		fmt.Sprintf(`SET CLUSTER SETTING changefeed.max_retry_backoff = '%s'`, params.maxBackoff),
+		`SET CLUSTER SETTING changefeed.shutdown_checkpoint.enabled = 'false'`,
+	}
+	if params.frontierPersistence {
+		setupStmts = append(setupStmts,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
+		)
+	} else {
+		setupStmts = append(setupStmts,
+			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '5s'`,
+			// Set frontier persistence to max allowed value (10m) to effectively disable it.
+			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
+		)
+	}
+
+	for _, s := range setupStmts {
+		t.L().Printf(s)
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cmd := fmt.Sprintf("./cockroach workload init kv --splits 50 {pgurl:%d}", c.Spec().NodeCount)
+	if err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	testBeginTime := timeutil.Now()
+
+	// Restart nodes in a loop.
+	stopRestarts := make(chan struct{})
+	m.Go(func(ctx context.Context) error {
+		defer func() {
+			t.L().Printf("done restarting nodes")
+		}()
+
+		if !params.doRestarts {
+			t.L().Printf("control mode: skipping restarts, changefeed will run uninterrupted for %s", testDuration)
+			select {
+			case <-stopRestarts:
+			case <-ctx.Done():
+			}
+			return nil
+		}
+
+		t.L().Printf("starting rolling drain+restarts of nodes 1, 2, 3 at %s interval for %s...", restartInterval, restartDuration)
+
+		timer := time.NewTimer(0)
+		restartDeadline := testBeginTime.Add(restartDuration)
+		for {
+			for _, n := range []int{1, 2, 3} {
+				if timeutil.Now().After(restartDeadline) {
+					t.L().Printf("=== RESTART DEADLINE REACHED at %s (after %s) ===", timeutil.Now(), timeutil.Since(testBeginTime))
+					t.L().Printf("=== STOPPING RESTARTS TO MEASURE RECOVERY ===")
+					t.L().Printf("Changefeed will now run uninterrupted for remaining %s", testDuration-restartDuration)
+					return nil
+				}
+
+				select {
+				case <-stopRestarts:
+					return nil
+				case <-ctx.Done():
+					return nil
+				case <-timer.C:
+				}
+
+				if err := restart(n); err != nil {
+					return err
+				}
+				// Wait between restarts to let changefeeds make progress and
+				// allow backoff to climb higher before the next disruption.
+				timer.Reset(restartInterval)
+			}
+		}
+	})
+
+	m.Go(func(ctx context.Context) error {
+		cmd := fmt.Sprintf("./cockroach workload run kv --zipfian --duration=%s {pgurl:%d} --tolerate-errors",
+			testDuration, c.Spec().NodeCount)
+		if err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)), cmd); err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	})
+
+	wait := make(chan struct{})
+
+	func() {
+		defer close(wait)
+		defer close(stopRestarts)
+
+		t.L().Printf("starting changefeed...")
+		var jobID int
+		if err := db.QueryRow(`CREATE CHANGEFEED FOR TABLE kv.kv INTO 'null://' WITH initial_scan='no'`).Scan(&jobID); err != nil {
+			t.Fatal(err)
+		}
+
+		if restartDuration == 0 {
+			t.L().Printf("changefeed %d will run for %s (no restarts, baseline test)", jobID, testDuration)
+		} else if restartDuration >= testDuration {
+			t.L().Printf("changefeed %d will run for %s (restarts throughout)", jobID, testDuration)
+		} else {
+			t.L().Printf("changefeed %d will run for %s (restarts for %s, then recovery measurement for %s)",
+				jobID, testDuration, restartDuration, testDuration-restartDuration)
+		}
+
+		const maxLagDuringRestarts = 5 * time.Minute
+		const maxLagAfterRecovery = 2 * time.Minute
+
+		beginTime := timeutil.Now()
+		numSamples := int(testDuration / (10 * time.Second))
+
+		var recoveryPhaseStarted bool
+		var recoveryStartLag time.Duration
+		var recoveryStartTime time.Time
+		var finalLag time.Duration
+
+		for i := 0; i < numSamples; i++ {
+			time.Sleep(10 * time.Second)
+			runtime := timeutil.Since(beginTime)
+
+			if !recoveryPhaseStarted && runtime > restartDuration {
+				recoveryPhaseStarted = true
+				recoveryStartTime = timeutil.Now()
+				t.L().Printf("=== ENTERING RECOVERY PHASE at %s ===", runtime)
+			}
+
+			var status string
+			var hwNanos gosql.NullFloat64
+			var runningStatus gosql.NullString
+			err := db.QueryRow(`
+				SELECT status, running_status, high_water_timestamp
+				FROM [SHOW CHANGEFEED JOB $1]`, jobID).Scan(&status, &runningStatus, &hwNanos)
+			if err != nil {
+				t.L().Printf("error querying changefeed status: %v", err)
+				continue
+			}
+
+			var currentLag time.Duration
+			if hwNanos.Valid {
+				highwater := timeutil.Unix(0, int64(hwNanos.Float64))
+				currentLag = timeutil.Since(highwater)
+			}
+
+			if recoveryPhaseStarted && recoveryStartLag == 0 && currentLag > 0 {
+				recoveryStartLag = currentLag
+				t.L().Printf("=== RECOVERY BASELINE: lag=%s at %s ===", currentLag, timeutil.Since(recoveryStartTime))
+			}
+
+			prefix := ""
+			if recoveryPhaseStarted {
+				recoveryTime := timeutil.Since(recoveryStartTime)
+				lagReduction := recoveryStartLag - currentLag
+				prefix = fmt.Sprintf("[RECOVERY +%s lag_reduction=%s] ", recoveryTime, lagReduction)
+			}
+
+			if hwNanos.Valid {
+				t.L().Printf("%s[%s] changefeed %d: status=%s, running_status=%s, lag=%s, highwater=%s",
+					prefix, runtime, jobID, status, runningStatus.String, currentLag,
+					timeutil.Unix(0, int64(hwNanos.Float64)))
+			} else {
+				t.L().Printf("%s[%s] changefeed %d: status=%s, running_status=%s, highwater=not yet set",
+					prefix, runtime, jobID, status, runningStatus.String)
+			}
+
+			// Assert that lag never exceeds the maximum during rolling restarts.
+			if params.doRestarts && currentLag > maxLagDuringRestarts {
+				t.Fatalf("changefeed lag %s exceeded maximum allowed %s during rolling restarts",
+					currentLag, maxLagDuringRestarts)
+			}
+
+			finalLag = currentLag
+		}
+
+		t.L().Printf("changefeed %d completed %s test run, final lag=%s", jobID, testDuration, finalLag)
+
+		// After the recovery period, lag should have settled below the threshold.
+		if params.doRestarts && finalLag > maxLagAfterRecovery {
+			t.Fatalf("changefeed lag %s exceeded maximum allowed %s after recovery period",
+				finalLag, maxLagAfterRecovery)
+		}
+	}()
+
+	<-wait
+	m.Wait()
+}
+
 type fineGrainedCheckpointingParams struct {
 	numRanges               int
 	transientErrorFrequency time.Duration
@@ -2194,6 +2444,24 @@ CONFIGURE ZONE USING
 		// TODO(#155015): Unskip this test.
 		Skip: "frontier persistence will not happen during an initial-scan only changefeed " +
 			"without periodic aggregator frontier flushes",
+	})
+	// runCDCRollingRestart can be parametrized over maxBackoff, doRestarts
+	// (for a control baseline), and frontierPersistence (vs span checkpoints).
+	// Additional variants can be registered here for manual investigation.
+	r.Add(registry.TestSpec{
+		Name:             "cdc/rolling-restart",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          30 * time.Minute,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runCDCRollingRestart(ctx, t, c, rollingRestartParams{
+				maxBackoff:          "1m",
+				doRestarts:          true,
+				frontierPersistence: true,
+			})
+		},
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/fine-grained-checkpointing",
