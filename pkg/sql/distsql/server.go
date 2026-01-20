@@ -528,7 +528,8 @@ func (ds *ServerImpl) newFlowContext(
 		)
 		flowCtx.IsDescriptorsCleanupRequired = true
 		var evalCatalogBuiltins evalcatalog.Builtins
-		evalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
+		// In distributed execution, authorization was already checked on the gateway node.
+		evalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors, nil /* authzChecker */)
 		evalCtx.CatalogBuiltins = &evalCatalogBuiltins
 	}
 	return flowCtx
