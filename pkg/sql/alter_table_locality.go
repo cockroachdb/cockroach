@@ -478,9 +478,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	}
 
 	// When altering the table from REGIONAL BY ROW, automatically unset the RBR
-	// using constraint.
+	// using constraint and the skip unique row ID checks parameter.
 	if newLocalityConfig.GetRegionalByRow() == nil {
 		n.tableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+		n.tableDesc.SkipRBRUniqueRowIDChecks = false
 	}
 
 	return params.p.writeSchemaChange(

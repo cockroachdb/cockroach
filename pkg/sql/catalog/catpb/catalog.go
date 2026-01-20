@@ -107,6 +107,10 @@ const (
 
 	// CanaryStatsWindowSettingName is the name of the stats canary window table setting.
 	CanaryStatsWindowSettingName = "sql_stats_canary_window"
+
+	// RBRSkipUniqueRowIDChecksTableSettingName is the name of the
+	// skip_rbr_unique_rowid_checks table setting.
+	RBRSkipUniqueRowIDChecksTableSettingName = "skip_rbr_unique_rowid_checks"
 )
 
 // AutoStatsCollectionEnabled indicates if automatic statistics collection is

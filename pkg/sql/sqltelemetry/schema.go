@@ -231,3 +231,7 @@ var DDLOnlyTransactionSuccessCounter = telemetry.GetCounterOnce("sql.schema.tran
 // DDLOnlyTransactionFailureCounter is incremented whenever an explicit
 // transaction that has only DDL statements fails.
 var DDLOnlyTransactionFailureCounter = telemetry.GetCounterOnce("sql.schema.transaction.ddl_only.failure")
+
+// SkipRBRUniqueRowIDChecksCounter is incremented whenever the
+// skip_rbr_unique_rowid_checks table storage parameter is set.
+var SkipRBRUniqueRowIDChecksCounter = telemetry.GetCounterOnce("sql.schema.skip_rbr_unique_rowid_checks")

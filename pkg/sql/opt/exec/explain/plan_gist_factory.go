@@ -637,6 +637,11 @@ func (ot *unknownTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint 
 	return nil
 }
 
+// SkipRBRUniqueRowIDCrossRegionChecks is part of the cat.Table interface.
+func (u *unknownTable) SkipRBRUniqueRowIDCrossRegionChecks() bool {
+	return false
+}
+
 // GetDatabaseID is part of the cat.Table interface.
 func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0
