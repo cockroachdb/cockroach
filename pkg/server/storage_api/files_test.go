@@ -94,16 +94,16 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("goroutines", func(t *testing.T) {
 
 		// regex for goroutine file names manually added
-		reDump := regexp.MustCompile(`goroutine_dump\d+.txt.gz`)
+		reDump := regexp.MustCompile(`goroutine_dump\d+.pb.gz`)
 		// regex for goroutine file names dumped by goroutinedumper
-		reOOMDump := regexp.MustCompile("goroutine_dump.*.double_since_last_dump.*.txt.gz")
+		reOOMDump := regexp.MustCompile("goroutine_dump.*.double_since_last_dump.*.pb.gz")
 		// regex for content of goroutine files manually added
 		reDumpContent := regexp.MustCompile(`Goroutine dump \d+`)
 
 		const testFilesNo = 3
 		for i := 0; i < testFilesNo; i++ {
 			testGoroutineDir := filepath.Join(storeSpec.Path, "logs", base.GoroutineDumpDir)
-			testGoroutineFile := filepath.Join(testGoroutineDir, fmt.Sprintf("goroutine_dump%d.txt.gz", i))
+			testGoroutineFile := filepath.Join(testGoroutineDir, fmt.Sprintf("goroutine_dump%d.pb.gz", i))
 			if err := os.MkdirAll(testGoroutineDir, os.ModePerm); err != nil {
 				t.Fatal(err)
 			}
