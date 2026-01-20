@@ -17,6 +17,12 @@ import (
 var useFastRetry = envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY", false)
 
+// useSlowRetry is useful for testing the retry behavior near its
+// maximum. This way, it doesn't take 10 retries to reach 1 minute
+// of backoff.
+var useSlowRetry = envutil.EnvOrDefaultBool(
+	"COCKROACH_CHANGEFEED_TESTING_SLOW_RETRY", false)
+
 // getRetry returns retry object for changefeed.
 func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry {
 	opts := retry.Options{
@@ -30,6 +36,14 @@ func getRetry(ctx context.Context, maxBackoff, backoffReset time.Duration) Retry
 			InitialBackoff: 5 * time.Millisecond,
 			Multiplier:     2,
 			MaxBackoff:     250 * time.Millisecond,
+		}
+	}
+
+	if useSlowRetry {
+		opts = retry.Options{
+			InitialBackoff: 32 * time.Second,
+			Multiplier:     2,
+			MaxBackoff:     maxBackoff,
 		}
 	}
 
