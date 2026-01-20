@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,8 +222,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			}
 			// Next, start up the workload for our list of databases from earlier.
 			tpccDatabaseLists := [][]string{activeDBList, inactiveDBList}
-			// Since we will spawn two sets of TPCC clients, split the
-			// total workers between them.
+			// Cap the number of workers to reduce noise in measurements.
 			numWorkers := numTotalWorkers / len(tpccDatabaseLists)
 			for dbListType, dbList := range tpccDatabaseLists {
 				dbList := dbList
@@ -232,10 +232,14 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					waitEnabled := "--wait 0.0"
 					var wlInstance []workloadInstance
 					disableHistogram := false
+					numWarehouses := len(c.All()) - 1
 					// Inactive databases will intentionally have wait time on
 					// them and not include them in our histograms.
 					if dbListType == inactiveDbListType {
 						waitEnabled = "--wait 1.0"
+						// TPCC requires workers = warehouses * 10 when --wait > 0.
+						// Use 1 warehouse to allow running with fewer workers.
+						numWarehouses = 1
 
 						// disable histogram since they shouldn't be included
 						disableHistogram = true
@@ -260,10 +264,17 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							},
 						)
 					}
+					// TPCC requires workers = warehouses * 10 when --wait > 0.
+					// For active DBs (--wait 0), we can use reduced workers.
+					// For inactive DBs (--wait 1.0), we use 1 warehouse to allow 10 workers.
+					tpccWorkers := numWorkers
+					if dbListType == inactiveDbListType {
+						tpccWorkers = numWarehouses * tpcc.NumWorkersPerWarehouse
+					}
 					options := tpccOptions{
 						WorkloadCmd:       "tpccmultidb",
 						DB:                strings.Split(dbList[0], ".")[0],
-						Warehouses:        len(c.All()) - 1,
+						Warehouses:        numWarehouses,
 						SkipSetup:         true,
 						DisablePrometheus: true,
 						DisableHistogram:  disableHistogram, // We setup the flag above.
@@ -277,7 +288,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							"roachadmin",
 							"roacher",
 							numWorkers,
-							numWorkers,
+							tpccWorkers,
 							waitEnabled),
 					}
 					runTPCC(ctx, t, t.L(), c, options)
