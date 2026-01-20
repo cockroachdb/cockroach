@@ -119,7 +119,7 @@ func ChecksForTable(
 	}
 
 	for _, index := range table.PublicNonPrimaryIndexes() {
-		if isUnsupportedIndexForIndexConsistencyCheck(index, table) {
+		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason != "" {
 			if p != nil {
 				p.BufferClientNotice(ctx, pgnotice.Newf(
 					"skipping index %q on table %q: not supported for index consistency checking", index.GetName(), table.GetName()))
@@ -187,7 +187,7 @@ func checksByIndexNames(
 		}
 		seenIndexes[indexKey{table.GetID(), index.GetID()}] = struct{}{}
 
-		if isUnsupportedIndexForIndexConsistencyCheck(index, table) {
+		if reason := isSupportedIndexForIndexConsistencyCheck(index, table); reason != "" {
 			return nil, pgerror.Newf(pgcode.InvalidName, "index %q on table %q is not supported for index consistency checking", index.GetName(), table.GetName())
 		}
 
@@ -202,19 +202,33 @@ func checksByIndexNames(
 	return checks, nil
 }
 
-func isUnsupportedIndexForIndexConsistencyCheck(
+// isSupportedIndexForIndexConsistencyCheck returns an empty string if a given
+// index is supported for index consistency checking or a reason if it is not.
+func isSupportedIndexForIndexConsistencyCheck(
 	index catalog.Index, table catalog.TableDescriptor,
-) bool {
-	if index.Primary() {
-		return true
+) (reason string) {
+	if !index.Public() {
+		return "index is not public"
 	}
 
+	if index.Primary() {
+		return "cannot check primary index consistency against itself"
+	}
+
+	// We can only check a secondary index that has a 1-to-1 mapping between
+	// keys in the primary index. Unsupported indexes should be filtered out
+	// when the job is created.
+	// TODO(154862): support partial indexes
 	if index.IsPartial() {
-		return true
-	} else if index.IsSharded() {
-		return true
-	} else if table.IsExpressionIndex(index) {
-		return true
+		return "partial index"
+	}
+	// TODO(154762): support hash sharded indexes
+	if index.IsSharded() {
+		return "hash-sharded index"
+	}
+	// TODO(154772): support expression indexes
+	if table.IsExpressionIndex(index) {
+		return "expression index"
 	}
 
 	// Check if any of the index key columns are virtual columns.
@@ -223,16 +237,15 @@ func isUnsupportedIndexForIndexConsistencyCheck(
 		colID := index.GetKeyColumnID(i)
 		col := catalog.FindColumnByID(table, colID)
 		if col != nil && col.IsVirtual() {
-			return true
+			return "index on virtual column"
 		}
 	}
 
 	switch t := index.GetType(); t {
-	case idxtype.VECTOR:
-		return true
-	case idxtype.INVERTED:
-		return true
+	// TODO(154860): support inverted indexes
+	case idxtype.INVERTED, idxtype.VECTOR:
+		return t.String()
 	}
 
-	return false
+	return ""
 }
