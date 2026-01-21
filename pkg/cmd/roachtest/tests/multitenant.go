@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"slices"
@@ -16,12 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -408,4 +411,213 @@ func registerMultiTenantMultiregion(r registry.Registry) {
 			runMultiTenantMultiRegion(ctx, t, c)
 		},
 	})
+}
+
+func registerMultiTenantSQLProxy(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:              "multitenant/sqlproxy",
+		Owner:             registry.OwnerTestEng,
+		Cluster:           r.MakeClusterSpec(3),
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		CompatibleClouds:  registry.AllClouds,
+		Leases:            registry.MetamorphicLeases,
+		Suites:            registry.Suites(registry.Weekly),
+		Run:               runMultiTenantSQLProxy,
+	})
+}
+
+// runMultiTenantSQLProxy demonstrates starting a SQL proxy and connecting
+// to a multi-tenant cluster through it.
+func runMultiTenantSQLProxy(ctx context.Context, t test.Test, c cluster.Cluster) {
+	storageNodes := c.All()
+	storageSettings := install.MakeClusterSettings(
+		install.EnvOption([]string{"COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true"}),
+	)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), storageSettings, storageNodes)
+
+	const virtualClusterName = "tenant"
+	virtualClusterNodes := c.All()
+	virtualClusterSettings := install.MakeClusterSettings(
+		install.EnvOption([]string{"COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR=true"}),
+	)
+	c.StartServiceForVirtualCluster(
+		ctx, t.L(),
+		option.StartVirtualClusterOpts(virtualClusterName, virtualClusterNodes),
+		virtualClusterSettings,
+	)
+
+	// Set up SQL proxy with directory server
+	proxyNode := c.Node(1)
+	directoryNode := c.Node(1)
+
+	sqlProxy := roachtestutil.NewSQLProxy(c, t.L(), proxyNode, directoryNode)
+
+	err := sqlProxy.Start(ctx)
+	require.NoError(t, err)
+
+	// Register the tenant in the directory
+	err = sqlProxy.AddTenant(ctx, virtualClusterName)
+	require.NoError(t, err)
+
+	// Add all pods in our tenant to the directory.
+	err = sqlProxy.AddPod(ctx, c.All(), virtualClusterName, 0 /* sqlInstance */)
+	require.NoError(t, err)
+
+	url, err := sqlProxy.InternalURL(ctx, virtualClusterName)
+	require.NoError(t, err)
+
+	// Check that the url is constructed properly by using it in a tpcc workload.
+	initCmd := fmt.Sprintf("./cockroach workload init tpcc --warehouses=10 '%s'", url)
+	c.Run(ctx, option.WithNodes(c.Node(3)), initCmd)
+
+	runCmd := fmt.Sprintf("./cockroach workload run tpcc --warehouses=10 --duration=10s '%s'", url)
+	c.Run(ctx, option.WithNodes(c.Node(3)), runCmd)
+
+	// nodeIDForSession queries the virtual cluster to find which node_id
+	// the given session_id is connected to.
+	nodeIDForSession := func(db *gosql.DB, sessionID string) (int, error) {
+		var nodeID int
+		err := db.QueryRow("SELECT node_id FROM crdb_internal.cluster_sessions WHERE session_id = $1", sessionID).Scan(&nodeID)
+		if err != nil {
+			return 0, err
+		}
+
+		return nodeID, nil
+	}
+
+	// Verify that the proxy is load balancing across multiple sql pods.
+	func() {
+		sqlPodsHit := make(map[int]bool)
+		dbConns := make([]*gosql.DB, 0)
+
+		// The SQL proxy will route connections to the pod with the least amount of
+		// connections, so we need to keep the connections alive until we are done
+		// connecting to all 3 pods.
+		defer func() {
+			for _, db := range dbConns {
+				db.Close()
+			}
+		}()
+
+		for i := range len(c.All()) * 3 {
+			db, err := sqlProxy.Conn(ctx, virtualClusterName)
+			require.NoError(t, err)
+			dbConns = append(dbConns, db)
+
+			var sessionID string
+			err = db.QueryRow("SHOW session_id").Scan(&sessionID)
+			require.NoError(t, err)
+			nodeID, err := nodeIDForSession(db, sessionID)
+			require.NoError(t, err)
+			sqlPodsHit[nodeID] = true
+
+			// We expect that the first len(c.All()) connections are evenly distributed across every
+			// pod, as well that subsequent connections after that don't connect to unexpected podIDs.
+			if i >= len(c.All())-1 {
+				require.Equal(t, len(c.All()), len(sqlPodsHit))
+			}
+		}
+	}()
+
+	// Test that if we remove all but one of the sql pods, we should see that all connections now
+	// connect to the same pod.
+	func() {
+		sqlPodsHit := make(map[int]bool)
+		dbConns := make([]*gosql.DB, 0)
+		defer func() {
+			for _, db := range dbConns {
+				db.Close()
+			}
+		}()
+
+		podsToStop := c.All()[:len(c.All())-1]
+		for _, node := range podsToStop {
+			t.L().Printf("removing tenant on n%d", node)
+			err = sqlProxy.RemovePod(ctx, option.NodeListOption{node}, virtualClusterName, 0 /* sqlInstance */)
+			require.NoError(t, err)
+		}
+
+		for range c.All() {
+			db, err := sqlProxy.Conn(ctx, virtualClusterName)
+			require.NoError(t, err)
+			dbConns = append(dbConns, db)
+
+			var sessionID string
+			err = db.QueryRow("SHOW session_id").Scan(&sessionID)
+			require.NoError(t, err)
+			nodeID, err := nodeIDForSession(db, sessionID)
+			require.NoError(t, err)
+
+			sqlPodsHit[nodeID] = true
+		}
+
+		require.Equal(t, 1, len(sqlPodsHit))
+
+		err = sqlProxy.AddPod(ctx, podsToStop, virtualClusterName, 0 /* sqlInstance */)
+		require.NoError(t, err)
+	}()
+
+	// Test that draining a pod causes existing sessions to be migrated.
+	func() {
+		sqlPodsHit := make(map[int]bool)
+		dbConns := make([]*gosql.DB, 0)
+		defer func() {
+			for _, db := range dbConns {
+				db.Close()
+			}
+		}()
+
+		// Before draining, we should connect to all pods.
+		for range c.All() {
+			db, err := sqlProxy.Conn(ctx, virtualClusterName)
+			require.NoError(t, err)
+			dbConns = append(dbConns, db)
+
+			var sessionID string
+			err = db.QueryRow("SHOW session_id").Scan(&sessionID)
+			require.NoError(t, err)
+			nodeID, err := nodeIDForSession(db, sessionID)
+			require.NoError(t, err)
+			sqlPodsHit[nodeID] = true
+		}
+		require.Equal(t, len(c.All()), len(sqlPodsHit))
+
+		podsToDrain := c.All()[:len(c.All())-1]
+		for _, node := range podsToDrain {
+			t.L().Printf("draining tenant on n%d", node)
+			err = sqlProxy.DrainPod(ctx, option.NodeListOption{node}, virtualClusterName, 0 /* sqlInstance */)
+			require.NoError(t, err)
+		}
+
+		// After draining our other nodes, our existing connections should all be migrated such that
+		// we only connect to one pod. Connections only get migrated after 1 minute of draining to avoid
+		// fluctuation during high load, so lets retry for 5 minutes.
+		retryOpts := retry.Options{
+			InitialBackoff: 10 * time.Second,
+			MaxBackoff:     10 * time.Second,
+			MaxDuration:    5 * time.Minute,
+		}
+
+		err = retryOpts.Do(ctx, func(ctx context.Context) error {
+			sqlPodsHit := make(map[int]bool)
+			for _, db := range dbConns {
+				var sessionID string
+				err = db.QueryRow("SHOW session_id").Scan(&sessionID)
+				if err != nil {
+					return err
+				}
+				nodeID, err := nodeIDForSession(db, sessionID)
+				if err != nil {
+					return err
+				}
+				sqlPodsHit[nodeID] = true
+			}
+
+			if len(sqlPodsHit) != 1 {
+				return errors.Errorf("expected all sessions to be migrated to a single pod, but connected to %d pods", len(sqlPodsHit))
+			}
+			return nil
+		})
+		require.NoError(t, err)
+	}()
 }
