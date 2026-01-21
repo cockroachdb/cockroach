@@ -96,7 +96,7 @@ BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e GOOGLE_PROJE
   run_bazel <<EOF
 # Inside Docker container, artifacts are mounted at /artifacts
 ./bin/bazci --artifacts_dir=/artifacts -- test \
-  //pkg/cmd/roachprod/roachprodtest:roachprodtest_test \
+  //pkg/cmd/roachprod/test:test \
   --test_env=GOOGLE_EPHEMERAL_CREDENTIALS \
   --test_env=GOOGLE_PROJECT \
   --test_env=ROACHPROD_USER \
