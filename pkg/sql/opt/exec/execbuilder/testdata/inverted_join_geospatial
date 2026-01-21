@@ -317,6 +317,8 @@ regions: <hidden>
 • root
 │
 ├── • render
+│   │ execution time: 0µs
+│   │ actual row count: 0
 │   │
 │   └── • group (hash)
 │       │ sql nodes: <hidden>

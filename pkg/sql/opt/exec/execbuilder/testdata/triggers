@@ -134,6 +134,9 @@ quality of service: regular
 │
 └── • render
     │ columns: (x, y, rowid, x_new, y_new)
+    │ vectorized batch count: 0
+    │ execution time: 0µs
+    │ actual row count: 0
     │ render x_new: (f).x
     │ render y_new: (f).y
     │ render x: x
@@ -152,6 +155,9 @@ quality of service: regular
         │
         └── • render
             │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
+            │ vectorized batch count: 0
+            │ execution time: 0µs
+            │ actual row count: 0
             │ render f: f(new, old, 't', 'BEFORE', 'ROW', 'UPDATE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
             │ render x: x
             │ render y: y
@@ -166,6 +172,9 @@ quality of service: regular
             │
             └── • render
                 │ columns: (new, old, x_new, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ vectorized batch count: 0
+                │ execution time: 0µs
+                │ actual row count: 0
                 │ render new: ((3, y) AS x, y)
                 │ render old: ((x, y) AS x, y)
                 │ render x_new: 3
@@ -461,6 +470,9 @@ quality of service: regular
     │
     └── • render
         │ columns: (f, x_old, y_old, old, new)
+        │ vectorized batch count: 0
+        │ execution time: 0µs
+        │ actual row count: 1
         │ render f: f(NULL, old, 't', 'AFTER', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
         │ render x_old: x_old
         │ render y_old: y_old
@@ -469,6 +481,9 @@ quality of service: regular
         │
         └── • render
             │ columns: (new, old, x_old, y_old)
+            │ vectorized batch count: 0
+            │ execution time: 0µs
+            │ actual row count: 1
             │ render new: NULL
             │ render old: ((x, y) AS x, y)
             │ render x_old: x
@@ -705,6 +720,9 @@ quality of service: regular
 │       │
 │       └── • render
 │           │ columns: (k, k_new)
+│           │ vectorized batch count: 0
+│           │ execution time: 0µs
+│           │ actual row count: 0
 │           │ render k_new: 2
 │           │ render k: k
 │           │
@@ -786,6 +804,9 @@ quality of service: regular
 │       │
 │       └── • render
 │           │ columns: (k, k_new)
+│           │ vectorized batch count: 0
+│           │ execution time: 0µs
+│           │ actual row count: 1
 │           │ render k_new: 2
 │           │ render k: k
 │           │
@@ -850,6 +871,9 @@ quality of service: regular
         │           │
         │           └── • render
         │               │ columns: ("check-rows", k, fk, fk_old, fk_new, old, new, f)
+        │               │ vectorized batch count: 0
+        │               │ execution time: 0µs
+        │               │ actual row count: 1
         │               │ render check-rows: CASE WHEN f IS DISTINCT FROM new THEN crdb_internal.plpgsql_raise('ERROR', 'trigger t attempted to modify or filter a row in a cascade operation: ' || new::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END
         │               │ render k: k
         │               │ render fk: fk
@@ -861,6 +885,9 @@ quality of service: regular
         │               │
         │               └── • render
         │                   │ columns: (f, k, fk, fk_old, fk_new, old, new)
+        │                   │ vectorized batch count: 0
+        │                   │ execution time: 0µs
+        │                   │ actual row count: 1
         │                   │ render f: f(new, old, 't', 'BEFORE', 'ROW', 'UPDATE', 111, 'child', 'child', 'public', 0, ARRAY[])
         │                   │ render k: k
         │                   │ render fk: fk
@@ -871,6 +898,9 @@ quality of service: regular
         │                   │
         │                   └── • render
         │                       │ columns: (new, old, k, fk, fk_old, fk_new)
+        │                       │ vectorized batch count: 0
+        │                       │ execution time: 0µs
+        │                       │ actual row count: 1
         │                       │ render new: ((k, k_new) AS k, fk)
         │                       │ render old: ((k, fk) AS k, fk)
         │                       │ render k: k
@@ -988,6 +1018,9 @@ quality of service: regular
             │
             └── • render
                 │ columns: (f, k_old, fk_old, k_new, fk_new_new, old, new)
+                │ vectorized batch count: 0
+                │ execution time: 0µs
+                │ actual row count: 1
                 │ render f: f(new, old, 't2', 'AFTER', 'ROW', 'UPDATE', 111, 'child', 'child', 'public', 0, ARRAY[])
                 │ render k_old: k_old
                 │ render fk_old: fk_old
@@ -998,6 +1031,9 @@ quality of service: regular
                 │
                 └── • render
                     │ columns: (new, old, k_old, fk_old, k_new, fk_new_new)
+                    │ vectorized batch count: 0
+                    │ execution time: 0µs
+                    │ actual row count: 1
                     │ render new: ((k, fk_new) AS k, fk)
                     │ render old: ((k, fk) AS k, fk)
                     │ render k_old: k
@@ -1096,6 +1132,9 @@ quality of service: regular
         │           │
         │           └── • render
         │               │ columns: ("check-rows", k, fk, old, f)
+        │               │ vectorized batch count: 0
+        │               │ execution time: 0µs
+        │               │ actual row count: 1
         │               │ render check-rows: CASE WHEN f IS DISTINCT FROM old THEN crdb_internal.plpgsql_raise('ERROR', 'trigger t attempted to modify or filter a row in a cascade operation: ' || old::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END
         │               │ render k: k
         │               │ render fk: fk
@@ -1104,6 +1143,9 @@ quality of service: regular
         │               │
         │               └── • render
         │                   │ columns: (f, k, fk, old)
+        │                   │ vectorized batch count: 0
+        │                   │ execution time: 0µs
+        │                   │ actual row count: 1
         │                   │ render f: f(NULL, old, 't', 'BEFORE', 'ROW', 'DELETE', 111, 'child', 'child', 'public', 0, ARRAY[])
         │                   │ render k: k
         │                   │ render fk: fk
@@ -1111,6 +1153,9 @@ quality of service: regular
         │                   │
         │                   └── • render
         │                       │ columns: (old, k, fk)
+        │                       │ vectorized batch count: 0
+        │                       │ execution time: 0µs
+        │                       │ actual row count: 1
         │                       │ render old: ((k, fk) AS k, fk)
         │                       │ render k: k
         │                       │ render fk: fk
@@ -1149,6 +1194,9 @@ quality of service: regular
             │
             └── • render
                 │ columns: (f, k_old, fk_old, old, new)
+                │ vectorized batch count: 0
+                │ execution time: 0µs
+                │ actual row count: 1
                 │ render f: f(NULL, old, 't2', 'AFTER', 'ROW', 'DELETE', 111, 'child', 'child', 'public', 0, ARRAY[])
                 │ render k_old: k_old
                 │ render fk_old: fk_old
@@ -1157,6 +1205,9 @@ quality of service: regular
                 │
                 └── • render
                     │ columns: (new, old, k_old, fk_old)
+                    │ vectorized batch count: 0
+                    │ execution time: 0µs
+                    │ actual row count: 1
                     │ render new: NULL
                     │ render old: ((k, fk) AS k, fk)
                     │ render k_old: k

@@ -2063,7 +2063,7 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
 	newMergeOrdering := dsp.convertOrdering(n.reqOrdering, newColMap)
 	err = p.AddRendering(
-		ctx, n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering, finalizeLastStageCb,
+		ctx, n.render, planCtx, p.PlanToStreamColMap, typs, newMergeOrdering, finalizeLastStageCb, planCtx.collectExecStats,
 	)
 	if err != nil {
 		return err

@@ -502,11 +502,13 @@ func (e *distSQLSpecExecFactory) ConstructRender(
 ) (exec.Node, error) {
 	physPlan, plan := getPhysPlan(n)
 	recommendation := e.checkExprsAndMaybeMergeLastStage(exprs, physPlan)
+	planCtx := e.getPlanCtx(recommendation)
 
 	newColMap := identityMap(physPlan.PlanToStreamColMap, len(exprs))
 	if err := physPlan.AddRendering(
-		e.ctx, exprs, e.getPlanCtx(recommendation), physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
-		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap), nil, /* finalizeLastStageCb */
+		e.ctx, exprs, planCtx, physPlan.PlanToStreamColMap, getTypesFromResultColumns(columns),
+		e.dsp.convertOrdering(ReqOrdering(reqOrdering), newColMap),
+		nil /* finalizeLastStageCb */, planCtx.collectExecStats,
 	); err != nil {
 		return nil, err
 	}

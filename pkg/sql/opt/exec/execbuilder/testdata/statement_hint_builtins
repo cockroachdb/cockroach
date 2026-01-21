@@ -327,6 +327,8 @@ statement hints count: 1
 regions: <hidden>
 ·
 • render
+│ execution time: 0µs
+│ actual row count: 0
 │
 └── • scan
       sql nodes: <hidden>
@@ -544,6 +546,8 @@ statement hints count: 1
 regions: <hidden>
 ·
 • render
+│ execution time: 0µs
+│ actual row count: 0
 │
 └── • filter
     │ sql nodes: <hidden>
@@ -815,6 +819,8 @@ statement hints count: 1
 regions: <hidden>
 ·
 • render
+│ execution time: 0µs
+│ actual row count: 0
 │
 └── • filter
     │ sql nodes: <hidden>
@@ -906,6 +912,8 @@ statement hints count: 1
 regions: <hidden>
 ·
 • render
+│ execution time: 0µs
+│ actual row count: 0
 │
 └── • filter
     │ sql nodes: <hidden>

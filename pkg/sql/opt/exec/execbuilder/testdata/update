@@ -999,6 +999,8 @@ regions: <hidden>
 │ auto commit
 │
 └── • render
+    │ execution time: 0µs
+    │ actual row count: 0
     │
     └── • scan
           sql nodes: <hidden>
@@ -1050,6 +1052,8 @@ regions: <hidden>
 │ auto commit
 │
 └── • render
+    │ execution time: 0µs
+    │ actual row count: 0
     │
     └── • lookup join
         │ sql nodes: <hidden>
@@ -1126,6 +1130,8 @@ regions: <hidden>
 │ auto commit
 │
 └── • render
+    │ execution time: 0µs
+    │ actual row count: 1
     │
     └── • lookup join
         │ sql nodes: <hidden>
@@ -1202,6 +1208,8 @@ regions: <hidden>
 │ auto commit
 │
 └── • render
+    │ execution time: 0µs
+    │ actual row count: 0
     │
     └── • limit
         │ count: 1
