@@ -587,9 +587,27 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	skip.UnderRace(t, "slow timing sensitive test")
 
 	ctx := context.Background()
+
+	// progressUpdate wraps completed spans with a generation tag to detect
+	// stale messages from previous backfill runs.
+	type progressUpdate struct {
+		generation uint64
+		spans      []roachpb.Span
+	}
+
 	// backfillProgressCompletedCh will be used to communicate completed spans
 	// with the tenant prefix removed, if applicable.
-	backfillProgressCompletedCh := make(chan []roachpb.Span)
+	backfillProgressCompletedCh := make(chan progressUpdate)
+	// backfillGeneration tracks the current backfill run. It increments each
+	// time RunBeforeBackfill is called, allowing us to discard stale progress
+	// updates from previous runs.
+	var backfillGeneration atomic.Uint64
+	// backfillStartedCh signals when RunBeforeBackfill is called, indicating
+	// a new backfill run has started. receiveProgressUpdate waits on this to
+	// ensure it doesn't accept stale updates from the previous run.
+	// Buffered to allow RunBeforeBackfill to signal even if receiveProgressUpdate
+	// isn't waiting yet.
+	backfillStartedCh := make(chan struct{}, 1)
 	const numRows = 100
 	const numSpans = 20
 	var isBlockingBackfillProgress atomic.Bool
@@ -617,18 +635,42 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 							}
 							completed = updated
 						}
+
+						// Capture current generation to tag this progress update.
+						currentGen := backfillGeneration.Load()
+						update := progressUpdate{
+							generation: currentGen,
+							spans:      completed,
+						}
+
 						select {
 						case <-ctx.Done():
-						case backfillProgressCompletedCh <- completed:
-							t.Logf("before index backfill progress update, completed spans: %v", completed)
+							t.Logf("before index backfill progress update, got context done")
+						case backfillProgressCompletedCh <- update:
+							t.Logf("before index backfill progress update, generation=%d, completed spans: %v",
+								currentGen, completed)
 						}
 					}
 				},
 			},
 			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 				RunBeforeBackfill: func(progresses []scexec.BackfillProgress) error {
+					// Increment generation to mark start of new backfill run.
+					// First run is generation 1, subsequent resumes increment further.
+					newGen := backfillGeneration.Add(1)
+					t.Logf("starting backfill generation %d (new run=%v)", newGen, progresses == nil)
 					if progresses != nil {
 						t.Logf("before resuming backfill, checkpointed spans: %v", progresses[0].CompletedSpans)
+					}
+					// Signal that the backfill has started so receiveProgressUpdate
+					// can begin accepting updates from this generation.
+					select {
+					case backfillStartedCh <- struct{}{}:
+					default:
+						// Channel may already have a value if this is not the first call.
+						// It is safe to skip because the receiver synchronizes using
+						// backfillGeneration to filter stale updates, not the number of
+						// signals in this channel.
 					}
 					return nil
 				},
@@ -711,8 +753,30 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	var observedSpans []roachpb.Span
 	receiveProgressUpdate := func() {
 		updateCount := 2
+		// Wait for the backfill to actually start (or resume) before we start
+		// accepting progress updates. This ensures we don't accept stale updates
+		// from a previous backfill run.
+		<-backfillStartedCh
+		// Capture the minimum acceptable generation at the start of receiving.
+		// We'll accept updates from this generation or later, but discard
+		// updates from earlier generations (which are stale from previous runs).
+		minAcceptableGen := backfillGeneration.Load()
+		t.Logf("receiveProgressUpdate: accepting generation %d or later", minAcceptableGen)
+
 		for isBlockingBackfillProgress.Load() && updateCount > 0 {
-			progressUpdate := <-backfillProgressCompletedCh
+			update := <-backfillProgressCompletedCh
+
+			// Discard stale updates from previous backfill runs.
+			// Updates with generation >= minAcceptableGen are from the current or
+			// subsequent runs and should be processed.
+			if update.generation < minAcceptableGen {
+				t.Logf("discarding stale progress update from generation %d (min acceptable: %d), spans: %v",
+					update.generation, minAcceptableGen, update.spans)
+				continue
+			}
+
+			progressUpdate := update.spans
+
 			// Make sure the progress update does not contain overlapping spans.
 			for i, span1 := range progressUpdate {
 				for j, span2 := range progressUpdate {
