@@ -93,7 +93,7 @@ func FindAllIncrementalPaths(
 		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
-	indexes, err := backupinfo.ListIndexes(ctx, rootStore, subdir)
+	indexes, err := backupinfo.ListIndexes(ctx, rootStore, subdir, backupinfo.IndexBasenameOnly)
 	if err != nil {
 		return nil, err
 	}

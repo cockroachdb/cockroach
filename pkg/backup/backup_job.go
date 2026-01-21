@@ -1826,7 +1826,7 @@ func (b *backupResumer) processScheduledBackupCompletion(
 
 	if scheduleID != 0 && jobState == jobs.StateSucceeded {
 		if _, err := maybeStartCompactionJob(
-			ctx, execCtx.ExecCfg(), execCtx.User(), details,
+			ctx, execCtx.ExecCfg(), execCtx.User(), details, details.EndTime,
 		); err != nil {
 			log.Dev.Warningf(ctx, "failed to trigger backup compaction for schedule %d: %v", scheduleID, err)
 		}

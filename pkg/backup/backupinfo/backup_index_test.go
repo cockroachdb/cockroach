@@ -291,7 +291,7 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		indexes, err := ListIndexes(ctx, externalStorage, subdir)
+		indexes, err := ListIndexes(ctx, externalStorage, subdir, IndexBasenameOnly)
 		require.NoError(t, err)
 		require.Len(t, indexes, 3)
 	})
@@ -306,7 +306,7 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		_, err = ListIndexes(ctx, externalStorage, subdir)
+		_, err = ListIndexes(ctx, externalStorage, subdir, IndexBasenameOnly)
 		require.Error(t, err)
 	})
 }

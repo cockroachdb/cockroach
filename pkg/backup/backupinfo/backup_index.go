@@ -156,17 +156,23 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 	return indexExists, nil
 }
 
+type IndexFilenameFormat int
+
+const (
+	IndexFullPath IndexFilenameFormat = iota
+	IndexBasenameOnly
+)
+
 // ListIndexes lists all the index files for a backup chain rooted by the full
 // backup indicated by the subdir. The store should be rooted at the default
-// collection URI (the one that contains the `metadata/` directory). It returns
-// the basenames of the listed index files. It assumes that the subdir is
-// resolved and not `LATEST`.
+// collection URI (the one that contains the `metadata/` directory). It assumes
+// that the subdir is resolved and not `LATEST`.
 //
 // Note: The indexes are returned in ascending end time order, with ties broken
 // by ascending start time order. This matches the order that backup manifests
 // are returned in.
 func ListIndexes(
-	ctx context.Context, store cloud.ExternalStorage, subdir string,
+	ctx context.Context, store cloud.ExternalStorage, subdir string, format IndexFilenameFormat,
 ) ([]string, error) {
 	type indexTimes struct {
 		file       string
@@ -219,9 +225,16 @@ func ListIndexes(
 		}
 	})
 
-	return util.Map(indexes, func(i indexTimes) string {
-		return i.file
-	}), nil
+	return util.MapE(indexes, func(i indexTimes) (string, error) {
+		switch format {
+		case IndexFullPath:
+			return path.Join(indexDir, i.file), nil
+		case IndexBasenameOnly:
+			return i.file, nil
+		default:
+			return "", errors.Newf("unknown index filename format: %d", format)
+		}
+	})
 }
 
 // RestorableBackup represents a row in the `SHOW BACKUPS` output
@@ -300,7 +313,7 @@ func ListRestorableBackups(
 	ctx, readTrace := tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
 	defer readTrace.Finish()
 	backups, err := util.MapE(filteredIdxs, func(index parsedIndex) (RestorableBackup, error) {
-		idxMeta, err := readIndexFile(ctx, store, index.filePath)
+		idxMeta, err := ReadIndexFile(ctx, store, index.filePath)
 		if err != nil {
 			return RestorableBackup{}, err
 		}
@@ -431,21 +444,16 @@ func listIndexesWithinRange(
 func GetBackupTreeIndexMetadata(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]backuppb.BackupIndexMetadata, error) {
-	indexBasenames, err := ListIndexes(ctx, store, subdir)
+	indexFilepaths, err := ListIndexes(ctx, store, subdir, IndexFullPath)
 	if err != nil {
 		return nil, err
 	}
 
-	indexes := make([]backuppb.BackupIndexMetadata, len(indexBasenames))
+	indexes := make([]backuppb.BackupIndexMetadata, len(indexFilepaths))
 	g := ctxgroup.WithContext(ctx)
-	for i, basename := range indexBasenames {
+	for i, filepath := range indexFilepaths {
 		g.GoCtx(func(ctx context.Context) error {
-			indexDir, err := indexSubdir(subdir)
-			if err != nil {
-				return err
-			}
-			indexFilePath := path.Join(indexDir, basename)
-			index, err := readIndexFile(ctx, store, indexFilePath)
+			index, err := ReadIndexFile(ctx, store, filepath)
 			if err != nil {
 				return err
 			}
@@ -515,7 +523,7 @@ func FindLatestBackup(
 		return backuppb.BackupIndexMetadata{}, "", errors.Newf("no backups found in collection")
 	}
 
-	index, err := readIndexFile(ctx, store, latestIdxFilepath)
+	index, err := ReadIndexFile(ctx, store, latestIdxFilepath)
 	if err != nil {
 		return backuppb.BackupIndexMetadata{}, "", err
 	}
@@ -570,7 +578,7 @@ func ResolveBackupIDtoIndex(
 			"backup with ID %s not found", backupID,
 		)
 	}
-	index, err := readIndexFile(ctx, store, matchingIdxFile)
+	index, err := ReadIndexFile(ctx, store, matchingIdxFile)
 	if err != nil {
 		return backuppb.BackupIndexMetadata{}, err
 	}
@@ -844,11 +852,11 @@ func parseTimesFromIndexFilepath(filepath string) (fullEnd, start, end time.Time
 	return fullEnd, start, end, nil
 }
 
-// readIndexFile reads and unmarshals the backup index file at the given path.
+// ReadIndexFile reads and unmarshals the backup index file at the given path.
 // store should be rooted at the default collection URI (the one that contains
 // the `metadata/` directory). The indexFilePath is relative to the collection
 // URI.
-func readIndexFile(
+func ReadIndexFile(
 	ctx context.Context, store cloud.ExternalStorage, indexFilePath string,
 ) (backuppb.BackupIndexMetadata, error) {
 	reader, _, err := store.ReadFile(ctx, indexFilePath, cloud.ReadOptions{})

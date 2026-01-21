@@ -58,14 +58,15 @@ var (
 
 // maybeStartCompactionJob will initiate a compaction job off of a triggering
 // incremental job if the backup chain length exceeds the threshold.
-// backupStmt should be the original backup statement that triggered the job.
-// It is the responsibility of the caller to ensure that the backup details'
-// destination contains a resolved subdir.
+// chainEndTime restricts compaction to only consider backups up to that time
+// for compaction. It is the responsibility of the caller to ensure that the
+// backup details' destination contains a resolved subdir.
 func maybeStartCompactionJob(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	triggerJob jobspb.BackupDetails,
+	chainEndTime hlc.Timestamp,
 ) (jobspb.JobID, error) {
 	threshold := backupCompactionThreshold.Get(&execCfg.Settings.SV)
 	if threshold == 0 || triggerJob.StartTime.IsEmpty() {
@@ -117,7 +118,7 @@ func maybeStartCompactionJob(
 
 	chain, _, _, _, err := getBackupChain(
 		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
-		triggerJob.EndTime, &kmsEnv,
+		chainEndTime, &kmsEnv,
 	)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get backup chain")
@@ -480,7 +481,7 @@ func (b *backupResumer) processCompactionCompletion(
 	if details.ScheduleID == 0 {
 		return nil
 	}
-	return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		scheduledJob := jobs.ScheduledJobTxn(txn)
 		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, scheduledJob, details.ScheduleID,
@@ -497,7 +498,38 @@ func (b *backupResumer) processCompactionCompletion(
 			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 		)
 		return scheduledJob.Update(ctx, backupSchedule)
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to clear compaction job ID from schedule %d", details.ScheduleID)
+	}
+
+	if err := b.maybeTriggerFollowupCompaction(ctx, execCtx, details); err != nil {
+		log.Dev.Warningf(ctx, "failed to trigger follow-up compaction job: %+v", err)
+	}
+	return nil
+}
+
+func (b *backupResumer) maybeTriggerFollowupCompaction(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.BackupDetails,
+) error {
+	// We want to re-evaluate if another compaction is necessary based on the
+	// whole chain, NOT the end time of the compaction job, so we find the latest
+	// end time.
+	endTime, err := latestEndTimeInChain(ctx, execCtx, details)
+	if err != nil {
+		return errors.Wrap(err, "failed to determine latest end time in backup chain")
+	}
+	jobID, err := maybeStartCompactionJob(
+		ctx, execCtx.ExecCfg(), execCtx.User(), details, endTime,
+	)
+	if err != nil {
+		return err
+	}
+	if jobID != 0 {
+		log.Dev.Infof(
+			ctx, "compaction job %d completed, triggering follow-up compaction job %d", b.job.ID(), jobID,
+		)
+	}
+	return nil
 }
 
 type compactionChain struct {
@@ -957,6 +989,44 @@ func getScheduledExecutionArgsAndCheckCompactionLock(
 		)
 	}
 	return args, nil
+}
+
+// latestEndTimeInChain retrieves the end time of the latest backup in the chain
+// belonging to the backup details.
+func latestEndTimeInChain(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.BackupDetails,
+) (hlc.Timestamp, error) {
+	rootStore, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI(
+		ctx, details.Destination.To[0], execCtx.User(),
+	)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	defer rootStore.Close()
+
+	if indexExists, err := backupinfo.IndexExists(
+		ctx, rootStore, details.Destination.Subdir,
+	); err != nil {
+		return hlc.Timestamp{}, err
+	} else if !indexExists {
+		return hlc.Timestamp{}, errors.New("no backup indexes found in backup collection")
+	}
+
+	indexes, err := backupinfo.ListIndexes(
+		ctx, rootStore, details.Destination.Subdir, backupinfo.IndexFullPath,
+	)
+	if err != nil {
+		return hlc.Timestamp{}, err
+	} else if len(indexes) == 0 {
+		return hlc.Timestamp{}, errors.AssertionFailedf(
+			"no backup indexes found in backup collection",
+		)
+	}
+	idx, err := backupinfo.ReadIndexFile(ctx, rootStore, indexes[len(indexes)-1])
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	return idx.EndTime, nil
 }
 
 func init() {
