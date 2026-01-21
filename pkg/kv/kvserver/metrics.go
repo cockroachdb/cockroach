@@ -4623,6 +4623,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	}
 
 	sm.categoryIterMetrics.init(storeRegistry)
+	sm.categoryDiskWriteMetrics.init(storeRegistry)
 
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
@@ -5141,6 +5142,36 @@ func (m *pebbleCategoryDiskWriteMetrics) update(stats vfs.DiskWriteStatsAggregat
 type pebbleCategoryDiskWriteMetricsContainer struct {
 	registry   *metric.Registry
 	metricsMap syncutil.Map[vfs.DiskWriteCategory, pebbleCategoryDiskWriteMetrics]
+}
+
+// knownDiskWriteCategories contains all known disk write categories that should
+// be eagerly initialized. This includes both Pebble internal categories and
+// CockroachDB-defined categories.
+var knownDiskWriteCategories = []vfs.DiskWriteCategory{
+	// Pebble internal categories
+	"pebble-wal",
+	"pebble-memtable-flush",
+	"pebble-compaction",
+	"pebble-manifest",
+	// CockroachDB categories (from pkg/storage/fs/category.go)
+	vfs.WriteCategoryUnspecified,
+	fs.RaftSnapshotWriteCategory,
+	fs.SQLColumnSpillWriteCategory,
+	fs.PebbleIngestionWriteCategory,
+	fs.CRDBLogWriteCategory,
+	fs.EncryptionRegistryWriteCategory,
+}
+
+func (m *pebbleCategoryDiskWriteMetricsContainer) init(registry *metric.Registry) {
+	m.registry = registry
+	// Eagerly initialize metrics for all known disk write categories to ensure
+	// consistent metric visibility across all stores from startup.
+	for _, category := range knownDiskWriteCategories {
+		cm, ok := m.metricsMap.LoadOrStore(category, makePebbleCategorizedWriteMetrics(category))
+		if !ok {
+			m.registry.AddMetricStruct(cm)
+		}
+	}
 }
 
 func (m *pebbleCategoryDiskWriteMetricsContainer) update(stats []vfs.DiskWriteStatsAggregate) {
