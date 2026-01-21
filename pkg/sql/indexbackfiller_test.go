@@ -1361,13 +1361,8 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 
 					if state.pauseAfterMapPhase {
 						t.Logf("[%s] map phase complete, blocking to allow test to pause job", state.currentTestName)
-						select {
-						case <-state.mapPhaseContinueCh:
-							t.Logf("[%s] unblocked by test, continuing with merge iterations", state.currentTestName)
-						case <-ctx.Done():
-							t.Logf("[%s] context cancelled (job paused), exiting hook", state.currentTestName)
-							return
-						}
+						<-state.mapPhaseContinueCh
+						t.Logf("[%s] unblocked by test, continuing with merge iterations", state.currentTestName)
 					}
 				},
 				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
@@ -1384,13 +1379,8 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 					// On resume, the final iteration will have len(manifests)==0, and we don't want to block.
 					if state.pauseAfterIteration > 0 && iteration == state.pauseAfterIteration && len(manifests) > 0 {
 						t.Logf("[%s] iteration %d complete, blocking to allow test to pause job", state.currentTestName, iteration)
-						select {
-						case <-state.iterationContinueCh:
-							t.Logf("[%s] unblocked by test, continuing with remaining iterations", state.currentTestName)
-						case <-ctx.Done():
-							t.Logf("[%s] context cancelled (job paused), exiting hook", state.currentTestName)
-							return
-						}
+						<-state.iterationContinueCh
+						t.Logf("[%s] unblocked by test, continuing with remaining iterations", state.currentTestName)
 					}
 				},
 			},
@@ -1605,7 +1595,16 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 					waitForCheckpointPersisted(t, ctx, db, jobID, nil)
 				}
 
-				pauseAndResumeJob()
+				// Pause the job while it's blocked in the hook.
+				sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+				ensureJobState("paused")
+
+				// Unblock the hook so it can exit cleanly.
+				close(state.iterationContinueCh)
+
+				// Resume the job.
+				sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+				ensureJobState("running")
 			}
 
 			// Now we can wait for the job to succeed.
