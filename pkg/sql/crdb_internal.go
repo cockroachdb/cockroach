@@ -3853,11 +3853,12 @@ CREATE TABLE crdb_internal.table_columns (
   column_type      STRING NOT NULL,
   nullable         BOOL NOT NULL,
   default_expr     STRING,
-  hidden           BOOL NOT NULL
+  hidden           BOOL NOT NULL,
+  on_update_expr   STRING
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		const numDatums = 8
+		const numDatums = 9
 		row := make(tree.Datums, numDatums)
 		worker := func(ctx context.Context, pusher rowPusher) error {
 			opts := forEachTableDescOptions{virtualOpts: hideVirtual, allowAdding: true}
@@ -3878,6 +3879,16 @@ CREATE TABLE crdb_internal.table_columns (
 							}
 							defStr = tree.NewDString(defExpr)
 						}
+						onUpdateStr := tree.DNull
+						if col.HasOnUpdate() {
+							onUpdateExpr, err := schemaexpr.FormatExprForDisplay(
+								ctx, table, col.GetOnUpdateExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtParsable,
+							)
+							if err != nil {
+								return err
+							}
+							onUpdateStr = tree.NewDString(onUpdateExpr)
+						}
 						row = append(row[:0],
 							tableID,
 							tableName,
@@ -3887,6 +3898,7 @@ CREATE TABLE crdb_internal.table_columns (
 							tree.MakeDBool(tree.DBool(col.IsNullable())),
 							defStr,
 							tree.MakeDBool(tree.DBool(col.IsHidden())),
+							onUpdateStr,
 						)
 						if buildutil.CrdbTestBuild {
 							if len(row) != numDatums {
