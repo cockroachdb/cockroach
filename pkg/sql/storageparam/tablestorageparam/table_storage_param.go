@@ -106,12 +106,12 @@ func intFromDatum(
 	intDatum := datum
 	if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
 		if intDatum, err = tree.ParseDInt(stringVal); err != nil {
-			return 0, errors.Wrapf(err, "invalid integer value for %s", key)
+			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "invalid integer value for %s", key)
 		}
 	}
 	s, err := paramparse.DatumAsInt(ctx, evalCtx, key, intDatum)
 	if err != nil {
-		return 0, err
+		return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error decoding %q", key)
 	}
 	return s, nil
 }
@@ -122,12 +122,12 @@ func floatFromDatum(
 	floatDatum := datum
 	if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
 		if floatDatum, err = tree.ParseDFloat(stringVal); err != nil {
-			return 0, errors.Wrapf(err, "invalid float value for %s", key)
+			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "invalid float value for %s", key)
 		}
 	}
 	s, err := paramparse.DatumAsFloat(ctx, evalCtx, key, floatDatum)
 	if err != nil {
-		return 0, err
+		return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error decoding %q", key)
 	}
 	return s, nil
 }
@@ -574,7 +574,8 @@ var tableParams = map[string]tableParam{
 			// we only allow a table with no incoming FK references to be marked as
 			// ephemeral.
 			if len(po.TableDesc.InboundFKs) != 0 {
-				return errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup")
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot set data in a table with inbound foreign key constraints to be excluded from backup")
 			}
 
 			excludeDataFromBackup, err := strconv.ParseBool(value)

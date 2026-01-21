@@ -86,7 +86,7 @@ func (po *Setter) applyGeometryIndexSetting(
 	}
 	val, err := paramparse.DatumAsFloat(ctx, evalCtx, key, expr)
 	if err != nil {
-		return errors.Wrapf(err, "error decoding %q", key)
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error decoding %q", key)
 	}
 	switch key {
 	case `geometry_min_x`:

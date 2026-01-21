@@ -11,6 +11,7 @@ package slinstance
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -419,8 +420,15 @@ func NewSQLInstance(
 			}
 			return ttl
 		},
+		// hb returns the heartbeat interval with jitter applied.
+		// This spreads heartbeats across a wider time window, reducing peak
+		// concurrency on the system.sqlliveness table.
 		hb: func() time.Duration {
-			return slbase.DefaultHeartBeat.Get(&settings.SV)
+			defaultHB := slbase.DefaultHeartBeat.Get(&settings.SV)
+			hbJitter := slbase.HeartbeatJitter.Get(&settings.SV)
+			// Have the jitter interval [1-hbJitter, 1+hbJitter).
+			frac := 1 + (2*rand.Float64()-1)*hbJitter
+			return time.Duration(frac * float64(defaultHB.Nanoseconds()))
 		},
 		drain: make(chan struct{}),
 	}

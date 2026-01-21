@@ -3592,11 +3592,12 @@ func (og *operationGenerator) getTableColumns(
 			   columns.ordinal::INT-1
     FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
    WHERE show_columns.column_name != 'rowid'
+         AND show_columns.column_name NOT LIKE 'crdb_internal%%'
          AND show_columns.column_name = columns.column_name
 `, tableName)
 	rows, err := tx.Query(ctx, q, tableName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
+		return nil, errors.Wrapf(err, "getting table columns from %s: query=%q", tableName, q)
 	}
 	defer rows.Close()
 
@@ -3653,12 +3654,13 @@ func (og *operationGenerator) randColumn(
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
    WHERE NOT is_hidden
+         AND column_name NOT LIKE 'crdb_internal%%'
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
 	var name string
 	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "randColumn: %q", q)
 	}
 	return tree.Name(name), nil
 }
@@ -3681,13 +3683,14 @@ func (og *operationGenerator) randColumnWithMeta(
 		}, nil
 	}
 	q := fmt.Sprintf(`
- SELECT 
-column_name, 
-data_type, 
-is_nullable, 
+ SELECT
+column_name,
+data_type,
+is_nullable,
 generation_expression != '' AS is_generated
    FROM [SHOW COLUMNS FROM %s]
   WHERE column_name != 'rowid'
+        AND column_name NOT LIKE 'crdb_internal%%'
 ORDER BY random()
   LIMIT 1;
 `, tableName.String())
@@ -3717,6 +3720,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
     SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
       FROM information_schema.columns
 		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
+		       AND column_name NOT LIKE 'crdb_internal%%'
   `)
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
@@ -3788,6 +3792,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
                concat(table_schema, '.', table_name)::REGCLASS::INT8 AS tableid
           FROM information_schema.columns
 					WHERE column_name <> 'rowid'
+					      AND column_name NOT LIKE 'crdb_internal%%'
            ) AS cols
 		  JOIN (
 		        SELECT contype, conkey, conrelid
@@ -4178,7 +4183,7 @@ FROM [SHOW COLUMNS FROM %s];
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		if name != "rowid" {
+		if name != "rowid" && !strings.HasPrefix(name, "crdb_internal") {
 			columnNames = append(columnNames, name)
 		}
 	}
@@ -5810,6 +5815,10 @@ func (og *operationGenerator) setTableStorageParam(
 		// set schema_locked cannot be combined with other operations
 		// and will return an error if it does.
 		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	} else if param == "exclude_data_from_backup" {
+		// exclude_data_from_backup cannot be set on tables with inbound FK
+		// references.
+		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
 	return stmt, nil
