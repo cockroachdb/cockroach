@@ -629,6 +629,8 @@ func init() {
 		f := initCmd.Flags()
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualized, cliflags.Virtualized)
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualizedEmpty, cliflags.VirtualizedEmpty)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
