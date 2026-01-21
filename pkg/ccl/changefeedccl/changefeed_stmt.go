@@ -865,7 +865,7 @@ func createChangefeedJobRecord(
 		)
 	}
 
-	if err = validateDetailsAndOptions(details, opts); err != nil {
+	if err = validateDetailsAndOptions(details, opts, p.ExecCfg().Settings); err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
 
@@ -1396,7 +1396,9 @@ func logSanitizedChangefeedDestination(ctx context.Context, destination string) 
 }
 
 func validateDetailsAndOptions(
-	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
+	details jobspb.ChangefeedDetails,
+	opts changefeedbase.StatementOptions,
+	settings *cluster.Settings,
 ) error {
 	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
 		return err
@@ -1429,6 +1431,17 @@ func validateDetailsAndOptions(
 			}
 		}
 	}
+
+	if opts.IsSet(changefeedbase.OptPartitionAlg) {
+		if !changefeedbase.PartitionAlgEnabled.Get(&settings.SV) {
+			return errors.Newf(
+				"option %q requires cluster setting %q to be enabled",
+				changefeedbase.OptPartitionAlg,
+				changefeedbase.PartitionAlgEnabled.Name(),
+			)
+		}
+	}
+
 	return nil
 }
 
