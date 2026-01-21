@@ -279,16 +279,8 @@ func BenchmarkIntentResolution(b *testing.B) {
 	}
 
 	highPriorityScan := func(t testing.TB, ctx context.Context, kvDB *kv.DB, span roachpb.Span) {
-		// TODO(ssd): We are setting a fixed timestamp on this reader transaction
-		// for the side effect of removing the uncertainty interval. When a
-		// transaction has an uncertainty interval, we don't allow it to use the
-		// txnCache and thus this test would end up pushing the conflicting
-		// transaction batchSize times. We should be able to remove this once we
-		// move to a request-scoped transaction cache.
-		readTimestamp := kvDB.Clock().Now()
 		txn2 := kvDB.NewTxn(ctx, "high priority reader")
 		require.NoError(t, txn2.SetUserPriority(roachpb.MaxUserPriority))
-		require.NoError(t, txn2.SetFixedTimestamp(ctx, readTimestamp))
 		_, err := txn2.Scan(ctx, span.Key, span.EndKey, 0 /* maxKeys */)
 		require.NoError(t, err)
 	}

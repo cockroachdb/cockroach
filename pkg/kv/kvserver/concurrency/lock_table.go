@@ -817,6 +817,16 @@ func (g *lockTableGuardImpl) hasUncertaintyInterval() bool {
 	return g.txn != nil && g.txn.ReadTimestamp.Less(g.txn.GlobalUncertaintyLimit)
 }
 
+func (g *lockTableGuardImpl) hasObservationAtOrBefore(o roachpb.ObservedTimestamp) bool {
+	if o.Timestamp.IsEmpty() {
+		return false
+	}
+	if ts, ok := g.txn.GetObservedTimestamp(o.NodeID); ok {
+		return ts.LessEq(o.Timestamp)
+	}
+	return false
+}
+
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
 }
@@ -2013,10 +2023,10 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 				tl.unreplicatedInfo.safeFormat(sb)
 			}
 			if txnStatusCache != nil {
-				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
+				finalizedTxnEntry, ok := txnStatusCache.finalizedTxns.get(txn.ID)
 				if ok {
 					var statusStr string
-					switch finalizedTxn.Status {
+					switch finalizedTxnEntry.Txn.Status {
 					case roachpb.COMMITTED:
 						statusStr = "committed"
 					case roachpb.ABORTED:
@@ -2694,9 +2704,9 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 			continue // no conflict with a lock held by our own transaction
 		}
 
-		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
+		finalizedTxnEntry, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 		if ok {
-			up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: kl.key})
+			up := roachpb.MakeLockUpdate(finalizedTxnEntry.Txn, roachpb.Span{Key: kl.key})
 			// The lock belongs to a finalized transaction. There's no conflict, but
 			// the lock must be resolved -- accumulate it on the appropriate slice.
 			if !tl.isHeldReplicated() { // only held unreplicated
@@ -2708,25 +2718,26 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 		}
 
 		// The lock is held by a different, un-finalized transaction.
-
-		if g.curStrength() == lock.None {
+		if g.curStrength() == lock.None && g.lt.batchPushedLockResolution() {
 			// If the non-locking reader is reading at a higher timestamp than the
 			// lock holder, but it knows that the lock holder has been pushed above
 			// its read timestamp, it can proceed after rewriting the lock at its
 			// transaction's pushed timestamp. Intent resolution can be deferred to
 			// maximize batching opportunities.
-			//
-			// This fast-path is only enabled for readers without uncertainty
-			// intervals, as readers with uncertainty intervals must contend with the
-			// possibility of pushing a conflicting intent up into their uncertainty
-			// interval and causing more work for themselves, which is avoided with
-			// care by the lockTableWaiter but difficult to coordinate through the
-			// txnStatusCache. This limitation is acceptable because the most
-			// important case here is optimizing the Export requests issued by backup.
-			if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
-				pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
-				if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-					up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: kl.key})
+			pushedTxnEntry, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
+			if ok && g.ts.Less(pushedTxnEntry.Txn.WriteTimestamp) {
+				// This fast-path is only enabled in two cases:
+				//
+				// 1) For readers without uncertainty intervals
+				//
+				// 2) Readers with uncertainty intervals that have a clock observation
+				// from this node that is <= the known pending time recorded in the
+				// cache.
+				if !g.hasUncertaintyInterval() || g.hasObservationAtOrBefore(pushedTxnEntry.ClockWhilePending) {
+					up := roachpb.MakeLockUpdate(pushedTxnEntry.Txn, roachpb.Span{Key: kl.key})
+					if g.hasUncertaintyInterval() {
+						up.ClockWhilePending = pushedTxnEntry.ClockWhilePending
+					}
 					if !tl.isHeldReplicated() {
 						// Only held unreplicated. Accumulate it as an unreplicated lock to
 						// resolve, in case any other waiting readers can benefit from the
@@ -4368,10 +4379,10 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		return false, err
 	}
 	if consultTxnStatusCache {
-		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
+		finalizedTxnEntry, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
 		if ok {
 			g.toResolve = append(
-				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
+				g.toResolve, roachpb.MakeLockUpdate(finalizedTxnEntry.Txn, roachpb.Span{Key: key}))
 			return true, nil
 		}
 
@@ -4380,10 +4391,10 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		// comment in scanAndMaybeEnqueue for more details, including why we include
 		// the hasUncertaintyInterval condition.
 		if str == lock.None && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
-			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(foundLock.Txn.ID)
-			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
+			pushedTxnEntry, ok := g.lt.txnStatusCache.pendingTxns.get(foundLock.Txn.ID)
+			if ok && g.ts.Less(pushedTxnEntry.Txn.WriteTimestamp) {
 				g.toResolve = append(
-					g.toResolve, roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: key}))
+					g.toResolve, roachpb.MakeLockUpdate(pushedTxnEntry.Txn, roachpb.Span{Key: key}))
 				return true, nil
 			}
 		}
@@ -4764,13 +4775,15 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
-func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
+func (t *lockTableImpl) PushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
 	// TODO(sumeer): We don't take any action for requests that are already
 	// waiting on locks held by txn. They need to take some action, like
 	// pushing, and resume their scan, to notice the change to this txn. We
 	// could be more proactive if we knew which locks in lockTableImpl were held
 	// by txn.
-	t.txnStatusCache.add(txn)
+	t.txnStatusCache.add(txn, clockObs)
 }
 
 // Enable implements the lockTable interface.

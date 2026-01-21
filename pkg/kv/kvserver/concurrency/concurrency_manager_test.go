@@ -58,7 +58,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]] [observed-ts=<nodeID>@<ts>]
 // new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
 // [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
@@ -135,6 +135,23 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					},
 					ReadTimestamp:          ts,
 					GlobalUncertaintyLimit: uncertaintyLimit,
+				}
+				// Add observed timestamp if specified. Format: "nodeID@ts"
+				if d.HasArg("observed-ts") {
+					obsStr := dd.ScanArg[string](t, d, "observed-ts")
+					parts := strings.Split(obsStr, "@")
+					nodeID, err := strconv.Atoi(parts[0])
+					if err != nil {
+						d.Fatalf(t, "invalid node ID in observed-ts: %s", obsStr)
+					}
+					obsTs, err := hlc.ParseTimestamp(parts[1])
+					if err != nil {
+						d.Fatalf(t, "invalid timestamp in observed-ts: %s", obsStr)
+					}
+					txn.UpdateObservedTimestamp(
+						roachpb.NodeID(nodeID),
+						obsTs.UnsafeToClockTimestamp(),
+					)
 				}
 				c.registerTxn(txnName, txn)
 				return ""
