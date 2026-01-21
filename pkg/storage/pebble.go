@@ -579,15 +579,15 @@ var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
 	10, // 10%
 	settings.IntInRange(0, 100),
 )
-
 var tableFilterModeSetting = settings.RegisterEnumSetting(
 	settings.ApplicationLevel, // used by temp storage as well
 	"storage.table_filters",
 	"table filter configuration: uniform = 10bpk bloom filters on all levels; progressive = bloom filters with level-dependent size",
 	"uniform",
 	map[tableFilterMode]string{
-		tableFilterModeUniform:     "uniform",
-		tableFilterModeProgressive: "progressive",
+		tableFilterModeUniform:               "uniform",
+		tableFilterModeProgressive:           "progressive",
+		tableFilterModeProgressiveBinaryFuse: "progressive_binaryfuse",
 	},
 )
 
@@ -598,6 +598,8 @@ const (
 	tableFilterModeUniform tableFilterMode = iota
 	// tableFilterModeProgressive applies pebble.DBTableFilterPolicyProgressive.
 	tableFilterModeProgressive
+	// tableFilterModeBinaryFuse applies pebble.DBTableFilterPolicyBinaryFuseProgressive.
+	tableFilterModeProgressiveBinaryFuse
 )
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
@@ -1042,6 +1044,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return pebble.DBTableFilterPolicyUniform
 		case tableFilterModeProgressive:
 			return pebble.DBTableFilterPolicyProgressive
+		case tableFilterModeProgressiveBinaryFuse:
+			if !cfg.settings.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.V26_2) {
+				// 26.1 hosts can't read binary fuse filters, which will hurt
+				// performance. Only start using binary fuse filters once upgrade is
+				// finalized.
+				return pebble.DBTableFilterPolicyUniform
+			}
+			return pebble.DBTableFilterPolicyBinaryFuseProgressive
 		default:
 			return pebble.DBTableFilterPolicyUniform
 		}
