@@ -124,6 +124,21 @@ func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
 // SupportState implements the SupportStatus interface.
 func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.ClockTimestamp) {
 	ss := sm.supporterStateHandler.getSupportFor(id)
+	return computeSupportState(ss)
+}
+
+// computeSupportState determines the SupportState and withdrawal timestamp from
+// a supportState. This is extracted as a standalone function for testability.
+//
+//	Expiration | lastSupportWithdrawnTime | Result
+//	-----------+--------------------------+-------------------------------------------------------
+//	empty      | empty                    | StateUnknown (never supported this store, or support
+//	           |                          | was withdrawn prior to restart)
+//	empty      | non-empty                | StateNotSupporting (withdrawn, timestamp known)
+//	non-empty  | empty                    | StateSupporting (not withdrawn or timestamp lost on
+//	           |                          | restart after re-establishment)
+//	non-empty  | non-empty                | StateSupporting (active, even if withdrawn previously)
+func computeSupportState(ss supportState) (SupportState, hlc.ClockTimestamp) {
 	// If we've never seen this store, return StateUnknown.
 	if ss.empty() {
 		return StateUnknown, hlc.ClockTimestamp{}
@@ -132,7 +147,14 @@ func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.Cl
 	if !ss.Expiration.IsEmpty() {
 		return StateSupporting, ss.lastSupportWithdrawnTime
 	}
-	// Otherwise, support has been withdrawn.
+	// Expiration is empty, meaning support was withdrawn. But if we don't have
+	// a withdrawal timestamp, this is stale state from before a restart
+	// (lastSupportWithdrawnTime is not persisted). Return StateUnknown since we
+	// can't confirm the withdrawal is recent.
+	if ss.lastSupportWithdrawnTime.IsEmpty() {
+		return StateUnknown, hlc.ClockTimestamp{}
+	}
+	// Support was withdrawn and we have evidence of when.
 	return StateNotSupporting, ss.lastSupportWithdrawnTime
 }
 
