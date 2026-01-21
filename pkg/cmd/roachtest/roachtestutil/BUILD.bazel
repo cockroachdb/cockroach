@@ -6,6 +6,7 @@ go_library(
         "commandbuilder.go",
         "disk_stall.go",
         "disk_usage.go",
+        "failure_injection.go",
         "httpclient.go",
         "jaeger.go",
         "load_group.go",
