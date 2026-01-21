@@ -73,10 +73,9 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 	// We will set the store ID during start, but we want to set it as quickly as
 	// possible after creating a store (to initialize the shared object creator
 	// ID).
-	if err := eng.TODOEngine().SetStoreID(ctx, int32(ident.StoreID)); err != nil {
+	if err := eng.SetStoreID(ctx, ident.StoreID); err != nil {
 		return errors.Wrap(err, "setting store ID")
 	}
-
 	return nil
 }
 

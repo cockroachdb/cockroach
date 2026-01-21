@@ -2139,9 +2139,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	ctx = s.AnnotateCtx(ctx)
 	log.Event(ctx, "read store identity")
 
-	// Communicate store ID to engine.
-	// TODO(sep-raft-log): do for both engines.
-	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
+	// Communicate store ID to storage engines.
+	if err := s.internalEngines.SetStoreID(ctx, s.StoreID()); err != nil {
 		return err
 	}
 

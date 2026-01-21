@@ -726,13 +726,8 @@ func inspectEngines(
 		}
 		nodeID = storeIdent.NodeID
 
-		if err := eng.StateEngine().SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
+		if err := eng.SetStoreID(ctx, storeIdent.StoreID); err != nil {
 			return nil, err
-		}
-		if eng.Separated() {
-			if err := eng.LogEngine().SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
-				return nil, err
-			}
 		}
 
 		initializedEngines = append(initializedEngines, eng)
