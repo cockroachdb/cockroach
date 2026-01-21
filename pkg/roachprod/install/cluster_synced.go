@@ -1531,6 +1531,7 @@ fi
 %[3]s cert create-node %[4]s $SHARED_ARGS
 %[3]s cert create-tenant-client %[5]d %[4]s $SHARED_ARGS
 %[3]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+%[3]s mt cert create-tenant-signing --certs-dir=$CERT_DIR %[5]d
 tar cvf %[6]s $CERT_DIR
 `,
 				CockroachNodeTenantCertsDir,

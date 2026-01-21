@@ -40,6 +40,12 @@ import (
 //go:embed scripts/start.sh
 var startScript string
 
+//go:embed scripts/start_sql_proxy.sh
+var startSQLProxyScript string
+
+//go:embed scripts/start_directory_server.sh
+var startDirectoryServerScript string
+
 //go:embed files/cockroachdb-logging.yaml
 var loggingConfig string
 
@@ -1108,6 +1114,40 @@ func execStartTemplate(data startTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+func execSQLProxyStartTemplate(data startTemplateData) (string, error) {
+	tpl, err := template.New("start-sqlproxy").
+		Funcs(template.FuncMap{"shesc": func(i interface{}) string {
+			return shellescape.Quote(fmt.Sprint(i))
+		}}).
+		Delims("#{", "#}").
+		Parse(startSQLProxyScript)
+	if err != nil {
+		return "", err
+	}
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func execDirectoryServerStartTemplate(data startTemplateData) (string, error) {
+	tpl, err := template.New("start-directory-server").
+		Funcs(template.FuncMap{"shesc": func(i interface{}) string {
+			return shellescape.Quote(fmt.Sprint(i))
+		}}).
+		Delims("#{", "#}").
+		Parse(startDirectoryServerScript)
+	if err != nil {
+		return "", err
+	}
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
 func execLoggingTemplate(data loggingTemplateData) (string, error) {
 	tpl, err := template.New("loggingConfig").
 		Delims("#{", "#}").
@@ -1825,6 +1865,369 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	if out := strings.TrimSpace(res.CombinedOut); out != "" {
 		l.Printf(out)
 	}
+	return nil
+}
+
+// SQLProxyOpts contains options for starting or stopping a SQL proxy.
+type SQLProxyOpts struct {
+	// DirectoryAddr is the address of the directory server.
+	DirectoryAddr string
+	// Insecure disables TLS to backend.
+	Insecure bool
+	// SkipVerify skips identity verification of the backend.
+	SkipVerify bool
+	// ListenPort is the port the proxy listens on.
+	ListenPort int
+}
+
+// DirectoryServerOpts contains options for starting or stopping a directory server.
+type DirectoryServerOpts struct {
+	// GRPCPort is the port for the GRPC directory interface.
+	GRPCPort int
+	// HTTPPort is the port for the HTTP control API.
+	HTTPPort int
+}
+
+// SQLProxyLabel is the value used to "label" SQL proxy processes
+// running locally or in a VM. This is used by roachprod to identify
+// and monitor such processes.
+func SQLProxyLabel() string {
+	return "sql-proxy"
+}
+
+func SQLProxyPort(proxyOpts SQLProxyOpts) int {
+	if proxyOpts.ListenPort != 0 {
+		return proxyOpts.ListenPort
+	}
+
+	// N.B. For now, we hardcode the sql proxy port as the default of 46257.
+	// TODO(darryl): support service registration for sql proxy and dynamically assign ports.
+	return 46257
+}
+
+// DirectoryServerLabel returns the label for a directory server instance.
+func DirectoryServerLabel() string {
+	return "directory-server"
+}
+
+func DirectoryServerGRPCPort(proxyOpts DirectoryServerOpts) int {
+	if proxyOpts.GRPCPort != 0 {
+		return proxyOpts.GRPCPort
+	}
+
+	// N.B. For now, we hardcode the directory server grpc port as the default of 46258.
+	// TODO(darryl): support service registration for directory and dynamically assign ports.
+	return 46258
+}
+
+func DirectoryServerHTTPPort(proxyOpts DirectoryServerOpts) int {
+	if proxyOpts.HTTPPort != 0 {
+		return proxyOpts.HTTPPort
+	}
+
+	// N.B. For now, we hardcode the directory server http port as the default of 46259.
+	// TODO(darryl): support service registration for directory and dynamically assign ports.
+	return 46259
+}
+
+// StartSQLProxy starts a SQL proxy process on the specified node.
+func (c *SyncedCluster) StartSQLProxy(
+	ctx context.Context, l *logger.Logger, node Node, proxyOpts SQLProxyOpts,
+) error {
+	label := SQLProxyLabel()
+	logDir := c.LogDir(node, label, 0)
+
+	// Determine listen address
+	var listenHost string
+	if c.IsLocal() {
+		listenHost = "127.0.0.1"
+	} else {
+		listenHost = "0.0.0.0"
+	}
+	listenAddr := fmt.Sprintf("%s:%d", listenHost, SQLProxyPort(proxyOpts))
+
+	// Build the proxy command arguments
+	var args []string
+	args = append(args, "mt", "start-proxy")
+
+	args = append(args, fmt.Sprintf("--listen-addr=%s", listenAddr))
+	args = append(args, fmt.Sprintf("--directory=%s", proxyOpts.DirectoryAddr))
+
+	if proxyOpts.Insecure {
+		args = append(args, "--insecure")
+	} else {
+		certsDir := c.CertsDir(node)
+		args = append(args, fmt.Sprintf("--listen-cert=%s/node.crt", certsDir))
+		args = append(args, fmt.Sprintf("--listen-key=%s/node.key", certsDir))
+	}
+
+	if proxyOpts.SkipVerify {
+		args = append(args, "--skip-verify")
+	}
+
+	// Generate the start script content using the SQL proxy template
+	scriptContent, err := execSQLProxyStartTemplate(startTemplateData{
+		LogDir:              logDir,
+		Binary:              cockroachNodeBinary(c, node),
+		Args:                args,
+		VirtualClusterLabel: label,
+		Local:               c.IsLocal(),
+		MemoryMax:           config.MemoryMax,
+		NumFilesLimit:       config.DefaultNumFilesLimit,
+		EnvVars: append(append([]string{
+			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
+		}, c.Env...), getEnvVars()...),
+	})
+	if err != nil {
+		return err
+	}
+
+	scriptPath := "sqlproxy.sh"
+
+	var uploadCmd string
+	if c.IsLocal() {
+		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+	}
+	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, scriptPath)
+
+	uploadOpts := defaultCmdOpts("upload-sql-proxy-script")
+	uploadOpts.stdin = strings.NewReader(scriptContent)
+	result, err := c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	// Execute the start script
+	var runScriptCmd string
+	if c.IsLocal() {
+		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+	}
+	runScriptCmd += "./" + scriptPath
+	result, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-sql-proxy-script"))
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	l.Printf("SQL proxy started on node %d", node)
+	return nil
+}
+
+// StopSQLProxy stops a SQL proxy process on the specified node.
+func (c *SyncedCluster) StopSQLProxy(
+	ctx context.Context, l *logger.Logger, node Node, proxyOpts SQLProxyOpts,
+) error {
+	label := SQLProxyLabel()
+
+	l.Printf("Stopping SQL proxy on node %d", node)
+
+	// Find and kill the proxy process using the label
+	// We use SIGTERM (15) for graceful shutdown, wait for it to exit, with a 30s grace period
+	virtualClusterFilter := fmt.Sprintf(
+		"grep -E '%s' |",
+		envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", label),
+	)
+
+	cmd := fmt.Sprintf(`
+pids=$(ps axeww -o pid -o command | \
+  %s \
+  sed 's/export ROACHPROD=//g' | \
+  awk '/%s/ { print $1 }')
+if [ -n "${pids}" ]; then
+  echo "Stopping proxy processes: ${pids}"
+  kill -15 ${pids}
+  # Wait for process to exit (up to 30 seconds)
+  for pid in ${pids}; do
+    waitcnt=0
+    while kill -0 ${pid} 2>/dev/null; do
+      if [ $waitcnt -gt 30 ]; then
+        echo "Process ${pid} did not stop after 30s, sending SIGKILL"
+        kill -9 ${pid}
+        break
+      fi
+      sleep 1
+      waitcnt=$(expr $waitcnt + 1)
+    done
+    echo "Process ${pid} stopped"
+  done
+else
+  echo "No proxy process found with label: %s"
+fi`,
+		virtualClusterFilter,
+		c.roachprodEnvRegex(node),
+		label,
+	)
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("stop-proxy"))
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	l.Printf("SQL proxy stopped on node %d", node)
+	return nil
+}
+
+func (c *SyncedCluster) SQLProxyURL(
+	node Node, virtualClusterName string, tenantID int, certsDir string, opts SQLProxyOpts,
+) string {
+	var u url.URL
+	u.Scheme = "postgres"
+	u.Host = fmt.Sprintf("%s:%d", c.Host(node), SQLProxyPort(opts))
+	u.Path = "/"
+
+	v := url.Values{}
+	if opts.Insecure {
+		u.User = url.User("root")
+		v.Add("sslmode", "disable")
+	} else {
+		user := DefaultUser
+		password := DefaultPassword
+		u.User = url.UserPassword(user, password)
+
+		v.Add("sslcert", fmt.Sprintf("%s/client.%s.crt", certsDir, user))
+		v.Add("sslkey", fmt.Sprintf("%s/client.%s.key", certsDir, user))
+		v.Add("sslrootcert", fmt.Sprintf("%s/ca.crt", certsDir))
+		v.Add("sslmode", "verify-full")
+	}
+
+	// To connect to the SQL proxy, we must specify the tenant we wish to connect
+	// with a cluster identifier: <virtualclustername>-<tenantid>
+	clusterIdentifier := fmt.Sprintf("%s-%d", virtualClusterName, tenantID)
+	v.Add("options", fmt.Sprintf("-ccluster=%s", clusterIdentifier))
+
+	u.RawQuery = v.Encode()
+	return u.String()
+}
+
+// StartDirectoryServer starts a directory server process on the specified node.
+// The directory server provides a static pod registry for SQL proxies to discover tenant pods.
+func (c *SyncedCluster) StartDirectoryServer(
+	ctx context.Context, l *logger.Logger, node Node, dirOpts DirectoryServerOpts,
+) error {
+	label := DirectoryServerLabel()
+	logDir := c.LogDir(node, label, 0)
+
+	// Build the directory server command arguments
+	var args []string
+	args = append(args, "mt", "http-test-directory")
+	args = append(args, "--logtostderr=INFO")
+
+	args = append(args, fmt.Sprintf("--grpc-port=%d", DirectoryServerGRPCPort(dirOpts)))
+	args = append(args, fmt.Sprintf("--http-port=%d", DirectoryServerHTTPPort(dirOpts)))
+
+	// Generate the start script content using the directory server template
+	scriptContent, err := execDirectoryServerStartTemplate(startTemplateData{
+		LogDir:              logDir,
+		Binary:              cockroachNodeBinary(c, node),
+		Args:                args,
+		VirtualClusterLabel: label,
+		Local:               c.IsLocal(),
+		MemoryMax:           config.MemoryMax,
+		NumFilesLimit:       config.DefaultNumFilesLimit,
+		EnvVars: append(append([]string{
+			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
+		}, c.Env...), getEnvVars()...),
+	})
+	if err != nil {
+		return err
+	}
+
+	scriptPath := "directory-server.sh"
+
+	var uploadCmd string
+	if c.IsLocal() {
+		uploadCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+	}
+	uploadCmd += fmt.Sprintf(`cat > %[1]s && chmod +x %[1]s`, scriptPath)
+
+	uploadOpts := defaultCmdOpts("upload-directory-server-script")
+	uploadOpts.stdin = strings.NewReader(scriptContent)
+	result, err := c.runCmdOnSingleNode(ctx, l, node, uploadCmd, uploadOpts)
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	// Execute the start script
+	var runScriptCmd string
+	if c.IsLocal() {
+		runScriptCmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+	}
+	runScriptCmd += "./" + scriptPath
+	result, err = c.runCmdOnSingleNode(ctx, l, node, runScriptCmd, defaultCmdOpts("run-directory-server-script"))
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	l.Printf("Directory server started on node %d", node)
+	return nil
+}
+
+// StopDirectoryServer stops a directory server process on the specified node.
+func (c *SyncedCluster) StopDirectoryServer(
+	ctx context.Context, l *logger.Logger, node Node, dirOpts DirectoryServerOpts,
+) error {
+	label := DirectoryServerLabel()
+
+	l.Printf("Stopping directory server on node %d", node)
+
+	virtualClusterFilter := fmt.Sprintf(
+		"grep -E '%s' |",
+		envVarRegex("ROACHPROD_VIRTUAL_CLUSTER", label),
+	)
+
+	cmd := fmt.Sprintf(`
+pids=$(ps axeww -o pid -o command | \
+  %s \
+  sed 's/export ROACHPROD=//g' | \
+  awk '/%s/ { print $1 }')
+if [ -n "${pids}" ]; then
+  echo "Stopping directory server processes: ${pids}"
+  kill -15 ${pids}
+  # Wait for process to exit (up to 30 seconds)
+  for pid in ${pids}; do
+    waitcnt=0
+    while kill -0 ${pid} 2>/dev/null; do
+      if [ $waitcnt -gt 30 ]; then
+        echo "Process ${pid} did not stop after 30s, sending SIGKILL"
+        kill -9 ${pid}
+        break
+      fi
+      sleep 1
+      waitcnt=$(expr $waitcnt + 1)
+    done
+    echo "Process ${pid} stopped"
+  done
+else
+  echo "No directory server process found with label: %s"
+fi`,
+		virtualClusterFilter,
+		c.roachprodEnvRegex(node),
+		label,
+	)
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("stop-directory-server"))
+	if err != nil {
+		return err
+	}
+	if result.Err != nil {
+		return result.Err
+	}
+
+	l.Printf("Directory server stopped on node %d", node)
 	return nil
 }
 
