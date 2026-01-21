@@ -922,6 +922,14 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// validation. In which case a potential commit error is an undefined table
 	// error.
 	og.potentialCommitErrors.add(pgcode.UndefinedTable)
+
+	// If the child column has an ON UPDATE expression (e.g., crdb_internal_expiration
+	// on TTL tables), specifying an ON UPDATE action on the foreign key constraint
+	// will fail with InvalidTableDefinition.
+	if childColumn.name == "crdb_internal_expiration" && referenceActions.Update != tree.NoAction {
+		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
+	}
+
 	stmt.sql = tree.Serialize(def)
 	return stmt, nil
 }
