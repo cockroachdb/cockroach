@@ -1375,6 +1375,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	setupDoneCh := make(chan struct{})
+	finishedCancelCh := make(chan struct{})
 	for i := 0; i < tc.NumServers(); i++ {
 		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
 			jobspb.TypeImport,
@@ -1382,6 +1383,12 @@ func TestImportIntoCSVCancel(t *testing.T) {
 				r := raw.(*importResumer)
 				r.testingKnobs.onSetupFinish = func(flowinfra.Flow) {
 					close(setupDoneCh)
+				}
+				// We need this to ensure the cancel happens before the descriptor is
+				// marked online, and thus the rows ingested will be reverted.
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
+					<-finishedCancelCh
+					return nil
 				}
 				return r
 			})
@@ -1397,6 +1404,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	row.Scan(&jobID)
 	<-setupDoneCh
 	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", jobID))
+	close(finishedCancelCh)
 	sqlDB.Exec(t, fmt.Sprintf("SHOW JOB WHEN COMPLETE %d", jobID))
 	sqlDB.CheckQueryResults(t, "SELECT count(*) FROM t", [][]string{{"0"}})
 
