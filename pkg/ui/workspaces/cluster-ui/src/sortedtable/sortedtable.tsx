@@ -103,6 +103,7 @@ interface SortedTableProps<T> {
   // empty state for table
   empty?: boolean;
   emptyProps?: EmptyPanelProps;
+  dataTestId?: string;
 }
 
 interface SortedTableState {
@@ -343,6 +344,7 @@ export class SortedTable<T> extends React.Component<
       emptyProps,
       className,
       tableWrapperClassName,
+      dataTestId,
     } = this.props;
     let expandableConfig: ExpandableConfig = null;
     if (this.props.expandableConfig) {
@@ -366,7 +368,7 @@ export class SortedTable<T> extends React.Component<
 
     return (
       <div className={tableWrapperClass}>
-        <table className={tableStyleClass}>
+        <table className={tableStyleClass} data-testid={dataTestId}>
           <TableHead
             columns={columns}
             sortSetting={sortSetting}

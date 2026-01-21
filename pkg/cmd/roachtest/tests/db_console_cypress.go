@@ -273,6 +273,26 @@ func runDbConsoleCypressPages(ctx context.Context, t test.Test, c cluster.Cluste
 		t.Fatal(err)
 	}
 	defer db.Close()
+
+	_, err = db.ExecContext(ctx, `CREATE TABLE test_table(id integer PRIMARY KEY, t TEXT);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := `INSERT INTO test_table(id, t) SELECT i, sha512(random()::text) FROM ` +
+		`generate_series(0, 1000) AS t(i);`
+	_, err = tx.ExecContext(ctx, query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cypressTest.SetupTest(ctx, db)
 	for _, targetNode := range c.CRDBNodes() {
 		cypressTest.RunTest(ctx, targetNode, t.L())
