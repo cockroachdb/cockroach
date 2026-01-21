@@ -1923,6 +1923,8 @@ func TestWALFailoverWrapperRoundtrip(t *testing.T) {
 	})
 }
 
+// TestUseNewRPC verifies that the --use-new-rpc flag is properly configured
+// on all commands that support DRPC for inter-node communication.
 func TestUseNewRPC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1956,27 +1958,43 @@ func TestUseNewRPC(t *testing.T) {
 	}
 
 	testCases := []struct {
+		name        string
 		args        []string
 		expectedVal bool
 	}{
-		{[]string{}, false},                      // Default value
-		{[]string{"--use-new-rpc"}, true},        // Flag enabled
-		{[]string{"--use-new-rpc=true"}, true},   // Flag explicitly enabled
-		{[]string{"--use-new-rpc=false"}, false}, // Flag explicitly disabled
+		{"default", []string{}, false},
+		{"enabled", []string{"--use-new-rpc"}, true},
+		{"explicitly_enabled", []string{"--use-new-rpc=true"}, true},
+		{"explicitly_disabled", []string{"--use-new-rpc=false"}, false},
 	}
 
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%v", tc.args), func(t *testing.T) {
-			// Reset to defaults before each test
-			initCLIDefaults()
+	for _, cmd := range testCommands {
+		cmdName := cmd.Use
+		t.Run(cmdName, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					// Reset to defaults before each test
+					initCLIDefaults()
 
-			f := startCmd.Flags()
-			if err := f.Parse(tc.args); err != nil {
-				t.Fatal(err)
-			}
+					f := cmd.Flags()
+					if err := f.Parse(tc.args); err != nil {
+						t.Fatal(err)
+					}
 
-			if baseCfg.UseDRPC != tc.expectedVal {
-				t.Errorf("expected UseDRPC=%v, but got %v", tc.expectedVal, baseCfg.UseDRPC)
+					// Verify the flag exists
+					flag := f.Lookup(cliflags.UseNewRPC.Name)
+					if flag == nil {
+						t.Fatalf("command %s is missing --%s flag", cmdName, cliflags.UseNewRPC.Name)
+					}
+
+					// Verify the flag is hidden
+					require.True(t, flag.Hidden, "flag --%s should be hidden on command %s", cliflags.UseNewRPC.Name, cmdName)
+
+					// Verify the flag has the correct value
+					if baseCfg.UseDRPC != tc.expectedVal {
+						t.Errorf("command %s: expected --%s=%v, but got %v", cmdName, cliflags.UseNewRPC.Name, tc.expectedVal, baseCfg.UseDRPC)
+					}
+				})
 			}
 		})
 	}
