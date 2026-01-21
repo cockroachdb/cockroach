@@ -81,6 +81,7 @@ regions: <hidden>
 │ order: +nspname,+relname
 │
 └── • render
+    │ execution time: 0µs
     │
     └── • hash join (left outer)
         │ sql nodes: <hidden>
@@ -89,6 +90,7 @@ regions: <hidden>
         │ equality: (column80) = (table_id)
         │
         ├── • render
+        │   │ execution time: 0µs
         │   │
         │   └── • hash join (left outer)
         │       │ sql nodes: <hidden>
@@ -98,6 +100,7 @@ regions: <hidden>
         │       │ right cols are key
         │       │
         │       ├── • render
+        │       │   │ execution time: 0µs
         │       │   │
         │       │   └── • hash join (right outer)
         │       │       │ sql nodes: <hidden>
@@ -202,6 +205,8 @@ plan type: custom
 regions: <hidden>
 ·
 • render
+│ execution time: 0µs
+│ actual row count: 1
 │
 └── • insert
     │ sql nodes: <hidden>

@@ -1250,6 +1250,8 @@ regions: <hidden>
 │ arbiter indexes: t137352_a_key
 │
 └── • render
+    │ execution time: 0µs
+    │ actual row count: 1
     │
     └── • lookup join (left outer)
         │ sql nodes: <hidden>
