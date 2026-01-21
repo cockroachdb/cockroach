@@ -67,6 +67,10 @@ type ClientConnConfig struct {
 	// Clock is the HLC clock to use. This can be nil to disable
 	// maxoffset verification.
 	Clock *hlc.Clock
+
+	// UseDRPC indicates whether to use DRPC for this connection.
+	// This is typically set via the --use-new-rpc CLI flag.
+	UseDRPC bool
 }
 
 // MakeClientConnConfigFromBaseConfig creates a ClientConnConfig from a
@@ -93,6 +97,7 @@ func MakeClientConnConfigFromBaseConfig(
 		RPCHeartbeatInterval:           cfg.RPCHeartbeatInterval,
 		RPCHeartbeatTimeout:            cfg.RPCHeartbeatTimeout,
 		HistogramWindowInterval:        cfg.HistogramWindowInterval(),
+		UseDRPC:                        cfg.UseDRPC,
 	}
 }
 
