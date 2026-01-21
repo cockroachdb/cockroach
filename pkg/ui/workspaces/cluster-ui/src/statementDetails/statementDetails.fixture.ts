@@ -68,6 +68,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
   internal_app_name_prefix: "$ internal",
   statement_statistics_per_aggregated_ts: [],
   statement_statistics_per_plan_hash: [],
+  table_stats_collection_events: [],
 };
 
 const statementDetailsData: StatementDetailsResponse = {
@@ -819,6 +820,7 @@ const statementDetailsData: StatementDetailsResponse = {
     },
   ],
   internal_app_name_prefix: "$ internal",
+  table_stats_collection_events: [],
 };
 
 export const getStatementDetailsPropsFixture = (

@@ -29,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -72,6 +75,9 @@ type sampleAggregator struct {
 	// index keys, mapped by column index.
 	invSr     map[uint32]*stats.SampleReservoir
 	invSketch map[uint32]*sketchInfo
+
+	// eventWriter for logging statistic collection events
+	eventWriter *eventlog.Writer
 }
 
 var _ execinfra.Processor = &sampleAggregator{}
@@ -136,6 +142,15 @@ func newSampleAggregator(
 		invSr:        make(map[uint32]*stats.SampleReservoir, len(spec.InvertedSketches)),
 		invSketch:    make(map[uint32]*sketchInfo, len(spec.InvertedSketches)),
 	}
+
+	// Initialize event writer for logging statistic collection events
+	s.eventWriter = eventlog.NewWriter(
+		flowCtx.Cfg.DB,         // isql.DB for database operations
+		true,                   // writeAsync = true for non-blocking writes
+		flowCtx.Cfg.Stopper,    // *stop.Stopper for graceful shutdown
+		flowCtx.AmbientContext, // log.AmbientContext for tracing context
+		flowCtx.Cfg.Settings,   // *cluster.Settings for cluster configuration
+	)
 
 	var sampleCols intsets.Fast
 	for i := range spec.Sketches {
@@ -554,7 +569,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			}
 
 			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			ts, statsID, err := stats.InsertNewStat(
 				ctx,
 				s.FlowCtx.Cfg.Settings,
 				txn,
@@ -568,9 +583,13 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
-			); err != nil {
+			)
+			if err != nil {
 				return err
 			}
+
+			// Log statistic collection event
+			s.logStatisticCollectedEvent(ctx, si.spec.StatName, ts, columnIDs, statsID, si.numRows)
 
 			// Release any memory temporarily used for this statistic.
 			s.tempMemAcc.Clear(ctx)
@@ -680,6 +699,39 @@ func (s *sampleAggregator) generateHistogram(
 	// whether this can use a nil *eval.Context.
 	h, _, err := stats.EquiDepthHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, evalCtx.Settings)
 	return h, err
+}
+
+// logStatisticCollectedEvent logs an event when a new statistic is successfully collected.
+func (s *sampleAggregator) logStatisticCollectedEvent(
+	ctx context.Context,
+	statsName string,
+	timestamp int64,
+	columnIDs []descpb.ColumnID,
+	statsID int64,
+	rowCount int64,
+) {
+
+	colIDs := make([]uint32, len(columnIDs))
+	for i, c := range columnIDs {
+		colIDs[i] = uint32(c)
+	}
+	// Create event payload for statistic collection
+	event := &eventpb.NewStatsCollected{
+		CommonEventDetails: logpb.CommonEventDetails{
+			Timestamp: timestamp,
+			EventType: "stats_collected",
+		},
+		CommonSQLEventDetails: eventpb.CommonSQLEventDetails{
+			DescriptorID: uint32(s.tableID),
+		},
+		StatsName: statsName,
+		ColumnIds: colIDs,
+		StatsId:   statsID,
+		RowCount:  rowCount,
+	}
+
+	// Write event asynchronously (non-blocking)
+	s.eventWriter.Write(ctx, event, true /* writeAsync */)
 }
 
 var _ execinfra.DoesNotUseTxn = &sampleAggregator{}

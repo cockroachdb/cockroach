@@ -360,6 +360,9 @@ func (m *TxnRowsReadLimitInternal) LoggingChannel() logpb.Channel { return logpb
 func (m *TxnRowsWrittenLimitInternal) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *NewStatsCollected) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_STATS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.

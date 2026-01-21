@@ -186,3 +186,7 @@ The `CHANGEFEED` channel is used to report changefeed events
 The `KV_EXEC` channel is used to report KV execution events that don't fall into the
 KV_DISTRIBUTION channel.
 
+### `SQL_STATS`
+
+The `SQL_STATS` channel is used to report SQL statistics collection events
+
