@@ -12,6 +12,7 @@ go_library(
         "metric_utils.go",
         "profile.go",
         "replication.go",
+        "sql_proxy.go",
         "utils.go",
         "validation_check.go",
     ],
