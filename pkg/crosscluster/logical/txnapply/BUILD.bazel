@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnapply",
+    srcs = [
+        "apply_queue.go",
+        "latest.go",
+        "txn_applier.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/ring",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "txnapply_test",
+    srcs = ["txn_applier_test.go"],
+    embed = [":txnapply"],
+    deps = [
+        "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/txnwriter",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

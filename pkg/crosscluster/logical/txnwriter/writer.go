@@ -8,6 +8,7 @@ package txnwriter
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -30,15 +31,20 @@ type ApplyResult struct {
 	AppliedRows int
 }
 
+type TransactionWriter interface {
+	ApplyBatch(context.Context, []ldrdecoder.Transaction) ([]ApplyResult, error)
+	Close(ctx context.Context)
+}
+
 func NewTransactionWriter(
 	ctx context.Context, db isql.DB, leaseMgr *lease.Manager, settings *cluster.Settings,
-) (*TransactionWriter, error) {
+) (TransactionWriter, error) {
 	session, err := sqlwriter.NewInternalSession(ctx, db, settings)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new isql session for transaction writer")
 	}
 
-	return &TransactionWriter{
+	return &transactionWriter{
 		db:           db,
 		leaseMgr:     leaseMgr,
 		session:      session,
@@ -47,7 +53,7 @@ func NewTransactionWriter(
 	}, nil
 }
 
-type TransactionWriter struct {
+type transactionWriter struct {
 	db       isql.DB
 	leaseMgr *lease.Manager
 
@@ -57,7 +63,7 @@ type TransactionWriter struct {
 	// TODO(jeffswenson): add tombstone updater
 }
 
-func (tw *TransactionWriter) initTable(ctx context.Context, tableID descpb.ID) error {
+func (tw *transactionWriter) initTable(ctx context.Context, tableID descpb.ID) error {
 	if _, exists := tw.tableWriters[tableID]; exists {
 		return nil
 	}
@@ -92,6 +98,6 @@ func (tw *TransactionWriter) initTable(ctx context.Context, tableID descpb.ID) e
 	return nil
 }
 
-func (tw *TransactionWriter) Close(ctx context.Context) {
+func (tw *transactionWriter) Close(ctx context.Context) {
 	tw.session.Close(ctx)
 }
