@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (tw *TransactionWriter) ApplyBatch(
+func (tw *transactionWriter) ApplyBatch(
 	ctx context.Context, transactions []ldrdecoder.Transaction,
 ) ([]ApplyResult, error) {
 	for _, transaction := range transactions {
@@ -54,7 +54,7 @@ func (tw *TransactionWriter) ApplyBatch(
 	return results, nil
 }
 
-func (tw *TransactionWriter) refresh(
+func (tw *transactionWriter) refresh(
 	ctx context.Context, transactions []ldrdecoder.Transaction,
 ) error {
 	type rowIndex struct {
@@ -99,7 +99,7 @@ func (tw *TransactionWriter) refresh(
 	return nil
 }
 
-func (tw *TransactionWriter) tryApply(
+func (tw *transactionWriter) tryApply(
 	ctx context.Context, txn []ldrdecoder.Transaction, results []ApplyResult,
 ) error {
 	for i, transaction := range txn {
@@ -115,7 +115,7 @@ func (tw *TransactionWriter) tryApply(
 	return nil
 }
 
-func (tw *TransactionWriter) tryApplyTransaction(
+func (tw *transactionWriter) tryApplyTransaction(
 	ctx context.Context, transaction ldrdecoder.Transaction,
 ) (ApplyResult, error) {
 	for _, row := range transaction.WriteSet {

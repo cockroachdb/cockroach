@@ -58,6 +58,23 @@ func NewTxnLdrCoordinator(
 func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
 
+	// TODO(jeffswenson): restructure this so that every stage has the format
+	// input channel -> output channel.
+	// TODO(jeffswenson): stages should shut down when the context is cancelled
+	// in order to ensure we don't get stuck clearing buffers on cancellation.
+	// TODO(jeffswenson): stages should pass batches of transactions via channel
+	// instead of channels pushing individual transactions.
+
+	// The general API is:
+	// NewStage(ctx, input, output) -> initialization and initial validation
+	// Start(ctx, ctxgroup) -> start goroutines using the passed in context
+	//   group, error passed to context group
+	// Close(ctx) -> Frees resources associated with the stage
+	// Alternatively: Each module has a Run(ctx) error function that is called
+	// by a ctx group in the parent.
+	//
+	// But why not Stage(ctx, ctxgroup, args, input, output) error ?
+
 	feed, err := p.createTxnFeed(ctx)
 	if err != nil {
 		return errors.Wrap(err, "creating txn feed")
