@@ -1,14 +1,14 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "roachprodtest",
+    name = "test_lib",
     srcs = [
         "assertions.go",
         "operations.go",
         "testconfig.go",
         "testutils.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/roachprodtest",
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/cloud",
@@ -21,7 +21,7 @@ go_library(
 )
 
 go_test(
-    name = "roachprodtest_test",
+    name = "test",
     size = "enormous",
     srcs = [
         "create_test.go",
@@ -33,7 +33,7 @@ go_test(
     data = [
         "//pkg/cmd/roachprod",
     ],
-    embed = [":roachprodtest"],
+    embed = [":test_lib"],
     env = {
         "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
         "HOME": "$$TEST_TMPDIR",
