@@ -134,13 +134,11 @@ func (s *spanConfigStore) computeSplitKey(
 		return roachpb.RKey(match.span.Key), nil
 	}
 
-	rem, matchTenID, err := keys.DecodeTenantPrefix(match.span.Key)
-	if err != nil {
-		return nil, err
-	}
+	// Use the cached tenant ID for comparisons to avoid repeated decoding.
+	matchTenID := match.tenantID
 
 	if !s.knobs.StoreIgnoreCoalesceAdjacentExceptions {
-		if matchTenID.IsSystem() {
+		if matchTenID == roachpb.SystemTenantID.ToUint64() {
 			// NB: This MaxReservedDescID fellow isn't really that meaningful anymore,
 			// it's just the maximum ID system tables could have had before dynamic
 			// system table IDs were thing. This check here is out of an abundance of
@@ -151,6 +149,10 @@ func (s *spanConfigStore) computeSplitKey(
 			// so perhaps it's overblown. Perhaps we want general config attributes
 			// that opt a specific table/index out of being coalesced with adjacent
 			// ranges.
+			rem, _, err := keys.DecodeTenantPrefix(match.span.Key)
+			if err != nil {
+				return nil, err
+			}
 			systemTableUpperBound := keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)
 			if roachpb.Key(rem).Compare(systemTableUpperBound) < 0 ||
 				!StorageCoalesceAdjacentSetting.Get(&s.settings.SV) {
@@ -180,11 +182,7 @@ func (s *spanConfigStore) computeSplitKey(
 		if firstMatch.isEmpty() {
 			return roachpb.RKey(match.span.Key), nil
 		}
-		_, firstMatchTenID, err := keys.DecodeTenantPrefix(firstMatch.span.Key)
-		if err != nil {
-			return nil, err
-		}
-		if firstMatch.canonical != match.canonical || firstMatchTenID.ToUint64() != matchTenID.ToUint64() {
+		if firstMatch.canonical != match.canonical || firstMatch.tenantID != matchTenID {
 			return roachpb.RKey(match.span.Key), nil
 		}
 	}
@@ -198,11 +196,7 @@ func (s *spanConfigStore) computeSplitKey(
 		iter, query := s.btree.MakeIter(), makeQueryEntry(postSplitKeySp)
 		for iter.FirstOverlap(query); iter.Valid(); iter.NextOverlap(query) {
 			nextEntry := iter.Cur().spanConfigPairInterned
-			_, entryTenID, err := keys.DecodeTenantPrefix(nextEntry.span.Key)
-			if err != nil {
-				return nil, err
-			}
-			if nextEntry.canonical != match.canonical || entryTenID.ToUint64() != matchTenID.ToUint64() {
+			if nextEntry.canonical != match.canonical || nextEntry.tenantID != matchTenID {
 				lastMatch = nextEntry
 				break // we're done
 			}
@@ -535,6 +529,10 @@ func (s *spanConfigPair) isEmpty() bool {
 type spanConfigPairInterned struct {
 	span      roachpb.Span
 	canonical *roachpb.SpanConfig
+	// tenantID is the cached tenant ID extracted from span.Key. This avoids
+	// repeated calls to keys.DecodeTenantPrefix in hot paths like
+	// computeSplitKey.
+	tenantID uint64
 }
 
 func (s *spanConfigPairInterned) isEmpty() bool {
@@ -557,10 +555,14 @@ func (s *spanConfigStore) makeEntry(
 ) entry {
 	s.treeIDAlloc++
 	canonical := s.interner.add(ctx, conf)
+	// Extract and cache the tenant ID to avoid repeated DecodeTenantPrefix
+	// calls in hot paths like computeSplitKey.
+	_, tenID, _ := keys.DecodeTenantPrefix(sp.Key)
 	return entry{
 		spanConfigPairInterned: spanConfigPairInterned{
 			span:      sp,
 			canonical: canonical,
+			tenantID:  tenID.ToUint64(),
 		},
 		id: s.treeIDAlloc,
 	}
