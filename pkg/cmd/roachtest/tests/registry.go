@@ -70,6 +70,7 @@ func RegisterTests(r registry.Registry) {
 	registerHotSpotSplits(r)
 	registerHTTPRestart(r)
 	registerFISmokeTest(r)
+	registerFIExamples(r)
 	registerImport(r)
 	registerImportMixedVersions(r)
 	registerImportTPCC(r)
