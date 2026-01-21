@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -244,7 +245,142 @@ func collectBackupInfo(
 	collectionURIs []string,
 	backupToken string,
 ) (info backupInfo, memReserved int64, err error) {
-	return legacyCollectBackupInfo(ctx, p, mem, kmsEnv, stmt, collectionURIs, backupToken)
+	useIDs := p.SessionData().UseBackupsWithIDs
+	if !useIDs {
+		return legacyCollectBackupInfo(ctx, p, mem, kmsEnv, stmt, collectionURIs, backupToken)
+	}
+	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	defaultURI, _, err := backupdest.GetURIsByLocalityKV(collectionURIs, "")
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+
+	defaultRootStore, err := mkStore(ctx, defaultURI, p.User())
+	if err != nil {
+		return backupInfo{}, 0, errors.Wrapf(err, "make storage")
+	}
+	defer besteffort.Error(ctx, "close-root-store", func(_ context.Context) error {
+		return defaultRootStore.Close()
+	})
+
+	var backupIdx backuppb.BackupIndexMetadata
+	var backupID string
+	if strings.EqualFold(backupToken, backupbase.LatestFileName) {
+		backupIdx, backupID, err = backupinfo.FindLatestBackup(ctx, defaultRootStore)
+		if err != nil {
+			return backupInfo{}, 0, err
+		}
+	} else {
+		backupID = backupToken
+		backupIdx, err = backupinfo.ResolveBackupIDtoIndex(ctx, defaultRootStore, backupID)
+		if err != nil {
+			return backupInfo{}, 0, err
+		}
+	}
+
+	fullSubdir, err := backupinfo.BackupIDToFullSubdir(backupID)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+
+	// Find encryption options from the full backup.
+	encPath, err := backuputils.AppendPath(defaultURI, fullSubdir)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	encStore, err := mkStore(ctx, encPath, p.User())
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	defer besteffort.Error(ctx, "close-enc-store", func(_ context.Context) error {
+		return encStore.Close()
+	})
+	encryption, err := backupencryption.ResolveEncryptionOptionsFromExpr(
+		ctx, p, p.ExprEvaluator("SHOW BACKUP"), encStore,
+		stmt.Options.EncryptionPassphrase, tree.Exprs(stmt.Options.DecryptionKMSURI),
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+
+	mainBackupURI, err := backuputils.AppendPath(defaultURI, backupIdx.Path)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	backupStore, err := mkStore(ctx, mainBackupURI, p.User())
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	defer besteffort.Error(ctx, "close-backup-store", func(_ context.Context) error {
+		return backupStore.Close()
+	})
+	manifest, memReserved, err := backupinfo.ReadBackupManifestFromStore(
+		ctx, mem, backupStore, mainBackupURI, encryption, kmsEnv,
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	defer func() {
+		// If there was an error after reading the manifest, release the memory.
+		if err != nil {
+			mem.Shrink(ctx, memReserved)
+		}
+	}()
+
+	rootStores, cleanupStores, err := backupdest.MakeBackupDestinationStores(
+		ctx, p.User(), mkStore, collectionURIs,
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	defer besteffort.Error(ctx, "close-root-stores", func(_ context.Context) error {
+		return cleanupStores()
+	})
+	localityInfo, err := backupinfo.GetLocalityInfo(
+		ctx, rootStores, collectionURIs, manifest, encryption, kmsEnv, backupIdx.Path,
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+	iter, err := backupinfo.GetBackupManifestIterFactories(
+		ctx, p.ExecCfg().DistSQLSrv.ExternalStorage, []backuppb.BackupManifest{manifest}, encryption, kmsEnv,
+	)
+	if err != nil {
+		return backupInfo{}, 0, err
+	}
+
+	info.collectionURI = defaultURI
+	info.subdir = fullSubdir
+	info.kmsEnv = kmsEnv
+	info.enc = encryption
+	info.defaultURIs = []string{mainBackupURI}
+	info.manifests = []backuppb.BackupManifest{manifest}
+	info.layerToIterFactory = iter
+	info.localityInfo = []jobspb.RestoreDetails_BackupLocalityInfo{localityInfo}
+
+	if stmt.Options.CheckFiles {
+		info.fileSizes, err = checkBackupFiles(ctx, info, p.ExecCfg(), p.User(), encryption, kmsEnv)
+		if err != nil {
+			return backupInfo{}, 0, err
+		}
+	}
+
+	// If backup is locality aware, check that user passed at least some localities.
+	// TODO (msbutler): this is an extremely crude check that the user is
+	// passing at least as many URIS as there are localities in the backup. This
+	// check is only meant for the 22.1 backport. Ben is working on a much more
+	// robust check.
+	for _, locMap := range info.localityInfo {
+		if len(locMap.URIsByOriginalLocalityKV) > len(collectionURIs) {
+			p.BufferClientNotice(ctx,
+				pgnotice.Newf("The backup contains %d localities; however, "+
+					"the SHOW BACKUP command contains only %d URIs. To capture all locality aware data, "+
+					"pass every locality aware URI from the backup", len(locMap.URIsByOriginalLocalityKV),
+					len(collectionURIs)))
+		}
+	}
+
+	return info, memReserved, nil
 }
 
 func legacyCollectBackupInfo(
@@ -323,8 +459,7 @@ func legacyCollectBackupInfo(
 	info.enc = encryption
 
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
-	info.defaultURIs, info.manifests, info.localityInfo, memReserved,
-		err = backupdest.ResolveBackupManifests(
+	info.defaultURIs, info.manifests, info.localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
 		ctx, p.ExecCfg(), mem, defaultCollectionURI, collectionURIs, mkStore, subdir,
 		fullyResolvedDest, fullyResolvedIncrementalsDirectory, hlc.Timestamp{},
 		encryption, kmsEnv, p.User(), true /* includeSkipped */, true, /* includeCompacted */
@@ -529,6 +664,9 @@ func checkBackupFiles(
 	return manifestFileSizes, nil
 }
 
+// TODO (kev-cao): After deprecating the non-ID based SHOW BACKUP, change
+// manifests to a single manifest, layerToIterFactory to a single factory, and
+// fileSizes to a single slice.
 type backupInfo struct {
 	collectionURI string
 	defaultURIs   []string
@@ -1169,7 +1307,9 @@ func backupShowerFileSetup() backupShower {
 		fn: func(ctx context.Context, info backupInfo) (rows []tree.Datums, err error) {
 
 			var localityAware bool
-			manifestDirs, err := getManifestDirs(info.subdir, info.defaultURIs)
+			manifestDirs, err := util.MapE(info.defaultURIs, func(backupURI string) (string, error) {
+				return backuputils.AbsoluteBackupPathInCollectionURI(info.collectionURI, backupURI)
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -1233,78 +1373,6 @@ func backupShowerFileSetup() backupShower {
 			return rows, nil
 		},
 	}
-}
-
-// getRootURI splits a fully resolved backup URI at the backup's subdirectory
-// and returns the path to that subdirectory. e.g. for a full backup URI,
-// getRootURI returns the collectionURI.
-func getRootURI(defaultURI string, subdir string) (string, error) {
-	splitFullBackupPath := strings.Split(defaultURI, subdir)
-	if len(splitFullBackupPath) != 2 {
-		return "", errors.AssertionFailedf(
-			"the full backup URI %s does not contain 1 instance of the subdir %s"+
-				"", defaultURI, subdir)
-	}
-	return splitFullBackupPath[0], nil
-}
-
-// getManifestDirs gathers the path to the directory of each backup manifest,
-// relative to the collection root. Consider the following example: Suppose a
-// backup chain contains a full backup with a defaultURI of
-// 'userfile:///foo/fullSubdir' and an incremental backup with a defaultURI of
-// 'userfile:///foo/incrementals/fullSubdir/incrementalSubdir'. getManifestDirs
-// would return a relative path to the full backup manifest's directory, '/fullSubdir', and
-// to the incremental backup manifest's directory
-// '/incrementals/fullSubdir/incrementalSubdir'.
-func getManifestDirs(fullSubdir string, defaultUris []string) ([]string, error) {
-	manifestDirs := make([]string, len(defaultUris))
-
-	// The full backup manifest path is always in the fullSubdir.
-	manifestDirs[0] = fullSubdir
-
-	if len(defaultUris) == 1 {
-		return manifestDirs, nil
-	}
-	incRoot, err := getRootURI(defaultUris[1], fullSubdir)
-	if err != nil {
-		return nil, err
-	}
-
-	var incSubdir string
-	if strings.HasSuffix(incRoot, backupbase.DefaultIncrementalsSubdir) {
-		// The incremental backup is stored in the default incremental
-		// directory (i.e. collectionURI/incrementals/fullSubdir)
-		incSubdir = path.Join("/"+backupbase.DefaultIncrementalsSubdir, fullSubdir)
-	} else {
-		// Implies one of two scenarios:
-		// 1) the incremental chain is stored in the pre 22.1
-		//    default location: collectionURI/fullSubdir.
-		// 2) incremental backups were created with `incremental_location`,
-		//    so while the path to the subdirectory will be different
-		//    than the full backup's, the incremental backups will have the
-		//    same subdirectory, i.e. the full path is incrementalURI/fullSubdir.
-		incSubdir = fullSubdir
-	}
-
-	for i, incURI := range defaultUris {
-		// The first URI corresponds to the defaultURI of the full backup-- we have already dealt with
-		// this.
-		if i == 0 {
-			continue
-		}
-		// the manifestDir for an incremental backup will have the following structure:
-		// 'incSubdir/incSubSubSubDir', where incSubdir is resolved above,
-		// and incSubSubDir corresponds to the path to the incremental backup within
-		// the subdirectory.
-
-		// remove locality info from URI
-		incURI = strings.Split(incURI, "?")[0]
-
-		// get the subdirectory within the incSubdir
-		incSubSubDir := strings.Split(incURI, incSubdir)[1]
-		manifestDirs[i] = path.Join(incSubdir, incSubSubDir)
-	}
-	return manifestDirs, nil
 }
 
 var jsonShower = backupShower{
