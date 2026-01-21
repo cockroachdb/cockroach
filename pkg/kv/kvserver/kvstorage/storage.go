@@ -6,6 +6,8 @@
 package kvstorage
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -225,6 +227,20 @@ func (e *Engines) SetMinVersion(cv clusterversion.ClusterVersion) error {
 		return nil // there is only one engine
 	} else if err := e.LogEngine().SetMinVersion(cv.Version); err != nil {
 		return errors.Wrapf(err, "error writing version to engine %s", e.LogEngine())
+	}
+	return nil
+}
+
+// SetStoreID informs the engines of the store ID, once it is known. Used to
+// show the store ID in logs and to initialize the shared object creator ID (if
+// shared object storage is configured).
+func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
+	if err := e.StateEngine().SetStoreID(ctx, int32(id)); err != nil {
+		return errors.Wrapf(err, "error setting store ID on %s", e.StateEngine())
+	} else if !e.Separated() {
+		return nil // there is only one engine
+	} else if err := e.LogEngine().SetStoreID(ctx, int32(id)); err != nil {
+		return errors.Wrapf(err, "error setting store ID on engine %s", e.LogEngine())
 	}
 	return nil
 }
