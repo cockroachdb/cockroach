@@ -121,6 +121,10 @@ func getStatementDetails(
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
+	statementStatisticsPerAggregatedTsAndPlanHash, err := rb.getStatementDetailsPerAggregatedTsAndPlanHash(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
 
 	// At this point the counts on statementTotal.metadata have the count for how many times we saw that value
 	// as a row, and not the count of executions for each value.
@@ -139,10 +143,11 @@ func getStatementDetails(
 	}
 
 	response := &serverpb.StatementDetailsResponse{
-		Statement:                          statementTotal,
-		StatementStatisticsPerAggregatedTs: statementStatisticsPerAggregatedTs,
-		StatementStatisticsPerPlanHash:     statementStatisticsPerPlanHash,
-		InternalAppNamePrefix:              catconstants.InternalAppNamePrefix,
+		Statement:                                     statementTotal,
+		StatementStatisticsPerAggregatedTs:            statementStatisticsPerAggregatedTs,
+		StatementStatisticsPerPlanHash:                statementStatisticsPerPlanHash,
+		StatementStatisticsPerAggregatedTsAndPlanHash: statementStatisticsPerAggregatedTsAndPlanHash,
+		InternalAppNamePrefix:                         catconstants.InternalAppNamePrefix,
 	}
 
 	return response, nil
@@ -643,6 +648,115 @@ LIMIT $%d`, rb.mergeAggStmtMetadataColExpr, rb.whereClause, len(args)), args...)
 			Stats:                metadata.Stats,
 			Metadata:             aggregatedMetadata,
 			IndexRecommendations: idxRecommendations,
+		}
+
+		statements = append(statements, stmt)
+	}
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+
+	return statements, nil
+}
+
+// getStatementDetailsPerAggregatedTsAndPlanHash returns the execution count for each
+// unique combination of aggregated timestamp and plan hash. This is used to visualize
+// plan distribution over time in a stacked bar chart.
+func (rb *statementDetailsRespBuilder) getStatementDetailsPerAggregatedTsAndPlanHash(
+	ctx context.Context,
+) ([]serverpb.StatementDetailsResponse_StatementPlanDistribution, error) {
+	const expectedNumDatums = 4
+	const queryFormat = `
+SELECT
+    COALESCE(sum((statistics -> 'statistics' ->> 'cnt')::INT8), 0)::INT8 AS execution_count,
+    aggregated_ts,
+    plan_hash,
+    (statistics -> 'statistics' -> 'planGists' ->> 0) AS plan_gist
+FROM %s %s
+GROUP BY
+    aggregated_ts,
+    plan_hash,
+    plan_gist
+ORDER BY aggregated_ts ASC, plan_hash
+LIMIT $%d`
+
+	args := rb.qargs[:]
+	args = append(args, rb.limit)
+
+	var it isql.Rows
+	var err error
+	var iterErr error
+	defer func() {
+		if iterErr == nil {
+			err = closeIterator(it, err)
+		}
+	}()
+
+	// Try activity table first
+	if rb.activityHasData {
+		query := fmt.Sprintf(queryFormat, "crdb_internal.statement_activity", rb.whereClause, len(args))
+		it, iterErr = rb.ie.QueryIteratorEx(ctx, "console-stmts-activity-details-by-ts-and-plan", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if iterErr != nil {
+			return nil, srverrors.ServerError(ctx, iterErr)
+		}
+	}
+
+	// Fallback to persisted table
+	if it == nil || !it.HasResults() {
+		if it != nil {
+			err = closeIterator(it, err)
+		}
+		query := fmt.Sprintf(queryFormat, CrdbInternalStmtStatsPersisted, rb.whereClause, len(args))
+		it, iterErr = rb.ie.QueryIteratorEx(ctx, "console-stmts-persisted-details-by-ts-and-plan", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if iterErr != nil {
+			return nil, srverrors.ServerError(ctx, iterErr)
+		}
+	}
+
+	// Fallback to combined view
+	if !it.HasResults() {
+		err = closeIterator(it, err)
+		query := fmt.Sprintf(queryFormat, CrdbInternalStmtStatsCombined, rb.whereClause, len(args))
+		it, iterErr = rb.ie.QueryIteratorEx(ctx, "console-stmts-details-by-ts-and-plan-with-memory", nil,
+			sessiondata.NodeUserSessionDataOverride, query, args...)
+		if iterErr != nil {
+			return nil, srverrors.ServerError(ctx, iterErr)
+		}
+	}
+
+	var statements []serverpb.StatementDetailsResponse_StatementPlanDistribution
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		var row tree.Datums
+		if row = it.Cur(); row == nil {
+			return nil, errors.New("unexpected null row on getStatementDetailsPerAggregatedTsAndPlanHash")
+		}
+
+		if row.Len() != expectedNumDatums {
+			return nil, errors.Newf("expected %d columns on getStatementDetailsPerAggregatedTsAndPlanHash, received %d", expectedNumDatums, row.Len())
+		}
+
+		executionCount := int64(tree.MustBeDInt(row[0]))
+
+		aggregatedTs := tree.MustBeDTimestampTZ(row[1]).Time
+
+		var planHash uint64
+		if planHash, err = sqlstatsutil.DatumToUint64(row[2]); err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+
+		var planGist string
+		if row[3] != tree.DNull {
+			planGist = string(tree.MustBeDString(row[3]))
+		}
+
+		stmt := serverpb.StatementDetailsResponse_StatementPlanDistribution{
+			ExecutionCount: executionCount,
+			AggregatedTs:   aggregatedTs,
+			PlanHash:       planHash,
+			PlanGist:       planGist,
 		}
 
 		statements = append(statements, stmt)
