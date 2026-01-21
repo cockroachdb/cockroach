@@ -117,3 +117,42 @@ export function generateCPUTimeseries(
 
   return [ts, count];
 }
+
+type StatementStatisticsPerAggregatedTsAndPlanHash =
+  cockroach.server.serverpb.StatementDetailsResponse.IStatementPlanDistribution;
+export function generatePlanDistributionTimeseries(
+  stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
+): { alignedData: AlignedData; planGists: string[] } {
+  const timeMap = new Map<number, Map<string, number>>();
+  const planGistSet = new Set<string>();
+
+  stats.forEach(stat => {
+    const ts = TimestampToNumber(stat.aggregated_ts) * 1e3;
+    const planGist = stat.plan_gist || "unknown";
+    planGistSet.add(planGist);
+
+    if (!timeMap.has(ts)) {
+      timeMap.set(ts, new Map());
+    }
+
+    const existingCount = timeMap.get(ts).get(planGist) || 0;
+    timeMap
+      .get(ts)
+      .set(planGist, existingCount + Number(stat.execution_count || 0));
+  });
+
+  const timestamps = Array.from(timeMap.keys()).sort((a, b) => a - b);
+  const planGists = Array.from(planGistSet).sort();
+
+  // Build aligned data structure: [timestamps, plan1_counts, plan2_counts, ...]
+  const alignedData: AlignedData = [timestamps];
+
+  planGists.forEach(planGist => {
+    const counts = timestamps.map(ts => {
+      return timeMap.get(ts)?.get(planGist) || 0;
+    });
+    alignedData.push(counts);
+  });
+
+  return { alignedData, planGists };
+}

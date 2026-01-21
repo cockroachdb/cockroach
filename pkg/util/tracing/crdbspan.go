@@ -560,11 +560,14 @@ func (buf *sizeLimitedBuffer[T]) Discard() {
 // finish marks the span as finished. Further operations on the span are not
 // allowed. Returns false if the span was already finished.
 //
+// If endTime is non-zero, the span's duration is calculated as the difference
+// between endTime and the span's start time. Otherwise, the current time is used.
+//
 // Calling finish() a second time is illegal, as is any use-after-finish().
 // Still, the Tracer can be configured to tolerate such uses. If the Tracer was
 // configured to not tolerate use-after-Finish, we would have crashed before
 // calling this.
-func (s *crdbSpan) finish() bool {
+func (s *crdbSpan) finish(endTime time.Time) bool {
 	// Finishing involves the following steps:
 	// 1) Take the lock and capture a reference to the parent.
 	// 2) Operate on the parent outside of the lock.
@@ -590,8 +593,13 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.finished = true
 		if s.recordingType() != tracingpb.RecordingOff {
-			duration := timeutil.Since(s.startTime)
-			if duration == 0 {
+			var duration time.Duration
+			if endTime.IsZero() {
+				duration = timeutil.Since(s.startTime)
+			} else {
+				duration = endTime.Sub(s.startTime)
+			}
+			if duration <= 0 {
 				duration = time.Nanosecond
 			}
 			s.mu.duration = duration

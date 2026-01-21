@@ -499,6 +499,7 @@ go_test(
         "settings_cache_test.go",
         "span_stats_server_test.go",
         "span_stats_test.go",
+        "statement_details_test.go",
         "statements_test.go",
         "status_ext_test.go",
         "status_test.go",

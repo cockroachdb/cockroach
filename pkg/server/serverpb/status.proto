@@ -1785,6 +1785,13 @@ message StatementDetailsResponse {
     repeated string index_recommendations = 6;
   }
 
+  message StatementPlanDistribution {
+    int64 execution_count = 1;
+    google.protobuf.Timestamp aggregated_ts = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+    uint64 plan_hash = 3;
+    string plan_gist = 4;
+  }
+
   // statement returns the total statistics for the statement.
   CollectedStatementSummary statement = 1 [(gogoproto.nullable) = false];
   // statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics
@@ -1796,6 +1803,9 @@ message StatementDetailsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;
+  // statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both
+  // aggregated timestamp and plan hash for visualizing plan distribution over time.
+  repeated StatementPlanDistribution statement_statistics_per_aggregated_ts_and_plan_hash = 5 [(gogoproto.nullable) = false];
 }
 
 message StatementDiagnosticsReport {
