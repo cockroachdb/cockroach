@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -25,6 +26,7 @@ const (
 	debugPausePointsSettingKey = "jobs.debug.pausepoints"
 	metricsPollingIntervalKey  = "jobs.metrics.interval.poll"
 	claimQueryTimeoutKey       = "jobs.registry.claim_query.timeout"
+	useSelectForUpdateKey      = "jobs.registry.claim_query.select_for_update.enabled"
 )
 
 const (
@@ -142,6 +144,14 @@ var (
 		"the timeout for the claim query used when adopting jobs",
 		time.Minute,
 		settings.PositiveDuration,
+	)
+
+	UseSelectForUpdate = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		useSelectForUpdateKey,
+		"when true, uses SELECT FOR UPDATE in the claim loop to prevent deadlock; "+
+			"when false, uses the legacy single-query UPDATE RETURNING approach",
+		metamorphic.ConstantWithTestBool("jobs-claim-use-sfu", true),
 	)
 )
 

@@ -83,7 +83,7 @@ func (j *Job) TestingCurrentState(ctx context.Context) (State, error) {
 }
 
 const (
-	AdoptQuery               = claimQuery
+	GetAdoptableQuery        = GetClaimableJobsQuery
 	CancelQuery              = pauseAndCancelUpdate
 	RemoveClaimsQuery        = removeClaimsForDeadSessionsQuery
 	ProcessJobsQuery         = processQuery

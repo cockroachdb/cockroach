@@ -211,7 +211,7 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			name:       "adopt setting",
 			setting:    jobs.AdoptIntervalSettingKey,
 			value:      shortDuration,
-			matchStmt:  jobs.AdoptQuery,
+			matchStmt:  jobs.GetAdoptableQuery,
 			initCount:  0,
 			toOverride: jobs.AdoptIntervalSetting,
 		},
@@ -219,7 +219,7 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			name:       "adopt setting with base",
 			setting:    jobs.IntervalBaseSettingKey,
 			value:      shortDurationBase,
-			matchStmt:  jobs.AdoptQuery,
+			matchStmt:  jobs.GetAdoptableQuery,
 			initCount:  0,
 			toOverride: jobs.AdoptIntervalSetting,
 		},
@@ -293,6 +293,9 @@ func TestRegistrySettingUpdate(t *testing.T) {
 			s, sdb, _ := serverutils.StartServer(t, args)
 			defer s.Stopper().Stop(ctx)
 			tdb := sqlutils.MakeSQLRunner(sdb)
+
+			// Enable SELECT FOR UPDATE in claim query.
+			tdb.Exec(t, "SET CLUSTER SETTING jobs.registry.claim_query.select_for_update.enabled = true")
 
 			// Wait for the initial job runs to finish.
 			testutils.SucceedsSoon(t, func() error {

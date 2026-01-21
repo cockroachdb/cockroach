@@ -1591,17 +1591,12 @@ func ScanLocks(
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
 func WriteSyncNoop(eng Engine) error {
-	batch := eng.NewBatch()
+	batch := eng.NewWriteBatch()
 	defer batch.Close()
-
 	if err := batch.LogData(nil); err != nil {
 		return err
 	}
-
-	if err := batch.Commit(true /* sync */); err != nil {
-		return err
-	}
-	return nil
+	return batch.Commit(true /* sync */)
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
