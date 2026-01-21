@@ -117,6 +117,7 @@ const (
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
+	OptPartitionAlg          = `partition_alg`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -408,6 +409,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptEncodeJSONValueNullAsObject:        flagOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptHeadersJSONColumnName:              stringOption,
+	OptPartitionAlg:                       enum("fnv-1a", "murmur2"),
 }
 
 // CommonOptions is options common to all sinks
@@ -428,7 +430,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -1056,6 +1058,11 @@ func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
 // by the kafka sink.
 func (s StatementOptions) GetKafkaConfigJSON() SinkSpecificJSONConfig {
 	return s.getJSONValue(OptKafkaSinkConfig)
+}
+
+// GetPartitionAlg returns the hash method to use for Kafka partitioning.
+func (s StatementOptions) GetPartitionAlg() (string, error) {
+	return s.getEnumValue(OptPartitionAlg)
 }
 
 // GetPubsubConfigJSON returns arbitrary json to be interpreted
