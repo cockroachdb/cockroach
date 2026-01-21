@@ -1238,7 +1238,9 @@ type pauseResumeTestState struct {
 	currentIteration            atomic.Int32
 	finalIterationCompleted     atomic.Bool
 	iterationContinueCh         chan struct{}
+	iterationChClosed           bool
 	mapPhaseContinueCh          chan struct{}
+	mapPhaseChClosed            bool
 	currentTestName             string
 	pauseDuringMapPhase         bool
 	pauseAfterMapPhase          bool
@@ -1249,7 +1251,7 @@ type pauseResumeTestState struct {
 // reset initializes the state for a new subtest run.
 func (s *pauseResumeTestState) reset(
 	testName string, pauseDuringMap bool, pauseAfterMap bool, pauseAfterIter int,
-) {
+) (cleanup func()) {
 	s.currentTestName = testName
 	s.pauseDuringMapPhase = pauseDuringMap
 	s.pauseAfterMapPhase = pauseAfterMap
@@ -1260,8 +1262,21 @@ func (s *pauseResumeTestState) reset(
 	s.finalIterationCompleted.Store(false)
 	s.mapPhaseManifestCount.Store(0)
 	s.iterationContinueCh = make(chan struct{})
+	s.iterationChClosed = false
 	s.mapPhaseContinueCh = make(chan struct{})
+	s.mapPhaseChClosed = false
 	s.isBlockingBackfillProgress.Store(true)
+
+	// Return a cleanup function that closes channels if they haven't been
+	// closed explicitly during the test.
+	return func() {
+		if !s.iterationChClosed {
+			close(s.iterationContinueCh)
+		}
+		if !s.mapPhaseChClosed {
+			close(s.mapPhaseContinueCh)
+		}
+	}
 }
 
 // waitForCheckpointPersisted waits for checkpoint data to be persisted to the job payload.
@@ -1361,13 +1376,8 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 
 					if state.pauseAfterMapPhase {
 						t.Logf("[%s] map phase complete, blocking to allow test to pause job", state.currentTestName)
-						select {
-						case <-state.mapPhaseContinueCh:
-							t.Logf("[%s] unblocked by test, continuing with merge iterations", state.currentTestName)
-						case <-ctx.Done():
-							t.Logf("[%s] context cancelled (job paused), exiting hook", state.currentTestName)
-							return
-						}
+						<-state.mapPhaseContinueCh
+						t.Logf("[%s] unblocked by test, continuing with merge iterations", state.currentTestName)
 					}
 				},
 				AfterDistributedMergeIteration: func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest) {
@@ -1384,13 +1394,8 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 					// On resume, the final iteration will have len(manifests)==0, and we don't want to block.
 					if state.pauseAfterIteration > 0 && iteration == state.pauseAfterIteration && len(manifests) > 0 {
 						t.Logf("[%s] iteration %d complete, blocking to allow test to pause job", state.currentTestName, iteration)
-						select {
-						case <-state.iterationContinueCh:
-							t.Logf("[%s] unblocked by test, continuing with remaining iterations", state.currentTestName)
-						case <-ctx.Done():
-							t.Logf("[%s] context cancelled (job paused), exiting hook", state.currentTestName)
-							return
-						}
+						<-state.iterationContinueCh
+						t.Logf("[%s] unblocked by test, continuing with remaining iterations", state.currentTestName)
 					}
 				},
 			},
@@ -1482,7 +1487,8 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 		indexName := fmt.Sprintf("idx%d", testIdx)
 
 		t.Run(tc.name, func(t *testing.T) {
-			state.reset(tc.name, tc.pauseDuringMapPhase, tc.pauseAfterMapPhase, tc.pauseAfterIteration)
+			cleanup := state.reset(tc.name, tc.pauseDuringMapPhase, tc.pauseAfterMapPhase, tc.pauseAfterIteration)
+			defer cleanup()
 
 			// Set checkpoint interval based on test variant.
 			sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = $1`, tc.checkpointInterval)
@@ -1586,6 +1592,7 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 
 				// Unblock the hook so it can exit cleanly.
 				close(state.mapPhaseContinueCh)
+				state.mapPhaseChClosed = true
 
 				// Resume the job.
 				sqlDB.Exec(t, `RESUME JOB $1`, jobID)
@@ -1605,7 +1612,17 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 					waitForCheckpointPersisted(t, ctx, db, jobID, nil)
 				}
 
-				pauseAndResumeJob()
+				// Pause the job while it's blocked in the hook.
+				sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+				ensureJobState("paused")
+
+				// Unblock the hook so it can exit cleanly.
+				close(state.iterationContinueCh)
+				state.iterationChClosed = true
+
+				// Resume the job.
+				sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+				ensureJobState("running")
 			}
 
 			// Now we can wait for the job to succeed.
