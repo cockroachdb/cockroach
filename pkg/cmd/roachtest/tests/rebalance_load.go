@@ -165,7 +165,7 @@ func registerRebalanceLoad(r registry.Registry) {
 				continue
 			}
 
-			// Configure the variables for the test specification
+			// Configure the variables for the test specification.
 			name := fmt.Sprintf("rebalance/by-load/mode=%s%s", rebalanceModeNames[rebalanceMode], testKindNames[testKind])
 			clusterSpec := r.MakeClusterSpec(7) // the last node is just used to generate load
 			suites := registry.Suites(registry.Nightly)
@@ -176,7 +176,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			randomized := false
 			concurrency := 128
 
-			// Use fewer nodes for the lease only test
+			// Use fewer nodes for the lease only test.
 			if rebalanceMode == "leases" {
 				clusterSpec = r.MakeClusterSpec(4)
 				duration = leaseOnlyRebalanceDuration
@@ -185,7 +185,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			// When running mixed-version tests, disable IBM cloud,
 			// add the test to the MixedVersion registry, set the
 			// leases to be DefaultLeases, and enable monitoring and
-			// randomization
+			// randomization.
 			if testKind == "mixed-version" {
 				// Disabled on IBM because s390x is only built on master and mixed-version
 				// is impossible to test as of 05/2025.
@@ -197,7 +197,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			}
 
 			// When running multi-store tests, switch to GCE and configure
-			// the cluster to have multiple SSDs
+			// the cluster to have multiple SSDs.
 			if testKind == "multi-store" {
 				clouds = registry.OnlyGCE
 				clusterSpec = r.MakeClusterSpec(7,
@@ -209,7 +209,7 @@ func registerRebalanceLoad(r registry.Registry) {
 				)
 			}
 
-			// Add the test to the registry
+			// Add the test to the registry.
 			r.Add(
 				registry.TestSpec{
 					Name:             name,
