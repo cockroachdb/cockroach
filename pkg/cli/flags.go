@@ -1025,6 +1025,11 @@ func init() {
 		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	{
+		f := debugResetQuorumCmd.Flags()
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
+	}
+	{
 		f := debugBallastCmd.Flags()
 		cliflagcfg.VarFlag(f, newSizeFlagVal(&debugCtx.ballastSize), cliflags.Size)
 	}
