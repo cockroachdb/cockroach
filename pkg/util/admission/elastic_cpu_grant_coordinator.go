@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -23,8 +22,7 @@ func makeElasticCPUGrantCoordinator(
 	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
 	registry.AddMetricStruct(elasticCPUGranterMetrics)
 
-	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry,
-		admissionpb.BulkNormalPri, admissionpb.NormalPri)
+	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry)
 
 	elasticCPUGranter := newElasticCPUGranter(ambientCtx, st, elasticCPUGranterMetrics)
 	schedulerLatencyListener := newSchedulerLatencyListener(ambientCtx, st, schedulerLatencyListenerMetrics, elasticCPUGranter)
