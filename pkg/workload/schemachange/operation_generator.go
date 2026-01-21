@@ -5810,6 +5810,10 @@ func (og *operationGenerator) setTableStorageParam(
 		// set schema_locked cannot be combined with other operations
 		// and will return an error if it does.
 		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	} else if param == "exclude_data_from_backup" {
+		// exclude_data_from_backup cannot be set on tables with inbound FK
+		// references.
+		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
 	return stmt, nil

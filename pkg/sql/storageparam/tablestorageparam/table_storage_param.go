@@ -574,7 +574,8 @@ var tableParams = map[string]tableParam{
 			// we only allow a table with no incoming FK references to be marked as
 			// ephemeral.
 			if len(po.TableDesc.InboundFKs) != 0 {
-				return errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup")
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot set data in a table with inbound foreign key constraints to be excluded from backup")
 			}
 
 			excludeDataFromBackup, err := strconv.ParseBool(value)

@@ -485,7 +485,8 @@ func validateExcludeDataFromBackup(b BuildCtx, tbl *scpb.Table, key string) {
 	// we only allow a table with no incoming FK references to be marked as
 	// ephemeral.
 	if isTableReferencedByFK(b, tbl) {
-		panic(errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup"))
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot set data in a table with inbound foreign key constraints to be excluded from backup"))
 	}
 }
 
