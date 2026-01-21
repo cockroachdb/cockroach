@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 // verifySnap verifies that the replica descriptor before and after the
@@ -119,8 +120,101 @@ func verifySnap(
 // snapWriter helps preparing the snapshot write to storage.
 // TODO(pav-kv): move this and other structs in this file to kvstorage package.
 type snapWriter struct {
-	todoEng  storage.Engine
+	// eng encapsulates the storage engines of the Store. It knows whether the
+	// raft/log and state engines are separated, or the same engine must be used.
+	eng kvstorage.Engines
+	// batch is the pending write batch when the snapshot is applied using a batch
+	// rather than ingestion, or nil if the snapshot is applied using ingestion.
+	//
+	// The batch is scoped only to the state machine engine when engines are
+	// separated. Under a single engine, the batch contains the entire mutation
+	// spanning both logical engines.
+	batch storage.WriteBatch
+	// raftWO is the pending write batch into the raft engine. Not nil iff
+	// separated engines are enabled. If nil, the raft state is written into the
+	// combined engine using writeSST.
+	raftWO storage.WriteBatch
+	// writeSST provides a Writer which the caller uses to populate a subset of
+	// the pending snapshot write. One writeSST call corresponds to one keys
+	// subspace (such as replicated RangeID-local) and/or one range.
+	//
+	// Writes within one writeSST call are sorted by key. Distinct writeSST calls
+	// write into non-overlapping spans. Both requirements are dictated by the
+	// common case in which the snapshot is applied as a Pebble ingestion.
+	//
+	// Commonly, writeSST provides a Writer backed by a newly created SSTable
+	// which will be part of a Pebble ingestion. Less commonly, when the snapshot
+	// is simple/small and applying it as a batch is more efficient, the Writer is
+	// backed by a shared Pebble batch (one for the entire snapshot application).
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+}
+
+// applyAsBatch instructs the snapWriter that the snapshot application is going
+// to be written as a Pebble batch rather than ingestion.
+//
+// Must be called at most once.
+func (s *snapWriter) applyAsBatch() kvstorage.StateWO {
+	if s.batch != nil {
+		panic("applyAsBatch called twice")
+	}
+	if s.eng.Separated() {
+		s.batch = s.eng.StateEngine().NewWriteBatch()
+	} else {
+		s.batch = s.eng.Engine().NewWriteBatch()
+	}
+	// Redirect all writes to the newly created batch.
+	s.writeSST = func(ctx context.Context, w func(context.Context, storage.Writer) error) error {
+		return w(ctx, s.batch)
+	}
+	return s.batch
+}
+
+// commit commits the snapshot application to storage. If engines are separated,
+// it first commits/syncs the raft engine batch, and then commits the state
+// machine mutation (as ingestion or batch). Otherwise, it commits the entire
+// mutation to a single engine (as ingestion or batch).
+func (s *snapWriter) commit(
+	ctx context.Context, ing snapIngestion,
+) (pebble.IngestOperationStats, error) {
+	if s.eng.Separated() {
+		// TODO(sep-raft-log): populate the WAG node.
+		if err := s.raftWO.Commit(true /* sync */); err != nil {
+			return pebble.IngestOperationStats{}, err
+		}
+	}
+	if s.batch != nil {
+		// If engines are separated then the raft engine batch will contain a WAG
+		// node that guarantees durability of the state machine write, so we don't
+		// need so sync the state machine batch.
+		if err := s.batch.Commit(!s.eng.Separated()); err != nil {
+			return pebble.IngestOperationStats{}, err
+		}
+		// TODO(pav-kv): return stats instead of managing them in the caller.
+		return pebble.IngestOperationStats{}, nil
+	}
+
+	ingestTo := s.eng.StateEngine()
+	if !s.eng.Separated() {
+		ingestTo = s.eng.Engine()
+	}
+	stats, err := ingestTo.IngestAndExciseFiles(
+		ctx, ing.paths, ing.shared, ing.external, ing.exciseSpan)
+	if err != nil {
+		return pebble.IngestOperationStats{}, errors.Wrapf(err,
+			"while ingesting %s and excising %v", ing.paths, ing.exciseSpan)
+	}
+	return stats, nil
+}
+
+// close closes the underlying storage batches, if any. Must be called exactly
+// once, at the end of the snapWriter lifetime.
+func (s *snapWriter) close() {
+	if s.batch != nil {
+		s.batch.Close()
+	}
+	if s.raftWO != nil {
+		s.raftWO.Close()
+	}
 }
 
 // snapWrite contains the data needed to prepare a snapshot write to storage.
@@ -174,23 +268,19 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 	}
 	_ = applySnapshotTODO
 
-	// TODO(pav-kv): assert that our replica already exists in storage. Note that
-	// it can be either uninitialized or initialized.
-	// TODO(sep-raft-log): RewriteRaftState now only touches raft engine keys, so
-	// it will be convenient to redirect it to a raft engine batch.
-	if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
-	}); err != nil {
-		return err
+	// With separated engines, redirect the raft/log engine writes into a
+	// dedicated batch.
+	if s.eng.Separated() {
+		s.raftWO = s.eng.LogEngine().NewWriteBatch()
 	}
 
-	// TODO(sep-raft-log): need different readers for raft and state engine.
-	reader := storage.Reader(s.todoEng)
+	// TODO(pav-kv): assert that our replica already exists in storage. Note that
+	// it can be either uninitialized or initialized.
+	if err := s.rewriteRaftState(ctx, &sw); err != nil {
+		return err
+	}
 	for _, sub := range sw.subsume {
-		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
-		}); err != nil {
+		if err := s.subsumeReplica(ctx, sub); err != nil {
 			return err
 		}
 	}
@@ -209,13 +299,65 @@ func (s *snapWriter) prepareSnapApply(ctx context.Context, sw snapWrite) error {
 		},
 	}) {
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			// TODO(sep-raft-log): read from the state machine engine here.
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys(),
+				ctx, s.eng.StateEngine(), w, span.Key, span.EndKey,
+				kvstorage.ClearRangeThresholdPointKeys(),
 			)
 		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log.
+//
+// The method knows how to handle separated and single engine, so that the
+// caller is not concerned about it.
+func (s *snapWriter) rewriteRaftState(ctx context.Context, sw *snapWrite) error {
+	// If engines are separated, write directly to the raft engine batch.
+	if s.raftWO != nil {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(s.raftWO), sw.sl, sw.hardState, sw.truncState)
+	}
+	// Otherwise, write to an SSTable in the state machine engine, or s.batch if
+	// applying the snapshot as a batch.
+	return s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		return kvstorage.RewriteRaftState(ctx, kvstorage.RaftWO(w), sw.sl, sw.hardState, sw.truncState)
+	})
+}
+
+// subsumeReplica destroys the given "subsumed" replica, except it leaves its
+// "user keys" spans intact which are inherited and overridden by the caller.
+//
+// The method knows how to handle separated and single engine, so that the
+// caller is not concerned about it.
+func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyReplicaInfo) error {
+	// Create an SST for the subsumed replica's RangeID-local keys. Note that it's
+	// redirected to s.batch if the snapshot is written as a batch.
+	return s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
+		// If engines are separated, write the relevant subset of keys directly to
+		// the raft engine batch, instead of the combined SST/batch.
+		raftWO := kvstorage.RaftWO(s.raftWO)
+		if raftWO == nil {
+			raftWO = w
+		}
+		return kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
+			State: kvstorage.State{RO: s.eng.StateEngine(), WO: kvstorage.StateWO(w)},
+			Raft:  kvstorage.Raft{RO: s.eng.LogEngine(), WO: raftWO},
+		}, sub)
+	})
+}
+
+// snapIngestion encodes the parameters needed to run a Pebble ingestion for
+// applying a snapshot.
+//
+// TODO(sep-raft-log): this information needs to be stored in the corresponding
+// WAG node. Use the proto counterparts of this type (see wagpb.Ingestion).
+type snapIngestion struct {
+	paths      []string
+	shared     []pebble.SharedSSTMeta
+	external   []pebble.ExternalFile
+	exciseSpan roachpb.Span
 }
