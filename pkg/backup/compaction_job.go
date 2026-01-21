@@ -8,6 +8,7 @@ package backup
 import (
 	"context"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -126,11 +127,14 @@ func maybeStartCompactionJob(
 		return 0, nil
 	}
 
-	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+	compactWindows, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
 	if err != nil {
 		return 0, err
 	}
-	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
+	compactTimestamps := util.Map(compactWindows, func(window [2]int) [2]hlc.Timestamp {
+		startIdx, endIdx := window[0], window[1]
+		return [2]hlc.Timestamp{chain[startIdx].StartTime, chain[endIdx-1].EndTime}
+	})
 
 	var jobID jobspb.JobID
 	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -140,26 +144,30 @@ func maybeStartCompactionJob(
 		if err != nil {
 			return err
 		}
-		datums, err := txn.QueryRowEx(
-			ctx,
-			"start-compaction-job",
-			txn.KV(),
-			sessiondata.NoSessionDataOverride,
-			`SELECT crdb_internal.backup_compaction($1, $2, $3, $4::DECIMAL, $5::DECIMAL)`,
-			triggerJob.ScheduleID,
-			args.BackupStatement,
-			triggerJob.Destination.Subdir,
-			startTS.AsOfSystemTime(),
-			endTS.AsOfSystemTime(),
-		)
-		if err != nil {
-			return err
+		jobIDs := make([]jobspb.JobID, 0, len(compactWindows))
+		for _, ts := range compactTimestamps {
+			startTS, endTS := ts[0], ts[1]
+			datums, err := txn.QueryRowEx(
+				ctx,
+				"start-compaction-job",
+				txn.KV(),
+				sessiondata.NoSessionDataOverride,
+				`SELECT crdb_internal.backup_compaction($1, $2, $3, $4::DECIMAL, $5::DECIMAL)`,
+				triggerJob.ScheduleID,
+				args.BackupStatement,
+				triggerJob.Destination.Subdir,
+				startTS.AsOfSystemTime(),
+				endTS.AsOfSystemTime(),
+			)
+			if err != nil {
+				return err
+			}
+			idDatum, ok := datums[0].(*tree.DInt)
+			if !ok {
+				return errors.Newf("expected job ID: unexpected result type %T", datums[0])
+			}
+			jobIDs = append(jobIDs, jobspb.JobID(*idDatum))
 		}
-		idDatum, ok := datums[0].(*tree.DInt)
-		if !ok {
-			return errors.Newf("expected job ID: unexpected result type %T", datums[0])
-		}
-		jobID = jobspb.JobID(*idDatum)
 
 		scheduledJob := jobs.ScheduledJobTxn(txn)
 		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
@@ -168,7 +176,7 @@ func maybeStartCompactionJob(
 		if err != nil {
 			return errors.Wrapf(err, "unable to load backup schedule %d", triggerJob.ScheduleID)
 		}
-		args.CompactionJobID = jobID
+		args.CompactionJobIDs = jobIDs
 		any, err := types.MarshalAny(args)
 		if err != nil {
 			return errors.Wrap(err, "marshaling args")
@@ -179,7 +187,7 @@ func maybeStartCompactionJob(
 		return scheduledJob.Update(ctx, backupSchedule)
 	})
 	if err == nil {
-		log.Dev.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+		log.Dev.Infof(ctx, "compacting backups in time windows: %v", compactTimestamps)
 	}
 	return jobID, err
 }
@@ -488,7 +496,15 @@ func (b *backupResumer) processCompactionCompletion(
 		if err != nil {
 			return errors.Wrapf(err, "unable to load backup schedule %d", details.ScheduleID)
 		}
-		args.CompactionJobID = 0
+		jobIdx := slices.Index(args.CompactionJobIDs, b.job.ID())
+		if jobIdx == -1 {
+			log.Dev.Warningf(
+				ctx, "compaction job %d not found in schedule %d's compaction job list",
+				b.job.ID(), details.ScheduleID,
+			)
+			return nil
+		}
+		args.CompactionJobIDs = slices.Delete(args.CompactionJobIDs, jobIdx, jobIdx+1)
 		any, err := types.MarshalAny(args)
 		if err != nil {
 			return errors.Wrap(err, "marshaling args")
@@ -933,9 +949,9 @@ func maybeWriteBackupCheckpoint(
 }
 
 // getScheduledExecutionArgsAndCheckCompactionLock retrieves the scheduled
-// backup execution args and also checks if a compaction jobs is already
-// running. If we fail to fetch the args or if a compaction job is already
-// running for this schedule, an error is returned.
+// backup execution args and also checks if a set of compaction jobs is already
+// running. If we fail to fetch the args or if a previous set of compaction jobs
+// is still running for this schedule, an error is returned.
 func getScheduledExecutionArgsAndCheckCompactionLock(
 	ctx context.Context,
 	txn isql.Txn,
@@ -950,10 +966,10 @@ func getScheduledExecutionArgsAndCheckCompactionLock(
 			err, "failed to get scheduled backup execution args for schedule %d", scheduleID,
 		)
 	}
-	if args.CompactionJobID != 0 {
+	if len(args.CompactionJobIDs) > 0 {
 		return nil, errors.Newf(
-			"compaction job %d already running for schedule %d",
-			args.CompactionJobID, scheduleID,
+			"compaction jobs %v are still running for schedule %d",
+			args.CompactionJobIDs, scheduleID,
 		)
 	}
 	return args, nil
