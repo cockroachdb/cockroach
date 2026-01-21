@@ -91,6 +91,12 @@ func init() {
 		cliflagcfg.StringFlagDepth(1, f, &testDirectorySvrContext.kvAddrs, cliflags.KVAddrs)
 	})
 
+	cli.RegisterFlags(func() {
+		f := mtHTTPTestDirectorySvr.Flags()
+		cliflagcfg.IntFlag(f, &httpTestDirectorySvrContext.grpcPort, cliflags.HTTPTestDirectoryGRPCPort)
+		cliflagcfg.IntFlag(f, &httpTestDirectorySvrContext.httpPort, cliflags.HTTPTestDirectoryHTTPPort)
+	})
+
 	// FIPS verification flags.
 	cli.RegisterFlags(func() {
 		cmd := cli.CockroachCmd()
