@@ -17999,6 +17999,86 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-crdb-log.bytes-written
+      exported_name: storage_category_crdb_log_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-encryption-registry.bytes-written
+      exported_name: storage_category_encryption_registry_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-compaction.bytes-written
+      exported_name: storage_category_pebble_compaction_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-ingestion.bytes-written
+      exported_name: storage_category_pebble_ingestion_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-manifest.bytes-written
+      exported_name: storage_category_pebble_manifest_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-memtable-flush.bytes-written
+      exported_name: storage_category_pebble_memtable_flush_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-wal.bytes-written
+      exported_name: storage_category_pebble_wal_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-raft-snapshot.bytes-written
+      exported_name: storage_category_raft_snapshot_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-sql-col-spill.bytes-written
+      exported_name: storage_category_sql_col_spill_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-unspecified.bytes-written
+      exported_name: storage_category_unspecified_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.checkpoints
       exported_name: storage_checkpoints
       description: |-
