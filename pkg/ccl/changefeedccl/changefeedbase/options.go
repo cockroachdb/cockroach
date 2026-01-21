@@ -138,6 +138,7 @@ const (
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
 	OptExtraHeaders          = `extra_headers`
+	OptPartitionAlg          = `partition_alg`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -437,6 +438,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptRangeDistributionStrategy:          enum(string(ChangefeedRangeDistributionStrategyDefault), string(ChangefeedRangeDistributionStrategyBalancedSimple)),
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
+	OptPartitionAlg:                       enum("fnv-1a", "murmur2"),
 }
 
 // CommonOptions is options common to all sinks
@@ -458,7 +460,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -1155,6 +1157,10 @@ type KafkaSinkOptions struct {
 
 	// Headers is a map of header names to values.
 	Headers map[string][]byte
+
+	// PartitionAlg is the hash function to use for Kafka partitioning.
+	// Valid values are "fnv-1a" (default) and "murmur2".
+	PartitionAlg string
 }
 
 func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
@@ -1163,11 +1169,22 @@ func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
 		return KafkaSinkOptions{}, err
 	}
 
+	partitionAlg, err := s.GetPartitionAlg()
+	if err != nil {
+		return KafkaSinkOptions{}, err
+	}
+
 	o := KafkaSinkOptions{
-		JSONConfig: s.getJSONValue(OptKafkaSinkConfig),
-		Headers:    headersMap,
+		JSONConfig:   s.getJSONValue(OptKafkaSinkConfig),
+		Headers:      headersMap,
+		PartitionAlg: partitionAlg,
 	}
 	return o, nil
+}
+
+// GetPartitionAlg returns the hash method to use for Kafka partitioning.
+func (s StatementOptions) GetPartitionAlg() (string, error) {
+	return s.getEnumValue(OptPartitionAlg)
 }
 
 // GetPubsubConfigJSON returns arbitrary json to be interpreted
