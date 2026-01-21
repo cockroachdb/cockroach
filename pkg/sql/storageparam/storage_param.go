@@ -113,7 +113,7 @@ func Reset(
 func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum tree.Datum) error {
 	val, err := paramparse.DatumAsFloat(ctx, evalCtx, key, datum)
 	if err != nil {
-		return err
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error decoding %q", key)
 	}
 	if val < 0 || val > 100 {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "%q must be between 0 and 100", key)

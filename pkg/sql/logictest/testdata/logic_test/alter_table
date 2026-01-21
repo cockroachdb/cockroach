@@ -2689,6 +2689,9 @@ ALTER TABLE storage_param_table SET (foo=100)
 statement error parameter "fillfactor" requires a float value
 ALTER TABLE storage_param_table SET (fillfactor=true)
 
+statement error pgcode 22023 error decoding "fillfactor": strconv.ParseFloat: parsing "invalid_val": invalid syntax
+ALTER TABLE storage_param_table SET (fillfactor=invalid_val)
+
 statement error unimplemented: storage parameter "toast_tuple_target"
 ALTER TABLE storage_param_table SET (toast_tuple_target=100)
 
@@ -2976,7 +2979,7 @@ WHERE
 ----
 {}
 
-statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
+statement error pgcode 22P02 pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
 ALTER TABLE t5 SET (sql_stats_automatic_collection_fraction_stale_rows = 'hello')
 
 statement error pq: invalid integer value for sql_stats_automatic_collection_min_stale_rows: could not parse "world" as type int: strconv.ParseInt: parsing "world": invalid syntax
@@ -3122,6 +3125,9 @@ ALTER TABLE t5 RESET (sql_stats_automatic_partial_collection_fraction_stale_rows
 
 statement error pq: invalid float value for sql_stats_automatic_partial_collection_fraction_stale_rows: cannot set to a negative value: -0.500000
 ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = -0.5)
+
+statement error pgcode 22P02 pq: invalid float value for sql_stats_automatic_partial_collection_fraction_stale_rows: could not parse "invalid" as type float: strconv.ParseFloat: parsing "invalid": invalid syntax
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = 'invalid')
 
 statement ok
 DROP TABLE t5
