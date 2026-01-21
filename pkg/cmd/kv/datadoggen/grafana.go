@@ -46,6 +46,7 @@ Query formats follow Datadog best practices:
 	}
 
 	cmd.Flags().StringVarP(&grafanaOutputFile, "output", "o", "", "Output file (default: <input>_datadog.json)")
+	cmd.Flags().BoolVar(&TsdumpMode, "tsdump", false, "Generate queries for self-hosted tsdump format (crdb.tsdump.* prefix, $upload_id tag)")
 
 	return cmd
 }
@@ -130,7 +131,7 @@ func runConvertGrafana(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Output: %s\n", outputFile)
 	fmt.Printf("\nDatadog query configuration:\n")
 	fmt.Printf("  Metric prefix: %s\n", MetricPrefix)
-	fmt.Printf("  Default tags: %s\n", DefaultTags)
+	fmt.Printf("  Default tags: %s\n", GetDefaultTags())
 	fmt.Printf("  Rollup interval: %ds (matches scrape interval)\n", RollupInterval)
 	fmt.Printf("  Counter format: sum:metric{tags} by {group}.as_rate().rollup(max, %d)\n", RollupInterval)
 	fmt.Printf("  Gauge format: avg:metric{tags} by {group}.rollup(avg, %d)\n", RollupInterval)
@@ -559,9 +560,9 @@ func convertPromQLToDatadog(expr string) string {
 		metric := match[1]
 		ddMetric := ConvertExportedMetricName(metric)
 		if IsCounterMetric(metric) {
-			return BuildCounterQuery(ddMetric, DefaultTags, "", "")
+			return BuildCounterQuery(ddMetric, GetDefaultTags(), "", "")
 		}
-		return BuildGaugeQuery(ddMetric, DefaultTags, "", "")
+		return BuildGaugeQuery(ddMetric, GetDefaultTags(), "", "")
 	}
 
 	// Fallback: Try to extract the main metric from complex expressions
@@ -632,7 +633,7 @@ func extractMetricAndLabels(expr string) (string, string) {
 
 	// Match just metric_name
 	if match := regexp.MustCompile(`^([a-zA-Z_][a-zA-Z0-9_]*)$`).FindStringSubmatch(strings.TrimSpace(expr)); match != nil {
-		return match[1], DefaultTags
+		return match[1], GetDefaultTags()
 	}
 
 	return "", ""
@@ -640,7 +641,7 @@ func extractMetricAndLabels(expr string) (string, string) {
 
 func cleanLabels(labelsStr string) string {
 	// Always return default tags for now, as the Python version does
-	return DefaultTags
+	return GetDefaultTags()
 }
 
 func cleanGroupBy(groupBy string) string {

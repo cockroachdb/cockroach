@@ -78,6 +78,7 @@ Examples:
 	cmd.Flags().BoolVarP(&metricsQueriesOnly, "queries-only", "q", false, "Output only queries to stdout (for piping)")
 	cmd.Flags().BoolVar(&metricsQuiet, "quiet", false, "Suppress info messages, output only results")
 	cmd.Flags().BoolVar(&metricsNoGrouping, "no-group", false, "Disable grouping by prefix (flat list)")
+	cmd.Flags().BoolVar(&TsdumpMode, "tsdump", false, "Generate queries for self-hosted tsdump format (crdb.tsdump.* prefix, $upload_id tag)")
 
 	return cmd
 }

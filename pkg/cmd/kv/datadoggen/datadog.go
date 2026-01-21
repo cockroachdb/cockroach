@@ -17,14 +17,39 @@ const (
 	// MetricPrefix is the prefix for all CockroachDB metrics in Datadog.
 	MetricPrefix = "cockroachdb"
 
+	// TsdumpMetricPrefix is the prefix for self-hosted tsdump metrics.
+	TsdumpMetricPrefix = "crdb.tsdump"
+
 	// DefaultTags are the default template variable tags for filtering.
 	// No spaces - Datadog is sensitive to whitespace in tag filters.
 	DefaultTags = "$cluster,$node_id,$store"
+
+	// TsdumpTags are the template variable tags for tsdump/self-hosted metrics.
+	TsdumpTags = "$upload_id,$node_id"
 
 	// RollupInterval is the default rollup interval in seconds.
 	// Matches CockroachDB scrape interval (both Cloud and self-hosted tsdump).
 	RollupInterval = 10
 )
+
+// TsdumpMode indicates whether to generate queries for tsdump/self-hosted format.
+var TsdumpMode bool
+
+// GetMetricPrefix returns the appropriate metric prefix based on the mode.
+func GetMetricPrefix() string {
+	if TsdumpMode {
+		return TsdumpMetricPrefix
+	}
+	return MetricPrefix
+}
+
+// GetDefaultTags returns the appropriate tags based on the mode.
+func GetDefaultTags() string {
+	if TsdumpMode {
+		return TsdumpTags
+	}
+	return DefaultTags
+}
 
 // MetricType represents the type of a metric.
 type MetricType string
@@ -170,6 +195,12 @@ type WidgetLayout struct {
 
 // DefaultTemplateVariables returns the default template variables for a dashboard.
 func DefaultTemplateVariables() []TemplateVariable {
+	if TsdumpMode {
+		return []TemplateVariable{
+			{Name: "upload_id", Prefix: "upload_id", AvailableValues: []string{}, Default: "*"},
+			{Name: "node_id", Prefix: "node_id", AvailableValues: []string{}, Default: "*"},
+		}
+	}
 	return []TemplateVariable{
 		{Name: "cluster", Prefix: "cluster", AvailableValues: []string{}, Default: "*"},
 		{Name: "node_id", Prefix: "node_id", AvailableValues: []string{}, Default: "*"},
@@ -245,8 +276,14 @@ func LookupMetricUnit(metricName string) string {
 	if metricUnitLookup == nil {
 		return ""
 	}
-	// Strip the cockroachdb. prefix if present
-	name := strings.TrimPrefix(metricName, MetricPrefix+".")
+	// Strip the metric prefix if present (either cockroachdb. or crdb.tsdump.)
+	name := metricName
+	name = strings.TrimPrefix(name, MetricPrefix+".")
+	name = strings.TrimPrefix(name, TsdumpMetricPrefix+".")
+	// Also strip percentile suffix for tsdump metrics (e.g., _p99)
+	for _, suffix := range []string{"_p50", "_p75", "_p90", "_p99", "_p999", "_p9999"} {
+		name = strings.TrimSuffix(name, suffix)
+	}
 	if unit, ok := metricUnitLookup[name]; ok {
 		return ConvertUnitToDatadog(unit)
 	}
@@ -261,7 +298,7 @@ func LookupMetricUnit(metricName string) string {
 func ConvertMetricName(name string) string {
 	// Replace hyphens with underscores (for names like sys.cpu.combined.percent-normalized)
 	ddMetric := strings.ReplaceAll(name, "-", "_")
-	return fmt.Sprintf("%s.%s", MetricPrefix, ddMetric)
+	return fmt.Sprintf("%s.%s", GetMetricPrefix(), ddMetric)
 }
 
 // ConvertExportedMetricName converts a Prometheus/exported metric name to Datadog format.
@@ -298,7 +335,7 @@ func ConvertExportedMetricName(exportedName string) string {
 
 	// Fallback: convert all underscores to dots (less accurate but works)
 	ddMetric := strings.ReplaceAll(baseName, "_", ".")
-	result := fmt.Sprintf("%s.%s", MetricPrefix, ddMetric)
+	result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddMetric)
 	if suffix != "" {
 		result += "." + suffix
 	}
@@ -366,24 +403,40 @@ func BuildHistogramQuery(metricBase, labels string, percentilePrefix string, gro
 	// Remove .bucket suffix if present
 	metricBase = strings.TrimSuffix(metricBase, ".bucket")
 
+	if TsdumpMode {
+		// For tsdump/self-hosted: percentiles are metric suffixes
+		// Format: avg:metric_p90{labels} by {group}.rollup(max, 10)
+		// Convert percentile prefix to suffix (e.g., "p99" -> "_p99", "p99.9" -> "_p999")
+		percentileSuffix := "_" + strings.ReplaceAll(percentilePrefix, ".", "")
+		return fmt.Sprintf("avg:%s%s{%s} by {%s}.rollup(max, %d)",
+			metricBase, percentileSuffix, labels, groupBy, RollupInterval)
+	}
+
 	// Format: p99:metric{labels} by {group}.rollup(max, 10)
 	// This works for Datadog distribution metrics with percentiles enabled.
-	// Note: If you get "percentiles not enabled" error, the metric may need
-	// to be queried as max:metric_p99{labels} instead (for tsdump metrics).
 	return fmt.Sprintf("%s:%s{%s} by {%s}.rollup(max, %d)",
 		percentilePrefix, metricBase, labels, groupBy, RollupInterval)
 }
 
+// TsdumpPercentiles are the percentile suffixes to generate for tsdump histograms.
+var TsdumpPercentiles = []string{"p50", "p90", "p99"}
+
 // BuildQuery builds a Datadog query based on metric type.
+// For tsdump histograms, this returns only the p90 query. Use BuildQueries for all percentiles.
 func BuildQuery(metric MetricDef) string {
 	ddName := ConvertMetricName(metric.Name)
-	tags := DefaultTags
+	tags := GetDefaultTags()
 
 	switch metric.Type {
 	case MetricTypeCounter:
 		return BuildCounterQuery(ddName, tags, "sum", "node_id")
 	case MetricTypeHistogram:
-		// For histograms, check the Aggregation hint from the YAML.
+		// In tsdump mode, histograms always use suffix format (metric_p90)
+		// regardless of the aggregation hint.
+		if TsdumpMode {
+			return BuildHistogramQuery(ddName, tags, "p90", "node_id")
+		}
+		// For non-tsdump (Cloud) mode:
 		// If AVG is specified, the metric may not support p99: percentile queries
 		// (not configured as a Datadog Distribution metric), so use avg: instead.
 		if strings.ToUpper(metric.Aggregation) == "AVG" {
@@ -392,6 +445,35 @@ func BuildQuery(metric MetricDef) string {
 		return BuildHistogramQuery(ddName, tags, "p99", "node_id")
 	default:
 		return BuildGaugeQuery(ddName, tags, "avg", "node_id")
+	}
+}
+
+// BuildQueries builds all Datadog queries for a metric.
+// For tsdump histograms, this returns queries for p50, p90, and p99.
+// For other metrics, returns a single query.
+func BuildQueries(metric MetricDef) []string {
+	ddName := ConvertMetricName(metric.Name)
+	tags := GetDefaultTags()
+
+	switch metric.Type {
+	case MetricTypeCounter:
+		return []string{BuildCounterQuery(ddName, tags, "sum", "node_id")}
+	case MetricTypeHistogram:
+		if TsdumpMode {
+			// Return queries for all percentiles
+			queries := make([]string, len(TsdumpPercentiles))
+			for i, p := range TsdumpPercentiles {
+				queries[i] = BuildHistogramQuery(ddName, tags, p, "node_id")
+			}
+			return queries
+		}
+		// For non-tsdump mode
+		if strings.ToUpper(metric.Aggregation) == "AVG" {
+			return []string{BuildGaugeQuery(ddName, tags, "avg", "node_id")}
+		}
+		return []string{BuildHistogramQuery(ddName, tags, "p99", "node_id")}
+	default:
+		return []string{BuildGaugeQuery(ddName, tags, "avg", "node_id")}
 	}
 }
 
@@ -438,25 +520,38 @@ func IsCounterMetric(metricName string) bool {
 
 // CreateTimeseriesWidget creates a timeseries widget for a metric.
 func CreateTimeseriesWidget(metric MetricDef, index int) Widget {
-	query := BuildQuery(metric)
+	queries := BuildQueries(metric)
 
 	// Create a readable title from the metric name
 	title := strings.ReplaceAll(metric.Name, ".", " ")
 	title = strings.ReplaceAll(title, "_", " ")
 	title = strings.Title(title)
 
-	// Create formula with unit if available
-	formula := Formula{Formula: fmt.Sprintf("q%d", index)}
-	if metric.Unit != "" {
-		ddUnit := ConvertUnitToDatadog(metric.Unit)
-		if ddUnit != "" {
-			formula.NumberFormat = &NumberFormat{
-				Unit: &UnitFormat{
-					Type:     "canonical_unit",
-					UnitName: ddUnit,
-				},
+	// Build query and formula arrays
+	var widgetQueries []WidgetQuery
+	var formulas []Formula
+
+	for i, q := range queries {
+		queryName := fmt.Sprintf("q%d_%d", index, i)
+		widgetQueries = append(widgetQueries, WidgetQuery{
+			DataSource: "metrics",
+			Name:       queryName,
+			Query:      q,
+		})
+
+		formula := Formula{Formula: queryName}
+		if metric.Unit != "" {
+			ddUnit := ConvertUnitToDatadog(metric.Unit)
+			if ddUnit != "" {
+				formula.NumberFormat = &NumberFormat{
+					Unit: &UnitFormat{
+						Type:     "canonical_unit",
+						UnitName: ddUnit,
+					},
+				}
 			}
 		}
+		formulas = append(formulas, formula)
 	}
 
 	return Widget{
@@ -467,15 +562,9 @@ func CreateTimeseriesWidget(metric MetricDef, index int) Widget {
 			Requests: []WidgetRequest{
 				{
 					ResponseFormat: "timeseries",
-					Queries: []WidgetQuery{
-						{
-							DataSource: "metrics",
-							Name:       fmt.Sprintf("q%d", index),
-							Query:      query,
-						},
-					},
-					Formulas:    []Formula{formula},
-					DisplayType: "line",
+					Queries:        widgetQueries,
+					Formulas:       formulas,
+					DisplayType:    "line",
 				},
 			},
 		},

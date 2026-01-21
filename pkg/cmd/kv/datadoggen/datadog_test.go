@@ -434,8 +434,8 @@ func TestCreateTimeseriesWidget(t *testing.T) {
 	if req.Queries[0].DataSource != "metrics" {
 		t.Errorf("Query data_source = %q, want %q", req.Queries[0].DataSource, "metrics")
 	}
-	if req.Queries[0].Name != "q0" {
-		t.Errorf("Query name = %q, want %q", req.Queries[0].Name, "q0")
+	if req.Queries[0].Name != "q0_0" {
+		t.Errorf("Query name = %q, want %q", req.Queries[0].Name, "q0_0")
 	}
 }
 
@@ -870,4 +870,142 @@ func TestConvertExportedMetricName(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTsdumpMode tests query generation in tsdump (self-hosted) mode.
+func TestTsdumpMode(t *testing.T) {
+	// Save original state and restore after test
+	originalMode := TsdumpMode
+	defer func() { TsdumpMode = originalMode }()
+
+	t.Run("GetMetricPrefix", func(t *testing.T) {
+		TsdumpMode = false
+		if got := GetMetricPrefix(); got != "cockroachdb" {
+			t.Errorf("GetMetricPrefix() in normal mode = %q, want %q", got, "cockroachdb")
+		}
+
+		TsdumpMode = true
+		if got := GetMetricPrefix(); got != "crdb.tsdump" {
+			t.Errorf("GetMetricPrefix() in tsdump mode = %q, want %q", got, "crdb.tsdump")
+		}
+	})
+
+	t.Run("GetDefaultTags", func(t *testing.T) {
+		TsdumpMode = false
+		if got := GetDefaultTags(); got != "$cluster,$node_id,$store" {
+			t.Errorf("GetDefaultTags() in normal mode = %q, want %q", got, "$cluster,$node_id,$store")
+		}
+
+		TsdumpMode = true
+		if got := GetDefaultTags(); got != "$upload_id,$node_id" {
+			t.Errorf("GetDefaultTags() in tsdump mode = %q, want %q", got, "$upload_id,$node_id")
+		}
+	})
+
+	t.Run("ConvertMetricName_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		tests := []struct {
+			input    string
+			expected string
+		}{
+			{"sql.service.latency", "crdb.tsdump.sql.service.latency"},
+			{"sys.cpu.combined.percent-normalized", "crdb.tsdump.sys.cpu.combined.percent_normalized"},
+			{"sql.txns.open", "crdb.tsdump.sql.txns.open"},
+			{"ranges.decommissioning", "crdb.tsdump.ranges.decommissioning"},
+		}
+
+		for _, tt := range tests {
+			result := ConvertMetricName(tt.input)
+			if result != tt.expected {
+				t.Errorf("ConvertMetricName(%q) in tsdump mode = %q, want %q", tt.input, result, tt.expected)
+			}
+		}
+	})
+
+	t.Run("BuildHistogramQuery_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		// In tsdump mode, histograms use suffix format: avg:metric_p90{tags}
+		result := BuildHistogramQuery("crdb.tsdump.sql.txn.latency", "$upload_id,$node_id", "p90", "node_id")
+		expected := "avg:crdb.tsdump.sql.txn.latency_p90{$upload_id,$node_id} by {node_id}.rollup(max, 10)"
+		if result != expected {
+			t.Errorf("BuildHistogramQuery() in tsdump mode = %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("BuildQuery_histogram_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		metric := MetricDef{
+			Name: "sql.txn.latency",
+			Type: MetricTypeHistogram,
+		}
+		result := BuildQuery(metric)
+		// BuildQuery returns p90 for tsdump histograms (single query)
+		expected := "avg:crdb.tsdump.sql.txn.latency_p90{$upload_id,$node_id} by {node_id}.rollup(max, 10)"
+		if result != expected {
+			t.Errorf("BuildQuery() histogram in tsdump mode = %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("BuildQueries_histogram_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		metric := MetricDef{
+			Name: "sql.txn.latency",
+			Type: MetricTypeHistogram,
+		}
+		results := BuildQueries(metric)
+		// BuildQueries returns p50, p90, p99 for tsdump histograms
+		if len(results) != 3 {
+			t.Errorf("BuildQueries() histogram in tsdump mode returned %d queries, want 3", len(results))
+		}
+		expectedQueries := []string{
+			"avg:crdb.tsdump.sql.txn.latency_p50{$upload_id,$node_id} by {node_id}.rollup(max, 10)",
+			"avg:crdb.tsdump.sql.txn.latency_p90{$upload_id,$node_id} by {node_id}.rollup(max, 10)",
+			"avg:crdb.tsdump.sql.txn.latency_p99{$upload_id,$node_id} by {node_id}.rollup(max, 10)",
+		}
+		for i, expected := range expectedQueries {
+			if results[i] != expected {
+				t.Errorf("BuildQueries()[%d] in tsdump mode = %q, want %q", i, results[i], expected)
+			}
+		}
+	})
+
+	t.Run("BuildQuery_gauge_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		metric := MetricDef{
+			Name: "sql.txns.open",
+			Type: MetricTypeGauge,
+		}
+		result := BuildQuery(metric)
+		expected := "avg:crdb.tsdump.sql.txns.open{$upload_id,$node_id} by {node_id}.rollup(avg, 10)"
+		if result != expected {
+			t.Errorf("BuildQuery() gauge in tsdump mode = %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("BuildQuery_counter_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		metric := MetricDef{
+			Name: "sql.statements.count",
+			Type: MetricTypeCounter,
+		}
+		result := BuildQuery(metric)
+		expected := "sum:crdb.tsdump.sql.statements.count{$upload_id,$node_id} by {node_id}.as_rate().rollup(max, 10)"
+		if result != expected {
+			t.Errorf("BuildQuery() counter in tsdump mode = %q, want %q", result, expected)
+		}
+	})
+
+	t.Run("DefaultTemplateVariables_tsdump", func(t *testing.T) {
+		TsdumpMode = true
+		vars := DefaultTemplateVariables()
+		if len(vars) != 2 {
+			t.Errorf("DefaultTemplateVariables() in tsdump mode has %d vars, want 2", len(vars))
+		}
+		if vars[0].Name != "upload_id" {
+			t.Errorf("First template var in tsdump mode = %q, want %q", vars[0].Name, "upload_id")
+		}
+		if vars[1].Name != "node_id" {
+			t.Errorf("Second template var in tsdump mode = %q, want %q", vars[1].Name, "node_id")
+		}
+	})
 }
