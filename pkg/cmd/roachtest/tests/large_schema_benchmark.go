@@ -422,6 +422,8 @@ func runLargeSchemaIntrospectionBenchmark(
 		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --data-loader=none",
 			populateFileName,
 		),
+		// Use all CRDB nodes for init to distribute table creation load.
+		InitNodes: c.CRDBNodes(),
 		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Cluster is already started, this is a no-op.
 		},

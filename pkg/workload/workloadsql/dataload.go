@@ -32,7 +32,11 @@ type InsertsDataLoader struct {
 // SchemaOnlyDataLoader is an InitialDataLoader implementation that only creates
 // tables without loading any data. This is useful for benchmarks that only need
 // the schema structure without any row data.
-type SchemaOnlyDataLoader struct{}
+type SchemaOnlyDataLoader struct {
+	// URLs is the list of node URLs to distribute table creation across.
+	// If empty, the provided db connection is used directly.
+	URLs []string
+}
 
 // InitialDataLoad implements the InitialDataLoader interface.
 func (l SchemaOnlyDataLoader) InitialDataLoad(
@@ -53,6 +57,30 @@ func (l SchemaOnlyDataLoader) InitialDataLoad(
 	log.Dev.Infof(ctx, `creating %d tables (schema only, no data)`, len(tables))
 	startTime := timeutil.Now()
 
+	// Create connections to each node if URLs are provided.
+	var dbs []*gosql.DB
+	if len(l.URLs) > 1 {
+		for _, url := range l.URLs {
+			nodeDB, err := gosql.Open("cockroach", url)
+			if err != nil {
+				// Close any already-opened connections before returning.
+				for _, openDB := range dbs {
+					_ = openDB.Close()
+				}
+				return 0, errors.Wrapf(err, "opening connection to %s", url)
+			}
+			dbs = append(dbs, nodeDB)
+		}
+		defer func() {
+			for _, nodeDB := range dbs {
+				_ = nodeDB.Close()
+			}
+		}()
+		log.Dev.Infof(ctx, `distributing table creation across %d nodes`, len(dbs))
+	} else {
+		dbs = []*gosql.DB{db}
+	}
+
 	const maxTableBatchSize = 5000
 	const backoffBetweenBatches = 30 * time.Second
 	currentTable := 0
@@ -65,7 +93,10 @@ func (l SchemaOnlyDataLoader) InitialDataLoad(
 		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
 		nextBatch := tables[currentTable:batchEnd]
 		batchNum++
-		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+
+		// Distribute batches across nodes round-robin.
+		nodeDB := dbs[(batchNum-1)%len(dbs)]
+		if err := crdb.ExecuteTx(ctx, nodeDB, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
 			// Run the operations in a single txn so they complete more quickly.
 			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
 				return err
@@ -95,8 +126,8 @@ func (l SchemaOnlyDataLoader) InitialDataLoad(
 			return 0, err
 		}
 		currentTable = batchEnd
-		log.Dev.Infof(ctx, `created %d/%d tables (batch %d, %d tables in %s); waiting %s before next batch`,
-			currentTable, len(tables), batchNum, len(nextBatch), timeutil.Since(batchStart).Round(time.Millisecond), backoffBetweenBatches)
+		log.Dev.Infof(ctx, `created %d/%d tables (batch %d on node %d, %d tables in %s); waiting %s before next batch`,
+			currentTable, len(tables), batchNum, (batchNum-1)%len(dbs)+1, len(nextBatch), timeutil.Since(batchStart).Round(time.Millisecond), backoffBetweenBatches)
 
 		// Add backoff between batches to reduce contention on system tables.
 		if currentTable < len(tables) {

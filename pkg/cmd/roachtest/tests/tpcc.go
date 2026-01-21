@@ -247,6 +247,10 @@ type tpccOptions struct {
 	// DisableHistogram will determine if the histogram argument should
 	// be passed in.
 	DisableHistogram bool
+	// InitNodes specifies which nodes to use for the init step. If nil,
+	// defaults to node 1 only. Set this to distribute table creation
+	// across multiple nodes for large schema workloads.
+	InitNodes option.NodeListOption
 }
 
 func (t tpccOptions) getWorkloadCmd() string {
@@ -348,11 +352,15 @@ func setupTPCC(
 		case usingInit:
 			l.Printf("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
+			initNodes := opts.InitNodes
+			if len(initNodes) == 0 {
+				initNodes = c.Node(1)
+			}
 			cmd := roachtestutil.NewCommand("%s workload init %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
 				Arg("%s", extraArgs).
-				Arg("%s", "{pgurl:1}")
+				Arg("{pgurl%s}", initNodes)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 		default:

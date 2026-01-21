@@ -337,11 +337,11 @@ func runInit(gen workload.Generator, urls []string, dbName string) error {
 
 	startPProfEndPoint(ctx)
 	maybeLogRandomSeed(ctx, gen)
-	return runInitImpl(ctx, gen, initDB, dbName)
+	return runInitImpl(ctx, gen, initDB, dbName, urls)
 }
 
 func runInitImpl(
-	ctx context.Context, gen workload.Generator, initDB *gosql.DB, dbName string,
+	ctx context.Context, gen workload.Generator, initDB *gosql.DB, dbName string, urls []string,
 ) error {
 	if *drop {
 		if _, err := initDB.ExecContext(ctx, `DROP DATABASE IF EXISTS `+dbName); err != nil {
@@ -374,7 +374,7 @@ func runInitImpl(
 	case `import`, `imports`:
 		l = workload.ImportDataLoader
 	case `none`:
-		l = workloadsql.SchemaOnlyDataLoader{}
+		l = workloadsql.SchemaOnlyDataLoader{URLs: urls}
 	default:
 		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
 	}
@@ -422,7 +422,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		log.Dev.Info(ctx, `DEPRECATION: `+
 			`the --init flag on "workload run" will no longer be supported after 19.2`)
 		for {
-			err = runInitImpl(ctx, gen, initDB, dbName)
+			err = runInitImpl(ctx, gen, initDB, dbName, urls)
 			if err == nil {
 				break
 			}
