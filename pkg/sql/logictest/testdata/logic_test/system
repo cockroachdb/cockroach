@@ -16,7 +16,7 @@ public  descriptor_id_seq    sequence  node  NULL
 public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-25.4
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----

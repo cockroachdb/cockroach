@@ -1138,7 +1138,7 @@ statement ok
 ROLLBACK;
 
 # The declarative schema changer allows this.
-skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
+skipif config local-legacy-schema-changer local-mixed-25.4
 statement ok
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;

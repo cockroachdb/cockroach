@@ -1283,7 +1283,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         system                   NULL                    NULL
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
-skipif config local-mixed-25.4 local-mixed-26.1
+skipif config local-mixed-25.4
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
