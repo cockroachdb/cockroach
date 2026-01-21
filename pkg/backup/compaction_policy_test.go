@@ -59,15 +59,32 @@ func TestBackupCompactionHeuristic(t *testing.T) {
 			expected:   [2]int{0, 3},
 		},
 	}
+	st := cluster.MakeTestingClusterSettings()
+	sizesToBackupChain := func(sizes []int64) []backuppb.BackupManifest {
+		factory := newFakeBackupChainFactory(t, nil, 1 /* initial key space */)
+		for _, size := range sizes {
+			factory.AddWorkload(
+				newWorkloadCfg(randomWorkload{updateProbability: 0.5}).Backups(1).Keys(int(size)),
+			)
+		}
+		return factory.CreateBackupChain().toBackupManifests()
+	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			start, end := minDeltaWindow(tc.sizes, tc.windowSize)
-			require.Equal(t, tc.expected[0], start)
-			require.Equal(t, tc.expected[1], end)
+			require.Equal(t, tc.expected, [2]int{start, end})
+
+			// Ensure we get the same results when calling the policy function.
+			backupCompactionWindow.Override(ctx, &st.SV, int64(tc.windowSize))
+			execCfg := &sql.ExecutorConfig{Settings: st}
+			chain := sizesToBackupChain(tc.sizes)
+			policyStart, policyEnd, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+			require.NoError(t, err)
+			// Since the chain includes the full backup, the heuristic indices are offset by 1.
+			require.Equal(t, [2]int{tc.expected[0] + 1, tc.expected[1] + 1}, [2]int{policyStart, policyEnd})
 		})
 	}
 
-	st := cluster.MakeTestingClusterSettings()
 	t.Run("too large window", func(t *testing.T) {
 		var windowSize int64 = 5
 		chain := make([]backuppb.BackupManifest, 5)
@@ -274,7 +291,7 @@ func (w randomWorkload) CreateBackup(
 	}
 
 	// Store keys that can be updated to avoid duplicate updates.
-	updateableKeys := allKeys[:]
+	updateableKeys := slices.Clone(allKeys)
 
 	for range numKeys {
 		if rng.Float64() < w.updateProbability && len(updateableKeys) > 0 {
