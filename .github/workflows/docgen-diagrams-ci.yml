@@ -315,7 +315,7 @@ jobs:
             }
           }
           main().catch(e => { console.error(e); process.exit(1); });
-          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png 5
+          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png 99999
 
           echo "::endgroup::"
 
@@ -388,7 +388,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pr_url: ${{ steps.create-pr.outputs.pull-request-url }}
-      sync_branch: diagram-sync/${{ github.sha }}
+      preview_branch: ${{ steps.push-previews.outputs.preview_branch }}
       png_files: ${{ steps.sync-files.outputs.png_files }}
     steps:
       - name: Download diagram artifacts
@@ -411,7 +411,6 @@ jobs:
           # Create directories if they don't exist
           mkdir -p generated-diagrams/bnf
           mkdir -p generated-diagrams/grammar_svg
-          mkdir -p generated-diagrams/grammar_png
 
           # Copy BNF files
           cp artifacts/*.bnf generated-diagrams/bnf/ 2>/dev/null || echo "No BNF files to copy"
@@ -419,23 +418,19 @@ jobs:
           # Copy HTML/SVG files
           cp artifacts/*.html generated-diagrams/grammar_svg/ 2>/dev/null || echo "No HTML files to copy"
 
-          # Copy PNG preview files
-          cp artifacts/png/*.png generated-diagrams/grammar_png/ 2>/dev/null || echo "No PNG files to copy"
+          # Note: manifest.json and PNGs are NOT synced to generated-diagrams
+          # PNGs are pushed to a separate preview branch for PR comment images only
 
-          # Copy manifest
-          cp artifacts/manifest.json generated-diagrams/ 2>/dev/null || echo "No manifest to copy"
-
-          # List PNG files for the comment job
-          PNG_FILES=$(ls -1 generated-diagrams/grammar_png/*.png 2>/dev/null | xargs -I {} basename {} | head -5 || echo "")
+          # List PNG files from artifacts for the comment job
+          PNG_FILES=$(ls -1 artifacts/png/*.png 2>/dev/null | xargs -I {} basename {} || echo "")
           echo "png_files<<EOF" >> $GITHUB_OUTPUT
           echo "$PNG_FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # Show what was synced
+          # Show what was synced (only BNF and HTML)
           echo "Synced files:"
           ls -la generated-diagrams/bnf/ 2>/dev/null | head -10 || true
           ls -la generated-diagrams/grammar_svg/ 2>/dev/null | head -10 || true
-          ls -la generated-diagrams/grammar_png/ 2>/dev/null | head -10 || true
 
       - name: Create PR in generated-diagrams
         id: create-pr
@@ -472,6 +467,34 @@ jobs:
             diagram-sync
             automated
 
+      - name: Push PNG previews to temporary branch
+        id: push-previews
+        run: |
+          # Push PNGs to a separate preview branch for PR comment images
+          # This branch is temporary and NOT part of the sync PR
+          cd generated-diagrams
+
+          PREVIEW_BRANCH="preview/${{ github.sha }}"
+
+          # Create preview branch from current state
+          git checkout -b "$PREVIEW_BRANCH"
+
+          # Create directory and copy PNGs
+          mkdir -p grammar_png
+          cp ../artifacts/png/*.png grammar_png/ 2>/dev/null || echo "No PNG files to copy"
+
+          # Check if there are PNGs to push
+          if ls grammar_png/*.png 1> /dev/null 2>&1; then
+            git add grammar_png/
+            git commit -m "temp: add PNG previews for PR comment (auto-cleanup)"
+            git push origin "$PREVIEW_BRANCH"
+            echo "preview_branch=$PREVIEW_BRANCH" >> $GITHUB_OUTPUT
+            echo "::notice::Pushed PNG previews to $PREVIEW_BRANCH"
+          else
+            echo "preview_branch=" >> $GITHUB_OUTPUT
+            echo "No PNGs to push for preview"
+          fi
+
       - name: Report PR creation result
         run: |
           if [[ -n "${{ steps.create-pr.outputs.pull-request-url }}" ]]; then
@@ -494,7 +517,7 @@ jobs:
             const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
             const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
             const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
-            const syncBranch = '${{ needs.sync-to-generated-diagrams.outputs.sync_branch }}';
+            const previewBranch = '${{ needs.sync-to-generated-diagrams.outputs.preview_branch }}';
             const pngFiles = `${{ needs.sync-to-generated-diagrams.outputs.png_files }}`;
             const targetRepo = '${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}';
 
@@ -516,19 +539,20 @@ jobs:
               }
 
               // Add PNG diagram previews if available
-              if (pngFiles && pngFiles.trim() !== '' && syncBranch) {
+              // PNGs are on a separate preview branch (not part of the sync PR)
+              if (pngFiles && pngFiles.trim() !== '' && previewBranch) {
                 body += '### Diagram Previews\n\n';
 
                 const files = pngFiles.trim().split('\n').filter(f => f.length > 0);
                 for (const file of files) {
                   const diagramName = file.replace('.png', '');
-                  const imageUrl = `https://raw.githubusercontent.com/${targetRepo}/${syncBranch}/grammar_png/${file}`;
+                  const imageUrl = `https://raw.githubusercontent.com/${targetRepo}/${previewBranch}/grammar_png/${file}`;
                   body += `**${diagramName}**\n\n`;
                   body += `![${diagramName}](${imageUrl})\n\n`;
                 }
 
                 if (files.length > 0) {
-                  body += `*Showing ${files.length} diagram preview(s).*\n\n`;
+                  body += `*Showing ${files.length} diagram preview(s). (Preview images are temporary.)*\n\n`;
                 }
               } else {
                 // Fallback to listing changed files
