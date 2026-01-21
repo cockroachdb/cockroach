@@ -6,7 +6,7 @@
 import classNames from "classnames";
 import React from "react";
 
-import "./outsideEventHandler.styl";
+import "./outsideEventHandler.scss";
 
 export interface OutsideEventHandlerProps {
   onOutsideClick: () => void;

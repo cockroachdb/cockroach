@@ -20,7 +20,7 @@ import { cockroach } from "src/js/protos";
 import { getHotRanges, getNodesUI, queryTimeSeries } from "src/util/api";
 
 import { HexagonHeatmap } from "./components/hexagonHeatmap";
-import styles from "./explorer.module.styl";
+import styles from "./explorer.module.scss";
 
 type MetricType = "cpu" | "writeBytes";
 

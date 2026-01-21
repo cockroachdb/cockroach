@@ -1,0 +1,16 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "styl/base/palette.scss";
+
+.debug-annotation__label {
+  color: $body-color;
+  font-size: 14px;
+}
+
+.debug-annotation__value {
+  color: black;
+  font-size: 14px;
+}

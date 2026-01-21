@@ -1,0 +1,22 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/components/core/index.scss";
+
+.breadcrumbs {
+  font-weight: $font-weight--bold;
+  &__icon {
+    padding-right: $spacing-xx-small;
+    position: relative;
+    top: 2px;
+  }
+  &__link {
+    @extend %text--body;
+    color: $colors--link;
+  }
+  &__separator {
+    color: $colors--link;
+  }
+}

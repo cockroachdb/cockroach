@@ -25,7 +25,7 @@ import {
   Panel,
 } from "src/views/shared/components/panelSection";
 
-import "./debug.styl";
+import "./debug.scss";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 

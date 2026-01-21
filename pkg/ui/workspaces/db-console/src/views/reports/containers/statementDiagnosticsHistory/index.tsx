@@ -37,7 +37,7 @@ import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
 
-import "./statementDiagnosticsHistoryView.styl";
+import "./statementDiagnosticsHistoryView.scss";
 
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";

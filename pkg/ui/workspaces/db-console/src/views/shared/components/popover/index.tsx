@@ -8,7 +8,7 @@ import React from "react";
 
 import { OutsideEventHandler } from "src/components/outsideEventHandler";
 
-import "./popover.styl";
+import "./popover.scss";
 
 export interface PopoverProps {
   content: JSX.Element;
