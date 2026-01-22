@@ -58,7 +58,6 @@ var (
 
 // maybeStartCompactionJob will initiate a compaction job off of a triggering
 // incremental job if the backup chain length exceeds the threshold.
-// backupStmt should be the original backup statement that triggered the job.
 // It is the responsibility of the caller to ensure that the backup details'
 // destination contains a resolved subdir.
 func maybeStartCompactionJob(
@@ -116,8 +115,13 @@ func maybeStartCompactionJob(
 	}
 
 	chain, _, _, _, err := getBackupChain(
-		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
-		triggerJob.EndTime, &kmsEnv,
+		ctx,
+		execCfg,
+		user,
+		triggerJob.Destination,
+		triggerJob.EncryptionOptions,
+		hlc.Timestamp{}, // Use the whole chain when considering what to compact.
+		&kmsEnv,
 	)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get backup chain")
@@ -480,7 +484,7 @@ func (b *backupResumer) processCompactionCompletion(
 	if details.ScheduleID == 0 {
 		return nil
 	}
-	return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		scheduledJob := jobs.ScheduledJobTxn(txn)
 		backupSchedule, args, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, scheduledJob, details.ScheduleID,
@@ -497,7 +501,31 @@ func (b *backupResumer) processCompactionCompletion(
 			backupSchedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 		)
 		return scheduledJob.Update(ctx, backupSchedule)
-	})
+	}); err != nil {
+		return errors.Wrapf(err, "failed to clear compaction job ID from schedule %d", details.ScheduleID)
+	}
+
+	if err := b.maybeTriggerFollowupCompaction(ctx, execCtx, details); err != nil {
+		log.Dev.Warningf(ctx, "failed to trigger follow-up compaction job: %+v", err)
+	}
+	return nil
+}
+
+func (b *backupResumer) maybeTriggerFollowupCompaction(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.BackupDetails,
+) error {
+	jobID, err := maybeStartCompactionJob(
+		ctx, execCtx.ExecCfg(), execCtx.User(), details,
+	)
+	if err != nil {
+		return err
+	}
+	if jobID != 0 {
+		log.Dev.Infof(
+			ctx, "compaction job %d completed, triggering follow-up compaction job %d", b.job.ID(), jobID,
+		)
+	}
+	return nil
 }
 
 type compactionChain struct {
