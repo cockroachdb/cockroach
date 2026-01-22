@@ -1,0 +1,62 @@
+# This test verifies that the allocator can satisfy zone constraints when they
+# are being violates and fixing the constraints would make disk utilization
+# even more imbalanced. The test sets up a 7-node cluster across 3 regions
+# (a, b, c) with 2, 2, and 3 nodes respectively. The span config requires 2
+# replicas in region a, with lease preferences for region a. The test creates 12
+# ranges with 3 replicas each with a replica on s1, s2 (region a), and equally
+# balanced between s3 & s4 (region b). 4 additional ranges are created with 3
+# replicas on s5, s6, and s7 (region c). Stores s1 and s2 have high disk
+# utilization vs the rest.
+#
+# Expected outcome: The allocator should move replicas for the 4 ranges to s1
+# and s2 to satisfy the zone constraints. The other replicas might be balanced
+# between the stores in region b and c.
+gen_cluster nodes=7 region=(a,b,c) nodes_per_region=(2,2,3) store_byte_capacity_gib=10
+----
+
+gen_ranges ranges=6 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=0 max_key=10000
+{s1,s2,s3}:1
+----
+{s1:*,s2,s3}:1
+
+gen_ranges ranges=6 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=10000 max_key=20000
+{s1,s2,s4}:1
+----
+{s1:*,s2,s4}:1
+
+gen_ranges ranges=4 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=20000 max_key=30000
+{s5,s6,s7}:1
+----
+{s5:*,s6,s7}:1
+
+set_span_config
+[0,9999999999): num_replicas=3 num_voters=3 constraints={'+region=a':2} lease_preferences=[['+region=a']]
+----
+
+setting split_queue_enabled=false
+----
+
+eval duration=60m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
+----
+disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.24, s6=0.24, s7=0.24] (stddev=0.20, mean=0.42, sum=3)
+disk_fraction_used#1: last:  [s1=0.85, s2=0.85, s3=0.24, s4=0.24, s5=0.24, s6=0.24, s7=0.24] (stddev=0.28, mean=0.42, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=1896%, s2=1669%, s3=563%, s4=616%, s5=667%, s6=1067%, s7=453%]  (sum=6931%)
+leases#1: first: [s1=12, s2=0, s3=0, s4=0, s5=4, s6=0, s7=0] (stddev=4.20, mean=2.29, sum=16)
+leases#1: last:  [s1=8, s2=7, s3=0, s4=0, s5=0, s6=1, s7=0] (stddev=3.33, mean=2.29, sum=16)
+leases#1: thrash_pct: [s1=806%, s2=793%, s3=201%, s4=201%, s5=206%, s6=462%, s7=125%]  (sum=2794%)
+replicas#1: first: [s1=12, s2=12, s3=6, s4=6, s5=4, s6=4, s7=4] (stddev=3.36, mean=6.86, sum=48)
+replicas#1: last:  [s1=14, s2=14, s3=4, s4=4, s5=4, s6=4, s7=4] (stddev=4.52, mean=6.86, sum=48)
+replicas#1: thrash_pct: [s1=1896%, s2=1669%, s3=563%, s4=616%, s5=667%, s6=1067%, s7=453%]  (sum=6931%)
+artifacts[sma-count]: 793f139e8826ddcc
+==========================
+disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.24, s6=0.24, s7=0.24] (stddev=0.20, mean=0.42, sum=3)
+disk_fraction_used#1: last:  [s1=0.85, s2=0.85, s3=0.24, s4=0.24, s5=0.24, s6=0.24, s7=0.24] (stddev=0.28, mean=0.42, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=1896%, s2=1669%, s3=563%, s4=616%, s5=667%, s6=1067%, s7=453%]  (sum=6931%)
+leases#1: first: [s1=12, s2=0, s3=0, s4=0, s5=4, s6=0, s7=0] (stddev=4.20, mean=2.29, sum=16)
+leases#1: last:  [s1=8, s2=7, s3=0, s4=0, s5=0, s6=1, s7=0] (stddev=3.33, mean=2.29, sum=16)
+leases#1: thrash_pct: [s1=806%, s2=793%, s3=201%, s4=201%, s5=206%, s6=462%, s7=125%]  (sum=2794%)
+replicas#1: first: [s1=12, s2=12, s3=6, s4=6, s5=4, s6=4, s7=4] (stddev=3.36, mean=6.86, sum=48)
+replicas#1: last:  [s1=14, s2=14, s3=4, s4=4, s5=4, s6=4, s7=4] (stddev=4.52, mean=6.86, sum=48)
+replicas#1: thrash_pct: [s1=1896%, s2=1669%, s3=563%, s4=616%, s5=667%, s6=1067%, s7=453%]  (sum=6931%)
+artifacts[mma-count]: 793f139e8826ddcc
+==========================
