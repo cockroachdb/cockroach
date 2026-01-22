@@ -154,9 +154,10 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 		"from the table's indexes or copy them from the primary index. The multiple "+
 		"given will be multiplied with the number of nodes in the cluster to produce "+
 		"the number of preserved range splits. This can improve performance when "+
-		"truncating or backlling an index from a table with significant write traffic.",
+		"truncating or backfilling an index from a table with significant write traffic.",
 	4,
 	settings.WithName("sql.schema.preserved_split_count_multiple"),
+	settings.IntWithMinimum(0),
 )
 
 // truncateTable truncates the data of a table in a single transaction. It does
