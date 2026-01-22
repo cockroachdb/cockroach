@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dyncert",
+    srcs = [
+        "cert.go",
+        "doc.go",
+        "manager.go",
+        "tls_config.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/dyncert",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/severity",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "dyncert_test",
+    srcs = [
+        "cert_test.go",
+        "manager_test.go",
+        "tls_config_test.go",
+    ],
+    embed = [":dyncert"],
+    deps = [
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sys//unix",
+    ],
+)
