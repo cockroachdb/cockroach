@@ -1008,6 +1008,13 @@ func TestRepeatableReadLogic_impure(
 	runLogicTest(t, "impure")
 }
 
+func TestRepeatableReadLogic_index_backfill(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_backfill")
+}
+
 func TestRepeatableReadLogic_index_join(
 	t *testing.T,
 ) {

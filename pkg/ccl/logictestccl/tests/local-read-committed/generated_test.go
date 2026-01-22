@@ -1049,6 +1049,13 @@ func TestReadCommittedLogic_impure(
 	runLogicTest(t, "impure")
 }
 
+func TestReadCommittedLogic_index_backfill(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_backfill")
+}
+
 func TestReadCommittedLogic_index_join(
 	t *testing.T,
 ) {

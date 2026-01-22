@@ -990,6 +990,13 @@ func TestLogic_impure(
 	runLogicTest(t, "impure")
 }
 
+func TestLogic_index_backfill(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "index_backfill")
+}
+
 func TestLogic_index_join(
 	t *testing.T,
 ) {
