@@ -89,17 +89,25 @@ func (r *Retry) mustReset() {
 	r.isReset = true
 }
 
-func (r Retry) retryIn() time.Duration {
+// retryIn returns the duration to wait before the next retry attempt.
+func (r Retry) retryIn(randomizationFactor float64) time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
 		backoff = maxBackoff
 	}
 
-	var delta = r.opts.RandomizationFactor * backoff
+	var delta = randomizationFactor * backoff
 	// Get a random value from the range [backoff - delta, backoff + delta].
 	// The formula used below has a +1 because time.Duration is an int64, and the
 	// conversion floors the float64.
 	return time.Duration(backoff - delta + rand.Float64()*(2*delta+1))
+}
+
+// NextBackoff returns the average duration to wait before the next retry attempt.
+// This is different from retryIn() because it does not take into account the
+// randomization factor. Use this for logging purposes only.
+func (r *Retry) NextBackoff() time.Duration {
+	return r.retryIn(0)
 }
 
 // Next returns whether the retry loop should continue, and blocks for the
@@ -121,7 +129,7 @@ func (r *Retry) Next() bool {
 	}
 
 	// Wait before retry.
-	d := r.retryIn()
+	d := r.retryIn(r.opts.RandomizationFactor)
 	if d > 0 {
 		log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", d)
 	}
@@ -155,7 +163,7 @@ func (r *Retry) NextCh() <-chan time.Time {
 	if r.opts.MaxRetries > 0 && r.currentAttempt > r.opts.MaxRetries {
 		return nil
 	}
-	return time.After(r.retryIn())
+	return time.After(r.retryIn(r.opts.RandomizationFactor))
 }
 
 // CurrentAttempt returns the current attempt
