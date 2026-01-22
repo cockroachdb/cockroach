@@ -1067,39 +1067,95 @@ func TestFindLatestBackup(t *testing.T) {
 func TestEncodeDecodeBackupID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// We truncate to 10ms precision since that's the precision we use in the ID.
-	precision := 10 * time.Millisecond
-	fullEnd := time.Now().UTC().Truncate(precision)
+	// The following testcases will roundtrip through encoding and decoding.
+	testcases := []struct {
+		name      string
+		fullEnd   time.Time
+		backupEnd time.Time
+		id        string
+		errMsg    string
+	}{
+		{
+			name:      "full backup",
+			fullEnd:   time.Date(2026, 1, 22, 21, 10, 12, 340000000, time.UTC),
+			backupEnd: time.Date(2026, 1, 22, 21, 10, 12, 340000000, time.UTC),
+			id:        "dByL55sB",
+		},
+		{
+			name:      "incremental backup",
+			fullEnd:   time.Date(2026, 1, 22, 21, 10, 12, 340000000, time.UTC),
+			backupEnd: time.Date(2026, 1, 22, 21, 10, 45, 560000000, time.UTC),
+			id:        "OJ6L55sBAABMgg==",
+		},
+		{
+			name:      "invalid full time granularity",
+			fullEnd:   time.Date(2026, 1, 22, 21, 10, 12, 345678901, time.UTC),
+			backupEnd: time.Date(2026, 1, 22, 21, 10, 45, 560000000, time.UTC),
+			errMsg:    "end times encoded in backup ID can have a maximum granularity of",
+		},
+		{
+			name:      "invalid incremental time granularity",
+			fullEnd:   time.Date(2026, 1, 22, 21, 10, 12, 340000000, time.UTC),
+			backupEnd: time.Date(2026, 1, 22, 21, 10, 45, 567890123, time.UTC),
+			errMsg:    "end times encoded in backup ID can have a maximum granularity of",
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, err := encodeBackupID(tc.fullEnd, tc.backupEnd)
+			if tc.errMsg != "" {
+				require.ErrorContains(t, err, tc.errMsg)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.id, id)
 
-	t.Run("full backup ID", func(t *testing.T) {
-		endTime := fullEnd
-		id := encodeBackupID(fullEnd, endTime)
-		decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
-		require.NoError(t, err)
-		require.Equal(t, fullEnd, decodedFullEnd)
-		require.Equal(t, endTime, decodedEnd)
+			decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+			require.NoError(t, err)
+			require.Equal(t, tc.fullEnd, decodedFullEnd)
+			require.Equal(t, tc.backupEnd, decodedEnd)
+		})
+	}
+
+	t.Run("randomly generated IDs", func(t *testing.T) {
+		// We test against "random" IDs (current time) to cover a wide variety of
+		// timestamps and stress test the encoding.
+		// We truncate to match the precision we support.
+		precision := backupbase.BackupIndexFilenameTSGranularity
+		fullEnd := time.Now().UTC().Truncate(precision)
+
+		t.Run("full backup ID", func(t *testing.T) {
+			endTime := fullEnd
+			id, err := encodeBackupID(fullEnd, endTime)
+			require.NoError(t, err)
+			decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+			require.NoError(t, err)
+			require.Equal(t, fullEnd, decodedFullEnd)
+			require.Equal(t, endTime, decodedEnd)
+		})
+
+		t.Run("incremental backup ID", func(t *testing.T) {
+			// We test in increasing differences up to one week to stress test the
+			// XOR encoding.
+			var delta time.Duration
+			for i := 0; i < 8; i++ {
+				// This effectively adds one more random digit to the delta starting at
+				// the minimum precision.
+				delta += time.Duration(int(math.Pow10(i))*rand.Intn(10)) * precision
+				t.Run(fmt.Sprintf("delta=%s", delta), func(t *testing.T) {
+					endTime := fullEnd.Add(delta)
+					id, err := encodeBackupID(fullEnd, endTime)
+					require.NoError(t, err)
+					decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
+					require.NoError(t, err)
+					require.Equal(t, fullEnd, decodedFullEnd)
+					require.Equal(t, endTime, decodedEnd)
+				})
+			}
+		})
 	})
 
-	t.Run("incremental backup ID", func(t *testing.T) {
-		// We test in increasing differences up to one week to stress test the
-		// XOR encoding.
-		var delta time.Duration
-		for i := 0; i < 8; i++ {
-			// This effectively adds one more random digit to the delta starting at
-			// the minimum precision.
-			delta += time.Duration(int(math.Pow10(i))*rand.Intn(10)) * precision
-			t.Run(fmt.Sprintf("delta=%s", delta), func(t *testing.T) {
-				endTime := fullEnd.Add(delta)
-				id := encodeBackupID(fullEnd, endTime)
-				decodedFullEnd, decodedEnd, err := DecodeBackupID(id)
-				require.NoError(t, err)
-				require.Equal(t, fullEnd, decodedFullEnd)
-				require.Equal(t, endTime, decodedEnd)
-			})
-		}
-	})
-
-	t.Run("invalid ID", func(t *testing.T) {
+	t.Run("decoding invalid IDs", func(t *testing.T) {
 		invalidIDs := map[string]string{
 			"empty":          "",
 			"invalid base64": "#!@($*%!)",
@@ -1210,7 +1266,8 @@ func TestResolveBackupIDtoIndex(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fullEnd := intToTime(tc.endTimesToID[0]).GoTime()
 			endTime := intToTime(tc.endTimesToID[1]).GoTime()
-			id := encodeBackupID(fullEnd, endTime)
+			id, err := encodeBackupID(fullEnd, endTime)
+			require.NoError(t, err)
 
 			index, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
 			require.NoError(t, err)
@@ -1228,18 +1285,20 @@ func TestResolveBackupIDtoIndex(t *testing.T) {
 		t.Run("no matching full subdir", func(t *testing.T) {
 			fullEnd := intToTime(100).GoTime()
 			endTime := intToTime(200).GoTime()
-			id := encodeBackupID(fullEnd, endTime)
+			id, err := encodeBackupID(fullEnd, endTime)
+			require.NoError(t, err)
 
-			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			_, err = ResolveBackupIDtoIndex(ctx, externalStorage, id)
 			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
 		})
 
 		t.Run("no matching backup end time", func(t *testing.T) {
 			fullEnd := intToTime(28).GoTime()
 			endTime := intToTime(30).GoTime()
-			id := encodeBackupID(fullEnd, endTime)
+			id, err := encodeBackupID(fullEnd, endTime)
+			require.NoError(t, err)
 
-			_, err := ResolveBackupIDtoIndex(ctx, externalStorage, id)
+			_, err = ResolveBackupIDtoIndex(ctx, externalStorage, id)
 			require.ErrorContains(t, err, fmt.Sprintf("backup with ID %s not found", id))
 		})
 	})
