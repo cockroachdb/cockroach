@@ -105,6 +105,10 @@ type Context struct {
 	// DisableServerController is true if we want to avoid the server
 	// controller to instantiate tenant secondary servers.
 	DisableServerController bool
+
+	// UseDRPC indicates whether to use DRPC instead of gRPC for
+	// inter-node RPC communication in the demo cluster.
+	UseDRPC bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

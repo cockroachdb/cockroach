@@ -211,6 +211,8 @@ func runDemoInternal(
 	ctx := context.Background()
 
 	demoCtx.WorkloadGenerator = gen
+	// Copy the DRPC flag from baseCfg to demoCtx so it's available to the demo cluster.
+	demoCtx.UseDRPC = baseCfg.UseDRPC
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
 		log.Dev.Infof,
