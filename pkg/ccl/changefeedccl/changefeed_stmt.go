@@ -536,6 +536,11 @@ func coreChangefeed(
 			return ctx.Err()
 		}
 
+		if backoffDuration := r.LastBackoff(); backoffDuration > time.Minute {
+			log.Changefeed.Warningf(ctx,
+				"core changefeed retry backoff blocked for: %s", redact.Safe(backoffDuration))
+		}
+
 		if knobs != nil && knobs.BeforeDistChangefeed != nil {
 			knobs.BeforeDistChangefeed()
 		}
@@ -1831,6 +1836,10 @@ func (b *changefeedResumer) resumeWithRetries(
 	defer watcherMemMonitor.Stop(ctx)
 
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
+		if backoffDuration := r.LastBackoff(); backoffDuration > time.Minute {
+			log.Changefeed.Warningf(ctx,
+				"changefeed retry backoff blocked for: %s", redact.Safe(backoffDuration))
+		}
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {

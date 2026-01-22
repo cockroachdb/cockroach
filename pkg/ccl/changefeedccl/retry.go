@@ -50,6 +50,9 @@ func testingUseFastRetry() func() {
 type Retry struct {
 	retry.Retry
 	lastRetry time.Time
+	// lastBackoff is the time spent waiting for retry.Next() to return
+	// in the most recent Next() call.
+	lastBackoff time.Duration
 	// reset retry state after changefeed ran for that much time
 	// without errors.
 	resetRetryAfter time.Duration
@@ -66,5 +69,18 @@ func (r *Retry) Next() bool {
 	if timeutil.Since(r.lastRetry) > r.resetRetryAfter {
 		r.Reset()
 	}
+
+	start := timeutil.Now()
+	defer func() {
+		r.lastBackoff = timeutil.Since(start)
+	}()
+
 	return r.Retry.Next()
+}
+
+// LastBackoff returns the time spent waiting for r.Retry.Next()
+// to return in the most recent Next() call. It is expected that this function
+// is only called after a call to Next().
+func (r *Retry) LastBackoff() time.Duration {
+	return r.lastBackoff
 }
