@@ -35,7 +35,8 @@ function get_ip() {
 }
 
 function user_domain_suffix() {
-	gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.\-]/_/g'
+	# Trim the account name to 32 characters to respect the Linux username length limit.
+	gcloud auth list --limit 1 --filter="status:ACTIVE account:@cockroachlabs.com" --format="value(account)" | sed 's/[@\.\-]/_/g' | cut -c1-32
 }
 
 function gcloud_compute_ssh() {
