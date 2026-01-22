@@ -1854,10 +1854,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "fb048e455791e92642aa1534d1829455feb5dde5051a3aac1e78678b53c7d22e",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260116174828-d233b3991a22",
+        sha256 = "a6e25134ee101a56987975e2c0c8ad12231a061e792ca3e2d81b8512337f6138",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20260121183949-86f48627b1b4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260116174828-d233b3991a22.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20260121183949-86f48627b1b4.zip",
         ],
     )
     go_repository(
@@ -2915,10 +2915,10 @@ def go_deps():
         name = "com_github_fastfilter_xorfilter",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/FastFilter/xorfilter",
-        sha256 = "844a71379ea6cfcf04e95fdf27a473066a383ae255644b024f9b11c03608e6b8",
-        strip_prefix = "github.com/FastFilter/xorfilter@v0.4.0",
+        sha256 = "779835f57397caa5f1ef6e64df5d45eb3ccb34fbedaa128f962e40bd9415f569",
+        strip_prefix = "github.com/FastFilter/xorfilter@v0.4.2-0.20260120015552-4e5a4d9df65a",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/FastFilter/xorfilter/com_github_fastfilter_xorfilter-v0.4.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/FastFilter/xorfilter/com_github_fastfilter_xorfilter-v0.4.2-0.20260120015552-4e5a4d9df65a.zip",
         ],
     )
     go_repository(
@@ -6318,10 +6318,10 @@ def go_deps():
         name = "com_github_minio_minlz",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/minio/minlz",
-        sha256 = "eebf4da3a42da834d650af4e620e879f35b3a4aabb5c41dce417a0bbe6bac859",
-        strip_prefix = "github.com/minio/minlz@v1.0.1-0.20250507153514-87eb42fe8882",
+        sha256 = "4aa59500780b1b5e209f077c3533aefc351656640b12c21721926300dcf30ea7",
+        strip_prefix = "github.com/minio/minlz@v1.0.2-0.20260119185444-845e64f85661",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.1-0.20250507153514-87eb42fe8882.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.2-0.20260119185444-845e64f85661.zip",
         ],
     )
     go_repository(
@@ -7604,13 +7604,13 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_raduberinde_axisds",
+        name = "com_github_raduberinde_axisds_v2",
         build_file_proto_mode = "disable_global",
-        importpath = "github.com/RaduBerinde/axisds",
-        sha256 = "13560b33fdd1fd0c4a4c629220a3ea87539ed460b93184cba6db6de57aa48eb5",
-        strip_prefix = "github.com/RaduBerinde/axisds@v0.0.0-20260105221726-1be486564c85",
+        importpath = "github.com/RaduBerinde/axisds/v2",
+        sha256 = "edb00ef04b6f897b9b82521ab23140ff0aeda3a35cf05cc3fefe8a06d4418f0b",
+        strip_prefix = "github.com/RaduBerinde/axisds/v2@v2.0.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/com_github_raduberinde_axisds-v0.0.0-20260105221726-1be486564c85.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/RaduBerinde/axisds/v2/com_github_raduberinde_axisds_v2-v2.0.0.zip",
         ],
     )
     go_repository(
