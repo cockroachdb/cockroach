@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Datadog configuration constants.
@@ -212,8 +215,97 @@ func DefaultTemplateVariables() []TemplateVariable {
 // This is lazily loaded from metrics.yaml when needed.
 var metricNameLookup map[string]string
 
+// datadogMetricLookup maps exported_name to the exact Datadog metric name.
+// This is loaded from cockroachdb_datadog_metrics.yaml for accurate Datadog names.
+var datadogMetricLookup map[string]string
+
+// baseMetricLookup maps exported_name to the Datadog metric name from
+// cockroachdb_metrics_base.yaml (legacy metrics and runtime conditional metrics).
+var baseMetricLookup map[string]string
+
+// fullMetricLookup maps exported_name to the Datadog metric name from
+// cockroachdb_metrics.yaml (the comprehensive auto-generated file).
+var fullMetricLookup map[string]string
+
 // metricUnitLookup maps metric name (dot format) to its unit.
 var metricUnitLookup map[string]string
+
+// LoadDatadogMetricLookup loads the Prometheus name → Datadog name mapping from
+// cockroachdb_datadog_metrics.yaml. This file has the exact Datadog metric names.
+func LoadDatadogMetricLookup(yamlPath string) error {
+	lookup, err := loadKeyValueYAML(yamlPath)
+	if err != nil {
+		return err
+	}
+	datadogMetricLookup = lookup
+	return nil
+}
+
+// LoadBaseMetricLookup loads the Prometheus name → Datadog name mapping from
+// cockroachdb_metrics_base.yaml (legacy metrics section).
+func LoadBaseMetricLookup(yamlPath string) error {
+	lookup, err := loadKeyValueYAML(yamlPath)
+	if err != nil {
+		return err
+	}
+	baseMetricLookup = lookup
+	return nil
+}
+
+// LoadFullMetricLookup loads the Prometheus name → Datadog name mapping from
+// cockroachdb_metrics.yaml (the comprehensive auto-generated file).
+func LoadFullMetricLookup(yamlPath string) error {
+	lookup, err := loadKeyValueYAML(yamlPath)
+	if err != nil {
+		return err
+	}
+	fullMetricLookup = lookup
+	return nil
+}
+
+// loadKeyValueYAML loads a YAML file with "key: value" format into a map.
+func loadKeyValueYAML(yamlPath string) (map[string]string, error) {
+	lookup := make(map[string]string)
+
+	file, err := os.Open(yamlPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Skip comments, empty lines, and YAML structure markers
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") || trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "-") || strings.HasSuffix(trimmed, ":") {
+			// Skip list items and section headers
+			continue
+		}
+		// Parse "key: value" format (must have both key and value)
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			// Check for leading spaces BEFORE trimming to skip nested YAML keys
+			if strings.HasPrefix(parts[0], " ") {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if key != "" && value != "" {
+				lookup[key] = value
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return lookup, nil
+}
 
 // LoadMetricNameLookup loads the exported_name → name mapping from metrics.yaml.
 // This enables accurate conversion of Prometheus-style names (sql_service_latency)
@@ -298,6 +390,41 @@ func LookupMetricUnit(metricName string) string {
 func ConvertMetricName(name string) string {
 	// Replace hyphens with underscores (for names like sys.cpu.combined.percent-normalized)
 	ddMetric := strings.ReplaceAll(name, "-", "_")
+
+	// Convert to exported format (dots to underscores) to look up in Datadog YAML
+	exportedName := strings.ReplaceAll(ddMetric, ".", "_")
+
+	// Track this metric for summary stats
+	trackMetricProcessed(exportedName)
+
+	// Try Datadog-specific lookup (most accurate)
+	if datadogMetricLookup != nil {
+		if ddName, ok := datadogMetricLookup[exportedName]; ok {
+			return fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+		}
+	}
+
+	// Try base metrics lookup (legacy/runtime conditional metrics)
+	if baseMetricLookup != nil {
+		if ddName, ok := baseMetricLookup[exportedName]; ok {
+			return fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+		}
+	}
+
+	// Try full metrics lookup (comprehensive auto-generated file)
+	if fullMetricLookup != nil {
+		if ddName, ok := fullMetricLookup[exportedName]; ok {
+			return fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+		}
+	}
+
+	// Warn if not found in any lookup
+	if datadogMetricLookup != nil || baseMetricLookup != nil || fullMetricLookup != nil {
+		result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddMetric)
+		warnMissingMetric(exportedName, result)
+		return result
+	}
+
 	return fmt.Sprintf("%s.%s", GetMetricPrefix(), ddMetric)
 }
 
@@ -322,7 +449,43 @@ func ConvertExportedMetricName(exportedName string) string {
 		}
 	}
 
-	// Try lookup first
+	// Track this metric for summary stats
+	trackMetricProcessed(baseName)
+
+	// Try Datadog-specific lookup first (most accurate)
+	if datadogMetricLookup != nil {
+		if ddName, ok := datadogMetricLookup[baseName]; ok {
+			result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+			if suffix != "" {
+				result += "." + suffix
+			}
+			return result
+		}
+	}
+
+	// Try base metrics lookup (legacy/runtime conditional metrics)
+	if baseMetricLookup != nil {
+		if ddName, ok := baseMetricLookup[baseName]; ok {
+			result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+			if suffix != "" {
+				result += "." + suffix
+			}
+			return result
+		}
+	}
+
+	// Try full metrics lookup (comprehensive auto-generated file)
+	if fullMetricLookup != nil {
+		if ddName, ok := fullMetricLookup[baseName]; ok {
+			result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddName)
+			if suffix != "" {
+				result += "." + suffix
+			}
+			return result
+		}
+	}
+
+	// Try metrics.yaml lookup (uses internal names with hyphens)
 	if metricNameLookup != nil {
 		if name, ok := metricNameLookup[baseName]; ok {
 			result := ConvertMetricName(name)
@@ -333,13 +496,58 @@ func ConvertExportedMetricName(exportedName string) string {
 		}
 	}
 
-	// Fallback: convert all underscores to dots (less accurate but works)
-	ddMetric := strings.ReplaceAll(baseName, "_", ".")
+	// Fallback: convert underscores to dots, but only for the first few components.
+	// CockroachDB metrics typically have 3-4 hierarchical components (e.g., sys.cpu.combined),
+	// followed by a multi-word metric name (e.g., percent_normalized).
+	// We convert the first 3 underscores to dots and keep the rest as underscores.
+	parts := strings.SplitN(baseName, "_", 4) // Split into at most 4 parts
+	ddMetric := strings.Join(parts, ".")
 	result := fmt.Sprintf("%s.%s", GetMetricPrefix(), ddMetric)
 	if suffix != "" {
 		result += "." + suffix
 	}
+
+	// Warn about metrics not found in lookup tables (may need manual verification)
+	warnMissingMetric(baseName, result)
+
 	return result
+}
+
+// warnedMetrics tracks metrics we've already warned about to avoid duplicate warnings.
+var warnedMetrics = make(map[string]bool)
+
+// totalMetricsProcessed tracks total unique metrics processed for summary.
+var totalMetricsProcessed = make(map[string]bool)
+
+// warnMissingMetric prints a warning for metrics not found in cockroachdb_datadog_metrics.yaml.
+// Each metric is only warned about once per run.
+func warnMissingMetric(exportedName, convertedName string) {
+	if warnedMetrics[exportedName] {
+		return
+	}
+	warnedMetrics[exportedName] = true
+	fmt.Fprintf(os.Stderr, "WARNING: metric %q not in lookup, converted to: %s\n", exportedName, convertedName)
+}
+
+// trackMetricProcessed records that a metric was processed (for summary stats).
+func trackMetricProcessed(metricName string) {
+	totalMetricsProcessed[metricName] = true
+}
+
+// PrintMissingMetricsSummary prints a summary of how many metrics were not found in the lookup.
+// Call this at the end of command execution to show the user a summary.
+func PrintMissingMetricsSummary() {
+	missing := len(warnedMetrics)
+	total := len(totalMetricsProcessed)
+	if total > 0 {
+		fmt.Fprintf(os.Stderr, "\n⚠ %d out of %d metric(s) not found in metric lookup files (used heuristic conversion)\n", missing, total)
+	}
+}
+
+// ResetMissingMetricsWarnings clears the warned metrics map (useful for testing).
+func ResetMissingMetricsWarnings() {
+	warnedMetrics = make(map[string]bool)
+	totalMetricsProcessed = make(map[string]bool)
 }
 
 // BuildCounterQuery builds a Datadog query for counter metrics.
@@ -393,7 +601,9 @@ func BuildGaugeQuery(metric, labels string, aggregator string, groupBy string) s
 //   - Use 10s rollup interval to match CockroachDB scrape interval (both Cloud and tsdump)
 //   - Note: Self-hosted uploads use different naming (e.g., crdb.tsdump.sql.service.latency_p99)
 //   - Note: Datadog charts limit to 1500 data points; interval may be ignored for large ranges
-func BuildHistogramQuery(metricBase, labels string, percentilePrefix string, groupBy string) string {
+func BuildHistogramQuery(
+	metricBase, labels string, percentilePrefix string, groupBy string,
+) string {
 	if percentilePrefix == "" {
 		percentilePrefix = "p99"
 	}
@@ -525,7 +735,7 @@ func CreateTimeseriesWidget(metric MetricDef, index int) Widget {
 	// Create a readable title from the metric name
 	title := strings.ReplaceAll(metric.Name, ".", " ")
 	title = strings.ReplaceAll(title, "_", " ")
-	title = strings.Title(title)
+	title = cases.Title(language.English).String(title)
 
 	// Build query and formula arrays
 	var widgetQueries []WidgetQuery

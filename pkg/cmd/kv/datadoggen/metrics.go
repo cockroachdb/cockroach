@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -30,6 +32,9 @@ var (
 )
 
 const defaultYAMLPath = "docs/generated/metrics/metrics.yaml"
+const defaultDatadogYAMLPathMetrics = "pkg/cli/files/cockroachdb_datadog_metrics.yaml"
+const defaultBaseMetricsYAMLPathMetrics = "pkg/roachprod/agents/opentelemetry/files/cockroachdb_metrics_base.yaml"
+const defaultFullMetricsYAMLPathMetrics = "pkg/roachprod/agents/opentelemetry/files/cockroachdb_metrics.yaml"
 
 func newFromMetricsCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -66,7 +71,13 @@ Examples:
   datadoggen from-metrics -g pkg/kv/kvserver/metrics.go -o my_dashboard.json
 
   # Disable grouping (flat list)
-  datadoggen from-metrics --search "sql" --no-group`,
+  datadoggen from-metrics --search "sql" --no-group
+
+  # Generate for self-hosted tsdump format (crdb.tsdump.* prefix, $upload_id tag)
+  datadoggen from-metrics --search "sql.service" --tsdump
+
+  # Combine tsdump with Go file input
+  datadoggen from-metrics -g pkg/kv/kvserver/metrics.go --tsdump -o my_tsdump_dashboard.json`,
 		RunE: runFromMetrics,
 	}
 
@@ -97,6 +108,42 @@ func runFromMetrics(cmd *cobra.Command, args []string) error {
 	// Check that at least one source is provided
 	if len(metricsGoFiles) == 0 && metricsPrefix == "" && metricsSearch == "" {
 		return fmt.Errorf("either --go-file, --prefix, or --search is required")
+	}
+
+	// Load Datadog-specific metric lookup for accurate name conversion (preferred)
+	if err := LoadDatadogMetricLookup(defaultDatadogYAMLPathMetrics); err != nil {
+		// Not fatal - we'll use the fallback
+		if !metricsQuiet {
+			fmt.Fprintf(os.Stderr, "Note: Could not load cockroachdb_datadog_metrics.yaml: %v\n", err)
+		}
+	}
+
+	// Load base metrics lookup (legacy/runtime conditional metrics)
+	if err := LoadBaseMetricLookup(defaultBaseMetricsYAMLPathMetrics); err != nil {
+		// Not fatal - we'll try other fallbacks
+		if !metricsQuiet {
+			fmt.Fprintf(os.Stderr, "Note: Could not load cockroachdb_metrics_base.yaml: %v\n", err)
+		}
+	}
+
+	// Load full metrics lookup (comprehensive auto-generated file)
+	if err := LoadFullMetricLookup(defaultFullMetricsYAMLPathMetrics); err != nil {
+		// Not fatal - we'll try other fallbacks
+		if !metricsQuiet {
+			fmt.Fprintf(os.Stderr, "Note: Could not load cockroachdb_metrics.yaml: %v\n", err)
+		}
+	}
+
+	// Load metric name lookup as fallback
+	yamlFile := metricsYAMLFile
+	if yamlFile == "" {
+		yamlFile = defaultYAMLPath
+	}
+	if err := LoadMetricNameLookup(yamlFile); err != nil {
+		// Not fatal - we'll fall back to simple conversion
+		if !metricsQuiet {
+			fmt.Fprintf(os.Stderr, "Note: Could not load metrics.yaml for name lookup: %v\n", err)
+		}
 	}
 
 	// Parse search terms and prefixes
@@ -379,7 +426,7 @@ func runFromMetrics(cmd *cobra.Command, args []string) error {
 	titleParts = append(titleParts, prefixes...)
 	dashboardTitle := strings.ReplaceAll(strings.Join(titleParts, ", "), ".", " ")
 	dashboardTitle = strings.ReplaceAll(dashboardTitle, "_", " ")
-	dashboardTitle = strings.Title(dashboardTitle) + " Metrics"
+	dashboardTitle = cases.Title(language.English).String(dashboardTitle) + " Metrics"
 
 	// Create dashboard
 	logf("\n%s\n", strings.Repeat("-", 70))
@@ -435,6 +482,9 @@ func runFromMetrics(cmd *cobra.Command, args []string) error {
 	}
 
 	logln(strings.Repeat("=", 70))
+
+	// Print summary of metrics not found in lookup
+	PrintMissingMetricsSummary()
 
 	return nil
 }
@@ -621,7 +671,9 @@ func loadMetricsYAML(yamlPath string) (map[string]YAMLMetric, error) {
 // For example, "kv.rangefeed.scheduler.%s.latency" would match:
 //   - kv.rangefeed.scheduler.normal.latency
 //   - kv.rangefeed.scheduler.system.latency
-func expandTemplateMetric(templateName string, templateMetric YAMLMetric, yamlMetrics map[string]YAMLMetric) map[string]YAMLMetric {
+func expandTemplateMetric(
+	templateName string, templateMetric YAMLMetric, yamlMetrics map[string]YAMLMetric,
+) map[string]YAMLMetric {
 	result := make(map[string]YAMLMetric)
 
 	// Convert template to regex pattern: replace %s, %d, etc. with .+
@@ -822,7 +874,7 @@ func createDashboard(metrics []MetricDef, title string, groupByPrefix bool) *Dat
 
 			groupTitle := strings.ReplaceAll(groupName, ".", " ")
 			groupTitle = strings.ReplaceAll(groupTitle, "_", " ")
-			groupTitle = strings.Title(groupTitle)
+			groupTitle = cases.Title(language.English).String(groupTitle)
 
 			groupWidget := CreateGroupWidget(groupTitle, groupWidgets)
 			dashboard.Widgets = append(dashboard.Widgets, groupWidget)

@@ -40,7 +40,13 @@ Query formats follow Datadog best practices:
   datadoggen convert-grafana grafana_dashboard.json
 
   # Custom output file
-  datadoggen convert-grafana input.json -o custom_output.json`,
+  datadoggen convert-grafana input.json -o custom_output.json
+
+  # Generate for self-hosted tsdump format (crdb.tsdump.* prefix, $upload_id tag)
+  datadoggen convert-grafana grafana_dashboard.json --tsdump
+
+  # Combine tsdump with custom output
+  datadoggen convert-grafana input.json --tsdump -o my_tsdump_dashboard.json`,
 		Args: cobra.ExactArgs(1),
 		RunE: runConvertGrafana,
 	}
@@ -107,6 +113,9 @@ type GrafanaDashboard struct {
 }
 
 const defaultYAMLPathGrafana = "docs/generated/metrics/metrics.yaml"
+const defaultDatadogYAMLPath = "pkg/cli/files/cockroachdb_datadog_metrics.yaml"
+const defaultBaseMetricsYAMLPath = "pkg/roachprod/agents/opentelemetry/files/cockroachdb_metrics_base.yaml"
+const defaultFullMetricsYAMLPath = "pkg/roachprod/agents/opentelemetry/files/cockroachdb_metrics.yaml"
 
 func runConvertGrafana(cmd *cobra.Command, args []string) error {
 	inputFile := args[0]
@@ -117,7 +126,25 @@ func runConvertGrafana(cmd *cobra.Command, args []string) error {
 		outputFile = strings.TrimSuffix(inputFile, ".json") + "_datadog.json"
 	}
 
-	// Load metric name lookup for accurate name conversion
+	// Load Datadog-specific metric lookup for accurate name conversion (preferred)
+	if err := LoadDatadogMetricLookup(defaultDatadogYAMLPath); err != nil {
+		// Not fatal - we'll try the fallback
+		fmt.Printf("Note: Could not load cockroachdb_datadog_metrics.yaml: %v\n", err)
+	}
+
+	// Load base metrics lookup (legacy/runtime conditional metrics)
+	if err := LoadBaseMetricLookup(defaultBaseMetricsYAMLPath); err != nil {
+		// Not fatal - we'll try other fallbacks
+		fmt.Printf("Note: Could not load cockroachdb_metrics_base.yaml: %v\n", err)
+	}
+
+	// Load full metrics lookup (comprehensive auto-generated file)
+	if err := LoadFullMetricLookup(defaultFullMetricsYAMLPath); err != nil {
+		// Not fatal - we'll try other fallbacks
+		fmt.Printf("Note: Could not load cockroachdb_metrics.yaml: %v\n", err)
+	}
+
+	// Load metric name lookup as fallback
 	if err := LoadMetricNameLookup(defaultYAMLPathGrafana); err != nil {
 		// Not fatal - we'll fall back to simple underscore conversion
 		fmt.Printf("Note: Could not load metrics.yaml for name lookup: %v\n", err)
@@ -179,6 +206,9 @@ func runConvertGrafana(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✓ Dashboard written to: %s\n", outputFile)
 	fmt.Println(strings.Repeat("=", 70))
+
+	// Print summary of metrics not found in lookup
+	PrintMissingMetricsSummary()
 
 	return nil
 }
@@ -668,7 +698,7 @@ func lookupUnitFromQuery(query string) string {
 	// Pattern: "agg:cockroachdb.metric.name{" or "agg:cockroachdb.metric.name "
 	re := regexp.MustCompile(`(?:avg|sum|max|min|p\d+(?:\.\d+)?):([a-zA-Z0-9_.]+)`)
 	match := re.FindStringSubmatch(query)
-	if match == nil || len(match) < 2 {
+	if len(match) < 2 {
 		return ""
 	}
 	metricName := match[1]

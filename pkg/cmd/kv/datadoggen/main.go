@@ -50,7 +50,13 @@ func main() {
   datadoggen from-metrics --search "latency"
 
   # Get queries to stdout (for piping)
-  datadoggen from-metrics --search "sql.service" -q --quiet`,
+  datadoggen from-metrics --search "sql.service" -q --quiet
+
+  # Generate for self-hosted tsdump format (crdb.tsdump.* prefix, $upload_id tag)
+  datadoggen from-metrics --search "sql.service" --tsdump
+
+  # Convert Grafana dashboard for tsdump
+  datadoggen convert-grafana grafana_dashboard.json --tsdump`,
 	}
 
 	rootCmd.AddCommand(

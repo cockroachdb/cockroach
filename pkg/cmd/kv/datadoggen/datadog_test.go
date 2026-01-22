@@ -7,6 +7,9 @@ package main
 
 import (
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
 func TestConvertMetricName(t *testing.T) {
@@ -44,6 +47,64 @@ func TestConvertMetricName(t *testing.T) {
 			name:     "metric with mixed hyphens and dots",
 			input:    "storage.iterator.category-abort-span.block-load.latency",
 			expected: "cockroachdb.storage.iterator.category_abort_span.block_load.latency",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertMetricName(tt.input)
+			if result != tt.expected {
+				t.Errorf("ConvertMetricName(%q) = %q, want %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestConvertMetricNameWithLookup tests ConvertMetricName with the Datadog lookup loaded.
+// This simulates how from-metrics works when cockroachdb_datadog_metrics.yaml is available.
+func TestConvertMetricNameWithLookup(t *testing.T) {
+	// Load Datadog-specific metric lookup using datapathutils for correct Bazel paths
+	datadogPath := datapathutils.RewritableDataPath(t, "pkg", "cli", "files", "cockroachdb_datadog_metrics.yaml")
+	if err := LoadDatadogMetricLookup(datadogPath); err != nil {
+		skip.IgnoreLint(t, "Could not load cockroachdb_datadog_metrics.yaml for test")
+	}
+
+	// Clear the lookup after test to not affect other tests
+	defer func() { datadogMetricLookup = nil }()
+
+	// Input format matches metrics.yaml (with hyphens), expected format uses Datadog lookup
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// Round trip metrics - these use the Datadog lookup
+		{
+			name:     "round-trip-latency from metrics.yaml",
+			input:    "round-trip-latency",
+			expected: "cockroachdb.round_trip.latency",
+		},
+		{
+			name:     "round-trip-default-class-latency from metrics.yaml",
+			input:    "round-trip-default-class-latency",
+			expected: "cockroachdb.round_trip_default_class_latency",
+		},
+		{
+			name:     "round-trip-raft-class-latency from metrics.yaml",
+			input:    "round-trip-raft-class-latency",
+			expected: "cockroachdb.round_trip_raft_class_latency",
+		},
+		// SQL service latency
+		{
+			name:     "sql.service.latency from metrics.yaml",
+			input:    "sql.service.latency",
+			expected: "cockroachdb.sql.service.latency",
+		},
+		// sys.cpu metric - YAML has percent.normalized (dot before normalized)
+		{
+			name:     "sys.cpu.combined.percent-normalized from metrics.yaml",
+			input:    "sys.cpu.combined.percent-normalized",
+			expected: "cockroachdb.sys.cpu.combined.percent.normalized",
 		},
 	}
 
@@ -821,21 +882,17 @@ func TestRealWorldQueryExamples(t *testing.T) {
 // TestConvertExportedMetricName tests that exported metric names (Prometheus-style with underscores)
 // convert correctly to Datadog format using the metrics.yaml lookup.
 func TestConvertExportedMetricName(t *testing.T) {
-	// Try multiple paths to find metrics.yaml
-	yamlPaths := []string{
-		"docs/generated/metrics/metrics.yaml",
-		"../../../docs/generated/metrics/metrics.yaml",
-		"../../../../docs/generated/metrics/metrics.yaml",
+	// Load Datadog-specific metric lookup (preferred) using datapathutils for correct Bazel paths
+	datadogPath := datapathutils.RewritableDataPath(t, "pkg", "cli", "files", "cockroachdb_datadog_metrics.yaml")
+	if err := LoadDatadogMetricLookup(datadogPath); err != nil {
+		// Not fatal - we'll try the fallback
+		t.Logf("Note: Could not load cockroachdb_datadog_metrics.yaml: %v", err)
 	}
-	var err error
-	for _, path := range yamlPaths {
-		err = LoadMetricNameLookup(path)
-		if err == nil {
-			break
-		}
-	}
-	if err != nil {
-		t.Skipf("Could not load metrics.yaml for test: %v", err)
+
+	// Load metrics.yaml as fallback using datapathutils
+	metricsPath := datapathutils.RewritableDataPath(t, "docs", "generated", "metrics", "metrics.yaml")
+	if err := LoadMetricNameLookup(metricsPath); err != nil {
+		skip.IgnoreLint(t, "Could not load metrics.yaml for test")
 	}
 
 	// These are actual metrics from example.json (exported_name format)
@@ -852,7 +909,7 @@ func TestConvertExportedMetricName(t *testing.T) {
 		{name: "sql service latency", input: "sql_service_latency", expected: "cockroachdb.sql.service.latency"},
 
 		// System metrics
-		{name: "sys cpu percent", input: "sys_cpu_combined_percent_normalized", expected: "cockroachdb.sys.cpu.combined.percent_normalized"},
+		{name: "sys cpu percent", input: "sys_cpu_combined_percent_normalized", expected: "cockroachdb.sys.cpu.combined.percent.normalized"},
 		{name: "sys rss", input: "sys_rss", expected: "cockroachdb.sys.rss"},
 
 		// Ranges metrics
@@ -860,6 +917,11 @@ func TestConvertExportedMetricName(t *testing.T) {
 
 		// Metrics with _bucket suffix should strip it
 		{name: "sql service latency bucket", input: "sql_service_latency_bucket", expected: "cockroachdb.sql.service.latency"},
+
+		// Round trip metrics - mixed patterns
+		{name: "round trip latency", input: "round_trip_latency", expected: "cockroachdb.round_trip.latency"},
+		{name: "round trip default class latency", input: "round_trip_default_class_latency", expected: "cockroachdb.round_trip_default_class_latency"},
+		{name: "round trip raft class latency", input: "round_trip_raft_class_latency", expected: "cockroachdb.round_trip_raft_class_latency"},
 	}
 
 	for _, tt := range tests {
@@ -877,6 +939,14 @@ func TestTsdumpMode(t *testing.T) {
 	// Save original state and restore after test
 	originalMode := TsdumpMode
 	defer func() { TsdumpMode = originalMode }()
+
+	// Load Datadog-specific metric lookup using datapathutils for correct Bazel paths
+	datadogPath := datapathutils.RewritableDataPath(t, "pkg", "cli", "files", "cockroachdb_datadog_metrics.yaml")
+	if err := LoadDatadogMetricLookup(datadogPath); err != nil {
+		skip.IgnoreLint(t, "Could not load cockroachdb_datadog_metrics.yaml for test")
+	}
+	// Clear the lookup after test to not affect other tests
+	defer func() { datadogMetricLookup = nil }()
 
 	t.Run("GetMetricPrefix", func(t *testing.T) {
 		TsdumpMode = false
@@ -909,7 +979,7 @@ func TestTsdumpMode(t *testing.T) {
 			expected string
 		}{
 			{"sql.service.latency", "crdb.tsdump.sql.service.latency"},
-			{"sys.cpu.combined.percent-normalized", "crdb.tsdump.sys.cpu.combined.percent_normalized"},
+			{"sys.cpu.combined.percent-normalized", "crdb.tsdump.sys.cpu.combined.percent.normalized"},
 			{"sql.txns.open", "crdb.tsdump.sql.txns.open"},
 			{"ranges.decommissioning", "crdb.tsdump.ranges.decommissioning"},
 		}

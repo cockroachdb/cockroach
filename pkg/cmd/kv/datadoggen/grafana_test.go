@@ -8,18 +8,20 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 )
 
 func TestConvertPromQLToDatadog(t *testing.T) {
-	// Try to load the metric name lookup table for accurate conversions
-	for _, path := range []string{
-		"docs/generated/metrics/metrics.yaml",
-		"../../../docs/generated/metrics/metrics.yaml",
-		"../../../../docs/generated/metrics/metrics.yaml",
-	} {
-		if err := LoadMetricNameLookup(path); err == nil {
-			break
-		}
+	// Load Datadog-specific metric lookup (preferred) using datapathutils for correct Bazel paths
+	datadogPath := datapathutils.RewritableDataPath(t, "pkg", "cli", "files", "cockroachdb_datadog_metrics.yaml")
+	if err := LoadDatadogMetricLookup(datadogPath); err != nil {
+		t.Logf("Note: Could not load cockroachdb_datadog_metrics.yaml: %v", err)
+	}
+	// Load metrics.yaml as fallback using datapathutils
+	metricsPath := datapathutils.RewritableDataPath(t, "docs", "generated", "metrics", "metrics.yaml")
+	if err := LoadMetricNameLookup(metricsPath); err != nil {
+		t.Logf("Note: Could not load metrics.yaml: %v", err)
 	}
 	tests := []struct {
 		name     string
@@ -59,7 +61,7 @@ func TestConvertPromQLToDatadog(t *testing.T) {
 		{
 			name:     "avg by metric",
 			promql:   `avg by (instance) (sys_cpu_combined_percent_normalized{cluster="$cluster"})`,
-			expected: "avg:cockroachdb.sys.cpu.combined.percent_normalized{$cluster,$node_id,$store} by {instance}.rollup(avg, 10)",
+			expected: "avg:cockroachdb.sys.cpu.combined.percent.normalized{$cluster,$node_id,$store} by {instance}.rollup(avg, 10)",
 		},
 		{
 			name:     "avg by rate (counter)",
