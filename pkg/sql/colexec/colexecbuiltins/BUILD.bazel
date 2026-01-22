@@ -5,6 +5,7 @@ go_library(
     name = "colexecbuiltins",
     srcs = [
         "builtin_funcs.go",
+        "fnv64.go",
         "range_stats.go",
         ":gen-exec",  # keep
     ],
