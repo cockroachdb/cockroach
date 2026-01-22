@@ -71,11 +71,14 @@ func (o *OrderedFeed) Next(ctx context.Context) (WriteSet, error) {
 		}
 
 		var ev crosscluster.Event
+		var ok bool
 		select {
 		case <-ctx.Done():
 			return WriteSet{}, ctx.Err()
-		case ev = <-o.rawSubscription.Events():
-			// continue
+		case ev, ok = <-o.rawSubscription.Events():
+			if !ok {
+				return WriteSet{}, errors.New("Events channel was closed")
+			}
 		}
 
 		switch ev.Type() {
