@@ -23,9 +23,8 @@ func TestRetryExceedsMaxBackoff(t *testing.T) {
 	}
 
 	r := Start(opts)
-	r.opts.RandomizationFactor = 0
 	for i := 0; i < 10; i++ {
-		d := r.retryIn()
+		d := r.retryIn(0)
 		if d > opts.MaxBackoff {
 			t.Fatalf("expected backoff less than max-backoff: %s vs %s", d, opts.MaxBackoff)
 		}
