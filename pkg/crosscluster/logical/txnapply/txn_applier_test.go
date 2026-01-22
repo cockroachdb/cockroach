@@ -132,7 +132,7 @@ func TestTxnApplier(t *testing.T) {
 		}
 	}
 
-	applier := NewApplier(input, writers)
+	applier := NewApplier(writers)
 	defer applier.Close(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +140,7 @@ func TestTxnApplier(t *testing.T) {
 
 	group := ctxgroup.WithContext(ctx)
 	group.GoCtx(func(ctx context.Context) error {
-		return applier.Run(ctx, input, applier.Frontier())
+		return applier.Run(ctx, input)
 	})
 
 	// Consume frontier updates and validate monotonicity.

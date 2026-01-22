@@ -9,11 +9,14 @@ package txnmode
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnapply"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnfeed"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnlock"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnscheduler"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -80,11 +83,20 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 		return errors.Wrap(err, "creating txn feed")
 	}
 
-	writer, err := txnwriter.NewTransactionWriter(ctx, p.execCtx.ExecCfg().InternalDB, p.execCtx.ExecCfg().LeaseManager, p.execCtx.ExecCfg().Settings)
-	if err != nil {
-		return errors.Wrap(err, "creating txn writer")
+	// Create multiple writers for parallel application.
+	const numWriters = 4
+	var writers []txnwriter.TransactionWriter
+	for i := 0; i < numWriters; i++ {
+		writer, err := txnwriter.NewTransactionWriter(ctx, p.execCtx.ExecCfg().InternalDB, p.execCtx.ExecCfg().LeaseManager, p.execCtx.ExecCfg().Settings)
+		if err != nil {
+			// Close any writers we already created.
+			for _, w := range writers {
+				w.Close(ctx)
+			}
+			return errors.Wrap(err, "creating txn writer")
+		}
+		writers = append(writers, writer)
 	}
-	defer writer.Close(ctx)
 
 	txnDecoder, err := ldrdecoder.NewTxnDecoder(
 		ctx,
@@ -93,6 +105,9 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 		p.tables,
 	)
 	if err != nil {
+		for _, w := range writers {
+			w.Close(ctx)
+		}
 		return errors.Wrap(err, "creating txn decoder")
 	}
 
@@ -103,16 +118,30 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 		p.tables,
 	)
 	if err != nil {
+		for _, w := range writers {
+			w.Close(ctx)
+		}
 		return errors.Wrap(err, "creating lock synthesizer")
 	}
+
+	// Create the scheduler to track lock dependencies between transactions.
+	// The lock count is the max number of locks the scheduler will track before
+	// it starts evicting old transactions.
+	const schedulerLockCount = 10000
+	scheduler := txnscheduler.NewScheduler(schedulerLockCount)
+
+	// Create the applier which manages parallel transaction application.
+	scheduledTxns := make(chan txnapply.ScheduledTransaction)
+	applier := txnapply.NewApplier(writers)
+	defer applier.Close(ctx)
 
 	// TODO(jeffswenson): we need to sometimes emit checkpoints even if there are
 	// no transactions so that we can advance resolved time.
 	writeSets := make(chan txnfeed.WriteSet)
-	group.Go(func() error {
+	group.GoCtx(func(ctx context.Context) error {
 		return feed.Run(ctx)
 	})
-	group.Go(func() error {
+	group.GoCtx(func(ctx context.Context) error {
 		defer close(writeSets)
 		for {
 			if ctx.Err() != nil {
@@ -131,7 +160,7 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 	})
 
 	batches := make(chan []ldrdecoder.Transaction, 1)
-	group.Go(func() error {
+	group.GoCtx(func(ctx context.Context) error {
 		maxInterval := time.Second
 		ticker := time.NewTicker(maxInterval)
 		defer ticker.Stop()
@@ -176,7 +205,11 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 		}
 	})
 
-	group.Go(func() error {
+	// Scheduling goroutine: processes decoded transactions through the scheduler
+	// and sends scheduled transactions to the applier.
+	group.GoCtx(func(ctx context.Context) error {
+		defer close(scheduledTxns)
+		var scratch []hlc.Timestamp
 		for {
 			select {
 			case <-ctx.Done():
@@ -189,33 +222,73 @@ func (p *TxnLdrCoordinator) Resume(ctx context.Context) error {
 					continue
 				}
 
-				// Run lock synthesis on each transaction to determine apply order
 				for i := range transactions {
+					// Derive locks for the transaction.
 					lockSet, err := lockSynthesizer.DeriveLocks(transactions[i].WriteSet)
 					if err != nil {
 						return errors.Wrap(err, "deriving locks for transaction")
 					}
 					transactions[i].WriteSet = lockSet.SortedRows
 
-					// TODO(jeffswenson): why can't I put multiple transactions touching the same
-					// constraint in a batch?
-					status, err := writer.ApplyBatch(ctx, transactions[i:i+1])
-					if err != nil {
-						// TODO(jeffswenson): ensure this gets logged somewhere higher up
-						log.Dev.Errorf(ctx, "failed to apply transaction batch: %+v", err)
-						return errors.Wrap(err, "applying transaction batch")
-					}
-					for _, s := range status {
-						if s.DlqReason != nil {
-							log.Dev.Errorf(ctx, "transaction batch sent to DLQ: %+v", s.DlqReason)
-							// TODO(jeffswenson): DLQ failed transactions
-							return errors.Wrap(s.DlqReason, "transaction batch failed with DLQ reason")
+					// Convert txnlock.Lock to txnscheduler.Lock format.
+					schedulerLocks := make([]txnscheduler.Lock, len(lockSet.Locks))
+					for j, lock := range lockSet.Locks {
+						schedulerLocks[j] = txnscheduler.Lock{
+							Hash:   txnscheduler.LockHash(lock.Hash),
+							IsRead: lock.Read,
 						}
 					}
-				}
 
-				err = p.checkpoint(ctx, transactions[len(transactions)-1].Timestamp)
-				if err != nil {
+					// Schedule the transaction to compute dependencies.
+					schedulerTxn := txnscheduler.Transaction{
+						CommitTime: transactions[i].Timestamp,
+						Locks:      schedulerLocks,
+					}
+					dependencies, _ := scheduler.Schedule(schedulerTxn, scratch)
+					scratch = scratch[:0]
+
+					dependencies = slices.Clone(dependencies)
+					slices.SortFunc(dependencies, func(a, b hlc.Timestamp) int {
+						return a.Compare(b)
+					})
+					dependencies = slices.Compact(dependencies)
+
+					// Send the scheduled transaction to the applier.
+					// Clone dependencies since the scheduler reuses the scratch slice.
+					scheduled := txnapply.ScheduledTransaction{
+						Transaction:  transactions[i],
+						Dependencies: slices.Clone(dependencies),
+					}
+
+					log.Dev.Infof(ctx, "scheduled %v -> %v", scheduled.Timestamp, scheduled.Dependencies)
+
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case scheduledTxns <- scheduled:
+					}
+				}
+			}
+		}
+	})
+
+	// Run the applier.
+	group.GoCtx(func(ctx context.Context) error {
+		return applier.Run(ctx, scheduledTxns)
+	})
+
+	// Checkpoint goroutine: monitors the applier's frontier and checkpoints progress.
+	group.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case frontier, ok := <-applier.Frontier():
+				if !ok {
+					return nil
+				}
+				log.Dev.Infof(ctx, "checkpointing frontier: %+v", frontier)
+				if err := p.checkpoint(ctx, frontier); err != nil {
 					return errors.Wrap(err, "checkpointing progress")
 				}
 			}

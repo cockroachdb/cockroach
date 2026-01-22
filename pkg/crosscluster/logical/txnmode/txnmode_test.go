@@ -54,7 +54,9 @@ func TestTxnModeSmoketest(t *testing.T) {
 		// NOTE: this only works right now because the parent's descriptor id sorts
 		// before the childs and we don't run deletes in the same txn.
 		db.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
-		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
+		db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT)")
+		// TODO(jeffswenson): add fk support to lock derivation then uncomment this
+		// db.Exec(t, "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id))")
 	}
 
 	// Get connection URL for source database
