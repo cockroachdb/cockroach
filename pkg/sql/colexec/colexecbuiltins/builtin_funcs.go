@@ -6,6 +6,9 @@
 package colexecbuiltins
 
 import (
+	"hash"
+	"hash/fnv"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -140,6 +143,14 @@ func NewBuiltinFunctionOperator(
 		return newRangeStatsOperator(
 			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, withErrors,
 		), nil
+	case tree.FNV64, tree.FNV64a:
+		var hash hash.Hash64
+		if overload.SpecializedVecBuiltin == tree.FNV64 {
+			hash = fnv.New64()
+		} else {
+			hash = fnv.New64a()
+		}
+		return newFNV64Op(argumentCols, outputIdx, input, hash), nil
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),

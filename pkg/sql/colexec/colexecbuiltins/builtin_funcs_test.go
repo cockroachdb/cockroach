@@ -105,6 +105,38 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 				{"hi你好吗ciao", 6, 4, "ciao"},
 			},
 		},
+		{
+			desc:         "FNV64",
+			expr:         "fnv64(@1)",
+			inputCols:    []int{0},
+			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
+			inputTypes:   []*types.T{types.String},
+			outputTuples: colexectestutils.Tuples{{"abc", int64(-2820157060406071861)}, {"", int64(-3750763034362895579)}, {"hello world", int64(9065573210506989167)}, {"x", int64(-5808590958014384217)}, {"123", int64(-2774223862635011909)}},
+		},
+		{
+			desc:         "FNV64a",
+			expr:         "fnv64a(@1)",
+			inputCols:    []int{0},
+			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
+			inputTypes:   []*types.T{types.String},
+			outputTuples: colexectestutils.Tuples{{"abc", int64(-1792535898324117685)}, {"", int64(-3750763034362895579)}, {"hello world", int64(8618312879776256743)}, {"x", int64(-5808529385363204345)}, {"123", int64(5003431119771845851)}},
+		},
+		{
+			desc:         "FNV64 with 3 values",
+			expr:         "fnv64(@1, @2, @3)",
+			inputCols:    []int{0, 1, 2},
+			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
+			inputTypes:   []*types.T{types.String, types.String, types.String},
+			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-2820157060406071861)}, {"hello", "world", "test", int64(1178316459888765213)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(590622495169253564)}},
+		},
+		{
+			desc:         "FNV64a with 3 values",
+			expr:         "fnv64a(@1, @2, @3)",
+			inputCols:    []int{0, 1, 2},
+			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
+			inputTypes:   []*types.T{types.String, types.String, types.String},
+			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-1792535898324117685)}, {"hello", "world", "test", int64(7507279486104997145)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(644383116220033818)}},
+		},
 	}
 
 	for _, tc := range testCases {
