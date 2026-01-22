@@ -25,7 +25,6 @@ go_test(
     size = "enormous",
     srcs = [
         "create_test.go",
-        "help_test.go",
         "list_test.go",
         "main_test.go",
         "version_test.go",
@@ -46,4 +45,25 @@ go_test(
         "//pkg/roachprod/vm/gce",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+go_test(
+    name = "help_test",
+    size = "small",
+    srcs = [
+        "help_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    embed = [":test_lib"],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = ["@com_github_stretchr_testify//require"],
 )
