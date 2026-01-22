@@ -831,12 +831,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	var apiInternalServer http.Handler
 	var drpcEnabled = false
-	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(s.rpcContext.UseDRPC) {
 		drpcEnabled = true
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
-			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings)
+			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.rpcContext.UseDRPC)
 		if err != nil {
 			return err
 		}

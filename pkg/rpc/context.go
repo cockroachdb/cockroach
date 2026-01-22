@@ -1397,7 +1397,7 @@ func (rpcCtx *Context) ConnHealth(
 		return nil
 	}
 
-	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+	if !rpcbase.DRPCEnabled(rpcCtx.UseDRPC) {
 		return rpcCtx.grpcConnHealth(target, nodeID, class)
 	}
 	return rpcCtx.drpcConnHealth(target, nodeID, class)
@@ -1539,7 +1539,7 @@ func (rpcCtx *Context) GetBreakerForAddr(
 		Class:      class,
 	}
 
-	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+	if !rpcbase.DRPCEnabled(rpcCtx.UseDRPC) {
 		return rpcCtx.grpcGetBreakerForAddr(k)
 	}
 	return rpcCtx.drpcGetBreakerForAddr(k)

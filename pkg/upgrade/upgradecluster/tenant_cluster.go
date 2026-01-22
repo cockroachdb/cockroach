@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -238,9 +239,11 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			}
 			// This retry was added to benefit our tests (not users) by reducing the chance of
 			// test flakes due to network issues.
+			nd := t.Dialer.(*nodedialer.Dialer)
+			useDRPC := nd.RPCContext().UseDRPC
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass, t.Settings)
+				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass, useDRPC)
 				return err
 			}); err != nil {
 				return annotateDialError(err)

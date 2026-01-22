@@ -140,7 +140,7 @@ func (c *mockConn) getState() connState                { return connState{} }
 func newMockSenderWithSt(connFactory connFactory, st *cluster.Settings) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	clock := hlc.NewClockForTesting(nil)
-	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
+	s := newSenderWithConnFactory(stopper, st, clock, false /* useDRPC */, connFactory)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
 }

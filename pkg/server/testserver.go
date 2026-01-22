@@ -2693,7 +2693,7 @@ func (ts *testServer) RPCClientConn(
 func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcbase.DRPCEnabled(rpcCtx.UseDRPC) {
 		conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
@@ -2745,7 +2745,7 @@ func (t *testTenant) RPCClientConn(
 func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcbase.DRPCEnabled(rpcCtx.UseDRPC) {
 		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err

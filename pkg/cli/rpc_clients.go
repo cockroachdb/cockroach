@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -103,7 +102,7 @@ func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), err
 	ccfg := makeRPCClientConfig(cfg)
 	// Use DRPC if either the CLI flag is set (ccfg.UseDRPC) or the cluster
 	// setting is enabled. The CLI flag takes precedence for CLI commands.
-	useDRPC := ccfg.UseDRPC || rpcbase.DRPCEnabled(ctx, cfg.Settings)
+	useDRPC := ccfg.UseDRPC || (cfg.Settings != nil && rpcbase.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV))
 	if !useDRPC {
 		cc, finish, err := rpc.NewClientConn(ctx, ccfg)
 		if err != nil {

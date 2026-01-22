@@ -32,12 +32,13 @@ func GetDistSQLClientForOutbox(
 	ctx context.Context,
 	dialer rpcbase.NodeDialerNoBreaker,
 	cs *cluster.Settings,
+	useDRPC bool,
 	sqlInstanceID base.SQLInstanceID,
 	timeout time.Duration,
 ) (client execinfrapb.RPCDistSQLClient, err error) {
 	firstConnectionAttempt := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		client, err = execinfrapb.DialDistSQLClientNoBreaker(dialer, ctx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass, cs)
+		client, err = execinfrapb.DialDistSQLClientNoBreaker(dialer, ctx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass, useDRPC)
 		if err == nil || timeutil.Since(firstConnectionAttempt) > timeout {
 			break
 		}

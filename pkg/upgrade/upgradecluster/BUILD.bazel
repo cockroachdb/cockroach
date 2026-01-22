@@ -15,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",

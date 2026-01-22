@@ -56,10 +56,10 @@ func DialRPCClient[C any](
 	class ConnectionClass,
 	grpcClientFn func(*grpc.ClientConn) C,
 	drpcClientFn func(drpc.Conn) C,
-	st *cluster.Settings,
+	useDRPC bool,
 ) (C, error) {
 	var nilC C
-	if !DRPCEnabled(ctx, st) {
+	if !useDRPC {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
@@ -83,10 +83,10 @@ func DialRPCClientNoBreaker[C any](
 	class ConnectionClass,
 	grpcClientFn func(*grpc.ClientConn) C,
 	drpcClientFn func(drpc.Conn) C,
-	st *cluster.Settings,
+	useDRPC bool,
 ) (C, error) {
 	var nilC C
-	if !DRPCEnabled(ctx, st) {
+	if !useDRPC {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
 		if err != nil {
 			return nilC, err
@@ -101,6 +101,8 @@ func DialRPCClientNoBreaker[C any](
 	return drpcClientFn(conn), nil
 }
 
-func DRPCEnabled(ctx context.Context, st *cluster.Settings) bool {
-	return st != nil && ExperimentalDRPCEnabled.Get(&st.SV)
+// DRPCEnabled returns whether DRPC should be used for RPC communication.
+// This is a simple helper function that returns the useDRPC parameter.
+func DRPCEnabled(useDRPC bool) bool {
+	return useDRPC
 }

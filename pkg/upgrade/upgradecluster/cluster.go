@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -136,7 +137,9 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass, c.c.Settings)
+			nd := c.c.Dialer.(*nodedialer.Dialer)
+			useDRPC := nd.RPCContext().UseDRPC
+			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass, useDRPC)
 			if err != nil {
 				return err
 			}

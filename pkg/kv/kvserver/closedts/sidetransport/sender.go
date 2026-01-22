@@ -62,6 +62,8 @@ type Sender struct {
 	st      *cluster.Settings
 	clock   *hlc.Clock
 	nodeID  roachpb.NodeID
+	// useDRPC indicates whether to use DRPC for RPC communication.
+	useDRPC bool
 	// connFactory is used to establish new connections.
 	connFactory connFactory
 
@@ -218,16 +220,18 @@ const (
 func NewSender(
 	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}))
+	useDRPC := dialer.RPCContext().UseDRPC
+	return newSenderWithConnFactory(stopper, st, clock, useDRPC, newRPCConnFactory(dialer, connTestingKnobs{}))
 }
 
 func newSenderWithConnFactory(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, connFactory connFactory,
+	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, useDRPC bool, connFactory connFactory,
 ) *Sender {
 	s := &Sender{
 		stopper:     stopper,
 		st:          st,
 		clock:       clock,
+		useDRPC:     useDRPC,
 		connFactory: connFactory,
 		buf:         newUpdatesBuf(st),
 	}
@@ -923,7 +927,7 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
+	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.useDRPC)
 	if err != nil {
 		return err
 	}

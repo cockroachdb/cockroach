@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -181,7 +182,10 @@ func (o *Outbox) Run(
 
 	var stream execinfrapb.RPCDistSQL_FlowStreamClient
 	if err := func() error {
-		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, o.flowCtx.Cfg.Settings, sqlInstanceID, connectionTimeout)
+		// Get UseDRPC from the dialer's RPC context.
+		nd := dialer.(*nodedialer.Dialer)
+		useDRPC := nd.RPCContext().UseDRPC
+		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, o.flowCtx.Cfg.Settings, useDRPC, sqlInstanceID, connectionTimeout)
 		if err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err

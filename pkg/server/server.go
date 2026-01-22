@@ -2163,11 +2163,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 	var apiInternalServer http.Handler
 	var drpcEnabled = false
-	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(s.rpcContext.UseDRPC) {
 		drpcEnabled = true
 		// Pass our own node ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(
-			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
+			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.rpcContext.UseDRPC)
 		if err != nil {
 			return err
 		}
