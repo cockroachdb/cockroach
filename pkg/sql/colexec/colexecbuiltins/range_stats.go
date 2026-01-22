@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package colexec
+package colexecbuiltins
 
 import (
 	gojson "encoding/json"
@@ -44,7 +44,7 @@ func newRangeStatsOperator(
 	outputIdx int,
 	input colexecop.Operator,
 	withErrors bool,
-) (colexecop.Operator, error) {
+) colexecop.Operator {
 	return &rangeStatsOperator{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		allocator:      allocator,
@@ -52,7 +52,7 @@ func newRangeStatsOperator(
 		outputIdx:      outputIdx,
 		fetcher:        fetcher,
 		withErrors:     withErrors,
-	}, nil
+	}
 }
 
 // TODO(ajwerner): Generalize this operator to deal with other very similar
@@ -163,7 +163,6 @@ func (r *rangeStatsOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 				} else {
 					jsonStr, err = gojson.Marshal(&res[i].MVCCStats)
 				}
-
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}

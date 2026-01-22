@@ -24,17 +24,10 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// SpecializedVectorizedBuiltin is used to map overloads
-// to the vectorized operator that is specific to
-// that implementation of the builtin function.
+// SpecializedVectorizedBuiltin is used to map overloads to the vectorized
+// operator that is specific to that implementation of the builtin function.
 type SpecializedVectorizedBuiltin int
 
-// TODO (rohany): What is the best place to put this list?
-// I want to put it in builtins or exec, but those create an import
-// cycle with exec. tree is imported by both of them, so
-// this package seems like a good place to do it.
-
-// Keep this list alphabetized so that it is easy to manage.
 const (
 	_ SpecializedVectorizedBuiltin = iota
 	SubstringStringIntInt

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package colexec
+package colexecbuiltins
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -129,26 +129,17 @@ func NewBuiltinFunctionOperator(
 		return newSubstringOperator(
 			allocator, columnTypes, argumentCols, outputIdx, input,
 		), nil
-	case tree.CrdbInternalRangeStats:
+	case tree.CrdbInternalRangeStats, tree.CrdbInternalRangeStatsWithErrors:
 		if len(argumentCols) != 1 {
 			return nil, errors.AssertionFailedf(
 				"expected 1 input column to crdb_internal.range_stats, got %d",
 				len(argumentCols),
 			)
 		}
+		withErrors := overload.SpecializedVecBuiltin == tree.CrdbInternalRangeStatsWithErrors
 		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, false, /* withErrors */
-		)
-	case tree.CrdbInternalRangeStatsWithErrors:
-		if len(argumentCols) != 1 {
-			return nil, errors.AssertionFailedf(
-				"expected 1 input column to crdb_internal.range_stats, got %d",
-				len(argumentCols),
-			)
-		}
-		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, true, /* withErrors */
-		)
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, withErrors,
+		), nil
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
