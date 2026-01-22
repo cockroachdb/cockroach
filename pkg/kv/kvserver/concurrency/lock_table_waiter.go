@@ -849,21 +849,19 @@ type txnStatusCache struct {
 	// pushed and found to be finalized (COMMITTED or ABORTED). It is used as an
 	// optimization to avoid repeatedly pushing the transaction record when
 	// cleaning up the intents of an abandoned transaction.
-	finalizedTxns txnCache
+	finalizedTxns finalizedTxnCache
 
 	// pendingTxns is a small LRU cache that tracks transactions whose minimum
 	// commit timestamp was pushed but whose final status is not yet known. It is
 	// used as an optimization to avoid repeatedly pushing the transaction record
 	// when transaction priorities allow a pusher to move many intents of a
 	// lower-priority transaction.
-	pendingTxns txnCache
+	pendingTxns pendingTxnCache
 }
 
 func (c *txnStatusCache) add(txn *roachpb.Transaction, pendingAt roachpb.ObservedTimestamp) {
 	if txn.Status.IsFinalized() {
-		// For finalized transactions, we don't need the clock observation since
-		// readers don't need uncertainty checks for committed/aborted transactions.
-		c.finalizedTxns.add(txn, roachpb.ObservedTimestamp{})
+		c.finalizedTxns.add(txn)
 	} else {
 		c.pendingTxns.add(txn, pendingAt)
 	}
@@ -874,20 +872,17 @@ func (c *txnStatusCache) clear() {
 	c.pendingTxns.clear()
 }
 
-// txnCache is a small LRU cache that holds Transaction objects.
+// finalizedTxnCache is a small LRU cache that holds finalized Transaction
+// objects (COMMITTED or ABORTED). Since finalized transactions don't need
+// clock observations for uncertainty checks, we only store the Transaction.
 //
 // The zero value of this struct is ready for use.
-type txnCache struct {
+type finalizedTxnCache struct {
 	mu   syncutil.Mutex
-	txns [8]*txnCacheEntry // [MRU, ..., LRU]
+	txns [8]*roachpb.Transaction // [MRU, ..., LRU]
 }
 
-type txnCacheEntry struct {
-	ClockWhilePending roachpb.ObservedTimestamp
-	Txn               *roachpb.Transaction
-}
-
-func (c *txnCache) get(id uuid.UUID) (*txnCacheEntry, bool) {
+func (c *finalizedTxnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(id); idx >= 0 {
@@ -898,29 +893,21 @@ func (c *txnCache) get(id uuid.UUID) (*txnCacheEntry, bool) {
 	return nil, false
 }
 
-func (c *txnCache) add(txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp) {
+func (c *finalizedTxnCache) add(txn *roachpb.Transaction) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
-		curEntry := c.txns[idx]
-		var entry *txnCacheEntry
-		if txn.WriteTimestamp.Less(curEntry.Txn.WriteTimestamp) {
-			// If we didn't have a clock observation before somehow, add it here.
-			if (curEntry.ClockWhilePending == roachpb.ObservedTimestamp{}) {
-				entry = &txnCacheEntry{Txn: curEntry.Txn, ClockWhilePending: clockObservation}
-			} else {
-				entry = curEntry
-			}
-		} else {
-			entry = &txnCacheEntry{Txn: txn, ClockWhilePending: clockObservation}
+		curTxn := c.txns[idx]
+		if !txn.WriteTimestamp.Less(curTxn.WriteTimestamp) {
+			curTxn = txn
 		}
-		c.moveFrontLocked(entry, idx)
+		c.moveFrontLocked(curTxn, idx)
 	} else {
-		c.insertFrontLocked(&txnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
+		c.insertFrontLocked(txn)
 	}
 }
 
-func (c *txnCache) clear() {
+func (c *finalizedTxnCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for i := range c.txns {
@@ -928,23 +915,103 @@ func (c *txnCache) clear() {
 	}
 }
 
-func (c *txnCache) getIdxLocked(id uuid.UUID) int {
+func (c *finalizedTxnCache) getIdxLocked(id uuid.UUID) int {
 	for i, txn := range c.txns {
-		if txn != nil && txn.Txn.ID == id {
+		if txn != nil && txn.ID == id {
 			return i
 		}
 	}
 	return -1
 }
 
-func (c *txnCache) moveFrontLocked(txn *txnCacheEntry, cur int) {
+func (c *finalizedTxnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
 	copy(c.txns[1:cur+1], c.txns[:cur])
 	c.txns[0] = txn
 }
 
-func (c *txnCache) insertFrontLocked(txn *txnCacheEntry) {
+func (c *finalizedTxnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	copy(c.txns[1:], c.txns[:])
 	c.txns[0] = txn
+}
+
+// pendingTxnCache is a small LRU cache that holds pending Transaction objects
+// along with clock observations captured when the transaction was pushed. The
+// clock observation is used by readers with uncertainty intervals to determine
+// if cached push results can be reused.
+//
+// The zero value of this struct is ready for use.
+type pendingTxnCache struct {
+	mu   syncutil.Mutex
+	txns [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
+}
+
+// pendingTxnCacheEntry holds a pending transaction and the clock observation
+// captured when the transaction was pushed. The clock observation allows
+// readers with uncertainty intervals to reuse cached push results if their
+// observed timestamp on this node is <= ClockWhilePending.
+type pendingTxnCacheEntry struct {
+	Txn               *roachpb.Transaction
+	ClockWhilePending roachpb.ObservedTimestamp
+}
+
+func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if idx := c.getIdxLocked(id); idx >= 0 {
+		entry := c.txns[idx]
+		c.moveFrontLocked(entry, idx)
+		return entry, true
+	}
+	return nil, false
+}
+
+func (c *pendingTxnCache) add(txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
+		curEntry := c.txns[idx]
+		var entry *pendingTxnCacheEntry
+		if txn.WriteTimestamp.Less(curEntry.Txn.WriteTimestamp) {
+			// If we didn't have a clock observation before somehow, add it here.
+			if (curEntry.ClockWhilePending == roachpb.ObservedTimestamp{}) {
+				entry = &pendingTxnCacheEntry{Txn: curEntry.Txn, ClockWhilePending: clockObservation}
+			} else {
+				entry = curEntry
+			}
+		} else {
+			entry = &pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation}
+		}
+		c.moveFrontLocked(entry, idx)
+	} else {
+		c.insertFrontLocked(&pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
+	}
+}
+
+func (c *pendingTxnCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := range c.txns {
+		c.txns[i] = nil
+	}
+}
+
+func (c *pendingTxnCache) getIdxLocked(id uuid.UUID) int {
+	for i, entry := range c.txns {
+		if entry != nil && entry.Txn.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (c *pendingTxnCache) moveFrontLocked(entry *pendingTxnCacheEntry, cur int) {
+	copy(c.txns[1:cur+1], c.txns[:cur])
+	c.txns[0] = entry
+}
+
+func (c *pendingTxnCache) insertFrontLocked(entry *pendingTxnCacheEntry) {
+	copy(c.txns[1:], c.txns[:])
+	c.txns[0] = entry
 }
 
 // tagContentionTracer is the tracing span tag that the *contentionEventTracer
