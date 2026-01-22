@@ -1930,6 +1930,31 @@ func TestUseNewRPC(t *testing.T) {
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
 
+	// List of all commands that should have the --use-new-rpc flag.
+	// These commands were modified to support DRPC for inter-node communication.
+	testCommands := []*cobra.Command{
+		initCmd,       // init
+		genHAProxyCmd, // gen haproxy
+		demoCmd,       // demo
+
+		// debug commands
+		debugGossipValuesCmd,
+		debugTimeSeriesDumpCmd,
+		debugZipCmd,
+		debugListFilesCmd,
+		debugSendKVBatchCmd,
+		debugResetQuorumCmd,
+		debugRecoverCollectInfoCmd,
+		debugRecoverPlanCmd,
+		debugRecoverExecuteCmd,
+		debugRecoverVerifyCmd,
+
+		// node commands
+		decommissionNodeCmd,
+		recommissionNodeCmd,
+		drainNodeCmd,
+	}
+
 	testCases := []struct {
 		args        []string
 		expectedVal bool

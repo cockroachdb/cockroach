@@ -950,6 +950,9 @@ func init() {
 		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
 		_ = f.MarkHidden(cliflags.DemoDisableServerController.Name)
 
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
+
 		cliflagcfg.BoolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// We also support overriding the GEOS library path for 'demo'.
 		// Even though the demoCtx uses mostly different configuration

@@ -930,6 +930,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		CacheSize:               demoCtx.CacheSize,
 		NoAutoInitializeCluster: true,
 		EnableDemoLoginEndpoint: true,
+		UseDRPC:                 demoCtx.UseDRPC,
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
