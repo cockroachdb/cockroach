@@ -3858,6 +3858,12 @@ func MVCCPredicateDeleteRangePointTombstones(
 	}
 	defer iter.Close()
 
+	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+	// NB: StartTimer is used to denote that we're just starting to do the actual
+	// on-CPU work we acquired CPU tokens for. This prevents exhausting our tokens
+	// after flushing a single key.
+	elasticCPUHandle.StartTimer()
+
 	var batchSize, batchSizeBytes int64
 	iter.SeekGE(MVCCKey{Key: startKey})
 	for {
@@ -3865,6 +3871,14 @@ func MVCCPredicateDeleteRangePointTombstones(
 			return nil, err
 		} else if !ok {
 			break
+		}
+
+		if batchSize > 1 && elasticCPUHandle != nil {
+			if overLimit, _, _ := elasticCPUHandle.IsOverLimitAndPossiblyYield(); overLimit {
+				resumeKey := iter.UnsafeKey().Clone()
+				log.Dev.VEventf(ctx, 2, "yielding during MVCCPredicateDeleteRangePointTombstones; deleted %d keys", batchSize)
+				return &roachpb.Span{Key: resumeKey.Key, EndKey: endKey}, nil
+			}
 		}
 
 		hasPointKey, hasRangeKey := iter.HasPointAndRange()
