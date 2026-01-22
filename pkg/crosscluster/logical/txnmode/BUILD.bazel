@@ -10,8 +10,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/crosscluster/logical/ldrdecoder",
+        "//pkg/crosscluster/logical/txnapply",
         "//pkg/crosscluster/logical/txnfeed",
         "//pkg/crosscluster/logical/txnlock",
+        "//pkg/crosscluster/logical/txnscheduler",
         "//pkg/crosscluster/logical/txnwriter",
         "//pkg/crosscluster/streamclient",
         "//pkg/jobs",

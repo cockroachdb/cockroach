@@ -47,7 +47,7 @@ type Applier struct {
 	frontier Latest[hlc.Timestamp]
 }
 
-func NewApplier(input chan ScheduledTransaction, writers []txnwriter.TransactionWriter) *Applier {
+func NewApplier(writers []txnwriter.TransactionWriter) *Applier {
 	a := &Applier{
 		txnWriters: writers,
 		frontier:   MakeLatest[hlc.Timestamp](),
@@ -68,9 +68,7 @@ func (a *Applier) Frontier() chan hlc.Timestamp {
 	return a.frontier.Chan
 }
 
-func (a *Applier) Run(
-	ctx context.Context, input chan ScheduledTransaction, frontier chan hlc.Timestamp,
-) error {
+func (a *Applier) Run(ctx context.Context, input chan ScheduledTransaction) error {
 	ready := make(chan ldrdecoder.Transaction)
 	applied := make(chan appliedTransaction)
 
