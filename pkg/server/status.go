@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -2689,6 +2690,45 @@ func (s *systemStatusServer) rangesHelper(
 		}
 	}
 
+	// constructRangeInfoForProblems builds a lightweight RangeInfo containing
+	// only the fields needed for problem detection. This significantly reduces
+	// response size when callers only need to identify problematic ranges.
+	// Unlike constructRangeInfo, this avoids calling the expensive rep.State()
+	// method which involves proto cloning and RPC calls, instead using the
+	// lightweight rep.Desc() and rep.HasCircuitBreakerError() methods.
+	constructRangeInfoForProblems := func(
+		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
+	) serverpb.RangeInfo {
+		raftStatus := rep.RaftStatus()
+		desc := rep.Desc()
+		quiescentOrAsleep := metrics.Quiescent || metrics.Asleep
+		return serverpb.RangeInfo{
+			// Only populate the Desc field in State, which is needed for RangeID.
+			// This avoids the expensive rep.State(ctx) call which clones protos
+			// and makes RPC calls.
+			State: kvserverpb.RangeInfo{
+				ReplicaState: kvserverpb.ReplicaState{
+					Desc: desc,
+				},
+			},
+			SourceNodeID:  nodeID,
+			SourceStoreID: storeID,
+			Problems: serverpb.RangeProblems{
+				Unavailable:            metrics.Unavailable,
+				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+				NoRaftLeader:           !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent,
+				Underreplicated:        metrics.Underreplicated,
+				Overreplicated:         metrics.Overreplicated,
+				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
+				QuiescentEqualsTicking: raftStatus != nil && quiescentOrAsleep == metrics.Ticking,
+				RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				RangeTooLarge:          metrics.RangeTooLarge,
+				CircuitBreakerError:    rep.HasCircuitBreakerError(),
+				PausedFollowers:        metrics.PausedFollowerCount > 0,
+			},
+		}
+	}
+
 	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
@@ -2714,11 +2754,20 @@ func (s *systemStatusServer) rangesHelper(
 				}
 			}
 
-			output.Ranges = append(output.Ranges, constructRangeInfo(
-				rep,
-				store.Ident.StoreID,
-				rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-			))
+			metrics := rep.Metrics(ctx, now, isLiveMap, clusterNodes)
+			if req.ProblemsOnly {
+				output.Ranges = append(output.Ranges, constructRangeInfoForProblems(
+					rep,
+					store.Ident.StoreID,
+					metrics,
+				))
+			} else {
+				output.Ranges = append(output.Ranges, constructRangeInfo(
+					rep,
+					store.Ident.StoreID,
+					metrics,
+				))
+			}
 		}
 
 		if len(req.RangeIDs) == 0 {

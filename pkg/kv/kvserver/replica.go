@@ -1302,6 +1302,13 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.shMu.state.Desc
 }
 
+// HasCircuitBreakerError returns true if the replica's circuit breaker is
+// currently tripped. This is a lightweight check that avoids the expensive
+// State() call when only the circuit breaker status is needed.
+func (r *Replica) HasCircuitBreakerError() bool {
+	return r.breaker.Signal().Err() != nil
+}
+
 // toClientClosedTsPolicy converts a side-transport closed timestamp policy
 // (ctpb) to its client-facing equivalent (roachpb).
 func toClientClosedTsPolicy(

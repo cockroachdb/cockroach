@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -59,7 +58,9 @@ func (s *systemStatusServer) ProblemRanges(
 				status, err := s.dialNode(ctx, nodeID)
 				var rangesResponse *serverpb.RangesResponse
 				if err == nil {
-					req := &serverpb.RangesRequest{}
+					req := &serverpb.RangesRequest{
+						ProblemsOnly: true,
+					}
 					rangesResponse, err = status.Ranges(ctx, req)
 				}
 				response := nodeResponse{
@@ -141,17 +142,8 @@ func (s *systemStatusServer) ProblemRanges(
 						append(problems.TooLargeRangeIds, info.State.Desc.RangeID)
 				}
 			}
-			slices.Sort(problems.UnavailableRangeIDs)
-			slices.Sort(problems.RaftLeaderNotLeaseHolderRangeIDs)
-			slices.Sort(problems.NoRaftLeaderRangeIDs)
-			slices.Sort(problems.NoLeaseRangeIDs)
-			slices.Sort(problems.UnderreplicatedRangeIDs)
-			slices.Sort(problems.OverreplicatedRangeIDs)
-			slices.Sort(problems.QuiescentEqualsTickingRangeIDs)
-			slices.Sort(problems.RaftLogTooLargeRangeIDs)
-			slices.Sort(problems.CircuitBreakerErrorRangeIDs)
-			slices.Sort(problems.PausedReplicaIDs)
-			slices.Sort(problems.TooLargeRangeIds)
+			// Note: Range IDs are already sorted because the Ranges RPC uses
+			// kvserver.WithReplicasInOrder() when visiting replicas.
 			response.ProblemsByNodeID[resp.nodeID] = problems
 		case <-ctx.Done():
 			return nil, status.Error(codes.DeadlineExceeded, ctx.Err().Error())
