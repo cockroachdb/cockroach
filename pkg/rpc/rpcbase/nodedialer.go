@@ -6,6 +6,8 @@
 package rpcbase
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
 	"storj.io/drpc"

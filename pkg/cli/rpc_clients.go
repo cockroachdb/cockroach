@@ -100,10 +100,8 @@ func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
 
 func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), error) {
 	ccfg := makeRPCClientConfig(cfg)
-	// Use DRPC if either the CLI flag is set (ccfg.UseDRPC) or the cluster
-	// setting is enabled. The CLI flag takes precedence for CLI commands.
-	useDRPC := ccfg.UseDRPC || (cfg.Settings != nil && rpcbase.ExperimentalDRPCEnabled.Get(&cfg.Settings.SV))
-	if !useDRPC {
+	// Use DRPC if the CLI flag is set.
+	if !ccfg.UseDRPC {
 		cc, finish, err := rpc.NewClientConn(ctx, ccfg)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "failed to connect to the node")
