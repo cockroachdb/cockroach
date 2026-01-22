@@ -219,7 +219,7 @@ func ResumingReaderRetryOnErrFnForSettings(
 			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
 			return true
 		}
-		return false
+		return strings.Contains(err.Error(), "stream error") && strings.Contains(err.Error(), "CANCEL; received from peer")
 	}
 }
 

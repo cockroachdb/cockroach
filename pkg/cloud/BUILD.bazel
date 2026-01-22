@@ -47,6 +47,7 @@ go_test(
     embed = [":cloud"],
     deps = [
         "//pkg/cloud/cloudpb",
+        "//pkg/settings/cluster",
         "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -88,6 +89,7 @@ func TestResumingReader(t *testing.T) {
 
 	t.Run("read-with-retry", func(t *testing.T) {
 		customErr := errors.New("injected test error")
+		streamErr := errors.New("read ‹foo.avro›: ‹stream error: stream ID 42; CANCEL; received from peer›")
 
 		for _, tc := range []struct {
 			name         string
@@ -105,6 +107,11 @@ func TestResumingReader(t *testing.T) {
 				retryOnErrFn: func(err error) bool {
 					return errors.Is(err, customErr)
 				},
+			},
+			{
+				name:         "stream error",
+				retriableErr: streamErr,
+				retryOnErrFn: ResumingReaderRetryOnErrFnForSettings(ctx, cluster.MakeTestingClusterSettings()),
 			},
 		} {
 			for _, retriable := range []bool{true, false} {
