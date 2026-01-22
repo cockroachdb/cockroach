@@ -337,9 +337,11 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 
 	switch params.DefaultDRPCOption {
 	case base.TestDRPCEnabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, true)
+		cfg.UseDRPC = true
+		params.UseDRPC = true
 	case base.TestDRPCDisabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, false)
+		cfg.UseDRPC = false
+		params.UseDRPC = false
 	}
 
 	return cfg
