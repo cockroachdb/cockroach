@@ -2020,10 +2020,10 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 				tl.unreplicatedInfo.safeFormat(sb)
 			}
 			if txnStatusCache != nil {
-				finalizedTxnEntry, ok := txnStatusCache.finalizedTxns.get(txn.ID)
+				finalizedTxn, ok := txnStatusCache.finalizedTxns.get(txn.ID)
 				if ok {
 					var statusStr string
-					switch finalizedTxnEntry.Txn.Status {
+					switch finalizedTxn.Status {
 					case roachpb.COMMITTED:
 						statusStr = "committed"
 					case roachpb.ABORTED:
@@ -2701,9 +2701,9 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 			continue // no conflict with a lock held by our own transaction
 		}
 
-		finalizedTxnEntry, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
+		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
 		if ok {
-			up := roachpb.MakeLockUpdate(finalizedTxnEntry.Txn, roachpb.Span{Key: kl.key})
+			up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: kl.key})
 			// The lock belongs to a finalized transaction. There's no conflict, but
 			// the lock must be resolved -- accumulate it on the appropriate slice.
 			if !tl.isHeldReplicated() { // only held unreplicated
@@ -4375,10 +4375,10 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		return false, err
 	}
 	if consultTxnStatusCache {
-		finalizedTxnEntry, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
+		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
 		if ok {
 			g.toResolve = append(
-				g.toResolve, roachpb.MakeLockUpdate(finalizedTxnEntry.Txn, roachpb.Span{Key: key}))
+				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
 			return true, nil
 		}
 

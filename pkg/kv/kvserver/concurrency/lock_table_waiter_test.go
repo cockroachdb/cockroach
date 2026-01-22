@@ -880,8 +880,8 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	require.Equal(t, err1, err)
 }
 
-func TestTxnCache(t *testing.T) {
-	var c txnCache
+func TestPendingTxnCache(t *testing.T) {
+	var c pendingTxnCache
 	const overflow = 4
 	var txns [len(c.txns) + overflow]roachpb.Transaction
 	for i := range txns {
@@ -923,8 +923,8 @@ func TestTxnCache(t *testing.T) {
 	}
 }
 
-func TestTxnCacheUpdatesTxn(t *testing.T) {
-	var c txnCache
+func TestPendingTxnCacheUpdatesTxn(t *testing.T) {
+	var c pendingTxnCache
 
 	// Add txn to cache.
 	txnOrig := makeTxnProto("txn")
@@ -950,9 +950,9 @@ func TestTxnCacheUpdatesTxn(t *testing.T) {
 	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
 }
 
-func BenchmarkTxnCache(b *testing.B) {
+func BenchmarkPendingTxnCache(b *testing.B) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	var c txnCache
+	var c pendingTxnCache
 	var txns [len(c.txns) + 4]roachpb.Transaction
 	for i := range txns {
 		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
@@ -965,6 +965,97 @@ func BenchmarkTxnCache(b *testing.B) {
 	for i, txnOp := range txnOps {
 		if i%2 == 0 {
 			c.add(txnOp, roachpb.ObservedTimestamp{})
+		} else {
+			_, _ = c.get(txnOp.ID)
+		}
+	}
+}
+
+func TestFinalizedTxnCache(t *testing.T) {
+	var c finalizedTxnCache
+	const overflow = 4
+	var txns [len(c.txns) + overflow]roachpb.Transaction
+	for i := range txns {
+		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	}
+
+	// Add each txn to the cache. Observe LRU eviction policy.
+	for i := range txns {
+		txn := &txns[i]
+		c.add(txn)
+		for j, txn := range c.txns {
+			if j <= i {
+				require.Equal(t, &txns[i-j], txn)
+			} else {
+				require.Nil(t, txn)
+			}
+		}
+	}
+
+	// Access each txn in the cache in reverse order.
+	// Should reverse the order of the cache because of LRU policy.
+	for i := len(txns) - 1; i >= 0; i-- {
+		txn := &txns[i]
+		entryInCache, ok := c.get(txn.ID)
+		if i < overflow {
+			// Expect overflow.
+			require.Nil(t, entryInCache)
+			require.False(t, ok)
+		} else {
+			// Should be in cache.
+			require.Equal(t, txn, entryInCache)
+			require.True(t, ok)
+		}
+	}
+
+	// Cache should be in order again.
+	for i, entryInCache := range c.txns {
+		require.Equal(t, &txns[i+overflow], entryInCache)
+	}
+}
+
+func TestFinalizedTxnCacheUpdatesTxn(t *testing.T) {
+	var c finalizedTxnCache
+
+	// Add txn to cache.
+	txnOrig := makeTxnProto("txn")
+	c.add(txnOrig.Clone())
+	entryInCache, ok := c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.Equal(t, txnOrig.WriteTimestamp, entryInCache.WriteTimestamp)
+
+	// Add pushed txn with higher write timestamp.
+	txnPushed := txnOrig.Clone()
+	txnPushed.WriteTimestamp.Forward(txnPushed.WriteTimestamp.Add(1, 0))
+	c.add(txnPushed)
+	entryInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, entryInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.WriteTimestamp)
+
+	// Re-add txn with lower timestamp. Timestamp should not regress.
+	c.add(txnOrig.Clone())
+	entryInCache, ok = c.get(txnOrig.ID)
+	require.True(t, ok)
+	require.NotEqual(t, txnOrig.WriteTimestamp, entryInCache.WriteTimestamp)
+	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.WriteTimestamp)
+}
+
+func BenchmarkFinalizedTxnCache(b *testing.B) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	var c finalizedTxnCache
+	var txns [len(c.txns) + 4]roachpb.Transaction
+	for i := range txns {
+		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
+	}
+	txnOps := make([]*roachpb.Transaction, b.N)
+	for i := range txnOps {
+		txnOps[i] = &txns[rng.Intn(len(txns))]
+	}
+	b.ResetTimer()
+	for i, txnOp := range txnOps {
+		if i%2 == 0 {
+			c.add(txnOp)
 		} else {
 			_, _ = c.get(txnOp.ID)
 		}
