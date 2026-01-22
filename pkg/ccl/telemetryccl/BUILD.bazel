@@ -2,6 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "telemetryccl_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "telemetry_logging_test.go",
