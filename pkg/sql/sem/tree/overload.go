@@ -33,6 +33,8 @@ const (
 	SubstringStringIntInt
 	CrdbInternalRangeStats
 	CrdbInternalRangeStatsWithErrors
+	FNV64
+	FNV64a
 )
 
 // AggregateOverload is an opaque type which is used to box an eval.AggregateOverload.
