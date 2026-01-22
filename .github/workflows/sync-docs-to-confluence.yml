@@ -1,0 +1,135 @@
+name: Sync Docs to Confluence
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'docs/generated/sql/bnf/README.md'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync even if no changes detected'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  sync-to-confluence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install marked
+
+      - name: Sync to Confluence
+        env:
+          CONFLUENCE_BASE_URL: "https://cockroachlabs.atlassian.net/wiki"
+          CONFLUENCE_USER_EMAIL: ${{ secrets.CONFLUENCE_USER_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          CONFLUENCE_PAGE_ID: "5202804773"
+        run: |
+          node << 'EOF'
+          const fs = require('fs');
+          const { marked } = require('marked');
+
+          const baseUrl = process.env.CONFLUENCE_BASE_URL;
+          const email = process.env.CONFLUENCE_USER_EMAIL;
+          const token = process.env.CONFLUENCE_API_TOKEN;
+          const pageId = process.env.CONFLUENCE_PAGE_ID;
+
+          if (!baseUrl || !email || !token || !pageId) {
+            console.log('Missing Confluence credentials. Skipping sync.');
+            console.log('Required secrets: CONFLUENCE_BASE_URL, CONFLUENCE_USER_EMAIL, CONFLUENCE_API_TOKEN, CONFLUENCE_PAGE_ID');
+            process.exit(0);
+          }
+
+          const auth = Buffer.from(`${email}:${token}`).toString('base64');
+
+          async function getPageVersion() {
+            const response = await fetch(
+              `${baseUrl}/rest/api/content/${pageId}?expand=version`,
+              {
+                headers: {
+                  'Authorization': `Basic ${auth}`,
+                  'Content-Type': 'application/json'
+                }
+              }
+            );
+            const data = await response.json();
+            return data.version.number;
+          }
+
+          async function updatePage(htmlContent, version) {
+            const response = await fetch(
+              `${baseUrl}/rest/api/content/${pageId}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Basic ${auth}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  version: { number: version + 1 },
+                  title: 'SQL Diagram Guide for Writers',
+                  type: 'page',
+                  body: {
+                    storage: {
+                      value: htmlContent,
+                      representation: 'storage'
+                    }
+                  }
+                })
+              }
+            );
+
+            if (!response.ok) {
+              const error = await response.text();
+              throw new Error(`Failed to update page: ${error}`);
+            }
+
+            return response.json();
+          }
+
+          async function main() {
+            // Read and convert markdown
+            const markdown = fs.readFileSync('docs/generated/sql/bnf/README.md', 'utf8');
+
+            // Convert to HTML with Confluence-compatible formatting
+            let html = marked(markdown);
+
+            // Add info panel for the quick start section
+            html = html.replace(
+              /<p><strong>You only need to edit one file:<\/strong><\/p>/,
+              '<ac:structured-macro ac:name="info"><ac:rich-text-body><p><strong>You only need to edit one file:</strong></p></ac:rich-text-body></ac:structured-macro>'
+            );
+
+            // Add last updated timestamp
+            const timestamp = new Date().toISOString();
+            html = `<p><em>Last synced from GitHub: ${timestamp}</em></p>\n${html}`;
+
+            // Get current version and update
+            const version = await getPageVersion();
+            console.log(`Current page version: ${version}`);
+
+            await updatePage(html, version);
+            console.log(`Successfully updated Confluence page ${pageId} to version ${version + 1}`);
+          }
+
+          main().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Report sync status
+        if: always()
+        run: |
+          echo "::notice::Confluence sync workflow completed"
