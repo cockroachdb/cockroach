@@ -20646,7 +20646,7 @@ EXPLAIN (VEC) SELECT supp_nation, cust_nation, l_year, sum(volume) AS revenue FR
     └ *colexec.hashAggregator
       └ *colexecproj.projMultFloat64Float64Op
         └ *colexecprojconst.projMinusFloat64ConstFloat64Op
-          └ *colexec.defaultBuiltinFuncOperator
+          └ *colexecbuiltins.defaultBuiltinFuncOperator
             └ *colexecbase.constBytesOp
               └ *colexecjoin.hashJoiner
                 ├ *colfetcher.ColBatchScan
@@ -20685,7 +20685,7 @@ EXPLAIN (VEC) SELECT o_year, sum(CASE WHEN nation = 'BRAZIL' THEN volume ELSE 0 
           ├ *colexec.bufferOp
           │ └ *colexecproj.projMultFloat64Float64Op
           │   └ *colexecprojconst.projMinusFloat64ConstFloat64Op
-          │     └ *colexec.defaultBuiltinFuncOperator
+          │     └ *colexecbuiltins.defaultBuiltinFuncOperator
           │       └ *colexecbase.constBytesOp
           │         └ *colexecjoin.hashJoiner
           │           ├ *colexecjoin.hashJoiner
@@ -20718,7 +20718,7 @@ EXPLAIN (VEC) SELECT nation, o_year, sum(amount) AS sum_profit FROM ( SELECT n_n
         └ *colexecproj.projMultFloat64Float64Op
           └ *colexecproj.projMultFloat64Float64Op
             └ *colexecprojconst.projMinusFloat64ConstFloat64Op
-              └ *colexec.defaultBuiltinFuncOperator
+              └ *colexecbuiltins.defaultBuiltinFuncOperator
                 └ *colexecbase.constBytesOp
                   └ *colexecjoin.hashJoiner
                     ├ *colexecjoin.hashJoiner
@@ -21000,7 +21000,7 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
 └ Node 1
   └ *colexec.sortOp
     └ *colexec.hashAggregator
-      └ *colexec.substringInt64Int64Operator
+      └ *colexecbuiltins.substringInt64Int64Operator
         └ *colexecbase.constInt64Op
           └ *colexecbase.constInt64Op
             └ *rowexec.joinReader
@@ -21008,7 +21008,7 @@ EXPLAIN (VEC) SELECT cntrycode, count(*) AS numcust, sum(c_acctbal) AS totacctba
                 └ *colexecbase.castOpNullAny
                   └ *colexecbase.constNullOp
                     └ *colexec.selectInOpBytes
-                      └ *colexec.substringInt64Int64Operator
+                      └ *colexecbuiltins.substringInt64Int64Operator
                         └ *colexecbase.constInt64Op
                           └ *colexecbase.constInt64Op
                             └ *colfetcher.ColBatchScan
