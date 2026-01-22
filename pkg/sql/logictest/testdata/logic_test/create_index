@@ -705,3 +705,27 @@ statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_prima
 CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
 
 subtest end
+
+# Regression test for an internal setting's effect on index backfills.
+subtest issue-161408
+
+statement ok
+SET CLUSTER SETTING sql.schema.preserved_split_count_multiple = 0
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c STRING
+)
+
+statement ok
+INSERT INTO t SELECT i, i % 100, repeat('x', 10) FROM generate_series(1, 10000) AS g(i)
+
+statement ok
+CREATE STATISTICS st FROM t
+
+statement ok
+CREATE INDEX idx_b ON t(b)
+
+subtest end
