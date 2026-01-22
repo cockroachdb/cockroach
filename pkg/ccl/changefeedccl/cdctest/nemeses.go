@@ -1004,19 +1004,27 @@ func addColumn(a fsm.Args) error {
 			`there are less than %d columns.`, ns.maxTestColumnCount)
 	}
 
+	const addColumnTimeout = 30 * time.Second
+	var alterStmt string
 	switch payload.columnType {
 	case addColumnTypeEnum:
 		// Pick a random enum to add.
 		enum := payload.enum
-		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d enum%d DEFAULT 'hello'`,
-			ns.currentTestColumnCount, enum)); err != nil {
-			return err
-		}
+		alterStmt = fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d enum%d DEFAULT 'hello'`,
+			ns.currentTestColumnCount, enum)
 	case addColumnTypeString:
-		if _, err := ns.db.Exec(fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
-			ns.currentTestColumnCount)); err != nil {
+		alterStmt = fmt.Sprintf(`ALTER TABLE foo ADD COLUMN test%d STRING DEFAULT 'x'`,
+			ns.currentTestColumnCount)
+	default:
+		return errors.AssertionFailedf(`unsupported column type: %s`, payload.columnType)
+	}
+
+	if err := timeutil.RunWithTimeout(a.Ctx, "addColumn ALTER TABLE",
+		addColumnTimeout, func(ctx context.Context) error {
+			_, err := ns.db.ExecContext(ctx, alterStmt)
 			return err
-		}
+		}); err != nil {
+		return err
 	}
 
 	ns.currentTestColumnCount++
