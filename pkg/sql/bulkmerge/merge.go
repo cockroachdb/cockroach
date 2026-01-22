@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -31,6 +32,8 @@ func Merge(
 	maxIterations int,
 	writeTS *hlc.Timestamp,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
+	logMergeInputs(ctx, ssts, iteration, maxIterations)
+
 	execCfg := execCtx.ExecCfg()
 
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, iteration, maxIterations, writeTS)
@@ -80,6 +83,28 @@ func Merge(
 	})
 
 	return result.SSTs, nil
+}
+
+// logMergeInputs logs the input SSTs for the current merge iteration.
+// All logging is opt-in via log.V(2) for detailed iteration tracking.
+func logMergeInputs(
+	ctx context.Context, ssts []execinfrapb.BulkMergeSpec_SST, iteration int, maxIterations int,
+) {
+	// All iteration logging is verbose (opt-in).
+	if !log.V(2) {
+		return
+	}
+
+	log.Dev.Infof(ctx, "Distributed merge iteration %d/%d starting with %d input SSTs",
+		iteration, maxIterations, len(ssts))
+
+	var totalInputKeys uint64
+	for i, sst := range ssts {
+		totalInputKeys += sst.KeyCount
+		log.Dev.Infof(ctx, "  input SST[%d]: %d keys, span=[%s, %s), uri=%s",
+			i, sst.KeyCount, sst.StartKey, sst.EndKey, sst.URI)
+	}
+	log.Dev.Infof(ctx, "  Total input keys: %d", totalInputKeys)
 }
 
 func init() {

@@ -65,6 +65,7 @@ func (s *Writer) SetWriteTS(ts hlc.Timestamp) {
 func (s *Writer) flushSST(ctx context.Context, span roachpb.Span, rowSample roachpb.Key) error {
 	// Allocate a new file in storage.
 	fileSize := uint64(len(s.kvData))
+	keyCount := uint64(len(s.kv))
 	sstFile, uri, err := s.fileAllocator.AddFile(ctx)
 	if err != nil {
 		return err
@@ -82,7 +83,7 @@ func (s *Writer) flushSST(ctx context.Context, span roachpb.Span, rowSample roac
 	if err != nil {
 		return err
 	}
-	s.fileAllocator.CommitFile(uri, span, rowSample, fileSize)
+	s.fileAllocator.CommitFile(uri, span, rowSample, fileSize, keyCount)
 	return nil
 }
 

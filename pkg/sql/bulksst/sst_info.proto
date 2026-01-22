@@ -15,6 +15,7 @@ message SSTFileInfo {
     required bytes end_key = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
     required uint64 file_size = 4 [(gogoproto.nullable) = false];
     optional bytes row_sample = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
+    optional uint64 key_count = 6 [(gogoproto.nullable) = false];
 }
 
 message SSTFiles {

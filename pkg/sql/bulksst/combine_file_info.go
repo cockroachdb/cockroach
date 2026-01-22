@@ -47,6 +47,7 @@ func CombineFileInfo(
 				StartKey: sst.StartKey,
 				EndKey:   sst.EndKey,
 				URI:      sst.URI,
+				KeyCount: sst.KeyCount,
 			})
 		}
 		for _, sample := range file.RowSamples {

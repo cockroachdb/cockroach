@@ -50,6 +50,7 @@ type externalStorageWriter struct {
 	currentFileURI string
 	firstKey       roachpb.Key
 	currentSize    int64
+	keyCount       uint64
 	output         execinfrapb.BulkMergeSpec_Output
 }
 
@@ -97,6 +98,7 @@ func (w *externalStorageWriter) Add(
 		return false, err
 	}
 	w.currentSize += int64(len(key.Key) + len(val))
+	w.keyCount++
 
 	// Signal that we should split if we've exceeded the target size.
 	return w.currentSize >= w.targetSize, nil
@@ -110,6 +112,7 @@ func (w *externalStorageWriter) Complete(
 		StartKey: w.firstKey,
 		EndKey:   endKey,
 		URI:      w.currentFileURI,
+		KeyCount: w.keyCount,
 	}
 	w.output.SSTs = append(w.output.SSTs, sst)
 
@@ -126,6 +129,7 @@ func (w *externalStorageWriter) Complete(
 	// non-overlapping ranges.
 	w.firstKey = endKey
 	w.currentSize = 0
+	w.keyCount = 0
 
 	return sst, nil
 }
@@ -144,6 +148,7 @@ func (w *externalStorageWriter) Finish(
 			StartKey: w.firstKey,
 			EndKey:   endKey,
 			URI:      w.currentFileURI,
+			KeyCount: w.keyCount,
 		})
 	}
 
