@@ -621,10 +621,7 @@ type initServerCfg struct {
 	bootstrapAddresses []util.UnresolvedAddr
 
 	// useDRPC determines whether to use DRPC for internode communication
-	// instead of gRPC.
-	//
-	// NB: This configuration option is provided via a CLI flag and is not
-	// controlled by the "rpc.experimental_drpc.enabled" cluster setting.
+	// instead of gRPC. This configuration option is provided via a CLI flag.
 	useDRPC bool
 
 	// testingKnobs is used for internal test controls only.

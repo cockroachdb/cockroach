@@ -25,8 +25,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-	// With DRPC enabled, its cluster setting "rpc.experimental_drpc.enabled"
-	// interferes with some tests hence we disable it here.
+	// With DRPC enabled, it interferes with some tests hence we disable it here.
 	serverutils.TestingGlobalDRPCOption(base.TestDRPCDisabled)
 
 	os.Exit(m.Run())
