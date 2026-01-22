@@ -1,24 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-
-go_library(
-    name = "test_lib",
-    srcs = [
-        "assertions.go",
-        "operations.go",
-        "testconfig.go",
-        "testutils.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/roachprod/cloud",
-        "//pkg/roachprod/cloud/types",
-        "//pkg/roachprod/vm",
-        "//pkg/roachprod/vm/gce",
-        "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
-    ],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "test",
@@ -32,7 +12,6 @@ go_test(
     data = [
         "//pkg/cmd/roachprod",
     ],
-    embed = [":test_lib"],
     env = {
         "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
         "HOME": "$$TEST_TMPDIR",
@@ -41,6 +20,7 @@ go_test(
         "integration",
     ],
     deps = [
+        "//pkg/cmd/roachprod/test/framework",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce",
         "@com_github_stretchr_testify//require",
@@ -57,7 +37,6 @@ go_test(
     data = [
         "//pkg/cmd/roachprod",
     ],
-    embed = [":test_lib"],
     env = {
         "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
         "HOME": "$$TEST_TMPDIR",
@@ -65,5 +44,8 @@ go_test(
     tags = [
         "integration",
     ],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
 )
