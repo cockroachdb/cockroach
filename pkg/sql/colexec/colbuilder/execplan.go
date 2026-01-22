@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbuiltins"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecdisk"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecjoin"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecproj"
@@ -2623,7 +2624,7 @@ func planProjectionOperators(
 			inputCols = append(inputCols, resultIdx)
 		}
 		resultIdx = len(typs)
-		op, err = colexec.NewBuiltinFunctionOperator(
+		op, err = colexecbuiltins.NewBuiltinFunctionOperator(
 			allocator, evalCtx, t, typs, inputCols, resultIdx, op,
 		)
 		if r, ok := op.(execreleasable.Releasable); ok {
