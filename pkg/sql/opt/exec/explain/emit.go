@@ -496,9 +496,22 @@ func omitStats(n *Node) bool {
 	switch n.op {
 	case simpleProjectOp,
 		serializingProjectOp,
-		renderOp,
 		limitOp:
 		return true
+	case renderOp:
+		// If renderOp has actual render expressions to evaluate AND we're
+		// collecting execution stats, then it's handled by a separate no-op
+		// processor so that separate - from its inputs - exec stats are
+		// collected, and we do want to show them.
+		var needRendering bool
+		// This logic matches what we do in PhysicalPlan.AddRendering.
+		for _, expr := range n.args.(*renderArgs).Exprs {
+			if _, ok := expr.(*tree.IndexedVar); !ok {
+				needRendering = true
+				break
+			}
+		}
+		return !needRendering
 	}
 	return false
 }
@@ -515,14 +528,17 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 	var hasActualRowCount bool
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
-		if len(s.SQLNodes) > 0 {
-			e.ob.AddFlakyField(DeflakeNodes, "sql nodes", strings.Join(s.SQLNodes, ", "))
-		}
-		if len(s.KVNodes) > 0 {
-			e.ob.AddFlakyField(DeflakeNodes, "kv nodes", strings.Join(s.KVNodes, ", "))
-		}
-		if len(s.Regions) > 0 {
-			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
+		if n.op != renderOp {
+			// renderOp shares these stats with its input, so we omit them.
+			if len(s.SQLNodes) > 0 {
+				e.ob.AddFlakyField(DeflakeNodes, "sql nodes", strings.Join(s.SQLNodes, ", "))
+			}
+			if len(s.KVNodes) > 0 {
+				e.ob.AddFlakyField(DeflakeNodes, "kv nodes", strings.Join(s.KVNodes, ", "))
+			}
+			if len(s.Regions) > 0 {
+				e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
+			}
 		}
 		if s.UsedFollowerRead {
 			e.ob.AddField("used follower read", "")
@@ -619,8 +635,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 			}
 		}
 
-		// Show the estimated row count (except Values, where it is redundant).
-		if n.op != valuesOp && !e.ob.flags.OnlyShape {
+		// Show the estimated row count (except Values, where it is redundant,
+		// and renderOp which shares them with its input).
+		if n.op != valuesOp && n.op != renderOp && !e.ob.flags.OnlyShape {
 			if s.TableStatsAvailable {
 				if n.op == scanOp && s.TableStatsRowCount != 0 {
 					percentage := s.RowCount / float64(s.TableStatsRowCount) * 100

@@ -621,6 +621,8 @@ regions: <hidden>
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 2
 │           │
 │           └── • values
 │                 sql nodes: <hidden>
@@ -728,6 +730,8 @@ regions: <hidden>
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 2
 │           │
 │           └── • values
 │                 sql nodes: <hidden>
@@ -2583,6 +2587,8 @@ regions: <hidden>
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ execution time: 0µs
+│           │ actual row count: 2
 │           │
 │           └── • scan
 │                 sql nodes: <hidden>
