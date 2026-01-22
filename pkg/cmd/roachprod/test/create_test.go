@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test/framework"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ import (
 // TestCloudCreate tests creating a cloud cluster with a basic configuration
 func TestCloudCreate(t *testing.T) {
 	t.Parallel()
-	rpt := NewRoachprodTest(t, WithTimeout(10*time.Minute))
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// Create a 3-node GCE cluster
 	rpt.RunExpectSuccess("create", rpt.ClusterName(),
@@ -36,10 +37,10 @@ func TestCloudCreate(t *testing.T) {
 // TestCloudCreateRandomized tests creating clusters with randomized GCE options
 func TestCloudCreateRandomized(t *testing.T) {
 	t.Parallel()
-	rpt := NewRoachprodTest(t, WithTimeout(15*time.Minute))
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(15*time.Minute))
 
 	// Generate random GCE create options using the test's seeded RNG
-	opts := RandomGCECreateOptions(rpt.Rand())
+	opts := framework.RandomGCECreateOptions(rpt.Rand())
 	t.Logf("Creating cluster with random options (seed=%d): %s", rpt.Seed(), opts.String())
 
 	// Create cluster with randomized options
@@ -71,7 +72,7 @@ func TestCloudCreateRandomized(t *testing.T) {
 // and verifies all VMs are created in the correct zone
 func TestCloudCreateWithSpecificZone(t *testing.T) {
 	t.Parallel()
-	rpt := NewRoachprodTest(t, WithTimeout(10*time.Minute))
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// Get the list of potential zones from roachprod GCE provider implementation
 	// This list is small, is there a benefit to expanding it?
@@ -103,7 +104,7 @@ func TestCloudCreateWithSpecificZone(t *testing.T) {
 // where N specifies how many nodes should be in each zone
 func TestCloudCreateWithZoneCounts(t *testing.T) {
 	t.Parallel()
-	rpt := NewRoachprodTest(t, WithTimeout(10*time.Minute))
+	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 
 	// Get valid zones and randomly select 2-3 zones
 	validZones := gce.DefaultZones(string(vm.ArchAMD64), true)

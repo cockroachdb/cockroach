@@ -8,12 +8,13 @@ package test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/test/framework"
 	"github.com/stretchr/testify/require"
 )
 
 // TestRoachprodHelp verifies the roachprod --help command works
 func TestRoachprodHelp(t *testing.T) {
-	rpt := NewRoachprodTest(t, DisableCleanup())
+	rpt := framework.NewRoachprodTest(t, framework.DisableCleanup())
 
 	result := rpt.Run("--help")
 

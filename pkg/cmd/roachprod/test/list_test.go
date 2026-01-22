@@ -9,7 +9,7 @@ package test
 // Commenting because this just makes the log unusable rn...
 //func TestCloudList(t *testing.T) {
 //	t.Parallel()
-//	rpt := NewRoachprodTest(t, WithTimeout(10*time.Minute))
+//	rpt := framework.NewRoachprodTest(t, framework.WithTimeout(10*time.Minute))
 //
 //	// Create cluster
 //	rpt.RunExpectSuccess("create", rpt.ClusterName(),
