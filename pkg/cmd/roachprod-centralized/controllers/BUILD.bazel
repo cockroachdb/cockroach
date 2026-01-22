@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "controllers",
     srcs = [
+        "authn_authz.go",
         "controllers.go",
         "interfaces.go",
         "types.go",
@@ -10,21 +11,29 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
         "//pkg/cmd/roachprod-centralized/utils",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gin_gonic_gin//:gin",
-        "@org_golang_google_api//idtoken",
     ],
 )
 
 go_test(
     name = "controllers_test",
-    srcs = ["controllers_test.go"],
+    srcs = [
+        "authn_authz_test.go",
+        "controllers_test.go",
+    ],
     embed = [":controllers"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_gin_gonic_gin//:gin",
         "@com_github_stretchr_testify//assert",
-        "@org_golang_google_api//idtoken",
     ],
 )

@@ -6,7 +6,6 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/api/idtoken"
 )
 
 type MockResultDTO struct {
@@ -128,7 +126,7 @@ func TestControllerHandler_GetHandlers(t *testing.T) {
 		Extra: extra,
 	}
 
-	handlers := ch.GetHandlers()
+	handlers := ch.GetRouteHandlers()
 	assert.Equal(t, len(extra)+1, len(handlers))
 }
 
@@ -156,111 +154,6 @@ func TestControllerHandler_GetAuthenticationType(t *testing.T) {
 				Authentication: at,
 			}
 			assert.Equal(t, at, ch.GetAuthenticationType())
-		})
-	}
-}
-
-func TestController_Authentication(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	tests := []struct {
-		name         string
-		authDisabled bool
-		authHeader   string
-		setupHeader  func(*gin.Context)
-		validateFn   func(context.Context, string, string) (*idtoken.Payload, error)
-		wantStatus   int
-		wantUserID   string
-		wantEmail    string
-	}{
-		{
-			name:         "authentication disabled",
-			authDisabled: true,
-			wantStatus:   http.StatusOK,
-		},
-		{
-			name: "missing jwt token",
-			validateFn: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
-				return nil, fmt.Errorf("missing token")
-			},
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name: "invalid jwt token",
-			setupHeader: func(c *gin.Context) {
-				c.Request.Header.Set("X-Goog-IAP-JWT-Assertion", "invalid-token")
-			},
-			validateFn: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
-				return nil, fmt.Errorf("invalid token")
-			},
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name: "valid jwt token without claims",
-			setupHeader: func(c *gin.Context) {
-				c.Request.Header.Set("X-Goog-IAP-JWT-Assertion", "valid-token")
-			},
-			validateFn: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
-				return &idtoken.Payload{
-					Claims: map[string]interface{}{},
-				}, nil
-			},
-			wantStatus: http.StatusUnauthorized,
-		},
-		{
-			name: "valid jwt token with claims",
-			setupHeader: func(c *gin.Context) {
-				c.Request.Header.Set("X-Goog-IAP-JWT-Assertion", "valid-token")
-			},
-			validateFn: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
-				return &idtoken.Payload{
-					Issuer: "test-issuer",
-					Claims: map[string]interface{}{
-						"sub":   "test-user-id",
-						"email": "test@example.com",
-					},
-				}, nil
-			},
-			wantStatus: http.StatusOK,
-			wantUserID: "test-user-id",
-			wantEmail:  "test@example.com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			fmt.Printf("Running test: %s\n", tt.name)
-
-			// Setup
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest("GET", "/", nil)
-
-			if tt.setupHeader != nil {
-				tt.setupHeader(c)
-			}
-
-			// Create a test controller and mock the idtoken.Validate function.
-			ctrl := NewControllerWithTokenValidator(tt.validateFn)
-
-			// Test the authentication middleware
-			ctrl.Authentication(c, tt.authDisabled, "X-Goog-IAP-JWT-Assertion", "test-audience", "test-issuer")
-
-			// Verify response status
-			assert.Equal(t, tt.wantStatus, w.Code)
-
-			// Verify user claims if expected
-			if tt.wantUserID != "" {
-				userID, exists := c.Get(SessionUserID)
-				assert.True(t, exists)
-				assert.Equal(t, tt.wantUserID, userID)
-			}
-			if tt.wantEmail != "" {
-				email, exists := c.Get(SessionUserEmail)
-				assert.True(t, exists)
-				assert.Equal(t, tt.wantEmail, email)
-			}
 		})
 	}
 }

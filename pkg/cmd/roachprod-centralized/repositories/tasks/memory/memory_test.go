@@ -33,8 +33,9 @@ func newMockTask(id uuid.UUID, state tasks.TaskState) tasks.ITask {
 
 func TestGetTasks(t *testing.T) {
 	repo := NewTasksRepository()
-	tasksList, err := repo.GetTasks(context.Background(), logger.DefaultLogger, *filters.NewFilterSet())
+	tasksList, totalCount, err := repo.GetTasks(context.Background(), logger.DefaultLogger, *filters.NewFilterSet())
 	assert.NoError(t, err)
+	assert.Equal(t, 0, totalCount, "expected total count to be 0")
 	assert.Empty(t, tasksList, "expected empty tasks list")
 }
 

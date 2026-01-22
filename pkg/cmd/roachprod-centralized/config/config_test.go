@@ -55,8 +55,8 @@ func TestDefaultValues(t *testing.T) {
 	assert.Equal(t, true, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/metrics", config.Api.Metrics.Path)
 	assert.Equal(t, 8081, config.Api.Metrics.Port)
-	assert.Equal(t, false, config.Api.Authentication.Disabled)
-	assert.Equal(t, "X-Goog-IAP-JWT-Assertion", config.Api.Authentication.JWT.Header)
+	assert.Equal(t, "jwt", config.Api.Authentication.Type)
+	assert.Equal(t, "Authorization", config.Api.Authentication.Header)
 	assert.Equal(t, "", config.Api.Authentication.JWT.Audience)
 	assert.Equal(t, 1, config.Tasks.Workers)
 	assert.Equal(t, "", config.Database.URL)
@@ -79,8 +79,8 @@ func TestEnvironmentVariables(t *testing.T) {
 		"ROACHPROD_API_METRICS_ENABLED":             "false",
 		"ROACHPROD_API_METRICS_PATH":                "/health",
 		"ROACHPROD_API_METRICS_PORT":                "9091",
-		"ROACHPROD_API_AUTHENTICATION_DISABLED":     "true",
-		"ROACHPROD_API_AUTHENTICATION_JWT_HEADER":   "Authorization",
+		"ROACHPROD_API_AUTHENTICATION_TYPE":         "disabled",
+		"ROACHPROD_API_AUTHENTICATION_HEADER":       "Authorization",
 		"ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE": "test-audience",
 		"ROACHPROD_TASKS_WORKERS":                   "5",
 		"ROACHPROD_DATABASE_URL":                    "postgres://test",
@@ -107,8 +107,8 @@ func TestEnvironmentVariables(t *testing.T) {
 	assert.Equal(t, false, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/health", config.Api.Metrics.Path)
 	assert.Equal(t, 9091, config.Api.Metrics.Port)
-	assert.Equal(t, true, config.Api.Authentication.Disabled)
-	assert.Equal(t, "Authorization", config.Api.Authentication.JWT.Header)
+	assert.Equal(t, "disabled", config.Api.Authentication.Type)
+	assert.Equal(t, "Authorization", config.Api.Authentication.Header)
 	assert.Equal(t, "test-audience", config.Api.Authentication.JWT.Audience)
 	assert.Equal(t, 5, config.Tasks.Workers)
 	assert.Equal(t, "postgres://test", config.Database.URL)
@@ -133,8 +133,8 @@ func TestCommandLineFlags(t *testing.T) {
 		"--api-metrics-enabled=false",
 		"--api-metrics-path", "/status",
 		"--api-metrics-port", "7071",
-		"--api-authentication-disabled",
-		"--api-authentication-jwt-header", "X-Auth-Token",
+		"--api-authentication-type", "disabled",
+		"--api-authentication-header", "X-Auth-Token",
 		"--api-authentication-jwt-audience", "test-app",
 		"--tasks-workers", "3",
 		"--database-url", "sqlite://test.db",
@@ -156,8 +156,8 @@ func TestCommandLineFlags(t *testing.T) {
 	assert.Equal(t, false, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/status", config.Api.Metrics.Path)
 	assert.Equal(t, 7071, config.Api.Metrics.Port)
-	assert.Equal(t, true, config.Api.Authentication.Disabled)
-	assert.Equal(t, "X-Auth-Token", config.Api.Authentication.JWT.Header)
+	assert.Equal(t, "disabled", config.Api.Authentication.Type)
+	assert.Equal(t, "X-Auth-Token", config.Api.Authentication.Header)
 	assert.Equal(t, "test-app", config.Api.Authentication.JWT.Audience)
 	assert.Equal(t, 3, config.Tasks.Workers)
 	assert.Equal(t, "sqlite://test.db", config.Database.URL)
@@ -182,9 +182,9 @@ api:
     path: /ping
     port: 6061
   authentication:
-    disabled: true
+    type: disabled
+    header: X-Custom-Auth
     jwt:
-      header: X-Custom-Auth
       audience: yaml-test
 tasks:
   workers: 7
@@ -222,8 +222,8 @@ database:
 	assert.Equal(t, false, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/ping", config.Api.Metrics.Path)
 	assert.Equal(t, 6061, config.Api.Metrics.Port)
-	assert.Equal(t, true, config.Api.Authentication.Disabled)
-	assert.Equal(t, "X-Custom-Auth", config.Api.Authentication.JWT.Header)
+	assert.Equal(t, "disabled", config.Api.Authentication.Type)
+	assert.Equal(t, "X-Custom-Auth", config.Api.Authentication.Header)
 	assert.Equal(t, "yaml-test", config.Api.Authentication.JWT.Audience)
 	assert.Equal(t, 7, config.Tasks.Workers)
 	assert.Equal(t, "mysql://test", config.Database.URL)
@@ -250,9 +250,9 @@ func TestJSONFileConfig(t *testing.T) {
 			"port": 5051
 		},
 		"authentication": {
-			"disabled": false,
+			"type": "jwt",
+			"header": "X-JSON-Auth",
 			"jwt": {
-				"header": "X-JSON-Auth",
 				"audience": "json-test"
 			}
 		}
@@ -295,8 +295,8 @@ func TestJSONFileConfig(t *testing.T) {
 	assert.Equal(t, true, config.Api.Metrics.Enabled)
 	assert.Equal(t, "/json-metrics", config.Api.Metrics.Path)
 	assert.Equal(t, 5051, config.Api.Metrics.Port)
-	assert.Equal(t, false, config.Api.Authentication.Disabled)
-	assert.Equal(t, "X-JSON-Auth", config.Api.Authentication.JWT.Header)
+	assert.Equal(t, "jwt", config.Api.Authentication.Type)
+	assert.Equal(t, "X-JSON-Auth", config.Api.Authentication.Header)
 	assert.Equal(t, "json-test", config.Api.Authentication.JWT.Audience)
 	assert.Equal(t, 2, config.Tasks.Workers)
 	assert.Equal(t, "json://test", config.Database.URL)
@@ -532,7 +532,7 @@ func clearConfigEnvVars(t *testing.T) {
 		"ROACHPROD_API_METRICS_ENABLED",
 		"ROACHPROD_API_METRICS_PATH",
 		"ROACHPROD_API_METRICS_PORT",
-		"ROACHPROD_API_AUTHENTICATION_DISABLED",
+		"ROACHPROD_API_AUTHENTICATION_METHOD",
 		"ROACHPROD_API_AUTHENTICATION_JWT_HEADER",
 		"ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE",
 		"ROACHPROD_INSTANCE_HEALTH_TIMEOUT_SECONDS",

@@ -34,7 +34,7 @@ func TestSchedulePurgeTaskRoutine(t *testing.T) {
 	// Expect GetTasks to check for recent purge tasks
 	mockRepo.On(
 		"GetTasks", mock.Anything, mock.Anything, mock.Anything,
-	).Return([]tasks.ITask{}, nil)
+	).Return([]tasks.ITask{}, 0, nil)
 
 	// Expect CreateTask to be called to schedule the purge task
 	mockRepo.On(
@@ -70,7 +70,7 @@ func TestSchedulePurgeTaskRoutine_Error(t *testing.T) {
 
 	mockRepo.On(
 		"GetTasks", mock.Anything, mock.Anything, mock.Anything,
-	).Return(nil, expectedError)
+	).Return(nil, 0, expectedError)
 
 	errChan := make(chan error)
 	err := taskService.schedulePurgeTaskRoutine(ctx, logger.DefaultLogger, errChan)
