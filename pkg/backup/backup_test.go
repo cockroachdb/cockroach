@@ -3968,6 +3968,8 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	// Test Server too slow under deadlock.
 	skip.UnderDeadlock(t)
+	// Flaky under race.
+	skip.UnderRace(t)
 
 	const numAccounts = 1000
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
