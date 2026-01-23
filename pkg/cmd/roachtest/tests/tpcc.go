@@ -1072,7 +1072,9 @@ func registerTPCC(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "weekly/tpcc/headroom",
+		Name: "weekly/tpcc/headroom",
+		// TODO: #141792
+		Skip:             "add back when #141792 is implemented (--tolerate-retry-error)",
 		Owner:            registry.OwnerTestEng,
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
