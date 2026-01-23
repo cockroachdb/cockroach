@@ -467,8 +467,9 @@ func backupRollbacks(
 				url:                url,
 				mayRollback:        true,
 				expectedOnRollback: postRollback,
-				// Speed up mixed version variants by excluding individual table restores.
-				excludeAllTablesInDatabaseFlavor: isMultiRegion && isMixedVersion,
+				// Speed up multi-region or mixed version variants by excluding
+				// individual table restores, due to the slower speed due to multiple nodes.
+				excludeAllTablesInDatabaseFlavor: isMultiRegion || isMixedVersion,
 			}
 			var name string
 			switch i {
