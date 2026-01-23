@@ -39,61 +39,61 @@ import (
 const (
 	NamespaceTableSchema = `
 CREATE TABLE system.namespace (
-  "parentID" INT8,
-  "parentSchemaID" INT8,
-  name       STRING,
-  id         INT8,
-  CONSTRAINT "primary" PRIMARY KEY ("parentID", "parentSchemaID", name)
+    "parentID" INT8,
+    "parentSchemaID" INT8,
+    name       STRING,
+    id         INT8,
+    CONSTRAINT "primary" PRIMARY KEY ("parentID", "parentSchemaID", name)
 );`
 
 	DescriptorTableSchema = `
 CREATE TABLE system.descriptor (
-  id         INT8,
-  descriptor BYTES,
-  CONSTRAINT "primary" PRIMARY KEY (id)
+    id         INT8,
+    descriptor BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
 	// UsersTableSchema represents the system.users table.
 	UsersTableSchema = `
 CREATE TABLE system.users (
-  username         STRING NOT NULL,
-  "hashedPassword" BYTES NULL,
-  "isRole"         BOOL NOT NULL DEFAULT false,
-  user_id          OID NOT NULL,
-  estimated_last_login_time TIMESTAMPTZ NULL,
-  CONSTRAINT "primary" PRIMARY KEY (username),
-  UNIQUE INDEX users_user_id_idx (user_id ASC),
-  FAMILY "primary" (username, user_id)
+    username         STRING NOT NULL,
+    "hashedPassword" BYTES NULL,
+    "isRole"         BOOL NOT NULL DEFAULT false,
+    user_id          OID NOT NULL,
+    estimated_last_login_time TIMESTAMPTZ NULL,
+    CONSTRAINT "primary" PRIMARY KEY (username),
+    UNIQUE INDEX users_user_id_idx (user_id ASC),
+    FAMILY "primary" (username, user_id)
 );`
 	RoleOptionsTableSchema = `
 CREATE TABLE system.role_options (
-	username STRING NOT NULL,
-	option STRING NOT NULL,
-	value STRING,
-	user_id OID NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (username, option),
-	INDEX users_user_id_idx (user_id ASC),
-	FAMILY "primary" (username, option, value, user_id)
+    username STRING NOT NULL,
+    option STRING NOT NULL,
+    value STRING,
+    user_id OID NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (username, option),
+    INDEX users_user_id_idx (user_id ASC),
+    FAMILY "primary" (username, option, value, user_id)
 )`
 
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
 CREATE TABLE system.zones (
-  id     INT8,
-  config BYTES,
-  CONSTRAINT "primary" PRIMARY KEY (id)
+    id     INT8,
+    config BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (id)
 );`
 
 	SettingsTableSchema = `
 CREATE TABLE system.settings (
-	-- the internal key for the setting. The column is called 'name' for
-	-- historical reasons.
-	name              STRING    NOT NULL,
-	value             STRING    NOT NULL,
-	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
-	"valueType"       STRING,
-	CONSTRAINT "primary" PRIMARY KEY (name),
-	FAMILY (name, value, "lastUpdated", "valueType")
+    -- the internal key for the setting. The column is called 'name' for
+    -- historical reasons.
+    name              STRING    NOT NULL,
+    value             STRING    NOT NULL,
+    "lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
+    "valueType"       STRING,
+    CONSTRAINT "primary" PRIMARY KEY (name),
+    FAMILY (name, value, "lastUpdated", "valueType")
 );`
 
 	DescIDSequenceSchema = `
@@ -105,16 +105,16 @@ CREATE SEQUENCE system.tenant_id_seq;`
 	// Note: the "active" column is deprecated.
 	TenantsTableSchema = `
 CREATE TABLE system.tenants (
-	id           INT8 NOT NULL,
-	active       BOOL NOT NULL DEFAULT true NOT VISIBLE,
-	info         BYTES,
-	name         STRING,
-	data_state   INT,
-	service_mode INT,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, active, info, name, data_state, service_mode),
-	UNIQUE INDEX tenants_name_idx (name ASC),
-	INDEX tenants_service_mode_idx (service_mode ASC)
+    id           INT8 NOT NULL,
+    active       BOOL NOT NULL DEFAULT true NOT VISIBLE,
+    info         BYTES,
+    name         STRING,
+    data_state   INT,
+    service_mode INT,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, active, info, name, data_state, service_mode),
+    UNIQUE INDEX tenants_name_idx (name ASC),
+    INDEX tenants_service_mode_idx (service_mode ASC)
 );`
 
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
@@ -142,14 +142,15 @@ var p99LatencyComputeExprStr = p99LatencyComputeExpr
 // These system tables are not part of the system config.
 const (
 	// LeaseTableSchema is the new session based leasing table format.
-	LeaseTableSchema = `CREATE TABLE system.lease (
-  desc_id          INT8,
-  version          INT8,
-  sql_instance_id  INT8 NOT NULL,
-  session_id       BYTES,
-  crdb_region      BYTES NOT NULL,
-  CONSTRAINT       "primary" PRIMARY KEY (crdb_region, desc_id, version, session_id),
-  FAMILY           "primary" (desc_id, version, sql_instance_id, session_id, crdb_region)
+	LeaseTableSchema = `
+CREATE TABLE system.lease (
+    desc_id          INT8,
+    version          INT8,
+    sql_instance_id  INT8 NOT NULL,
+    session_id       BYTES,
+    crdb_region      BYTES NOT NULL,
+    CONSTRAINT       "primary" PRIMARY KEY (crdb_region, desc_id, version, session_id),
+    FAMILY           "primary" (desc_id, version, sql_instance_id, session_id, crdb_region)
 ) WITH (exclude_data_from_backup = true);`
 
 	// system.eventlog contains notable events from the cluster.
@@ -166,37 +167,37 @@ const (
 	// TODO(knz): Implement a migration to remove it.
 	EventLogTableSchema = `
 CREATE TABLE system.eventlog (
-  timestamp     TIMESTAMP  NOT NULL,
-  "eventType"   STRING     NOT NULL,
-  "targetID"    INT8       NOT NULL,
-  "reportingID" INT8       NOT NULL,
-  info          STRING,
-  "uniqueID"    BYTES      DEFAULT uuid_v4(),
-  payload       JSONB,
-  CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID"),
-  INDEX event_type_idx ("eventType", timestamp DESC)
+    timestamp     TIMESTAMP  NOT NULL,
+    "eventType"   STRING     NOT NULL,
+    "targetID"    INT8       NOT NULL,
+    "reportingID" INT8       NOT NULL,
+    info          STRING,
+    "uniqueID"    BYTES      DEFAULT uuid_v4(),
+    payload       JSONB,
+    CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID"),
+    INDEX event_type_idx ("eventType", timestamp DESC)
 );`
 
 	// rangelog is currently envisioned as a wide table; many different event
 	// types can be recorded to the table.
 	RangeEventTableSchema = `
 CREATE TABLE system.rangelog (
-  timestamp      TIMESTAMP  NOT NULL,
-  "rangeID"      INT8       NOT NULL,
-  "storeID"      INT8       NOT NULL,
-  "eventType"    STRING     NOT NULL,
-  "otherRangeID" INT8,
-  info           STRING,
-  "uniqueID"     INT8       DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID")
+    timestamp      TIMESTAMP  NOT NULL,
+    "rangeID"      INT8       NOT NULL,
+    "storeID"      INT8       NOT NULL,
+    "eventType"    STRING     NOT NULL,
+    "otherRangeID" INT8,
+    info           STRING,
+    "uniqueID"     INT8       DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (timestamp, "uniqueID")
 );`
 
 	UITableSchema = `
 CREATE TABLE system.ui (
-	key           STRING,
-	value         BYTES,
-	"lastUpdated" TIMESTAMP NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (key)
+    key           STRING,
+    value         BYTES,
+    "lastUpdated" TIMESTAMP NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (key)
 );`
 
 	// JobsRunStatsIdxPredicate is the predicate in jobs_run_stats_idx in JobsTable.
@@ -208,35 +209,35 @@ CREATE TABLE system.ui (
 	// This is done to minimize migration work required.
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
-	id                INT8      DEFAULT unique_rowid(),
-	status            STRING    NOT NULL,
-	created           TIMESTAMP NOT NULL DEFAULT now(),
-	dropped_payload   BYTES NOT VISIBLE,
-	dropped_progress  BYTES NOT VISIBLE,
-	created_by_type   STRING,
-	created_by_id     INT,
-	claim_session_id  BYTES,
-	claim_instance_id INT8,
-	num_runs          INT8,
-	last_run          TIMESTAMP,
-	job_type          STRING,
-	owner             STRING,
-	description       STRING,
-	error_msg         STRING,
-	finished          TIMESTAMPTZ,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX (status, created),
-	INDEX (created_by_type, created_by_id) STORING (status),
-	INDEX jobs_run_stats_idx (
-    claim_session_id,
-    status,
-    created
-  ) STORING(last_run, num_runs, claim_instance_id)
-    WHERE ` + JobsRunStatsIdxPredicate + `,
-  INDEX jobs_job_type_idx (job_type),
-	FAMILY fam_0_id_status_created_payload (id, status, created, dropped_payload, created_by_type, created_by_id, job_type, owner, description, error_msg, finished),
-	FAMILY progress (dropped_progress),
-	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
+    id                INT8      DEFAULT unique_rowid(),
+    status            STRING    NOT NULL,
+    created           TIMESTAMP NOT NULL DEFAULT now(),
+    dropped_payload   BYTES NOT VISIBLE,
+    dropped_progress  BYTES NOT VISIBLE,
+    created_by_type   STRING,
+    created_by_id     INT,
+    claim_session_id  BYTES,
+    claim_instance_id INT8,
+    num_runs          INT8,
+    last_run          TIMESTAMP,
+    job_type          STRING,
+    owner             STRING,
+    description       STRING,
+    error_msg         STRING,
+    finished          TIMESTAMPTZ,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    INDEX (status, created),
+    INDEX (created_by_type, created_by_id) STORING (status),
+    INDEX jobs_run_stats_idx (
+        claim_session_id,
+        status,
+        created
+    ) STORING (last_run, num_runs, claim_instance_id)
+      WHERE ` + JobsRunStatsIdxPredicate + `,
+    INDEX jobs_job_type_idx (job_type),
+    FAMILY fam_0_id_status_created_payload (id, status, created, dropped_payload, created_by_type, created_by_id, job_type, owner, description, error_msg, finished),
+    FAMILY progress (dropped_progress),
+    FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
 	// JobProgressTableSchema is a table that contains one row per job reflecting
@@ -250,13 +251,13 @@ CREATE TABLE system.jobs (
 	// used by job_info.
 	JobProgressTableSchema = `
 CREATE TABLE system.job_progress (
-	job_id INT8 NOT NULL,
-	written TIMESTAMPTZ NOT NULL DEFAULT now(), -- when this progress was reported.
-	fraction FLOAT, -- the fraction of some known work that is complete (e.g. half done with backfill)
-	resolved DECIMAL, -- a timestamp up to which processing is complete (aka "highwater"/resolvedTS/etc). Typically used by perpetual jobs instead of fraction.
-	--
-	FAMILY "primary" ("job_id", "written", "fraction", "resolved"),
-	CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC)
+    job_id INT8 NOT NULL,
+    written TIMESTAMPTZ NOT NULL DEFAULT now(), -- when this progress was reported.
+    fraction FLOAT, -- the fraction of some known work that is complete (e.g. half done with backfill)
+    resolved DECIMAL, -- a timestamp up to which processing is complete (aka "highwater"/resolvedTS/etc). Typically used by perpetual jobs instead of fraction.
+    --
+    FAMILY "primary" ("job_id", "written", "fraction", "resolved"),
+    CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC)
 )`
 
 	// JobProgressHistoryTableSchema is identical to job_progress, but is allowed
@@ -267,15 +268,15 @@ CREATE TABLE system.job_progress (
 	// for a specific job at a time. History is not stored indefinitely and may be
 	// pruned based on retention limits.
 	JobProgressHistoryTableSchema = `
-	CREATE TABLE system.job_progress_history (
-		job_id INT8 NOT NULL,
-		written TIMESTAMPTZ NOT NULL DEFAULT now(),
-		fraction FLOAT,
-		resolved DECIMAL,
-		--
-		FAMILY "primary" ("job_id", "written", "fraction", "resolved"),
-		CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC)
-	)`
+CREATE TABLE system.job_progress_history (
+    job_id INT8 NOT NULL,
+    written TIMESTAMPTZ NOT NULL DEFAULT now(),
+    fraction FLOAT,
+    resolved DECIMAL,
+    --
+    FAMILY "primary" ("job_id", "written", "fraction", "resolved"),
+    CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC)
+)`
 
 	// JobStatusTableSchema is the table that contains the current, user-visible
 	// status of a job, which is typically its current phase of execution such as
@@ -288,14 +289,14 @@ CREATE TABLE system.job_progress (
 	// wish to write that as a message in job_message rather than changing their
 	// status in this table; jobs should avoid frequent mutations to status.
 	JobStatusTableSchema = `
-	CREATE TABLE system.job_status (
-		job_id INT8 NOT NULL,
-		written TIMESTAMPTZ NOT NULL DEFAULT now(), 
-		status STRING NOT NULL, -- the human-readable status message e.g. "reverting" or "backfilling".
-		--
-		FAMILY "primary" ("job_id", "written", "status"),
-		CONSTRAINT "primary" PRIMARY KEY (job_id, written DESC)
-	)`
+CREATE TABLE system.job_status (
+    job_id INT8 NOT NULL,
+    written TIMESTAMPTZ NOT NULL DEFAULT now(), 
+    status STRING NOT NULL, -- the human-readable status message e.g. "reverting" or "backfilling".
+    --
+    FAMILY "primary" ("job_id", "written", "status"),
+    CONSTRAINT "primary" PRIMARY KEY (job_id, written DESC)
+)`
 
 	// JobMessageTableSchema is the table that contains a history of messages a
 	// job wishes to be visible to a human inspecting that specific job. Unlike
@@ -310,15 +311,15 @@ CREATE TABLE system.job_progress (
 	// their status in job_status, as this table is not joined in the same txn
 	// when listing all jobs.
 	JobMessageTableSchema = `
-	CREATE TABLE system.job_message (
-		job_id INT8 NOT NULL,
-		written TIMESTAMPTZ NOT NULL DEFAULT now(), 
-		kind STRING, -- the type of message, e.g. "warning", "status_change", etc
-		message STRING NOT NULL, -- the human-readable status message e.g. "reverting" or "backfilling".
-		--
-		FAMILY "primary" ("job_id", "written", "kind", "message"),
-		CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC, kind ASC)
-	)`
+CREATE TABLE system.job_message (
+    job_id INT8 NOT NULL,
+    written TIMESTAMPTZ NOT NULL DEFAULT now(), 
+    kind STRING, -- the type of message, e.g. "warning", "status_change", etc
+    message STRING NOT NULL, -- the human-readable status message e.g. "reverting" or "backfilling".
+    --
+    FAMILY "primary" ("job_id", "written", "kind", "message"),
+    CONSTRAINT "primary" PRIMARY KEY (job_id ASC, written DESC, kind ASC)
+)`
 
 	// web_sessions are used to track authenticated user actions over stateless
 	// connections, such as the cookie-based authentication used by the Admin
@@ -326,21 +327,21 @@ CREATE TABLE system.job_progress (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             INT8       NOT NULL DEFAULT unique_rowid(),
-	"hashedSecret" BYTES      NOT NULL,
-	username       STRING     NOT NULL,
-	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
-	"expiresAt"    TIMESTAMP  NOT NULL,
-	"revokedAt"    TIMESTAMP,
-	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
-	"auditInfo"    STRING,
-	user_id        OID        NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX ("expiresAt"),
-	INDEX ("createdAt"),
-  INDEX ("revokedAt"),
-  INDEX ("lastUsedAt"),
-	FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo", user_id)
+    id             INT8       NOT NULL DEFAULT unique_rowid(),
+    "hashedSecret" BYTES      NOT NULL,
+    username       STRING     NOT NULL,
+    "createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
+    "expiresAt"    TIMESTAMP  NOT NULL,
+    "revokedAt"    TIMESTAMP,
+    "lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
+    "auditInfo"    STRING,
+    user_id        OID        NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    INDEX ("expiresAt"),
+    INDEX ("createdAt"),
+    INDEX ("revokedAt"),
+    INDEX ("lastUsedAt"),
+    FAMILY "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo" (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo", user_id)
 );`
 
 	// table_statistics is used to track statistics collected about individual
@@ -354,237 +355,210 @@ CREATE TABLE system.web_sessions (
 	// average size of the column group in bytes.
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
-	"tableID"            INT8       NOT NULL,
-	"statisticID"        INT8       NOT NULL DEFAULT unique_rowid(),
-	name                 STRING,
-	"columnIDs"          INT8[]     NOT NULL,
-	"createdAt"          TIMESTAMP  NOT NULL DEFAULT now(),
-	"rowCount"           INT8       NOT NULL,
-	"distinctCount"      INT8       NOT NULL,
-	"nullCount"          INT8       NOT NULL,
-	histogram            BYTES,
-	"avgSize"            INT8       NOT NULL DEFAULT 0,
-	"partialPredicate"   STRING,
-	"fullStatisticID"    INT8,
-	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID")
+    "tableID"            INT8       NOT NULL,
+    "statisticID"        INT8       NOT NULL DEFAULT unique_rowid(),
+    name                 STRING,
+    "columnIDs"          INT8[]     NOT NULL,
+    "createdAt"          TIMESTAMP  NOT NULL DEFAULT now(),
+    "rowCount"           INT8       NOT NULL,
+    "distinctCount"      INT8       NOT NULL,
+    "nullCount"          INT8       NOT NULL,
+    histogram            BYTES,
+    "avgSize"            INT8       NOT NULL DEFAULT 0,
+    "partialPredicate"   STRING,
+    "fullStatisticID"    INT8,
+    CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
+    FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate", "fullStatisticID")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
 	// latitude, longitude coordinates, specified as degrees.
 	LocationsTableSchema = `
 CREATE TABLE system.locations (
-  "localityKey"   STRING,
-  "localityValue" STRING,
-  latitude        DECIMAL(18,15) NOT NULL,
-  longitude       DECIMAL(18,15) NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY ("localityKey", "localityValue"),
-  FAMILY ("localityKey", "localityValue", latitude, longitude)
+    "localityKey"   STRING,
+    "localityValue" STRING,
+    latitude        DECIMAL(18,15) NOT NULL,
+    longitude       DECIMAL(18,15) NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY ("localityKey", "localityValue"),
+    FAMILY ("localityKey", "localityValue", latitude, longitude)
 );`
 
 	// role_members stores relationships between roles (role->role and role->user).
 	RoleMembersTableSchema = `
 CREATE TABLE system.role_members (
-  "role"    STRING NOT NULL,
-  "member"  STRING NOT NULL,
-  "isAdmin" BOOL NOT NULL,
-  role_id   OID NOT NULL,
-  member_id OID NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
-  INDEX ("role"),
-  INDEX ("member"),
-  INDEX (role_id),
-  INDEX (member_id),
-  UNIQUE INDEX (role_id, member_id)
+    "role"    STRING NOT NULL,
+    "member"  STRING NOT NULL,
+    "isAdmin" BOOL NOT NULL,
+    role_id   OID NOT NULL,
+    member_id OID NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
+    INDEX ("role"),
+    INDEX ("member"),
+    INDEX (role_id),
+    INDEX (member_id),
+    UNIQUE INDEX (role_id, member_id)
 );`
 
 	// comments stores comments(database, table, column...).
 	CommentsTableSchema = `
 CREATE TABLE system.comments (
-   type      INT NOT NULL,    -- type of object, to distinguish between db, table, column and others
-   object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
-   sub_id    INT NOT NULL,    -- sub ID for column or indexes inside table, 0 for pure table
-   comment   STRING NOT NULL, -- the comment
-   CONSTRAINT "primary" PRIMARY KEY (type, object_id, sub_id)
+    type      INT NOT NULL,    -- type of object, to distinguish between db, table, column and others
+    object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
+    sub_id    INT NOT NULL,    -- sub ID for column or indexes inside table, 0 for pure table
+    comment   STRING NOT NULL, -- the comment
+    CONSTRAINT "primary" PRIMARY KEY (type, object_id, sub_id)
 );`
 
 	// reports_meta stores reports metadata
 	ReportsMetaTableSchema = `
 CREATE TABLE system.reports_meta (
-	id INT8 NOT NULL, "generated" TIMESTAMPTZ NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	FAMILY "primary" (id, "generated")
+    id INT8 NOT NULL, "generated" TIMESTAMPTZ NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    FAMILY "primary" (id, "generated")
 );`
 
 	// replication_constraint_stats stores replication constraint statistics
 	ReplicationConstraintStatsTableSchema = `
 CREATE TABLE system.replication_constraint_stats (
-	zone_id
-		INT8 NOT NULL,
-	subzone_id
-		INT8 NOT NULL,
-	type
-		STRING NOT NULL,
-	config
-		STRING NOT NULL,
-	report_id
-		INT8 NOT NULL,
-	violation_start
-		TIMESTAMPTZ NULL,
-	violating_ranges
-		INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC),
-	FAMILY "primary" (zone_id, subzone_id, type, config, report_id, violation_start, violating_ranges)
+    zone_id          INT8 NOT NULL,
+    subzone_id       INT8 NOT NULL,
+    type             STRING NOT NULL,
+    config           STRING NOT NULL,
+    report_id        INT8 NOT NULL,
+    violation_start  TIMESTAMPTZ NULL,
+    violating_ranges INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, type ASC, config ASC),
+    FAMILY "primary" (zone_id, subzone_id, type, config, report_id, violation_start, violating_ranges)
 ) WITH (exclude_data_from_backup = true);`
 
 	// replication_critical_localities stores replication critical localities
 	ReplicationCriticalLocalitiesTableSchema = `
 CREATE TABLE system.replication_critical_localities (
-	zone_id
-		INT8 NOT NULL,
-	subzone_id
-		INT8 NOT NULL,
-	locality
-		STRING NOT NULL,
-	report_id
-		INT8 NOT NULL,
-	at_risk_ranges
-		INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, locality ASC),
-	FAMILY "primary" (zone_id, subzone_id, locality, report_id, at_risk_ranges)
+    zone_id        INT8 NOT NULL,
+    subzone_id     INT8 NOT NULL,
+    locality       STRING NOT NULL,
+    report_id      INT8 NOT NULL,
+    at_risk_ranges INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (zone_id ASC, subzone_id ASC, locality ASC),
+    FAMILY "primary" (zone_id, subzone_id, locality, report_id, at_risk_ranges)
 );`
 
 	// replication_stats stores replication statistics
 	ReplicationStatsTableSchema = `
 CREATE TABLE system.replication_stats (
-	zone_id
-		INT8 NOT NULL,
-	subzone_id
-		INT8 NOT NULL,
-	report_id
-		INT8 NOT NULL,
-	total_ranges
-		INT8 NOT NULL,
-	unavailable_ranges
-		INT8 NOT NULL,
-	under_replicated_ranges
-		INT8 NOT NULL,
-	over_replicated_ranges
-		INT8 NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (zone_id, subzone_id),
-	FAMILY "primary" (
-		zone_id,
-		subzone_id,
-		report_id,
-		total_ranges,
-		unavailable_ranges,
-		under_replicated_ranges,
-		over_replicated_ranges
-	)
+    zone_id                 INT8 NOT NULL,
+    subzone_id              INT8 NOT NULL,
+    report_id               INT8 NOT NULL,
+    total_ranges            INT8 NOT NULL,
+    unavailable_ranges      INT8 NOT NULL,
+    under_replicated_ranges INT8 NOT NULL,
+    over_replicated_ranges  INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (zone_id, subzone_id),
+    FAMILY "primary" (zone_id, subzone_id, report_id, total_ranges, unavailable_ranges, under_replicated_ranges, over_replicated_ranges)
 ) WITH (exclude_data_from_backup = true);`
 
 	// protected_ts_meta stores a single row of metadata for the protectedts
 	// subsystem.
 	ProtectedTimestampsMetaTableSchema = `
 CREATE TABLE system.protected_ts_meta (
-   singleton   BOOL NOT NULL DEFAULT (true),
-   version     INT8 NOT NULL,
-   num_records INT8 NOT NULL,
-   num_spans   INT8 NOT NULL,
-   total_bytes INT8 NOT NULL,
-   CONSTRAINT check_singleton  CHECK (singleton),
-   CONSTRAINT "primary" PRIMARY KEY (singleton),
-	 FAMILY "primary" (singleton, version, num_records, num_spans, total_bytes)
+    singleton   BOOL NOT NULL DEFAULT (true),
+    version     INT8 NOT NULL,
+    num_records INT8 NOT NULL,
+    num_spans   INT8 NOT NULL,
+    total_bytes INT8 NOT NULL,
+    CONSTRAINT check_singleton  CHECK (singleton),
+    CONSTRAINT "primary" PRIMARY KEY (singleton),
+    FAMILY "primary" (singleton, version, num_records, num_spans, total_bytes)
 );`
 
 	ProtectedTimestampsRecordsTableSchema = `
 CREATE TABLE system.protected_ts_records (
-   id        UUID NOT NULL,
-   ts        DECIMAL NOT NULL,
-   meta_type STRING NOT NULL,
-   meta      BYTES,
-   num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
-   spans     BYTES NOT NULL,
-   verified  BOOL NOT NULL DEFAULT (false),
-   target    BYTES,         -- target is an encoded protobuf that specifies what the pts record will protect
-   CONSTRAINT "primary" PRIMARY KEY (id),
-	 FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified, target)
+    id        UUID NOT NULL,
+    ts        DECIMAL NOT NULL,
+    meta_type STRING NOT NULL,
+    meta      BYTES,
+    num_spans INT8 NOT NULL, -- num spans is important to know how to decode spans
+    spans     BYTES NOT NULL,
+    verified  BOOL NOT NULL DEFAULT (false),
+    target    BYTES,         -- target is an encoded protobuf that specifies what the pts record will protect
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, ts, meta_type, meta, num_spans, spans, verified, target)
 );`
 
 	StatementBundleChunksTableSchema = `
 CREATE TABLE system.statement_bundle_chunks (
-	id          INT8 DEFAULT unique_rowid(),
-	description STRING,
-	data        BYTES NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, description, data)
+    id          INT8 DEFAULT unique_rowid(),
+    description STRING,
+    data        BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, description, data)
 );`
 
 	StatementDiagnosticsRequestsTableSchema = `
 CREATE TABLE system.statement_diagnostics_requests(
-	id                       INT8        NOT NULL DEFAULT unique_rowid(),
-	completed                BOOL        NOT NULL DEFAULT FALSE,
-	statement_fingerprint    STRING      NOT NULL,
-	statement_diagnostics_id INT8,
-	requested_at             TIMESTAMPTZ NOT NULL,
-	min_execution_latency    INTERVAL    NULL,
-	expires_at               TIMESTAMPTZ NULL,
-	sampling_probability     FLOAT       NULL,
-	plan_gist                STRING      NULL,
-	anti_plan_gist           BOOL        NULL,
-	redacted                 BOOL        NOT NULL DEFAULT FALSE,
-	username                 STRING      NOT NULL DEFAULT '',
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
-	INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
-	FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
+    id                       INT8        NOT NULL DEFAULT unique_rowid(),
+    completed                BOOL        NOT NULL DEFAULT FALSE,
+    statement_fingerprint    STRING      NOT NULL,
+    statement_diagnostics_id INT8,
+    requested_at             TIMESTAMPTZ NOT NULL,
+    min_execution_latency    INTERVAL    NULL,
+    expires_at               TIMESTAMPTZ NULL,
+    sampling_probability     FLOAT       NULL,
+    plan_gist                STRING      NULL,
+    anti_plan_gist           BOOL        NULL,
+    redacted                 BOOL        NOT NULL DEFAULT FALSE,
+    username                 STRING      NOT NULL DEFAULT '',
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
+    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
+    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
 );`
 
 	StatementDiagnosticsTableSchema = `
 CREATE TABLE system.statement_diagnostics(
-	id                         INT8        NOT NULL DEFAULT unique_rowid(),
-	statement_fingerprint      STRING      NOT NULL,
-	statement                  STRING      NOT NULL,
-	collected_at               TIMESTAMPTZ NOT NULL,
-	trace                      JSONB,
-	bundle_chunks              INT ARRAY,
-	error                      STRING,
-	transaction_diagnostics_id INT8,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id),
-	INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id)
+    id                         INT8        NOT NULL DEFAULT unique_rowid(),
+    statement_fingerprint      STRING      NOT NULL,
+    statement                  STRING      NOT NULL,
+    collected_at               TIMESTAMPTZ NOT NULL,
+    trace                      JSONB,
+    bundle_chunks              INT ARRAY,
+    error                      STRING,
+    transaction_diagnostics_id INT8,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, statement_fingerprint, statement, collected_at, trace, bundle_chunks, error, transaction_diagnostics_id),
+    INDEX transaction_diagnostics_id_idx (transaction_diagnostics_id)
 );`
 
 	TransactionDiagnosticsRequestsTableSchema = `
 CREATE TABLE system.transaction_diagnostics_requests(
-	id                         INT8        NOT NULL DEFAULT unique_rowid(),
-	completed                  BOOL        NOT NULL DEFAULT FALSE,
-	transaction_fingerprint_id BYTES       NOT NULL,
-	statement_fingerprint_ids  BYTES[]     NOT NULL,
-	transaction_diagnostics_id INT8,
-	requested_at               TIMESTAMPTZ NOT NULL,
-	min_execution_latency      INTERVAL    NULL,
-	expires_at                 TIMESTAMPTZ NULL,
-	sampling_probability       FLOAT       NULL,
-	redacted                   BOOL        NOT NULL DEFAULT FALSE,
-	username                   STRING      NOT NULL DEFAULT '',
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
-	INDEX completed_idx (completed, id) STORING (transaction_fingerprint_id, statement_fingerprint_ids, min_execution_latency, expires_at, sampling_probability, redacted, username),
-	FAMILY "primary" (id, completed, transaction_fingerprint_id, statement_fingerprint_ids, transaction_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, redacted, username)
+    id                         INT8        NOT NULL DEFAULT unique_rowid(),
+    completed                  BOOL        NOT NULL DEFAULT FALSE,
+    transaction_fingerprint_id BYTES       NOT NULL,
+    statement_fingerprint_ids  BYTES[]     NOT NULL,
+    transaction_diagnostics_id INT8,
+    requested_at               TIMESTAMPTZ NOT NULL,
+    min_execution_latency      INTERVAL    NULL,
+    expires_at                 TIMESTAMPTZ NULL,
+    sampling_probability       FLOAT       NULL,
+    redacted                   BOOL        NOT NULL DEFAULT FALSE,
+    username                   STRING      NOT NULL DEFAULT '',
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
+    INDEX completed_idx (completed, id) STORING (transaction_fingerprint_id, statement_fingerprint_ids, min_execution_latency, expires_at, sampling_probability, redacted, username),
+    FAMILY "primary" (id, completed, transaction_fingerprint_id, statement_fingerprint_ids, transaction_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, redacted, username)
 );`
 
 	TransactionDiagnosticsTableSchema = `
 CREATE TABLE system.transaction_diagnostics(
-	id                         INT8        NOT NULL DEFAULT unique_rowid(),
-	transaction_fingerprint_id BYTES       NOT NULL,
-	statement_fingerprint_ids  BYTES[]     NOT NULL,
-	transaction_fingerprint    STRING      NOT NULL,
-	collected_at               TIMESTAMPTZ NOT NULL,
-	bundle_chunks              INT8 ARRAY,
-	error                      STRING,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, transaction_fingerprint_id, statement_fingerprint_ids, transaction_fingerprint, collected_at, bundle_chunks, error)
+    id                         INT8        NOT NULL DEFAULT unique_rowid(),
+    transaction_fingerprint_id BYTES       NOT NULL,
+    statement_fingerprint_ids  BYTES[]     NOT NULL,
+    transaction_fingerprint    STRING      NOT NULL,
+    collected_at               TIMESTAMPTZ NOT NULL,
+    bundle_chunks              INT8 ARRAY,
+    error                      STRING,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, transaction_fingerprint_id, statement_fingerprint_ids, transaction_fingerprint, collected_at, bundle_chunks, error)
 );`
 
 	ScheduledJobsTableSchema = `
@@ -599,15 +573,10 @@ CREATE TABLE system.scheduled_jobs (
     schedule_details BYTES,
     executor_type    STRING NOT NULL,
     execution_args   BYTES NOT NULL,
-
     CONSTRAINT "primary" PRIMARY KEY (schedule_id),
     INDEX "next_run_idx" (next_run),
-
- 	 FAMILY sched (schedule_id, next_run, schedule_state),
- 	 FAMILY other (
-       schedule_name, created, owner, schedule_expr, 
-       schedule_details, executor_type, execution_args 
-    )
+    FAMILY sched (schedule_id, next_run, schedule_state),
+    FAMILY other (schedule_name, created, owner, schedule_expr, schedule_details, executor_type, execution_args)
 )`
 
 	SqllivenessTableSchema = `
@@ -628,7 +597,7 @@ CREATE TABLE system.migrations (
     patch        INT8 NOT NULL,
     internal     INT8 NOT NULL,
     completed_at TIMESTAMPTZ NOT NULL,
- 	 FAMILY "primary" (major, minor, patch, internal, completed_at),
+    FAMILY "primary" (major, minor, patch, internal, completed_at),
     CONSTRAINT "primary" PRIMARY KEY (major, minor, patch, internal)
 )`
 
@@ -638,7 +607,7 @@ CREATE TABLE system.join_tokens (
     secret       BYTES NOT NULL,
     expiration   TIMESTAMPTZ NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (id),
- 	 FAMILY "primary" (id, secret, expiration)
+    FAMILY "primary" (id, secret, expiration)
 )`
 
 	// TODO(azhng): Currently we choose number of bucket for hash-sharding to be
@@ -672,8 +641,7 @@ CREATE TABLE system.statement_statistics (
     total_estimated_execution_time FLOAT AS (` + totalEstimatedExecutionTimeExpr + `) STORED,
     p99_latency FLOAT8 AS (` + p99LatencyComputeExpr + `) STORED,
 
-    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-      USING HASH WITH (bucket_count=8),
+    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
     INVERTED INDEX "indexes_usage_idx" (indexes_usage),
     INDEX "execution_count_idx" (aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE '$ internal%',
@@ -682,26 +650,7 @@ CREATE TABLE system.statement_statistics (
     INDEX "contention_time_idx" (aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "total_estimated_execution_time_idx" (aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "p99_latency_idx" (aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE '$ internal%',
-		FAMILY "primary" (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
-			aggregated_ts,
-			fingerprint_id,
-			transaction_fingerprint_id,
-			plan_hash,
-			app_name,
-			node_id,
-			agg_interval,
-			metadata,
-			statistics,
-			plan,
-			index_recommendations,
-			execution_count,
-			service_latency,
-			cpu_sql_nanos,
-			contention_time,
-			total_estimated_execution_time,
-			p99_latency
-		)
+    FAMILY "primary" (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
 ) WITH (sql_stats_automatic_collection_fraction_stale_rows = 4, sql_stats_automatic_partial_collection_fraction_stale_rows = 1);
 `
 
@@ -726,8 +675,7 @@ CREATE TABLE system.transaction_statistics (
     total_estimated_execution_time FLOAT AS (` + totalEstimatedExecutionTimeExpr + `) STORED,
     p99_latency FLOAT8 AS (` + p99LatencyComputeExpr + `) STORED,
 
-    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
-      USING HASH WITH (bucket_count=8),
+    CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id) USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id),
     INDEX "execution_count_idx" (aggregated_ts, app_name, execution_count DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "service_latency_idx" (aggregated_ts, app_name, service_latency DESC) WHERE app_name NOT LIKE '$ internal%',
@@ -735,22 +683,7 @@ CREATE TABLE system.transaction_statistics (
     INDEX "contention_time_idx" (aggregated_ts, app_name, contention_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "total_estimated_execution_time_idx" (aggregated_ts, app_name, total_estimated_execution_time DESC) WHERE app_name NOT LIKE '$ internal%',
     INDEX "p99_latency_idx" (aggregated_ts, app_name, p99_latency DESC) WHERE app_name NOT LIKE '$ internal%',
-		FAMILY "primary" (
-			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
-			aggregated_ts,
-			fingerprint_id,
-			app_name,
-			node_id,
-			agg_interval,
-			metadata,
-			statistics,
-			execution_count,
-			service_latency,
-			cpu_sql_nanos,
-			contention_time,
-			total_estimated_execution_time,
-			p99_latency
-		)
+    FAMILY "primary" (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8, aggregated_ts, fingerprint_id, app_name, node_id, agg_interval, metadata, statistics, execution_count, service_latency, cpu_sql_nanos, contention_time, total_estimated_execution_time, p99_latency)
 ) WITH (sql_stats_automatic_collection_fraction_stale_rows = 4, sql_stats_automatic_partial_collection_fraction_stale_rows = 1);
 `
 
@@ -782,25 +715,7 @@ CREATE TABLE system.statement_activity
     INDEX "cpu_sql_avg_nanos_idx" (aggregated_ts, cpu_sql_avg_nanos DESC),
     INDEX "service_latency_avg_seconds_idx" (aggregated_ts, service_latency_avg_seconds DESC),
     INDEX "service_latency_p99_seconds_idx" (aggregated_ts, service_latency_p99_seconds DESC),
-    FAMILY "primary" (
-                      aggregated_ts,
-                      fingerprint_id,
-                      transaction_fingerprint_id,
-                      plan_hash,
-                      app_name,
-                      agg_interval,
-                      metadata,
-                      statistics,
-                      plan,
-                      index_recommendations,
-                      execution_count,
-                      execution_total_seconds,
-                      execution_total_cluster_seconds,
-                      contention_time_avg_seconds,
-                      cpu_sql_avg_nanos,
-                      service_latency_avg_seconds,
-                      service_latency_p99_seconds
-        )
+    FAMILY "primary" ( aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
 )
 `
 
@@ -829,22 +744,7 @@ CREATE TABLE system.transaction_activity
     INDEX "cpu_sql_avg_nanos_idx" (aggregated_ts, cpu_sql_avg_nanos DESC),
     INDEX "service_latency_avg_seconds_idx" (aggregated_ts, service_latency_avg_seconds DESC),
     INDEX "service_latency_p99_seconds_idx" (aggregated_ts, service_latency_p99_seconds DESC),
-    FAMILY "primary" (
-                      aggregated_ts,
-                      fingerprint_id,
-                      app_name,
-                      agg_interval,
-                      metadata,
-                      statistics,
-                      query,
-                      execution_count,
-                      execution_total_seconds,
-                      execution_total_cluster_seconds,
-                      contention_time_avg_seconds,
-                      cpu_sql_avg_nanos,
-                      service_latency_avg_seconds,
-                      service_latency_p99_seconds
-        )
+    FAMILY "primary" (aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
 );
 `
 
@@ -856,92 +756,80 @@ CREATE TABLE system.database_role_settings (
     role_id      OID NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (database_id, role_name),
     UNIQUE INDEX (database_id, role_id) STORING (settings),
-		FAMILY "primary" (
-			database_id,
-			role_name,
-			settings,
-			role_id
-		)
+    FAMILY "primary" (database_id, role_name, settings, role_id)
 );`
 
 	TenantUsageTableSchema = `
 CREATE TABLE system.tenant_usage (
-  tenant_id INT NOT NULL,
+    tenant_id INT NOT NULL,
 
-  -- For each tenant, there is a special row with instance_id = 0 which contains
-  -- per-tenant stat. Each SQL instance (pod) also has its own row with
-  -- per-instance state.
-  instance_id INT NOT NULL,
+    -- For each tenant, there is a special row with instance_id = 0 which contains
+    -- per-tenant stat. Each SQL instance (pod) also has its own row with
+    -- per-instance state.
+    instance_id INT NOT NULL,
 
-  -- next_instance_id identifies the next live instance ID, with the smallest ID
-  -- larger than this instance_id (or 0 if there is no such ID).
-  -- We are overlaying a circular linked list of all live instances, with
-  -- instance 0 acting as a sentinel (always the head of the list).
-  next_instance_id INT NOT NULL,
+    -- next_instance_id identifies the next live instance ID, with the smallest ID
+    -- larger than this instance_id (or 0 if there is no such ID).
+    -- We are overlaying a circular linked list of all live instances, with
+    -- instance 0 acting as a sentinel (always the head of the list).
+    next_instance_id INT NOT NULL,
 
-  -- Time when we last interacted with this row. For the per-tenant row, this
-  -- is the time of the last update from any instance. For instance rows, this
-  -- is the time of the last update from that particular instance.
-  last_update TIMESTAMP NOT NULL,
+    -- Time when we last interacted with this row. For the per-tenant row, this
+    -- is the time of the last update from any instance. For instance rows, this
+    -- is the time of the last update from that particular instance.
+    last_update TIMESTAMP NOT NULL,
 
-  -- -------------------------------------------------------------------
-  --  The following fields are used only for the per-tenant state, when
-  --  instance_id = 0.
-  -- -------------------------------------------------------------------
+    -- -------------------------------------------------------------------
+    --  The following fields are used only for the per-tenant state, when
+    --  instance_id = 0.
+    -- -------------------------------------------------------------------
 
-  -- Bucket configuration.
-  ru_burst_limit FLOAT,
-  ru_refill_rate FLOAT,
+    -- Bucket configuration.
+    ru_burst_limit FLOAT,
+    ru_refill_rate FLOAT,
 
-  -- Current amount of RUs in the bucket.
-  ru_current FLOAT,
+    -- Current amount of RUs in the bucket.
+    ru_current FLOAT,
 
-  -- Current sum of the shares values for all instances.
-  current_share_sum FLOAT,
+    -- Current sum of the shares values for all instances.
+    current_share_sum FLOAT,
 
-  -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
-  total_consumption BYTES,
+    -- Cumulative usage statistics, encoded as roachpb.TenantConsumption.
+    total_consumption BYTES,
 
-  -- -------------------------------------------------------------
-  --  The following fields are used for per-instance state, when
-  --  instance_id != 0.
-  -- --------------------------------------------------------------
+    -- -------------------------------------------------------------
+    --  The following fields are used for per-instance state, when
+    --  instance_id != 0.
+    -- --------------------------------------------------------------
 
-  -- The lease is a unique identifier for this instance, necessary because
-  -- instance IDs can be reused.
-  instance_lease BYTES,
+    -- The lease is a unique identifier for this instance, necessary because
+    -- instance IDs can be reused.
+    instance_lease BYTES,
 
-  -- Last request sequence number. These numbers are provided by the
-  -- instance and are monotonically increasing; used to detect duplicate
-  -- requests and provide idempotency.
-  instance_seq INT,
+    -- Last request sequence number. These numbers are provided by the
+    -- instance and are monotonically increasing; used to detect duplicate
+    -- requests and provide idempotency.
+    instance_seq INT,
 
-  -- Current shares value for this instance.
-  instance_shares FLOAT,
+    -- Current shares value for this instance.
+    instance_shares FLOAT,
 
-  -- -------------------------------------------------------------
-  --  The following fields are used only for the per-tenant state, when
-  --  instance_id = 0.
-  --  These were added later and need to be ordered last in order to
-  --  be compatible with older versions of the table that are upgraded.
-  -- --------------------------------------------------------------
+    -- -------------------------------------------------------------
+    --  The following fields are used only for the per-tenant state, when
+    --  instance_id = 0.
+    --  These were added later and need to be ordered last in order to
+    --  be compatible with older versions of the table that are upgraded.
+    -- --------------------------------------------------------------
 
-  -- Computed rates of consumption for metrics used in tenant modeling, encoded
-  -- as roachpb.TenantConsumptionRates.
-  current_rates BYTES,
+    -- Computed rates of consumption for metrics used in tenant modeling, encoded
+    -- as roachpb.TenantConsumptionRates.
+    current_rates BYTES,
 
-  -- In-progress computed rates of consumption for metrics used in tenant
-  -- modeling, encoded as roachpb.TenantConsumptionRates.
-  next_rates BYTES,
-
-  FAMILY "primary" (
-    tenant_id, instance_id, next_instance_id, last_update,
-    ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
-    total_consumption, instance_lease, instance_seq, instance_shares,
-    current_rates, next_rates
-  ),
-
-  CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id)
+    -- In-progress computed rates of consumption for metrics used in tenant
+    -- modeling, encoded as roachpb.TenantConsumptionRates.
+    next_rates BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (tenant_id, instance_id),
+    FAMILY "primary" (tenant_id, instance_id, next_instance_id, last_update, ru_burst_limit, ru_refill_rate, ru_current, current_share_sum, total_consumption, instance_lease, instance_seq, instance_shares, current_rates, next_rates)
 ) WITH (exclude_data_from_backup = true)`
 
 	SQLInstancesTableSchema = `
@@ -955,16 +843,7 @@ CREATE TABLE system.sql_instances (
     binary_version STRING,
     is_draining    BOOL NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
-    FAMILY "primary" (
-      id, 
-      addr, 
-      session_id, 
-      locality, 
-      sql_addr, 
-      crdb_region, 
-      binary_version, 
-      is_draining
-    )
+    FAMILY "primary" ( id, addr, session_id, locality, sql_addr, crdb_region, binary_version, is_draining)
 )`
 
 	SpanConfigurationsTableSchema = `
@@ -979,102 +858,102 @@ CREATE TABLE system.span_configurations (
 
 	TenantSettingsTableSchema = `
 CREATE TABLE system.tenant_settings (
-	-- A non-zero tenant_id indicates that this is a setting specific to that
-	-- particular tenant. A zero tenant_id indicates an "all tenant" setting that
-	-- applies to all tenants which don't a tenant-specific value for this
-	-- setting.
-	tenant_id    INT8 NOT NULL,
-	-- the internal key for the setting. The column is called 'name' for
-	-- historical reasons.
-	name         STRING NOT NULL,
-	value        STRING NOT NULL,
-	last_updated TIMESTAMP NOT NULL DEFAULT now(),
-	value_type   STRING NOT NULL,
+    -- A non-zero tenant_id indicates that this is a setting specific to that
+    -- particular tenant. A zero tenant_id indicates an "all tenant" setting that
+    -- applies to all tenants which don't a tenant-specific value for this
+    -- setting.
+    tenant_id    INT8 NOT NULL,
+    -- the internal key for the setting. The column is called 'name' for
+    -- historical reasons.
+    name         STRING NOT NULL,
+    value        STRING NOT NULL,
+    last_updated TIMESTAMP NOT NULL DEFAULT now(),
+    value_type   STRING NOT NULL,
 
-	-- reason is unused for now.
-	reason       STRING,
-	CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
-	FAMILY (tenant_id, name, value, last_updated, value_type, reason)
+    -- reason is unused for now.
+    reason       STRING,
+    CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
+    FAMILY (tenant_id, name, value, last_updated, value_type, reason)
 );`
 
 	SpanCountTableSchema = `
 CREATE TABLE system.span_count (
-	singleton  BOOL DEFAULT TRUE,
-	span_count INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (singleton),
-	CONSTRAINT single_row CHECK (singleton),
-	FAMILY "primary" (singleton, span_count)
+    singleton  BOOL DEFAULT TRUE,
+    span_count INT NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (singleton),
+    CONSTRAINT single_row CHECK (singleton),
+    FAMILY "primary" (singleton, span_count)
 );`
 
 	SystemPrivilegeTableSchema = `
 CREATE TABLE system.privileges (
-	username STRING NOT NULL,
-	path STRING NOT NULL,
-	privileges STRING[] NOT NULL,
-	grant_options STRING[] NOT NULL,
-	user_id OID NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (username, path),
-	UNIQUE INDEX (path, user_id) STORING (privileges, grant_options),
-	UNIQUE INDEX (path, username) STORING (privileges, grant_options),
-	FAMILY "primary" (username, path, privileges, grant_options, user_id)
+    username STRING NOT NULL,
+    path STRING NOT NULL,
+    privileges STRING[] NOT NULL,
+    grant_options STRING[] NOT NULL,
+    user_id OID NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (username, path),
+    UNIQUE INDEX (path, user_id) STORING (privileges, grant_options),
+    UNIQUE INDEX (path, username) STORING (privileges, grant_options),
+    FAMILY "primary" (username, path, privileges, grant_options, user_id)
 );`
 
 	SystemExternalConnectionsTableSchema = `
 CREATE TABLE system.external_connections (
-	connection_name STRING NOT NULL,
-	created TIMESTAMP NOT NULL DEFAULT now(),
-	updated TIMESTAMP NOT NULL DEFAULT now(),
-	connection_type STRING NOT NULL,
-	connection_details BYTES NOT NULL,
-	owner STRING NOT NULL,
-	owner_id OID NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (connection_name),
-	FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
+    connection_name STRING NOT NULL,
+    created TIMESTAMP NOT NULL DEFAULT now(),
+    updated TIMESTAMP NOT NULL DEFAULT now(),
+    connection_type STRING NOT NULL,
+    connection_details BYTES NOT NULL,
+    owner STRING NOT NULL,
+    owner_id OID NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (connection_name),
+    FAMILY "primary" (connection_name, created, updated, connection_type, connection_details, owner, owner_id)
 );`
 
 	SystemTenantTasksSchema = `
 CREATE TABLE system.tenant_tasks (
-	tenant_id    INT8 NOT NULL,
-	issuer       STRING NOT NULL,
-	task_id      INT8 NOT NULL,
-	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
-	payload_id   STRING NOT NULL,
-	owner        STRING NOT NULL,
-	owner_id     OID NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (tenant_id, issuer, task_id),
-	FAMILY "primary" (tenant_id, issuer, task_id, created, payload_id, owner, owner_id)
+    tenant_id    INT8 NOT NULL,
+    issuer       STRING NOT NULL,
+    task_id      INT8 NOT NULL,
+    created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+    payload_id   STRING NOT NULL,
+    owner        STRING NOT NULL,
+    owner_id     OID NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (tenant_id, issuer, task_id),
+    FAMILY "primary" (tenant_id, issuer, task_id, created, payload_id, owner, owner_id)
 );`
 
 	SystemTaskPayloadsSchema = `
 CREATE TABLE system.task_payloads (
-	id           STRING NOT NULL,
-	created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
-	owner        STRING NOT NULL,
-	owner_id     OID NOT NULL,
-	min_version  STRING NOT NULL,
-	description  STRING,
-	type         STRING NOT NULL,
-	value        BYTES NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, created, owner, owner_id, min_version, description, type, value)
+    id           STRING NOT NULL,
+    created      TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+    owner        STRING NOT NULL,
+    owner_id     OID NOT NULL,
+    min_version  STRING NOT NULL,
+    description  STRING,
+    type         STRING NOT NULL,
+    value        BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    FAMILY "primary" (id, created, owner, owner_id, min_version, description, type, value)
 );`
 
 	// SystemJobInfoTableSchema is the schema for the system.job_info table, which
 	// is used by jobs to store arbitrary "info".
 	SystemJobInfoTableSchema = `
 CREATE TABLE system.job_info (
-	job_id INT8 NOT NULL,
-	info_key STRING NOT NULL,
-	-- written is in the PK for this table to give it mvcc-over-sql semantics, so
-	-- that revisions to the value for the logical job/key pair are separate SQL
-	-- rows. This is done because we do not allow KV ranges to split between the
-	-- revisions of a single row, and these job info KVs may be both large
-	-- and revised frequently; if we did not store revisions to them in separate
-	-- SQL rows, we could easily cause over-sized ranges that cannot split.
-	written TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
-	value BYTES,
-	CONSTRAINT "primary" PRIMARY KEY (job_id, info_key, written DESC),
-	FAMILY "primary" (job_id, info_key, written, value)
+    job_id INT8 NOT NULL,
+    info_key STRING NOT NULL,
+    -- written is in the PK for this table to give it mvcc-over-sql semantics, so
+    -- that revisions to the value for the logical job/key pair are separate SQL
+    -- rows. This is done because we do not allow KV ranges to split between the
+    -- revisions of a single row, and these job info KVs may be both large
+    -- and revised frequently; if we did not store revisions to them in separate
+    -- SQL rows, we could easily cause over-sized ranges that cannot split.
+    written TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+    value BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (job_id, info_key, written DESC),
+    FAMILY "primary" (job_id, info_key, written, value)
 );`
 
 	// SpanStatsUniqueKeysTableSchema defines the schema to store
@@ -1084,16 +963,16 @@ CREATE TABLE system.job_info (
 	SpanStatsUniqueKeysTableSchema = `
 CREATE TABLE system.span_stats_unique_keys (
     -- Every key has a unique id. We can't use the value of the key itself
-	-- because we want the cost of storing the key to 
-	-- amortize with repeated references. A UUID is 16 bytes,
-	-- but a roachpb.Key can be arbitrarily large.
-	id UUID DEFAULT gen_random_uuid(),
-	
-	-- key_bytes stores the raw bytes of a roachpb.Key.
-	key_bytes BYTES,
-  	CONSTRAINT "primary" PRIMARY KEY (id),
-  	UNIQUE INDEX unique_keys_key_bytes_idx (key_bytes ASC),
-	FAMILY "primary" (id, key_bytes)
+    -- because we want the cost of storing the key to 
+    -- amortize with repeated references. A UUID is 16 bytes,
+    -- but a roachpb.Key can be arbitrarily large.
+    id UUID DEFAULT gen_random_uuid(),
+
+    -- key_bytes stores the raw bytes of a roachpb.Key.
+    key_bytes BYTES,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    UNIQUE INDEX unique_keys_key_bytes_idx (key_bytes ASC),
+    FAMILY "primary" (id, key_bytes)
 );`
 
 	// SpanStatsBucketsTableSchema defines the schema to store
@@ -1101,22 +980,22 @@ CREATE TABLE system.span_stats_unique_keys (
 	SpanStatsBucketsTableSchema = `
 CREATE TABLE system.span_stats_buckets (
     -- Every bucket has a unique id.
-	id UUID DEFAULT gen_random_uuid(),
-	
-	-- The bucket belongs to sample_id
-	sample_id UUID NOT NULL,
-	
-	-- The uuid of this bucket's span's start key.
-	start_key_id UUID NOT NULL,
-	
-	-- The uuid of this bucket's span's start key.
-	end_key_id UUID NOT NULL,
-	
-	-- The number of KV requests destined for this span. 
-	requests INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	INDEX buckets_sample_id_idx (sample_id ASC),
-	FAMILY "primary" (id, sample_id, start_key_id, end_key_id, requests)
+    id UUID DEFAULT gen_random_uuid(),
+
+    -- The bucket belongs to sample_id
+    sample_id UUID NOT NULL,
+
+    -- The uuid of this bucket's span's start key.
+    start_key_id UUID NOT NULL,
+
+    -- The uuid of this bucket's span's start key.
+    end_key_id UUID NOT NULL,
+
+    -- The number of KV requests destined for this span. 
+    requests INT NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    INDEX buckets_sample_id_idx (sample_id ASC),
+    FAMILY "primary" (id, sample_id, start_key_id, end_key_id, requests)
 );`
 
 	// SpanStatsSamplesTableSchema defines the schema to store
@@ -1124,14 +1003,14 @@ CREATE TABLE system.span_stats_buckets (
 	SpanStatsSamplesTableSchema = `
 CREATE TABLE system.span_stats_samples (
     -- Every sample has a unique id.
-	id UUID DEFAULT gen_random_uuid(),
-	
-	-- sample_time represents the time the sample ended.
-	-- The sample's start time is therefore equal to sample_time - keyvissettings.SampleInterval.
-	sample_time TIMESTAMP NOT NULL DEFAULT now(),
-	CONSTRAINT "primary" PRIMARY KEY (id),
-	UNIQUE INDEX samples_sample_time_idx (sample_time ASC),
-	FAMILY "primary" (id, sample_time)
+    id UUID DEFAULT gen_random_uuid(),
+
+    -- sample_time represents the time the sample ended.
+    -- The sample's start time is therefore equal to sample_time - keyvissettings.SampleInterval.
+    sample_time TIMESTAMP NOT NULL DEFAULT now(),
+    CONSTRAINT "primary" PRIMARY KEY (id),
+    UNIQUE INDEX samples_sample_time_idx (sample_time ASC),
+    FAMILY "primary" (id, sample_time)
 );`
 
 	// SpanStatsTenantBoundariesTableSchema stores the boundaries that a tenant
@@ -1139,167 +1018,111 @@ CREATE TABLE system.span_stats_samples (
 	// keyvispb.UpdateBoundariesRequest proto.
 	SpanStatsTenantBoundariesTableSchema = `
 CREATE TABLE system.span_stats_tenant_boundaries (
-	tenant_id    INT8 NOT NULL,
-	boundaries	 BYTES NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (tenant_id),
-	FAMILY "primary" (tenant_id, boundaries)
+    tenant_id  INT8 NOT NULL,
+    boundaries BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (tenant_id),
+    FAMILY "primary" (tenant_id, boundaries)
 );`
 
 	// RegionLivenessTableSchema stores the liveness for a region
-	RegionLivenessTableSchema = `CREATE TABLE system.public.region_liveness (
+	RegionLivenessTableSchema = `
+CREATE TABLE system.public.region_liveness (
     crdb_region BYTES NOT NULL,
     unavailable_at TIMESTAMP NULL,
     CONSTRAINT region_liveness_pkey PRIMARY KEY (crdb_region ASC),
-	  FAMILY "primary" (crdb_region, unavailable_at)
+    FAMILY "primary" (crdb_region, unavailable_at)
 ) ;
 `
 
 	SystemMVCCStatisticsSchema = `
 CREATE TABLE system.mvcc_statistics (
-	created_at TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
-	database_id INT8 NOT NULL,
-	table_id INT8 NOT NULL,
-	index_id INT8 NOT NULL,
-	statistics JSONB NOT NULL,
-	crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)) VIRTUAL,
-	CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
-	FAMILY "primary" (
-	    created_at,
-	    database_id,
-	    table_id,
-	    index_id,
-	    statistics
-	)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now():::TIMESTAMPTZ,
+    database_id INT8 NOT NULL,
+    table_id INT8 NOT NULL,
+    index_id INT8 NOT NULL,
+    statistics JSONB NOT NULL,
+    crdb_internal_created_at_database_id_index_id_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(created_at))), 16:::INT8)) VIRTUAL,
+    CONSTRAINT mvcc_statistics_pkey PRIMARY KEY (created_at ASC, database_id ASC, table_id ASC, index_id ASC) USING HASH WITH (bucket_count=16),
+	FAMILY "primary" (created_at, database_id, table_id, index_id, statistics)
 );`
 
 	TxnExecutionStatsTableSchema = `
-	CREATE TABLE system.transaction_execution_insights (
-		transaction_id                     UUID NOT NULL,
-		transaction_fingerprint_id         BYTES NOT NULL,
-		query_summary                      STRING,
-		implicit_txn                       BOOL,
-		session_id                         STRING NOT NULL,
-		start_time                         TIMESTAMPTZ,
-		end_time                           TIMESTAMPTZ,
-		user_name                          STRING,
-		app_name                           STRING,
-		user_priority                      STRING,
-		retries                            INT8,
-		last_retry_reason                  STRING,
-		problems                           INT[], 
-		causes                             INT[],
-		stmt_execution_ids                 STRING[],
-		cpu_sql_nanos                      INT8,
-		last_error_code                    STRING,
-		status                             INT,
-		contention_time                    INTERVAL,
-		contention_info                    JSONB,
-		details                            JSONB,
-		created                            TIMESTAMPTZ NOT NULL DEFAULT now(),
-		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
-		CONSTRAINT "primary" PRIMARY KEY (transaction_id),
-		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id),
-		INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16),
-		FAMILY "primary" (
-			transaction_id,
-			transaction_fingerprint_id,
-			query_summary,
-			implicit_txn,
-			session_id,
-			start_time,
-			end_time,
-			user_name,
-			app_name,
-			user_priority,
-			retries,
-			last_retry_reason,
-			problems,
-			causes,
-			stmt_execution_ids,
-			cpu_sql_nanos,
-			last_error_code,
-			status,
-			contention_time,
-			contention_info,
-			details,
-			created
-		)
-	);`
+CREATE TABLE system.transaction_execution_insights (
+    transaction_id                     UUID NOT NULL,
+    transaction_fingerprint_id         BYTES NOT NULL,
+    query_summary                      STRING,
+    implicit_txn                       BOOL,
+    session_id                         STRING NOT NULL,
+    start_time                         TIMESTAMPTZ,
+    end_time                           TIMESTAMPTZ,
+    user_name                          STRING,
+    app_name                           STRING,
+    user_priority                      STRING,
+    retries                            INT8,
+    last_retry_reason                  STRING,
+    problems                           INT[], 
+    causes                             INT[],
+    stmt_execution_ids                 STRING[],
+    cpu_sql_nanos                      INT8,
+    last_error_code                    STRING,
+    status                             INT,
+    contention_time                    INTERVAL,
+    contention_info                    JSONB,
+    details                            JSONB,
+    created                            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
+    CONSTRAINT "primary" PRIMARY KEY (transaction_id),
+    INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id),
+    INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH WITH (bucket_count=16),
+	FAMILY "primary" (transaction_id, transaction_fingerprint_id, query_summary, implicit_txn, session_id, start_time, end_time, user_name, app_name, user_priority, retries, last_retry_reason, problems, causes, stmt_execution_ids, cpu_sql_nanos, last_error_code, status, contention_time, contention_info, details, created)
+);`
 
 	StatementExecutionStatsTableSchema = `
-	CREATE TABLE system.statement_execution_insights (
-		session_id                 STRING NOT NULL,
-		transaction_id             UUID NOT NULL,
-		transaction_fingerprint_id BYTES NOT NULL,
-		statement_id               STRING NOT NULL,
-		statement_fingerprint_id   BYTES NOT NULL,
-		problem                    INT,
-		causes                     INT[],
-		query                      STRING,
-		status                     INT,
-		start_time                 TIMESTAMPTZ,
-		end_time                   TIMESTAMPTZ,
-		full_scan                  BOOL,
-		user_name                  STRING,
-		app_name                   STRING,
-		user_priority              STRING,
-		database_name              STRING,
-		plan_gist                  STRING,
-		retries                    INT8,
-		last_retry_reason          STRING,
-		execution_node_ids         INT[],
-		index_recommendations      STRING[],
-		implicit_txn               BOOL,
-		cpu_sql_nanos              INT8,
-		error_code                 STRING,
-		contention_time            INTERVAL,
-		contention_info            JSONB,
-		details                    JSONB,
-		created                    TIMESTAMPTZ NOT NULL DEFAULT now(),
-		crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
-		CONSTRAINT "primary" PRIMARY KEY (statement_id, transaction_id),
-		INDEX transaction_id_idx (transaction_id),
-		INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id, start_time DESC, end_time DESC),
-		INDEX statement_fingerprint_id_idx (statement_fingerprint_id, start_time DESC, end_time DESC),
-		INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH,
-		FAMILY "primary" (
-			session_id,
-			transaction_id,
-			transaction_fingerprint_id,
-			statement_id,
-			statement_fingerprint_id,
-			problem,
-			causes,
-			query,
-			status,
-			start_time,
-			end_time,
-			full_scan,
-			user_name,
-			app_name,
-			user_priority,
-			database_name,
-			plan_gist,
-			retries,
-			last_retry_reason,
-			execution_node_ids,
-			index_recommendations,
-			implicit_txn,
-			cpu_sql_nanos,
-			error_code,
-			contention_time,
-			contention_info,
-			details,
-			created
-		)
-	);`
+CREATE TABLE system.statement_execution_insights (
+    session_id                 STRING NOT NULL,
+    transaction_id             UUID NOT NULL,
+    transaction_fingerprint_id BYTES NOT NULL,
+    statement_id               STRING NOT NULL,
+    statement_fingerprint_id   BYTES NOT NULL,
+    problem                    INT,
+    causes                     INT[],
+    query                      STRING,
+    status                     INT,
+    start_time                 TIMESTAMPTZ,
+    end_time                   TIMESTAMPTZ,
+    full_scan                  BOOL,
+    user_name                  STRING,
+    app_name                   STRING,
+    user_priority              STRING,
+    database_name              STRING,
+    plan_gist                  STRING,
+    retries                    INT8,
+    last_retry_reason          STRING,
+    execution_node_ids         INT[],
+    index_recommendations      STRING[],
+    implicit_txn               BOOL,
+    cpu_sql_nanos              INT8,
+    error_code                 STRING,
+    contention_time            INTERVAL,
+    contention_info            JSONB,
+    details                    JSONB,
+    created                    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
+    CONSTRAINT "primary" PRIMARY KEY (statement_id, transaction_id),
+    INDEX transaction_id_idx (transaction_id),
+    INDEX transaction_fingerprint_id_idx (transaction_fingerprint_id, start_time DESC, end_time DESC),
+    INDEX statement_fingerprint_id_idx (statement_fingerprint_id, start_time DESC, end_time DESC),
+    INDEX time_range_idx (start_time DESC, end_time DESC) USING HASH,
+	FAMILY "primary" ( session_id, transaction_id, transaction_fingerprint_id, statement_id, statement_fingerprint_id, problem, causes, query, status, start_time, end_time, full_scan, user_name, app_name, user_priority, database_name, plan_gist, retries, last_retry_reason, execution_node_ids, index_recommendations, implicit_txn, cpu_sql_nanos, error_code, contention_time, contention_info, details, created)
+);`
 
 	crdbInternalTableIdLastUpdatedShard = "mod(fnv32(md5(crdb_internal.datums_to_bytes(table_id, last_updated))), 16:::INT8)"
-	TableMetadataTableSchema            = ` CREATE TABLE system.table_metadata (
-	  db_id INT8 NOT NULL,
+	TableMetadataTableSchema            = `
+CREATE TABLE system.table_metadata (
+    db_id INT8 NOT NULL,
     table_id INT8 NOT NULL,
-	  db_name STRING NOT NULL,
-		schema_name STRING NOT NULL,
+    db_name STRING NOT NULL,
+    schema_name STRING NOT NULL,
     table_name STRING NOT NULL,
     total_columns INT8 NOT NULL,
     total_indexes INT8 NOT NULL,
@@ -1312,53 +1135,35 @@ CREATE TABLE system.mvcc_statistics (
     last_update_error string,
     last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
     table_type string NOT NULL,
-		details JSONB NOT NULL,
-		crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
+    details JSONB NOT NULL,
+    crdb_internal_last_updated_table_id_shard_16 INT4 NOT VISIBLE NOT NULL AS (` + crdbInternalTableIdLastUpdatedShard + `) VIRTUAL,
     CONSTRAINT "primary" PRIMARY KEY (db_id, table_id),
-		INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
-		INDEX "total_ranges_table_id_idx" (total_ranges desc, table_id),
-		INDEX "total_columns_table_id_idx" (total_columns desc, table_id),
-		INDEX "total_indexes_table_id_idx" (total_indexes desc, table_id),
-		INDEX "perc_live_data_id_idx" (perc_live_data desc, table_id),
-		INDEX "last_updated_idx" (last_updated desc, table_id) USING HASH,
-		INVERTED INDEX db_name_gin (db_name gin_trgm_ops),
-		INVERTED INDEX table_name_gin (table_name gin_trgm_ops),
-		INVERTED INDEX schema_name_gin (schema_name gin_trgm_ops),
-		INVERTED INDEX store_ids_gin (store_ids),
-    FAMILY "primary" (
-      db_id,
-			table_id,
-			db_name,
-			schema_name,
-			table_name,
-			total_columns,
-			total_indexes,
-			store_ids,
-			replication_size_bytes,
-			total_ranges,
-			total_live_data_bytes,
-			total_data_bytes,
-			perc_live_data,
-			last_update_error,
-			last_updated,
-			table_type,
-			details
-    )
-	);`
+    INDEX "replication_size_bytes_table_id_idx" (replication_size_bytes desc, table_id),
+    INDEX "total_ranges_table_id_idx" (total_ranges desc, table_id),
+    INDEX "total_columns_table_id_idx" (total_columns desc, table_id),
+    INDEX "total_indexes_table_id_idx" (total_indexes desc, table_id),
+    INDEX "perc_live_data_id_idx" (perc_live_data desc, table_id),
+    INDEX "last_updated_idx" (last_updated desc, table_id) USING HASH,
+    INVERTED INDEX db_name_gin (db_name gin_trgm_ops),
+    INVERTED INDEX table_name_gin (table_name gin_trgm_ops),
+    INVERTED INDEX schema_name_gin (schema_name gin_trgm_ops),
+    INVERTED INDEX store_ids_gin (store_ids),
+    FAMILY "primary" ( db_id, table_id, db_name, schema_name, table_name, total_columns, total_indexes, store_ids, replication_size_bytes, total_ranges, total_live_data_bytes, total_data_bytes, perc_live_data, last_update_error, last_updated, table_type, details)
+);`
 
 	PreparedTransactionsTableSchema = `
 CREATE TABLE system.prepared_transactions (
-  global_id        STRING       NOT NULL,
-  transaction_id   UUID         NOT NULL,
-  -- Null if the transaction does not have a transaction record.
-  transaction_key  BYTES        NULL,
-  prepared         TIMESTAMPTZ  NOT NULL DEFAULT now(),
-  owner            STRING       NOT NULL,
-  database         STRING       NOT NULL,
-  -- Unused. Included in schema to support a future implementation of XA "heuristic completion".
-  heuristic        STRING       NULL,
-  CONSTRAINT "primary" PRIMARY KEY (global_id),
-  FAMILY "primary" (global_id, transaction_id, transaction_key, prepared, owner, database, heuristic)
+    global_id        STRING       NOT NULL,
+    transaction_id   UUID         NOT NULL,
+    -- Null if the transaction does not have a transaction record.
+    transaction_key  BYTES        NULL,
+    prepared         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    owner            STRING       NOT NULL,
+    database         STRING       NOT NULL,
+    -- Unused. Included in schema to support a future implementation of XA "heuristic completion".
+    heuristic        STRING       NULL,
+    CONSTRAINT "primary" PRIMARY KEY (global_id),
+    FAMILY "primary" (global_id, transaction_id, transaction_key, prepared, owner, database, heuristic)
 );`
 
 	InspectErrorsTableSchema = `
@@ -1366,7 +1171,7 @@ CREATE TABLE public.inspect_errors (
     error_id UUID DEFAULT gen_random_uuid(),
     job_id INT8 NOT NULL,
     error_type STRING NOT NULL,
-	aost TIMESTAMPTZ NOT NULL,
+    aost TIMESTAMPTZ NOT NULL,
     database_id OID NULL,
     schema_id OID NULL,
     id OID NOT NULL,
@@ -1375,7 +1180,7 @@ CREATE TABLE public.inspect_errors (
     crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
     CONSTRAINT "primary" PRIMARY KEY (error_id ASC),
     INDEX object_idx (id ASC),
-	FAMILY "primary" (error_id, job_id, error_type, aost, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
+    FAMILY "primary" (error_id, job_id, error_type, aost, database_id, schema_id, id, primary_key, details, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '90 days');`
 
 	// StatementHintsTableSchema defines the schema for the system.statement_hints
@@ -1388,7 +1193,7 @@ CREATE TABLE public.inspect_errors (
 	// * hint: an external hint for the query, serialized into bytes.
 	// * created_at: the timestamp when the hint was created.
 	StatementHintsTableSchema = `
-  CREATE TABLE system.statement_hints (
+CREATE TABLE system.statement_hints (
     row_id      INT8 DEFAULT unique_rowid() NOT NULL,
     hash        INT8 NOT VISIBLE NOT NULL AS (fnv64(fingerprint)) STORED,
     fingerprint STRING NOT NULL,
@@ -1428,13 +1233,13 @@ CREATE TABLE public.inspect_errors (
 	// stats job is considered to be created - all relevant JobIDs are checked
 	// for whether they are still running and removed from the array if not.
 	TableStatisticsLocksTableSchema = `
-  CREATE TABLE system.table_statistics_locks (
+CREATE TABLE system.table_statistics_locks (
     table_id  INT8 NOT NULL,
     kind      INT8 NOT NULL,
     job_ids   INT8[] NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (table_id ASC, kind ASC),
     FAMILY "primary" (table_id, kind, job_ids)
-  );`
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
