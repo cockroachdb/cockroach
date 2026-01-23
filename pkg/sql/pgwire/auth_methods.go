@@ -464,6 +464,7 @@ func authCert(
 			cm,
 			roleSubject,
 			security.ClientCertSubjectRequired.Get(&execCfg.Settings.SV),
+			clientCertSANRequired,
 		)
 		if err != nil {
 			return err
@@ -489,12 +490,11 @@ func authCert(
 				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate.")
 			}
 			b.SetSANIdentities(identityList)
-		} else {
-			// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
-			b.SetReplacementIdentity(
-				lexbase.NormalizeName(tlsState.PeerCertificates[0].Subject.CommonName),
-			)
 		}
+		// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
+		b.SetReplacementIdentity(
+			lexbase.NormalizeName(tlsState.PeerCertificates[0].Subject.CommonName),
+		)
 	}
 	return b, nil
 }
