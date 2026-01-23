@@ -886,6 +886,9 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 		if err == nil {
 			return nil
 		}
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
 		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
 		if lastProgress != r.downloadJobProg {
 			lastProgress = r.downloadJobProg
@@ -912,9 +915,6 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	})
 
 	if err := grp.Wait(); err != nil {
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
-			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
-		}
 		return errors.Wrap(err, "failed to generate and send download spans")
 	}
 
