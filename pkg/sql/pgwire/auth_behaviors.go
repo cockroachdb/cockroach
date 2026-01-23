@@ -25,14 +25,15 @@ import (
 // associated network connection has been terminated to allow external
 // resources to be released.
 type AuthBehaviors struct {
-	authenticator       Authenticator
-	connClose           func()
-	replacementIdentity string
-	replacedIdentity    bool
-	roleMapper          RoleMapper
-	enhancedRoleMapper  EnhancedRoleMapper
-	authorizer          Authorizer
-	provisioningManager struct {
+	authenticator         Authenticator
+	connClose             func()
+	replacementIdentity   string
+	replacedIdentity      bool
+	roleMapper            RoleMapper
+	enhancedRoleMapper    EnhancedRoleMapper
+	enhancedRoleMapperSet bool
+	authorizer            Authorizer
+	provisioningManager   struct {
 		sync.Once
 		pc provisioning.UserProvisioningConfig
 	}
@@ -136,6 +137,11 @@ func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 // This is used when multiple system identities exist (e.g., certificate SANs).
 func (a *AuthBehaviors) SetEnhancedRoleMapper(fn EnhancedRoleMapper) {
 	a.enhancedRoleMapper = fn
+	a.enhancedRoleMapperSet = true
+}
+
+func (a *AuthBehaviors) IsEnhancedRoleMapperSet() bool {
+	return a.enhancedRoleMapperSet
 }
 
 // SetAuthorizer updates the SetAuthorizer to be used.
