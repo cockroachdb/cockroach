@@ -146,6 +146,7 @@ func RegisterTests(r registry.Registry) {
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
 	registerSchemaChangeBulkIngest(r)
+	registerSchemaChangeBulkIngestScaleTest(r)
 	registerSchemaChangeDuringKV(r)
 	registerSchemaChangeDuringTPCC800(r)
 	registerSchemaChangeIndexTPCC100(r)
