@@ -1771,39 +1771,25 @@ func (desc *wrapper) validateTableIndexes(
 					idx.GetName(), idx.GetSharded().Name)
 			}
 
-			// Validate that shard columns are a valid subset of index key columns.
+			// Validate that shard columns are a prefix of index key columns.
 			shardedDesc := idx.GetSharded()
-			if len(shardedDesc.ColumnNames) == 0 {
-				return errors.Newf("index %q has empty shard column names",
-					idx.GetName())
-			}
-
-			// Get the index key column names (excluding the shard column itself).
-			// For sharded indexes, the shard column is always first in key columns.
-			var indexColNames []string
-			for i := 0; i < idx.NumKeyColumns(); i++ {
-				colName := idx.GetKeyColumnName(i)
-				if colName != shardedDesc.Name {
-					indexColNames = append(indexColNames, colName)
-				}
-			}
 
 			// To avoid running this validation against existing indexes that are
 			// otherwise not causing any problems, we only carry out the validation
-			// when the shard columns are a proper subset of the key columns.
-			if len(shardedDesc.ColumnNames) < len(indexColNames) {
-				// Validate that each shard column appears in the index columns.
-				// Build a set of index column names for efficient lookup.
-				indexColSet := make(map[string]struct{}, len(indexColNames))
-				for _, colName := range indexColNames {
-					indexColSet[colName] = struct{}{}
+			// when the shard columns are a proper prefix of the key columns.
+			startIndex := idx.ExplicitColumnStartIdx()
+
+			if len(shardedDesc.ColumnNames) < (idx.NumKeyColumns() - startIndex) {
+				if len(shardedDesc.ColumnNames) == 0 {
+					return errors.Newf("index %q has empty shard column names",
+						idx.GetName())
 				}
 
-				// Check that each shard column exists in the index.
-				for _, shardColName := range shardedDesc.ColumnNames {
-					if _, ok := indexColSet[shardColName]; !ok {
-						return errors.Newf("index %q shard column %q is not in the index columns",
-							idx.GetName(), shardColName)
+				for i, shardColName := range shardedDesc.ColumnNames {
+					keyColumnIndex := i + startIndex
+					if idx.GetKeyColumnName(keyColumnIndex) != shardColName {
+						return errors.Newf("index %q shard column %q at position %d is not prefix of index columns",
+							idx.GetName(), shardColName, (i + 1))
 					}
 				}
 			}

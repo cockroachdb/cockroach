@@ -8,7 +8,6 @@ package tabledesc
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -420,9 +419,14 @@ var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
 // GetShardColumnName generates a name for the hidden shard column to be used to create a
 // hash sharded index.
 func GetShardColumnName(colNames []string, buckets int32) string {
-	// We sort the `colNames` here because we want to avoid creating a duplicate shard
-	// column if one already exists for the set of columns in `colNames`.
-	sort.Strings(colNames)
+	// Previously the column names were sorted here prior to generating the
+	// internal column name. This sort modified the original column name array,
+	// resulting in a sorted list of columns both for the internal column name and
+	// as input into the hashing function. Generated index DDL in pg_indexes or
+	// SHOW statements could be confusing to users that observe a different order
+	// from what they specified when creating the index. As the internal column
+	// is virtual, there is not significant overhead in having multiple internal
+	// columns where previously (post-sort) we may have reused one.
 	return strings.Join(
 		append(append([]string{`crdb_internal`}, colNames...), fmt.Sprintf(`shard_%v`, buckets)), `_`,
 	)

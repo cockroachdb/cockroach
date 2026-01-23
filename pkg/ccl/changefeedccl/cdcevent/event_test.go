@@ -193,7 +193,7 @@ CREATE TABLE foo (
 			//		we are going to have a new key column (crdb_internal_a_b_shard_16)
 			//		that is hashing the primary key columns.
 			schemaChange:    "ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS(b, a) USING HASH",
-			expectedKeyCols: [][]string{{"b", "a"}, {"crdb_internal_a_b_shard_16", "b", "a"}},
+			expectedKeyCols: [][]string{{"b", "a"}, {"crdb_internal_b_a_shard_16", "b", "a"}},
 			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}},
 			expectedUDTCols: [][]string{{"e"}, {"e"}},
 		},
@@ -205,7 +205,7 @@ CREATE TABLE foo (
 			// 2) An index without the hash sharding column and just c + e
 			// 3) An index with c + e and a new hash sharding column.
 			schemaChange:    "ALTER TABLE foo ALTER PRIMARY KEY USING COLUMNS(c, e) USING HASH",
-			expectedKeyCols: [][]string{{"crdb_internal_a_b_shard_16", "b", "a"}, {"c", "e"}, {"crdb_internal_c_e_shard_16", "c", "e"}},
+			expectedKeyCols: [][]string{{"crdb_internal_b_a_shard_16", "b", "a"}, {"c", "e"}, {"crdb_internal_c_e_shard_16", "c", "e"}},
 			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}, {"a", "b", "e"}},
 			expectedUDTCols: [][]string{{"e"}, {"e"}, {"e"}},
 		},
@@ -221,7 +221,7 @@ CREATE TABLE foo (
 			// 1) Existing columns in the table
 			// 2) New column j added (repeated for the final PK switch)
 			// 3) Old column b removed (final state)
-			schemaChange:    "ALTER TABLE foo ADD COLUMN j INT DEFAULT 32, DROP COLUMN d, DROP COLUMN crdb_internal_a_b_shard_16, DROP COLUMN b, ALTER PRIMARY KEY USING COLUMNS(a) USING HASH",
+			schemaChange:    "ALTER TABLE foo ADD COLUMN j INT DEFAULT 32, DROP COLUMN d, DROP COLUMN crdb_internal_b_a_shard_16, DROP COLUMN b, ALTER PRIMARY KEY USING COLUMNS(a) USING HASH",
 			expectedKeyCols: [][]string{{"crdb_internal_c_e_shard_16", "c", "e"}, {"a"}, {"crdb_internal_a_shard_16", "a"}, {"crdb_internal_a_shard_16", "a"}},
 			expectedColumns: [][]string{{"a", "b", "e"}, {"a", "b", "e"}, {"a", "b", "e", "j"}, {"a", "e", "j"}},
 			expectedUDTCols: [][]string{{"e"}, {"e"}, {"e"}, {"e"}},
