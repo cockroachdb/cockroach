@@ -119,6 +119,11 @@ func (t *descriptorState) findForTimestampImpl(
 	readTimestamp hlc.Timestamp,
 	expensiveLogEnabled bool,
 ) (*descriptorVersionState, bool, error) {
+	// Read is attempting to read at or after the offline time, so
+	// attempt a renewal first.
+	if t.mu.takenOffline && !leaseTimestamp.Less(t.mu.takenOfflineAt) {
+		return nil, false, errRenewLease
+	}
 	// Normally this is true if an older timestamp is intentionally used for
 	// locked leasing.
 	hasDifferentReadTimeStamp := leaseTimestamp != readTimestamp
@@ -137,7 +142,7 @@ func (t *descriptorState) findForTimestampImpl(
 				// Existing valid descriptor version.
 				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil
-			} else if !latest && hasDifferentReadTimeStamp {
+			} else if (!latest || t.mu.takenOffline) && hasDifferentReadTimeStamp {
 				// The lease timestamp is not compatible with the read timestamp, since
 				// the descriptor returned will be expired. This means we are seeing the
 				// first read of this descriptor, since the prior version was not locked.
@@ -165,7 +170,11 @@ func (t *descriptorState) findForTimestampImpl(
 		return t.findForTimestampImpl(ctx, readTimestamp, readTimestamp, expensiveLogEnabled)
 	}
 
-	return nil, false, errReadOlderVersion
+	err := errReadOlderVersion
+	if !hasDifferentReadTimeStamp {
+		err = errors.Mark(err, errReadAtBase)
+	}
+	return nil, false, err
 }
 
 // upsertLeaseLocked inserts a lease for a particular descriptor version.
@@ -197,24 +206,43 @@ func (t *descriptorState) upsertLeaseLocked(
 		t.m.names.insert(ctx, descState)
 		return nil
 	}
-	// If the version already exists and the session ID matches nothing
-	// needs to be done.
-	if s.getSessionID() == session.ID() {
+	// If the version already exists and the session ID matches, nothing
+	// needs to be done. If an expiration is set up then this is a historical
+	// version being revived.
+	if s.getSessionID() == session.ID() && s.expiration.Load() == nil {
 		return nil
 	}
 
 	// Otherwise, we need to update the existing lease to fix the session ID. The
 	// previously stored lease also needs to be deleted.
 	var existingLease storedLease
+	cleanupOldLease := false
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		existingLease = *s.mu.lease
 		s.session.Store(&session)
-		s.mu.lease.sessionID = session.ID().UnsafeBytes()
+		if s.mu.lease != nil {
+			existingLease = *s.mu.lease
+			cleanupOldLease = true
+			s.mu.lease.sessionID = session.ID().UnsafeBytes()
+			return
+		}
+		// It's possible a historical descriptor is now being revived as
+		// a live descriptor. This can only happen due to a repair query.
+		// In this scenario, we need to repopulate the stored lease with
+		// the new information.
+		s.mu.lease = &storedLease{
+			id:        desc.GetID(),
+			prefix:    regionEnumPrefix,
+			sessionID: session.ID().UnsafeBytes(),
+			version:   int(desc.GetVersion()),
+		}
+		s.expiration.Store(nil)
 	}()
 	// Delete the existing lease on behalf of the caller.
-	t.m.storage.release(ctx, t.m.stopper, &existingLease)
+	if cleanupOldLease {
+		t.m.storage.release(ctx, t.m.stopper, &existingLease)
+	}
 	return nil
 }
 
