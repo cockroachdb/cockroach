@@ -119,7 +119,9 @@ func getPkgToTests(diff string) map[string][]string {
 func runTests(ctx context.Context, pkgToTests map[string][]string, extraBazelArgs []string) error {
 	var testPackages []string
 	for pkg := range pkgToTests {
-		testPackages = append(testPackages, fmt.Sprintf("//%s:%s_test", pkg, filepath.Base(pkg)))
+		// Replace dots with underscores in the target name to match Bazel naming conventions.
+		targetName := strings.ReplaceAll(filepath.Base(pkg), ".", "_")
+		testPackages = append(testPackages, fmt.Sprintf("//%s:%s_test", pkg, targetName))
 	}
 	allTests := make(map[string]struct{})
 	for _, tests := range pkgToTests {
