@@ -872,12 +872,14 @@ func (c *txnStatusCache) clear() {
 	c.pendingTxns.clear()
 }
 
+const txnCacheSize = 8
+
 // txnCache is a small LRU cache that holds Transaction objects.
 //
 // The zero value of this struct is ready for use.
 type txnCache struct {
 	mu   syncutil.Mutex
-	txns [8]*roachpb.Transaction // [MRU, ..., LRU]
+	txns [txnCacheSize]*roachpb.Transaction // [MRU, ..., LRU]
 }
 
 func (c *txnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
