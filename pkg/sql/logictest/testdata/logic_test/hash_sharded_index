@@ -1906,3 +1906,95 @@ statement ok
 DROP TABLE shard_columns_parent
 
 subtest end
+
+subtest sharded_columns_no_sort
+
+statement ok
+CREATE TABLE no_sort_test (
+  id INT PRIMARY KEY,
+  c1 INT,
+  c2 INT,
+  c3 INT,
+  FAMILY all_columns (id, c1, c2, c3)
+)
+
+# Create two indexes with the same shard_columns but in different orders
+statement ok
+CREATE INDEX idx1 ON no_sort_test (c1, c2, c3) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2))
+
+statement ok
+CREATE INDEX idx2 ON no_sort_test (c2, c1, c3) USING HASH WITH (bucket_count=8, shard_columns=(c2, c1))
+
+statement ok
+INSERT INTO no_sort_test
+  SELECT generate_series(1,20), generate_series(21,40), generate_series(41,60), generate_series(61,80)
+
+# Show that an internal column was created for each index
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE no_sort_test]
+----
+CREATE TABLE public.no_sort_test (
+  id INT8 NOT NULL,
+  c1 INT8 NULL,
+  c2 INT8 NULL,
+  c3 INT8 NULL,
+  crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c1, c2))), 8:::INT8)) VIRTUAL,
+  crdb_internal_c2_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2, c1))), 8:::INT8)) VIRTUAL,
+  CONSTRAINT no_sort_test_pkey PRIMARY KEY (id ASC),
+  INDEX idx1 (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2)),
+  INDEX idx2 (c2 ASC, c1 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2, c1)),
+  FAMILY all_columns (id, c1, c2, c3)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE no_sort_test]
+----
+CREATE TABLE public.no_sort_test (
+  id INT8 NOT NULL,
+  c1 INT8 NULL,
+  c2 INT8 NULL,
+  c3 INT8 NULL,
+  crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c1, c2))), 8:::INT8)) VIRTUAL,
+  crdb_internal_c2_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2, c1))), 8:::INT8)) VIRTUAL,
+  CONSTRAINT no_sort_test_pkey PRIMARY KEY (id ASC),
+  INDEX idx1 (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2)),
+  INDEX idx2 (c2 ASC, c1 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2, c1)),
+  FAMILY all_columns (id, c1, c2, c3)
+) WITH (schema_locked = true);
+
+# Verify initial data
+query I rowsort
+SELECT COUNT(*) FROM no_sort_test@idx1
+----
+20
+
+# Verify initial data
+query I rowsort
+SELECT COUNT(*) FROM no_sort_test@idx2
+----
+20
+
+# Update shard column values, moving rows to different buckets
+statement ok
+UPDATE no_sort_test SET c1 = c1 + 80, c2 = c2 + 80
+
+# Verify data correctness after updates
+query II rowsort
+SELECT c1, c2 FROM no_sort_test@idx1 WHERE c1 IN (101, 111)
+----
+101  121
+111  131
+
+# Verify data correctness after updates
+query II rowsort
+SELECT c1, c2 FROM no_sort_test@idx2 WHERE c2 IN (121, 131)
+----
+101  121
+111  131
+
+statement ok
+DROP TABLE no_sort_test
+
+subtest end
