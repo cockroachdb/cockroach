@@ -63,6 +63,52 @@ func (c *BulkJobCleaner) CleanupURIs(ctx context.Context, uris []string) error {
 	return errOut
 }
 
+// ensureTrailingSlash returns the string with a trailing slash if it doesn't
+// already have one.
+func ensureTrailingSlash(s string) string {
+	if !strings.HasSuffix(s, "/") {
+		return s + "/"
+	}
+	return s
+}
+
+// dedupeDirectories removes duplicate directory paths while preserving order.
+func dedupeDirectories(dirs []string) []string {
+	seen := make(map[string]struct{})
+	var uniqueDirs []string
+	for _, dir := range dirs {
+		if _, exists := seen[dir]; !exists {
+			seen[dir] = struct{}{}
+			uniqueDirs = append(uniqueDirs, dir)
+		}
+	}
+	return uniqueDirs
+}
+
+// deleteFilesInDirectories lists and deletes all files in the given
+// directories. Errors are aggregated and returned. Directories that don't
+// support listing are skipped.
+func (c *BulkJobCleaner) deleteFilesInDirectories(ctx context.Context, dirs []string) error {
+	var errOut error
+	for _, dir := range dirs {
+		listErr := c.mux.ListFiles(ctx, dir, func(name string) error {
+			relativePath := strings.TrimPrefix(name, "/")
+			target := ensureTrailingSlash(dir) + relativePath
+			if err := c.mux.DeleteFile(ctx, target); err != nil {
+				errOut = errors.CombineErrors(errOut, err)
+			}
+			return nil
+		})
+		if errors.Is(listErr, cloud.ErrListingUnsupported) {
+			continue
+		}
+		if listErr != nil {
+			errOut = errors.CombineErrors(errOut, listErr)
+		}
+	}
+	return errOut
+}
+
 // CleanupJobDirectories enumerates all files under the job-scoped directories
 // and removes them. This is intended as a catch-all sweep after targeted
 // cleanup has already run.
@@ -95,44 +141,39 @@ func (c *BulkJobCleaner) CleanupJobDirectories(
 		if prefix == "" {
 			continue
 		}
-		// Ensure prefix ends with / before appending job path.
-		if !strings.HasSuffix(prefix, "/") {
-			prefix += "/"
-		}
-		jobDir := fmt.Sprintf("%sjob/%d/", prefix, jobID)
+		jobDir := fmt.Sprintf("%sjob/%d/", ensureTrailingSlash(prefix), jobID)
 		jobDirs = append(jobDirs, jobDir)
 	}
 
-	// Remove duplicates.
-	seen := make(map[string]struct{})
-	var uniqueDirs []string
-	for _, dir := range jobDirs {
-		if _, exists := seen[dir]; !exists {
-			seen[dir] = struct{}{}
-			uniqueDirs = append(uniqueDirs, dir)
-		}
+	uniqueDirs := dedupeDirectories(jobDirs)
+	return c.deleteFilesInDirectories(ctx, uniqueDirs)
+}
+
+// CleanupJobSubdirectory enumerates all files under a specific subdirectory
+// within the job-scoped directories and removes them. This is intended for
+// cleaning up intermediate files between merge iterations.
+//
+// The storagePrefixes parameter specifies the storage locations (without the
+// job directory path) where temporary files may exist. The function constructs
+// the full cleanup path as "<prefix>/job/<jobID>/<subdirectory>" and removes
+// all files under that path.
+func (c *BulkJobCleaner) CleanupJobSubdirectory(
+	ctx context.Context, jobID jobspb.JobID, storagePrefixes []string, subdirectory string,
+) error {
+	if c == nil {
+		return nil
 	}
 
-	var errOut error
-	for _, jobDir := range uniqueDirs {
-		listErr := c.mux.ListFiles(ctx, jobDir, func(name string) error {
-			trimmed := strings.TrimPrefix(name, "/")
-			target := jobDir
-			if !strings.HasSuffix(target, "/") {
-				target += "/"
-			}
-			target += trimmed
-			if err := c.mux.DeleteFile(ctx, target); err != nil {
-				errOut = errors.CombineErrors(errOut, err)
-			}
-			return nil
-		})
-		if errors.Is(listErr, cloud.ErrListingUnsupported) {
+	// Construct full subdirectory paths from storage prefixes.
+	subDirs := make([]string, 0, len(storagePrefixes))
+	for _, prefix := range storagePrefixes {
+		if prefix == "" {
 			continue
 		}
-		if listErr != nil {
-			errOut = errors.CombineErrors(errOut, listErr)
-		}
+		subDir := fmt.Sprintf("%sjob/%d/%s", ensureTrailingSlash(prefix), jobID, subdirectory)
+		subDirs = append(subDirs, subDir)
 	}
-	return errOut
+
+	uniqueDirs := dedupeDirectories(subDirs)
+	return c.deleteFilesInDirectories(ctx, uniqueDirs)
 }
