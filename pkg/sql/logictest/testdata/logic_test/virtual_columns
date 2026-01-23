@@ -1505,3 +1505,178 @@ GROUP BY k, v
 HAVING every(true)
 ----
 0
+
+# Test that virtual columns can have user-defined types (enums).
+# Unlike PostgreSQL, CockroachDB does not restrict virtual columns from using
+# user-defined types or referencing them in expressions.
+subtest virtual_columns_with_enums
+
+statement ok
+CREATE TYPE color AS ENUM ('red', 'green', 'blue');
+
+# Virtual column with enum type.
+statement ok
+CREATE TABLE t_enum_virtual (
+  a INT PRIMARY KEY,
+  c color,
+  v color AS (c) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_enum_virtual VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query IT rowsort
+SELECT a, v FROM t_enum_virtual
+----
+1  red
+2  green
+3  blue
+
+# Virtual column expression that uses enum in a CASE expression.
+statement ok
+CREATE TABLE t_enum_expr (
+  a INT PRIMARY KEY,
+  c color,
+  v STRING AS (CASE c WHEN 'red' THEN 'stop' WHEN 'green' THEN 'go' ELSE 'caution' END) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_enum_expr VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query IT rowsort
+SELECT a, v FROM t_enum_expr
+----
+1  stop
+2  go
+3  caution
+
+# Index on virtual column with enum type.
+statement ok
+CREATE INDEX ON t_enum_virtual (v);
+
+query IT rowsort
+SELECT a, v FROM t_enum_virtual@t_enum_virtual_v_idx WHERE v = 'green'
+----
+2  green
+
+# Test that virtual columns can use user-defined functions (UDFs) in their expressions.
+# Unlike PostgreSQL, CockroachDB allows UDFs in virtual computed column expressions.
+# Note: UDFs must be IMMUTABLE to be used in virtual computed columns.
+subtest virtual_columns_with_udfs
+
+statement ok
+CREATE FUNCTION double_it(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 2 $$;
+
+statement ok
+CREATE TABLE t_udf_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (double_it(b)) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_udf_virtual VALUES (1, 10), (2, 20), (3, 30);
+
+query III rowsort
+SELECT * FROM t_udf_virtual
+----
+1  10  20
+2  20  40
+3  30  60
+
+# Update should recompute the virtual column using the UDF.
+statement ok
+UPDATE t_udf_virtual SET b = 5 WHERE a = 1;
+
+query III
+SELECT * FROM t_udf_virtual WHERE a = 1
+----
+1  5  10
+
+# Filter by virtual column that uses UDF.
+query III rowsort
+SELECT * FROM t_udf_virtual WHERE v = 40
+----
+2  20  40
+
+# Virtual column using UDF with enum parameter.
+statement ok
+CREATE FUNCTION color_to_int(c color) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT CASE c WHEN 'red' THEN 1 WHEN 'green' THEN 2 WHEN 'blue' THEN 3 ELSE 0 END
+$$;
+
+statement ok
+CREATE TABLE t_udf_enum_virtual (
+  a INT PRIMARY KEY,
+  c color,
+  v INT AS (color_to_int(c)) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_udf_enum_virtual VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query ITI rowsort
+SELECT * FROM t_udf_enum_virtual
+----
+1  red    1
+2  green  2
+3  blue   3
+
+subtest virtual_column_error_conditions
+
+# Virtual columns are computed at write time, so errors like overflow or division
+# by zero occur when the row is inserted or updated.
+
+# Test integer overflow in virtual column expression.
+statement ok
+CREATE TABLE t_overflow_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  doubled INT AS (b * 2) VIRTUAL,
+  FAMILY (a, b)
+);
+
+statement ok
+INSERT INTO t_overflow_virtual (a, b) VALUES (1, 100);
+
+query III
+SELECT * FROM t_overflow_virtual
+----
+1  100  200
+
+# Insert a value that will overflow when doubled.
+# 4611686018427387904 * 2 = 9223372036854775808 > MAX_INT64
+statement error integer out of range
+INSERT INTO t_overflow_virtual (a, b) VALUES (2, 4611686018427387904);
+
+# Update to a value that will overflow.
+statement error integer out of range
+UPDATE t_overflow_virtual SET b = 4611686018427387904 WHERE a = 1
+
+# Test division by zero in virtual column expression.
+statement ok
+CREATE TABLE t_divzero_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  ratio INT AS (b // c) VIRTUAL,
+  FAMILY (a, b, c)
+);
+
+statement ok
+INSERT INTO t_divzero_virtual (a, b, c) VALUES (1, 100, 10);
+
+query IIII
+SELECT * FROM t_divzero_virtual
+----
+1  100  10  10
+
+# Insert with zero divisor fails at write time.
+statement error division by zero
+INSERT INTO t_divzero_virtual (a, b, c) VALUES (2, 50, 0);
+
+# Update to zero divisor fails.
+statement error division by zero
+UPDATE t_divzero_virtual SET c = 0 WHERE a = 1
+
+subtest end

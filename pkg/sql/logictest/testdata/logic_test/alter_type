@@ -227,6 +227,18 @@ ROLLBACK
 statement ok
 RESET autocommit_before_ddl
 
+# After ADD VALUE commits, the new value can be inserted into a table.
+statement ok
+ALTER TYPE build ADD VALUE 'g'
+
+statement ok
+INSERT INTO new_enum_values VALUES ('g')
+
+query T
+SELECT * FROM new_enum_values
+----
+g
+
 # Ensure that optimizer plan caching takes into account changes in types.
 statement ok
 CREATE TYPE cache AS ENUM ('lru', 'clock')
@@ -789,5 +801,54 @@ ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE JSONB USING s::JSONB; -- 
 skipif config local-legacy-schema-changer
 statement error failed to construct index entries during backfill: could not parse "{" as type int: strconv.ParseInt: parsing "{": invalid syntax
 ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE INT USING s::INT; -- Attempt to convert string to int
+
+subtest end
+
+# Test that RENAME VALUE updates expressions in computed columns.
+subtest rename_value_computed_column
+
+statement ok
+CREATE TYPE rename_enum AS ENUM ('a', 'b');
+
+statement ok
+CREATE TABLE t_rename_computed (
+  x INT PRIMARY KEY,
+  y rename_enum AS ('a':::rename_enum) VIRTUAL,
+  z rename_enum AS ('a':::rename_enum) STORED,
+  FAMILY (x, z)
+) WITH (schema_locked = false);
+
+statement ok
+INSERT INTO t_rename_computed (x) VALUES (1);
+
+query ITT
+SELECT * FROM t_rename_computed;
+----
+1  a  a
+
+statement ok
+ALTER TYPE rename_enum RENAME VALUE 'a' TO 'alpha';
+
+# Both computed column expressions should be updated and return the new value name.
+query ITT
+SELECT * FROM t_rename_computed;
+----
+1  alpha  alpha
+
+query TT
+SELECT y, z FROM t_rename_computed;
+----
+alpha  alpha
+
+query TT
+SHOW CREATE TABLE t_rename_computed;
+----
+t_rename_computed  CREATE TABLE public.t_rename_computed (
+                     x INT8 NOT NULL,
+                     y public.rename_enum NULL AS ('alpha':::public.rename_enum) VIRTUAL,
+                     z public.rename_enum NULL AS ('alpha':::public.rename_enum) STORED,
+                     CONSTRAINT t_rename_computed_pkey PRIMARY KEY (x ASC),
+                     FAMILY fam_0_x_z (x, z)
+                   );
 
 subtest end
