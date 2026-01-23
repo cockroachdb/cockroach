@@ -166,7 +166,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			}
 
 			// Configure the variables for the test specification.
-			name := fmt.Sprintf("rebalance/by-load/mode=%s%s", rebalanceModeNames[rebalanceMode], testKindNames[testKind])
+			name := fmt.Sprintf("rebalance/by-load/%s%s", rebalanceModeNames[rebalanceMode], testKindNames[testKind])
 			clusterSpec := r.MakeClusterSpec(7) // the last node is just used to generate load
 			suites := registry.Suites(registry.Nightly)
 			clouds := registry.AllExceptAWS
