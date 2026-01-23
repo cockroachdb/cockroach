@@ -161,3 +161,92 @@ func TestTxnModeUniqueConstraintUpdate(t *testing.T) {
 		t.Fatalf("expected 1 row with unique_value = 1337, got %d", count)
 	}
 }
+
+func TestTxnModeCreateLogicallyReplicated(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(conn)
+
+	// Configure low latency replication settings
+	sysRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	ldrtestutils.ApplyLowLatencyReplicationSettings(t, sysRunner, runner)
+
+	// Create source database
+	runner.Exec(t, "CREATE DATABASE source_db")
+
+	sourceDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("source_db")))
+
+	// Create a table in source with some initial data
+	sourceDB.Exec(t, "CREATE TABLE orders (id INT PRIMARY KEY, customer_id INT, amount DECIMAL)")
+	sourceDB.Exec(t, "INSERT INTO orders VALUES (1, 100, 50.00)")
+
+	// Create destination database
+	runner.Exec(t, "CREATE DATABASE dest_db")
+	destDB := sqlutils.MakeSQLRunner(s.SQLConn(t, serverutils.DBName("dest_db")))
+
+	// Get connection URL for source database
+	sourceURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("source_db"))
+
+	// Create logically replicated table with transaction mode and unidirectional replication
+	var jobID jobspb.JobID
+	destDB.QueryRow(t,
+		"CREATE LOGICALLY REPLICATED TABLE orders FROM TABLE orders ON $1 WITH MODE = 'transaction', UNIDIRECTIONAL",
+		sourceURL.String(),
+	).Scan(&jobID)
+
+	// Check job status
+	var status string
+	destDB.QueryRow(t, "SELECT status FROM [SHOW JOB $1]", jobID).Scan(&status)
+	t.Logf("Job %d status: %s", jobID, status)
+
+	// Insert more data in a transaction after replication starts
+	now := s.Clock().Now()
+	sourceDB.Exec(t, `
+		BEGIN;
+		INSERT INTO orders VALUES (2, 100, 75.00);
+		INSERT INTO orders VALUES (3, 101, 100.00);
+		COMMIT;
+	`)
+
+	// Wait for replication to catch up
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	// Verify all data was replicated including initial scan and transactional inserts
+	destDB.CheckQueryResults(t, "SELECT * FROM orders ORDER BY id", [][]string{
+		{"1", "100", "50.00"},
+		{"2", "100", "75.00"},
+		{"3", "101", "100.00"},
+	})
+
+	// Test that a multi-statement transaction is replicated atomically
+	now = s.Clock().Now()
+	sourceDB.Exec(t, `
+		BEGIN;
+		UPDATE orders SET amount = amount + 10 WHERE customer_id = 100;
+		INSERT INTO orders VALUES (4, 102, 200.00);
+		COMMIT;
+	`)
+
+	ldrtestutils.WaitUntilReplicatedTime(t, now, destDB, jobID)
+
+	// Verify the transaction was applied atomically
+	destDB.CheckQueryResults(t, "SELECT * FROM orders ORDER BY id", [][]string{
+		{"1", "100", "60.00"},
+		{"2", "100", "85.00"},
+		{"3", "101", "100.00"},
+		{"4", "102", "200.00"},
+	})
+}

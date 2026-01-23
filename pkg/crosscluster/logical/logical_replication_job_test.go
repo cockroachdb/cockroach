@@ -447,7 +447,7 @@ func TestCreateTables(t *testing.T) {
 		sqlA.Exec(t, "CREATE DATABASE c")
 		sqlA.Exec(t, "CREATE TABLE tab2 (pk int primary key, payload string)")
 		sqlc := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName("c")))
-		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.after.retryable_error'")
+		sqlc.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'logical_replication.after.initial_scan'")
 		defer func() {
 			sqlc.Exec(t, "RESET CLUSTER SETTING jobs.debug.pausepoints")
 		}()
