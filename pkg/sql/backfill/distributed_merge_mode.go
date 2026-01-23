@@ -7,12 +7,12 @@ package backfill
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -107,7 +107,7 @@ func shouldEnableDistributedMergeIndexBackfill(
 // processor constructs the full nodelocal URI using its own node ID at runtime.
 func EnableDistributedMergeIndexBackfillSink(jobID jobspb.JobID, spec *execinfrapb.BackfillerSpec) {
 	spec.UseDistributedMergeSink = true
-	spec.DistributedMergeFilePrefix = fmt.Sprintf("job/%d/map", jobID)
+	spec.DistributedMergeFilePrefix = bulkutil.NewDistMergePaths(jobID).MapPath()
 }
 
 // DetermineDistributedMergeMode evaluates the cluster setting to decide
