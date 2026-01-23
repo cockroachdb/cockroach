@@ -319,10 +319,17 @@ func (t *TxnLdrCoordinator) checkpoint(ctx context.Context, frontier hlc.Timesta
 
 func (t *TxnLdrCoordinator) createTxnFeed(ctx context.Context) (_ *txnfeed.OrderedFeed, err error) {
 	// TODO(jeffswenson): heartbeat the stream
+
+	// Use the checkpointed replicated time if resuming, otherwise use the start time.
+	progress := t.job.Progress().Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
+	asOf := t.payload.ReplicationStartTime
+	if !progress.ReplicatedTime.IsEmpty() {
+		asOf = progress.ReplicatedTime
+	}
+
 	req := streampb.LogicalReplicationPlanRequest{
 		StreamID: streampb.StreamID(t.payload.StreamID),
-		// TODO(jeffswenson): this should be the checkpointed time if resuming
-		PlanAsOf: t.payload.ReplicationStartTime,
+		PlanAsOf: asOf,
 	}
 	for _, pair := range t.payload.ReplicationPairs {
 		req.TableIDs = append(req.TableIDs, pair.SrcDescriptorID)
@@ -346,9 +353,7 @@ func (t *TxnLdrCoordinator) createTxnFeed(ctx context.Context) (_ *txnfeed.Order
 			0,        // consumerNode - not used in logical replication
 			int32(i), // consumerProc - use partition index
 			partition.SubscriptionToken,
-			t.payload.ReplicationStartTime,
-			// TODO(jeffswenson): do we need to scope this down to the spans we care
-			// about?
+			asOf,
 			frontier,
 			streamclient.WithDiff(true),
 		)
