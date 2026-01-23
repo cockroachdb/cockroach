@@ -87,6 +87,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util",
         "//pkg/util/allstacks",
+        "//pkg/util/cache",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
