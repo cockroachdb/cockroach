@@ -392,6 +392,10 @@ func runLargeSchemaIntrospectionBenchmark(
 		// Increase the lease refresh limit to handle the large number of
 		// descriptors being created. The default (500) is too low for 1M tables.
 		"SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 50000",
+		// Increase the intent tracking limit for bulk DDL transactions. The
+		// default is too low for creating 1M tables, causing long waits when
+		// transactions block on system.descriptor intents.
+		"SET CLUSTER SETTING kv.transaction.max_intents_bytes = 16777216",
 	}
 	for _, stmt := range clusterSettings {
 		_, err := conn.Exec(stmt)
