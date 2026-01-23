@@ -143,10 +143,6 @@ func TestZipContainsAllSystemTables(t *testing.T) {
 	// disabled list.
 	var missingTables []string
 	for _, fullTableName := range allSystemTables {
-		if _, tbd := toBeTriaged[fullTableName]; tbd {
-			// TODO(yuzefovich): remove this.
-			continue
-		}
 		_, inRegistry := zipSystemTables[fullTableName]
 		_, inDisabled := disabledSystemTables[fullTableName]
 		if !inRegistry && !inDisabled {
