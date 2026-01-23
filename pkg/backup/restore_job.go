@@ -85,6 +85,7 @@ import (
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/redact"
 )
 
 var (
@@ -2268,6 +2269,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			telemetry.CountBucketed("restore.speed-mbps.over10mb.per-node", mbps/int64(numNodes))
 		}
 		logutil.LogJobCompletion(ctx, restoreJobEventType, r.job.ID(), true, nil, resTotal.Rows)
+		log.Telemetry.Infof(ctx, "Restore completed in %d seconds, logical size %d MB, node count %d, per node throughput %d MB/s", redact.Safe(sec), redact.Safe(sizeMb), redact.Safe(numNodes), redact.Safe(mbps/int64(numNodes)))
 	}
 	return nil
 }
