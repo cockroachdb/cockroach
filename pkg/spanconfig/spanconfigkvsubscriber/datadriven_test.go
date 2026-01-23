@@ -144,7 +144,6 @@ func TestDataDriven(t *testing.T) {
 			ts.Clock(),
 			ts.RangeFeedFactory().(*rangefeed.Factory),
 			dummyTableID,
-			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
 			ts.ClusterSettings(),
 			spanconfigstore.NewEmptyBoundsReader(),
