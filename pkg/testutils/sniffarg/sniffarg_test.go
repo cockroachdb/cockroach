@@ -47,6 +47,19 @@ func TestDo(t *testing.T) {
 
 }
 
+func TestRegressionSingleDashStringValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Regression test verifying that a `-` string value doesn't get transformed
+	// into `--` which would stop pflag's flag parsing.
+	args := []string{
+		`-test.run`, `-`, `-test.memprofile`, `benchdiff/3c4a71e/artifacts/mem_last.prof`,
+	}
+	var benchMem string
+	require.NoError(t, Do(args, "test.memprofile", &benchMem))
+	require.NotEmpty(t, benchMem)
+}
+
 func TestDoBoolUnknownSingleDashFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
