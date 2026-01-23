@@ -610,6 +610,13 @@ func TestExecBuild_srfs(
 	runExecBuildLogicTest(t, "srfs")
 }
 
+func TestExecBuild_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "statement_hint_builtins")
+}
+
 func TestExecBuild_stats(
 	t *testing.T,
 ) {
