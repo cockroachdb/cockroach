@@ -66,6 +66,7 @@ import (
 
 var errRenewLease = errors.New("renew lease on id")
 var errReadOlderVersion = errors.New("read older descriptor version from store")
+var errReadOlderVersionAtBase = errors.New("read older descriptor version from store at base timestamp")
 var errLeaseManagerIsDraining = errors.New("cannot acquire lease when draining")
 
 // LeaseDuration controls the duration of sql descriptor leases.
@@ -725,7 +726,7 @@ func NewIDVersionPrev(name string, id descpb.ID, currVersion descpb.DescriptorVe
 func ensureVersion(
 	ctx context.Context, id descpb.ID, minVersion descpb.DescriptorVersion, m *Manager,
 ) error {
-	if s := m.findNewest(id); s != nil && minVersion <= s.GetVersion() {
+	if s, _ := m.findNewest(id); s != nil && minVersion <= s.GetVersion() {
 		return nil
 	}
 
@@ -733,7 +734,7 @@ func ensureVersion(
 		return err
 	}
 
-	s := m.findNewest(id)
+	s, _ := m.findNewest(id)
 	if s != nil && s.GetVersion() < minVersion {
 		return errors.Errorf("version %d for descriptor %s does not exist yet", minVersion, s.GetName())
 	} else if s != nil {
@@ -941,7 +942,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 		defer t.mu.Unlock()
 
 		// If there are no descriptors, then we won't have a valid end timestamp.
-		if len(t.mu.active.data) == 0 {
+		if len(t.mu.active.data) == 0 || (t.mu.takenOffline && !timestamp.GetTimestamp().Less(t.mu.takenOfflineAt)) {
 			// If the descriptor is offline, then we can return when it was taken
 			// offline, a valid descriptor exists within this interval.
 			// Note: This allows us to populate dropped descriptors, which will
@@ -955,23 +956,9 @@ func (m *Manager) readOlderVersionForTimestamp(
 		// We permit gaps in historical versions. We want to find the timestamp
 		// that represents the start of the validity interval for the known version
 		// which immediately follows the timestamps we're searching for.
-		tsForComparison := timestamp.GetTimestamp()
 		indexAfterTS := sort.Search(len(t.mu.active.data), func(i int) bool {
 			return timestamp.GetTimestamp().Less(t.mu.active.data[i].GetModificationTime())
 		})
-
-		// If the read timestamp and base timestamp are different, additionally,
-		// check if we need a slightly later end timestamp. This guarantees we will
-		// populate every possible descriptor needed for this request.
-		if timestamp.GetTimestamp() != timestamp.GetBaseTimestamp() {
-			baseTimeStampIndex := sort.Search(len(t.mu.active.data), func(i int) bool {
-				return timestamp.GetBaseTimestamp().Less(t.mu.active.data[i].GetModificationTime())
-			})
-			if baseTimeStampIndex != len(t.mu.active.data) {
-				indexAfterTS = baseTimeStampIndex
-				tsForComparison = timestamp.GetBaseTimestamp()
-			}
-		}
 
 		// If the timestamp we're searching for is somehow after the last descriptor
 		// we have in play, then either we have the right descriptor, or some other
@@ -980,7 +967,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 			// If we found a descriptor that isn't the first descriptor, go and check
 			// whether the descriptor for which we're searching actually exists. This
 			// will deal with cases where a concurrent fetch filled it in for us.
-			indexAfterTS > 0 && tsForComparison.Less(t.mu.active.data[indexAfterTS-1].getExpiration(ctx)) {
+			indexAfterTS > 0 && timestamp.GetTimestamp().Less(t.mu.active.data[indexAfterTS-1].getExpiration(ctx)) {
 			// If the descriptor is offline, then nothing newer can exist.
 			if !t.mu.takenOffline {
 				return hlc.Timestamp{}, false, true
@@ -1024,8 +1011,7 @@ func (m *Manager) readOlderVersionForTimestamp(
 		if err != nil {
 			// In locked reading timestamp, we will attempt to read with the lease timestamp. If the descriptor
 			// is found to be missing at that time, then it may be readable at our base timestamp.
-			// When we scanned [timestamp, endTimestamp), we implicitly scanned the base timestamp as well,
-			// so check if anything from that timestamp fits.
+			// The descriptor state layer will tell us to read with an older version.
 			if len(descs) > 0 &&
 				errors.Is(err, catalog.ErrDescriptorNotFound) && timestamp.GetTimestamp() != timestamp.GetBaseTimestamp() &&
 				earliestModificationTime.LessEq(timestamp.GetBaseTimestamp()) {
@@ -1323,10 +1309,12 @@ func (m *Manager) acquireNodeLease(
 				// We didn't do any acquiring and just waited for a bulk operation.
 				return false, err
 			}
-			newest := m.findNewest(id)
+			newest, offline := m.findNewest(id)
 			var currentVersion descpb.DescriptorVersion
 			var currentSessionID sqlliveness.SessionID
-			if newest != nil {
+			// The current version only matters if the descriptor is
+			// not offline.
+			if newest != nil && !offline {
 				currentVersion = newest.GetVersion()
 				currentSessionID = newest.getSessionID()
 			}
@@ -1341,7 +1329,6 @@ func (m *Manager) acquireNodeLease(
 				if err != nil {
 					return nil, err
 				}
-
 				return desc, nil
 			}
 
@@ -1541,7 +1528,7 @@ func (m *Manager) purgeOldVersions(
 			break
 		}
 		// We encountered an error telling us to renew the lease.
-		newest := m.findNewest(id)
+		newest, _ := m.findNewest(id)
 		// It is possible that a concurrent drop / removal of this descriptor is
 		// occurring. If the newest version just doesn't exist, bail out.
 		if newest == nil {
@@ -1999,15 +1986,16 @@ func NameMatchesDescriptor(
 		desc.GetParentSchemaID() == parentSchemaID
 }
 
-// findNewest returns the newest descriptor version state for the ID.
-func (m *Manager) findNewest(id descpb.ID) *descriptorVersionState {
+// findNewest returns the newest descriptor version state for the ID, and
+// a boolean indicating if it's offline.
+func (m *Manager) findNewest(id descpb.ID) (state *descriptorVersionState, offline bool) {
 	t := m.findDescriptorState(id, false /* create */)
 	if t == nil {
-		return nil
+		return nil, false
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.mu.active.findNewest()
+	return t.mu.active.findNewest(), t.mu.takenOffline
 }
 
 // SetRegionPrefix sets the prefix this Manager uses to write leases. If val
@@ -2248,6 +2236,7 @@ func (m *Manager) Acquire(
 		if err == nil {
 			return desc, nil
 		}
+		readTimestamp := timestamp
 		switch {
 		case errors.Is(err, errRenewLease):
 			if err := func() error {
@@ -2259,10 +2248,14 @@ func (m *Manager) Acquire(
 			}(); err != nil {
 				return nil, err
 			}
-
+		case errors.Is(err, errReadOlderVersionAtBase):
+			// If we need an older version valid at the base timestamp, read should
+			// ensure that is in the validation interval.
+			readTimestamp = TimestampToReadTimestamp(timestamp.GetBaseTimestamp())
+			fallthrough
 		case errors.Is(err, errReadOlderVersion):
 			// Read old versions from the store. This can block while reading.
-			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp)
+			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, readTimestamp)
 			if errRead != nil {
 				return nil, errRead
 			}
@@ -2406,7 +2399,7 @@ func (m *Manager) hasDescUpdateBeenApplied(
 ) (allApplied bool, remaining descpb.DescriptorUpdates) {
 	allApplied = true
 	for idx, descID := range updates.DescriptorIDs {
-		descVersionState := m.findNewest(descID)
+		descVersionState, _ := m.findNewest(descID)
 		requiredVersion := updates.DescriptorVersions[idx]
 		// If a descriptor is missing, we still consider it as applied, since
 		// we will lease a newer version.
@@ -2623,7 +2616,7 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 					}()
 					// Once the descriptor is purged notify that some change has occurred.
 					defer m.leaseGeneration.Add(1)
-					state := m.findNewest(id)
+					state, _ := m.findNewest(id)
 					if state != nil {
 						if err := m.purgeOldVersions(ctx, db, id, true /* dropped */, state.GetVersion()); err != nil {
 							log.Dev.Warningf(ctx, "error purging leases for deleted descriptor %d",
@@ -3735,4 +3728,12 @@ func (m *Manager) GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp)
 // TestingGetBoundAccount returns the bound account used by the lease manager.
 func (m *Manager) TestingGetBoundAccount() *mon.ConcurrentBoundAccount {
 	return m.boundAccount
+}
+
+// TestingLeasedVersionIsActive returns if the leased descriptor is non-historical.
+func TestingLeasedVersionIsActive(descriptor LeasedDescriptor) (bool, int) {
+	state := descriptor.(*descriptorVersionState)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return state.mu.lease != nil, int(state.refcount.Load())
 }
