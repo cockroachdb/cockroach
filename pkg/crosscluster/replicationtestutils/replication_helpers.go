@@ -178,6 +178,17 @@ func (rf *ReplicationFeed) Close(ctx context.Context) {
 	rf.f.Close(ctx)
 }
 
+// ObserveGeneric consumes the feed until the predicate is satisfied.
+// Returns the matching event.
+func (rf *ReplicationFeed) ObserveGeneric(
+	ctx context.Context, pred FeedEventPredicate,
+) crosscluster.Event {
+	rf.consumeUntil(ctx, pred, func(err error) bool {
+		return false
+	})
+	return rf.msg
+}
+
 func (rf *ReplicationFeed) consumeUntil(
 	ctx context.Context, pred FeedEventPredicate, errPred FeedErrorPredicate,
 ) {

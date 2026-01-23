@@ -184,12 +184,13 @@ func WithRetry(options retry.Options) Option {
 }
 
 // WithOnValues sets up a callback that's invoked whenever a batch of values is
-// passed such as during initial scans, allowing passing it as a batch to the
-// client rather than key-by-key to reduce overhead. This however comes with
-// some limitations: for batches passed this way the rangefeed client will not
-// process individual values and instead leaves this to the caller, meaning that
-// the options WithRowTimestampInInitialScan is implied, and WithDiff is ignored
-// as these are per-key processing that is not performed on batches.
+// passed such as during initial scans or catch-up scans, allowing passing it as
+// a batch to the client rather than key-by-key to reduce overhead. This however
+// comes with some limitations: for batches passed this way the rangefeed client
+// will not process individual values and instead leaves this to the caller,
+// meaning that the option WithRowTimestampInInitialScan is implied. For catch-up
+// scans, PrevValue is available if WithDiff is set; for initial scans, PrevValue
+// is not populated as these are point-in-time snapshots.
 func WithOnValues(fn OnValues) Option {
 	return optionFunc(func(c *config) {
 		c.onValues = fn

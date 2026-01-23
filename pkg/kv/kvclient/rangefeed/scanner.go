@@ -8,7 +8,6 @@ package rangefeed
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,9 +52,9 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
-	var onValues func(kvs []kv.KeyValue)
+	var onValues func(kvs []kvpb.RangeFeedValue)
 	if f.onValues != nil {
-		onValues = func(kvs []kv.KeyValue) {
+		onValues = func(kvs []kvpb.RangeFeedValue) {
 			f.onValues(ctx, kvs)
 		}
 	}
