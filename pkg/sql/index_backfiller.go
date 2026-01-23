@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -454,7 +456,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			}
 			// The '/job/<jobID>' prefix allows for easy cleanup in the event of job
 			// cancellation or failure.
-			return fmt.Sprintf("%sjob/%d/merge/iter-%d/", prefix, job.ID(), iteration), nil
+			return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(iteration), nil
 		}
 
 		var writeTS *hlc.Timestamp
@@ -501,6 +503,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 				return err
 			}
 
+			// Clean up SST files from the previous iteration.
+			ib.cleanupPreviousIterationSSTs(ctx, job.ID(), progress.SSTStoragePrefixes, iteration)
+
 			// Call testing knob for final iteration (manifests will be nil/empty).
 			if fn := ib.execCfg.DistSQLSrv.TestingKnobs.AfterDistributedMergeIteration; fn != nil {
 				fn(ctx, iteration, progress.SSTManifests)
@@ -535,6 +540,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			return err
 		}
 
+		// Clean up SST files from the previous stage.
+		ib.cleanupPreviousIterationSSTs(ctx, job.ID(), progress.SSTStoragePrefixes, iteration)
+
 		// Call testing knob after updating progress for this iteration.
 		if fn := ib.execCfg.DistSQLSrv.TestingKnobs.AfterDistributedMergeIteration; fn != nil {
 			fn(ctx, iteration, progress.SSTManifests)
@@ -545,4 +553,32 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 	}
 
 	return nil
+}
+
+// cleanupPreviousIterationSSTs removes SST files from the previous stage of the
+// distributed merge. This is a best-effort operation; errors are logged but
+// don't fail the job.
+func (ib *IndexBackfillPlanner) cleanupPreviousIterationSSTs(
+	ctx context.Context, jobID jobspb.JobID, storagePrefixes []string, completedIteration int,
+) {
+	if len(storagePrefixes) == 0 {
+		return
+	}
+
+	subdirectory := bulkutil.NewDistMergePaths(jobID).InputSubdir(completedIteration)
+
+	cleaner := bulkutil.NewBulkJobCleaner(
+		ib.execCfg.DistSQLSrv.ExternalStorageFromURI,
+		username.NodeUserName(),
+	)
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Ops.Warningf(ctx, "error closing bulk job cleaner: %v", err)
+		}
+	}()
+
+	if err := cleaner.CleanupJobSubdirectory(ctx, jobID, storagePrefixes, subdirectory); err != nil {
+		log.Ops.Warningf(ctx, "failed to cleanup previous iteration SSTs (job %d, subdirectory %s): %v",
+			jobID, subdirectory, err)
+	}
 }
