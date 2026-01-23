@@ -396,6 +396,13 @@ func runLargeSchemaIntrospectionBenchmark(
 		// default is too low for creating 1M tables, causing long waits when
 		// transactions block on system.descriptor intents.
 		"SET CLUSTER SETTING kv.transaction.max_intents_bytes = 16777216",
+		// Increase the refresh span tracking limit for serializable transactions.
+		// When creating many tables per transaction, the read spans on
+		// system.descriptor and system.namespace accumulate beyond the default
+		// 4MB limit. Once exceeded, the transaction loses its ability to refresh
+		// and must fully restart on any timestamp push, causing
+		// RETRY_SERIALIZABLE errors with "can't refresh txn spans; not valid".
+		"SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 67108864",
 	}
 	for _, stmt := range clusterSettings {
 		_, err := conn.Exec(stmt)
