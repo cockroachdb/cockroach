@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -323,6 +325,222 @@ const (
 	addColumnOp bulkIngestSchemaChangeOp = "add_column"
 )
 
+// indexOrder represents whether the index is created on sorted or random columns.
+type indexOrder string
+
+const (
+	// randomIndexOrder creates index on (payload, a) - random leading column.
+	// Since payload is random, index entries are in random order relative to
+	// how they're scanned, which exercises merge heavily.
+	randomIndexOrder indexOrder = "random"
+	// sortedIndexOrder creates index on (a, b, payload) - sorted leading columns.
+	// Since a and b are the leading columns and data is scanned in primary key
+	// order (a, b, c), index entries will be generated in mostly-sorted order,
+	// which reduces the benefit of distributed merge.
+	sortedIndexOrder indexOrder = "sorted"
+)
+
+// diskType represents the type of persistent disk to use for the test.
+type diskType string
+
+const (
+	// pdSsdDiskType uses pd-ssd persistent disks (fastest persistent disk).
+	pdSsdDiskType diskType = "pd-ssd"
+	// pdBalancedDiskType uses pd-balanced persistent disks (medium speed).
+	pdBalancedDiskType diskType = "pd-balanced"
+)
+
+// Prometheus metric queries for scale test stats collection.
+var (
+	// scaleCpuStat tracks average CPU utilization across nodes (0-100%).
+	scaleCpuStat = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     "avg_over_time(sys_cpu_combined_percent_normalized[1m]) * 100",
+	}
+	// scaleReadOpsStat tracks host disk read operations rate.
+	scaleReadOpsStat = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     "rate(sys_host_disk_read_count[1m])",
+	}
+	// scaleWriteOpsStat tracks host disk write operations rate.
+	scaleWriteOpsStat = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     "rate(sys_host_disk_write_count[1m])",
+	}
+	// scaleMemoryStat tracks RSS memory usage in GB per node.
+	scaleMemoryStat = clusterstats.ClusterStat{
+		LabelName: "node",
+		Query:     "sys_rss / 1073741824",
+	}
+)
+
+// scaleTestStats holds aggregated CPU, IO, and memory metrics from a scale test run.
+type scaleTestStats struct {
+	AvgCPU        float64 // Average CPU utilization across all nodes (%)
+	MaxCPU        float64 // Max CPU utilization across all nodes (%)
+	TotalReadOps  int64   // Total disk read operations across all nodes
+	TotalWriteOps int64   // Total disk write operations across all nodes
+	MaxMemoryGB   float64 // Max RSS memory per node (GB) - the highest max across all nodes
+}
+
+// setupScaleTestPrometheus initializes Prometheus and returns a StatCollector
+// and cleanup function. If setup fails or does not apply this returns nil
+// collector (metrics will be skipped).
+func setupScaleTestPrometheus(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) (clusterstats.StatCollector, func()) {
+	// Skip Prometheus in local mode.
+	if c.IsLocal() {
+		t.L().Printf("Skipping Prometheus setup in local mode (metrics will be zeros)")
+		return nil, func() {}
+	}
+
+	cfg := (&prometheus.Config{}).
+		WithCluster(c.CRDBNodes().InstallNodes()).
+		WithPrometheusNode(c.WorkloadNode().InstallNodes()[0])
+
+	if err := c.StartGrafana(ctx, t.L(), cfg); err != nil {
+		t.L().Printf("Warning: failed to start Prometheus/Grafana: %v (metrics will be skipped)", err)
+		return nil, func() {}
+	}
+
+	cleanupFunc := func() {
+		if err := c.StopGrafana(ctx, t.L(), t.ArtifactsDir()); err != nil {
+			t.L().Printf("Warning: error stopping Prometheus/Grafana: %v", err)
+		}
+	}
+
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), cfg)
+	if err != nil {
+		t.L().Printf("Warning: failed to setup Prometheus client: %v (metrics will be skipped)", err)
+		return nil, cleanupFunc
+	}
+
+	return clusterstats.NewStatsCollector(ctx, promClient), cleanupFunc
+}
+
+// collectScaleTestStats queries Prometheus for CPU, IO, and memory metrics over the given interval.
+func collectScaleTestStats(
+	ctx context.Context,
+	t test.Test,
+	collector clusterstats.StatCollector,
+	startTime, endTime time.Time,
+) scaleTestStats {
+	if collector == nil {
+		return scaleTestStats{}
+	}
+
+	interval := clusterstats.Interval{From: startTime, To: endTime}
+
+	stats := scaleTestStats{}
+
+	// Collect CPU stats.
+	if cpuData, err := collector.CollectInterval(ctx, t.L(), interval, scaleCpuStat.Query); err == nil {
+		var allCPU []float64
+		for _, nodeData := range cpuData[scaleCpuStat.LabelName] {
+			for _, pt := range nodeData {
+				allCPU = append(allCPU, pt.Value)
+			}
+		}
+		if len(allCPU) > 0 {
+			stats.AvgCPU = scaleStatsMean(allCPU)
+			stats.MaxCPU = scaleStatsMax(allCPU)
+		}
+	} else {
+		t.L().Printf("Warning: failed to collect CPU stats: %v", err)
+	}
+
+	durationSeconds := endTime.Sub(startTime).Seconds()
+
+	// Collect read ops stats - sum rates across nodes, then multiply by duration.
+	if readData, err := collector.CollectInterval(ctx, t.L(), interval, scaleReadOpsStat.Query); err == nil {
+		var allReadRates []float64
+		for _, nodeData := range readData[scaleReadOpsStat.LabelName] {
+			for _, pt := range nodeData {
+				allReadRates = append(allReadRates, pt.Value)
+			}
+		}
+		if len(allReadRates) > 0 {
+			avgRate := scaleStatsSum(allReadRates) / float64(len(allReadRates))
+			stats.TotalReadOps = int64(avgRate * durationSeconds)
+		}
+	} else {
+		t.L().Printf("Warning: failed to collect read ops stats: %v", err)
+	}
+
+	// Collect write ops stats - sum rates across nodes, then multiply by duration.
+	if writeData, err := collector.CollectInterval(ctx, t.L(), interval, scaleWriteOpsStat.Query); err == nil {
+		var allWriteRates []float64
+		for _, nodeData := range writeData[scaleWriteOpsStat.LabelName] {
+			for _, pt := range nodeData {
+				allWriteRates = append(allWriteRates, pt.Value)
+			}
+		}
+		if len(allWriteRates) > 0 {
+			avgRate := scaleStatsSum(allWriteRates) / float64(len(allWriteRates))
+			stats.TotalWriteOps = int64(avgRate * durationSeconds)
+		}
+	} else {
+		t.L().Printf("Warning: failed to collect write ops stats: %v", err)
+	}
+
+	// Collect memory stats - get max per node, then max across cluster.
+	if memData, err := collector.CollectInterval(ctx, t.L(), interval, scaleMemoryStat.Query); err == nil {
+		var nodeMaxes []float64
+		for _, nodeData := range memData[scaleMemoryStat.LabelName] {
+			var nodeVals []float64
+			for _, pt := range nodeData {
+				nodeVals = append(nodeVals, pt.Value)
+			}
+			if len(nodeVals) > 0 {
+				nodeMaxes = append(nodeMaxes, scaleStatsMax(nodeVals))
+			}
+		}
+		if len(nodeMaxes) > 0 {
+			stats.MaxMemoryGB = scaleStatsMax(nodeMaxes)
+		}
+	} else {
+		t.L().Printf("Warning: failed to collect memory stats: %v", err)
+	}
+
+	return stats
+}
+
+// scaleStatsMean calculates the arithmetic mean of a slice of float64 values.
+func scaleStatsMean(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, v := range vals {
+		sum += v
+	}
+	return sum / float64(len(vals))
+}
+
+// scaleStatsMax returns the maximum value in a slice of float64 values.
+func scaleStatsMax(vals []float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	m := vals[0]
+	for _, v := range vals[1:] {
+		if v > m {
+			m = v
+		}
+	}
+	return m
+}
+
+// scaleStatsSum returns the sum of a slice of float64 values.
+func scaleStatsSum(vals []float64) float64 {
+	sum := 0.0
+	for _, v := range vals {
+		sum += v
+	}
+	return sum
+}
+
 func registerSchemaChangeBulkIngest(r registry.Registry) {
 	// Allow a long running time to account for runs that use a
 	// cockroach build with runtime assertions enabled.
@@ -464,6 +682,230 @@ func makeSchemaChangeBulkIngestTest(
 			m.Wait()
 		},
 	}
+}
+
+// registerSchemaChangeBulkIngestScaleTest registers tests for investigating
+// distributed merge behavior at varying dataset sizes.
+func registerSchemaChangeBulkIngestScaleTest(r registry.Registry) {
+	// Local-mode tests for quick validation (1M rows)
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, randomIndexOrder, pdSsdDiskType))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, randomIndexOrder, pdSsdDiskType))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, false, true, sortedIndexOrder, pdSsdDiskType))
+	r.Add(makeSchemaChangeBulkIngestScaleTest(r, 4, 1_000_000, true, true, sortedIndexOrder, pdSsdDiskType))
+
+	// Cloud-mode tests for scale investigation
+	for rows := int64(5_000_000_000); rows <= 11_000_000_000; rows += 3_000_000_000 {
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdSsdDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdSsdDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, sortedIndexOrder, pdSsdDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, sortedIndexOrder, pdSsdDiskType))
+
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, false, false, randomIndexOrder, pdBalancedDiskType))
+		r.Add(makeSchemaChangeBulkIngestScaleTest(r, 12, rows, true, false, randomIndexOrder, pdBalancedDiskType))
+	}
+}
+
+func makeSchemaChangeBulkIngestScaleTest(
+	r registry.Registry,
+	numNodes int,
+	numRows int64,
+	distributedMerge bool,
+	localMode bool,
+	order indexOrder,
+	disk diskType,
+) registry.TestSpec {
+	modeStr := "nodist"
+	if distributedMerge {
+		modeStr = "dist"
+	}
+	const disks = 4
+
+	name := fmt.Sprintf("schemachange/bulkingest/scale/rows=%d/%s/%s/%s", numRows, order, disk, modeStr)
+
+	// Configure cloud compatibility and timeout based on mode
+	compatibleClouds := registry.OnlyGCE
+	timeout := 18 * time.Hour
+	if localMode {
+		compatibleClouds = registry.OnlyLocal
+		timeout = 30 * time.Minute
+	}
+
+	// Build cluster spec options - all variants use persistent disks
+	clusterOpts := []spec.Option{
+		spec.WorkloadNode(),
+		spec.Disks(disks),
+		spec.DisableLocalSSD(),
+		spec.VolumeSize(500),
+		spec.VolumeType(string(disk)),
+	}
+
+	return registry.TestSpec{
+		Name:             name,
+		Owner:            registry.OwnerSQLFoundations,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(numNodes, clusterOpts...),
+		CompatibleClouds: compatibleClouds,
+		Suites:           registry.ManualOnly, // Manual-only for investigation
+		Leases:           registry.LeaderLeases,
+		Timeout:          timeout,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runBulkIngestScaleTest(ctx, t, c, numRows, distributedMerge, disks, order, disk)
+		},
+	}
+}
+
+func runBulkIngestScaleTest(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	numRows int64,
+	distributedMerge bool,
+	disks int,
+	order indexOrder,
+	disk diskType,
+) {
+	// Step 1: Start cluster
+	settings := install.MakeClusterSettings()
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.StoreCount = disks
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+	// Step 1b: Setup Prometheus for metrics collection
+	statCollector, cleanupPrometheus := setupScaleTestPrometheus(ctx, t, c)
+	defer cleanupPrometheus()
+
+	// Step 2: Calculate workload parameters
+	var bNum, cNum int64 = 1000, 1000
+	aNum := numRows / (bNum * cNum)
+	if aNum < 1 {
+		aNum = 1
+	}
+	payloadBytes := 40
+
+	// Step 3: Import data (no secondary index)
+	cmdImport := fmt.Sprintf(
+		"./cockroach workload fixtures import bulkingest {pgurl:1} "+
+			"--a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
+		aNum, bNum, cNum, payloadBytes,
+	)
+	t.L().Printf("Importing data: %d rows (%d x %d x %d)", numRows, aNum, bNum, cNum)
+	importStart := timeutil.Now()
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdImport)
+	t.L().Printf("Import completed in %v", timeutil.Since(importStart))
+
+	// Step 4: Connect to database
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+
+	// Step 5: Gather statistics
+	t.L().Printf("Creating table statistics")
+	statsStart := timeutil.Now()
+	if _, err := db.Exec("CREATE STATISTICS stats FROM bulkingest.bulkingest"); err != nil {
+		t.Fatal(err)
+	}
+	t.L().Printf("Statistics created in %v", timeutil.Since(statsStart))
+
+	// Step 6: Get logical data size using SHOW RANGES WITH DETAILS
+	var logicalBytes int64
+	if err := db.QueryRow(`
+		SELECT COALESCE(sum(range_size), 0)
+		FROM [SHOW RANGES FROM TABLE bulkingest.bulkingest WITH DETAILS]
+	`).Scan(&logicalBytes); err != nil {
+		t.Fatal(err)
+	}
+	logicalGB := float64(logicalBytes) / (1024 * 1024 * 1024)
+	t.L().Printf("Logical data size: %.2f GB (%d bytes)", logicalGB, logicalBytes)
+
+	// Step 7: Print lease holder distribution
+	t.L().Printf("Table ranges after import:")
+	leaseRows, err := db.Query(`
+		WITH r AS (SHOW RANGES FROM TABLE bulkingest.bulkingest WITH DETAILS)
+		SELECT lease_holder, count(*) AS range_count FROM r GROUP BY lease_holder ORDER BY lease_holder
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer leaseRows.Close()
+	for leaseRows.Next() {
+		var leaseHolder int
+		var rangeCount int
+		if err := leaseRows.Scan(&leaseHolder, &rangeCount); err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("  lease_holder=%d, range_count=%d", leaseHolder, rangeCount)
+	}
+	if err := leaseRows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 8: Configure distributed merge mode
+	if distributedMerge {
+		t.L().Printf("Enabling distributed merge mode (declarative)")
+		if _, err := db.Exec(
+			"SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(
+			"SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(
+			"SET CLUSTER SETTING server.debug.default_vmodule = 'merge=2'",
+		); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		t.L().Printf("Disabling distributed merge mode")
+		if _, err := db.Exec(
+			"SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'disabled'",
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Step 9: Create index and measure time
+	var stmt string
+	switch order {
+	case sortedIndexOrder:
+		stmt = `CREATE INDEX a_b_payload ON bulkingest.bulkingest (a, b, payload)`
+	default: // randomIndexOrder
+		stmt = `CREATE INDEX payload_a ON bulkingest.bulkingest (payload, a)`
+	}
+	t.L().Printf("Creating index (distributed_merge=%v, order=%s, disk=%s)", distributedMerge, order, disk)
+
+	// Record start time for metrics collection
+	metricsStartTime := timeutil.Now()
+	indexStart := metricsStartTime
+
+	_, err = db.Exec(stmt)
+	indexDuration := timeutil.Since(indexStart)
+
+	// Collect CPU and IO stats for the index creation period
+	metricsEndTime := timeutil.Now()
+	perfStats := collectScaleTestStats(ctx, t, statCollector, metricsStartTime, metricsEndTime)
+
+	// Step 10: Report results
+	var resultError string
+	if err != nil {
+		resultError = fmt.Sprintf(", error=%s", err.Error())
+	}
+	t.L().Printf("RESULT: rows=%d, dist=%v, order=%s, disk=%s, size_gb=%.2f, duration_sec=%.2f, "+
+		"avg_cpu=%.1f, max_cpu=%.1f, total_read_ops=%d, total_write_ops=%d, "+
+		"max_mem_gb=%.2f, success=%v%s",
+		numRows, distributedMerge, order, disk, logicalGB,
+		indexDuration.Seconds(),
+		perfStats.AvgCPU, perfStats.MaxCPU, perfStats.TotalReadOps, perfStats.TotalWriteOps,
+		perfStats.MaxMemoryGB,
+		err == nil, resultError)
+
+	if err != nil {
+		t.L().Printf("CREATE INDEX FAILED: %v", err)
+		t.Fatal(err)
+	}
+
+	t.L().Printf("CREATE INDEX completed in %v", indexDuration)
 }
 
 func registerSchemaChangeDuringTPCC800(r registry.Registry) {
