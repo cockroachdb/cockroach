@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cache",
-    srcs = ["cache.go"],
+    srcs = [
+        "cache.go",
+        "typed_unordered_cache.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/cache",
     visibility = ["//visibility:public"],
     deps = [
@@ -14,7 +17,10 @@ go_library(
 go_test(
     name = "cache_test",
     size = "small",
-    srcs = ["cache_test.go"],
+    srcs = [
+        "cache_test.go",
+        "typed_unordered_cache_test.go",
+    ],
     embed = [":cache"],
     deps = [
         "//pkg/util/log",

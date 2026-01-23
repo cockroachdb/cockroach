@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1147,25 +1151,138 @@ func TestFinalizedTxnCacheUpdatesTxn(t *testing.T) {
 	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.WriteTimestamp)
 }
 
+type tCache interface {
+	add(*roachpb.Transaction)
+	get(id uuid.UUID) (*roachpb.Transaction, bool)
+}
+
+type adapter struct {
+	syncutil.Mutex
+	c *cache.UnorderedCache
+}
+
+func (a *adapter) add(txn *roachpb.Transaction) {
+	a.Lock()
+	defer a.Unlock()
+	a.c.Add(txn.ID, txn)
+}
+
+func (a *adapter) get(id uuid.UUID) (*roachpb.Transaction, bool) {
+	a.Lock()
+	defer a.Unlock()
+	txn, ok := a.c.Get(id)
+	if !ok {
+		return nil, ok
+	}
+	return txn.(*roachpb.Transaction), ok
+}
+
+type typedAdapter struct {
+	sync.Mutex
+	c *cache.TypedUnorderedCache[uuid.UUID, *roachpb.Transaction]
+}
+
+func (a *typedAdapter) add(txn *roachpb.Transaction) {
+	a.Lock()
+	defer a.Unlock()
+	a.c.Add(txn.ID, txn)
+}
+
+func (a *typedAdapter) get(id uuid.UUID) (*roachpb.Transaction, bool) {
+	a.Lock()
+	defer a.Unlock()
+	return a.c.Get(id)
+}
+
 func BenchmarkFinalizedTxnCache(b *testing.B) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	var c finalizedTxnCache
-	var txns [len(c.txns) + 4]roachpb.Transaction
+	numOps := txnCacheSize * 4 // TODO
+	txns := make([]roachpb.Transaction, numOps)
 	for i := range txns {
 		txns[i] = makeTxnProto(fmt.Sprintf("txn %d", i))
 	}
-	txnOps := make([]*roachpb.Transaction, b.N)
-	for i := range txnOps {
-		txnOps[i] = &txns[rng.Intn(len(txns))]
+
+	makeOps := func(b *testing.B) []*roachpb.Transaction {
+		txnOps := make([]*roachpb.Transaction, b.N)
+		for i := range txnOps {
+			txnOps[i] = &txns[rng.Intn(len(txns))]
+		}
+		return txnOps
 	}
-	b.ResetTimer()
-	for i, txnOp := range txnOps {
-		if i%2 == 0 {
+	allAdd := func(b *testing.B, c tCache) {
+		txnOps := makeOps(b)
+		b.ResetTimer()
+		for _, txnOp := range txnOps {
 			c.add(txnOp)
-		} else {
+		}
+	}
+	allGet := func(b *testing.B, c tCache) {
+		txnOps := makeOps(b)
+		for _, txnOp := range txnOps {
+			c.add(txnOp)
+		}
+		b.ResetTimer()
+		for _, txnOp := range txnOps {
 			_, _ = c.get(txnOp.ID)
 		}
 	}
+	halfAndHalf := func(b *testing.B, c tCache) {
+		txnOps := makeOps(b)
+		b.ResetTimer()
+		for i, txnOp := range txnOps {
+			if i%2 == 0 {
+				c.add(txnOp)
+			} else {
+				_, _ = c.get(txnOp.ID)
+			}
+		}
+	}
+
+	workloads := []struct {
+		name string
+		fn   func(b *testing.B, c tCache)
+	}{
+		{"all-get", allGet},
+		{"all-add", allAdd},
+		{"half-and-half", halfAndHalf},
+	}
+
+	b.Run("txnCache", func(b *testing.B) {
+		var c finalizedTxnCache
+		for _, tc := range workloads {
+			b.Run(tc.name, func(b *testing.B) {
+				tc.fn(b, &c)
+			})
+		}
+	})
+	b.Run("cache.UnorderedCache", func(b *testing.B) {
+		bc := cache.NewUnorderedCache(cache.Config{
+			Policy: cache.CacheLRU,
+			ShouldEvict: func(size int, _, _ interface{}) bool {
+				return size > txnCacheSize
+			},
+		})
+		c := &adapter{c: bc}
+		for _, tc := range workloads {
+			b.Run(tc.name, func(b *testing.B) {
+				tc.fn(b, c)
+			})
+		}
+	})
+	b.Run("cache.TypedUnorderedCache", func(b *testing.B) {
+		bc := cache.NewTypedUnorderedCache(cache.TypedConfig[uuid.UUID, *roachpb.Transaction]{
+			Policy: cache.CacheLRU,
+			ShouldEvict: func(size int, _ uuid.UUID, _ *roachpb.Transaction) bool {
+				return size > txnCacheSize
+			},
+		})
+		c := &typedAdapter{c: bc}
+		for _, tc := range workloads {
+			b.Run(tc.name, func(b *testing.B) {
+				tc.fn(b, c)
+			})
+		}
+	})
 }
 
 func TestContentionEventTracer(t *testing.T) {
