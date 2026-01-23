@@ -25,7 +25,7 @@ import (
 var unittestLogMetadata = LogMetadata{
 	TestName:        "acceptance/event-log",
 	Result:          "PASS",
-	Duration:        "6.67s",
+	Duration:        "6.67",
 	Owner:           "test-eng",
 	Cloud:           "gce",
 	Platform:        "linux-amd64",
