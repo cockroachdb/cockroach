@@ -114,6 +114,7 @@ func MockBackupChain(
 		if err != nil {
 			return nil, err
 		}
+		defer es.Close()
 		config := es.Conf()
 		if backups[i].HasExternalManifestSSTs {
 			// Write the Files to an SST and put them at a well known location.
@@ -171,6 +172,7 @@ func checkRestoreCovering(
 	if err != nil {
 		return err
 	}
+	defer layerToIterFactory.Close()
 
 	for _, span := range spans {
 		var last roachpb.Key
@@ -320,6 +322,7 @@ func makeCoverUtils(ctx context.Context, t *testing.T, execCfg *sql.ExecutorConf
 	es, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx,
 		fmt.Sprintf("nodelocal://1/mock%s", timeutil.Now().String()), username.RootUserName())
 	require.NoError(t, err)
+	defer es.Close()
 	dir := es.Conf()
 	return coverutils{
 		dir: dir,
@@ -389,6 +392,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 		backups, nil, nil)
 	require.NoError(t, err)
+	defer layerToIterFactory.Close()
 
 	emptyCompletedSpans := []jobspb.RestoreProgress_FrontierEntry{}
 
@@ -506,6 +510,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 			backups, nil, nil)
 		require.NoError(t, err)
+		defer layerToIterFactory.Close()
 
 		cover, err := makeImportSpans(
 			ctx,
@@ -616,6 +621,7 @@ func TestFileSpanStartKeyIterator(t *testing.T) {
 		layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 			backups, nil, nil)
 		require.NoError(t, err)
+		defer layerToBackupManifestFileIterFactory.Close()
 
 		sanityCheckFileIterator(ctx, t, layerToBackupManifestFileIterFactory[0], backups[0])
 
@@ -809,6 +815,7 @@ func runTestRestoreEntryCoverForSpanAndFileCounts(
 				layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
 					execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 				require.NoError(t, err)
+				defer layerToIterFactory.Close()
 				randLayer := rand.Intn(len(backups))
 				randBackup := backups[randLayer]
 				sanityCheckFileIterator(ctx, t, layerToIterFactory[randLayer], randBackup)
@@ -997,6 +1004,7 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 
 			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
 			require.NoError(t, err)
+			defer layerToIterFactory.Close()
 
 			expectedCover := tt.expectedCover
 			if len(expectedCover) == 0 && (len(tt.expectedCoverSimple) > 0 || len(tt.expectedCoverGenerated) > 0) {

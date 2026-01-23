@@ -1743,6 +1743,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+	defer layerToIterFactory.Close()
 
 	sqlDescs, restoreDBs, descsByTablePattern, tenants, err := selectTargets(
 		ctx, p, mainBackupManifests, layerToIterFactory, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
@@ -2429,6 +2430,7 @@ func resolveRestoreSubdirAndEndTime(
 	if err != nil {
 		return "", hlc.Timestamp{}, err
 	}
+	defer defaultRootStore.Close()
 
 	var backupIdx backuppb.BackupIndexMetadata
 	backupID := backupToken

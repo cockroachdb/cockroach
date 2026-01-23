@@ -5956,6 +5956,7 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest,
 		username.RootUserName())
 	require.NoError(t, err)
+	defer store.Close()
 	statsTable := backuppb.StatsTable{
 		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
 	}
@@ -8347,6 +8348,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer storage.Close()
 
 	m := mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("test-monitor"),
@@ -9898,6 +9900,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
+	defer store.Close()
 
 	// Find the latest file so we know where the directory is that we want
 	// to list from.
@@ -10039,6 +10042,7 @@ func TestBackupTimestampedCheckpointsAreLexicographical(t *testing.T) {
 			}
 			store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, uri, username.RootUserName())
 			require.NoError(t, err)
+			defer store.Close()
 			for _, checkpoint := range checkpoints {
 				var desc []byte
 				require.NoError(t, cloud.WriteFile(ctx, store, backupinfo.BackupProgressDirectory+"/"+checkpoint, bytes.NewReader(desc)))
@@ -10073,6 +10077,7 @@ func TestBackupNoOverwriteLatest(t *testing.T) {
 	ctx := context.Background()
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
+	defer store.Close()
 	findNumLatestFiles := func() (int, string) {
 		var numLatestFiles int
 		var latestFile string

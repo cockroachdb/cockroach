@@ -476,6 +476,7 @@ func runGenerativeSplitAndScatter(
 		if err != nil {
 			return errors.Wrap(err, "making backup metadata")
 		}
+		defer layerToFileIterFactory.Close()
 		introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, spec.EndTime)
 		if err != nil {
 			return errors.Wrap(err, "making introduced span frontier")

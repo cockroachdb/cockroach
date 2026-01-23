@@ -1735,6 +1735,7 @@ func getBackupDetailAndManifest(
 	if err != nil {
 		return jobspb.BackupDetails{}, nil, err
 	}
+	defer layerToIterFactory.Close()
 
 	backupManifest, err := createBackupManifest(
 		ctx,

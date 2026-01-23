@@ -383,6 +383,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
+		defer s.Close()
 		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 		require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
 	}
@@ -401,6 +402,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
+		defer s.Close()
 		_, _, err = s.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 		require.ErrorIs(t, err, cloud.ErrFileDoesNotExist)
 	}
@@ -436,6 +438,7 @@ func TestCompressedGCS(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer s1.Close()
 	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings,
 		nil, /* blobClientFactory */
 		nil, /* db */
@@ -443,6 +446,7 @@ func TestCompressedGCS(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer s2.Close()
 
 	reader1, _, err := s1.ReadFile(context.Background(), "", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)

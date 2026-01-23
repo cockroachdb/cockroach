@@ -485,6 +485,7 @@ func restore(
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
+	defer layerToIterFactory.Close()
 
 	// If any layer of the backup was produced with revision history before 24.1,
 	// we need to assume inclusive end-keys. If no layers used revision history or
@@ -737,6 +738,7 @@ func loadBackupSQLDescs(
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
+	defer layerToBackupManifestFileIterFactory.Close()
 
 	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToBackupManifestFileIterFactory, details.EndTime)
 	if err != nil {
@@ -1945,6 +1947,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
+	defer defaultStore.Close()
 	preData, preValidateData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r, latestBackupManifest)
 	if err != nil {
 		return err

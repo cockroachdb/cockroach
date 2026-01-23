@@ -1967,6 +1967,7 @@ func TestImportCSVStmtMisc(t *testing.T) {
 		userfileStorage, err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
+		defer func() { require.NoError(t, userfileStorage.Close()) }()
 
 		data := []byte("1,2")
 		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
@@ -1983,6 +1984,7 @@ func TestImportCSVStmtMisc(t *testing.T) {
 		userfileStorage, err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
+		defer func() { require.NoError(t, userfileStorage.Close()) }()
 
 		data := []byte("1,2")
 		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
@@ -2104,6 +2106,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 			username.TestUserName(), ief, nil, cloud.NilMetrics,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, fileTableSystem1.Close()) }()
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
 
@@ -3076,6 +3079,7 @@ func TestImportIntoCSV(t *testing.T) {
 		userfileStorage, err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
+		defer func() { require.NoError(t, userfileStorage.Close()) }()
 
 		data := []byte("1,2")
 		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
@@ -3142,6 +3146,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, username.RootUserName())
 		require.NoError(b, err)
+		defer func() { require.NoError(b, userfileStorage.Close()) }()
 		content, err := ioctx.ReadAll(ctx, r)
 		require.NoError(b, err)
 		require.NoError(b, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content)))

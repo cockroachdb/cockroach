@@ -863,7 +863,7 @@ func readIndexFile(
 	if err != nil {
 		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "reading index file %s", indexFilePath)
 	}
-	defer besteffort.Error(ctx, "cleanup-index-reader", func(ctx context.Context) error {
+	defer besteffort.Cleanup(ctx, "close-index-reader", func() error {
 		return reader.Close(ctx)
 	})
 

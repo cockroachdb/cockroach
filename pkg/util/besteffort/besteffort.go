@@ -62,3 +62,24 @@ func Error(ctx context.Context, name string, do func(ctx context.Context) error)
 		log.Dev.Errorf(ctx, "best effort operation '%s' failed: %+v", name, err)
 	}
 }
+
+// Cleanup executes a cleanup operation that must always run.
+//
+// Unlike Warning and Error, Cleanup never skips execution - it always runs the
+// provided function. This is appropriate for resource cleanup (closing files,
+// releasing locks, etc.) where skipping would cause resource leaks. In
+// production builds, errors are logged as warnings. In test builds, errors
+// panic by default to catch regressions.
+//
+// Example usage:
+//
+//	defer besteffort.Cleanup(ctx, "close-store", store.Close)
+func Cleanup(ctx context.Context, name string, do func() error) {
+	err := do()
+	if err != nil {
+		if !isAllowedFailure(name) {
+			panic(err)
+		}
+		log.Dev.Warningf(ctx, "cleanup operation '%s' failed: %+v", name, err)
+	}
+}
