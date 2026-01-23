@@ -1487,6 +1487,7 @@ Support status: [reserved](#support-status)
 | limit | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination limit to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
 | offset | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination offset to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
 | redact | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  | redact, if true, requests redaction of sensitive data away from the API response. | [reserved](#support-status) |
+| problems_only | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  | If `problems_only is true, will return response with only `problems` field populated. | [reserved](#support-status) |
 
 
 

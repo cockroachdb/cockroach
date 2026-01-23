@@ -579,6 +579,9 @@ message RangesRequest {
   // redact, if true, requests redaction of sensitive data away
   // from the API response.
   bool redact = 5;
+  // If `problems_only is true, will return response with only
+  // `problems` field populated.
+  bool problems_only = 6;
 }
 
 message RangesResponse {

@@ -435,6 +435,67 @@ func TestRangesUnredacted(t *testing.T) {
 	}
 }
 
+// TestRangesProblemsOnly checks that when ProblemsOnly is set, the response
+// contains only the fields needed for problem detection (State, Problems,
+// SourceNodeID, SourceStoreID) and omits expensive fields like RaftState,
+// LeaseHistory, Stats, Locality, etc.
+func TestRangesProblemsOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	server := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableSplitQueue: true,
+				DisableMergeQueue: true,
+			},
+		},
+	})
+	defer server.Stopper().Stop(ctx)
+
+	// Create a table and split it to ensure we have multiple ranges.
+	conn := sqlutils.MakeSQLRunner(server.ApplicationLayer().SQLConn(t))
+	conn.Exec(t, "CREATE TABLE test_ranges (k INT PRIMARY KEY)")
+	conn.Exec(t, "ALTER TABLE test_ranges SPLIT AT VALUES (100), (200)")
+
+	s := server.StatusServer().(*systemStatusServer)
+
+	// Get response with ProblemsOnly=true
+	resProblemsOnly, err := s.Ranges(ctx, &serverpb.RangesRequest{ProblemsOnly: true})
+	require.NoError(t, err)
+	require.Greater(t, len(resProblemsOnly.Ranges), 1, "expected multiple ranges")
+
+	// Get response with ProblemsOnly=false for comparison
+	resFull, err := s.Ranges(ctx, &serverpb.RangesRequest{ProblemsOnly: false})
+	require.NoError(t, err)
+	require.NotEmpty(t, resFull.Ranges)
+
+	// Verify both responses have the same number of ranges
+	require.Equal(t, len(resFull.Ranges), len(resProblemsOnly.Ranges))
+
+	for i, r := range resProblemsOnly.Ranges {
+		// Essential fields should be populated
+		require.NotNil(t, r.State.Desc, "State.Desc should be populated")
+		require.NotZero(t, r.State.Desc.RangeID, "RangeID should be set")
+		require.NotZero(t, r.SourceNodeID, "SourceNodeID should be set")
+		require.NotZero(t, r.SourceStoreID, "SourceStoreID should be set")
+		// Problems struct is always present (even if all false)
+
+		// Expensive fields should be zero/empty
+		require.Empty(t, r.RaftState.State, "RaftState should be empty when ProblemsOnly=true")
+		require.Empty(t, r.LeaseHistory, "LeaseHistory should be empty when ProblemsOnly=true")
+		require.Zero(t, r.Stats.QueriesPerSecond, "Stats should be zero when ProblemsOnly=true")
+		require.Nil(t, r.Locality, "Locality should be nil when ProblemsOnly=true")
+		require.Empty(t, r.TopKLocksByWaitQueueWaiters, "TopKLocksByWaitQueueWaiters should be empty when ProblemsOnly=true")
+		require.Empty(t, r.Span.StartKey, "Span should be empty when ProblemsOnly=true")
+
+		// Verify the full response has these fields populated for comparison
+		fullRange := resFull.Ranges[i]
+		require.NotEmpty(t, fullRange.RaftState.State, "Full response should have RaftState")
+		require.NotEmpty(t, fullRange.Span.StartKey, "Full response should have Span")
+	}
+}
+
 // TestGossipRedacted checks if the `GossipResponse` contains redacted fields
 // when the `Redact` flag is set in the `GossipRequest`
 func TestGossipRedacted(t *testing.T) {
