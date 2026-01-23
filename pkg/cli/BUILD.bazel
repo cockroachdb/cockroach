@@ -8,7 +8,10 @@ genrule(
     outs = ["files/cockroachdb_datadog_metrics.yaml"],
     cmd = "$(location //build/tools/gen-cockroachdb-metrics) --datadog-only $(location @datadog_cockroachdb_metrics//:metrics.py) $@",
     tools = ["//build/tools/gen-cockroachdb-metrics"],
-    visibility = ["//pkg/gen:__pkg__"],
+    visibility = [
+        "//pkg/cmd/kv/datadoggen:__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_library(
