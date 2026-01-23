@@ -66,14 +66,14 @@ var DistributedMergeIndexBackfillMode = settings.RegisterEnumSetting(
 	settings.WithRetiredName("bulkio.index_backfill.distributed_merge.enabled"),
 )
 
-// DistributedMergeIterations controls the number of merge iterations to perform
-// during index backfills using the distributed merge pipeline.
-var DistributedMergeIterations = settings.RegisterIntSetting(
+// LocalMergeEnabled controls whether a local merge iteration runs before the
+// final merge during index backfills. When enabled, each node first merges its
+// local SSTs to reduce cross-node data transfer.
+var LocalMergeEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
-	"bulkio.index_backfill.distributed_merge.iterations",
-	"number of merge iterations to perform during index backfills",
-	1,
-	settings.IntWithMinimum(1),
+	"bulkio.index_backfill.distributed_merge.local_merge.enabled",
+	"when true, run a local merge iteration before the final merge to reduce cross-node traffic",
+	true,
 )
 
 // shouldEnableDistributedMergeIndexBackfill determines whether the specified

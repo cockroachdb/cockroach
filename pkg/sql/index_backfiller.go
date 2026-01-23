@@ -224,20 +224,22 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	//   - phase = 0: Map phase complete, no merge iterations completed yet.
 	//   - phase = N (N >= 1): Merge iteration N completed.
 	//
-	// On resume after a completed iteration, for simplicity in tracking we do a
-	// single final iteration to KV rather than continuing with the original
-	// iteration count.
-	maxIterations := int(backfill.DistributedMergeIterations.Get(&ib.execCfg.Settings.SV))
-	startIteration := 1
+	// The number of merge iterations is controlled by the LocalMergeEnabled setting:
+	//   - When disabled: 1 iteration (final only).
+	//   - When enabled: 2 iterations (local merge + final).
+	maxIterations := 1
+	if backfill.LocalMergeEnabled.Get(&ib.execCfg.Settings.SV) {
+		maxIterations = 2
+	}
 
-	if progress.DistributedMergePhase >= 1 {
-		// Resume case: we've completed at least one merge iteration.
-		// Complete the merge in a single final iteration directly to KV.
-		startIteration = int(progress.DistributedMergePhase) + 1
+	startIteration := int(progress.DistributedMergePhase) + 1
+
+	// If the setting changed between pause/resume and we've already completed
+	// more iterations than the current setting would allow, ensure we do at
+	// least one more final iteration.
+	if startIteration > maxIterations {
 		maxIterations = startIteration
 	}
-	// If phase = 0, this is either a fresh merge or resume before any iteration
-	// completed. In both cases, run the full merge iterations from the start.
 
 	return ib.runDistributedMerge(
 		ctx, job, descriptor, &progress, tracker, manifests, startIteration, maxIterations, addStoragePrefix,
