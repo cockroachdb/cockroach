@@ -40,9 +40,9 @@ func TestDRPCBatchServer(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		args := base.TestClusterArgs{}
 		args.ServerArgs.Insecure = insecure
+		args.ServerArgs.DefaultDRPCOption = base.TestDRPCEnabled
 		args.ReplicationMode = base.ReplicationManual
 		args.ServerArgs.Settings = cluster.MakeClusterSettings()
-		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
 		c := testcluster.StartTestCluster(t, numNodes, args)
 		defer c.Stopper().Stop(ctx)
 
@@ -98,7 +98,7 @@ func TestStreamContextCancel(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
+	args.ServerArgs.DefaultDRPCOption = base.TestDRPCEnabled
 	c := testcluster.StartTestCluster(t, numNodes, args)
 	defer c.Stopper().Stop(ctx)
 
@@ -223,7 +223,6 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 		},
 	}
 
-	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
 	c := testcluster.StartTestCluster(t, numNodes, args)
 	defer c.Stopper().Stop(ctx)
 	rpcAddr := c.Server(0).RPCAddr()

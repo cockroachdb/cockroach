@@ -148,7 +148,7 @@ func TestConnHealth(t *testing.T) {
 			defer stopper.Stop(ctx)
 
 			// Enable or disable DRPC based on test case.
-			rpcbase.ExperimentalDRPCEnabled.Override(ctx, &rpcCtx.Settings.SV, tc.useDRPC)
+			rpcCtx.UseDRPC = tc.useDRPC
 
 			var ln *interceptingListener
 			var hb *heartbeatService
@@ -237,7 +237,7 @@ func TestConnHealthTryDial(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		// Enable or disable DRPC based on test case.
-		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &rpcCtx.Settings.SV, useDRPC)
+		rpcCtx.UseDRPC = useDRPC
 
 		var ln *interceptingListener
 		var hb *heartbeatService
@@ -304,7 +304,7 @@ func TestConnHealthInternal(t *testing.T) {
 		rpcCtx.AdvertiseAddr = localAddr.String()
 
 		// Enable or disable DRPC based on test case.
-		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &rpcCtx.Settings.SV, useDRPC)
+		rpcCtx.UseDRPC = useDRPC
 
 		nd := New(rpcCtx, newSingleNodeResolver(staticNodeID, localAddr))
 		defer stopper.Stop(ctx)

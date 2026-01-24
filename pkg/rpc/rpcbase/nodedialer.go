@@ -9,27 +9,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"google.golang.org/grpc"
 	"storj.io/drpc"
 )
-
-var envExperimentalDRPCEnabled = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_DRPC_ENABLED", false)
-
-// ExperimentalDRPCEnabled determines whether a drpc server accepting BatchRequest
-// is enabled. This server is experimental and completely unsuitable to production
-// usage (for example, does not implement authorization checks).
-var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"rpc.experimental_drpc.enabled",
-	"if true, use drpc to execute Batch RPCs (instead of gRPC)",
-	envExperimentalDRPCEnabled)
-
-// TODODRPC is a marker to identify sites that needs to be updated to support
-// DRPC.
-const TODODRPC = true
 
 // NodeDialer interface defines methods for dialing peer nodes using their
 // node IDs.
@@ -99,8 +81,4 @@ func DialRPCClientNoBreaker[C any](
 		return nilC, err
 	}
 	return drpcClientFn(conn), nil
-}
-
-func DRPCEnabled(ctx context.Context, st *cluster.Settings) bool {
-	return st != nil && ExperimentalDRPCEnabled.Get(&st.SV)
 }
