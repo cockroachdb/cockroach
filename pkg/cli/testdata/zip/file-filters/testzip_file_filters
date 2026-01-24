@@ -89,16 +89,20 @@ debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
 debug/system.external_connections.txt
+debug/system.inspect_errors.txt
 debug/system.job_info.txt
 debug/system.jobs.txt
 debug/system.lease.txt
 debug/system.locations.txt
 debug/system.migrations.txt
+debug/system.mvcc_statistics.txt
 debug/system.namespace.txt
+debug/system.prepared_transactions.txt
 debug/system.privileges.txt
 debug/system.protected_ts_meta.txt
 debug/system.protected_ts_records.txt
 debug/system.rangelog.txt
+debug/system.region_liveness.txt
 debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
@@ -116,6 +120,7 @@ debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
 debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
+debug/system.table_metadata.txt
 debug/system.table_statistics.txt
 debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
@@ -123,6 +128,8 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.transaction_diagnostics.txt
+debug/system.transaction_diagnostics_requests.txt
 debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
@@ -225,16 +232,20 @@ debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
 debug/system.external_connections.txt
+debug/system.inspect_errors.txt
 debug/system.job_info.txt
 debug/system.jobs.txt
 debug/system.lease.txt
 debug/system.locations.txt
 debug/system.migrations.txt
+debug/system.mvcc_statistics.txt
 debug/system.namespace.txt
+debug/system.prepared_transactions.txt
 debug/system.privileges.txt
 debug/system.protected_ts_meta.txt
 debug/system.protected_ts_records.txt
 debug/system.rangelog.txt
+debug/system.region_liveness.txt
 debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
@@ -252,6 +263,7 @@ debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
 debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
+debug/system.table_metadata.txt
 debug/system.table_statistics.txt
 debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
@@ -259,6 +271,8 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.transaction_diagnostics.txt
+debug/system.transaction_diagnostics_requests.txt
 debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
@@ -392,16 +406,20 @@ debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
 debug/system.external_connections.txt
+debug/system.inspect_errors.txt
 debug/system.job_info.txt
 debug/system.jobs.txt
 debug/system.lease.txt
 debug/system.locations.txt
 debug/system.migrations.txt
+debug/system.mvcc_statistics.txt
 debug/system.namespace.txt
+debug/system.prepared_transactions.txt
 debug/system.privileges.txt
 debug/system.protected_ts_meta.txt
 debug/system.protected_ts_records.txt
 debug/system.rangelog.txt
+debug/system.region_liveness.txt
 debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
@@ -419,6 +437,7 @@ debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
 debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
+debug/system.table_metadata.txt
 debug/system.table_statistics.txt
 debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
@@ -426,6 +445,8 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.transaction_diagnostics.txt
+debug/system.transaction_diagnostics_requests.txt
 debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
@@ -534,16 +555,20 @@ debug/system.database_role_settings.txt
 debug/system.descriptor.txt
 debug/system.eventlog.txt
 debug/system.external_connections.txt
+debug/system.inspect_errors.txt
 debug/system.job_info.txt
 debug/system.jobs.txt
 debug/system.lease.txt
 debug/system.locations.txt
 debug/system.migrations.txt
+debug/system.mvcc_statistics.txt
 debug/system.namespace.txt
+debug/system.prepared_transactions.txt
 debug/system.privileges.txt
 debug/system.protected_ts_meta.txt
 debug/system.protected_ts_records.txt
 debug/system.rangelog.txt
+debug/system.region_liveness.txt
 debug/system.replication_constraint_stats.txt
 debug/system.replication_critical_localities.txt
 debug/system.replication_stats.txt
@@ -561,6 +586,7 @@ debug/system.statement_diagnostics.txt
 debug/system.statement_diagnostics_requests.txt
 debug/system.statement_hints.txt
 debug/system.statement_statistics_limit_5000.txt
+debug/system.table_metadata.txt
 debug/system.table_statistics.txt
 debug/system.table_statistics_locks.txt
 debug/system.task_payloads.txt
@@ -568,6 +594,8 @@ debug/system.tenant_settings.txt
 debug/system.tenant_tasks.txt
 debug/system.tenant_usage.txt
 debug/system.tenants.txt
+debug/system.transaction_diagnostics.txt
+debug/system.transaction_diagnostics_requests.txt
 debug/system.zones.txt
 debug/tenant_ranges.err.txt
 
