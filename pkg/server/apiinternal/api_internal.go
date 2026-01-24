@@ -83,7 +83,7 @@ func NewAPIInternalServer(
 		rpcbase.DefaultClass,
 		tspb.NewGRPCTimeSeriesClientAdapter,
 		tspb.NewDRPCTimeSeriesClientAdapter,
-		cs,
+		rpcbase.DRPCEnabled(ctx, cs),
 	)
 	if err != nil {
 		return nil, err
