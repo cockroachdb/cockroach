@@ -11,7 +11,6 @@ import (
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialMigrationClient establishes a DRPC connection if enabled; otherwise,
@@ -22,10 +21,10 @@ func DialMigrationClient(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
-	cs *cluster.Settings,
+	useDRPC bool,
 ) (RPCMigrationClient, error) {
 	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCMigrationClientAdapter, NewDRPCMigrationClientAdapter,
-		rpcbase.DRPCEnabled(ctx, cs))
+		useDRPC)
 }
 
 // DialStatusClientNoBreaker establishes a DRPC connection if enabled;
