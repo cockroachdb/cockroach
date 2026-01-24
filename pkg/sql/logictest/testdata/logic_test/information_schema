@@ -120,7 +120,6 @@ CREATE DATABASE information_schema
 statement ok
 DROP DATABASE information_schema CASCADE
 
-
 # Verify information_schema tables handle mutation statements correctly.
 
 statement error tables is a virtual object and cannot be modified
@@ -361,7 +360,6 @@ SHOW GRANTS ON information_schema.tables
 ----
 database_name  schema_name         table_name  grantee  privilege_type  is_grantable
 test           information_schema  tables      public   SELECT          false
-
 
 # Verify selecting from information_schema.
 
@@ -1283,7 +1281,7 @@ NULL                   NULL                  UTF8                UCS            
 NULL                   NULL                  UTF8                UCS                   UTF8         system                   NULL                    NULL
 NULL                   NULL                  UTF8                UCS                   UTF8         test                     NULL                    NULL
 
-skipif config local-mixed-25.4
+skipif config local-mixed-25.4 local-mixed-26.1
 query TTTT colnames
 SELECT *
 FROM system.information_schema.check_constraints
@@ -1318,6 +1316,7 @@ system              public             29_19_5_not_null                         
 system              public             29_19_7_not_null                                                                                                lastUsedAt IS NOT NULL
 system              public             29_19_9_not_null                                                                                                user_id IS NOT NULL
 system              public             29_20_10_not_null                                                                                               avgSize IS NOT NULL
+system              public             29_20_13_not_null                                                                                               delayDelete IS NOT NULL
 system              public             29_20_1_not_null                                                                                                tableID IS NOT NULL
 system              public             29_20_2_not_null                                                                                                statisticID IS NOT NULL
 system              public             29_20_4_not_null                                                                                                columnIDs IS NOT NULL
@@ -3079,7 +3078,6 @@ column_name     STRING     false        NULL            ·                      
 privilege_type  STRING     false        NULL            ·                      {}       false
 is_grantable    STRING     true         NULL            ·                      {}       false
 
-
 # test information_schema.routines
 query TTBTTTB colnames,rowsort
 SHOW COLUMNS FROM information_schema.routines
@@ -3173,7 +3171,6 @@ SELECT * FROM information_schema.routines WHERE routine_name = 'pg_get_functiond
 ----
 specific_catalog  specific_schema  specific_name            routine_catalog  routine_schema  routine_name        routine_type  module_catalog  module_schema  module_name  udt_catalog  udt_schema  udt_name  data_type  character_maximum_length  character_octet_length  character_set_catalog  character_set_schema  character_set_name  collation_catalog  collation_schema  collation_name  numeric_precision  numeric_precision_radix  numeric_scale  datetime_precision  interval_type  interval_precision  type_udt_catalog  type_udt_schema  type_udt_name  scope_catalog  scope_schema  scope_name  maximum_cardinality  dtd_identifier  routine_body  routine_definition  external_name  external_language  parameter_style  is_deterministic  sql_data_access  is_null_call  sql_path  schema_level_routine  max_dynamic_result_sets  is_user_defined_cast  is_implicitly_invocable  security_type  to_sql_specific_catalog  to_sql_specific_schema  to_sql_specific_name  as_locator  created  last_altered  new_savepoint_level  is_udt_dependent  result_cast_from_data_type  result_cast_as_locator  result_cast_char_max_length  result_cast_char_octet_length  result_cast_char_set_catalog  result_cast_char_set_schema  result_cast_char_set_name  result_cast_collation_catalog  result_cast_collation_schema  result_cast_collation_name  result_cast_numeric_precision  result_cast_numeric_precision_radix  result_cast_numeric_scale  result_cast_datetime_precision  result_cast_interval_type  result_cast_interval_precision  result_cast_type_udt_catalog  result_cast_type_udt_schema  result_cast_type_udt_name  result_cast_scope_catalog  result_cast_scope_schema  result_cast_scope_name  result_cast_maximum_cardinality  result_cast_dtd_identifier
 test              pg_catalog       pg_get_functiondef_2035  test             pg_catalog      pg_get_functiondef  FUNCTION      NULL            NULL           NULL         NULL         NULL        NULL      text       NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test              pg_catalog       text           NULL           NULL          NULL        NULL                 0               EXTERNAL      NULL                NULL           INTERNAL           GENERAL          NO                MODIFIES         NO            NULL      YES                   0                        NULL                  NULL                     INVOKER        NULL                     NULL                    NULL                  NO          NULL     NULL          NULL                 NO                NULL                        NULL                    NULL                         NULL                           NULL                          NULL                         NULL                       NULL                           NULL                          NULL                        NULL                           NULL                                 NULL                       NULL                            NULL                       NULL                            NULL                          NULL                         NULL                       NULL                       NULL                      NULL                    NULL                             NULL
-
 
 # test information_schema.parameters
 query TTBTTTB colnames,rowsort
@@ -3613,7 +3610,6 @@ test               pg_catalog        zh-Hant              NO PAD
 test               pg_catalog        zh-Hant-u-co-pinyin  NO PAD
 test               pg_catalog        zh-u-co-stroke       NO PAD
 
-
 ## information_schema.collation_character_set_applicability
 subtest collation_character_set_applicability
 
@@ -3719,7 +3715,6 @@ test               pg_catalog        zh                   NULL                  
 test               pg_catalog        zh-u-co-stroke       NULL                   NULL                  UTF8
 test               pg_catalog        zh-Hant-u-co-pinyin  NULL                   NULL                  UTF8
 test               pg_catalog        zh-Hant              NULL                   NULL                  UTF8
-
 
 ## information_schema.session_variables
 subtest variables
@@ -4080,7 +4075,6 @@ k
 a
 b
 
-
 subtest identity_columns
 
 statement ok
@@ -4254,7 +4248,6 @@ query TTTTT
 select identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle from information_schema.columns where table_name = 't' and column_name='id28';
 ----
 1  1  9223372036854775807  1  NULL
-
 
 subtest get_seq_opt_with_default_int_size
 

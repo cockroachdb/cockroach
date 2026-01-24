@@ -1785,6 +1785,7 @@ limit 5000;`,
 			`"avgSize"`,
 			`"partialPredicate"`,
 			`"fullStatisticID"`,
+			`"delayDelete"`,
 		},
 	},
 	"system.table_statistics_locks": {

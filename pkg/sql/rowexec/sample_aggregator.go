@@ -507,17 +507,15 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				if !ok {
 					return errors.Errorf("no associated inverted sketch")
 				}
-				// GenerateHistogram is false for sketches
-				// with inverted index columns. Instead, the
-				// presence of those histograms is indicated
-				// by the existence of an inverted sketch on
-				// the column.
+				// GenerateHistogram is false for sketches with inverted index
+				// columns. Instead, the presence of those histograms is
+				// indicated by the existence of an inverted sketch on the
+				// column.
 
 				invDistinctCount := s.getDistinctCount(invSketch, false /* includeNulls */)
-				// Use 0 for the colIdx here because it refers
-				// to the column index of the samples, which
-				// only has a single bytes column with the
-				// inverted keys.
+				// Use 0 for the colIdx here because it refers to the column
+				// index of the samples, which only has a single bytes column
+				// with the inverted keys.
 				h, err := s.generateHistogram(
 					ctx,
 					s.FlowCtx.EvalCtx,
@@ -543,13 +541,31 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Delete old stats that have been superseded, if the new statistic
 			// is not partial.
 			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
-					return err
+				if s.spec.CanaryStatsEnabled {
+					// We don't immediately delete the "stale" stats, but keep it
+					// until another canary stats is collected. It is because if a
+					// query picked the stable path for stats selection, we will
+					// need to reuse the stale stats.
+					if err := stats.DeleteExpiredStats(
+						ctx,
+						txn,
+						s.tableID,
+						columnIDs,
+					); err != nil {
+						return errors.Wrapf(err, "fail to delete expired stats for table %d columns %v", s.tableID, columnIDs)
+					}
+					if err := stats.MarkDelayDelete(ctx, txn, s.tableID, columnIDs); err != nil {
+						return errors.Wrapf(err, "fail to mark rows for delayed deletion for table %d columns %v", s.tableID, columnIDs)
+					}
+				} else {
+					if err := stats.DeleteOldStatsForColumns(
+						ctx,
+						txn,
+						s.tableID,
+						columnIDs,
+					); err != nil {
+						return err
+					}
 				}
 			}
 
