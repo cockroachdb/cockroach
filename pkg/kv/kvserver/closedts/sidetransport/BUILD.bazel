@@ -19,7 +19,6 @@ go_library(
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/closedts/policyrefresher",
         "//pkg/roachpb",
-        "//pkg/rpc/nodedialer",
         "//pkg/rpc/rpcbase",
         "//pkg/settings/cluster",
         "//pkg/util/hlc",

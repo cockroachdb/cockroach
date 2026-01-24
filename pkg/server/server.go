@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
@@ -691,7 +692,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		false, /* deterministic */
 	)
 
-	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	newSideTransportClient := func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
+		return ctpb.DialSideTransportClient(kvNodeDialer, ctx, nodeID, class, rpcContext.UseDRPC)
+	}
+	ctSender := sidetransport.NewSender(stopper, st, clock, newSideTransportClient)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 	var policyRefresher *policyrefresher.PolicyRefresher
 	{
