@@ -651,7 +651,7 @@ func newStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 			serverIterator:     serverIterator,
-			nd:                 &nodeDialer{cs: st, si: serverIterator},
+			nd:                 &nodeDialer{useDRPC: rpcCtx.UseDRPC, si: serverIterator},
 			clock:              clock,
 		},
 		cfg:              cfg,
@@ -785,7 +785,7 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 }
 
 // Gossip returns current state of gossip information on the given node

@@ -43,20 +43,20 @@ func DialStatusClientNoBreaker(
 // falls back to gRPC. The established connection is used to create a
 // RPCStatusClient.
 func DialStatusClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, useDRPC bool,
 ) (RPCStatusClient, error) {
 	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-		NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, rpcbase.DRPCEnabled(ctx, cs))
+		NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, useDRPC)
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
 // falls back to gRPC. The established connection is used to create a
 // RPCAdminClient.
 func DialAdminClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, useDRPC bool,
 ) (RPCAdminClient, error) {
 	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-		NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, rpcbase.DRPCEnabled(ctx, cs))
+		NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, useDRPC)
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;
