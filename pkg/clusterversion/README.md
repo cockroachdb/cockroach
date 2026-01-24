@@ -216,10 +216,11 @@ bootstrap data in a meaningful way.
   (`local-mixed-24.1`). Make sure the new config is part of `DefaultConfigNames`.
   Run `./dev gen`.
 
-- [ ] Update logictests as needed. There should be a few cases where we
-  skip a statement in mixed version scenarios, and we might need to add a
-  `skipif config local-mixed-24.1` alongside an existing `skipif config
-  local-mixed-23.2`.
+- [ ] Update logictests as needed. Only add `skipif config local-mixed-24.1`
+  directives when tests actually fail without them. Most tests should not need
+  the new skipif directive since version gates (e.g., `version.IsActive(v24.1)`)
+  will return true in the `local-mixed-24.1` configuration. Do not proactively
+  add skipif directives alongside existing ones (e.g., `local-mixed-23.2`).
 
 **Sample PR:** [#135291](https://github.com/cockroachdb/cockroach/pull/135291)
 

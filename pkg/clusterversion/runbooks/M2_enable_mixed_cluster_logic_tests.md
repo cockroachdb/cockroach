@@ -184,31 +184,35 @@ git add pkg/sql/sqlitelogictest/tests/local-mixed-25.4/
 
 **Note:** The `cockroach-go-testserver-25.4` directory should NOT be generated in M.2 (it will be added in M.3).
 
-#### Step 6: Update Logictest Skipif Directives
+#### Step 6: Update Logictest Skipif Directives (Only When Tests Fail)
 
-Some logic tests need to skip or adjust their expectations for mixed-cluster configurations.
+**IMPORTANT:** Only add `skipif config local-mixed-25.4` directives when tests actually fail without them. Do not proactively add skipif directives alongside existing ones.
 
-**Common file to update:**
-- `pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog`
+**Why:** Most tests should not need the new skipif directive because version gates (e.g., `version.IsActive(v25.4)`) will return true in the `local-mixed-25.4` configuration.
 
-**Pattern:**
-Look for skipif directives that include previous mixed versions and add the new one:
+**Process:**
 
+**a) First, run the logic tests to identify failures:**
+```bash
+# Run all logic tests with the new config to find failures
+./dev testlogic --config=local-mixed-25.4
 ```
-# Before:
-skipif config schema-locked-disabled local-mixed-25.3
 
-# After:
+**b) For each failing test, add the skipif directive:**
+
+Example failure in `crdb_internal_catalog`:
+```
+# Only add local-mixed-25.4 if the test fails
 skipif config schema-locked-disabled local-mixed-25.3 local-mixed-25.4
 ```
 
-**How to find files that need updating:**
+**c) DO NOT proactively search and update:**
 ```bash
-# Search for skipif directives with previous mixed versions
-grep -r "skipif.*local-mixed-25.3" pkg/sql/logictest/testdata/ --include="logic_test"
+# ❌ Don't do this - it adds skipif unnecessarily:
+grep -r "skipif.*local-mixed-25.3" pkg/sql/logictest/testdata/
 ```
 
-For each file found, add `local-mixed-25.4` to the skipif list.
+**Expected:** Most M.2 PRs should only need to add `local-mixed-25.4` to 0-2 test files, typically just `crdb_internal_catalog`.
 
 #### Step 7: Verify Changes
 
@@ -474,6 +478,65 @@ Before creating the PR, verify:
 6. Update your commit message to remove references to cockroach-go-testserver-25.4
 
 **Reference:** The `cockroach-go-testserver-25.3` configuration was added in M.3 (commit b4a7d05d8e8), not M.2.
+
+### Recommended: Verify Skipif Necessity (Optional)
+
+If you want to validate which skipif directives are actually necessary, use this approach:
+
+**Process:**
+
+**Step 1: Create a verification branch**
+```bash
+# After completing your M.2 PR, create a new branch to test
+git checkout -b verify-skipif-necessity
+```
+
+**Step 2: Remove all new skipif directives**
+
+Identify files where you added `local-mixed-25.4` and remove those additions:
+```bash
+# Find files with the new skipif directive
+git diff master --name-only | xargs grep -l "local-mixed-25.4"
+
+# For each file, revert just the skipif directive changes
+# Example for crdb_internal_catalog:
+git show master:pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog > \
+  pkg/sql/logictest/testdata/logic_test/crdb_internal_catalog
+```
+
+**Step 3: Run logic tests and identify failures**
+```bash
+# Run all logic tests with the new config
+./dev testlogic --config=local-mixed-25.4
+
+# Note which tests fail
+```
+
+**Step 4: Add back only necessary skipif directives**
+
+For each test that failed, add the `local-mixed-25.4` skipif directive.
+
+**Step 5: Update your M.2 PR**
+
+Amend your M.2 commit to include only the necessary skipif directives:
+```bash
+git checkout <your-m2-branch>
+# Apply only the necessary skipif changes
+git commit --amend
+```
+
+**Example:** For M.2 26.1 (PR #161136), the verification process (PR #161473) revealed that only `crdb_internal_catalog` needed the skipif directive. The initial PR proactively added it to 6 files, but testing showed 5 were unnecessary.
+
+**Why this matters:** Unnecessary skipif directives:
+- Reduce test coverage in mixed-version scenarios
+- May hide real compatibility issues
+- Create maintenance burden when updating tests
+
+**When to use:** This verification process is optional but recommended when:
+- You're unsure which tests actually need skipif directives
+- The initial M.2 PR added skipif directives proactively
+- You want to maximize test coverage
+
 ### Timeline Context
 
 In the release cycle:
