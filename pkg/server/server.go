@@ -691,7 +691,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		false, /* deterministic */
 	)
 
-	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer, rpcContext.UseDRPC)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 	var policyRefresher *policyrefresher.PolicyRefresher
 	{
