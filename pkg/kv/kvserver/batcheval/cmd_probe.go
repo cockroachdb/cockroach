@@ -14,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func declareKeysProbe(
+	_ *cluster.Settings,
 	_ ImmutableRangeState,
 	_ *kvpb.Header,
 	_ kvpb.Request,

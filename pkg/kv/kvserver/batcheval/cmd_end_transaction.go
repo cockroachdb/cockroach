@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -80,6 +82,7 @@ func declareKeysWriteTransaction(
 }
 
 func declareKeysEndTxn(
+	cs *cluster.Settings,
 	rs ImmutableRangeState,
 	header *kvpb.Header,
 	req kvpb.Request,
@@ -168,12 +171,20 @@ func declareKeysEndTxn(
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
-				// NB: the RHS LastReplicaGCTimestampKey, to which the LHS timestamp is
-				// copied, is covered above by the SpanReadWrite for the entire RHS
-				// unreplicated RangeID-local span.
-				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
-				})
+				// TODO(dodeca12): Remove the `cs` cluster setting variable from
+				// this function and from `DeclareKeysFunc` type and all the
+				// resultant functions that use it once the version gate is dropped.
+				if !cs.Version.IsActive(
+					context.TODO(),
+					clusterversion.V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine,
+				) {
+					// NB: the RHS LastReplicaGCTimestampKey, to which the LHS timestamp is
+					// copied, is covered above by the SpanReadWrite for the entire RHS
+					// unreplicated RangeID-local span.
+					latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+						Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
+					})
+				}
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(rs.GetRangeID()),
@@ -1348,19 +1359,35 @@ func splitTriggerHelper(
 	// NB: the replicated post-split left hand keyspace is frozen at this point.
 	// Only the RHS can be mutated (and we do so to seed its state).
 
-	// Copy the last replica GC timestamp. This value is unreplicated,
-	// which is why the MVCC stats are set to nil on calls to
-	// MVCCPutProto.
-	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
-	}
-
-	if err := storage.MVCCPutProto(
-		ctx, spanset.DisableForbiddenSpanAssertions(batch),
-		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
+	// Copy the last replica GC timestamp. This value is unreplicated, which is
+	// why the MVCC stats are set to nil on calls to `MVCCPutProto()`.
+	//
+	// Only (incorrectly) write `LastReplicaGCTimestamp` (an unreplicated key)
+	// to the state machine when the version is below
+	// TODO_Delete_V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine.
+	// After this version, the key is (correctly) written to the log engine at
+	// apply time.
+	// TODO(dodeca12): Remove this whole if conditional when the version gate is
+	// dropped.
+	if !rec.ClusterSettings().Version.IsActive(
+		ctx,
+		clusterversion.V26_2_StopWritingLastReplicaGCTimestampKeyToStateMachine,
+	) {
+		replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{},
+				errors.Wrap(err, "unable to fetch last replica GC timestamp")
+		}
+		if err := storage.MVCCPutProto(
+			ctx, spanset.DisableForbiddenSpanAssertions(batch),
+			keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID),
+			hlc.Timestamp{},
+			&replicaGCTS,
+			storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory},
+		); err != nil {
+			return enginepb.MVCCStats{}, result.Result{},
+				errors.Wrap(err, "unable to copy last replica GC timestamp")
+		}
 	}
 
 	// Compute the absolute stats for the (post-split) ranges. No more
@@ -1403,6 +1430,7 @@ func splitTriggerHelper(
 
 	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	var err error
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
