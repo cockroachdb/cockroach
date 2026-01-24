@@ -1689,7 +1689,11 @@ func writeColumnValues(
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
 		val := findColumnValue(col.ColID, colMap, row)
-		if val == tree.DNull || (col.IsComposite && !val.(tree.CompositeDatum).IsComposite()) {
+		var valIsComposite bool
+		if d, ok := val.(tree.CompositeDatum); ok {
+			valIsComposite = d.IsComposite()
+		}
+		if val == tree.DNull || (col.IsComposite && !valIsComposite) {
 			continue
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
