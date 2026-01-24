@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -216,7 +215,7 @@ func newAdminServer(
 		),
 		st:             cs,
 		serverIterator: serverIterator,
-		nd:             &nodeDialer{cs: cs, si: serverIterator},
+		nd:             &nodeDialer{useDRPC: rpcCtx.UseDRPC, si: serverIterator},
 		distSender:     distSender,
 		rpcContext:     rpcCtx,
 		clock:          clock,
@@ -1314,7 +1313,7 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 						if err == nil {
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
@@ -2092,7 +2091,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if rpcbase.DRPCEnabled(ctx, s.st) {
+	if s.rpcContext.UseDRPC {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2138,7 +2137,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if rpcbase.DRPCEnabled(ctx, s.st) {
+	if s.rpcContext.UseDRPC {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -3681,7 +3680,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.RPCAdminClient, error) {
-	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 }
 
 func (s *adminServer) ListTracingSnapshots(

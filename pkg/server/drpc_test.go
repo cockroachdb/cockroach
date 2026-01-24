@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -177,8 +176,7 @@ func TestDefaultDRPCOption(t *testing.T) {
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{DefaultDRPCOption: opt})
 		defer s.Stopper().Stop(context.Background())
 
-		var enabled bool
-		sqlutils.MakeSQLRunner(s.SQLConn(t)).QueryRow(t, "SHOW CLUSTER SETTING rpc.experimental_drpc.enabled").Scan(&enabled)
+		enabled := s.RPCContext().UseDRPC
 		require.Equal(t, option, enabled)
 	})
 }

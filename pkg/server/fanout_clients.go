@@ -86,8 +86,8 @@ type ServerIterator interface {
 // implementation that can be use to create RPC clients. nodeDialer allows
 // reusing utity function in serverpb package to create RPC clients.
 type nodeDialer struct {
-	cs *cluster.Settings
-	si ServerIterator
+	useDRPC bool
+	si      ServerIterator
 }
 
 func (d *nodeDialer) Dial(

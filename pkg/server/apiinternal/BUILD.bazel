@@ -17,7 +17,6 @@ go_library(
         "//pkg/server/apiutil",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/ts/tspb",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
