@@ -11,7 +11,6 @@ import (
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialDistSQLClient establishes a DRPC connection if enabled; otherwise,
@@ -32,7 +31,7 @@ func DialDistSQLClientNoBreaker(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
-	cs *cluster.Settings,
+	useDRPC bool,
 ) (RPCDistSQLClient, error) {
-	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, NewGRPCDistSQLClientAdapter, NewDRPCDistSQLClientAdapter, cs)
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, NewGRPCDistSQLClientAdapter, NewDRPCDistSQLClientAdapter, useDRPC)
 }

@@ -171,7 +171,7 @@ func (n *Dialer) DialInternalClient(
 
 	var client rpc.RestrictedInternalClient
 	useStreamPoolClient := shouldUseBatchStreamPoolClient(ctx, n.rpcContext.Settings)
-	if !rpcbase.DRPCEnabled(ctx, n.rpcContext.Settings) {
+	if !n.rpcContext.UseDRPC {
 		gc, conn, err := dial(ctx, n.resolver, n.rpcContext.GRPCDialNode, nodeID, class, true /* checkBreaker */)
 		if err != nil {
 			return nil, errors.Wrapf(err, "gRPC")
@@ -283,7 +283,7 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpcbase.Connecti
 	}
 	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
 	// not be done by the time `Health` is called since DialNode is async.
-	if !rpcbase.DRPCEnabled(context.Background(), n.rpcContext.Settings) {
+	if !n.rpcContext.UseDRPC {
 		return n.rpcContext.GRPCDialNode(addr.String(), nodeID, locality, class).Health()
 	}
 	return n.rpcContext.DRPCDialNode(addr.String(), nodeID, locality, class).Health()
@@ -302,7 +302,7 @@ func (n *Dialer) ConnHealthTryDialInstance(id base.SQLInstanceID, addr string) e
 		return nil
 	}
 
-	if !rpcbase.DRPCEnabled(context.Background(), n.rpcContext.Settings) {
+	if !n.rpcContext.UseDRPC {
 		return n.rpcContext.GRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
 	}
 	return n.rpcContext.DRPCDialPod(addr, id, roachpb.Locality{}, rpcbase.DefaultClass).Health()
@@ -450,7 +450,7 @@ func DialRPCClient[C any](
 	drpcClientFn func(drpc.Conn) C,
 ) (C, error) {
 	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, grpcClientFn,
-		drpcClientFn, nd.rpcContext.Settings)
+		drpcClientFn, nd.rpcContext.UseDRPC)
 }
 
 // DialRPCClientNoBreaker is like DialRPCClient, but will not check the
@@ -464,5 +464,5 @@ func DialRPCClientNoBreaker[C any](
 	drpcClientFn func(drpc.Conn) C,
 ) (C, error) {
 	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class, grpcClientFn,
-		drpcClientFn, nd.rpcContext.Settings)
+		drpcClientFn, nd.rpcContext.UseDRPC)
 }
