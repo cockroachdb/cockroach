@@ -335,11 +335,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
-	switch params.DefaultDRPCOption {
-	case base.TestDRPCEnabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, true)
-	case base.TestDRPCDisabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, false)
+	if params.DefaultDRPCOption == base.TestDRPCEnabled {
+		cfg.UseDRPC = true
 	}
 
 	return cfg
@@ -2691,7 +2688,7 @@ func (ts *testServer) RPCClientConn(
 func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
@@ -2743,7 +2740,7 @@ func (t *testTenant) RPCClientConn(
 func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
