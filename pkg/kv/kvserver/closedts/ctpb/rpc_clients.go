@@ -23,5 +23,6 @@ func DialSideTransportClient(
 	class rpcbase.ConnectionClass,
 	cs *cluster.Settings,
 ) (RPCSideTransportClient, error) {
-	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCSideTransportClientAdapter, NewDRPCSideTransportClientAdapter, cs)
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCSideTransportClientAdapter, NewDRPCSideTransportClientAdapter,
+		rpcbase.DRPCEnabled(ctx, cs))
 }
