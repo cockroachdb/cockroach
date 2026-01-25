@@ -87,7 +87,10 @@ func newRowLevelTTLTestJobTestHelper(
 		return st
 	}
 
-	jobsInterval := 2 * time.Second
+	jobsInterval := 5 * time.Second
+	if skip.Duress() {
+		jobsInterval = 30 * time.Second
+	}
 	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
