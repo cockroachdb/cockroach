@@ -430,7 +430,7 @@ func runLargeSchemaIntrospectionBenchmark(
 		DB:          strings.Split(dbList[0], ".")[0],
 		SetupType:   usingInit,
 		Warehouses:  1, // Required for schema generation but no data will be loaded
-		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --data-loader=none",
+		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --data-loader=none --fks=false",
 			populateFileName,
 		),
 		// Use all CRDB nodes for init to distribute table creation load.
