@@ -662,10 +662,18 @@ func setupShardedIndex(
 			return nil, nil, err
 		}
 		if anyColumnIsPartitioningField(columns, partitionAllBy) {
-			return nil, nil, pgerror.New(
-				pgcode.FeatureNotSupported,
-				`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
-			)
+			isRegionalByRow := tableDesc.IsLocalityRegionalByRow()
+			if isRegionalByRow {
+				return nil, nil, pgerror.New(
+					pgcode.FeatureNotSupported,
+					`hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"`,
+				)
+			} else {
+				return nil, nil, pgerror.New(
+					pgcode.FeatureNotSupported,
+					`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY"`,
+				)
+			}
 		}
 	}
 

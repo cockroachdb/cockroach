@@ -1784,10 +1784,17 @@ func NewTableDesc(
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes cannot be explicitly partitioned")
 		}
 		if desc.IsPartitionAllBy() && anyColumnIsPartitioningField(d.Columns, partitionAllBy) {
-			return nil, pgerror.New(
-				pgcode.FeatureNotSupported,
-				`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
-			)
+			if n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow {
+				return nil, pgerror.New(
+					pgcode.FeatureNotSupported,
+					`hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"`,
+				)
+			} else {
+				return nil, pgerror.New(
+					pgcode.FeatureNotSupported,
+					`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY"`,
+				)
+			}
 		}
 		shardCol, newColumns, err := setupShardedIndex(
 			ctx,

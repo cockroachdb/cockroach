@@ -12,23 +12,29 @@ CREATE TABLE t_regional (
   b INT
 ) LOCALITY REGIONAL BY ROW;
 
-statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
 CREATE INDEX ON t_regional (crdb_region, b) USING HASH;
 
-statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX ON t_regional USING btree(crdb_region, b);
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
 CREATE UNIQUE INDEX ON t_regional (crdb_region, b) USING HASH;
 
-statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE UNIQUE INDEX ON t_regional USING btree(crdb_region, b);
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
 ALTER TABLE t_regional ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk) USING HASH;
 
-statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
 CREATE TABLE t_regional_bad (
   pk INT PRIMARY KEY,
   b INT,
   INDEX (crdb_region, b) USING HASH
 ) LOCALITY REGIONAL BY ROW;
 
-statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
 CREATE TABLE t_regional_bad (
   pk INT,
   b INT,

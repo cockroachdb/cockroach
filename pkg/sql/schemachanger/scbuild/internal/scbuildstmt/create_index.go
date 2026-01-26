@@ -492,12 +492,25 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 					}
 				}
 			})
+			// Check if this is a REGIONAL BY ROW table. Since REGIONAL BY ROW
+			// and PARTITION ALL BY are mutually exclusive (in fact the former
+			// creates implicit PARTITION ALL BY LIST(crdb_region)
+			// partitioning), we only need to confirm one to rule out the
+			// other.
+			isRegionalByRow := isTableLocalityRegionalByRow(b, idxSpec.secondary.TableID)
 			for _, col := range idxSpec.columns {
 				if _, ok := implicitColumns[col.ColumnID]; !col.Implicit && ok {
-					panic(pgerror.New(
-						pgcode.FeatureNotSupported,
-						`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
-					))
+					if isRegionalByRow {
+						panic(pgerror.New(
+							pgcode.FeatureNotSupported,
+							`cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition`,
+						))
+					} else {
+						panic(pgerror.New(
+							pgcode.FeatureNotSupported,
+							`cannot explicitly include implicit partitioning columns from "PARTITION ALL BY" in index definition`,
+						))
+					}
 				}
 			}
 		}
