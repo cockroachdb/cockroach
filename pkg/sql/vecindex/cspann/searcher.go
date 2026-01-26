@@ -450,22 +450,24 @@ func (s *levelSearcher) searchChildPartitions(
 			}
 		}
 
-		// Enqueue background fixup if a split or merge operation needs to be
-		// started or continued after stalling. Split if the partition is over-
-		// sized. Merge if the partition is under-sized and if there are multiple
-		// search partitions, indicating there are siblings/cousins.
-		state := s.idxCtx.tempToSearch[i].StateDetails
-		needSplit := count > s.idx.options.MaxPartitionSize
-		needSplit = needSplit || state.MaybeSplitStalled(s.idx.options.StalledOpTimeout())
-		needMerge := count < s.idx.options.MinPartitionSize && len(parentResults) > 1 &&
-			state.State.AllowMerge()
-		needMerge = needMerge || state.MaybeMergeStalled(s.idx.options.StalledOpTimeout())
-		if needSplit {
-			s.idx.fixups.AddSplit(ctx, s.idxCtx.treeKey,
-				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
-		} else if needMerge {
-			s.idx.fixups.AddMerge(ctx, s.idxCtx.treeKey,
-				parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+		if !s.idxCtx.options.DisableSplitMergeFixups {
+			// Enqueue background fixup if a split or merge operation needs to be
+			// started or continued after stalling. Split if the partition is over-
+			// sized. Merge if the partition is under-sized and if there are multiple
+			// search partitions, indicating there are siblings/cousins.
+			state := s.idxCtx.tempToSearch[i].StateDetails
+			needSplit := count > s.idx.options.MaxPartitionSize
+			needSplit = needSplit || state.MaybeSplitStalled(s.idx.options.StalledOpTimeout())
+			needMerge := count < s.idx.options.MinPartitionSize && len(parentResults) > 1 && state.State.AllowMerge()
+			needMerge = needMerge || state.MaybeMergeStalled(s.idx.options.StalledOpTimeout())
+
+			if needSplit {
+				s.idx.fixups.AddSplit(ctx, s.idxCtx.treeKey,
+					parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+			} else if needMerge {
+				s.idx.fixups.AddMerge(ctx, s.idxCtx.treeKey,
+					parentResults[i].ParentPartitionKey, partitionKey, false /* singleStep */)
+			}
 		}
 	}
 
