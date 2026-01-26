@@ -8,6 +8,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"strings"
@@ -21,12 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 // registerLargeSchemaBenchmarks registers all permutations of
@@ -470,37 +471,44 @@ func runLargeSchemaIntrospectionBenchmark(
 	numWorkers := (len(c.All()) - 1) * 10
 	t.L().Printf("Running introspection benchmark for %v with %d workers", benchmarkDuration, numWorkers)
 
+	// Precreate a connection pool (sql.DB) for each CRDB node. Workers will
+	// share these pools based on their assigned node, and the sql.DB driver
+	// will manage connection pooling internally.
+	nodeConns := make(map[int]*gosql.DB)
+	for _, nodeIdx := range c.CRDBNodes() {
+		nodeConns[nodeIdx] = c.Conn(ctx, t.L(), nodeIdx)
+	}
+	defer func() {
+		for _, conn := range nodeConns {
+			conn.Close()
+		}
+	}()
+
 	var queryCount atomic.Int64
 	startTime := timeutil.Now()
 	endTime := startTime.Add(benchmarkDuration)
 
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < numWorkers; i++ {
 		workerIdx := i
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			// Each worker connects to a different node for load distribution.
-			nodeIdx := (workerIdx % len(c.CRDBNodes())) + 1
-			workerConn := c.Conn(gCtx, t.L(), nodeIdx)
-			defer workerConn.Close()
-
-			// Pick a random database from the list for this worker.
+			nodeIdx := c.CRDBNodes()[workerIdx%len(c.CRDBNodes())]
+			workerConn := nodeConns[nodeIdx]
+			// Pick a database from the list for this worker.
 			dbSchema := dbList[workerIdx%len(dbList)]
 			dbName := strings.Split(dbSchema, ".")[0]
-			_, err := workerConn.ExecContext(gCtx, fmt.Sprintf("USE %s", dbName))
-			if err != nil {
-				return err
-			}
 
 			for timeutil.Now().Before(endTime) {
 				select {
-				case <-gCtx.Done():
-					return gCtx.Err()
+				case <-ctx.Done():
+					return ctx.Err()
 				default:
 				}
 
 				// Execute ORM introspection query.
 				start := timeutil.Now()
-				_, err := workerConn.QueryContext(gCtx, LargeSchemaOrmQueries)
+				_, err := workerConn.QueryContext(ctx, fmt.Sprintf("USE %s; %s", dbName, LargeSchemaOrmQueries))
 				if err != nil {
 					t.L().Printf("Worker %d query error: %v", workerIdx, err)
 					continue
@@ -516,13 +524,20 @@ func runLargeSchemaIntrospectionBenchmark(
 	// Periodically tick the histogram and log progress.
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		lastCount := int64(0)
 		for {
 			select {
-			case <-gCtx.Done():
+			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
+				// Exit the ticker goroutine when the benchmark duration is complete.
+				// This prevents the goroutine from running indefinitely if workers
+				// exit normally (returning nil) since ctxgroup only cancels ctx
+				// when a goroutine returns an error.
+				if timeutil.Now().After(endTime) {
+					return nil
+				}
 				currentCount := queryCount.Load()
 				elapsed := timeutil.Since(startTime)
 				qps := float64(currentCount-lastCount) / 10.0
