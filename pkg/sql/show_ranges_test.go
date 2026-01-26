@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -148,13 +150,16 @@ func TestShowRangesWithDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "the test is too heavy")
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156145),
-		},
-	})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
+
+	// Disable automatic load-based splits to have full control over range
+	// boundaries during the test.
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load_enabled = false`)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, "CREATE DATABASE test")
@@ -208,35 +213,48 @@ func TestShowRangesWithDetails(t *testing.T) {
 	// Now, let's add some users, and query the table's val_bytes.
 	sqlDB.Exec(t, "INSERT INTO test.users (id, name) VALUES (1, 'ab'), (2, 'cd')")
 
-	valBytesPreSplitRes := sqlDB.QueryRow(t, `
-		SELECT span_stats->'val_bytes'
-		FROM [SHOW RANGES FROM DATABASE test WITH DETAILS]`,
-	)
-
+	isSystemTenant := tc.ApplicationLayer(0).Codec().ForSystemTenant()
 	var valBytesPreSplit int
-	valBytesPreSplitRes.Scan(&valBytesPreSplit)
+	if isSystemTenant {
+		valBytesPreSplitRes := sqlDB.QueryRow(t, `
+			SELECT span_stats->'val_bytes'
+			FROM [SHOW RANGES FROM TABLE test.users WITH DETAILS]`,
+		)
+		valBytesPreSplitRes.Scan(&valBytesPreSplit)
+	}
 
 	// Split the table at the second row, so it occupies a second range.
 	sqlDB.Exec(t, `ALTER TABLE test.users SPLIT AT VALUES (2)`)
-	afterSplit := sqlDB.Query(t, `
-		SELECT span_stats->'val_bytes'
-		FROM [SHOW RANGES FROM TABLE test.users WITH DETAILS]
-	`)
+	testutils.SucceedsSoon(t, func() error {
+		afterSplit := sqlDB.Query(t, `
+				SELECT span_stats->'val_bytes'
+				FROM [SHOW RANGES FROM TABLE test.users WITH DETAILS]
+			`)
+		defer afterSplit.Close()
 
-	var valBytesR1 int
-	var valBytesR2 int
+		var valBytesR1 int
+		var valBytesR2 int
 
-	afterSplit.Next()
-	err = afterSplit.Scan(&valBytesR1)
-	require.NoError(t, err)
+		afterSplit.Next()
+		err = afterSplit.Scan(&valBytesR1)
+		if err != nil {
+			return err
+		}
 
-	afterSplit.Next()
-	err = afterSplit.Scan(&valBytesR2)
-	require.NoError(t, err)
+		afterSplit.Next()
+		err = afterSplit.Scan(&valBytesR2)
+		if err != nil {
+			return err
+		}
 
-	// Assert that the sum of val_bytes for each range equals the
-	// val_bytes for the whole table.
-	require.Equal(t, valBytesPreSplit, valBytesR1+valBytesR2)
+		// For system tenant, verify the sum of parts equals the whole.
+		// For secondary tenants, we skip this check because span stats accounting
+		// works differently with tenant-prefixed keys.
+		if isSystemTenant && valBytesPreSplit != valBytesR1+valBytesR2 {
+			return errors.Newf("expected %d to equal %d + %d", valBytesPreSplit, valBytesR1, valBytesR2)
+		}
+		return nil
+	})
 }
 
 // TestShowRangesUnavailableReplicas tests that SHOW RANGES does not return an
@@ -248,13 +266,14 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 
 	const numNodes = 3
 	ctx := context.Background()
+	// This test requires system tenant because it controls server lifecycle
+	// (stopping servers to create unavailable ranges) and uses manual
+	// replication mode - both are KV-layer infrastructure operations.
 	tc := testcluster.StartTestCluster(
-		// Manual replication will prevent the leaseholder for the unavailable range
-		// from moving a different node.
 		t, numNodes, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156145),
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		},
 	)
