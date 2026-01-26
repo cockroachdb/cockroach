@@ -1268,6 +1268,13 @@ func panicIfRegionChangeUnderwayOnRBRTable(b BuildCtx, op redact.SafeString, tab
 	}
 }
 
+// isTableLocalityRegionalByRow returns true if the table has LOCALITY REGIONAL BY ROW.
+func isTableLocalityRegionalByRow(b BuildCtx, tableID catid.DescID) bool {
+	tableElems := b.QueryByID(tableID)
+	rbrElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	return rbrElem != nil
+}
+
 // haveSameIndexColsByKind returns true if two indexes have the same index
 // columns of a particular kind.
 func haveSameIndexColsByKind(
