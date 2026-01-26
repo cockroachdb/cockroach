@@ -149,11 +149,7 @@ func TestShowRangesWithDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156145),
-		},
-	})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -248,13 +244,14 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 
 	const numNodes = 3
 	ctx := context.Background()
+	// This test requires system tenant because it controls server lifecycle
+	// (stopping servers to create unavailable ranges) and uses manual
+	// replication mode - both are KV-layer infrastructure operations.
 	tc := testcluster.StartTestCluster(
-		// Manual replication will prevent the leaseholder for the unavailable range
-		// from moving a different node.
 		t, numNodes, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156145),
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		},
 	)
