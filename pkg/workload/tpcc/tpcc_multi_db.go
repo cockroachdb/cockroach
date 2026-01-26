@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -421,25 +422,22 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 			end := min(i+batchSize, len(t.dbList))
 			batch := t.dbList[i:end]
 
-			tx, err := db.BeginTx(ctx, &gosql.TxOptions{})
-			if err != nil {
-				return err
-			}
-			// Disable autocommit before DDL to batch statements in a single
-			// transaction, reducing round trips on multi-region.
-			_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
-			if err != nil {
-				return err
-			}
-			for _, dbName := range batch {
-				if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
+			if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
+				// Disable autocommit before DDL to batch statements in a single
+				// transaction, reducing round trips on multi-region.
+				if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
-					return err
+				for _, dbName := range batch {
+					if _, err := tx.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName.Catalog())); err != nil {
+						return err
+					}
+					if _, err := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s.%s", dbName.Catalog(), dbName.Schema())); err != nil {
+						return err
+					}
 				}
-			}
-			if err := tx.Commit(); err != nil {
+				return nil
+			}); err != nil {
 				return err
 			}
 			currentEntry = end
