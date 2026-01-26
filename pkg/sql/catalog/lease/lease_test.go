@@ -4137,3 +4137,144 @@ func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
 		require.NoError(t, grp.Wait())
 	})
 }
+
+// TestLeaseManagerTxnTimestampAdvance confirms that locked timestamp leasing will maintain
+// consistency even if the read timestamp advances. This is done by injecting a retry error
+// if any leased descriptors we depend on have been modified. This tests both the happy
+// and unhappy paths.
+func TestLeaseManagerTxnTimestampAdvance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "with-schema-change", func(t *testing.T, withSchemaChange bool) {
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+
+		var versionToBlock atomic.Int64
+		versionWaitCh := make(chan descpb.ID)
+		versionContinueCh := make(chan struct{})
+		ts, conn, _ := serverutils.StartServer(
+			t, base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					SQLLeaseManager: &lease.ManagerTestingKnobs{
+						TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+							tbl, _, _, _, _ := descpb.GetDescriptors(descriptor)
+							if tbl == nil {
+								return
+							}
+							id := tbl.ID
+							if versionToBlock.Load() == int64(id) {
+								versionWaitCh <- id
+								<-versionContinueCh
+							}
+						},
+					},
+				},
+			})
+		defer ts.Stopper().Stop(ctx)
+
+		runner := sqlutils.MakeSQLRunner(conn)
+		runner.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+		// Setup tables to create a write conflict.
+		runner.Exec(t, "CREATE TABLE t1(id INT PRIMARY KEY, n INT)")
+		runner.Exec(t, "CREATE TABLE t2(n int)")
+		runner.Exec(t, "CREATE TABLE t3(n int)")
+		runner.Exec(t, "INSERT INTO t1 VALUES (1, 100)")
+		var tblID int64
+		r := runner.QueryRow(t, "SELECT 't1'::REGCLASS::OID")
+		r.Scan(&tblID)
+
+		grp := ctxgroup.WithContext(ctx)
+		if withSchemaChange {
+			versionToBlock.Store(tblID)
+		}
+
+		// Channel to synchronize the write that forces a refresh.
+		writeStart := make(chan struct{})
+		writeComplete := make(chan struct{})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			if !withSchemaChange {
+				return nil
+			}
+			_, err := conn.Exec("ALTER TABLE t1 ADD COLUMN j int")
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		// Goroutine that will write to t1 to force a refresh in the serializable transaction.
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(writeComplete)
+			<-writeStart
+			_, err := conn.Exec("UPDATE t1 SET n = 200 WHERE id = 1")
+			return err
+		})
+
+		grp.GoCtx(func(ctx context.Context) error {
+			defer versionToBlock.Store(0)
+			defer close(versionContinueCh)
+			defer close(versionWaitCh)
+			defer close(writeStart)
+			tx, err := conn.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelSerializable})
+			if err != nil {
+				return err
+			}
+			// Read a non-existent key from t1 - this establishes read timestamp and read spans,
+			// but won't conflict with the concurrent write to id=1.
+			_, err = tx.Exec("SELECT * FROM t1 WHERE id = 999")
+			if err != nil {
+				return err
+			}
+			// Wait for the schema change to inject a new version.
+			if withSchemaChange {
+				<-versionWaitCh
+			}
+			// Trigger a concurrent write to t1 (id=1) that will advance the timestamp.
+			writeStart <- struct{}{}
+			// Give the write time to complete.
+			<-writeComplete
+			// Release the schema change
+			if withSchemaChange {
+				versionToBlock.Store(0)
+				versionContinueCh <- struct{}{}
+			}
+			// Read from t2, then write to t1 (id=1). The write will encounter the concurrent
+			// write and get a WriteTooOld error, pushing the write timestamp forward.
+			// The transaction will then refresh its earlier read from t1 (id=999) at the new timestamp.
+			// This refresh succeeds because id=999 still doesn't exist, so the read is still valid.
+			// The read timestamp advances to the new write timestamp.
+			_, err = tx.Exec("SELECT * FROM t2")
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec("UPDATE t1 SET n = 300 WHERE id = 1")
+			if err != nil {
+				return err
+			}
+			_, stmtErr := tx.Exec("SELECT 't3'::REGCLASS::OID")
+			switch withSchemaChange {
+			case true:
+				if stmtErr == nil {
+					return errors.AssertionFailedf("expected error due to stale lease timestamp")
+				}
+				match, err := regexp.MatchString(`pq: restart transaction: the descriptor t1\(\d+\) has been modified at timestamp.*`, stmtErr.Error())
+				if err != nil {
+					return err
+				}
+				if !match {
+					return errors.Wrapf(stmtErr, "expected retry error due to stale lease timestamp")
+				}
+			case false:
+				if stmtErr != nil {
+					return errors.Wrapf(stmtErr, "no error is expected")
+				}
+			}
+			return tx.Rollback()
+		})
+		require.NoError(t, grp.Wait())
+	})
+}
