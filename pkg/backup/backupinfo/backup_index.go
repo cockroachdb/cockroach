@@ -304,8 +304,12 @@ func ListRestorableBackups(
 		if err != nil {
 			return RestorableBackup{}, err
 		}
+		backupID, err := encodeBackupID(index.fullEnd, index.end)
+		if err != nil {
+			return RestorableBackup{}, err
+		}
 		return RestorableBackup{
-			ID:                encodeBackupID(index.fullEnd, index.end),
+			ID:                backupID,
 			EndTime:           idxMeta.EndTime,
 			MVCCFilter:        idxMeta.MVCCFilter,
 			RevisionStartTime: idxMeta.RevisionStartTime,
@@ -344,9 +348,9 @@ func listIndexesWithinRange(
 ) error {
 	// First, find the full backup end time prefix we begin listing from. Since
 	// full backup end times are stored in descending order in the index, we add
-	// ten milliseconds (the maximum granularity of the timestamp encoding) to
-	// ensure an inclusive start.
-	maxEndTime := olderThan.Add(10 * time.Millisecond)
+	// the maximum granularity of the timestamp encoding to ensure an inclusive
+	// start.
+	maxEndTime := olderThan.Add(backupbase.BackupIndexFilenameTSGranularity)
 	maxEndTimeSubdir, err := endTimeToIndexSubdir(maxEndTime)
 	if err != nil {
 		return err
@@ -519,7 +523,11 @@ func FindLatestBackup(
 	if err != nil {
 		return backuppb.BackupIndexMetadata{}, "", err
 	}
-	return index, encodeBackupID(lastSeenFullEnd, latestEnd), nil
+	backupID, err := encodeBackupID(lastSeenFullEnd, latestEnd)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, "", err
+	}
+	return index, backupID, nil
 }
 
 // ResolveBackupIDtoIndex takes a backup ID and resolves it to the corresponding
@@ -876,7 +884,15 @@ func readIndexFile(
 //
 // NB: The times passed to this function are expected to be as precise as the
 // timestamps encoded in the index file names, no more or less.
-func encodeBackupID(fullEnd time.Time, backupEnd time.Time) string {
+func encodeBackupID(fullEnd time.Time, backupEnd time.Time) (string, error) {
+	if !fullEnd.Equal(fullEnd.Truncate(backupbase.BackupIndexFilenameTSGranularity)) ||
+		!backupEnd.Equal(backupEnd.Truncate(backupbase.BackupIndexFilenameTSGranularity)) {
+		return "", errors.AssertionFailedf(
+			"end times encoded in backup ID can have a maximum granularity of %s: "+
+				"received full end %s and backup end %s",
+			backupbase.BackupIndexFilenameTSGranularity, fullEnd, backupEnd,
+		)
+	}
 	var buf []byte
 	buf = encoding.EncodeUint64Ascending(buf, uint64(fullEnd.UnixMilli()))
 	buf = encoding.EncodeUint64Ascending(buf, uint64(backupEnd.UnixMilli()))
@@ -891,7 +907,7 @@ func encodeBackupID(fullEnd time.Time, backupEnd time.Time) string {
 	// backups tend to share a YYYY/MM/DD with their fulls. We can truncate these
 	// in the encoding and re-add them during decoding.
 	buf = bytes.TrimRight(buf, "\x00")
-	return base64.URLEncoding.EncodeToString(buf)
+	return base64.URLEncoding.EncodeToString(buf), nil
 }
 
 // DecodeBackupID decodes a backup ID into its corresponding full end time and

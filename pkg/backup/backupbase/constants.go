@@ -5,6 +5,8 @@
 
 package backupbase
 
+import "time"
+
 // TODO(adityamaru): Move constants to relevant backup packages.
 const (
 	// LatestFileName is the name of a file in the collection which contains the
@@ -67,5 +69,11 @@ const (
 
 	// BackupIndexFilenameTimestampFormat is the format used for the human
 	// readable start and end times in the index file names.
+	// NB: If this is for whatever reason updated, make sure to update the
+	// granularity specified by BackupIndexFilenameTimestampGranularity.
 	BackupIndexFilenameTimestampFormat = "20060102-150405.00"
+
+	// BackupIndexFilenameTimestampGranularity represents the granularity of the
+	// times encoded in the backup index filenames.
+	BackupIndexFilenameTSGranularity = 10 * time.Millisecond
 )
