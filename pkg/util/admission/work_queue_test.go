@@ -199,11 +199,6 @@ func TestWorkQueueBasic(t *testing.T) {
 				} else if d.HasArg("sql-sql") {
 					workKind = SQLSQLResponseWork
 				}
-				if d.HasArg("cpu-time-token-ac-enabled") {
-					cpuTimeTokenACEnabled.Override(context.Background(), &st.SV, true)
-				} else {
-					cpuTimeTokenACEnabled.Override(context.Background(), &st.SV, false)
-				}
 				opts := makeWorkQueueOptions(workKind)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
@@ -211,6 +206,11 @@ func TestWorkQueueBasic(t *testing.T) {
 				opts.disableGCTenantsAndResetUsed = true
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
 					workKind, tg, st, metrics, opts).(*WorkQueue)
+				if d.HasArg("override-all-to-bypass") {
+					q.SetOverrideAllToBypassAdmission(true)
+				} else {
+					q.SetOverrideAllToBypassAdmission(false)
+				}
 				tg.r = q
 				wrkMap.resetMap()
 				return ""

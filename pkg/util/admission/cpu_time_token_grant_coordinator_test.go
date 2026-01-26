@@ -36,10 +36,16 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	// Test that if setting is disabled, WorkQueues uses slots, else they
 	// use CPU time tokens.
 	cpuTimeTokenACEnabled.Override(context.Background(), &settings.SV, false)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false).mode)
-	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
+	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	// If CPU time token AC is disabled, we use one WorkQueue for both
+	// system & app tenant work.
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
 	cpuTimeTokenACEnabled.Override(context.Background(), &settings.SV, true)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
-	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
+	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
+	// If CPU time token AC is enabled, we use one WorkQueue for system
+	// tenant work & a second WorkQueue for app tenant work.
+	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 }

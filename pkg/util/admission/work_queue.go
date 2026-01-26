@@ -295,6 +295,9 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
+		// overrideAllToBypassAdmission, when true, causes all work to bypass
+		// admission control. Used by CPU time token AC.
+		overrideAllToBypassAdmission bool
 	}
 	logThreshold log.EveryN
 	metrics      *WorkQueueMetrics
@@ -688,11 +691,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			panic(errors.AssertionFailedf("unexpected ReplicatedWrite.Enabled in mode %v", q.mode))
 		}
 	}
-	// CPU time token AC currently only supports Serverless. In Serverless,
-	// SQL pods do not run admission control, and the vast majority of work
-	// on a KV pod is KVWork. So, for now, we allow all SQLKVResponseWork &
-	// SQLSQLResponseWork to bypass AC.
-	if cpuTimeTokenACEnabled.Get(&q.settings.SV) && q.workKind != KVWork {
+	if q.mu.overrideAllToBypassAdmission {
 		info.BypassAdmission = true
 	}
 	if info.BypassAdmission {
@@ -1242,6 +1241,14 @@ func (q *WorkQueue) getTenantWeightLocked(tenantID uint64) uint32 {
 		weight = defaultTenantWeight
 	}
 	return weight
+}
+
+// SetOverrideAllToBypassAdmission sets whether all work should bypass
+// admission control. Used by CPU time token AC.
+func (q *WorkQueue) SetOverrideAllToBypassAdmission(override bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.overrideAllToBypassAdmission = override
 }
 
 // SetTenantWeights sets the weight of tenants, using the provided tenant ID
