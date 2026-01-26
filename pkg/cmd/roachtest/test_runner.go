@@ -1635,8 +1635,8 @@ func (r *testRunner) runTest(
 		t.L().Printf("uploading %s to Datadog", "test.log")
 		logPath := filepath.Join(t.artifactsDir, "test.log")
 		m := datadog.NewLogMetadata(
-			t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2fs", t.duration().Seconds()), c.cloud, c.os, c.arch, c.name,
-			"test.log")
+			t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2f", timeutil.Since(t.start).Seconds()), c.cloud, c.os, c.arch,
+			c.name, "test.log")
 		if err := datadog.MaybeUploadTestLog(ctx, t.L(), logPath, m); err != nil {
 			// Best effort
 			t.L().Printf("error uploading logs to Datadog: %v", err)
