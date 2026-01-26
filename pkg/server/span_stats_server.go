@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,6 +64,9 @@ var RangeDescPageSize = settings.RegisterIntSetting(
 const MixedVersionErr = "span stats request - unable to service a mixed version request"
 const UnexpectedLegacyRequest = "span stats request - unexpected populated legacy fields (StartKey, EndKey)"
 const nodeErrorMsgPlaceholder = "could not get span stats sample for node %d: %v"
+const SkipApproxTotalStatsNotFanOutErr = "span stats request - SkipApproxTotalStats can only be set for fan out requests (NodeID=0)"
+const SpansRequiringMvccNotLocalErr = "span stats request - SpansRequiringMvcc can only be set for local node requests (NodeID!=0)"
+const SkipMvccStatsWithSpansRequiringMvccErr = "span stats request - SkipMvccStats cannot be set when SpansRequiringMvcc is non-empty"
 
 func (s *systemStatusServer) spanStatsFanOut(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
@@ -77,7 +81,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
 	}
 
-	spansPerNode, err := s.getSpansPerNode(ctx, req)
+	spansPerNode, mvccNodeForSpan, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -117,10 +121,24 @@ func (s *systemStatusServer) spanStatsFanOut(
 			return nil, nil
 		}
 
+		nodeSpans := spansPerNode[nodeID]
+		var spansRequiringMvcc []roachpb.Span
+
+		// If SkipApproxTotalStats is set, we only need MVCC stats from one node per span.
+		// Build the list of spans that this node should collect MVCC stats for.
+		if req.SkipApproxTotalStats {
+			for _, span := range nodeSpans {
+				if mvccNodeForSpan[span.String()] == nodeID {
+					spansRequiringMvcc = append(spansRequiringMvcc, span)
+				}
+			}
+		}
+
 		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
-				NodeID: nodeID.String(),
-				Spans:  spansPerNode[nodeID],
+				NodeID:             nodeID.String(),
+				Spans:              nodeSpans,
+				SpansRequiringMvcc: spansRequiringMvcc,
 			})
 		return resp, err
 	}
@@ -189,10 +207,13 @@ func collectSpanStatsResponses(
 			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
 			res.SpanToStats[spanStr].StoreIDs = util.CombineUnique(res.SpanToStats[spanStr].StoreIDs, spanStats.StoreIDs)
 
-			// Logical values: take the values from the node that responded first.
+			// Logical values: take the values from the first node that responded with
+			// MVCC stats (i.e., non-empty TotalStats) since some nodes may skip MVCC
+			// stats collection and return empty TotalStats.
 			// TODO: This should really be read from the leaseholder.
 			// https://github.com/cockroachdb/cockroach/issues/138792
-			if _, ok := responses[spanStr]; !ok {
+			hasMvccStats := spanStats.TotalStats != enginepb.MVCCStats{}
+			if _, ok := responses[spanStr]; !ok && hasMvccStats {
 				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
 				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
 				res.SpanToStats[spanStr].ReplicaCount = spanStats.ReplicaCount
@@ -206,8 +227,22 @@ func (s *systemStatusServer) getLocalStats(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
 ) (*roachpb.SpanStatsResponse, error) {
 	var res = &roachpb.SpanStatsResponse{SpanToStats: make(map[string]*roachpb.SpanStats)}
+
+	spansRequiringMvcc := make(map[string]struct{})
+	if len(req.SpansRequiringMvcc) > 0 {
+		for _, span := range req.SpansRequiringMvcc {
+			spansRequiringMvcc[span.String()] = struct{}{}
+		}
+	}
 	for _, span := range req.Spans {
-		spanStats, err := s.statsForSpan(ctx, span, req.SkipMvccStats)
+		// i.e. SkipMvccStats takes precedence over SpansRequiringMvcc.
+		skipMvcc := req.SkipMvccStats
+		if !skipMvcc && len(req.SpansRequiringMvcc) > 0 {
+			_, requiresMvcc := spansRequiringMvcc[span.String()]
+			skipMvcc = !requiresMvcc
+		}
+
+		spanStats, err := s.statsForSpan(ctx, span, skipMvcc)
 		if err != nil {
 			return nil, err
 		}
@@ -395,52 +430,81 @@ func (s *systemStatusServer) getSpanStatsInternal(
 
 func (s *systemStatusServer) getSpansPerNode(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
-) (map[roachpb.NodeID][]roachpb.Span, error) {
+) (
+	spansPerNode map[roachpb.NodeID][]roachpb.Span,
+	mvccNodeForSpan map[string]roachpb.NodeID,
+	err error,
+) {
 	// Mapping of node ids to spans with a replica on the node.
-	spansPerNode := make(map[roachpb.NodeID][]roachpb.Span)
+	spansPerNode = make(map[roachpb.NodeID][]roachpb.Span)
+	// Mapping of span (as string) to the node that should fetch MVCC stats for it.
+	mvccNodeForSpan = make(map[string]roachpb.NodeID)
 	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
 	for _, span := range req.Spans {
-		nodeIDs, err := nodeIDsForSpan(ctx, s.db, span, pageSize)
+		nodeIDs, mvccNode, err := nodeIDsForSpan(ctx, s.db, span, pageSize)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// Add the span to the map for each of the node IDs it belongs to.
 		for _, nodeID := range nodeIDs {
 			spansPerNode[nodeID] = append(spansPerNode[nodeID], span)
 		}
+		// Record which node should fetch MVCC stats for this span.
+		mvccNodeForSpan[span.String()] = mvccNode
 	}
-	return spansPerNode, nil
+	return spansPerNode, mvccNodeForSpan, nil
 }
 
 // nodeIDsForSpan returns a list of nodeIDs that contain at least one replica
-// for the argument span. Descriptors are found via ScanMetaKVs.
+// for the argument span, along with a suggested node to fetch MVCC stats from.
+// The MVCC node is chosen as the node that is a voter for the most ranges
+// within the span. Descriptors are found via ScanMetaKVs.
 func nodeIDsForSpan(
 	ctx context.Context, db *kv.DB, span roachpb.Span, pageSize int,
-) ([]roachpb.NodeID, error) {
+) (nodeIDList []roachpb.NodeID, mvccNode roachpb.NodeID, err error) {
 	nodeIDs := make(map[roachpb.NodeID]struct{})
+	// Track voter coverage count for each node to determine the best MVCC node.
+	nodeCoverage := make(map[roachpb.NodeID]int)
+
 	scanner := rangedesc.NewScanner(db)
-	err := scanner.Scan(ctx, pageSize, func() {
+	err = scanner.Scan(ctx, pageSize, func() {
 		// If the underlying txn fails and needs to be retried,
-		// clear the nodeIDs we've collected so far.
-		nodeIDs = map[roachpb.NodeID]struct{}{}
+		// clear the data we've collected so far.
+		nodeIDs = make(map[roachpb.NodeID]struct{})
+		nodeCoverage = make(map[roachpb.NodeID]int)
 	}, span, func(scanned ...roachpb.RangeDescriptor) error {
 		for _, desc := range scanned {
 			for _, repl := range desc.Replicas().Descriptors() {
 				nodeIDs[repl.NodeID] = struct{}{}
 			}
+			// Increment coverage count for each voter node.
+			for _, v := range desc.Replicas().VoterDescriptors() {
+				nodeCoverage[v.NodeID]++
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	nodeIDList := make([]roachpb.NodeID, 0, len(nodeIDs))
+	nodeIDList = make([]roachpb.NodeID, 0, len(nodeIDs))
 	for id := range nodeIDs {
 		nodeIDList = append(nodeIDList, id)
 	}
 
-	return nodeIDList, nil
+	// Pick the node with the most coverage as the MVCC node.
+	// This node is most likely to be leaseholder for many ranges and is
+	// a good candidate for fetching MVCC stats.
+	var bestCount int
+	for nodeID, count := range nodeCoverage {
+		if count > bestCount {
+			mvccNode = nodeID
+			bestCount = count
+		}
+	}
+
+	return nodeIDList, mvccNode, nil
 }
 
 func flushBatchedContainedKeys(
@@ -482,6 +546,28 @@ func verifySpanStatsRequest(
 		// We want to error if we receive a legacy request from a 22.2
 		// node (e.g. during a mixed-version fanout).
 		return errors.New(MixedVersionErr)
+	}
+
+	isFanOut := req.NodeID == "0"
+
+	// SkipApproxTotalStats is only valid for fan out requests, as it's an
+	// optimization that coordinates MVCC stats collection across nodes.
+	if req.SkipApproxTotalStats && !isFanOut {
+		return errors.New(SkipApproxTotalStatsNotFanOutErr)
+	}
+
+	// SpansRequiringMvcc is expected to be set by the coordinator for fan outs
+	// to facilitate the SkipApproxTotalStats optimization.
+	// Setting it on the fan out request is unexpected.
+	if len(req.SpansRequiringMvcc) > 0 && isFanOut {
+		return errors.New(SpansRequiringMvccNotLocalErr)
+	}
+
+	// SpansRequiringMvcc is expected to be set by the coordinator for fan outs
+	// to facilitate the SkipApproxTotalStats optimization.
+	// Setting it with SkipMvccStats is unexpected.
+	if len(req.SpansRequiringMvcc) > 0 && req.SkipMvccStats {
+		return errors.New(SkipMvccStatsWithSpansRequiringMvccErr)
 	}
 
 	return nil
