@@ -73,7 +73,9 @@ func getRelevantDescChanges(
 	// point in the interval.
 	interestingIDs := make(map[descpb.ID]struct{}, len(descriptors))
 
-	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(ctx, execCfg)
+	systemTableIDsToExcludeFromBackup, err := GetSystemTableIDsToExcludeFromClusterBackup(
+		ctx, execCfg, endTime,
+	)
 	if err != nil {
 		return nil, err
 	}
