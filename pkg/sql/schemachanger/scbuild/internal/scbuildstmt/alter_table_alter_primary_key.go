@@ -680,15 +680,33 @@ func recreateAllSecondaryIndexes(
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
 		// create new index partitioning when overriding the partitioning
 		if t.Partitioning != nil {
-			mutatedSpec := out.makeMutator()
-			err := configureIndexDescForNewIndexPartitioning(
-				b, tbl.TableID, 0 /* sourcePartitionIndexID */, nil /* prevSpec */, mutatedSpec, false /* isPrimary */, nil, t.Partitioning)
-			if err != nil {
-				panic(err)
+			//  first, reset the index partitioning descriptor
+			out.partitioning = nil
+			// second, must remove all implicit partition columns because they are changing
+			i := 0
+			for _, ic := range out.columns {
+				if !ic.Implicit {
+					break
+				}
+				i++
 			}
-			out.partitioning = mutatedSpec.partitioning
-			out.columns = mutatedSpec.columns
+			out.columns = out.columns[i:]
+			// then, add new partitioning if needed
+			if t.Partitioning.PartitionBy != nil {
+				// create a new index partitioning descriptor based on the primary index
+				b.QueryByID(tbl.TableID).FilterIndexPartitioning().ForEach(func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+					if e.IndexID == finalPrimaryIndex.IndexID && target == scpb.ToPublic {
+						out.partitioning = &scpb.IndexPartitioning{
+							TableID:                tbl.TableID,
+							IndexID:                out.indexID(),
+							PartitioningDescriptor: e.PartitioningDescriptor,
+						}
+					}
+				})
+			}
 		}
+
+		//out.partitioning = mutatedSpec.partitioning
 		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
 		// fix these references yet.
@@ -721,12 +739,29 @@ func recreateAllSecondaryIndexes(
 		}
 
 		var idxColIDs catalog.TableColSet
-		inColumns := make([]indexColumnSpec, 0, len(out.columns))
+		numNewImplicitPartCols := 0
+		if t.Partitioning != nil {
+			numNewImplicitPartCols = len(t.Partitioning.NewImplicitColumns)
+		}
+		inColumns := make([]indexColumnSpec, 0, len(out.columns)+numNewImplicitPartCols)
 		// Determine which columns end up in the new secondary index.
 		{
 			var largestKeyOrdinal uint32
 			var invertedColumnID catid.ColumnID
-			// First, add all key columns.
+			// First, add the new partitioning columns if any
+			if t.Partitioning != nil {
+				for _, ic := range t.Partitioning.NewImplicitColumns {
+					idxColIDs.Add(ic.ColumnID)
+					inColumns = append(inColumns, indexColumnSpec{
+						columnID:  ic.ColumnID,
+						kind:      scpb.IndexColumn_KEY,
+						direction: catenumpb.IndexColumn_ASC,
+						implicit:  true,
+					})
+				}
+			}
+
+			// Then, add all key columns.
 			// Also determine the ID of the inverted column, if applicable.
 			for _, ic := range out.columns {
 				if ic.Kind == scpb.IndexColumn_KEY {
@@ -1227,7 +1262,16 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 		case *scpb.View, *scpb.Sequence:
 			canBeDropped = false
 		case *scpb.PrimaryIndex:
-			canBeDropped = false
+			isPartOfNewPrimaryKeyColumns := false
+			indexElts := b.QueryByID(columnToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
+			scpb.ForEachIndexColumn(indexElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+				if columnToDrop.ColumnID == ic.ColumnID && ic.Kind == scpb.IndexColumn_KEY {
+					isPartOfNewPrimaryKeyColumns = true
+				}
+			})
+			if isPartOfNewPrimaryKeyColumns {
+				canBeDropped = false
+			}
 		case *scpb.SecondaryIndex:
 			isOnlyKeySuffixColumn := true
 			indexElts := b.QueryByID(columnToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
