@@ -154,6 +154,10 @@ func (po *Setter) Set(
 	// indexes.
 	case `bucket_count`:
 		return nil
+	// `shard_columns` is handled in schema changer when creating hash sharded
+	// indexes.
+	case `shard_columns`:
+		return nil
 	case `build_beam_size`:
 		return po.applyVectorIndexSetting(ctx, evalCtx, key, expr, 1, 512)
 	case `min_partition_size`:

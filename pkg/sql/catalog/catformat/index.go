@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -143,8 +144,18 @@ func indexForDisplay(
 
 	if index.IsSharded() {
 		if f.HasFlags(tree.FmtPGCatalog) {
-			fmt.Fprintf(f, " USING HASH WITH (bucket_count=%v)",
-				index.Sharded.ShardBuckets)
+			f.WriteString(" USING HASH WITH (bucket_count=")
+			f.WriteString(strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+
+			// Write out shard_columns as shard_columns=(col1, col2, ...)
+			f.WriteString(", shard_columns=(")
+			for i, colName := range index.Sharded.ColumnNames {
+				if i > 0 {
+					f.WriteString(", ")
+				}
+				f.WriteString(tree.NameString(colName))
+			}
+			f.WriteString("))")
 		} else {
 			f.WriteString(" USING HASH")
 		}
@@ -377,6 +388,19 @@ func formatStorageConfigs(
 
 	if index.IsSharded() {
 		writeCustomSetting(`bucket_count`, strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+
+		// Write out shard_columns as shard_columns=(col1, col2, ...)
+		var buf strings.Builder
+		buf.WriteByte('(')
+		for i, colName := range index.Sharded.ColumnNames {
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			// Use tree.NameString to properly quote column names if needed.
+			buf.WriteString(tree.NameString(colName))
+		}
+		buf.WriteByte(')')
+		writeCustomSetting(`shard_columns`, buf.String())
 	}
 
 	if numCustomSettings > 0 {

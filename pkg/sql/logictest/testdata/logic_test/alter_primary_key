@@ -297,7 +297,7 @@ t  CREATE TABLE public.t (
      UNIQUE INDEX i4 (z ASC),
      UNIQUE INDEX i5 (w ASC),
      INVERTED INDEX i6 (v),
-     INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
+     INDEX i7 (z ASC) USING HASH WITH (bucket_count=4, shard_columns=(z)),
      UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
    );
@@ -488,8 +488,8 @@ t  CREATE TABLE public.t (
      z INT8 NULL,
      crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 5:::INT8)) VIRTUAL,
      crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 10:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
-     INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10, shard_columns=(y)),
+     INDEX i1 (z ASC) USING HASH WITH (bucket_count=5, shard_columns=(z)),
      UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z (x, y, z)
    );
@@ -570,7 +570,7 @@ t  CREATE TABLE public.t (
      z INT8 NULL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
      INDEX i (z ASC),
-     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5, shard_columns=(x)),
      FAMILY fam_0_x_y_z (x, y, z)
    );
 
@@ -751,7 +751,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4, shard_columns=(x))
    );
 
 skipif config schema-locked-disabled
@@ -761,7 +761,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4, shard_columns=(x))
    ) WITH (schema_locked = true);
 
 statement ok
@@ -1288,7 +1288,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3, shard_columns=(x))
    );
 
 skipif config schema-locked-disabled
@@ -1298,7 +1298,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3, shard_columns=(x))
    ) WITH (schema_locked = true);
 
 # Changes on a hash sharded index that change the columns will cause the old
@@ -1321,8 +1321,8 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 2:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
-     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2, shard_columns=(y)),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2, shard_columns=(x)),
      FAMILY fam_0_x_y (x, y)
    );
 
@@ -1335,8 +1335,8 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 2:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
-     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
+     CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2, shard_columns=(y)),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2, shard_columns=(x)),
      FAMILY fam_0_x_y (x, y)
    ) WITH (schema_locked = true);
 
@@ -1873,7 +1873,7 @@ CREATE TABLE public.t_test_param (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
+  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5, shard_columns=(b)),
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
 );
@@ -1886,7 +1886,7 @@ CREATE TABLE public.t_test_param (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
+  CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5, shard_columns=(b)),
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
 ) WITH (schema_locked = true);
@@ -2226,7 +2226,7 @@ t_96730  CREATE TABLE public.t_96730 (
            j INT8 NOT NULL,
            k STRING NOT NULL,
            crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
-           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16, shard_columns=(j, k)),
            UNIQUE INDEX t_96730_i_key (i ASC)
          );
 
@@ -2239,7 +2239,7 @@ t_96730  CREATE TABLE public.t_96730 (
            j INT8 NOT NULL,
            k STRING NOT NULL,
            crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
-           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
+           CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16, shard_columns=(j, k)),
            UNIQUE INDEX t_96730_i_key (i ASC)
          ) WITH (schema_locked = true);
 
@@ -2390,7 +2390,7 @@ CREATE TABLE public.table_w0_66 (
   "Abc" INT4 NOT NULL,
   "ab\f" INT2 NOT NULL,
   "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16, shard_columns=("Abc", "ab\f")),
   UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
 );
@@ -2403,7 +2403,7 @@ CREATE TABLE public.table_w0_66 (
   "Abc" INT4 NOT NULL,
   "ab\f" INT2 NOT NULL,
   "crdb_internal_Abc_ab\f_shard_16" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("Abc", "ab\f"))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16),
+  CONSTRAINT table_w0_66_pkey PRIMARY KEY ("Abc" ASC, "ab\f" ASC) USING HASH WITH (bucket_count=16, shard_columns=("Abc", "ab\f")),
   UNIQUE INDEX "table_w0_66_Abc_key" ("Abc" ASC),
   FAMILY "fam_0_Abc_ab\f" ("Abc", "ab\f")
 ) WITH (schema_locked = true);

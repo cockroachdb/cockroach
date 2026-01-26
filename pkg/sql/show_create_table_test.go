@@ -67,7 +67,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 					`mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 16:::INT8)) VIRTUAL,`+
 					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
 					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
-					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16)`+
+					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16, shard_columns=(y))`+
 					`\n);'`,
 				fmt.Sprintf("%v", rows[1].String()),
 			)
@@ -102,7 +102,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 16:::INT8)) VIRTUAL,`+
 					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
 					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
-					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16),`+
+					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16, shard_columns=(y)),`+
 					`\n\tCONSTRAINT check_crdb_internal_y_shard_16 CHECK (`+
 					`crdb_internal_y_shard_16 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, `+
 					`4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, `+

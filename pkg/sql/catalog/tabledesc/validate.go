@@ -1770,6 +1770,29 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
 			}
+
+			// Validate that shard columns are a prefix of index key columns.
+			shardedDesc := idx.GetSharded()
+
+			// To avoid running this validation against existing indexes that are
+			// otherwise not causing any problems, we only carry out the validation
+			// when the shard columns are a proper prefix of the key columns.
+			startIndex := idx.ExplicitColumnStartIdx()
+
+			if len(shardedDesc.ColumnNames) < (idx.NumKeyColumns() - startIndex) {
+				if len(shardedDesc.ColumnNames) == 0 {
+					return errors.Newf("index %q has empty shard column names",
+						idx.GetName())
+				}
+
+				for i, shardColName := range shardedDesc.ColumnNames {
+					keyColumnIndex := i + startIndex
+					if idx.GetKeyColumnName(keyColumnIndex) != shardColName {
+						return errors.Newf("index %q shard column %q at position %d is not prefix of index columns",
+							idx.GetName(), shardColName, (i + 1))
+					}
+				}
+			}
 		}
 		if idx.IsPartial() {
 			expr, err := parserutils.ParseExpr(idx.GetPredicate())
