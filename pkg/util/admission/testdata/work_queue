@@ -791,18 +791,11 @@ closed epoch: 0 tenantHeap len: 0
  tenant-id: 7 used: 1, w: 8, fifo: -128
  tenant-id: 8 used: 1, w: 9, fifo: -128
 
-# If CPU time token AC is enabled, then SQL work queues shouldn't
-# do any queueing. That is, all work bypasses AC. Rationale for
-# this is: First, CPU time token AC is only intended for production
-# use on Serverless KV nodes right now, and they see very little
-# SQL workload. Second, CPU time token AC is not integrated with
-# SQL AC yet.
-#
-# In terms of the below output, if work bypasses AC, it is admitted
-# without checking resource availability in the granter. That is,
-# we should see tookWithoutPermission calls, instead of tryGet
-# calls.
-init sql-kv cpu-time-token-ac-enabled
+# If all work should bypass AC, it is admitted without checking
+# resource availability in the granter. That is, we should see
+# tookWithoutPermission calls, instead of tryGet calls. Override
+# all functionality is used by CPU time token AC.
+init sql-kv override-all-to-bypass
 ----
 
 admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
@@ -810,7 +803,7 @@ admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
 tookWithoutPermission 1
 id 1: admit succeeded
 
-init sql-sql cpu-time-token-ac-enabled
+init sql-sql override-all-to-bypass
 ----
 
 admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false

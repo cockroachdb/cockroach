@@ -55,10 +55,10 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 }
 
 // GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
-// SQLSQLResponseWork. If a queue for KVWork is requested from this function,
+// SQLSQLResponseWork. If any other queue is requested from this function,
 // it panics.
 func (coord *CPUGrantCoordinators) GetSQLWorkQueue(workKind WorkKind) *WorkQueue {
-	if workKind == KVWork {
+	if workKind != SQLKVResponseWork && workKind != SQLSQLResponseWork {
 		panic(fmt.Sprintf("workKind %q not supported by GetSQLWorkQueue", workKind))
 	}
 	return coord.slotsCoord.queues[workKind].(*WorkQueue)
@@ -108,6 +108,7 @@ func makeCPUTimeTokenGrantCoordinator(
 	timeSource := timeutil.DefaultTimeSource{}
 	filler := &cpuTimeTokenFiller{
 		timeSource: timeSource,
+		closeCh:    make(chan struct{}),
 	}
 	allocator := &cpuTimeTokenAllocator{
 		granter:  granter,

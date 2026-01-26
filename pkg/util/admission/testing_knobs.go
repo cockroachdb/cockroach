@@ -46,6 +46,10 @@ type TestingKnobs struct {
 	// DisableCPUTimeTokenFillerGoroutine prevents CPU time token AC from
 	// starting the filler goroutine. Useful in tests of slot-based AC.
 	DisableCPUTimeTokenFillerGoroutine bool
+
+	// DisableCPUTimeTokenSQLBypass disables the functionality which
+	// has SQL work bypass AC, in case CPU time token AC is enabled.
+	DisableCPUTimeTokenSQLBypass bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
