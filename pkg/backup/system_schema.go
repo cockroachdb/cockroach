@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -970,12 +971,17 @@ func GetSystemTablesToIncludeInClusterBackup() map[string]struct{} {
 // GetSystemTableIDsToExcludeFromClusterBackup returns a set of system table ids
 // that should be excluded from a cluster backup.
 func GetSystemTableIDsToExcludeFromClusterBackup(
-	ctx context.Context, execCfg *sql.ExecutorConfig,
+	ctx context.Context, execCfg *sql.ExecutorConfig, asOf hlc.Timestamp,
 ) (map[descpb.ID]struct{}, error) {
 	systemTableIDsToExclude := make(map[descpb.ID]struct{})
 	for systemTableName, backupConfig := range systemTableBackupConfiguration {
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
 			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				err := txn.KV().SetFixedTimestamp(ctx, asOf)
+				if err != nil {
+					return err
+				}
+
 				tn := tree.MakeTableNameWithSchema("system", catconstants.PublicSchemaName, tree.Name(systemTableName))
 				_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 				isNotFoundErr := errors.Is(err, catalog.ErrDescriptorNotFound)
