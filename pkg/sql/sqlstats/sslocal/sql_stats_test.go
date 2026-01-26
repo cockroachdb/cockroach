@@ -1781,10 +1781,10 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 					sqlstatstestutil.StatementFilter{AllowInternal: true})
 			}
 			if tc.txnLimit == 0 {
-				sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, utilConn, tc.minTxns,
-					sqlstatstestutil.TransactionFilter{AllowInternal: true})
+				sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, utilConn, tc.minTxns)
 			} else {
-				sqlstatstestutil.WaitForTransactionEntriesEqual(t, utilConn, tc.txnLimit-1)
+				sqlstatstestutil.WaitForTransactionEntriesEqual(t, utilConn, tc.txnLimit-1,
+					sqlstatstestutil.TransactionFilter{AllowInternal: true})
 			}
 			testutils.SucceedsSoon(t, func() error {
 				if discardedMetric.Count() < int64(tc.totalSkipped) {
