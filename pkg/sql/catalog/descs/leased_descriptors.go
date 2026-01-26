@@ -216,6 +216,7 @@ func (ld *leasedDescriptors) maybeAssertExternalRowDataTS(desc catalog.Descripto
 	})
 }
 
+// maybeReleaseReadTimestamp releases the read timestamp if one is set.
 func (ld *leasedDescriptors) maybeReleaseReadTimestamp(ctx context.Context) {
 	if !ld.leaseTimestampSet {
 		return
@@ -225,27 +226,86 @@ func (ld *leasedDescriptors) maybeReleaseReadTimestamp(ctx context.Context) {
 	ld.leaseTimestamp = nil
 }
 
+// maybeAdvanceReadTimestamp advances the read timestamp for the lease manager, if we know
+// that descriptor versions accessed have not been modified at the newer timestamp. Otherwise,
+// a retry error is generated.
+func (ld *leasedDescriptors) maybeAdvanceReadTimestamp(
+	ctx context.Context, txn deadlineHolder,
+) error {
+	// Read timestamp has advanced, so see if a new lease timestamp exists.
+	newLeaseTimestamp := ld.lm.GetReadTimestamp(ctx, txn.ReadTimestamp())
+	leaseToRelease := newLeaseTimestamp
+	defer func() {
+		leaseToRelease.Release(ctx)
+	}()
+	// If the new lease timestamp is the same, nothing needs to be done.
+	// Note: We can safely compare interface pointers because each timestamp,
+	// inside the lease manager has a single shared reference / pointer.
+	if newLeaseTimestamp == ld.leaseTimestamp {
+		return nil
+	}
+	upgradeTimestamp := func() {
+		leaseToRelease = ld.leaseTimestamp
+		ld.leaseTimestamp = newLeaseTimestamp
+	}
+	// If locked leasing is disabled, then we can refresh the timestamp directly.
+	if ld.leaseTimestamp.GetTimestamp() == ld.leaseTimestamp.GetBaseTimestamp() {
+		upgradeTimestamp()
+		return nil
+	}
+	// Otherwise, we need to rescan all descriptors used by this transaction
+	// to confirm their version has not changed at the newer timestamp.
+	err := ld.cache.IterateByID(func(entry catalog.NameEntry) error {
+		// We expect this cache to only store the type of LeasedDescriptor,
+		// so if we ever don't retrieve the correct type then assert below.
+		desc, ok := entry.(lease.LeasedDescriptor)
+		if !ok {
+			return errors.AssertionFailedf("expected leased descriptor, got %T", entry)
+		}
+		newDesc, err := ld.lm.Acquire(ctx, newLeaseTimestamp, desc.GetID())
+		if err != nil {
+			return err
+		}
+		defer newDesc.Release(ctx)
+		if newDesc.Underlying().GetVersion() != desc.Underlying().GetVersion() {
+			// Descriptor used earlier in this transaction was modified,
+			// we are no longer able to upgrade the timestamp.
+			return &retryOnModifiedDescriptor{
+				descName:      desc.GetName(),
+				descID:        desc.GetID(),
+				expiration:    newDesc.Underlying().GetModificationTime(),
+				readTimestamp: txn.ReadTimestamp(),
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	upgradeTimestamp()
+	return nil
+}
+
 // maybeInitReadTimestamp selects a read timestamp for the lease manager.
-func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn deadlineHolder) {
+func (ld *leasedDescriptors) maybeInitReadTimestamp(ctx context.Context, txn deadlineHolder) error {
 	// Refresh the leased timestamp if the read timestamp has changed on us
 	// or if it hasn't been populated yet.
 	if ld.leaseTimestampSet &&
 		ld.leaseTimestamp.GetBaseTimestamp() == txn.ReadTimestamp() {
-		return
+		return nil
 	} else if ld.leaseTimestampSet {
-		// Timestamp is already set, so release it before picking a new one.
-		// See #159355 can handle this better for correctness.
-		ld.maybeReleaseReadTimestamp(ctx)
+		return ld.maybeAdvanceReadTimestamp(ctx, txn)
 	}
 	readTimestamp := txn.ReadTimestamp()
 	ld.leaseTimestampSet = true
 	// Fixed timestamp queries will use descriptors at the user-selected timestamp.
 	if txn.ReadTimestampFixed() {
 		ld.leaseTimestamp = lease.TimestampToReadTimestamp(readTimestamp)
-		return
+		return nil
 	}
 	// Otherwise, get a safe read timestamp from the lease manager.
 	ld.leaseTimestamp = ld.lm.GetReadTimestamp(ctx, readTimestamp)
+	return nil
 }
 
 // ensureLeasesExist requests that the lease manager acquire leases for the
@@ -279,7 +339,9 @@ func (ld *leasedDescriptors) getByName(
 		desc = cached.(lease.LeasedDescriptor).Underlying()
 		return desc, false, nil
 	}
-	ld.maybeInitReadTimestamp(ctx, txn)
+	if err := ld.maybeInitReadTimestamp(ctx, txn); err != nil {
+		return nil, false, err
+	}
 	timestamp := ld.leaseTimestamp
 	if withoutLockedTimestamp {
 		timestamp = lease.TimestampToReadTimestamp(txn.ReadTimestamp())
@@ -298,7 +360,9 @@ func (ld *leasedDescriptors) getByID(
 	if cached := ld.getCachedByID(ctx, id); cached != nil {
 		return cached, false, nil
 	}
-	ld.maybeInitReadTimestamp(ctx, txn)
+	if err := ld.maybeInitReadTimestamp(ctx, txn); err != nil {
+		return nil, false, err
+	}
 	timestamp := ld.leaseTimestamp
 	if withoutLockedTimestamp {
 		timestamp = lease.TimestampToReadTimestamp(txn.ReadTimestamp())
