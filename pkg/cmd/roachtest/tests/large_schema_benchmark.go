@@ -309,36 +309,45 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 	})
 }
 
-// registerLargeSchemaIntrospectionBenchmark registers a test that creates
-// 1 million empty tables and benchmarks introspection queries without any
-// data import or TPCC workload. This is a smoke test to determine how
-// introspection with 1 million tables performs.
+// registerLargeSchemaIntrospectionBenchmark registers tests that create
+// empty tables and benchmark introspection queries without any data import
+// or TPCC workload. This measures how introspection performs with large
+// numbers of tables.
 func registerLargeSchemaIntrospectionBenchmark(r registry.Registry) {
-	const numTables = 1_000_000
-	clusterSpec := []spec.Option{
-		spec.CPU(16),
-		spec.WorkloadNode(),
-		spec.WorkloadNodeCPU(8),
-		spec.VolumeSize(500),
-		spec.VolumeType("pd-ssd"),
-		// Use highmem variant for more memory per node (128 GB vs 64 GB for
-		// n2-standard-16). Large schema operations require significant memory
-		// for the descriptor lease manager and span config subscriber.
-		spec.GCEMachineType("n2-highmem-16"),
-	}
+	for _, numTables := range []int{10_000, 1_000_000} {
+		numTables := numTables // capture loop variable
+		clusterSpec := []spec.Option{
+			spec.CPU(16),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(8),
+			spec.VolumeSize(500),
+			spec.VolumeType("pd-ssd"),
+			// Use highmem variant for more memory per node (128 GB vs 64 GB for
+			// n2-standard-16). Large schema operations require significant memory
+			// for the descriptor lease manager and span config subscriber.
+			spec.GCEMachineType("n2-highmem-16"),
+		}
 
-	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("large-schema-benchmark/multiregion=false/tables=%d", numTables),
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(10, clusterSpec...),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Weekly),
-		Timeout:          48 * time.Hour,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runLargeSchemaIntrospectionBenchmark(ctx, t, c, numTables)
-		},
-	})
+		// Adjust timeout based on number of tables. 1M tables takes much longer
+		// to create than 10K tables.
+		timeout := 4 * time.Hour
+		if numTables >= 1_000_000 {
+			timeout = 48 * time.Hour
+		}
+
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("large-schema-benchmark/multiregion=false/tables=%d", numTables),
+			Owner:            registry.OwnerSQLFoundations,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(10, clusterSpec...),
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Weekly),
+			Timeout:          timeout,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runLargeSchemaIntrospectionBenchmark(ctx, t, c, numTables)
+			},
+		})
+	}
 }
 
 func runLargeSchemaIntrospectionBenchmark(
