@@ -584,6 +584,34 @@ var QueryTimeoutError = pgerror.New(
 var TxnTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to transaction timeout")
 
+// HashIndexIncludeImplicitPartitionColFromRBR shows that hash sharded index cannot include
+// implicit cols from an RBR table.
+var HashIndexIncludeImplicitPartitionColFromRBR = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"`,
+)
+
+// HashIndexIncludeImplicitPartitionColFromPartitionAllBy shows that hash sharded index cannot include
+// implicit cols from a PARTITION ALL BY table.
+var HashIndexIncludeImplicitPartitionColFromPartitionAllBy = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY"`,
+)
+
+// NewIndexIncludeImplicitPartitionColFromRBR shows that the newly created index cannot include
+// implicit cols from an RBR table.
+var NewIndexIncludeImplicitPartitionColFromRBR = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition`,
+)
+
+// NewIndexIncludeImplicitPartitionColFromPartitionAllBy shows that the newly created index cannot include
+// implicit cols from a PARTITION ALL BY table.
+var NewIndexIncludeImplicitPartitionColFromPartitionAllBy = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition`,
+)
+
 // IsOutOfMemoryError checks whether this is an out of memory error.
 func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgcode.OutOfMemory)
