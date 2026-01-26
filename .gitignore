@@ -17,6 +17,13 @@ artifacts
 .buildinfo
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
+
+# The KV team maintains an experimental set of rules we do
+# not maintain in VCS, and don't want to accidentally commit.
+# See: https://github.com/tbg/cursorfiles
+/.cursor/commands/kv/**
+/.cursor/rules/kv/**
+
 /certs
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
