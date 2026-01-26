@@ -8,6 +8,7 @@ package concurrency
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // verifiableLockTable is a lock table that is able to verify structural and
@@ -33,7 +34,12 @@ var _ lockTable = &verifyingLockTable{}
 // maybeWrapInVerifyingLockTable wraps the supplied lock table to perform
 // verification for test-only builds.
 func maybeWrapInVerifyingLockTable(lt lockTable) lockTable {
-	if buildutil.CrdbTestBuild {
+	// Verification methods are called while holding mutexes, and the algorithm is
+	// quite slow, so this can falsely trip the deadlock detector. Enable the
+	// checks only in non-deadlock test builds.
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/161496.
+	if buildutil.CrdbTestBuild && !syncutil.DeadlockEnabled {
 		return &verifyingLockTable{lt: lt.(verifiableLockTable)}
 	}
 	return lt
