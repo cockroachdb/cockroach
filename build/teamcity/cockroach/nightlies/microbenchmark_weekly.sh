@@ -83,9 +83,6 @@ done
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
 
-# Update gcloud SDK to the latest version
-apt-get update && apt-get install --only-upgrade google-cloud-cli -y
-
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 export ROACHPROD_USER=teamcity
 export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
