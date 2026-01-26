@@ -34,7 +34,7 @@
     "@redux-saga/symbols": "1.1.2",
     "@reduxjs/toolkit": "1.6.0",
     "analytics-node": "^3.5.0",
-    "antd": "5.6.1",
+    "antd": "5.20.3",
     "babel-polyfill": "^6.26.0",
     "classnames": "2.3.2",
     "combokeys": "^2.4.6",

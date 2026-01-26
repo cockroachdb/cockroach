@@ -102,6 +102,9 @@ webpack_bin.webpack_cli(
     env = {
         "NODE_OPTIONS": "--max-old-space-size=5000",
     },
+    execution_requirements = {
+        "Pool": "large",
+    },
     visibility = ["//visibility:public"],
 )
 
@@ -155,6 +158,9 @@ webpack_bin.webpack_cli(
     chdir = package_name(),
     env = {
         "NODE_OPTIONS": "--max-old-space-size=5000",
+    },
+    execution_requirements = {
+        "Pool": "large",
     },
     visibility = ["//visibility:public"],
 )
