@@ -4137,3 +4137,109 @@ func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
 		require.NoError(t, grp.Wait())
 	})
 }
+
+// TestLeaseManagerTxnTimestampAdvance confirms that locked timestamp leasing will maintain
+// safety (by restarting the transaction) if the transaction timestamp is advanced
+// beyond the validity window of a leased descriptor.
+func TestLeaseManagerTxnTimestampAdvance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "with-schema-change", func(t *testing.T, withSchemaChange bool) {
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+
+		var versionToBlock atomic.Int64
+		versionWaitCh := make(chan struct{})
+		versionContinueCh := make(chan struct{})
+
+		knobs := base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+					tbl, _, _, _, _ := descpb.GetDescriptors(descriptor)
+					if tbl != nil && versionToBlock.Load() == int64(tbl.ID) {
+						versionWaitCh <- struct{}{}
+						<-versionContinueCh
+					}
+				},
+			},
+		}
+
+		ts, conn, _ := serverutils.StartServer(t, base.TestServerArgs{Settings: st, Knobs: knobs})
+		defer ts.Stopper().Stop(ctx)
+
+		runner := sqlutils.MakeSQLRunner(conn)
+		runner.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true")
+		runner.Exec(t, "CREATE TABLE t1(id INT PRIMARY KEY, n INT)")
+		runner.Exec(t, "CREATE TABLE t2(n int)")
+		runner.Exec(t, "CREATE TABLE t3(n int)")
+		runner.Exec(t, "INSERT INTO t1 VALUES (1, 100)")
+
+		var tblID int64
+		runner.QueryRow(t, "SELECT 't1'::REGCLASS::OID").Scan(&tblID)
+
+		grp := ctxgroup.WithContext(ctx)
+		if withSchemaChange {
+			versionToBlock.Store(tblID)
+			// Start schema change in background.
+			grp.GoCtx(func(ctx context.Context) error {
+				_, err := conn.Exec("ALTER TABLE t1 ADD COLUMN j int")
+				return err
+			})
+		}
+
+		tx, err := conn.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelSerializable})
+		require.NoError(t, err)
+		txnCommitted := false
+		defer func() {
+			if txnCommitted {
+				return
+			}
+			require.NoError(t, tx.Rollback())
+		}()
+
+		// 1. Establish Read Timestamp and Spans (Lease Acquisition)
+		_, err = tx.Exec("SELECT * FROM t1 WHERE id = 999")
+		require.NoError(t, err)
+
+		// 2. Wait for Schema Change to be blocked (modifying descriptor)
+		if withSchemaChange {
+			<-versionWaitCh
+		}
+
+		// 3. Concurrent Write (advances potential timestamp) - Synchronous
+		_, err = conn.Exec("UPDATE t1 SET n = 200 WHERE id = 1")
+		require.NoError(t, err)
+
+		// 4. Unblock Schema Change.
+		if withSchemaChange {
+			versionToBlock.Store(0)
+			close(versionContinueCh)
+		}
+
+		// 5. Txn Write (triggers WriteTooOld -> Refresh -> Timestamp Advance)
+		// Establish read dependency on t2.
+		_, err = tx.Exec("SELECT * FROM t2")
+		require.NoError(t, err)
+
+		_, err = tx.Exec("UPDATE t1 SET n = 300 WHERE id = 1")
+		require.NoError(t, err)
+
+		// 6. Verification trying to access another descriptor, with
+		// the newer timestamp.
+		_, stmtErr := tx.Exec("SELECT 't3'::REGCLASS::OID")
+
+		if withSchemaChange {
+			require.Error(t, stmtErr, "expected error due to stale lease timestamp")
+			require.Regexpf(t,
+				`pq: restart transaction: the descriptor t1\(\d+\) has been modified at timestamp.*`,
+				stmtErr.Error(),
+				"unexpected error message")
+		} else {
+			require.NoError(t, stmtErr)
+			require.NoError(t, tx.Commit())
+			txnCommitted = true
+		}
+	})
+}
