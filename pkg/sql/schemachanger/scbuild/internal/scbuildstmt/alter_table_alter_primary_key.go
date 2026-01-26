@@ -172,10 +172,14 @@ func setupSharding(
 				}
 				implicitColumnNames[mustRetrieveColumnName(b, tbl.TableID, col.ColumnID).Name] = struct{}{}
 			}
+			isRegionalByRow := isTableLocalityRegionalByRow(b, tbl.TableID)
 			for _, col := range t.Columns {
 				if _, ok := implicitColumnNames[string(col.Column)]; ok {
-					panic(pgerror.New(pgcode.FeatureNotSupported,
-						`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`))
+					if isRegionalByRow {
+						panic(sqlerrors.HashIndexIncludesImplicitPartitionColFromRBR)
+					} else {
+						panic(sqlerrors.HashIndexIncludesImplicitPartitionColFromPartitionAllBy)
+					}
 				}
 			}
 		}

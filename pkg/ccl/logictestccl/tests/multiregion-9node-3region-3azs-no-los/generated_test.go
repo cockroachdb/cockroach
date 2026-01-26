@@ -195,11 +195,11 @@ func TestCCLLogic_regional_by_row_foreign_key(
 	runCCLLogicTest(t, "regional_by_row_foreign_key")
 }
 
-func TestCCLLogic_regional_by_row_hash_sharded_index(
+func TestCCLLogic_regional_by_row_index(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "regional_by_row_hash_sharded_index")
+	runCCLLogicTest(t, "regional_by_row_index")
 }
 
 func TestCCLLogic_regional_by_row_placement_restricted(
