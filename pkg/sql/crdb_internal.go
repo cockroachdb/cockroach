@@ -4564,7 +4564,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 
 		execCfg := p.ExecCfg()
-		pageSize := int64(128)
+		pageSize := int64(10000)
 		if limit > 0 {
 			pageSize = min(limit, pageSize)
 		}
