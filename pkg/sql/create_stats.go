@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -108,11 +109,22 @@ var automaticStatsJobUseLocksTable = settings.RegisterBoolSetting(
 	true,
 )
 
+const (
+	// defaultConcurrencyVCPURequirement determines the scaling factor for the
+	// concurrency limit of auto full stats collections. It should be used as a
+	// divisor, This number was chosen so that on 4 vCPU nodes we'd get _some_
+	// concurrency.
+	defaultConcurrencyVCPURequirement = 2
+	// We don't recommend running on fewer than 4 vCPUs, but we do have clusters
+	// with 2 vCPUs.
+	minViableProcs = 2
+)
+
 var automaticFullStatsConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.stats.automatic_full_concurrency_limit",
 	"determines the maximum number of concurrent automatic full table statistics collection jobs",
-	1,
+	max(minViableProcs, int64(runtime.GOMAXPROCS(0)))/defaultConcurrencyVCPURequirement,
 	settings.WithPublic,
 	settings.IntWithMinimum(1),
 )
