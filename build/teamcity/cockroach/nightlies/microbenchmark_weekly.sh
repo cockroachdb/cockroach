@@ -83,8 +83,8 @@ done
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
 
-# Update gcloud SDK to the latest version, specifically the compute module
-gcloud components update --quiet
+# Update gcloud SDK to the latest version, specifically the core module
+gcloud components update core --quiet
 
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 export ROACHPROD_USER=teamcity
