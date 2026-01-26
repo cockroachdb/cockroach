@@ -270,7 +270,7 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 		// the resolved timestamp below resolvedTarget since it also depends on the
 		// checkpoint interval.
 		if actualCatchUpDuration <= 0 {
-			t.Fatal("changefeed never caught up")
+			t.Fatalf("changefeed never caught up: %s <= 0", actualCatchUpDuration)
 		} else if actualCatchUpDuration > allowedCatchUpDuration {
 			t.Fatalf("changefeed caught up too slowly: %s > %s (%s+10%%)", actualCatchUpDuration, allowedCatchUpDuration, catchUpDur)
 		} else {
