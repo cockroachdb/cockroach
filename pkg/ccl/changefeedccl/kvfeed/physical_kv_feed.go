@@ -127,7 +127,8 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop()
 			case *kvpb.RangeFeedCheckpoint:
-				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
+				ev := e.ShallowCopy()
+				if !ev.Checkpoint.ResolvedTS.IsEmpty() && ev.Checkpoint.ResolvedTS.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as
 					// soon as there are no outstanding intents under them.
 					// Changefeeds don't care about these at all, so throw them out.
@@ -138,7 +139,7 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 				stop := p.st.RangefeedBufferCheckpoint.Start()
 				if err := p.memBuf.Add(
-					ctx, kvevent.MakeResolvedEvent(e.RangeFeedEvent, jobspb.ResolvedSpan_NONE),
+					ctx, kvevent.MakeResolvedEvent(ev, jobspb.ResolvedSpan_NONE),
 				); err != nil {
 					return err
 				}
