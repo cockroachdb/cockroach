@@ -177,16 +177,6 @@ type ShowBackupOptions struct {
 	Privileges           bool
 	SkipSize             bool
 
-	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
-	//
-	// SHOW BACKUP <incremental_dir>
-	//
-	// on an encrypted incremental backup will need to pass their full backup's
-	// directory to the encryption_info_dir parameter because the
-	// `ENCRYPTION-INFO` file necessary to decode the incremental backup lives in
-	// the full backup dir.
-	EncryptionInfoDir Expr
-
 	CheckConnectionTransferSize Expr
 	CheckConnectionDuration     Expr
 	CheckConnectionConcurrency  Expr
@@ -230,11 +220,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("privileges")
 	}
 
-	if o.EncryptionInfoDir != nil {
-		maybeAddSep()
-		ctx.WriteString("encryption_info_dir = ")
-		ctx.FormatNode(o.EncryptionInfoDir)
-	}
 	if o.DecryptionKMSURI != nil {
 		maybeAddSep()
 		ctx.WriteString("kms = ")
@@ -272,7 +257,6 @@ func (o ShowBackupOptions) IsDefault() bool {
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
 		o.SkipSize == options.SkipSize &&
-		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
 		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency
@@ -336,11 +320,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 		return err
 	}
 	o.SkipSize, err = combineBools(o.SkipSize, other.SkipSize, "skip size")
-	if err != nil {
-		return err
-	}
-	o.EncryptionInfoDir, err = combineExpr(o.EncryptionInfoDir, other.EncryptionInfoDir,
-		"encryption_info_dir")
 	if err != nil {
 		return err
 	}

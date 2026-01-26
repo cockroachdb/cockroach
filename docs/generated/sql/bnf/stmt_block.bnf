@@ -1221,7 +1221,6 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
-	| 'ENCRYPTION_INFO_DIR'
 	| 'ENUM'
 	| 'ENUMS'
 	| 'ERRORS'
@@ -3780,7 +3779,6 @@ show_backup_options ::=
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
 	| 'PRIVILEGES'
-	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
 
 schema_wildcard ::=
 	wildcard_pattern
@@ -4164,7 +4162,6 @@ bare_label_keywords ::=
 	| 'ENABLE'
 	| 'ENCODING'
 	| 'ENCRYPTED'
-	| 'ENCRYPTION_INFO_DIR'
 	| 'ENCRYPTION_PASSPHRASE'
 	| 'END'
 	| 'ENUM'

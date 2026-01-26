@@ -149,7 +149,6 @@ func showBackupTypeCheck(
 		exprutil.Strings{
 			backup.Path,
 			backup.Options.EncryptionPassphrase,
-			backup.Options.EncryptionInfoDir,
 			backup.Options.CheckConnectionTransferSize,
 			backup.Options.CheckConnectionDuration,
 		},
@@ -417,21 +416,8 @@ func legacyCollectBackupInfo(
 		return cleanup()
 	})
 
-	encStore := baseStores[0]
-	if stmt.Options.EncryptionInfoDir != nil {
-		encDir, err := exprEval.String(ctx, stmt.Options.EncryptionInfoDir)
-		if err != nil {
-			return backupInfo{}, 0, err
-		}
-		encStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, encDir, p.User())
-		if err != nil {
-			return backupInfo{}, 0, errors.Wrap(err, "make storage")
-		}
-		defer encStore.Close()
-	}
-
 	encryption, err := backupencryption.ResolveEncryptionOptionsFromExpr(
-		ctx, p, exprEval, encStore,
+		ctx, p, exprEval, baseStores[0],
 		stmt.Options.EncryptionPassphrase, tree.Exprs(stmt.Options.DecryptionKMSURI),
 	)
 	if err != nil {

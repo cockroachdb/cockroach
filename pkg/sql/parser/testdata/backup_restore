@@ -229,13 +229,13 @@ SHOW BACKUP SCHEMAS FROM 'foo' IN '*****' -- identifiers removed
 SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- passwords exposed
 
 parse
-SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret', ENCRYPTION_INFO_DIR = 'long_live_backupper'
+SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret'
 ----
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- normalized!
-SHOW BACKUP ($1) IN ($2) WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = ('long_live_backupper')) -- fully parenthesized
-SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = '_') -- literals removed
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- identifiers removed
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper') -- passwords exposed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****') -- normalized!
+SHOW BACKUP ($1) IN ($2) WITH OPTIONS (encryption_passphrase = '*****') -- fully parenthesized
+SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****') -- literals removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****') -- identifiers removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret') -- passwords exposed
 
 parse
 BACKUP TABLE foo INTO 'bar' IN 'baz' AS OF SYSTEM TIME '1'
