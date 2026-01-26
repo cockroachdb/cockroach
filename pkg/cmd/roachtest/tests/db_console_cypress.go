@@ -274,6 +274,11 @@ func runDbConsoleCypressPages(ctx context.Context, t test.Test, c cluster.Cluste
 	}
 	defer db.Close()
 
+	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING sql.stats.flush.interval = '10s';`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	_, err = db.ExecContext(ctx, `CREATE TABLE test_table(id integer PRIMARY KEY, t TEXT);`)
 	if err != nil {
 		t.Fatal(err)

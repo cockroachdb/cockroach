@@ -52,19 +52,21 @@ describe("SQL Activity page - Statements Tab", () => {
 
   it("displays statement filter list in table area", () => {
     cy.get('[class*="table-area"]').within(() => {
-      cy.get('[class*="page-config__list"]').within(() => {
-        cy.get('input[placeholder="Search Statements"]').should("exist");
+      cy.get('[class*="page-config__list"]')
+        .first()
+        .within(() => {
+          cy.get('input[placeholder="Search Statements"]').should("exist");
 
-        cy.get('[class*="dropdown-btn"]').contains("Filters").should("exist");
+          cy.get('[class*="dropdown-btn"]').contains("Filters").should("exist");
 
-        cy.get("button").contains("Columns").should("exist");
-      });
+          cy.get("button").contains("Columns").should("exist");
+        });
     });
   });
 
   it("displays table of statements", () => {
-    cy.get('[class*="statements-table"]').should("exist");
-    cy.get('[class*="statements-table"]').within(() => {
+    cy.get(".statements-table").should("exist");
+    cy.get(".statements-table").within(() => {
       cy.get("thead").within(() => {
         // default column headers
         cy.contains("Statements");
@@ -87,10 +89,7 @@ describe("SQL Activity page - Statements Tab", () => {
     });
 
     // non-default header
-    cy.get('[class*="statements-table"]').should(
-      "not.contain.text",
-      "Min Latency",
-    );
+    cy.get(".statements-table").should("not.contain.text", "Min Latency");
     cy.contains("Columns").click();
     cy.get('[class*="dropdown-area"]')
       .should("exist")
@@ -98,7 +97,7 @@ describe("SQL Activity page - Statements Tab", () => {
         cy.contains("Min Latency").click();
         cy.contains("Apply").click();
       });
-    cy.get('[class*="statements-table"]').contains("Min Latency");
+    cy.get(".statements-table").contains("Min Latency");
   });
 
   it("displays statement filter list for active executions table", () => {
@@ -116,8 +115,8 @@ describe("SQL Activity page - Statements Tab", () => {
     cy.get('input[value="active"]').click();
     cy.get('input[value="active"]').should("be.checked");
 
-    cy.get('[class*="statements-table"]').should("exist");
-    cy.get('[class*="statements-table"]').within(() => {
+    cy.get(".statements-table").should("exist");
+    cy.get(".statements-table").within(() => {
       cy.get("thead").within(() => {
         cy.contains("Statement Execution ID");
         cy.contains("Statement Execution");
@@ -138,15 +137,12 @@ describe("SQL Activity page - Statements Tab", () => {
         cy.contains("Application").click();
         cy.contains("Apply").click();
       });
-    cy.get('[class*="statements-table"]').should(
-      "not.contain.text",
-      "Application",
-    );
+    cy.get(".statements-table").should("not.contain.text", "Application");
   });
 
   it("clicks into sql statement details page", () => {
     // should have at least one row
-    cy.get('[class*="statements-table"] tbody tr').within(() => {
+    cy.get(".statements-table tbody tr").within(() => {
       cy.get("a").first().click();
     });
 
@@ -162,8 +158,8 @@ describe("SQL Activity page - Statements Tab", () => {
     // switch tab to explain plan
     cy.contains("Explain Plans").click();
     cy.location("hash").should("include", "&tab=explain-plan");
-    cy.get('[class*="statements-table"]').should("exist");
-    cy.get('[class*="statements-table"]').within(() => {
+    cy.get(".statements-table").should("exist");
+    cy.get(".statements-table").within(() => {
       cy.get("thead").within(() => {
         cy.contains("Plan Gist");
         cy.contains("Used Index");
@@ -239,19 +235,21 @@ describe("SQL Activity page - Transactions Tab", () => {
 
   it("displays transaction filter list in table area", () => {
     cy.get('[class*="table-area"]').within(() => {
-      cy.get('[class*="page-config__list"]').within(() => {
-        cy.get('input[placeholder="Search Statements"]').should("exist");
+      cy.get('[class*="page-config__list"]')
+        .first()
+        .within(() => {
+          cy.get('input[placeholder="Search Statements"]').should("exist");
 
-        cy.get('[class*="dropdown-btn"]').contains("Filters").should("exist");
+          cy.get('[class*="dropdown-btn"]').contains("Filters").should("exist");
 
-        cy.get("button").contains("Columns").should("exist");
-      });
+          cy.get("button").contains("Columns").should("exist");
+        });
     });
   });
 
   it("displays table of transactions", () => {
-    cy.get('[class*="statements-table"]').should("exist");
-    cy.get('[class*="statements-table"]').within(() => {
+    cy.get(".statements-table").should("exist");
+    cy.get(".statements-table").within(() => {
       cy.get("thead").within(() => {
         // Check for default column headers
         cy.contains("Transactions");
@@ -306,7 +304,7 @@ describe("SQL Activity page - Transactions Tab", () => {
 
   it("clicks into sql transaction details page", () => {
     // should have at least one row
-    cy.get('[class*="statements-table"] tbody tr').within(() => {
+    cy.get(".statements-table tbody tr").within(() => {
       cy.get("a").first().click();
     });
 
@@ -319,8 +317,8 @@ describe("SQL Activity page - Transactions Tab", () => {
     cy.get('[class*="summary--card"]').contains("Fingerprint ID");
 
     // statements in transaction
-    cy.get('[class*="statements-table"]').should("exist");
-    cy.get('[class*="statements-table"]').within(() => {
+    cy.get(".statements-table").should("exist");
+    cy.get(".statements-table").within(() => {
       cy.get("thead").within(() => {
         // Check for some column headers
         cy.contains("Statements");
@@ -348,8 +346,8 @@ describe("SQL Activity page - Sessions Tab", () => {
   it("displays table of sessions", () => {
     cy.get('[class*="dropdown-btn"]').contains("Filters").should("exist");
 
-    cy.get('[class*="sessions-table"]').should("exist");
-    cy.get('[class*="sessions-table"]').within(() => {
+    cy.get(".sessions-table").should("exist");
+    cy.get(".sessions-table").within(() => {
       cy.get("thead").within(() => {
         // Check for default column headers
         cy.contains("Session Start Time (UTC)");
@@ -371,7 +369,7 @@ describe("SQL Activity page - Sessions Tab", () => {
 
   it("clicks into sql session details page", () => {
     // should have at least one row
-    cy.get('[class*="sessions-table"] tbody tr').within(() => {
+    cy.get(".sessions-table tbody tr").within(() => {
       cy.get("a").first().click();
     });
 
