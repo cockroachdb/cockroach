@@ -16,6 +16,10 @@ import (
 
 // Visitor defines methods that are called for Expr nodes during an expression
 // or statement walk.
+//
+// For historical reasons, Visitor does not actually visit every node in the
+// AST. New code should consider using ExtendedVisitor which does attempt to
+// visit every node.
 type Visitor interface {
 	// VisitPre is called for each Expr node before recursing into that
 	// subtree. Upon return, if recurse is false, the visit will not recurse into
@@ -1457,20 +1461,73 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Delete) copyNode() *Delete {
 	stmtCopy := *stmt
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
 	}
+	stmtCopy.Using = append(TableExprs(nil), stmt.Using...)
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Delete) walkStmt(v Visitor) Statement {
 	ret := stmt
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		for i := range stmt.Using {
+			t, changed = walkTableExpr(v, stmt.Using[i])
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.Using[i] = t
+			}
+		}
+
+		order, changed := walkOrderBy(v, stmt.OrderBy)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.OrderBy = order
+		}
+
+		limit, changed := walkLimit(v, stmt.Limit)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Limit = limit
+		}
+	}
+
 	if stmt.Where != nil {
 		e, changed := WalkExpr(v, stmt.Where.Expr)
 		if changed {
-			ret = stmt.copyNode()
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
 			ret.Where.Expr = e
 		}
 	}
@@ -1530,16 +1587,89 @@ func (stmt *ExplainAnalyze) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Insert) copyNode() *Insert {
 	stmtCopy := *stmt
+	// Copying of With is handled by walkWith.
+	// We only need to copy OnConflict for ON CONFLICT DO UPDATE, which has
+	// expressions/predicates/WHERE to walk. ON CONFLICT DO NOTHING has none.
+	if stmt.OnConflict != nil && !stmt.OnConflict.IsUpsertAlias() && !stmt.OnConflict.DoNothing {
+		onConflictCopy := *stmt.OnConflict
+		stmtCopy.OnConflict = &onConflictCopy
+		exprs := make([]UpdateExpr, len(stmt.OnConflict.Exprs))
+		stmtCopy.OnConflict.Exprs = make(UpdateExprs, len(stmt.OnConflict.Exprs))
+		for i, e := range stmt.OnConflict.Exprs {
+			exprs[i] = *e
+			stmtCopy.OnConflict.Exprs[i] = &exprs[i]
+		}
+		if stmt.OnConflict.Where != nil {
+			wCopy := *stmt.OnConflict.Where
+			stmtCopy.OnConflict.Where = &wCopy
+		}
+	}
 	return &stmtCopy
 }
 
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Insert) walkStmt(v Visitor) Statement {
 	ret := stmt
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		if stmt.OnConflict != nil && !stmt.OnConflict.IsUpsertAlias() && !stmt.OnConflict.DoNothing {
+			if stmt.OnConflict.ArbiterPredicate != nil {
+				e, changed := WalkExpr(v, stmt.OnConflict.ArbiterPredicate)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.ArbiterPredicate = e
+				}
+			}
+
+			for i, expr := range stmt.OnConflict.Exprs {
+				e, changed := WalkExpr(v, expr.Expr)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.Exprs[i].Expr = e
+				}
+			}
+
+			if stmt.OnConflict.Where != nil {
+				e, changed := WalkExpr(v, stmt.OnConflict.Where.Expr)
+				if changed {
+					if ret == stmt {
+						ret = stmt.copyNode()
+					}
+					ret.OnConflict.Where.Expr = e
+				}
+			}
+		}
+	}
+
 	if stmt.Rows != nil {
 		rows, changed := WalkStmt(v, stmt.Rows)
 		if changed {
-			ret = stmt.copyNode()
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
 			ret.Rows = rows.(*Select)
 		}
 	}
@@ -1550,8 +1680,6 @@ func (stmt *Insert) walkStmt(v Visitor) Statement {
 		}
 		ret.Returning = returning
 	}
-	// TODO(dan): Walk OnConflict once the ON CONFLICT DO UPDATE form of upsert is
-	// implemented.
 	return ret
 }
 
@@ -1766,23 +1894,67 @@ func walkOrderBy(v Visitor, order OrderBy) (OrderBy, bool) {
 	return order, copied
 }
 
+func walkWith(v Visitor, w *With) (*With, bool) {
+	ret := w
+	if w == nil {
+		return ret, false
+	}
+	for i := range w.CTEList {
+		if w.CTEList[i] != nil {
+			withStmt, changed := WalkStmt(v, w.CTEList[i].Stmt)
+			if changed {
+				if ret == w {
+					withCopy := *w
+					ret = &withCopy
+					cteList := make([]CTE, len(w.CTEList))
+					ret.CTEList = make([]*CTE, len(w.CTEList))
+					for j, cte := range w.CTEList {
+						if w.CTEList[j] != nil {
+							cteList[j] = *cte
+							ret.CTEList[j] = &cteList[j]
+						}
+					}
+				}
+				ret.CTEList[i].Stmt = withStmt
+			}
+		}
+	}
+	return ret, ret != w
+}
+
+func walkLimit(v Visitor, l *Limit) (*Limit, bool) {
+	ret := l
+	if l == nil {
+		return ret, false
+	}
+	if l.Offset != nil {
+		e, changed := WalkExpr(v, l.Offset)
+		if changed {
+			if ret == l {
+				lCopy := *l
+				ret = &lCopy
+			}
+			ret.Offset = e
+		}
+	}
+	if l.Count != nil {
+		e, changed := WalkExpr(v, l.Count)
+		if changed {
+			if ret == l {
+				lCopy := *l
+				ret = &lCopy
+			}
+			ret.Count = e
+		}
+	}
+	return ret, ret != l
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Select) copyNode() *Select {
 	stmtCopy := *stmt
-	if stmt.Limit != nil {
-		lCopy := *stmt.Limit
-		stmtCopy.Limit = &lCopy
-	}
-	if stmt.With != nil {
-		withCopy := *stmt.With
-		stmtCopy.With = &withCopy
-		cteList := make([]CTE, len(stmt.With.CTEList))
-		stmtCopy.With.CTEList = make([]*CTE, len(stmt.With.CTEList))
-		for i, cte := range stmt.With.CTEList {
-			cteList[i] = *cte
-			stmtCopy.With.CTEList[i] = &cteList[i]
-		}
-	}
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	return &stmtCopy
 }
 
@@ -1811,40 +1983,20 @@ func (stmt *Select) walkStmt(v Visitor) Statement {
 		}
 		ret.OrderBy = order
 	}
-	if stmt.Limit != nil {
-		if stmt.Limit.Offset != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Offset)
-			if changed {
-				if ret == stmt {
-					ret = stmt.copyNode()
-				}
-				ret.Limit.Offset = e
-			}
+	limit, changed := walkLimit(v, stmt.Limit)
+	if changed {
+		if ret == stmt {
+			ret = stmt.copyNode()
 		}
-		if stmt.Limit.Count != nil {
-			e, changed := WalkExpr(v, stmt.Limit.Count)
-			if changed {
-				if ret == stmt {
-					ret = stmt.copyNode()
-				}
-				ret.Limit.Count = e
-			}
-		}
+		ret.Limit = limit
 	}
-	if stmt.With != nil {
-		for i := range stmt.With.CTEList {
-			if stmt.With.CTEList[i] != nil {
-				withStmt, changed := WalkStmt(v, stmt.With.CTEList[i].Stmt)
-				if changed {
-					if ret == stmt {
-						ret = stmt.copyNode()
-					}
-					ret.With.CTEList[i].Stmt = withStmt
-				}
-			}
+	with, changed := walkWith(v, stmt.With)
+	if changed {
+		if ret == stmt {
+			ret = stmt.copyNode()
 		}
+		ret.With = with
 	}
-
 	return ret
 }
 
@@ -2059,12 +2211,15 @@ func (stmt *SetClusterSetting) walkStmt(v Visitor) Statement {
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Update) copyNode() *Update {
 	stmtCopy := *stmt
+	// Copying of With, OrderBy, and Limit is handled by walkWith, walkOrderBy,
+	// and walkLimit, respectively.
 	exprs := make([]UpdateExpr, len(stmt.Exprs))
 	stmtCopy.Exprs = make(UpdateExprs, len(stmt.Exprs))
 	for i, e := range stmt.Exprs {
 		exprs[i] = *e
 		stmtCopy.Exprs[i] = &exprs[i]
 	}
+	stmtCopy.From = append(TableExprs(nil), stmt.From...)
 	if stmt.Where != nil {
 		wCopy := *stmt.Where
 		stmtCopy.Where = &wCopy
@@ -2075,6 +2230,54 @@ func (stmt *Update) copyNode() *Update {
 // walkStmt is part of the walkableStmt interface.
 func (stmt *Update) walkStmt(v Visitor) Statement {
 	ret := stmt
+
+	if _, ok := v.(ExtendedVisitor); ok {
+		// TODO(michae2): investigate whether some of these sub-walks should also be
+		// performed by Visitor.
+
+		with, changed := walkWith(v, stmt.With)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.With = with
+		}
+
+		t, changed := walkTableExpr(v, stmt.Table)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Table = t
+		}
+
+		for i := range stmt.From {
+			t, changed = walkTableExpr(v, stmt.From[i])
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.From[i] = t
+			}
+		}
+
+		order, changed := walkOrderBy(v, stmt.OrderBy)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.OrderBy = order
+		}
+
+		limit, changed := walkLimit(v, stmt.Limit)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Limit = limit
+		}
+	}
+
 	for i, expr := range stmt.Exprs {
 		e, changed := WalkExpr(v, expr.Expr)
 		if changed {
