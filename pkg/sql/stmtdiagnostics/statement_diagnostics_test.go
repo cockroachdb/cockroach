@@ -1438,3 +1438,375 @@ func getRequestCompletedStatus(
 	runner.QueryRow(t, "SELECT completed FROM system.transaction_diagnostics_requests WHERE id=$1", reqId).Scan(&completed)
 	return completed
 }
+
+// TestMultipleBundlesPerRequest verifies that multiple bundles can be
+// collected for a single diagnostic request with sampling + expiration,
+// and that each bundle has the correct request_id set.
+func TestMultipleBundlesPerRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// Create a request with sampling probability, latency threshold, and expiration.
+	// Note: minExecutionLatency must be non-zero when samplingProbability is set.
+	samplingProbability, minExecutionLatency, expiresAfter := 1.0, time.Microsecond, time.Hour
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "SELECT _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	// Execute matching statements multiple times.
+	for i := 0; i < 3; i++ {
+		runner.Exec(t, "SELECT 1")
+	}
+
+	// Give time for bundles to be collected.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&count)
+		if count < 3 {
+			runner.Exec(t, "SELECT 1")
+			return errors.Newf("expected at least 3 bundles, got %d", count)
+		}
+		return nil
+	})
+
+	// Verify that all bundles have the correct request_id.
+	var bundleCount int
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&bundleCount)
+	require.GreaterOrEqual(t, bundleCount, 3, "expected at least 3 bundles with request_id")
+
+	// Verify the request is NOT marked completed (continuous collection).
+	var completed bool
+	runner.QueryRow(t, "SELECT completed FROM system.statement_diagnostics_requests WHERE id = $1", reqID).Scan(&completed)
+	require.False(t, completed, "request should not be marked completed during continuous collection")
+
+	// Clean up.
+	require.NoError(t, registry.CancelRequest(ctx, reqID))
+}
+
+// TestPerRequestBundleLimit verifies that old bundles are deleted when
+// the per-request limit is exceeded.
+func TestPerRequestBundleLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// Set the bundle limit to 3.
+	runner.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.max_bundles_per_request = 3")
+
+	// Create a request with sampling probability, latency threshold, and expiration.
+	// Note: minExecutionLatency must be non-zero when samplingProbability is set.
+	samplingProbability, minExecutionLatency, expiresAfter := 1.0, time.Microsecond, time.Hour
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ + _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	// Track the maximum bundle ID we've seen to know when a new bundle is collected.
+	var maxBundleID int64
+
+	// Execute matching statements more times than the limit (5 > 3).
+	// After each execution, wait for a new bundle to be collected.
+	// Due to the inline GC, we should never see more than 3 bundles at once.
+	for i := 0; i < 5; i++ {
+		runner.Exec(t, fmt.Sprintf("SELECT %d + %d", i, i))
+		testutils.SucceedsSoon(t, func() error {
+			var currentMaxID int64
+			err := db.QueryRow("SELECT COALESCE(MAX(id), 0) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&currentMaxID)
+			if err != nil {
+				return err
+			}
+			if currentMaxID <= maxBundleID {
+				runner.Exec(t, fmt.Sprintf("SELECT %d + %d", i, i))
+				return errors.Newf("waiting for bundle %d to be collected (max ID: %d)", i+1, currentMaxID)
+			}
+			maxBundleID = currentMaxID
+			return nil
+		})
+	}
+
+	// Verify that only 3 bundles remain (the limit).
+	var finalCount int
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&finalCount)
+	require.Equal(t, 3, finalCount, "expected exactly 3 bundles (the limit)")
+
+	// Verify the remaining bundles are the 3 most recent ones by checking
+	// that the maximum ID we tracked is among them.
+	var maxIDInResults int64
+	runner.QueryRow(t, "SELECT MAX(id) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&maxIDInResults)
+	require.Equal(t, maxBundleID, maxIDInResults, "the most recent bundle should still exist")
+
+	// Clean up.
+	require.NoError(t, registry.CancelRequest(ctx, reqID))
+}
+
+// TestContinuousCollectionDefault verifies that continuous collection
+// is now the default behavior when sampling_probability and expires_at are set,
+// without requiring the collect_continuously.enabled setting.
+func TestContinuousCollectionDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// The setting sql.stmt_diagnostics.collect_continuously.enabled now defaults
+	// to true, so continuous collection should work automatically without
+	// explicitly enabling it. We don't need to set it.
+
+	// Create a request WITH sampling_probability, latency threshold, AND expires_at.
+	// Note: minExecutionLatency must be non-zero when samplingProbability is set.
+	samplingProbability, minExecutionLatency, expiresAfter := 1.0, time.Microsecond, time.Hour
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ * _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	// Execute matching statement multiple times.
+	var firstBundleID int64
+	testutils.SucceedsSoon(t, func() error {
+		runner.Exec(t, "SELECT 2 * 3")
+		var count int
+		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&count)
+		if count < 1 {
+			return errors.New("waiting for first bundle")
+		}
+		runner.QueryRow(t, "SELECT id FROM system.statement_diagnostics WHERE request_id = $1 ORDER BY collected_at LIMIT 1", reqID).Scan(&firstBundleID)
+		return nil
+	})
+
+	// Execute more and verify we get additional bundles (continuous collection is default).
+	testutils.SucceedsSoon(t, func() error {
+		runner.Exec(t, "SELECT 2 * 3")
+		var count int
+		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&count)
+		if count < 2 {
+			return errors.New("waiting for second bundle (continuous collection)")
+		}
+		return nil
+	})
+
+	// Verify request is NOT completed.
+	var completed bool
+	runner.QueryRow(t, "SELECT completed FROM system.statement_diagnostics_requests WHERE id = $1", reqID).Scan(&completed)
+	require.False(t, completed, "request should not be completed with continuous collection")
+
+	// Clean up.
+	require.NoError(t, registry.CancelRequest(ctx, reqID))
+}
+
+// TestSingleBundleWithoutSamplingOrExpiration verifies that requests
+// without sampling_probability or expires_at still collect only one bundle
+// and are marked completed immediately (backward compatibility).
+func TestSingleBundleWithoutSamplingOrExpiration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// Create a request WITHOUT sampling_probability or expires_at (legacy behavior).
+	var noSampling float64
+	var noLatency, noExpiration time.Duration
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ - _", "", false,
+		noSampling, noLatency, noExpiration,
+	)
+	require.NoError(t, err)
+
+	// Execute the matching statement.
+	testutils.SucceedsSoon(t, func() error {
+		runner.Exec(t, "SELECT 5 - 3")
+		var completed bool
+		runner.QueryRow(t, "SELECT completed FROM system.statement_diagnostics_requests WHERE id = $1", reqID).Scan(&completed)
+		if !completed {
+			return errors.New("waiting for request to be completed")
+		}
+		return nil
+	})
+
+	// Verify exactly 1 bundle was collected.
+	var bundleCount int
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&bundleCount)
+	require.Equal(t, 1, bundleCount, "expected exactly 1 bundle for non-continuous request")
+
+	// Verify request is marked completed.
+	var completed bool
+	runner.QueryRow(t, "SELECT completed FROM system.statement_diagnostics_requests WHERE id = $1", reqID).Scan(&completed)
+	require.True(t, completed, "request should be marked completed after single bundle")
+
+	// Execute again - no more bundles should be collected.
+	runner.Exec(t, "SELECT 5 - 3")
+	time.Sleep(100 * time.Millisecond)
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&bundleCount)
+	require.Equal(t, 1, bundleCount, "should still have exactly 1 bundle after request completed")
+}
+
+// TestUnlimitedBundlesPerRequest verifies that when max_bundles_per_request
+// is set to 0, bundles accumulate without being pruned.
+func TestUnlimitedBundlesPerRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// Set the bundle limit to 0 (unlimited).
+	runner.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.max_bundles_per_request = 0")
+
+	// Create a request with sampling probability, latency threshold, and expiration.
+	samplingProbability, minExecutionLatency, expiresAfter := 1.0, time.Microsecond, time.Hour
+	reqID, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ / _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	// Execute matching statements more times than the default limit (10).
+	// With unlimited setting, all bundles should be kept.
+	const numExecutions = 15
+	for i := 0; i < numExecutions; i++ {
+		testutils.SucceedsSoon(t, func() error {
+			runner.Exec(t, fmt.Sprintf("SELECT %d / 1", i+1))
+			var count int
+			runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&count)
+			if count < i+1 {
+				return errors.Newf("waiting for bundle %d, got %d", i+1, count)
+			}
+			return nil
+		})
+	}
+
+	// Verify all bundles were kept (no pruning).
+	var finalCount int
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID).Scan(&finalCount)
+	require.Equal(t, numExecutions, finalCount, "expected all %d bundles to be kept with unlimited setting", numExecutions)
+
+	// Clean up.
+	require.NoError(t, registry.CancelRequest(ctx, reqID))
+}
+
+// TestMultipleConcurrentRequests verifies that bundles are correctly linked
+// to their originating requests when multiple requests are active simultaneously.
+func TestMultipleConcurrentRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Disable polling interval for precise control.
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
+
+	// Create two requests for different statement fingerprints.
+	samplingProbability, minExecutionLatency, expiresAfter := 1.0, time.Microsecond, time.Hour
+
+	reqID1, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ % _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	reqID2, err := registry.InsertRequestInternal(
+		ctx, "SELECT _ & _", "", false,
+		samplingProbability, minExecutionLatency, expiresAfter,
+	)
+	require.NoError(t, err)
+
+	// Execute statements matching both requests, interleaved.
+	for i := 0; i < 3; i++ {
+		runner.Exec(t, fmt.Sprintf("SELECT %d %% 2", i))
+		runner.Exec(t, fmt.Sprintf("SELECT %d & 1", i))
+	}
+
+	// Wait for bundles to be collected for both requests.
+	testutils.SucceedsSoon(t, func() error {
+		var count1, count2 int
+		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID1).Scan(&count1)
+		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID2).Scan(&count2)
+		if count1 < 3 || count2 < 3 {
+			// Execute more to trigger collection.
+			runner.Exec(t, "SELECT 99 % 2")
+			runner.Exec(t, "SELECT 99 & 1")
+			return errors.Newf("waiting for bundles: req1=%d, req2=%d", count1, count2)
+		}
+		return nil
+	})
+
+	// Verify bundles are correctly linked to their respective requests.
+	var count1, count2 int
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID1).Scan(&count1)
+	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID2).Scan(&count2)
+	require.GreaterOrEqual(t, count1, 3, "request 1 should have at least 3 bundles")
+	require.GreaterOrEqual(t, count2, 3, "request 2 should have at least 3 bundles")
+
+	// Verify no cross-contamination: bundles for req1 should have fingerprint matching req1.
+	var fp1, fp2 string
+	runner.QueryRow(t, "SELECT statement_fingerprint FROM system.statement_diagnostics WHERE request_id = $1 LIMIT 1", reqID1).Scan(&fp1)
+	runner.QueryRow(t, "SELECT statement_fingerprint FROM system.statement_diagnostics WHERE request_id = $1 LIMIT 1", reqID2).Scan(&fp2)
+	require.Contains(t, fp1, "%", "request 1 bundles should contain modulo operator")
+	require.Contains(t, fp2, "&", "request 2 bundles should contain bitwise AND operator")
+
+	// Clean up.
+	require.NoError(t, registry.CancelRequest(ctx, reqID1))
+	require.NoError(t, registry.CancelRequest(ctx, reqID2))
+}

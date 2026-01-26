@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -63,13 +64,29 @@ var bundleChunkSize = settings.RegisterByteSizeSetting(
 // TODO(irfansharif): Longer term we should rip this out in favor of keeping a
 // bounded set of bundles around per-request/fingerprint. See #82896 for more
 // details.
+//
+// Deprecated: Continuous collection is now the default behavior when a request
+// has both sampling_probability and expires_at set. This setting is kept for
+// backward compatibility but will be removed in a future version.
 var collectUntilExpiration = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.collect_continuously.enabled",
-	"collect diagnostic bundles continuously until request expiration (to be "+
-		"used with care, only has an effect if the diagnostic request has an "+
-		"expiration and a sampling probability set)",
-	false)
+	"deprecated: continuous collection is now the default behavior when "+
+		"sampling_probability and expires_at are set; this setting will be "+
+		"removed in a future version",
+	true)
+
+// maxBundlesPerRequest is the maximum number of diagnostic bundles to keep
+// per request. When a new bundle is collected and the limit is exceeded,
+// the oldest bundles for that request are deleted. A value of 0 means
+// unlimited (not recommended for production).
+var maxBundlesPerRequest = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stmt_diagnostics.max_bundles_per_request",
+	"maximum number of diagnostic bundles to keep per request (0 = unlimited)",
+	10,
+	settings.NonNegativeInt,
+)
 
 // Registry maintains a view on the statement fingerprints
 // on which data is to be collected (i.e. system.statement_diagnostics_requests)
@@ -132,11 +149,17 @@ func (r *Request) isConditional() bool {
 }
 
 // continueCollecting returns true if we want to continue collecting bundles for
-// this request.
+// this request. Continuous collection is now the default behavior when a
+// request has both sampling_probability and expires_at set.
 func (r *Request) continueCollecting(st *cluster.Settings) bool {
-	return collectUntilExpiration.Get(&st.SV) && // continuous collection must be enabled
-		r.samplingProbability != 0 && !r.expiresAt.IsZero() && // conditions for continuous collection must be set
-		!r.isExpired(timeutil.Now()) // the request must not have expired yet
+	// Continuous collection is the default when both conditions are met:
+	// 1. sampling_probability is set (non-zero)
+	// 2. expires_at is set (non-zero)
+	// The deprecated collectUntilExpiration setting can still disable this
+	// behavior if explicitly set to false.
+	return collectUntilExpiration.Get(&st.SV) &&
+		r.samplingProbability != 0 && !r.expiresAt.IsZero() &&
+		!r.isExpired(timeutil.Now())
 }
 
 // NewRegistry constructs a new Registry.
@@ -605,10 +628,21 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	insertCols := "statement_fingerprint, statement, collected_at, bundle_chunks, error"
 	insertVals := "$1, $2, $3, $4, $5"
 	vals := []interface{}{diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal}
+	paramIdx := 6
 	if txnDiagnosticId != 0 {
 		insertCols += ", transaction_diagnostics_id"
-		insertVals += ", $6"
+		insertVals += fmt.Sprintf(", $%d", paramIdx)
 		vals = append(vals, txnDiagnosticId)
+		paramIdx++
+	}
+	// Include request_id to link this bundle to the originating request.
+	// This enables multiple bundles per request for continuous collection.
+	// Only include if the migration has completed (cluster version is active).
+	requestIDColumnAvailable := r.st.Version.IsActive(ctx, clusterversion.V26_2_StmtDiagnosticsRequestID)
+	if diagnostic.requestID != 0 && requestIDColumnAvailable {
+		insertCols += ", request_id"
+		insertVals += fmt.Sprintf(", $%d", paramIdx)
+		vals = append(vals, diagnostic.requestID)
 	}
 	// Insert the collection metadata into system.statement_diagnostics.
 	row, err := txn.QueryRowEx(
@@ -627,24 +661,34 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	}
 	diagID = CollectedInstanceID(*row[0].(*tree.DInt))
 
+	// Enforce per-request bundle limit by deleting old bundles.
+	// Only prune if the request_id column is available (migration completed).
+	if maxLimit := maxBundlesPerRequest.Get(&r.st.SV); maxLimit > 0 && diagnostic.requestID != 0 && requestIDColumnAvailable {
+		// Delete the oldest bundles that exceed the limit for this request.
+		// We use a subquery to find bundles to keep (the most recent ones),
+		// and delete everything else for this request_id.
+		_, err = txn.ExecEx(ctx, "stmt-diag-prune-bundles", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`DELETE FROM system.statement_diagnostics
+			 WHERE request_id = $1
+			 AND id NOT IN (
+				 SELECT id FROM system.statement_diagnostics
+				 WHERE request_id = $1
+				 ORDER BY collected_at DESC
+				 LIMIT $2
+			 )`,
+			diagnostic.requestID, maxLimit)
+		if err != nil {
+			return diagID, err
+		}
+	}
+
 	if diagnostic.requestID != 0 {
 		// Link the request from system.statement_diagnostics_request to the
 		// diagnostic ID we just collected, marking it as completed if we're
-		// able.
-		shouldMarkCompleted := true
-		if collectUntilExpiration.Get(&r.st.SV) {
-			// Two other conditions need to hold true for us to continue
-			// capturing future traces, i.e. not mark this request as
-			// completed.
-			// - Requests need to be of the sampling sort (also implies
-			//   there's a latency threshold) -- a crude measure to prevent
-			//   against unbounded collection;
-			// - Requests need to have an expiration set -- same reason as
-			// above.
-			if diagnostic.req.samplingProbability > 0 && !diagnostic.req.expiresAt.IsZero() {
-				shouldMarkCompleted = false
-			}
-		}
+		// able. If the request is configured for continuous collection, we
+		// leave it open so future matching statements can create more bundles.
+		shouldMarkCompleted := !diagnostic.req.continueCollecting(r.st)
 		_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			"UPDATE system.statement_diagnostics_requests "+
