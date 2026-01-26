@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -25,55 +24,135 @@ var (
 		settings.WithVisibility(settings.Reserved),
 		settings.IntWithMinimum(3),
 	)
+
+	backupCompactionConcurrency = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"backup.compaction.concurrency",
+		"the max number of concurrent compaction jobs to run per schedule",
+		1,
+		settings.WithVisibility(settings.Reserved),
+		settings.IntWithMinimum(1),
+	)
 )
 
 // compactionPolicy is a function that determines what backups to compact when
-// given a chain of backups. It returns the inclusive start and exclusive end of
-// the window of backups to compact, as well as an error if one occurs.
-type compactionPolicy func(context.Context, *sql.ExecutorConfig, []backuppb.BackupManifest) (int, int, error)
+// given a chain of backups. It returns a set of [start, end) indices that
+// represent the windows of backups to compact.
+type compactionPolicy func(
+	context.Context, *sql.ExecutorConfig, []backuppb.BackupManifest,
+) ([][2]int, error)
 
-// minSizeDeltaHeuristic is a heuristic that selects a window of backups with the
-// smallest delta in data size between each backup.
+// minSizeDeltaHeuristic is a heuristic that selects a set of backup windows
+// with the smallest delta in data size between each backup.
 func minSizeDeltaHeuristic(
 	_ context.Context, execCfg *sql.ExecutorConfig, backupChain []backuppb.BackupManifest,
-) (int, int, error) {
-	windowSize := int(backupCompactionWindow.Get(&execCfg.Settings.SV))
-	// Compaction does not compact the full backup, so windowSize must be < len(backupChain).
-	if windowSize >= len(backupChain) {
-		return 0, 0, errors.New("window size must be less than backup chain length")
+) ([][2]int, error) {
+	windowSize, concurrency, err := compactionWindowAndConcurrency(execCfg, int64(len(backupChain)))
+	if err != nil {
+		return nil, err
 	}
-	dataSizes := make([]int64, len(backupChain))
+	// We only care about the data size deltas between incremental backups.
+	dataDeltas := make([]int64, len(backupChain)-2)
 	for i := range len(backupChain) {
-		dataSizes[i] = backupChain[i].EntryCounts.DataSize
+		if i <= 1 {
+			continue
+		}
+		dataDeltas[i-2] = int64(math.Abs(float64(
+			backupChain[i].EntryCounts.DataSize - backupChain[i-1].EntryCounts.DataSize,
+		)))
 	}
-	start, end := minDeltaWindow(dataSizes, windowSize)
-	return start, end, nil
-}
-
-// minDeltaWindow finds the start and end index of a window that has the minimum
-// total delta between each value in the window.
-func minDeltaWindow(nums []int64, windowSize int) (int, int) {
-	currDiff := util.Reduce(
-		nums,
-		func(diff int64, n int64, idx int) int64 {
-			if idx == 0 {
-				return 0
-			}
-			return diff + n - nums[idx-1]
-		},
-		0,
-	)
-	minDiff := currDiff
-	var minIdx int
-	// Move sliding window and adjust total diff size as we go.
-	for i := 1; i <= len(nums)-windowSize; i++ {
-		removedDiff := int64(math.Abs(float64(nums[i] - nums[i-1])))
-		addedDiff := int64(math.Abs(float64(nums[i+windowSize-1] - nums[i+windowSize-2])))
-		currDiff = currDiff - removedDiff + addedDiff
-		if currDiff < minDiff {
-			minDiff = currDiff
-			minIdx = i
+	windows := make([][2]int, 0, concurrency)
+	// We iteratively find the min delta window, invalidate them, and repeat until
+	// we have up to concurrency *non-overlapping* windows.
+	// NB: There is a fun leetcode-style dynamic programming solution to find the
+	// optimal minimum total sum of non-overlapping windows instead of this greedy
+	// approach. We leave this as an exercise to an eager reader.
+	for i := int64(0); i < concurrency; i++ {
+		start, end, ok := minSumWindow(dataDeltas, int(windowSize-1))
+		if !ok {
+			break
+		}
+		// Because dataDeltas represents the deltas between incremental backups but
+		// the windows are based on the full backups, so we need to correct the
+		windows = append(windows, [2]int{start + 1, end + 2})
+		// Invalidate the selected window so it is not selected again.
+		for j := start; j < min(len(dataDeltas), end+1); j++ {
+			dataDeltas[j] = math.MaxInt64
 		}
 	}
-	return minIdx, minIdx + windowSize
+	return windows, nil
+}
+
+// minSumWindow finds the start and end index of a contiguous window that has
+// the minimum total sum of values in the window. If no valid window exists, ok
+// is false. Invalid values that cannot be included in a window are represented
+// with math.MaxInt64.
+func minSumWindow(nums []int64, windowSize int) (start, end int, ok bool) {
+	minIdx := -1
+	minSum := int64(math.MaxInt64)
+	currSum := minSum
+	// idx represents the start of the current widnow, such that at idx = i, we
+	// are looking at the window [i, i + windowSize).
+	idx := 0
+	for idx <= len(nums)-windowSize {
+		if currSum == math.MaxInt64 {
+			// This is either the first window, or we've jumped forward to skip
+			// invalid values. Must manually recompute the sum of the window.
+			// Computing the sum be iterating backwards allows us to early exit and
+			// jump forward if we encounter an invalid value.
+			currSum = 0
+			for endIdx := idx + windowSize - 1; endIdx >= idx; endIdx-- {
+				if nums[endIdx] == math.MaxInt64 {
+					// Encountered an invalid value, this window is not valid. We can jump
+					// to the next window starting after the invalid value and skip
+					// everything in between.
+					currSum = math.MaxInt64
+					idx = endIdx + 1
+					break
+				}
+				currSum += nums[endIdx]
+			}
+			if currSum == math.MaxInt64 {
+				continue
+			}
+		} else {
+			// The previous window had no invalid values, we can adjust the sum with a
+			// sliding window here.
+			removedVal := nums[idx-1]
+			addedVal := nums[idx+windowSize-1]
+			if addedVal == math.MaxInt64 {
+				// New value is invalid, this window is not valid.
+				currSum = math.MaxInt64
+				idx++
+				continue
+			}
+			currSum = currSum - removedVal + addedVal
+		}
+
+		if currSum < minSum {
+			minSum = currSum
+			minIdx = idx
+		}
+		idx++
+	}
+
+	if minIdx == -1 {
+		return 0, 0, false
+	}
+	return minIdx, minIdx + windowSize, true
+}
+
+// compactionWindowAndConcurrency retrieves the compaction window size and
+// concurrency for the given backup chain length.
+func compactionWindowAndConcurrency(
+	execCfg *sql.ExecutorConfig, chainLen int64,
+) (int64, int64, error) {
+	windowSize := backupCompactionWindow.Get(&execCfg.Settings.SV)
+	// Compaction does not compact the full backup, so windowSize must be < len(backupChain).
+	if windowSize >= chainLen {
+		return 0, 0, errors.New("compaction window size must be less than backup chain length")
+	}
+	maxConcurrency := backupCompactionConcurrency.Get(&execCfg.Settings.SV)
+	maxPossibleConcurrency := (chainLen - 1) / windowSize
+	return windowSize, min(maxConcurrency, maxPossibleConcurrency), nil
 }
