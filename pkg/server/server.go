@@ -2590,9 +2590,9 @@ func MakeServerOptionsForURL(
 
 type cpuMetricsProvider struct{}
 
-var _ admission.CPUMetricsProvider = &cpuMetricsProvider{}
+var _ admission.CPUMetricsProvider = cpuMetricsProvider{}
 
-func (p *cpuMetricsProvider) GetCPUUsage() (totalCPUTimeMillis int64, err error) {
+func (p cpuMetricsProvider) GetCPUUsage() (totalCPUTimeMillis int64, err error) {
 	userMillis, systemMillis, err := status.GetProcCPUTime(context.Background())
 	if err != nil {
 		return 0, errors.Wrap(err, "fetching cumulative CPU time failed")
@@ -2600,6 +2600,6 @@ func (p *cpuMetricsProvider) GetCPUUsage() (totalCPUTimeMillis int64, err error)
 	return userMillis + systemMillis, nil
 }
 
-func (p *cpuMetricsProvider) GetCPUCapacity() (cpuCapacity float64) {
+func (p cpuMetricsProvider) GetCPUCapacity() (cpuCapacity float64) {
 	return status.GetCPUCapacity()
 }
