@@ -517,11 +517,12 @@ func runLargeSchemaIntrospectionBenchmark(
 
 				// Execute ORM introspection query.
 				start := timeutil.Now()
-				_, err := workerConn.QueryContext(ctx, fmt.Sprintf("USE %s; %s", dbName, LargeSchemaOrmQueries))
+				rows, err := workerConn.QueryContext(ctx, fmt.Sprintf("USE %s; %s", dbName, LargeSchemaOrmQueries))
 				if err != nil {
 					t.L().Printf("Worker %d query error: %v", workerIdx, err)
 					continue
 				}
+				rows.Close()
 				elapsed := timeutil.Since(start)
 				reg.GetHandle().Get("orm_queries").Record(elapsed)
 				queryCount.Add(1)
