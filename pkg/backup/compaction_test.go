@@ -463,6 +463,107 @@ func TestScheduledBackupCompaction(t *testing.T) {
 	require.Equal(t, 5, numBackups)
 }
 
+func TestCompactionTriggeringCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+	th.setOverrideAsOfClauseKnob(t)
+	// Set to a time such that full backups do not unexpectedly run based on test
+	// time.
+	th.env.SetTime(time.Date(2025, 05, 01, 1, 0, 0, 0, time.UTC))
+	// First disable compactions so that we can create a sufficiently long chain
+	// to require multiple compactions.
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 0")
+	schedules, err := th.createBackupSchedule(
+		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+	executeIncremental := func() {
+		t.Helper()
+		inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
+		require.NoError(t, err)
+		th.env.SetTime(inc.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+	}
+
+	for range 12 {
+		executeIncremental()
+	}
+
+	// Now enable compactions such that the next incremental will trigger a
+	// compaction, which should then trigger more compactions until the chain is
+	// shorter than the threshold.
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+	executeIncremental()
+
+	// Validate that a compaction job was created.
+	var unused jobspb.JobID
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&unused),
+	)
+
+	// Poll until there are no more compaction jobs running.
+	testutils.SucceedsSoon(t, func() error {
+		th.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		var numCompactions int
+		require.NoError(
+			t,
+			th.sqlDB.DB.QueryRowContext(
+				ctx,
+				`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status = $1`,
+				jobs.StateRunning,
+			).Scan(&numCompactions),
+		)
+		if numCompactions == 0 {
+			return nil
+		}
+		return fmt.Errorf("waiting for compactions to complete, %d still running", numCompactions)
+	})
+
+	// Validate that all compaction jobs succeeded.
+	var numNotSucceeded int
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP' AND status != $1`,
+			jobs.StateSucceeded,
+		).Scan(&numNotSucceeded),
+	)
+	require.Equal(t, 0, numNotSucceeded)
+
+	// Validate that multiple compactions were indeed run.
+	var numCompactions int
+	require.NoError(
+		t,
+		th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT count(*) FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&numCompactions),
+	)
+	require.Greater(t, numCompactions, 1)
+}
+
 func TestBlockConcurrentScheduledCompactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

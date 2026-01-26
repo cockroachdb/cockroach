@@ -948,10 +948,11 @@ func UnzipBackupTreeEntries(
 	return defaultURIs, mainBackupManifests, localityInfo
 }
 
-// ValidateEndTimeAndTruncate checks that the requested target time, if
-// specified, is valid for the list of incremental backups resolved, truncating
-// the results to the backup that contains the target time.
-// The method also performs additional sanity checks to ensure the backups cover
+// ValidateEndTimeAndTruncate checks that the requested target time is valid for
+// the list of incremental backups resolved, truncating the results to the
+// backup that contains the target time. If the endTime is empty, it is assumed
+// that the endTime is the end time of the last backup in the chain. The
+// function also performs additional sanity checks to ensure the backups cover
 // the requested time.
 //
 // Note: This function assumes that the manifests in the chain are sorted by end
