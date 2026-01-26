@@ -470,10 +470,36 @@ func newHistogram(
 		func() {
 			h.windowed.Lock()
 			defer h.windowed.Unlock()
-			if h.windowed.cur.Load() != nil {
-				h.windowed.prev.Store(h.windowed.cur.Load())
+
+			cur := h.windowed.cur.Load()
+			if cur != nil {
+				curHist := cur.(prometheus.Histogram)
+				curMetric := &prometheusgo.Metric{}
+				if err := curHist.Write(curMetric); err != nil {
+					panic(err)
+				}
+
+				if curMetric.Histogram.GetSampleCount() > 0 {
+					// cur has data - rotate normally
+					h.windowed.prev.Store(cur)
+					h.windowed.cur.Store(prometheus.NewHistogram(opts))
+				} else {
+					// cur is empty - wipe prev if it has data, reuse cur
+					prev := h.windowed.prev.Load()
+					if prev != nil {
+						prevHist := prev.(prometheus.Histogram)
+						prevMetric := &prometheusgo.Metric{}
+						if err := prevHist.Write(prevMetric); err != nil {
+							panic(err)
+						}
+						if prevMetric.Histogram.GetSampleCount() > 0 {
+							h.windowed.prev.Store(prometheus.NewHistogram(opts))
+						}
+					}
+				}
+			} else {
+				h.windowed.cur.Store(prometheus.NewHistogram(opts))
 			}
-			h.windowed.cur.Store(prometheus.NewHistogram(opts))
 		})
 	h.windowed.Ticker.OnTick()
 	return h
