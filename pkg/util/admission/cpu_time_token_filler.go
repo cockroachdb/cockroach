@@ -188,9 +188,7 @@ func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 }
 
 func (f *cpuTimeTokenFiller) close() {
-	if f.closeCh != nil {
-		close(f.closeCh)
-	}
+	close(f.closeCh)
 }
 
 // cpuTimeTokenAllocatorI abstracts cpuTimeTokenAllocator for testing.
@@ -453,16 +451,26 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 		return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, m.cpuMetricsProvider.GetCPUCapacity())
 	}
 
-	// If fetching CPU usage fails, the filler computes refill rates using
-	// the previous tokenToCPUTimeMultiplier.
+	// If fetching CPU usage fails, the filler sets interval CPU usage to
+	// zero. This causes the low CPU mode code path to be taken, documented
+	// below. The effect of this is to lower tokenToCPUTimeMultiplier, if
+	// it's not already low (see the comments & code below for details),
+	// thus giving out more tokens than were being given out before. We do
+	// not expect this case to come up in practice, but if it does, we'd
+	// rather fail open than closed.
 	cpuCapacity := m.cpuMetricsProvider.GetCPUCapacity()
-	totalCPUTimeMillis, err := m.cpuMetricsProvider.GetCPUUsage()
-	if err != nil {
-		log.Dev.Errorf(ctx, "fetching CPU usage in cpuTimeTokenLinearModel failed: %v", err)
-		return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	var intCPUTimeMillis int64
+	{
+		totalCPUTimeMillis, err := m.cpuMetricsProvider.GetCPUUsage()
+		if err != nil {
+			log.Dev.Errorf(ctx, "fetching CPU usage in cpuTimeTokenLinearModel failed: %v", err)
+			intCPUTimeMillis = 0
+		} else {
+			intCPUTimeMillis = totalCPUTimeMillis - m.totalCPUTimeMillis
+			m.totalCPUTimeMillis = totalCPUTimeMillis
+		}
 	}
 
-	intCPUTimeMillis := totalCPUTimeMillis - m.totalCPUTimeMillis
 	// totalCPUTimeMillis is not necessarily monotonic in all environments,
 	// e.g. in case of VM live migration on a public cloud provider. In this
 	// case, we set intCPUTimeMillis to 0, so that the computation of
@@ -470,7 +478,6 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 	if intCPUTimeMillis < 0 {
 		intCPUTimeMillis = 0
 	}
-	m.totalCPUTimeMillis = totalCPUTimeMillis
 	intCPUTimeNanos := intCPUTimeMillis * 1e6
 
 	now := m.timeSource.Now()

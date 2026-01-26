@@ -187,6 +187,26 @@ func NewGrantCoordinators(
 
 	slotsCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs)
 	cpuTimeTokenCoord := makeCPUTimeTokenGrantCoordinator(ambientCtx, opts, st, registry, knobs)
+
+	// CPU time token AC currently only supports Serverless. In Serverless,
+	// SQL pods do not run admission control, and the vast majority of work
+	// on a KV pod is KVWork. So, for now, we allow all SQLKVResponseWork &
+	// SQLSQLResponseWork to bypass AC.
+	if !knobs.DisableCPUTimeTokenSQLBypass {
+		sqlKVWorkQueue := slotsCoord.GetWorkQueue(SQLKVResponseWork)
+		sqlSQLWorkQueue := slotsCoord.GetWorkQueue(SQLSQLResponseWork)
+		setLatestOverride := func() {
+			override := cpuTimeTokenACEnabled.Get(&st.SV)
+			sqlKVWorkQueue.SetOverrideAllToBypassAdmission(override)
+			sqlSQLWorkQueue.SetOverrideAllToBypassAdmission(override)
+		}
+		cpuTimeTokenACEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+			setLatestOverride()
+		})
+		// Initialize.
+		setLatestOverride()
+	}
+
 	return GrantCoordinators{
 		Stores: makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
 		RegularCPU: &CPUGrantCoordinators{
