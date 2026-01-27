@@ -414,8 +414,12 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 			// Resume the job and check that it succeeds.
 			tdb.Exec(t, "RESUME JOB $1", jobID)
 			t.Logf("job %d is resuming", jobID)
+			// Wait for the schema change to complete.
+			// Note: This has a longer timeout than normal succeeds soon.
+			waitForSchemaChangesToFinish(t, tdb)
+			// Validate the terminal status of the schema change.
 			qStatusWithError := fmt.Sprintf(`SELECT status, error FROM [SHOW JOB %d]`, jobID)
-			tdb.CheckQueryResultsRetry(t, qStatusWithError, [][]string{{"succeeded", ""}})
+			tdb.CheckQueryResults(t, qStatusWithError, [][]string{{"succeeded", ""}})
 		}
 		waitForSchemaChangesToFinish(t, tdb)
 		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))
