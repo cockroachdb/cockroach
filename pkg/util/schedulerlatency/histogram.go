@@ -26,8 +26,8 @@ type runtimeHistogram struct {
 	metric.Metadata
 	mu struct {
 		syncutil.Mutex
-		buckets []float64 // inclusive lower bounds, like runtime/metrics
-		counts  []uint64
+		buckets        []float64 // inclusive lower bounds, like runtime/metrics
+		windowedCounts []uint64
 	}
 	mult float64 // multiplier to apply to each bucket boundary, used when translating across units
 }
@@ -61,7 +61,7 @@ func newRuntimeHistogram(metadata metric.Metadata, buckets []float64) *runtimeHi
 	// one more value in the buckets list than there are buckets represented,
 	// because in runtime/metrics, the bucket values represent boundaries,
 	// and non-Inf boundaries are inclusive lower bounds for that bucket.
-	h.mu.counts = make([]uint64, len(buckets)-1)
+	h.mu.windowedCounts = make([]uint64, len(buckets)-1)
 	return h
 }
 
@@ -71,12 +71,12 @@ func (h *runtimeHistogram) update(his *metrics.Float64Histogram) {
 	defer h.mu.Unlock()
 	counts, buckets := his.Counts, his.Buckets
 
-	for i := range h.mu.counts {
-		h.mu.counts[i] = 0 // clear buckets
+	for i := range h.mu.windowedCounts {
+		h.mu.windowedCounts[i] = 0 // clear buckets
 	}
 	var j int
 	for i, count := range counts { // copy and reduce buckets
-		h.mu.counts[j] += count
+		h.mu.windowedCounts[j] += count
 		if buckets[i+1] == h.mu.buckets[j+1] {
 			j++
 		}
@@ -90,9 +90,9 @@ func (h *runtimeHistogram) write(out *prometheusgo.Metric) {
 	defer h.mu.Unlock()
 
 	sum := float64(0)
-	dtoBuckets := make([]*prometheusgo.Bucket, 0, len(h.mu.counts))
+	dtoBuckets := make([]*prometheusgo.Bucket, 0, len(h.mu.windowedCounts))
 	totalCount := uint64(0)
-	for i, count := range h.mu.counts {
+	for i, count := range h.mu.windowedCounts {
 		totalCount += count
 		if count != 0 {
 			// N.B. this computed sum is an underestimate since we're using the
