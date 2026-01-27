@@ -922,6 +922,14 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// validation. In which case a potential commit error is an undefined table
 	// error.
 	og.potentialCommitErrors.add(pgcode.UndefinedTable)
+
+	// If the child column has an ON UPDATE expression (e.g., crdb_internal_expiration
+	// on TTL tables), specifying an ON UPDATE action on the foreign key constraint
+	// will fail with InvalidTableDefinition.
+	if childColumn.hasOnUpdate && referenceActions.Update != tree.NoAction {
+		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
+	}
+
 	stmt.sql = tree.Serialize(def)
 	return stmt, nil
 }
@@ -3561,6 +3569,7 @@ type column struct {
 	generated           bool
 	generatedExpression string
 	ordinal             int
+	hasOnUpdate         bool
 }
 
 func (og *operationGenerator) getTableColumns(
@@ -3717,7 +3726,7 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 
 	query := strings.Builder{}
 	query.WriteString(`
-    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
+    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, column_on_update IS NOT NULL
       FROM information_schema.columns
 		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
 		       AND column_name NOT LIKE 'crdb_internal%%'
@@ -3737,15 +3746,17 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	var columnName string
 	var typName string
 	var nullable string
+	var hasOnUpdate bool
 
-	err := tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
+	err := tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable, &hasOnUpdate)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	columnToReturn := column{
-		name:     tree.Name(columnName),
-		nullable: nullable == "YES",
+		name:        tree.Name(columnName),
+		nullable:    nullable == "YES",
+		hasOnUpdate: hasOnUpdate,
 	}
 	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(tableSchema),

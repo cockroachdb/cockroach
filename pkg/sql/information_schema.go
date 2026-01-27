@@ -503,6 +503,16 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+				colOnUpdate := tree.DNull
+				if column.HasOnUpdate() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(
+						ctx, table, column.GetOnUpdateExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtSimple,
+					)
+					if err != nil {
+						return err
+					}
+					colOnUpdate = tree.NewDString(colExpr)
+				}
 				colGeneratedAsIdentity := emptyString
 				if column.IsGeneratedAsIdentity() {
 					if column.IsGeneratedAlwaysAsIdentity() {
@@ -600,6 +610,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					), // is_updatable
 					yesOrNoDatum(column.IsHidden()),               // is_hidden
 					tree.NewDString(column.GetType().SQLString()), // crdb_sql_type
+					colOnUpdate, // column_on_update
 				)
 				if err != nil {
 					return err
