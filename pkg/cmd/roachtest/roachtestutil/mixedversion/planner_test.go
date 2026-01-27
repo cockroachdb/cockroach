@@ -699,6 +699,16 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 			require.NoError(t, err)
 			opts = append(opts, NumUpgrades(n))
 
+		case "min_upgrades":
+			n, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			opts = append(opts, MinUpgrades(n))
+
+		case "max_upgrades":
+			n, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			opts = append(opts, MaxUpgrades(n))
+
 		case "minimum_supported_version":
 			v := arg.Vals[0]
 			opts = append(opts, MinimumSupportedVersion(v))
@@ -728,6 +738,11 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 
 		case "enable_skip_version":
 			opts = append(opts, WithSkipVersionProbability(1))
+
+		case "same_series_upgrade_probability":
+			prob, err := strconv.ParseFloat(arg.Vals[0], 64)
+			require.NoError(t, err)
+			opts = append(opts, WithSameSeriesUpgradeProbability(prob))
 
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))
@@ -1335,17 +1350,26 @@ func Test_UpgradePaths(t *testing.T) {
 		numUpgrades := rng.Intn(maxUpgradesFromMBV) + 1
 		values[3] = reflect.ValueOf(numUpgrades)
 		values[4] = reflect.ValueOf(rng.Float64() > 0.5) // skipVersions
+		values[5] = reflect.ValueOf(rng.Float64() > 0.5) // sameSeriesUpgrades
 	}
 
 	verifyPlan := func(
-		finalVersion string, minBootstrapVersion string, minSupportedVersion string, numUpgrades int, skipVersions bool,
+		finalVersion string, minBootstrapVersion string, minSupportedVersion string, numUpgrades int, skipVersions bool, sameSeriesUpgrades bool,
 	) bool {
 		// The top level withTestBuildVersion will take care of resetting this for us.
 		_ = withTestBuildVersion(finalVersion)
 
 		genNewTest := func() *Test {
 			// Set up our test plan using the generated values.
-			opts := []CustomOption{NumUpgrades(numUpgrades)}
+			// When same-series upgrades are enabled, use MinUpgrades/MaxUpgrades to leave
+			// room for same-series insertions. Otherwise, use NumUpgrades for exact count.
+			var opts []CustomOption
+			if sameSeriesUpgrades {
+				// Leave room for same-series insertions by setting max higher than min.
+				opts = append(opts, MinUpgrades(numUpgrades), MaxUpgrades(numUpgrades+2))
+			} else {
+				opts = append(opts, NumUpgrades(numUpgrades))
+			}
 			if minBootstrapVersion != "" {
 				opts = append(opts, MinimumBootstrapVersion(minBootstrapVersion))
 			}
@@ -1363,6 +1387,11 @@ func Test_UpgradePaths(t *testing.T) {
 				mvt.options.skipVersionProbability = 1
 			} else {
 				mvt.options.skipVersionProbability = 0
+			}
+			if sameSeriesUpgrades {
+				mvt.options.sameSeriesUpgradeProbability = 1
+			} else {
+				mvt.options.sameSeriesUpgradeProbability = 0
 			}
 			// Setup user hooks so that we can exercise `mvt.assertExpectedUserHooks`.
 			mvt.BeforeClusterStart("BeforeClusterStart", dummyHook)
