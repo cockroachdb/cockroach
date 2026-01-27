@@ -53,7 +53,7 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -105,7 +105,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -178,7 +178,7 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -454,7 +454,7 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	ctx := context.Background()
 	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
+	defer onTestSucceed(t, cleanupFn)
 
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -919,5 +919,13 @@ func TestTruncateSpanOutput(t *testing.T) {
 				EndKey: keys.SystemSpanConfigPrefix,
 			}))
 		})
+	}
+}
+
+// onTestSucceed calls the given func if the test did not fail so far.
+// Convenient for skipping cleanups at the end of a failed test.
+func onTestSucceed(t *testing.T, do func()) {
+	if !t.Failed() {
+		do()
 	}
 }
