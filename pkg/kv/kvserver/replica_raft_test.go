@@ -467,6 +467,7 @@ func TestMaybeMarkReplicaUnavailableInLeaderlessWatcher(t *testing.T) {
 	for _, tc := range testCases {
 		ctx := context.Background()
 		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
 
 		tContext := testContext{}
 		cfg := TestStoreConfig(nil)
