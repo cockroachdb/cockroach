@@ -78,6 +78,45 @@ ORDER BY 1, 2, 3
 tablename        indexname  indexdef
 sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10)
 
+# Test that the indexdef output from pg_indexes is round-trippable. This is a
+# regression test for #161516.
+statement ok
+CREATE TABLE store_columns_test (c1 INT, c2 INT, c3 INT)
+
+statement ok
+CREATE INDEX idx1 ON store_columns_test (c1, c2) USING HASH STORING (c3)
+
+query TTT colnames
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
+----
+tablename           indexname  indexdef
+store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+
+# Verify that the CREATE INDEX statement from pg_indexes can be executed.
+# First, save the index definition.
+let $idx_def
+SELECT indexdef FROM pg_indexes WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
+
+statement ok
+DROP INDEX idx1
+
+# Re-create the index using the definition from pg_indexes.
+statement ok
+$idx_def
+
+query TTT colnames
+SELECT tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
+----
+tablename           indexname  indexdef
+store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
+
+statement ok
+DROP TABLE store_columns_test
+
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM sharded_primary]
 ORDER BY index_name, seq_in_index
@@ -868,8 +907,8 @@ SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_uniq
  WHERE descriptor_name = 'poor_t'
 ----
 descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded  shard_bucket_count
-121            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
-121            poor_t           2         t_idx_b      secondary   false      false        true        8
+122            poor_t           1         poor_t_pkey  primary     true       false        false       NULL
+122            poor_t           2         t_idx_b      secondary   false      false        true        8
 
 statement ok
 DROP TABLE poor_t
@@ -1092,7 +1131,7 @@ SELECT table_name, table_id, index_name, start_key, end_key
   FROM [SHOW RANGES FROM DATABASE test WITH INDEXES]
  WHERE table_name = 't_hash_pre_split'
 ----
-t_hash_pre_split  133  t_hash_pre_split_pkey  /Table/128/3/7  /Max
+t_hash_pre_split  134  t_hash_pre_split_pkey  /Table/129/3/7  /Max
 
 statement ok
 CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
@@ -1104,16 +1143,16 @@ SELECT table_name, table_id, index_name, start_key, end_key
  WHERE table_name = 't_hash_pre_split'
 ----
 table_name        table_id  index_name              start_key       end_key
-t_hash_pre_split  133       t_hash_pre_split_pkey   /Table/128/3/7  /Table/133/2
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2    /Table/133/2/0
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/0  /Table/133/2/1
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/1  /Table/133/2/2
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/2  /Table/133/2/3
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/3  /Table/133/2/4
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/4  /Table/133/2/5
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/5  /Table/133/2/6
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/6  /Table/133/2/7
-t_hash_pre_split  133       t_hash_pre_split_idx_b  /Table/133/2/7  /Table/133/3
+t_hash_pre_split  134       t_hash_pre_split_pkey   /Table/129/3/7  /Table/134/2
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2    /Table/134/2/0
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/0  /Table/134/2/1
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/1  /Table/134/2/2
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/2  /Table/134/2/3
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/3  /Table/134/2/4
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/4  /Table/134/2/5
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/5  /Table/134/2/6
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/6  /Table/134/2/7
+t_hash_pre_split  134       t_hash_pre_split_idx_b  /Table/134/2/7  /Table/134/3
 
 subtest test_default_bucket_count
 
