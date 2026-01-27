@@ -348,16 +348,17 @@ $udf
 [InlineAnyProjectSet, Normalize]
 (Any
     (ProjectSet
-        (Values [ (Tuple []) ])
-        [
-            (ZipItem
-                (Function
-                    [ $arg:* ]
-                    $fnPrivate:(FunctionPrivate "unnest")
+            (Values [ (Tuple []) ])
+            [
+                (ZipItem
+                    (Function
+                        [ $arg:* ]
+                        $fnPrivate:(FunctionPrivate "unnest")
+                    )
                 )
-            )
-        ]
-    )
+            ]
+        ) &
+        (CanInlineAnyUnnestSubquery)
     $scalar:*
     $private:*
 )
