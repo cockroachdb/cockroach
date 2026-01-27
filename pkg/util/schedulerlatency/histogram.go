@@ -83,31 +83,27 @@ func (h *runtimeHistogram) update(his *metrics.Float64Histogram) {
 	}
 }
 
-// write serializes the underlying histogram state into the form prometheus
-// expects.
-func (h *runtimeHistogram) write(out *prometheusgo.Metric) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+// writeCountsToMetricLocked converts counts into Prometheus histogram format.
+func writeCountsToMetricLocked(out *prometheusgo.Metric, counts []uint64, buckets []float64, mult float64) {
 	sum := float64(0)
-	dtoBuckets := make([]*prometheusgo.Bucket, 0, len(h.mu.windowedCounts))
+	dtoBuckets := make([]*prometheusgo.Bucket, 0, len(counts))
 	totalCount := uint64(0)
-	for i, count := range h.mu.windowedCounts {
+	for i, count := range counts {
 		totalCount += count
 		if count != 0 {
 			// N.B. this computed sum is an underestimate since we're using the
 			// lower bound of the bucket.
-			sum += h.mu.buckets[i] * h.mult * float64(count)
+			sum += buckets[i] * mult * float64(count)
 		}
 
 		// Skip the +Inf bucket, but only for the bucket list. It must still
 		// count for sum and totalCount.
-		if math.IsInf(h.mu.buckets[i+1]*h.mult, 1) {
+		if math.IsInf(buckets[i+1]*mult, 1) {
 			break
 		}
 		// Float64Histogram's upper bound is exclusive, so make it inclusive by
 		// obtaining the next float64 value down, in order.
-		upperBound := math.Nextafter(h.mu.buckets[i+1], h.mu.buckets[i]) * h.mult
+		upperBound := math.Nextafter(buckets[i+1], buckets[i]) * mult
 		dtoBuckets = append(dtoBuckets, &prometheusgo.Bucket{
 			CumulativeCount: proto.Uint64(totalCount),
 			UpperBound:      proto.Float64(upperBound),
@@ -126,9 +122,15 @@ func (h *runtimeHistogram) GetType() *prometheusgo.MetricType {
 }
 
 // ToPrometheusMetric is part of the PrometheusExportable interface.
+//
+// NB: The returned counts and sum are monotonically increasing across calls.
+// This is required for Prometheus's rate() and histogram_quantile() to work
+// correctly.
 func (h *runtimeHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	m := &prometheusgo.Metric{}
-	h.write(m)
+	writeCountsToMetricLocked(m, h.mu.windowedCounts, h.mu.buckets, h.mult)
 	return m
 }
 
