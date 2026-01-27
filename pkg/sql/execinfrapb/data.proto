@@ -17,6 +17,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
 import "errorspb/errors.proto";
+import "jobs/jobspb/jobs.proto";
 import "sql/catalog/catenumpb/encoded_datum.proto";
 import "sql/types/types.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
@@ -330,6 +331,10 @@ message RemoteProducerMetadata {
     optional bool drained = 9 [(gogoproto.nullable) = false];
     // ProcessorID is the ID of the processor that published the metadata.
     optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
+    // SSTMetadata contains SST file information emitted by import processors
+    // during distributed merge. This metadata is accumulated and persisted in
+    // job progress for retry safety.
+    repeated jobs.jobspb.IndexBackfillSSTManifest sst_metadata = 11 [(gogoproto.customname) = "SSTMetadata", (gogoproto.nullable) = false];
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
