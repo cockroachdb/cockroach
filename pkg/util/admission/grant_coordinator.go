@@ -25,7 +25,7 @@ import (
 // {regular,elastic} work, and a StoreGrantCoordinators that allows for
 // per-store GrantCoordinators for KVWork that involves writes.
 type GrantCoordinators struct {
-	RegularCPU *GrantCoordinator
+	RegularCPU *CPUGrantCoordinators
 	ElasticCPU *ElasticCPUGrantCoordinator
 	Stores     *StoreGrantCoordinators
 }
@@ -111,6 +111,7 @@ type Options struct {
 	MaxCPUSlots                   int
 	SQLKVResponseBurstTokens      int64
 	SQLSQLResponseBurstTokens     int64
+	CPUMetricsProvider            CPUMetricsProvider
 	TestingDisableSkipEnforcement bool
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
@@ -184,9 +185,15 @@ func NewGrantCoordinators(
 		knobs = &TestingKnobs{}
 	}
 
+	slotsCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs)
+	cpuTimeTokenCoord := makeCPUTimeTokenGrantCoordinator(ambientCtx, opts, st, registry, knobs)
 	return GrantCoordinators{
-		Stores:     makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
-		RegularCPU: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs),
+		Stores: makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
+		RegularCPU: &CPUGrantCoordinators{
+			st:           st,
+			slotsCoord:   slotsCoord,
+			cpuTimeCoord: cpuTimeTokenCoord,
+		},
 		ElasticCPU: makeElasticCPUGrantCoordinator(ambientCtx, st, registry),
 	}
 }
