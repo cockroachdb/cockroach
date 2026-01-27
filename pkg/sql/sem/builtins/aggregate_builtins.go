@@ -555,7 +555,7 @@ var aggregates = map[string]builtinDefinition{
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stMakeLineAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -826,7 +826,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stUnionAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -1042,7 +1042,7 @@ type stCollectAgg struct {
 
 func newSTCollectAgg(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &stCollectAgg{
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -1537,7 +1537,7 @@ type arrayAggregate struct {
 func newArrayAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -1953,7 +1953,7 @@ func newArrayCatAggregate(
 ) eval.AggregateFunc {
 	return &arrayCatAggregate{
 		arr: tree.NewDArray(params[0].ArrayContents()),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -5063,7 +5063,7 @@ func newPercentileDiscAggregate(
 ) eval.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -5161,7 +5161,7 @@ func newPercentileContAggregate(
 ) eval.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
