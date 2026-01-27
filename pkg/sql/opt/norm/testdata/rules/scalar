@@ -1987,7 +1987,7 @@ select
 # --------------------------------------------------
 
 # Basic equality case with unnest.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest($1:::INT[]))
 ----
 select
@@ -2002,7 +2002,7 @@ select
       └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
 
 # Different comparison operator.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k > ANY(SELECT * FROM unnest($1:::INT[]))
 ----
 select
@@ -2017,7 +2017,7 @@ select
       └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
 
 # String array.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT s FROM a WHERE s = ANY(SELECT * FROM unnest($1:::STRING[]))
 ----
 select
@@ -2030,7 +2030,7 @@ select
       └── $1 IS DISTINCT FROM CAST(NULL AS STRING[])
 
 # Using a column reference for the array.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(arr))
 ----
 project
@@ -2049,7 +2049,7 @@ project
            └── arr:5 IS DISTINCT FROM CAST(NULL AS INT8[]) [outer=(5), constraints=(/5: (/NULL - ]; tight)]
 
 # Case with an array-returning expression inside other than a placeholder.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(ARRAY[1]::int[] || array_remove($1::int[], 5)))
 ----
 select
@@ -2064,7 +2064,7 @@ select
       └── (ARRAY[1] || array_remove($1, 5)) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
 
 # Case with an array containing NULL.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k = ANY(SELECT unnest(array_append($1::int[], NULL)::int[]))
 ----
 select
@@ -2079,7 +2079,7 @@ select
       └── array_append($1, NULL) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
 
 # Case with a NULL array.
-norm set=optimizer_inline_any_unnest_subquery=true expect=InlineAnyProjectSet
+norm expect=InlineAnyProjectSet
 SELECT k FROM a WHERE k = ANY(SELECT unnest(NULL::int[]))
 ----
 values
