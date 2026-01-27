@@ -196,11 +196,13 @@ func (dl *DatasetLoader) downloadTrainFiles(
 
 			// Try to download this part.
 			if err := dl.downloadAndUnzip(ctx, baseName, zipFileName, partFileName); err != nil {
+				if partNum == 0 {
+					// First file failed - this is a critical error.
+					return nil, 0, errors.Wrapf(err, "downloading first train file %s", zipFileName)
+				}
 				// If already downloading multi-part files, then assume failure
 				// means there are no more files.
-				if partNum != 0 {
-					break
-				}
+				break
 			}
 			partNum++
 		}
@@ -256,11 +258,11 @@ func (dl *DatasetLoader) downloadTrainFiles(
 // file to destPath.
 func (dl *DatasetLoader) downloadAndUnzip(
 	ctx context.Context, baseName, objectFile, destPath string,
-) (err error) {
+) (retErr error) {
 	objectName := fmt.Sprintf("%s/%s/%s", bucketDirName, baseName, objectFile)
 	tempZipFile := destPath + ".zip"
 	defer func() {
-		err = errors.CombineErrors(err, os.Remove(tempZipFile))
+		retErr = errors.CombineErrors(retErr, os.Remove(tempZipFile))
 	}()
 
 	client, err := storage.NewClient(ctx)
@@ -268,7 +270,7 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		return errors.Wrapf(err, "creating GCS client")
 	}
 	defer func() {
-		err = errors.CombineErrors(err, client.Close())
+		retErr = errors.CombineErrors(retErr, client.Close())
 	}()
 
 	bucket := client.Bucket(bucketName)
@@ -286,7 +288,7 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		return errors.Wrapf(err, "creating temp zip file %s", tempZipFile)
 	}
 	defer func() {
-		err = errors.CombineErrors(err, tempZip.Close())
+		retErr = errors.CombineErrors(retErr, tempZip.Close())
 	}()
 
 	reader, err := object.NewReader(ctx)
@@ -294,7 +296,7 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		return errors.Wrapf(err, "creating reader for %s/%s", bucketName, objectName)
 	}
 	defer func() {
-		err = errors.CombineErrors(err, reader.Close())
+		retErr = errors.CombineErrors(retErr, reader.Close())
 	}()
 
 	writer := makeProgressWriter(tempZip, attrs.Size)
@@ -309,7 +311,7 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		return errors.Wrapf(err, "opening zip file %s", tempZipFile)
 	}
 	defer func() {
-		err = errors.CombineErrors(err, zipR.Close())
+		retErr = errors.CombineErrors(retErr, zipR.Close())
 	}()
 
 	if len(zipR.File) == 0 {
@@ -325,7 +327,13 @@ func (dl *DatasetLoader) downloadAndUnzip(
 	if err != nil {
 		return errors.Wrapf(err, "creating output file %s", destPath)
 	}
-	defer out.Close()
+	defer func() {
+		out.Close()
+		if retErr != nil {
+			// If we're returning an error, remove the potentially corrupted file.
+			_ = os.Remove(destPath)
+		}
+	}()
 	if _, err := io.Copy(out, zreader); err != nil {
 		return errors.Wrapf(err, "extracting to %s", destPath)
 	}
@@ -344,16 +352,39 @@ func readFbin(path string) (vector.Set, error) {
 		return vector.Set{}, errors.Wrapf(err, "opening %s", path)
 	}
 	defer f.Close()
+
+	// Get file info for validation.
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return vector.Set{}, errors.Wrapf(err, "getting file info for %s", path)
+	}
+	actualSize := fileInfo.Size()
+
 	var numVec, dim uint32
 	if err := binary.Read(f, binary.LittleEndian, &numVec); err != nil {
-		return vector.Set{}, errors.Wrapf(err, "reading numVec from %s", path)
+		return vector.Set{}, errors.Wrapf(err, "reading numVec from %s (file size: %d bytes)", path, actualSize)
 	}
 	if err := binary.Read(f, binary.LittleEndian, &dim); err != nil {
-		return vector.Set{}, errors.Wrapf(err, "reading dim from %s", path)
+		return vector.Set{}, errors.Wrapf(err, "reading dim from %s (file size: %d bytes)", path, actualSize)
 	}
+
+	// Validate file size matches expected data.
+	// Expected: 4 bytes (numVec) + 4 bytes (dim) + numVec*dim*4 bytes (float32 data)
+	expectedSize := int64(8 + int(numVec)*int(dim)*4)
+	if actualSize < expectedSize {
+		return vector.Set{}, errors.Newf(
+			"file %s is truncated: has %d bytes, expected %d bytes (numVec=%d, dim=%d, shortfall=%d bytes)",
+			path, actualSize, expectedSize, numVec, dim, expectedSize-actualSize)
+	} else if actualSize > expectedSize {
+		return vector.Set{}, errors.Newf(
+			"file %s is longer than expected: has %d bytes, expected %d bytes (numVec=%d, dim=%d, extra=%d bytes)",
+			path, actualSize, expectedSize, numVec, dim, actualSize-expectedSize)
+	}
+
 	data := make([]float32, int(numVec)*int(dim))
 	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
-		return vector.Set{}, errors.Wrapf(err, "reading data from %s", path)
+		return vector.Set{}, errors.Wrapf(err, "reading data from %s (file size: %d, expected: %d)",
+			path, actualSize, expectedSize)
 	}
 	return vector.MakeSetFromRawData(data, int(dim)), nil
 }
@@ -371,16 +402,39 @@ func readNeighbors(path string) ([][]int64, error) {
 		return nil, errors.Wrapf(err, "opening %s", path)
 	}
 	defer f.Close()
+
+	// Get file info for validation.
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting file info for %s", path)
+	}
+	actualSize := fileInfo.Size()
+
 	var numVec, numNeighbors uint32
 	if err := binary.Read(f, binary.LittleEndian, &numVec); err != nil {
-		return nil, errors.Wrapf(err, "reading numVec from %s", path)
+		return nil, errors.Wrapf(err, "reading numVec from %s (file size: %d bytes)", path, actualSize)
 	}
 	if err := binary.Read(f, binary.LittleEndian, &numNeighbors); err != nil {
-		return nil, errors.Wrapf(err, "reading numNeighbors from %s", path)
+		return nil, errors.Wrapf(err, "reading numNeighbors from %s (file size: %d bytes)", path, actualSize)
 	}
+
+	// Validate file size matches expected data.
+	// Expected: 4 bytes (numVec) + 4 bytes (numNeighbors) + numVec*numNeighbors*4 bytes (int32 data)
+	expectedSize := int64(8 + int(numVec)*int(numNeighbors)*4)
+	if actualSize < expectedSize {
+		return nil, errors.Newf(
+			"file %s is truncated: has %d bytes, expected %d bytes (numVec=%d, numNeighbors=%d, shortfall=%d bytes)",
+			path, actualSize, expectedSize, numVec, numNeighbors, expectedSize-actualSize)
+	} else if actualSize > expectedSize {
+		return nil, errors.Newf(
+			"file %s is longer than expected: has %d bytes, expected %d bytes (numVec=%d, numNeighbors=%d, extra=%d bytes)",
+			path, actualSize, expectedSize, numVec, numNeighbors, actualSize-expectedSize)
+	}
+
 	data := make([]int32, int(numVec)*int(numNeighbors))
 	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
-		return nil, errors.Wrapf(err, "reading data from %s", path)
+		return nil, errors.Wrapf(err, "reading data from %s (file size: %d, expected: %d)",
+			path, actualSize, expectedSize)
 	}
 	neighbors := make([][]int64, numVec)
 	for i := range neighbors {
