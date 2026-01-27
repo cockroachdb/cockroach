@@ -92,6 +92,7 @@ describe("SQL Activity page - Statements Tab", () => {
     cy.get(".statements-table").should("not.contain.text", "Min Latency");
     cy.contains("Columns").click();
     cy.get('[class*="dropdown-area"]')
+      .eq(2)
       .should("exist")
       .within(() => {
         cy.contains("Min Latency").click();
@@ -142,9 +143,11 @@ describe("SQL Activity page - Statements Tab", () => {
 
   it("clicks into sql statement details page", () => {
     // should have at least one row
-    cy.get(".statements-table tbody tr").within(() => {
-      cy.get("a").first().click();
-    });
+    cy.get(".statements-table tbody tr")
+      .first()
+      .within(() => {
+        cy.get("a").first().click();
+      });
 
     cy.location("hash").should("include", "/statement/");
 
@@ -304,9 +307,11 @@ describe("SQL Activity page - Transactions Tab", () => {
 
   it("clicks into sql transaction details page", () => {
     // should have at least one row
-    cy.get(".statements-table tbody tr").within(() => {
-      cy.get("a").first().click();
-    });
+    cy.get(".statements-table tbody tr")
+      .first()
+      .within(() => {
+        cy.get("a").first().click();
+      });
 
     cy.location("hash").should("include", "/transaction/");
 
