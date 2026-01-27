@@ -34,9 +34,11 @@ go_test(
     srcs = ["nodelocal_storage_test.go"],
     embed = [":nodelocal"],
     deps = [
+        "//pkg/base",
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/username",
         "//pkg/testutils",
         "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
     ],
 )

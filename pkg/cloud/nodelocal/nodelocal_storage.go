@@ -31,6 +31,21 @@ import (
 
 const scheme = "nodelocal"
 
+// ParseInstanceID parses a nodelocal URI and extracts the SQL instance ID
+// from the host component. Returns an error if the URI is invalid or not a
+// nodelocal URI.
+func ParseInstanceID(uri string) (base.SQLInstanceID, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to parse URI %q", uri)
+	}
+	extStorage, err := parseLocalFileURI(cloud.ExternalStorageURIContext{}, u)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to parse nodelocal URI %q", uri)
+	}
+	return base.SQLInstanceID(extStorage.LocalFileConfig.NodeID), nil
+}
+
 func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
 		return errors.Newf(

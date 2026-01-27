@@ -95,8 +95,12 @@ func logMergeInputs(
 		return
 	}
 
-	log.Dev.Infof(ctx, "Distributed merge iteration %d/%d starting with %d input SSTs",
-		iteration, maxIterations, len(ssts))
+	iterType := "local"
+	if iteration == maxIterations {
+		iterType = "final"
+	}
+	log.Dev.Infof(ctx, "Distributed merge iteration %d (%s) starting with %d input SSTs",
+		iteration, iterType, len(ssts))
 
 	var totalInputKeys uint64
 	for i, sst := range ssts {
