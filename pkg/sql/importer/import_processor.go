@@ -184,6 +184,19 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 		defer close(idp.progCh)
 		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
+
+		// When using distributed merge, emit SST metadata via progress metadata
+		// before closing the channel. This ensures the metadata is properly
+		// checkpointed and survives job retries.
+		if idp.files != nil && idp.importErr == nil {
+			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+			prog.SSTMetadata = sstFilesToManifests(idp.files)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case idp.progCh <- prog:
+			}
+		}
 		return nil
 	})
 }

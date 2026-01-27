@@ -784,6 +784,11 @@ message ImportProgress {
   // distributed-merge SSTs for this import. These prefixes are used to clean
   // up job-scoped files on completion or cancellation.
   repeated string sst_storage_prefixes = 8 [(gogoproto.customname) = "SSTStoragePrefixes"];
+
+  // CompletedMapWork stores SST file metadata from processors that have
+  // finished during the map phase of distributed merge so that the files
+  // are not lost on retry.
+  repeated IndexBackfillSSTManifest completed_map_work = 9 [(gogoproto.nullable) = false];
 }
 
 // TypeSchemaChangeDetails is the job detail information for a type schema change job.
