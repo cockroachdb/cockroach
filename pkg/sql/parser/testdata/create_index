@@ -540,3 +540,66 @@ CREATE VECTOR INDEX a ON b (c) -- normalized!
 CREATE VECTOR INDEX a ON b (c) -- fully parenthesized
 CREATE VECTOR INDEX a ON b (c) -- literals removed
 CREATE VECTOR INDEX _ ON _ (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH
+----
+CREATE INDEX a ON b (c) USING HASH
+CREATE INDEX a ON b (c) USING HASH -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH WITH (bucket_count = 16)
+----
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = 16) -- normalized!
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = (16)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH ('bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH ('bucket_count' = 16) -- identifiers removed
+
+# Also test the legacy way of defining bucket_count.
+# See https://github.com/cockroachdb/cockroach/pull/76112 for a discussion
+# of why we changed the format.
+parse
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16
+----
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = (16) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = _ -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH BUCKET_COUNT = 16 -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d)
+CREATE INDEX a ON b (c) USING HASH STORING (d) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH (bucket_count = 16)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = 16) -- normalized!
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = (16)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) WITH ('bucket_count' = 16) -- identifiers removed
+
+# Also test the legacy way of defining bucket_count, which must always be at
+# the end of the statement.
+# See https://github.com/cockroachdb/cockroach/pull/76112 for a discussion
+# of why we changed the format.
+parse
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16 STORING (d)
+----
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = 16 STORING (d)
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = (16) STORING (d) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = _ STORING (d) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH BUCKET_COUNT = 16 STORING (_) -- identifiers removed
+
+parse
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH (fillfactor = 100, bucket_count = 10)
+----
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = 100, 'bucket_count' = 10) -- normalized!
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = (100), 'bucket_count' = (10)) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH STORING (d) WITH ('fillfactor' = _, 'bucket_count' = _) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH STORING (_) WITH ('fillfactor' = 100, 'bucket_count' = 10) -- identifiers removed

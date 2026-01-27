@@ -142,12 +142,7 @@ func indexForDisplay(
 	f.WriteByte(')')
 
 	if index.IsSharded() {
-		if f.HasFlags(tree.FmtPGCatalog) {
-			fmt.Fprintf(f, " USING HASH WITH (bucket_count=%v)",
-				index.Sharded.ShardBuckets)
-		} else {
-			f.WriteString(" USING HASH")
-		}
+		f.WriteString(" USING HASH")
 	}
 
 	if !isPrimary && len(index.StoreColumnNames) > 0 {
@@ -163,10 +158,8 @@ func indexForDisplay(
 
 	f.WriteString(partition)
 
-	if !f.HasFlags(tree.FmtPGCatalog) {
-		if err := formatStorageConfigs(table, index, f); err != nil {
-			return "", err
-		}
+	if err := formatStorageConfigs(table, index, f); err != nil {
+		return "", err
 	}
 
 	if index.IsPartial() {
