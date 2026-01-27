@@ -2501,3 +2501,29 @@ SELECT * FROM t95158 WHERE c !~ ANY (ARRAY['x']::STRING[])
 query I
 SELECT * FROM t95158 WHERE c !~ SOME (ARRAY['x']::STRING[])
 ----
+
+# Regression tests for internal errors on an empty array string (#89969).
+query I
+SELECT array_length('{}', 1);
+----
+NULL
+
+query I
+SELECT array_length('{}'::text[], 1);
+----
+NULL
+
+query I
+SELECT cardinality('{}');
+----
+0
+
+query I
+SELECT width_bucket(true, '{}'::BOOL[]);
+----
+0
+
+query T
+SELECT array_to_string('{}', 'foo');
+----
+·

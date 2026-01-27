@@ -3711,7 +3711,7 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				delim := string(tree.MustBeDString(args[1]))
 				return arrayToString(evalCtx, arr, delim, nil)
 			},
@@ -3726,7 +3726,7 @@ value if you rely on the HLC for accuracy.`,
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, nil
 				}
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				delim := string(tree.MustBeDString(args[1]))
 				nullStr := stringOrNil(args[2])
 				return arrayToString(evalCtx, arr, delim, nullStr)
@@ -3742,7 +3742,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -3758,7 +3758,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				return cardinality(arr), nil
 			},
 			Info:       "Calculates the number of elements contained in `input`",
@@ -3771,7 +3771,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLower(arr, dimen), nil
 			},
@@ -3787,7 +3787,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{{Name: "input", Typ: types.AnyArray}, {Name: "array_dimension", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				arr := tree.MustBeDArray(args[0])
+				arr := mustBeDArrayMaybeDString(args[0])
 				dimen := int64(tree.MustBeDInt(args[1]))
 				return arrayLength(arr, dimen), nil
 			},
@@ -11838,6 +11838,22 @@ func stringOrNil(d tree.Datum) *string {
 	return &s
 }
 
+// mustBeDArrayMaybeDString checks whether d corresponds to an empty array
+// stored as DString and converts it into an empty DArray, otherwise it calls
+// MustBeDArray.
+func mustBeDArrayMaybeDString(d tree.Datum) *tree.DArray {
+	if s, ok := d.(*tree.DString); ok {
+		if *s == "{}" {
+			// TODO(yuzefovich): using the wildcard type is fragile and could
+			// lead to problems down the line. However, we don't have a way of
+			// determining the concrete array contents type in the context where
+			// this function is called.
+			return tree.NewDArray(types.AnyArray)
+		}
+	}
+	return tree.MustBeDArray(d)
+}
+
 // stringToArray implements the string_to_array builtin - str is split on delim to form an array of strings.
 // If nullStr is set, any elements equal to it will be NULL.
 func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, error) {
@@ -12410,7 +12426,7 @@ func arrayNumInvertedIndexEntries(
 	if val == tree.DNull {
 		return tree.DZero, nil
 	}
-	arr := tree.MustBeDArray(val)
+	arr := mustBeDArrayMaybeDString(val)
 
 	v := descpb.EmptyArraysInInvertedIndexesVersion
 	if version != tree.DNull {
