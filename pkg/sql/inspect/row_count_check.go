@@ -115,6 +115,7 @@ func (c *rowCountCheck) Close(context.Context) error {
 func (c *rowCountCheck) CheckSpan(
 	ctx context.Context,
 	checks inspectChecks,
+	span roachpb.Span,
 	logger *inspectLoggerBundle,
 	data *inspectpb.InspectProcessorSpanCheckData,
 ) error {

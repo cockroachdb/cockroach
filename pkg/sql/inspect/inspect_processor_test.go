@@ -258,6 +258,7 @@ func (*testingInspectCheckSpan) Close(ctx context.Context) error {
 func (t *testingInspectCheckSpan) CheckSpan(
 	ctx context.Context,
 	checks inspectChecks,
+	span roachpb.Span,
 	logger *inspectLoggerBundle,
 	msg *inspectpb.InspectProcessorSpanCheckData,
 ) error {
