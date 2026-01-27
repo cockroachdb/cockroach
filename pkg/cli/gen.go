@@ -340,6 +340,7 @@ var genCmds = []*cobra.Command{
 	genSettingsListCmd,
 	genMetricListCmd,
 	genEncryptionKeyCmd,
+	genDashboardCmd,
 }
 
 func init() {
