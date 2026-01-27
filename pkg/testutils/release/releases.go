@@ -119,6 +119,39 @@ func LatestPatch(seriesStr string) (string, error) {
 	return activeReleases[len(activeReleases)-1], nil
 }
 
+// OlderPatchReleases returns all non-withdrawn patch releases in the
+// same series as v that have a lower patch number than v. For example,
+// if v is "v24.3.12", this returns all active patches from 24.3.0 to
+// 24.3.11 (excluding any withdrawn patches). Returns an empty slice if
+// v is the oldest patch, a pre-release, or if the series has no older
+// active patches.
+func OlderPatchReleases(v *version.Version) ([]string, error) {
+	// Pre-releases don't have enumerable older patches.
+	if v.IsPrerelease() {
+		return nil, nil
+	}
+
+	seriesStr := VersionSeries(v)
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return nil, fmt.Errorf("no release data for version %s", v)
+	}
+
+	// Get all active (non-withdrawn) patches in this series.
+	activePatches := activePatchReleases(series)
+
+	// Filter to only patches older than v.
+	var olderPatches []string
+	for _, patchStr := range activePatches {
+		patchV := mustParseVersion(patchStr)
+		if patchV.Patch() < v.Patch() {
+			olderPatches = append(olderPatches, patchStr)
+		}
+	}
+
+	return olderPatches, nil
+}
+
 // LatestPredecessor returns the latest non-withdrawn predecessor of
 // the version passed. For example, if the version is "v19.2.0", this
 // will return the latest 19.1 patch release.

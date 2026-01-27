@@ -100,7 +100,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	testCtx := ctx
 	opts := []mixedversion.CustomOption{
 		mixedversion.AlwaysUseFixtures,
-		mixedversion.AlwaysUseLatestPredecessors,
 	}
 	if c.IsLocal() {
 		localTimeout := 30 * time.Minute
@@ -109,7 +108,13 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		defer cancel()
 		opts = append(
 			opts,
+			mixedversion.AlwaysUseLatestPredecessors,
 			mixedversion.NumUpgrades(1),
+		)
+	} else {
+		opts = append(
+			opts,
+			mixedversion.WithSameSeriesUpgradeProbability(0.5),
 		)
 	}
 
