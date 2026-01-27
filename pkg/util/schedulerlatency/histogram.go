@@ -26,10 +26,19 @@ type runtimeHistogram struct {
 	metric.Metadata
 	mu struct {
 		syncutil.Mutex
-		buckets        []float64 // inclusive lower bounds, like runtime/metrics
+		buckets []float64 // inclusive lower bounds, like runtime/metrics
+		// windowedCounts holds counts from the most recent update() call only.
+		// Used by TSDB for percentile calculations (p50, p99) where we want the
+		// recent distribution, not all-time.
 		windowedCounts []uint64
+		// cumCounts accumulates counts across all update() calls. Used by
+		// Prometheus (via ToPrometheusMetric) which requires monotonically
+		// increasing values for rate() and prometheus.
+		cumCounts []uint64
 	}
-	mult float64 // multiplier to apply to each bucket boundary, used when translating across units
+	// mult converts bucket boundaries from Go runtime units (seconds) to CRDB
+	// units (nanoseconds).
+	mult float64
 }
 
 var _ metric.Iterable = &runtimeHistogram{}
@@ -62,6 +71,7 @@ func newRuntimeHistogram(metadata metric.Metadata, buckets []float64) *runtimeHi
 	// because in runtime/metrics, the bucket values represent boundaries,
 	// and non-Inf boundaries are inclusive lower bounds for that bucket.
 	h.mu.windowedCounts = make([]uint64, len(buckets)-1)
+	h.mu.cumCounts = make([]uint64, len(buckets)-1)
 	return h
 }
 
@@ -77,6 +87,7 @@ func (h *runtimeHistogram) update(his *metrics.Float64Histogram) {
 	var j int
 	for i, count := range counts { // copy and reduce buckets
 		h.mu.windowedCounts[j] += count
+		h.mu.cumCounts[j] += count
 		if buckets[i+1] == h.mu.buckets[j+1] {
 			j++
 		}
@@ -132,23 +143,27 @@ func (h *runtimeHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	m := &prometheusgo.Metric{}
-	writeCountsToMetricLocked(m, h.mu.windowedCounts, h.mu.buckets, h.mult)
+	writeCountsToMetricLocked(m, h.mu.cumCounts, h.mu.buckets, h.mult)
 	return m
 }
 
 // CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+// Returns cumulative counts, used by timeseries for count and sum metrics.
+//
+// NB: Same as ToPrometheusMetric - values are monotonically increasing.
 func (h *runtimeHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
 	return metric.MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
 }
 
-// WindowedSnapshot is part of the metric.WindowedHistogram interface.
-// TODO(#116690): runtimeHistogram isn't windowed, so why does it implement
-// the WindowedHistogram interface? My best guess is because it was
-// the path of least resistance to get the metric exposed in /_status/vars.
-// It should either be truly windowed, should not implement the interface,
-// or should be deleted in favor of metric.Histogram.
+// WindowedSnapshot is part of the metric.WindowedHistogram interface. Returns
+// only the most recent update's counts, used by timeseries for percentiles
+// (p50, p99) where we want the recent distribution rather than all-time.
 func (h *runtimeHistogram) WindowedSnapshot() metric.HistogramSnapshot {
-	return metric.MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	m := &prometheusgo.Metric{}
+	writeCountsToMetricLocked(m, h.mu.windowedCounts, h.mu.buckets, h.mult)
+	return metric.MakeHistogramSnapshot(m.Histogram)
 }
 
 // GetMetadata is part of the PrometheusExportable interface.
