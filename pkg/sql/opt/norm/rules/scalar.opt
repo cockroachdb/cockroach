@@ -337,6 +337,28 @@ $udf
 =>
 (AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
 
+# InlineAnyProjectSet replaces an "unnest" subquery used for an ANY comparison
+# with the "unnest" argument. We only match when the ProjectSet has an empty
+# input and only projects the result of a single unnest function.
+[InlineAnyProjectSet, Normalize]
+(Any
+    (ProjectSet
+        (Values [ (Tuple []) ])
+        [
+            (ZipItem
+                (Function
+                    [ $arg:* ]
+                    $fnPrivate:(FunctionPrivate "unnest")
+                )
+            )
+        ]
+    )
+    $scalar:*
+    $private:*
+)
+=>
+(AnyScalar $scalar $arg (SubqueryCmp $private))
+
 # SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
 # It transforms
 #

@@ -1983,6 +1983,253 @@ select
       └── k:1 IN (1, 2, 3) [outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
 
 # --------------------------------------------------
+# InlineAnyProjectSet
+# --------------------------------------------------
+
+# Basic equality case with unnest.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest($1:::INT[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 = ANY $1 [outer=(1)]
+
+# Different comparison operator.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k > ANY(SELECT * FROM unnest($1:::INT[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 > ANY $1 [outer=(1)]
+
+# String array.
+norm expect=InlineAnyProjectSet
+SELECT s FROM a WHERE s = ANY(SELECT * FROM unnest($1:::STRING[]))
+----
+select
+ ├── columns: s:4
+ ├── has-placeholder
+ ├── scan a
+ │    └── columns: s:4
+ └── filters
+      └── s:4 = ANY $1 [outer=(4)]
+
+# Using a column reference for the array.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(arr))
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null arr:5
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan a
+      │    ├── columns: k:1!null arr:5
+      │    ├── key: (1)
+      │    └── fd: (1)-->(5)
+      └── filters
+           └── k:1 = ANY arr:5 [outer=(1,5)]
+
+# Case with an array-returning expression inside other than a placeholder.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest(ARRAY[1]::int[] || array_remove($1::int[], 5)))
+----
+select
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 = ANY (ARRAY[1] || array_remove($1, 5)) [outer=(1), immutable]
+
+# Case with an array containing NULL.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(array_append($1::int[], NULL)::int[]))
+----
+select
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 = ANY array_append($1, NULL) [outer=(1), immutable]
+
+# Case with a NULL array.
+norm expect=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(NULL::int[]))
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# No-op case that is instead handled by constant folding.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(ARRAY[$1::int, NULL]::int[]))
+----
+select
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ └── filters
+      └── k:1 IN ($1, NULL) [outer=(1)]
+
+# Rule should not fire when ProjectSet has multiple zip items.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE (k, i) = ANY(SELECT * FROM ROWS FROM (unnest($1:::INT[]), unnest($2:::INT[])))
+----
+project
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1!null i:2
+      ├── immutable, has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project-set
+      │    ├── columns: unnest:8 unnest:9
+      │    ├── immutable, has-placeholder
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         ├── unnest($1) [immutable]
+      │         └── unnest($2) [immutable]
+      └── filters
+           ├── unnest:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── unnest:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Rule should not fire when unnest function has multiple arguments.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE (k, i) = ANY(SELECT * FROM unnest($1:::INT[], $2:::INT[]))
+----
+project
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ └── semi-join (hash)
+      ├── columns: k:1!null i:2
+      ├── immutable, has-placeholder
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project-set
+      │    ├── columns: unnest:8 unnest:9
+      │    ├── immutable, has-placeholder
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── ()
+      │    └── zip
+      │         └── unnest($1, $2) [immutable]
+      └── filters
+           ├── unnest:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+           └── unnest:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# Rule should not fire when Values has columns (not empty tuple).
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest(array_append($1:::INT[], x)) FROM (VALUES (1)) v(x))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: column1:8!null unnest:9
+ │    ├── immutable, has-placeholder
+ │    ├── fd: ()-->(8)
+ │    ├── values
+ │    │    ├── columns: column1:8!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(8)
+ │    │    └── (1,)
+ │    └── zip
+ │         └── unnest(array_append($1, column1:8)) [outer=(8), immutable]
+ └── filters
+      └── k:1 = unnest:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Rule should not fire when Values has multiple rows.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT unnest($1:::INT[]) FROM (VALUES (1), (2)))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: unnest:9
+ │    ├── immutable, has-placeholder
+ │    ├── values
+ │    │    ├── cardinality: [2 - 2]
+ │    │    ├── ()
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest($1) [immutable]
+ └── filters
+      └── k:1 = unnest:9 [outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+
+# Rule should not fire when using a different set-returning function.
+norm expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM generate_series(1, 10))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: generate_series:8
+ │    ├── immutable
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 10) [immutable]
+ └── filters
+      └── k:1 = generate_series:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+# --------------------------------------------------
 # FoldCollate
 # --------------------------------------------------
 
