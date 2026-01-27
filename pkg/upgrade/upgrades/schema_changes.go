@@ -317,6 +317,19 @@ func doesNotHaveIndex(
 	return idx == nil, nil
 }
 
+// indexExists returns true if storedTable contains an index with the given
+// indexName. Unlike hasIndex, it does not check that the index descriptor in
+// storedTable and expectedTable match.
+//
+// This weaker check should be used when a migration creates an index where
+// certain properties (like CompositeColumnIDs) may be populated differently
+// by the SQL parser compared to the expected descriptor definition.
+func indexExists(
+	storedTable, expectedTable catalog.TableDescriptor, indexName string,
+) (bool, error) {
+	return catalog.FindIndexByName(storedTable, indexName) != nil, nil
+}
+
 // hasColumnFamily returns true if storedTable already has the given column
 // family, comparing with expectedTable. storedTable descriptor must be read
 // from system storage as compared to reading from the systemschema package. On
