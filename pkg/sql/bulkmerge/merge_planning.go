@@ -24,9 +24,7 @@ func newBulkMergePlan(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
-	iteration int,
-	maxIterations int,
-	writeTS *hlc.Timestamp,
+	opts MergeOptions,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	if len(spans) == 0 {
 		return nil, nil, errors.Newf("no spans specified")
@@ -73,12 +71,12 @@ func newBulkMergePlan(
 
 	mergeStage := plan.NewStageOnNodes(sqlInstanceIDs)
 	var writeTimestamp hlc.Timestamp
-	if writeTS != nil {
-		writeTimestamp = *writeTS
+	if opts.WriteTimestamp != nil {
+		writeTimestamp = *opts.WriteTimestamp
 	}
 	for streamID, sqlInstanceID := range sqlInstanceIDs {
 		var outputStorageConf cloudpb.ExternalStorage
-		if iteration < maxIterations {
+		if opts.Iteration < opts.MaxIterations {
 			outputURI, err := genOutputURIAndRecordPrefix(sqlInstanceID)
 			if err != nil {
 				return nil, nil, err
@@ -102,12 +100,13 @@ func newBulkMergePlan(
 				}},
 				Core: execinfrapb.ProcessorCoreUnion{
 					BulkMerge: &execinfrapb.BulkMergeSpec{
-						SSTs:           ssts,
-						Spans:          spans,
-						OutputStorage:  outputStorageConf,
-						Iteration:      int32(iteration),
-						MaxIterations:  int32(maxIterations),
-						WriteTimestamp: writeTimestamp,
+						SSTs:              ssts,
+						Spans:             spans,
+						OutputStorage:     outputStorageConf,
+						Iteration:         int32(opts.Iteration),
+						MaxIterations:     int32(opts.MaxIterations),
+						WriteTimestamp:    writeTimestamp,
+						EnforceUniqueness: opts.EnforceUniqueness,
 					},
 				},
 				Post: execinfrapb.PostProcessSpec{},

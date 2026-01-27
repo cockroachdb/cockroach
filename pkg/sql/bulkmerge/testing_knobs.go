@@ -22,6 +22,10 @@ type TestingKnobs struct {
 		flowID execinfrapb.FlowID,
 		taskID taskset.TaskID,
 	) error
+
+	// InjectDuplicateKey is called for each key during merge. Returning true
+	// causes the key to be written twice, injecting a duplicate for testing.
+	InjectDuplicateKey func(iteration, maxIteration int32) bool
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}

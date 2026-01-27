@@ -20,6 +20,32 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// MergeOptions contains configuration for the distributed merge operation.
+type MergeOptions struct {
+	// Iteration is the current merge iteration (1-based).
+	Iteration int
+
+	// MaxIterations is the total number of merge iterations planned.
+	// When Iteration == MaxIterations, data is written directly to KV
+	// instead of producing SSTs in external storage.
+	MaxIterations int
+
+	// WriteTimestamp is the MVCC timestamp to use when the final iteration
+	// writes to KV. If nil, the current cluster time is used.
+	WriteTimestamp *hlc.Timestamp
+
+	// EnforceUniqueness enables duplicate key detection during the final merge
+	// iteration. When true:
+	// - Consecutive duplicates within an SST batch raise DuplicateKeyError.
+	// - Keys conflicting with pre-existing KV data raise KeyCollisionError.
+	// TODO(161447): cross-SST duplicates within the same merge are not yet
+	// detected by this mechanism.
+	//
+	// Should be true when building unique indexes. Callers are responsible for
+	// wrapping errors into user-friendly messages.
+	EnforceUniqueness bool
+}
+
 // Merge creates and waits on a DistSQL flow that merges the provided SSTs into
 // the ranges defined by the input splits.
 func Merge(
@@ -28,15 +54,13 @@ func Merge(
 	ssts []execinfrapb.BulkMergeSpec_SST,
 	spans []roachpb.Span,
 	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
-	iteration int,
-	maxIterations int,
-	writeTS *hlc.Timestamp,
+	opts MergeOptions,
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
-	logMergeInputs(ctx, ssts, iteration, maxIterations)
+	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
 	execCfg := execCtx.ExecCfg()
 
-	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, iteration, maxIterations, writeTS)
+	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +94,7 @@ func Merge(
 		return nil, err
 	}
 
-	if iteration == maxIterations {
+	if opts.Iteration == opts.MaxIterations {
 		// Final iteration writes directly to KV; no SST outputs expected.
 		return nil, nil
 	}
@@ -108,5 +132,25 @@ func logMergeInputs(
 }
 
 func init() {
-	sql.RegisterBulkMerge(Merge)
+	// Register an adapter that receives individual parameters and constructs
+	// MergeOptions internally. This avoids duplicating the MergeOptions type
+	// in the sql package (which would cause an import cycle).
+	sql.RegisterBulkMerge(func(
+		ctx context.Context,
+		execCtx sql.JobExecContext,
+		ssts []execinfrapb.BulkMergeSpec_SST,
+		spans []roachpb.Span,
+		genOutputURIAndRecordPrefix func(base.SQLInstanceID) (string, error),
+		iteration int,
+		maxIterations int,
+		writeTimestamp *hlc.Timestamp,
+		enforceUniqueness bool,
+	) ([]execinfrapb.BulkMergeSpec_SST, error) {
+		return Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
+			Iteration:         iteration,
+			MaxIterations:     maxIterations,
+			WriteTimestamp:    writeTimestamp,
+			EnforceUniqueness: enforceUniqueness,
+		})
+	})
 }
