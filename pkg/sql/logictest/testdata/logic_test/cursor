@@ -848,6 +848,7 @@ SET statement_timeout = '1s';
 DECLARE a CURSOR FOR SELECT * FROM ( VALUES (1), (2) ) t(id);
 
 # Note we can't set pg_sleep to 1 or else it'll statement timeout!
+retry
 statement ok
 select pg_sleep(0.7)
 
@@ -856,6 +857,7 @@ FETCH 1 FROM a
 ----
 1
 
+retry
 statement ok
 select pg_sleep(0.7)
 
