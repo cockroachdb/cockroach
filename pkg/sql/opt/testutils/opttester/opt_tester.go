@@ -1154,7 +1154,12 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		f.MemoGroupLimit = limit
 
 	case "query-args":
-		f.QueryArgs = arg.Vals
+		// Process escape sequences in query args. The datadriven parser splits
+		// on commas, so we use \x2c as an escape for commas inside array literals.
+		f.QueryArgs = make([]string, len(arg.Vals))
+		for i, val := range arg.Vals {
+			f.QueryArgs[i] = strings.ReplaceAll(val, `\x2c`, ",")
+		}
 
 	case "memo-cycles":
 		f.MemoFormat = xform.FmtCycle
@@ -1293,7 +1298,15 @@ func (ot *OptTester) AssignPlaceholders(
 			return nil, err
 		}
 
-		ot.semaCtx.Placeholders.Values[i] = texpr
+		// Evaluate the typed expression to get a datum. This ensures that
+		// string representations of arrays like '{1,4}' are converted to
+		// actual DArray values, matching the behavior of array literals
+		// in the query itself.
+		datum, err := eval.Expr(context.Background(), &ot.evalCtx, texpr)
+		if err != nil {
+			return nil, err
+		}
+		ot.semaCtx.Placeholders.Values[i] = datum
 	}
 	ot.evalCtx.Placeholders = &ot.semaCtx.Placeholders
 
