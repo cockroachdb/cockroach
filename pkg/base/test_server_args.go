@@ -100,6 +100,7 @@ type TestServerArgs struct {
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
+	UseDRPC                     bool
 	RetryOptions                retry.Options // TODO(tbg): make testing knob.
 	SocketFile                  string
 	ScanInterval                time.Duration

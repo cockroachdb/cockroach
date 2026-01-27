@@ -629,6 +629,8 @@ func init() {
 		f := initCmd.Flags()
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualized, cliflags.Virtualized)
 		cliflagcfg.BoolFlag(f, &initCmdOptions.virtualizedEmpty, cliflags.VirtualizedEmpty)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// Multi-tenancy start-sql command flags.
@@ -799,6 +801,14 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
+	}
+	// List-files command.
+	{
+		f := debugListFilesCmd.Flags()
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	// List-files + Zip commands.
 	for _, cmd := range []*cobra.Command{debugZipCmd, debugListFilesCmd} {
@@ -818,10 +828,12 @@ func init() {
 	cliflagcfg.VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionChecks, cliflags.NodeDecommissionChecks)
 	cliflagcfg.BoolFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionDryRun, cliflags.NodeDecommissionDryRun)
 
-	// Decommission and recommission share --self.
+	// Decommission and recommission share --self and --use-new-rpc.
 	for _, cmd := range []*cobra.Command{decommissionNodeCmd, recommissionNodeCmd} {
 		f := cmd.Flags()
 		cliflagcfg.BoolFlag(f, &nodeCtx.nodeDecommissionSelf, cliflags.NodeDecommissionSelf)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// node drain command.
@@ -830,6 +842,8 @@ func init() {
 		cliflagcfg.DurationFlag(f, &drainCtx.drainWait, cliflags.DrainWait)
 		cliflagcfg.BoolFlag(f, &drainCtx.nodeDrainSelf, cliflags.NodeDrainSelf)
 		cliflagcfg.BoolFlag(f, &drainCtx.shutdown, cliflags.NodeDrainShutdown)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 
 	// Commands that establish a SQL connection.
@@ -936,6 +950,9 @@ func init() {
 		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
 		_ = f.MarkHidden(cliflags.DemoDisableServerController.Name)
 
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
+
 		cliflagcfg.BoolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// We also support overriding the GEOS library path for 'demo'.
 		// Even though the demoCtx uses mostly different configuration
@@ -1007,6 +1024,13 @@ func init() {
 	{
 		f := debugGossipValuesCmd.Flags()
 		cliflagcfg.StringFlag(f, &debugCtx.inputFile, cliflags.GossipInputFile)
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
+	}
+	{
+		f := debugResetQuorumCmd.Flags()
+		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
+		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	}
 	{
 		f := debugBallastCmd.Flags()
