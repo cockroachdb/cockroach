@@ -1268,6 +1268,278 @@ values
                 └── tuple
                      └── function: gen_random_uuid
 
+# --------------------------------------------------
+# EliminateNestedSubquery
+# --------------------------------------------------
+
+norm expect=EliminateNestedSubquery
+SELECT (SELECT (VALUES ($1::INT)))
+----
+values
+ ├── columns: column1:3
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: column1:1
+                ├── cardinality: [1 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── ($1,)
+
+norm expect=EliminateNestedSubquery
+SELECT (SELECT (SELECT $1::TEXT))
+----
+values
+ ├── columns: text:3
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: text:1
+                ├── cardinality: [1 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── ($1,)
+
+norm expect=EliminateNestedSubquery
+SELECT * FROM a WHERE k = (SELECT (SELECT $1::INT))
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 arr:5 int8:8!null
+      ├── cardinality: [0 - 1]
+      ├── has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(1-5,8), (1)==(8), (8)==(1)
+      ├── project
+      │    ├── columns: int8:8 k:1!null i:2 f:3 s:4 arr:5
+      │    ├── has-placeholder
+      │    ├── key: (1)
+      │    ├── fd: ()-->(8), (1)-->(2-5)
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    └── projections
+      │         └── $1 [as=int8:8]
+      └── filters
+           └── k:1 = int8:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+
+norm expect=EliminateNestedSubquery
+SELECT * FROM a WHERE k >= (SELECT (VALUES ($1::INT)))
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── has-placeholder
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── ge [outer=(1), subquery, constraints=(/1: (/NULL - ])]
+           ├── k:1
+           └── subquery
+                └── values
+                     ├── columns: column1:8
+                     ├── cardinality: [1 - 1]
+                     ├── has-placeholder
+                     ├── key: ()
+                     ├── fd: ()-->(8)
+                     └── ($1,)
+
+# Multi-level nesting.
+norm expect=EliminateNestedSubquery
+SELECT (SELECT (SELECT (VALUES ($1::BOOL))))
+----
+values
+ ├── columns: column1:4
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: column1:1
+                ├── cardinality: [1 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── ($1,)
+
+# Nested subquery with Max1Row operator.
+norm expect=EliminateNestedSubquery
+SELECT (SELECT (VALUES ($1::FLOAT), ($2::FLOAT)))
+----
+values
+ ├── columns: column1:3
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: column1:1
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [1 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(1)
+                └── values
+                     ├── columns: column1:1
+                     ├── cardinality: [2 - 2]
+                     ├── has-placeholder
+                     ├── ($1,)
+                     └── ($2,)
+
+# No-op case that is handled by EliminateConstValueSubquery instead.
+norm expect-not=EliminateNestedSubquery
+SELECT (SELECT (VALUES (1)))
+----
+values
+ ├── columns: column1:3!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── (1,)
+
+# Subquery must be directly nested - no intervening expressions other than
+# the Values.
+norm expect-not=EliminateNestedSubquery
+SELECT (SELECT 100 * (SELECT $1::INT))
+----
+values
+ ├── columns: "?column?":3
+ ├── cardinality: [1 - 1]
+ ├── immutable, has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── tuple
+      └── subquery
+           └── values
+                ├── columns: "?column?":2
+                ├── cardinality: [1 - 1]
+                ├── immutable, has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(2)
+                └── tuple
+                     └── mult
+                          ├── subquery
+                          │    └── values
+                          │         ├── columns: int8:1
+                          │         ├── cardinality: [1 - 1]
+                          │         ├── has-placeholder
+                          │         ├── key: ()
+                          │         ├── fd: ()-->(1)
+                          │         └── ($1,)
+                          └── 100
+
+# Nested subquery must be in a Values operator.
+norm expect-not=EliminateNestedSubquery
+SELECT (SELECT (SELECT $1::INT) FROM a LIMIT 1)
+----
+values
+ ├── columns: int8:10
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(10)
+ └── tuple
+      └── subquery
+           └── project
+                ├── columns: int8:9
+                ├── cardinality: [0 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(9)
+                ├── limit
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── scan a
+                │    │    └── limit hint: 1.00
+                │    └── 1
+                └── projections
+                     └── subquery [as=int8:9, subquery]
+                          └── values
+                               ├── columns: int8:8
+                               ├── cardinality: [1 - 1]
+                               ├── has-placeholder
+                               ├── key: ()
+                               ├── fd: ()-->(8)
+                               └── ($1,)
+
+# Multiple nested subqueries.
+norm expect-not=EliminateNestedSubquery
+SELECT (SELECT * FROM (VALUES ((SELECT $1::INT)), ((SELECT $2::INT))) LIMIT 1)
+----
+values
+ ├── columns: "?column?":4
+ ├── cardinality: [1 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── tuple
+      └── subquery
+           └── max1-row
+                ├── columns: column1:3
+                ├── error: "more than one row returned by a subquery used as an expression"
+                ├── cardinality: [1 - 1]
+                ├── has-placeholder
+                ├── key: ()
+                ├── fd: ()-->(3)
+                └── values
+                     ├── columns: column1:3
+                     ├── cardinality: [2 - 2]
+                     ├── has-placeholder
+                     ├── tuple
+                     │    └── subquery
+                     │         └── values
+                     │              ├── columns: int8:1
+                     │              ├── cardinality: [1 - 1]
+                     │              ├── has-placeholder
+                     │              ├── key: ()
+                     │              ├── fd: ()-->(1)
+                     │              └── ($1,)
+                     └── tuple
+                          └── subquery
+                               └── values
+                                    ├── columns: int8:2
+                                    ├── cardinality: [1 - 1]
+                                    ├── has-placeholder
+                                    ├── key: ()
+                                    ├── fd: ()-->(2)
+                                    └── ($2,)
+
+
+# Correlated subquery is a no-op because decorrelation rules apply first.
+norm expect-not=EliminateNestedSubquery
+SELECT (SELECT (SELECT a.k)) FROM a
+----
+project
+ ├── columns: k:10!null
+ ├── key: (10)
+ ├── scan a
+ │    ├── columns: a.k:1!null
+ │    └── key: (1)
+ └── projections
+      └── a.k:1 [as=k:10, outer=(1)]
 
 # --------------------------------------------------
 # SimplifyCaseWhenConstValue
