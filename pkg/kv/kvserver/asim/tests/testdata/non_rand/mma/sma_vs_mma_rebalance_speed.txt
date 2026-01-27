@@ -1,0 +1,115 @@
+# This test compares SMA vs MMA rebalancing "nimbleness" - how quickly each
+# achieves balance when one node is hot due to uniform CPU load.
+#
+# Scenario: 3-node cluster where s1 holds all 200 leases with uniform read load
+# creating a CPU hotspot. The load is read-only (rw_ratio=1.0) with
+# request_cpu_per_access to generate CPU-only load on the leaseholder.
+# This isolates CPU as the only dimension being stressed, making lease
+# shedding the natural response.
+#
+# Parameters Affecting MMA Rebalancing Speed:
+# -------------------------------------------
+# 1. fractionPendingIncreaseOrDecreaseThreshold (default 0.1 = 10%)
+#    Limits how much load can be "in-flight" to a target store before MMA stops
+#    proposing transfers to it. When estimated pending load exceeds this fraction
+#    of reported load, the store is excluded as a target.
+#    - Special case: When reportedLoad=0 but adjustedLoad>0 (i.e., a transfer was
+#      proposed but gossip hasn't reported actual load yet), frac_pending is set
+#      to 1000 (sentinel for "infinity"), blocking the target until gossip updates.
+#      See computeMaxFractionPendingIncDec() in cluster_state.go.
+#
+# 2. StateExchangeInterval (asim default 10s, production default 10s)
+#    How often stores gossip their load periodically. MMA can only see load
+#    changes when gossip arrives. The frac_pending=1000 issue blocks targets
+#    until their reportedLoad updates via gossip.
+#    - In production, stores also gossip reactively on significant changes:
+#      50% load delta, ±5 leases, ±5 ranges, or 10% capacity delta.
+#      See store_gossip.go for thresholds. See pkg/kv/kvserver/store_gossip.go
+#
+# 3. LBRebalancingInterval (asim default 60s, production cluster setting default 60s)
+#    When ComputeChanges returns 0 changes (e.g., due to frac_pending blocking
+#    all targets), MMA sleeps for this interval before retrying.
+#
+# 4. maxLeaseTransferCount (default 8)
+#    Maximum lease transfers proposed per ComputeChanges call. After this many
+#    proposals, MMA returns and waits for the next tick.
+#
+# 5. maxRangeMoveCount (default 1)
+#    Maximum replica moves proposed per ComputeChanges call. Not applicable to
+#    this test since RF=3 and replicas already exist on all stores.
+#
+# Why MMA is Slower Than SMA:
+# - SMA runs a tight loop: find target → transfer → wait for completion → repeat
+#   until no more targets. No frac_pending throttle.
+# - MMA is throttled by frac_pending (10% of reported load) and sleeps for 60s
+#   whenever all targets are blocked, causing frequent 60s sleeps.
+
+skip_under_ci
+----
+
+gen_cluster nodes=3 node_cpu_cores=8
+----
+
+setting split_queue_enabled=false
+----
+
+# All 200 leases start on s1, with replicas spread across s2 and s3.
+gen_ranges ranges=200 placement_type=replica_placement
+{s1:*,s2,s3}:200
+----
+{s1:*,s2,s3}:200
+
+# Uniform read load generating ~5 vCPUs on leaseholder only.
+# 10000 ops/s * 500000 ns/op / 1e9 = 5 vCPUs
+gen_load rate=10000 rw_ratio=1.0 access_skew=false request_cpu_per_access=500000
+----
+5.00 access-vcpus
+
+# Assert balance achieved - both SMA and MMA should eventually reach this,
+# but MMA will take longer due to the 10% inflight throttle.
+assertion type=balance stat=cpu ticks=6 upper_bound=1.15
+----
+asserting: max_{stores}(cpu)/mean_{stores}(cpu) ≤ 1.15 at each of last 6 ticks
+
+# Run with both SMA and MMA configurations.
+# MMA needs significantly longer than SMA due to the 10% inflight limit.
+# SMA achieves balance within ~3.5min, while MMA takes ~27min, and MMA-count 
+# takes ~5min.
+eval duration=32m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu,cpu_util,leases,replicas)
+----
+cpu#1: last:  [s1=1650518518, s2=1725373840, s3=1625615244] (stddev=42394011.32, mean=1667169200.67, sum=5001507602)
+cpu#1: thrash_pct: [s1=4%, s2=5%, s3=5%]  (sum=14%)
+cpu_util#1: last:  [s1=0.21, s2=0.22, s3=0.20] (stddev=0.01, mean=0.21, sum=1)
+cpu_util#1: thrash_pct: [s1=4%, s2=5%, s3=5%]  (sum=14%)
+leases#1: first: [s1=200, s2=0, s3=0] (stddev=94.28, mean=66.67, sum=200)
+leases#1: last:  [s1=66, s2=69, s3=65] (stddev=1.70, mean=66.67, sum=200)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+artifacts[sma-count]: d29c210445a690ce
+==========================
+cpu#1: last:  [s1=1820976543, s2=1649994712, s3=1524369164] (stddev=121560456.89, mean=1665113473.00, sum=4995340419)
+cpu#1: thrash_pct: [s1=2%, s2=11%, s3=11%]  (sum=25%)
+cpu_util#1: last:  [s1=0.23, s2=0.21, s3=0.19] (stddev=0.02, mean=0.21, sum=1)
+cpu_util#1: thrash_pct: [s1=2%, s2=11%, s3=11%]  (sum=25%)
+leases#1: first: [s1=200, s2=0, s3=0] (stddev=94.28, mean=66.67, sum=200)
+leases#1: last:  [s1=73, s2=66, s3=61] (stddev=4.92, mean=66.67, sum=200)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+artifacts[mma-only]: 239cb1f32d4a2e3f
+==========================
+cpu#1: last:  [s1=1776335802, s2=1675272645, s3=1549901392] (stddev=92618845.46, mean=1667169946.33, sum=5001509839)
+cpu#1: thrash_pct: [s1=4%, s2=6%, s3=5%]  (sum=15%)
+cpu_util#1: last:  [s1=0.22, s2=0.21, s3=0.19] (stddev=0.01, mean=0.21, sum=1)
+cpu_util#1: thrash_pct: [s1=4%, s2=6%, s3=5%]  (sum=15%)
+leases#1: first: [s1=200, s2=0, s3=0] (stddev=94.28, mean=66.67, sum=200)
+leases#1: last:  [s1=71, s2=67, s3=62] (stddev=3.68, mean=66.67, sum=200)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
+artifacts[mma-count]: c3c6de6cbcc1f69f
+==========================
