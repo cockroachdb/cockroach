@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/ioctx",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_azure_azure_sdk_for_go_sdk_azcore//:azcore",
