@@ -266,7 +266,7 @@ func clone(h *metrics.Float64Histogram) *metrics.Float64Histogram {
 	return res
 }
 
-// sub subtracts the counts of one histogram from another, assuming the bucket
+// sub subtracts the windowedCounts of one histogram from another, assuming the bucket
 // boundaries are the same. For cumulative scheduler latency histograms, this
 // can be used to compute an interval histogram.
 func sub(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
@@ -277,7 +277,7 @@ func sub(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
 	return res
 }
 
-// add adds the counts of one histogram to another, assuming the bucket
+// add adds the windowedCounts of one histogram to another, assuming the bucket
 // boundaries are the same.
 func add(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
 	res := clone(a)
