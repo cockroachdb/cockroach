@@ -1843,9 +1843,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	defer watcherMemMonitor.Stop(ctx)
 
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
-		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
-
-		if flowErr == nil {
+		flowErr := func() error {
 			// startedCh is normally used to signal back to the creator of the job that
 			// the job has started; however, in this case nothing will ever receive
 			// on the channel, causing the changefeed flow to block. Replace it with
@@ -1867,6 +1865,10 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 			targets, err := AllTargets(ctx, details, execCfg, schemaTS)
 			if err != nil {
+				return err
+			}
+
+			if err := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec); err != nil {
 				return err
 			}
 
@@ -1968,20 +1970,20 @@ func (b *changefeedResumer) resumeWithRetries(
 				}
 			})
 
-			flowErr = g.Wait()
+			return g.Wait()
+		}()
 
-			if flowErr == nil {
-				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
-			}
+		if flowErr == nil {
+			return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
+		}
 
-			if errors.Is(flowErr, replanErr) {
-				log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration")
-				continue
-			}
+		if errors.Is(flowErr, replanErr) {
+			log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration")
+			continue
+		}
 
-			if knobs != nil && knobs.HandleDistChangefeedError != nil {
-				flowErr = knobs.HandleDistChangefeedError(flowErr)
-			}
+		if knobs != nil && knobs.HandleDistChangefeedError != nil {
+			flowErr = knobs.HandleDistChangefeedError(flowErr)
 		}
 
 		// Terminate changefeed if needed.
