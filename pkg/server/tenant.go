@@ -802,6 +802,27 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	s.grpc.setMode(modeOperational)
 	s.drpc.setMode(modeOperational)
 
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	s.externalStorageBuilder.init(
+		s.cfg.EarlyBootExternalStorageAccessor,
+		s.cfg.ExternalIODirConfig,
+		s.sqlServer.cfg.Settings,
+		s.sqlServer.sqlIDContainer,
+		s.kvNodeDialer,
+		s.sqlServer.cfg.TestingKnobs,
+		false, /* allowLocalFastpath */
+		s.sqlServer.execCfg.InternalDB.
+			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
+		s.costController,
+		s.registry,
+		s.cfg.ExternalIODir,
+	)
+
 	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.sqlServer.cfg.HTTPRequestScheme()),
@@ -883,27 +904,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	s.externalStorageBuilder.init(
-		s.cfg.EarlyBootExternalStorageAccessor,
-		s.cfg.ExternalIODirConfig,
-		s.sqlServer.cfg.Settings,
-		s.sqlServer.sqlIDContainer,
-		s.kvNodeDialer,
-		s.sqlServer.cfg.TestingKnobs,
-		false, /* allowLocalFastpath */
-		s.sqlServer.execCfg.InternalDB.
-			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
-		s.costController,
-		s.registry,
-		s.cfg.ExternalIODir,
-	)
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.
