@@ -1426,52 +1426,14 @@ var _ aggregateWithIntermediateResult = &decimalVarianceAggregate{}
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
 // that store a single datum internally track their memory usage related to
 // that single datum.
-// It will reuse tree.EvalCtx.SingleDatumAggMemAccount when non-nil and will
-// *not* close that account upon its closure; if it is nil, then a new memory
-// account will be created specifically for this struct and that account will
-// be closed upon this struct's closure.
+//
+// It will reuse eval.Context.SingleDatumAggMemAccount and will *not* close that
+// account upon its closure.
 type singleDatumAggregateBase struct {
-	mode singleDatumAggregateBaseMode
-	acc  *mon.BoundAccount
+	acc *mon.BoundAccount
 	// accountedFor indicates how much memory (in bytes) have been registered
 	// with acc.
 	accountedFor int64
-}
-
-// singleDatumAggregateBaseMode indicates the mode in which
-// singleDatumAggregateBase operates with regards to resetting and closing
-// behaviors.
-type singleDatumAggregateBaseMode int
-
-const (
-	// sharedSingleDatumAggregateBaseMode is a mode in which the memory account
-	// will be grown and shrunk according the corresponding aggregate builtin's
-	// memory usage, but the account will never be cleared or closed. In this
-	// mode, singleDatumAggregateBaseMode is *not* responsible for closing the
-	// memory account.
-	sharedSingleDatumAggregateBaseMode singleDatumAggregateBaseMode = iota
-	// nonSharedSingleDatumAggregateBaseMode is a mode in which the memory
-	// account is "owned" by singleDatumAggregateBase, so the account can be
-	// cleared and closed by it. In fact, singleDatumAggregateBase is
-	// responsible for the account's closure.
-	nonSharedSingleDatumAggregateBaseMode
-)
-
-// makeSingleDatumAggregateBase makes a new singleDatumAggregateBase. If
-// evalCtx has non-nil SingleDatumAggMemAccount field, then that memory account
-// will be used by the new struct which will operate in "shared" mode
-func makeSingleDatumAggregateBase(evalCtx *eval.Context) singleDatumAggregateBase {
-	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Planner.Mon().MakeBoundAccount()
-		return singleDatumAggregateBase{
-			mode: nonSharedSingleDatumAggregateBaseMode,
-			acc:  &newAcc,
-		}
-	}
-	return singleDatumAggregateBase{
-		mode: sharedSingleDatumAggregateBaseMode,
-		acc:  evalCtx.SingleDatumAggMemAccount,
-	}
 }
 
 // updateMemoryUsage updates the memory account to reflect the new memory
@@ -1487,27 +1449,13 @@ func (b *singleDatumAggregateBase) updateMemoryUsage(ctx context.Context, newUsa
 }
 
 func (b *singleDatumAggregateBase) reset(ctx context.Context) {
-	switch b.mode {
-	case sharedSingleDatumAggregateBaseMode:
-		b.acc.Shrink(ctx, b.accountedFor)
-		b.accountedFor = 0
-	case nonSharedSingleDatumAggregateBaseMode:
-		b.acc.Clear(ctx)
-	default:
-		panic(errors.Errorf("unexpected singleDatumAggregateBaseMode: %d", b.mode))
-	}
+	b.acc.Shrink(ctx, b.accountedFor)
+	b.accountedFor = 0
 }
 
 func (b *singleDatumAggregateBase) close(ctx context.Context) {
-	switch b.mode {
-	case sharedSingleDatumAggregateBaseMode:
-		b.acc.Shrink(ctx, b.accountedFor)
-		b.accountedFor = 0
-	case nonSharedSingleDatumAggregateBaseMode:
-		b.acc.Close(ctx)
-	default:
-		panic(errors.Errorf("unexpected singleDatumAggregateBaseMode: %d", b.mode))
-	}
+	b.acc.Shrink(ctx, b.accountedFor)
+	b.accountedFor = 0
 }
 
 // See NewAnyNotNullAggregate.
@@ -1535,7 +1483,7 @@ type anyNotNullAggregate struct {
 //     add NULL values).
 func NewAnyNotNullAggregate(evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &anyNotNullAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		val:                      tree.DNull,
 	}
 }
@@ -1637,7 +1585,7 @@ func newAggStatementStatistics(
 	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementStatistics{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 	}
 }
 
@@ -1695,7 +1643,7 @@ func newAggStatementMetadata(
 	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementMetadata{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		stats:                    appstatspb.AggregatedStatementMetadata{},
 	}
 }
@@ -1809,7 +1757,7 @@ func newAggregatedStmtMetadataAggregate(
 	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggregatedStmtMetadataAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		stats:                    appstatspb.AggregatedStatementMetadata{},
 	}
 }
@@ -2150,7 +2098,7 @@ func newBytesConcatAggregate(
 	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		forBytes:                 true,
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
@@ -2165,7 +2113,7 @@ func newStringConcatAggregate(
 	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
@@ -2564,7 +2512,7 @@ type regressionAccumulatorDecimalBase struct {
 func makeRegressionAccumulatorDecimalBase(evalCtx *eval.Context) regressionAccumulatorDecimalBase {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return regressionAccumulatorDecimalBase{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -2577,7 +2525,7 @@ func makeTransitionRegressionAccumulatorDecimalBase(
 ) eval.AggregateFunc {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return &regressionAccumulatorDecimalBase{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -3615,7 +3563,7 @@ func newMaxAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) ev
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &maxAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		variableDatumSize:        variable,
 	}
@@ -3688,7 +3636,7 @@ func newMinAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) ev
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &minAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		variableDatumSize:        variable,
 	}
@@ -3805,7 +3753,7 @@ type intSumAggregate struct {
 }
 
 func newIntSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &intSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &intSumAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -3890,7 +3838,7 @@ type decimalSumAggregate struct {
 }
 
 func newDecimalSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &decimalSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &decimalSumAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -4169,7 +4117,7 @@ type decimalSqrDiffAggregate struct {
 func newDecimalSqrDiff(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSqrDiffAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -4365,7 +4313,7 @@ type decimalSumSqrDiffsAggregate struct {
 func newDecimalSumSqrDiffs(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSumSqrDiffsAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -4907,7 +4855,7 @@ type bytesXorAggregate struct {
 }
 
 func newBytesXorAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &bytesXorAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &bytesXorAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add inserts one value into the running xor.
@@ -5011,7 +4959,7 @@ type jsonAggregate struct {
 
 func newJSONAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		builder:                  json.NewArrayBuilderWithCounter(),
 		sawNonNull:               false,
@@ -5335,7 +5283,7 @@ type jsonObjectAggregate struct {
 
 func newJSONObjectAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonObjectAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		builder:                  json.NewObjectBuilderWithCounter(),
 		sawNonNull:               false,
