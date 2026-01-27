@@ -86,6 +86,9 @@ func New(
 // recreating it if it doesn't.
 func (m *Manager) Start(ctx context.Context) error {
 	return m.stopper.RunAsyncTask(ctx, "span-config-mgr", func(ctx context.Context) {
+		ctx, cancel := m.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		m.run(ctx)
 	})
 }
