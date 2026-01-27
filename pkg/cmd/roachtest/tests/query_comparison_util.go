@@ -753,14 +753,13 @@ func unsortedMatricesDiffWithFloatComp(
 		for j, colType := range colTypes {
 			if needApproximateMatch(colType) {
 				isFloatOrDecimalArray := isFloatArray(colType) || isDecimalArray(colType)
-				cmpFn := floatcmp.FloatsMatch
-				switch {
-				case runtime.GOARCH == "s390x" && isFloatOrDecimalArray:
+				// Always use approximate matching for floats to tolerate small
+				// differences from different execution paths (distributed vs local).
+				var cmpFn func(string, string) (bool, error)
+				if isFloatOrDecimalArray {
 					cmpFn = floatcmp.FloatArraysMatchApprox
-				case runtime.GOARCH == "s390x" && !isFloatOrDecimalArray:
+				} else {
 					cmpFn = floatcmp.FloatsMatchApprox
-				case isFloatOrDecimalArray:
-					cmpFn = floatcmp.FloatArraysMatch
 				}
 				match, err := cmpFn(row1[j], row2[j])
 				if err != nil {
