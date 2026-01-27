@@ -1036,8 +1036,225 @@ func epochBasedInProgressImport(desc catalog.Descriptor) bool {
 		table.TableDesc().ImportType == descpb.ImportType_IMPORT_WITH_IMPORT_EPOCH
 }
 
+func buildMultiRegionEnumMap(
+	ctx context.Context, typesByID map[descpb.ID]catalog.TypeDescriptor,
+) (multiRegionEnumsByDB map[descpb.ID]descpb.ID, err error) {
+	mrEnumsFound := make(map[descpb.ID]descpb.ID)
+	for _, t := range typesByID {
+		regionTypeDesc := typedesc.NewBuilder(t.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
+		if regionTypeDesc == nil {
+			continue
+		}
+
+		// Check to see if we've found more than one multi-region enum on any
+		// given database.
+		if id, ok := mrEnumsFound[regionTypeDesc.GetParentID()]; ok {
+			return nil, errors.AssertionFailedf(
+				"unexpectedly found more than one MULTIREGION_ENUM (IDs = %d, %d) "+
+					"on database %d during restore", id, regionTypeDesc.GetID(), regionTypeDesc.GetParentID())
+		}
+		mrEnumsFound[regionTypeDesc.GetParentID()] = regionTypeDesc.GetID()
+	}
+	return mrEnumsFound, nil
+}
+
+// applyMultiRegionDescriptorModifications applies in-place descriptor
+// modifications based on restore configuration.
+func applyMultiRegionDescriptorModifications(
+	tables []catalog.TableDescriptor,
+	databases []catalog.DatabaseDescriptor,
+	typesByID map[descpb.ID]catalog.TypeDescriptor,
+	dbsByID map[descpb.ID]catalog.DatabaseDescriptor,
+	removeRegions bool,
+	tempSystemDBName string,
+) error {
+
+	if removeRegions {
+		// Can't restore multi-region tables into non-multi-region database
+		for _, t := range tables {
+			t.TableDesc().LocalityConfig = nil
+		}
+
+		for _, d := range databases {
+			d.DatabaseDesc().RegionConfig = nil
+		}
+	}
+
+	for _, t := range typesByID {
+		regionTypeDesc := typedesc.NewBuilder(t.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
+		if regionTypeDesc == nil {
+			continue
+		}
+
+		// When stripping localities, there is no longer a need for a region config. In addition,
+		// we need to make sure that multi-region databases no longer get tagged as such - meaning
+		// that we want to change the TypeDescriptor_MULTIREGION_ENUM to a normal enum.
+		if removeRegions {
+			t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+			t.TypeDesc().RegionConfig = nil
+			continue
+		}
+
+		if db, ok := dbsByID[regionTypeDesc.GetParentID()]; ok {
+			desc := db.DatabaseDesc()
+			if db.GetName() == tempSystemDBName {
+				t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+				t.TypeDesc().RegionConfig = nil
+				// We nil them out to pass locality checks. This modification shouldn't
+				// matter much as we drop the temp db later on.
+				t.TypeDesc().ReferencingDescriptorIDs = nil
+				continue
+			}
+			if desc.RegionConfig == nil {
+				return errors.AssertionFailedf(
+					"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)
+			}
+
+			// Update the RegionEnumID to record the new multi-region enum ID.
+			desc.RegionConfig.RegionEnumID = t.GetID()
+		}
+	}
+	return nil
+}
+
+// synthesizeZoneConfigsForPartialRestore synthesizes zone configurations for
+// multi-region databases and tables during non cluster restore.
+func synthesizeZoneConfigsForPartialRestore(
+	ctx context.Context,
+	p sql.JobExecContext,
+	txn descs.Txn,
+	databases []catalog.DatabaseDescriptor,
+	tables []catalog.TableDescriptor,
+	typesByID map[descpb.ID]catalog.TypeDescriptor,
+	removeRegions bool,
+	skipLocalitiesCheck bool,
+) error {
+	kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+
+	var multiRegionEnumsByDB map[descpb.ID]descpb.ID
+	if !removeRegions {
+		var err error
+		multiRegionEnumsByDB, err = buildMultiRegionEnumMap(
+			ctx,
+			typesByID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Synthesize zone configs for multi-region databases.
+	for _, db := range databases {
+		dbID := db.GetID()
+		// Check if this database has a multi-region enum.
+		if _, ok := multiRegionEnumsByDB[dbID]; !ok {
+			continue
+		}
+
+		regionConfig := db.GetRegionConfig()
+		if regionConfig == nil {
+			return errors.AssertionFailedf(
+				"database %d has multi-region enum but no region config", dbID)
+		}
+
+		log.Dev.Infof(ctx, "restoring zone configuration for database %d", dbID)
+
+		typeDesc, ok := typesByID[regionConfig.RegionEnumID]
+		if !ok {
+			return errors.AssertionFailedf("could not find type descriptor %d for region enum", regionConfig.RegionEnumID)
+		}
+
+		regionTypeDesc := typedesc.NewBuilder(typeDesc.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
+		if regionTypeDesc == nil {
+			return errors.AssertionFailedf(
+				"type descriptor %d is not a multi-region enum", regionConfig.RegionEnumID)
+		}
+
+		// Build the region config for zone config synthesis.
+		var regionNames []catpb.RegionName
+		_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+			regionNames = append(regionNames, name)
+			return nil
+		})
+
+		var opts []multiregion.MakeRegionConfigOption
+		if regionConfig.SecondaryRegion != "" {
+			opts = append(opts, multiregion.WithSecondaryRegion(regionConfig.SecondaryRegion))
+		}
+
+		synthesizedRegionConfig := multiregion.MakeRegionConfig(
+			regionNames,
+			regionConfig.PrimaryRegion,
+			regionConfig.SurvivalGoal,
+			regionConfig.RegionEnumID,
+			regionConfig.Placement,
+			regionTypeDesc.TypeDesc().RegionConfig.SuperRegions,
+			regionTypeDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
+			opts...,
+		)
+
+		// Apply the zone config for the database.
+		if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
+			ctx,
+			dbID,
+			synthesizedRegionConfig,
+			txn,
+			p.ExecCfg(),
+			!skipLocalitiesCheck,
+			kvTrace,
+		); err != nil {
+			return err
+		}
+	}
+
+	// Synthesize zone configs for multi-region tables.
+	for _, table := range tables {
+		if lc := table.GetLocalityConfig(); lc != nil {
+			dbDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.GetParentID())
+			if err != nil {
+				return err
+			}
+			if dbDesc.GetRegionConfig() == nil {
+				return errors.AssertionFailedf(
+					"found multi-region table %d in non-multi-region database %d",
+					table.GetID(), table.GetParentID())
+			}
+
+			mutTable, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, table.GetID())
+			if err != nil {
+				return err
+			}
+
+			regionConfig, err := sql.SynthesizeRegionConfig(
+				ctx,
+				txn.KV(),
+				dbDesc.GetID(),
+				txn.Descriptors(),
+				multiregion.SynthesizeRegionConfigOptionIncludeOffline,
+			)
+			if err != nil {
+				return err
+			}
+
+			if err := sql.ApplyZoneConfigForMultiRegionTable(
+				ctx,
+				txn,
+				p.ExecCfg(),
+				kvTrace,
+				regionConfig,
+				mutTable,
+				sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
-// configurations for separate restoration flows. The three restoration flows are
+// configurations for separate restoration flows. The three restoration flows are:
 //
 //  1. dataToPreRestore: a restoration flow cfg to ingest a subset of
 //     system tables (e.g. zone configs) during a cluster restore that are
@@ -1323,17 +1540,6 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
-	if details.RemoveRegions {
-		// Can't restore multi-region tables into non-multi-region database
-		for _, t := range tables {
-			t.TableDesc().LocalityConfig = nil
-		}
-
-		for _, d := range databases {
-			d.DatabaseDesc().RegionConfig = nil
-		}
-	}
-
 	// Collect all databases, for doing lookups of whether a database is new when
 	// updating schema references later on.
 	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1341,107 +1547,31 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
+	if err := applyMultiRegionDescriptorModifications(
+		tables,
+		databases,
+		typesByID,
+		dbsByID,
+		details.RemoveRegions,
+		restoreTempSystemDB,
+	); err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Allocate no schedule to the row-level TTL.
+	// This will be re-written when the descriptor is published.
+	for _, table := range mutableTables {
+		if table.HasRowLevelTTL() {
+			table.RowLevelTTL.ScheduleID = 0
+		}
+	}
+
 	if !details.PrepareCompleted {
+
 		err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
-			// A couple of pieces of cleanup are required for multi-region databases.
-			// First, we need to find all of the MULTIREGION_ENUMs types and remap the
-			// IDs stored in the corresponding database descriptors to match the type's
-			// new ID. Secondly, we need to rebuild the zone configuration for each
-			// multi-region database. We don't perform the zone configuration rebuild on
-			// cluster restores, as they will have the zone configurations restored as
-			// as the system tables are restored.
-			mrEnumsFound := make(map[descpb.ID]descpb.ID)
-			for _, t := range typesByID {
-				regionTypeDesc := typedesc.NewBuilder(t.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
-				if regionTypeDesc == nil {
-					continue
-				}
 
-				// When stripping localities, there is no longer a need for a region config. In addition,
-				// we need to make sure that multi-region databases no longer get tagged as such - meaning
-				// that we want to change the TypeDescriptor_MULTIREGION_ENUM to a normal enum. We `continue`
-				// to skip the multi-region work below.
-				if details.RemoveRegions {
-					t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
-					t.TypeDesc().RegionConfig = nil
-					continue
-				}
-
-				// Check to see if we've found more than one multi-region enum on any
-				// given database.
-				if id, ok := mrEnumsFound[regionTypeDesc.GetParentID()]; ok {
-					return errors.AssertionFailedf(
-						"unexpectedly found more than one MULTIREGION_ENUM (IDs = %d, %d) "+
-							"on database %d during restore", id, regionTypeDesc.GetID(), regionTypeDesc.GetParentID())
-				}
-				mrEnumsFound[regionTypeDesc.GetParentID()] = regionTypeDesc.GetID()
-
-				if db, ok := dbsByID[regionTypeDesc.GetParentID()]; ok {
-					desc := db.DatabaseDesc()
-					if db.GetName() == restoreTempSystemDB {
-						t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
-						t.TypeDesc().RegionConfig = nil
-						// TODO(foundations): should these be rewritten instead of blank? Does it matter since we drop the whole DB before the job exits?
-						t.TypeDesc().ReferencingDescriptorIDs = nil
-						continue
-					}
-					if desc.RegionConfig == nil {
-						return errors.AssertionFailedf(
-							"found MULTIREGION_ENUM on non-multi-region database %s", desc.Name)
-					}
-
-					// Update the RegionEnumID to record the new multi-region enum ID.
-					desc.RegionConfig.RegionEnumID = t.GetID()
-
-					// If we're not in a cluster restore, rebuild the database-level zone
-					// configuration.
-					if details.DescriptorCoverage != tree.AllDescriptors {
-						log.Dev.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
-						var regionNames []catpb.RegionName
-						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
-							regionNames = append(regionNames, name)
-
-							return nil
-						})
-
-						var opts []multiregion.MakeRegionConfigOption
-						if desc.RegionConfig.SecondaryRegion != "" {
-							opts = append(opts, multiregion.WithSecondaryRegion(desc.RegionConfig.SecondaryRegion))
-						}
-						regionConfig := multiregion.MakeRegionConfig(
-							regionNames,
-							desc.RegionConfig.PrimaryRegion,
-							desc.RegionConfig.SurvivalGoal,
-							desc.RegionConfig.RegionEnumID,
-							desc.RegionConfig.Placement,
-							regionTypeDesc.TypeDesc().RegionConfig.SuperRegions,
-							regionTypeDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
-							opts...,
-						)
-						if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
-							ctx,
-							desc.GetID(),
-							regionConfig,
-							txn,
-							p.ExecCfg(),
-							!details.SkipLocalitiesCheck,
-							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-						); err != nil {
-							return err
-						}
-					}
-				}
-			}
-
-			// Allocate no schedule to the row-level TTL.
-			// This will be re-written when the descriptor is published.
-			for _, table := range mutableTables {
-				if table.HasRowLevelTTL() {
-					table.RowLevelTTL.ScheduleID = 0
-				}
-			}
 			descsCol := txn.Descriptors()
 			// Write the new descriptors which are set in the OFFLINE state.
 			includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
@@ -1525,54 +1655,6 @@ func createImportingDescriptors(
 				return err
 			}
 
-			// Now that all of the descriptors have been written to disk, rebuild
-			// the zone configurations for any multi-region tables. We only do this
-			// in cases where this is not a full cluster restore, because in cluster
-			// restore cases, the zone configurations will be restored when the
-			// system tables are restored.
-			if details.DescriptorCoverage != tree.AllDescriptors {
-				for _, table := range tableDescs {
-					if lc := table.GetLocalityConfig(); lc != nil {
-						desc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutDropped().Get().Database(ctx, table.ParentID)
-						if err != nil {
-							return err
-						}
-						if desc.GetRegionConfig() == nil {
-							return errors.AssertionFailedf(
-								"found multi-region table %d in non-multi-region database %d",
-								table.ID, table.ParentID)
-						}
-
-						mutTable, err := descsCol.MutableByID(txn.KV()).Table(ctx, table.GetID())
-						if err != nil {
-							return err
-						}
-
-						regionConfig, err := sql.SynthesizeRegionConfig(
-							ctx,
-							txn.KV(),
-							desc.GetID(),
-							descsCol,
-							multiregion.SynthesizeRegionConfigOptionIncludeOffline,
-						)
-						if err != nil {
-							return err
-						}
-						if err := sql.ApplyZoneConfigForMultiRegionTable(
-							ctx,
-							txn,
-							p.ExecCfg(),
-							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-							regionConfig,
-							mutTable,
-							sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-						); err != nil {
-							return err
-						}
-					}
-				}
-			}
-
 			if len(details.Tenants) > 0 {
 				initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, txn.KV(), descsCol)
 				if err != nil {
@@ -1609,6 +1691,20 @@ func createImportingDescriptors(
 				}
 			}
 
+			if details.DescriptorCoverage != tree.AllDescriptors {
+				if err := synthesizeZoneConfigsForPartialRestore(
+					ctx,
+					p,
+					txn,
+					databases,
+					tables,
+					typesByID,
+					details.RemoveRegions,
+					details.SkipLocalitiesCheck); err != nil {
+					return err
+				}
+			}
+
 			details.PrepareCompleted = true
 			details.DatabaseDescs = databaseDescs
 			details.TableDescs = tableDescs
@@ -1630,7 +1726,6 @@ func createImportingDescriptors(
 
 			// Emit to the event log now that the job has finished preparing descs.
 			emitRestoreJobEvent(ctx, p, jobs.StateRunning, r.job)
-
 			return err
 		})
 		if err != nil {
