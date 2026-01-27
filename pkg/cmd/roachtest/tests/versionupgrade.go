@@ -111,6 +111,11 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			opts,
 			mixedversion.NumUpgrades(1),
 		)
+	} else {
+		opts = append(
+			opts,
+			mixedversion.WithSameSeriesUpgradeProbability(0.5),
+		)
 	}
 
 	mvt := mixedversion.NewTest(testCtx, t, t.L(), c, c.All(), opts...)
