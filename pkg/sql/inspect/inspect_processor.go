@@ -335,7 +335,7 @@ func (p *inspectProcessor) processSpan(
 	}
 	for _, check := range checks {
 		if check, ok := check.(inspectSpanCheck); ok {
-			err := check.CheckSpan(ctx, checks, p.loggerBundle, progressMsg.SpanCheckData)
+			err := check.CheckSpan(ctx, checks, span, p.loggerBundle, progressMsg.SpanCheckData)
 			if err != nil {
 				return err
 			}

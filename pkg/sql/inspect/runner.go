@@ -102,7 +102,7 @@ type inspectSpanCheck interface {
 	// CheckSpan performs a validation using the other checks run on the span
 	// and updates the processor progress with any span information for use by
 	// the cluster-level checks.
-	CheckSpan(ctx context.Context, checks inspectChecks, logger *inspectLoggerBundle, data *inspectpb.InspectProcessorSpanCheckData) error
+	CheckSpan(ctx context.Context, checks inspectChecks, span roachpb.Span, logger *inspectLoggerBundle, data *inspectpb.InspectProcessorSpanCheckData) error
 }
 
 // checkClusterState represents the state of a cluster-level check.
