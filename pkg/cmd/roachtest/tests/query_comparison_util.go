@@ -611,6 +611,15 @@ func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows
 	return rows1, rows2
 }
 
+func isFloat(colType string) bool {
+	switch colType {
+	case "FLOAT4", "FLOAT8":
+		return true
+	default:
+		return false
+	}
+}
+
 func isFloatArray(colType string) bool {
 	switch colType {
 	case "[]FLOAT4", "[]FLOAT8", "_FLOAT4", "_FLOAT8":
@@ -643,7 +652,7 @@ func needApproximateMatch(colType string) bool {
 	// approximately equal to take into account platform differences in floating
 	// point calculations. On other architectures, check float values only.
 	return (runtime.GOARCH == "s390x" && (isDecimal(colType) || isDecimalArray(colType))) ||
-		colType == "FLOAT4" || colType == "FLOAT8" || isFloatArray(colType)
+		isFloat(colType) || isFloatArray(colType)
 }
 
 // sortRowsWithFloatComp is similar to joinAndSortRows, but it uses float
@@ -745,8 +754,10 @@ func unsortedMatricesDiffWithFloatComp(
 					cmpFn = floatcmp.FloatArraysMatchApprox
 				case runtime.GOARCH == "s390x" && !isFloatOrDecimalArray:
 					cmpFn = floatcmp.FloatsMatchApprox
-				case isFloatOrDecimalArray:
-					cmpFn = floatcmp.FloatArraysMatch
+				case isFloatArray(colType):
+					cmpFn = floatcmp.FloatArraysMatchApprox
+				case isFloat(colType):
+					cmpFn = floatcmp.FloatsMatchApprox
 				}
 				match, err := cmpFn(row1[j], row2[j])
 				if err != nil {
