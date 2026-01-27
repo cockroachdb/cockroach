@@ -347,8 +347,10 @@ type (
 		// release. By default, random predecessors are used, but tests
 		// may choose to always use the latest predecessor as well.
 		predecessorFunc                predecessorFunc
+		useLatestPredecessors          bool
 		waitForReplication             bool
 		skipVersionProbability         float64
+		sameSeriesUpgradeProbability   float64
 		settings                       []install.ClusterSettingOption
 		enabledDeploymentModes         []DeploymentMode
 		tag                            string
@@ -529,6 +531,7 @@ func EnabledDeploymentModes(modes ...DeploymentMode) CustomOption {
 // in case the test is more susceptible to fail due to known bugs.
 func AlwaysUseLatestPredecessors(opts *testOptions) {
 	opts.predecessorFunc = latestPredecessor
+	opts.useLatestPredecessors = true
 }
 
 // WithMutatorProbability allows tests to override the default
@@ -656,6 +659,7 @@ func defaultTestOptions() testOptions {
 		waitForReplication:             true,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
+		sameSeriesUpgradeProbability:   0,
 		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 }
@@ -676,6 +680,23 @@ func WithSkipVersionProbability(p float64) CustomOption {
 	return func(opts *testOptions) {
 		opts.skipVersionProbability = p
 	}
+}
+
+// WithSameSeriesUpgradeProbability allows callers to set the specific
+// probability under which same-series upgrades (e.g., 24.3.5 -> 24.3.12)
+// will be inserted in a test run. Same-series upgrades test patch-level
+// upgrades within the same major.minor release series.
+func WithSameSeriesUpgradeProbability(p float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.sameSeriesUpgradeProbability = p
+	}
+}
+
+// DisableSameSeriesUpgrades can be used by callers to disable
+// same-series upgrades. Useful if a test is verifying something
+// specific to cross-series upgrades only.
+func DisableSameSeriesUpgrades(opts *testOptions) {
+	WithSameSeriesUpgradeProbability(0)(opts)
 }
 
 // DisableWaitForReplication disables the wait for 3x replication
@@ -953,7 +974,8 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			)
 		}
 	}()
-	var retries, numUpgrades int
+	var retries int
+	var numMajorUpgrades, numSameSeriesUpgrades int
 	var skipVersions bool
 	// In case the length of the test plan exceeds `opts.maxNumPlanSteps`, retry up to 100 times.
 	// N.B. Statistically, the expected number of retries is miniscule; see #138014 for more info.
@@ -964,9 +986,9 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 		deploymentMode := t.deploymentMode()
 		t.updateOptionsForDeploymentMode(deploymentMode)
 
-		numUpgrades = t.numUpgrades()
+		numMajorUpgrades, numSameSeriesUpgrades = t.numUpgrades()
 		skipVersions = t.prng.Float64() < t.options.skipVersionProbability
-		upgradePath, err := t.chooseUpgradePath(numUpgrades, skipVersions)
+		upgradePath, err := t.chooseUpgradePath(numMajorUpgrades, numSameSeriesUpgrades, skipVersions)
 		if err != nil {
 			return nil, err
 		}
@@ -1012,7 +1034,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 	if retries > 0 {
 		t.logger.Printf("WARNING: generated a smaller (%d) test plan after %d retries", plan.length, retries)
 	}
-	if err := t.assertPlanValid(plan, numUpgrades, skipVersions); err != nil {
+	if err := t.assertPlanValid(plan, numMajorUpgrades, numSameSeriesUpgrades, skipVersions); err != nil {
 		t.logger.Errorf("invalid plan: %v\n%s", err, plan.prettyPrintInternal(true))
 		return nil, err
 	}
@@ -1027,11 +1049,13 @@ func (t *Test) clusterArch() vm.CPUArch {
 	return t.cluster.Architecture()
 }
 
-func (t *Test) assertPlanValid(plan *TestPlan, numUpgrades int, skipVersions bool) error {
+func (t *Test) assertPlanValid(
+	plan *TestPlan, numMajorUpgrades, numSameSeriesUpgrades int, skipVersions bool,
+) error {
 	if len(plan.upgrades) == 0 {
 		return errors.New("internal error: plan has no upgrades")
 	}
-	if err := t.assertNumUpgrades(plan, numUpgrades); err != nil {
+	if err := t.assertNumUpgrades(plan, numMajorUpgrades, numSameSeriesUpgrades); err != nil {
 		return err
 	}
 	if err := t.assertMbvAndMsv(plan); err != nil {
@@ -1047,20 +1071,41 @@ func (t *Test) assertPlanValid(plan *TestPlan, numUpgrades int, skipVersions boo
 	return nil
 }
 
-// assertNumUpgrades checks that the number of upgrades in the plan matches the specification in the test.
-// It is possible for the number of total upgrades generated to be one fewer than the
-// number requested when skip upgrades are enabled. The framework prioritizes testing at least one
-// skip upgrade over matching the exact number of upgrades requested. In all other cases, the plan must have
-// the exact number of specified upgrades (i.e., NumUpgrades(k)).
-func (t *Test) assertNumUpgrades(plan *TestPlan, expectedUpgrades int) error {
+// assertNumUpgrades checks that the number of upgrades in the plan
+// matches the specification in the test. It uses the predetermined
+// counts of major (cross-series) and same-series upgrades for precise
+// validation:
+//   - The actual count must be at most expectedMajor + expectedSameSeries.
+//   - Skip version upgrades may reduce the major count by 1.
+//   - Same-series insertions may fail if no eligible older patches exist
+//     (rejection sampling exhaustion), reducing the same-series count.
+//   - The actual count must be at least max(1, expectedMajor - 1) to
+//     account for skip version effects.
+func (t *Test) assertNumUpgrades(
+	plan *TestPlan, expectedMajorUpgrades, expectedSameSeriesUpgrades int,
+) error {
 	actualUpgrades := len(plan.allUpgrades())
-	if actualUpgrades != expectedUpgrades {
-		if t.options.skipVersionProbability > 0 && actualUpgrades == expectedUpgrades-1 {
-			return nil
-		}
-		return errors.Newf("expected %d upgrades, got %d", expectedUpgrades, actualUpgrades)
+	expectedTotal := expectedMajorUpgrades + expectedSameSeriesUpgrades
+
+	if actualUpgrades == expectedTotal {
+		return nil
 	}
-	return nil
+
+	// Compute the minimum allowable upgrades.
+	minAllowed := expectedMajorUpgrades
+	if t.options.skipVersionProbability > 0 {
+		// Skip version upgrades may reduce the major count by 1.
+		minAllowed = max(1, expectedMajorUpgrades-1)
+	}
+
+	if actualUpgrades >= minAllowed && actualUpgrades <= expectedTotal {
+		return nil
+	}
+
+	return errors.Newf(
+		"expected between %d and %d upgrades (%d major + %d same-series), got %d",
+		minAllowed, expectedTotal, expectedMajorUpgrades, expectedSameSeriesUpgrades, actualUpgrades,
+	)
 }
 
 // Check the following,
@@ -1146,7 +1191,11 @@ func (t *Test) assertSkipUpgrade(plan *TestPlan, skipVersions bool) error {
 	if skipVersions && hasEligibleSkips && numSkips == 0 {
 		return errors.Newf("expected at least one skip upgrade, got none")
 	}
-	if numSkips > 0 && t.supportsSkipUpgradeTo(upgrades[len(upgrades)-1].from, upgrades[len(upgrades)-1].to) && numSkipsToFinal == 0 {
+	// Check that skip upgrades to final are present when expected. However,
+	// if the final upgrade is a same-series upgrade (e.g., v25.2.4 → v25.2.10),
+	// we don't expect it to be a skip upgrade even if skip upgrades are enabled.
+	lastUpgradeIsSameSeries := lastUpgrade.from.Series() == lastUpgrade.to.Series()
+	if numSkips > 0 && !lastUpgradeIsSameSeries && t.supportsSkipUpgradeTo(lastUpgrade.from, lastUpgrade.to) && numSkipsToFinal == 0 {
 		return errors.Newf("expected at least one skip upgrade to the final version, got none")
 	}
 	return nil
@@ -1286,7 +1335,7 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) stepFunc 
 // not available under a certain cluster architecture. Specifically,
 // ARM64 builds are only available on v22.2.0+.
 func (t *Test) chooseUpgradePath(
-	numUpgrades int, skipVersions bool,
+	numMajorUpgrades, numSameSeriesUpgrades int, skipVersions bool,
 ) ([]*clusterupgrade.Version, error) {
 	mbv := t.options.minimumBootstrapVersion
 	msv := t.options.minimumSupportedVersion
@@ -1329,26 +1378,110 @@ func (t *Test) chooseUpgradePath(
 	}
 	if skipVersions {
 		// Choose a subset with skip upgrade steps.
-		predecessors = t.chooseSkips(predecessors, numUpgrades)
+		predecessors = t.chooseSkips(predecessors, numMajorUpgrades)
 	}
 	// N.B. len(predecessors) is the longest possible number of upgrade steps _modulo_ the result of `chooseSkips`.
-	if len(predecessors) < numUpgrades {
+	if len(predecessors) < numMajorUpgrades {
 		warnMsg := "WARNING: %d upgrades requested but found plan with only %d upgrades"
 		if skipVersions {
 			t.logger.Printf("%s: prioritizing running at least one skip version upgrade", warnMsg)
 		} else {
-			return nil, errors.Newf("unable to find a valid upgrade path with %d upgrades", numUpgrades)
+			return nil, errors.Newf("unable to find a valid upgrade path with %d upgrades", numMajorUpgrades)
 		}
 	}
-	// The chosen upgrade path is bounded by numUpgrades.
-	availableUpgrades := min(len(predecessors), numUpgrades)
+	// The chosen upgrade path is bounded by numMajorUpgrades.
+	availableUpgrades := min(len(predecessors), numMajorUpgrades)
 	upgradePath := predecessors[0:availableUpgrades]
 	// The upgrade path to be returned is from oldest to newest release.
 	slices.Reverse(upgradePath)
+	// Insert the predetermined number of same-series upgrades (e.g., 24.3.5 -> 24.3.12).
+	// This is done before appending the current version to ensure the
+	// current version remains the final step in the upgrade path.
+	upgradePath = t.chooseSameSeriesUpgrades(upgradePath, numSameSeriesUpgrades)
 	// Complete the upgrade path by appending the current version.
 	upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
 
 	return upgradePath, nil
+}
+
+// chooseSameSeriesUpgrades inserts up to numInsertions same-series upgrade
+// steps into the upgrade path using rejection sampling. For example, if the
+// upgrade path is [24.1.5, 24.2.3, 24.3.10] and numInsertions=2, this
+// function might produce [24.1.2, 24.1.5, 24.2.3, 24.3.7, 24.3.10] where
+// 24.1.2 -> 24.1.5 and 24.3.7 -> 24.3.10 are same-series upgrades.
+//
+// For each insertion, the function picks a random version from the path and
+// attempts to insert an older patch from the same release series. If the
+// chosen version has no valid older patches (respecting mbv and msv
+// constraints), or was already used for a previous insertion, the attempt is
+// retried. Insertion stops after numInsertions successful inserts or after
+// exhausting retry attempts.
+func (t *Test) chooseSameSeriesUpgrades(
+	upgradePath []*clusterupgrade.Version, numInsertions int,
+) []*clusterupgrade.Version {
+	if numInsertions == 0 {
+		return upgradePath
+	}
+
+	mbv := t.options.minimumBootstrapVersion
+	msv := t.options.minimumSupportedVersion
+
+	const maxRetriesPerInsertion = 100
+	insertions := make(map[int]*clusterupgrade.Version) // idx -> chosen older patch
+
+	for inserted := 0; inserted < numInsertions; {
+		found := false
+		for retries := 0; retries < maxRetriesPerInsertion; retries++ {
+			idx := t.prng.Intn(len(upgradePath))
+			if _, already := insertions[idx]; already {
+				continue
+			}
+
+			v := upgradePath[idx]
+			olderPatches, err := release.OlderPatchReleases(&v.Version)
+			if err != nil || len(olderPatches) == 0 {
+				continue
+			}
+
+			// Filter patches that respect mbv and msv constraints.
+			var validPatches []*clusterupgrade.Version
+			for _, patchStr := range olderPatches {
+				patchV := clusterupgrade.MustParseVersion(patchStr)
+				if mbv != nil && patchV.LessThan(mbv) {
+					continue
+				}
+				if msv != nil && patchV.Series() == msv.Series() && patchV.LessThan(msv) {
+					continue
+				}
+				validPatches = append(validPatches, patchV)
+			}
+
+			if len(validPatches) == 0 {
+				continue
+			}
+
+			insertions[idx] = validPatches[t.prng.Intn(len(validPatches))]
+			inserted++
+			found = true
+			break
+		}
+
+		if !found {
+			// Exhausted retries for this insertion; stop trying.
+			break
+		}
+	}
+
+	// Reconstruct the path with insertions.
+	result := make([]*clusterupgrade.Version, 0, len(upgradePath)+len(insertions))
+	for i, v := range upgradePath {
+		if patch, ok := insertions[i]; ok {
+			result = append(result, patch)
+		}
+		result = append(result, v)
+	}
+
+	return result
 }
 
 // chooseSkips returns a subset of predecessors (from newest to oldest) by skipping
@@ -1394,13 +1527,21 @@ func (t *Test) chooseSkips(
 	return res
 }
 
-// numUpgrades returns the number of upgrades that will be performed
-// in this test run. Returns a number in the [minUpgrades, maxUpgrades]
-// range.
-func (t *Test) numUpgrades() int {
-	return t.prng.Intn(
+// numUpgrades returns the number of major (cross-series) upgrades and
+// same-series (patch-level) upgrades that will be performed in this
+// test run. majorUpgrades is picked from [minUpgrades, maxUpgrades].
+// sameSeriesUpgrades is picked from [0, maxUpgrades - majorUpgrades]
+// when same-series upgrades are enabled (sameSeriesUpgradeProbability > 0),
+// and 0 otherwise. The total number of upgrades is bounded by maxUpgrades.
+func (t *Test) numUpgrades() (majorUpgrades, sameSeriesUpgrades int) {
+	majorUpgrades = t.prng.Intn(
 		t.options.maxUpgrades-t.options.minUpgrades+1,
 	) + t.options.minUpgrades
+	if t.options.sameSeriesUpgradeProbability > 0 {
+		remainingUpgrades := t.options.maxUpgrades - majorUpgrades
+		sameSeriesUpgrades = t.prng.Intn(remainingUpgrades + 1)
+	}
+	return majorUpgrades, sameSeriesUpgrades
 }
 
 func (t *Test) deploymentMode() DeploymentMode {
@@ -1545,8 +1686,10 @@ func (t *Test) updateOptionsForDeploymentMode(mode DeploymentMode) {
 			// is more prone to flake (due to the relative lack of testing historically). In
 			// addition, production separate-process deployments (Serverless) run in much more
 			// controlled environments than self-hosted and are generally running the latest
-			// patch releases.
+			// patch releases. Same-series upgrades are also disabled since they would
+			// reintroduce older patches, contradicting the intent of using latest predecessors.
 			t.options.predecessorFunc = latestPredecessor
+			t.options.sameSeriesUpgradeProbability = 0
 		default:
 			t.options.predecessorFunc = randomPredecessor
 		}
@@ -1921,6 +2064,13 @@ func assertValidTest(test *Test, fatalFunc func(...interface{})) {
 	if msv.LessThan(minBootstrapVersion) {
 		test.logger.Printf("WARN: overriding minSupportedVersion, cannot be older than minimum bootstrap version (%s)", minBootstrapVersion)
 		test.options.minimumSupportedVersion = minBootstrapVersion
+	}
+
+	if test.options.useLatestPredecessors && test.options.sameSeriesUpgradeProbability > 0 {
+		fail(fmt.Errorf(
+			"invalid test options: same-series upgrades (probability=%.2f) cannot be used with AlwaysUseLatestPredecessors",
+			test.options.sameSeriesUpgradeProbability,
+		))
 	}
 }
 
