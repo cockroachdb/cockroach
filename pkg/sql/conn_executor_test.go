@@ -680,6 +680,14 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	_, err = tx2.Exec("ALTER TABLE bar ADD COLUMN j INT NOT NULL")
 	require.NoError(t, err)
 
+	// Wait for the DDL to complete. If we don't do this, it is possible for the
+	// schema change jobs to encounter an error due to concurrent inserts on
+	// slow runs.
+	testDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND status != 'succeeded'",
+		[][]string{{"0"}},
+	)
+
 	// Now we want tx2 to get blocked on tx1 and stay blocked, then we want to
 	// push tx1 above tx2 and have it get blocked in planning.
 	errCh := make(chan error)
@@ -706,19 +714,27 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	_, err = tx1.Prepare("SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
 	require.NoError(t, err)
 
-	// Try to commit tx1. Either it should get a RETRY_SERIALIZABLE error or
-	// tx2 should. Ensure that either one or both of them does.
+	checkSerializableError := func(err error) {
+		var pqErr *pq.Error
+		require.NotNil(t, err)
+		require.Truef(t, errors.As(err, &pqErr), "expected a pq error, got: %v", err)
+		require.Equalf(t, pgcode.SerializationFailure, pgcode.MakeCode(string(pqErr.Code)),
+			"expected serialization failure, got (with code %v): %v", pqErr.Code, err)
+	}
+
+	// Try to commit tx1. Either it should get a retriable error or tx2 should.
+	// Ensure that either one or both of them does.
 	if tx1Err := tx1.Commit(); tx1Err == nil {
 		// tx1 committed successfully, ensure tx2 failed.
 		tx2ExecErr := <-errCh
-		require.Regexp(t, "RETRY_SERIALIZABLE", tx2ExecErr)
+		checkSerializableError(tx2ExecErr)
 		_ = tx2.Rollback()
 	} else {
-		require.Regexp(t, "RETRY_SERIALIZABLE", tx1Err)
+		checkSerializableError(tx1Err)
 		tx2ExecErr := <-errCh
 		require.NoError(t, tx2ExecErr)
 		if tx2CommitErr := tx2.Commit(); tx2CommitErr != nil {
-			require.Regexp(t, "RETRY_SERIALIZABLE", tx2CommitErr)
+			checkSerializableError(tx2CommitErr)
 		}
 	}
 }
