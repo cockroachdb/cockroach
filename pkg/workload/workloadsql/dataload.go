@@ -82,7 +82,6 @@ func (l SchemaOnlyDataLoader) InitialDataLoad(
 	}
 
 	const maxTableBatchSize = 5000
-	const backoffBetweenBatches = 30 * time.Second
 	currentTable := 0
 	batchNum := 0
 	// When dealing with large number of tables, opt to use transactions
@@ -126,17 +125,8 @@ func (l SchemaOnlyDataLoader) InitialDataLoad(
 			return 0, err
 		}
 		currentTable = batchEnd
-		log.Dev.Infof(ctx, `created %d/%d tables (batch %d on node %d, %d tables in %s); waiting %s before next batch`,
-			currentTable, len(tables), batchNum, (batchNum-1)%len(dbs)+1, len(nextBatch), timeutil.Since(batchStart).Round(time.Millisecond), backoffBetweenBatches)
-
-		// Add backoff between batches to reduce contention on system tables.
-		if currentTable < len(tables) {
-			select {
-			case <-ctx.Done():
-				return 0, ctx.Err()
-			case <-time.After(backoffBetweenBatches):
-			}
-		}
+		log.Dev.Infof(ctx, `created %d/%d tables (batch %d on node %d, %d tables in %s)`,
+			currentTable, len(tables), batchNum, (batchNum-1)%len(dbs)+1, len(nextBatch), timeutil.Since(batchStart).Round(time.Millisecond))
 	}
 
 	if hooks.PreLoad != nil {
