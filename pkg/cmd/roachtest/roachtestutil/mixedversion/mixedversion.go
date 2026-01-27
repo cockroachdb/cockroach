@@ -348,6 +348,7 @@ type (
 		predecessorFunc                predecessorFunc
 		waitForReplication             bool
 		skipVersionProbability         float64
+		sameSeriesUpgradeProbability   float64
 		settings                       []install.ClusterSettingOption
 		enabledDeploymentModes         []DeploymentMode
 		tag                            string
@@ -651,9 +652,10 @@ func defaultTestOptions() testOptions {
 		// appears to help, but we should be cautious of tests that create a lot
 		// of ranges as this may add significant delay.
 		waitForReplication:             true,
-		enabledDeploymentModes:         allDeploymentModes,
-		skipVersionProbability:         0.5,
-		overriddenMutatorProbabilities: make(map[string]float64),
+		enabledDeploymentModes:          allDeploymentModes,
+		skipVersionProbability:          0.5,
+		sameSeriesUpgradeProbability:    0,
+		overriddenMutatorProbabilities:  make(map[string]float64),
 	}
 }
 
@@ -1344,8 +1346,63 @@ func (t *Test) chooseUpgradePath(
 	slices.Reverse(upgradePath)
 	// Complete the upgrade path by appending the current version.
 	upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
+	// Optionally insert same-series upgrades (e.g., 24.3.5 -> 24.3.12).
+	upgradePath = t.chooseSameSeriesUpgrades(upgradePath)
 
 	return upgradePath, nil
+}
+
+// chooseSameSeriesUpgrades may insert older patches from the same series
+// before versions in the upgrade path, creating same-series upgrade steps.
+// For example, if the upgrade path is [24.1.5, 24.2.3, 24.3.10, current],
+// this function might transform it to [24.1.2, 24.1.5, 24.2.3, 24.3.7, 24.3.10, current]
+// where 24.1.2 -> 24.1.5 and 24.3.7 -> 24.3.10 are same-series upgrades.
+//
+// The function respects minimumBootstrapVersion: it won't insert a version
+// older than mbv. It uses sameSeriesUpgradeProbability to decide whether
+// to insert a same-series upgrade before each eligible version.
+func (t *Test) chooseSameSeriesUpgrades(
+	upgradePath []*clusterupgrade.Version,
+) []*clusterupgrade.Version {
+	// Early return if same-series upgrades are disabled to avoid consuming
+	// random numbers that would change the random sequence for other operations.
+	if len(upgradePath) == 0 || t.options.sameSeriesUpgradeProbability == 0 {
+		return upgradePath
+	}
+
+	mbv := t.options.minimumBootstrapVersion
+	result := make([]*clusterupgrade.Version, 0, len(upgradePath))
+
+	for i, v := range upgradePath {
+		// Don't insert same-series upgrades before the current version (last in path).
+		// Also skip pre-releases since they don't have enumerable older patches.
+		if i == len(upgradePath)-1 || v.IsPrerelease() {
+			result = append(result, v)
+			continue
+		}
+
+		// Check probability for inserting a same-series upgrade.
+		if t.prng.Float64() < t.options.sameSeriesUpgradeProbability {
+			olderPatches, err := release.OlderPatchReleases(&v.Version)
+			if err == nil && len(olderPatches) > 0 {
+				// Filter patches that are >= minimumBootstrapVersion.
+				var validPatches []*clusterupgrade.Version
+				for _, patchStr := range olderPatches {
+					patchV := clusterupgrade.MustParseVersion(patchStr)
+					if mbv == nil || patchV.AtLeast(mbv) {
+						validPatches = append(validPatches, patchV)
+					}
+				}
+				if len(validPatches) > 0 {
+					// Pick a random valid patch and insert before v.
+					result = append(result, validPatches[t.prng.Intn(len(validPatches))])
+				}
+			}
+		}
+		result = append(result, v)
+	}
+
+	return result
 }
 
 // chooseSkips returns a subset of predecessors (from newest to oldest) by skipping
@@ -1954,4 +2011,21 @@ func parseUpgradePathOverride(override string) ([]*clusterupgrade.Version, error
 	}
 
 	return upgradePath, nil
+}
+
+// WithSameSeriesUpgradeProbability allows callers to set the specific
+// probability under which same-series upgrades (e.g., 24.3.5 -> 24.3.12)
+// will be inserted in a test run. Same-series upgrades test patch-level
+// upgrades within the same major.minor release series.
+func WithSameSeriesUpgradeProbability(p float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.sameSeriesUpgradeProbability = p
+	}
+}
+
+// DisableSameSeriesUpgrades can be used by callers to disable
+// same-series upgrades. Useful if a test is verifying something
+// specific to cross-series upgrades only.
+func DisableSameSeriesUpgrades(opts *testOptions) {
+	WithSameSeriesUpgradeProbability(0)(opts)
 }
