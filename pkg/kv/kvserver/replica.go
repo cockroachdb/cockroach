@@ -244,6 +244,15 @@ func (lw *leaderlessWatcher) IsUnavailable() bool {
 	return lw.mu.unavailable
 }
 
+// LeaderlessSince returns the time at which the replica was first observed to
+// be leaderless. It is reset to zero if the replica has a leader.
+func (lw *leaderlessWatcher) LeaderlessSince() time.Time {
+	lw.mu.RLock()
+	defer lw.mu.RUnlock()
+
+	return lw.mu.leaderlessTimestamp
+}
+
 // refreshUnavailableState refreshes the unavailable state on the leaderless
 // watcher. Replicas are considered unavailable if they have been leaderless for
 // a long time, where long is defined by the ReplicaUnavailableThreshold.
