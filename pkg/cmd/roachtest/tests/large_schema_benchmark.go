@@ -83,6 +83,9 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
+		// Skip INSPECT and descriptor post-validation because this benchmark
+		// creates many databases and tables, and running them would take too long.
+		SkipPostValidations: registry.PostValidationInspect | registry.PostValidationInvalidDescriptors,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Cap the total number of workers based on the number of
 			// nodes and CPUs on them.
@@ -343,6 +346,9 @@ func registerLargeSchemaIntrospectionBenchmark(r registry.Registry) {
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Weekly),
 			Timeout:          timeout,
+			// Skip INSPECT and descriptor post-validation because this benchmark
+			// creates many databases and tables, and running them would take too long.
+			SkipPostValidations: registry.PostValidationInspect | registry.PostValidationInvalidDescriptors,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runLargeSchemaIntrospectionBenchmark(ctx, t, c, numTables)
 			},
