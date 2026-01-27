@@ -699,6 +699,16 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 			require.NoError(t, err)
 			opts = append(opts, NumUpgrades(n))
 
+		case "min_upgrades":
+			n, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			opts = append(opts, MinUpgrades(n))
+
+		case "max_upgrades":
+			n, err := strconv.Atoi(arg.Vals[0])
+			require.NoError(t, err)
+			opts = append(opts, MaxUpgrades(n))
+
 		case "minimum_supported_version":
 			v := arg.Vals[0]
 			opts = append(opts, MinimumSupportedVersion(v))
@@ -728,6 +738,11 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 
 		case "enable_skip_version":
 			opts = append(opts, WithSkipVersionProbability(1))
+
+		case "same_series_upgrade_probability":
+			prob, err := strconv.ParseFloat(arg.Vals[0], 64)
+			require.NoError(t, err)
+			opts = append(opts, WithSameSeriesUpgradeProbability(prob))
 
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))

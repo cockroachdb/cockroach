@@ -349,6 +349,7 @@ type (
 		predecessorFunc                predecessorFunc
 		waitForReplication             bool
 		skipVersionProbability         float64
+		sameSeriesUpgradeProbability   float64
 		settings                       []install.ClusterSettingOption
 		enabledDeploymentModes         []DeploymentMode
 		tag                            string
@@ -656,6 +657,7 @@ func defaultTestOptions() testOptions {
 		waitForReplication:             true,
 		enabledDeploymentModes:         allDeploymentModes,
 		skipVersionProbability:         0.5,
+		sameSeriesUpgradeProbability:   0,
 		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 }
@@ -676,6 +678,23 @@ func WithSkipVersionProbability(p float64) CustomOption {
 	return func(opts *testOptions) {
 		opts.skipVersionProbability = p
 	}
+}
+
+// WithSameSeriesUpgradeProbability allows callers to set the specific
+// probability under which same-series upgrades (e.g., 24.3.5 -> 24.3.12)
+// will be inserted in a test run. Same-series upgrades test patch-level
+// upgrades within the same major.minor release series.
+func WithSameSeriesUpgradeProbability(p float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.sameSeriesUpgradeProbability = p
+	}
+}
+
+// DisableSameSeriesUpgrades can be used by callers to disable
+// same-series upgrades. Useful if a test is verifying something
+// specific to cross-series upgrades only.
+func DisableSameSeriesUpgrades(opts *testOptions) {
+	WithSameSeriesUpgradeProbability(0)(opts)
 }
 
 // DisableWaitForReplication disables the wait for 3x replication
@@ -1050,12 +1069,22 @@ func (t *Test) assertPlanValid(plan *TestPlan, numUpgrades int, skipVersions boo
 // assertNumUpgrades checks that the number of upgrades in the plan matches the specification in the test.
 // It is possible for the number of total upgrades generated to be one fewer than the
 // number requested when skip upgrades are enabled. The framework prioritizes testing at least one
-// skip upgrade over matching the exact number of upgrades requested. In all other cases, the plan must have
-// the exact number of specified upgrades (i.e., NumUpgrades(k)).
+// skip upgrade over matching the exact number of upgrades requested.
+//
+// When same-series upgrades are enabled (sameSeriesUpgradeProbability > 0), the actual number of
+// upgrades may be larger than the base number due to inserted patch-level upgrades (e.g., 24.3.5 -> 24.3.12).
+// The total number of upgrades is bounded by maxUpgrades.
+//
+// In all other cases, the plan must have the exact number of specified upgrades (i.e., NumUpgrades(k)).
 func (t *Test) assertNumUpgrades(plan *TestPlan, expectedUpgrades int) error {
 	actualUpgrades := len(plan.allUpgrades())
 	if actualUpgrades != expectedUpgrades {
+		// Skip version upgrades may reduce the count by 1.
 		if t.options.skipVersionProbability > 0 && actualUpgrades == expectedUpgrades-1 {
+			return nil
+		}
+		// Same-series upgrades may increase the count, up to maxUpgrades.
+		if t.options.sameSeriesUpgradeProbability > 0 && actualUpgrades > expectedUpgrades && actualUpgrades <= t.options.maxUpgrades {
 			return nil
 		}
 		return errors.Newf("expected %d upgrades, got %d", expectedUpgrades, actualUpgrades)
@@ -1347,8 +1376,86 @@ func (t *Test) chooseUpgradePath(
 	slices.Reverse(upgradePath)
 	// Complete the upgrade path by appending the current version.
 	upgradePath = append(upgradePath, clusterupgrade.CurrentVersion())
+	// Optionally insert same-series upgrades (e.g., 24.3.5 -> 24.3.12).
+	// We pass maxUpgrades to limit the total number of upgrades.
+	upgradePath = t.chooseSameSeriesUpgrades(upgradePath, t.options.maxUpgrades)
 
 	return upgradePath, nil
+}
+
+// chooseSameSeriesUpgrades may insert older patches from the same series
+// before versions in the upgrade path, creating same-series upgrade steps.
+// For example, if the upgrade path is [24.1.5, 24.2.3, 24.3.10, current],
+// this function might transform it to [24.1.2, 24.1.5, 24.2.3, 24.3.7, 24.3.10, current]
+// where 24.1.2 -> 24.1.5 and 24.3.7 -> 24.3.10 are same-series upgrades.
+//
+// The function respects minimumBootstrapVersion: it won't insert a version
+// older than mbv. It uses sameSeriesUpgradeProbability to decide whether
+// to insert a same-series upgrade before each eligible version.
+//
+// The maxUpgrades parameter limits the total number of upgrades (len(result)-1)
+// to avoid excessive test runtime. Same-series upgrades are only inserted if
+// there is remaining capacity within the maxUpgrades budget.
+//
+// For pre-release versions (e.g., on release branches like release-24.3 where
+// current is v24.3.15-dev), the function uses AllPatchReleases to find
+// available patches in the same series.
+func (t *Test) chooseSameSeriesUpgrades(
+	upgradePath []*clusterupgrade.Version, maxUpgrades int,
+) []*clusterupgrade.Version {
+	// Early return if same-series upgrades are disabled to avoid consuming
+	// random numbers that would change the random sequence for other operations.
+	if len(upgradePath) == 0 || t.options.sameSeriesUpgradeProbability == 0 {
+		return upgradePath
+	}
+
+	mbv := t.options.minimumBootstrapVersion
+	result := make([]*clusterupgrade.Version, 0, len(upgradePath))
+	// Track how many same-series upgrades we've inserted.
+	// The original path has len(upgradePath)-1 upgrades.
+	// We can insert at most maxUpgrades - (len(upgradePath)-1) same-series upgrades.
+	originalUpgrades := len(upgradePath) - 1
+	maxSameSeriesInsertions := maxUpgrades - originalUpgrades
+	sameSeriesInserted := 0
+
+	for _, v := range upgradePath {
+		// Only attempt insertion if we have budget remaining.
+		if sameSeriesInserted < maxSameSeriesInsertions {
+			// Check probability for inserting a same-series upgrade.
+			if t.prng.Float64() < t.options.sameSeriesUpgradeProbability {
+				var candidatePatches []string
+				var err error
+
+				if v.IsPrerelease() {
+					// For pre-releases (e.g., v24.3.15-dev on release branches),
+					// get all patches in the same series since we can't compare patch numbers.
+					candidatePatches, err = release.AllPatchReleases(v.Series())
+				} else {
+					// For regular releases, get patches older than this version.
+					candidatePatches, err = release.OlderPatchReleases(&v.Version)
+				}
+
+				if err == nil && len(candidatePatches) > 0 {
+					// Filter patches that are >= minimumBootstrapVersion.
+					var validPatches []*clusterupgrade.Version
+					for _, patchStr := range candidatePatches {
+						patchV := clusterupgrade.MustParseVersion(patchStr)
+						if mbv == nil || patchV.AtLeast(mbv) {
+							validPatches = append(validPatches, patchV)
+						}
+					}
+					if len(validPatches) > 0 {
+						// Pick a random valid patch and insert before v.
+						result = append(result, validPatches[t.prng.Intn(len(validPatches))])
+						sameSeriesInserted++
+					}
+				}
+			}
+		}
+		result = append(result, v)
+	}
+
+	return result
 }
 
 // chooseSkips returns a subset of predecessors (from newest to oldest) by skipping
