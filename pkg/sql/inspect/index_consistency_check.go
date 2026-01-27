@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -168,78 +166,9 @@ func (c *indexConsistencyCheck) Start(
 	otherColNames := colNames(otherColumns)
 	allColNames := colNames(c.columns)
 
-	// Generate query bounds from the span to limit the query to the specified range
-	var predicate string
-	var queryArgs []interface{}
-
-	// Assert that we get meaningful spans
-	if span.Key.Equal(span.EndKey) || len(span.Key) == 0 || len(span.EndKey) == 0 {
-		return errors.AssertionFailedf("received invalid span: Key=%x EndKey=%x", span.Key, span.EndKey)
-	}
-
-	// Get primary key metadata for span conversion
-	pkColTypes, err := spanutils.GetPKColumnTypes(c.tableDesc, c.priIndex.IndexDesc())
+	predicate, queryArgs, err := getPredicateAndQueryArgs(ctx, cfg, span, c.tableDesc, c.priIndex, c.asOf, pkColNames)
 	if err != nil {
-		return errors.Wrap(err, "getting primary key column types")
-	}
-
-	pkColDirs := make([]catenumpb.IndexColumn_Direction, c.priIndex.NumKeyColumns())
-	pkColIDs := catalog.TableColMap{}
-	for i := 0; i < c.priIndex.NumKeyColumns(); i++ {
-		colID := c.priIndex.GetKeyColumnID(i)
-		pkColIDs.Set(colID, i)
-		pkColDirs[i] = c.priIndex.GetKeyColumnDirection(i)
-	}
-
-	// Convert span to query bounds
-	alloc := &tree.DatumAlloc{}
-	bounds, hasRows, err := spanutils.SpanToQueryBounds(
-		ctx, cfg.DB.KV(), cfg.Codec, pkColIDs, pkColTypes, pkColDirs,
-		len(c.tableDesc.GetFamilies()), span, alloc, c.asOf,
-	)
-	if err != nil {
-		return errors.Wrap(err, "converting span to query bounds")
-	}
-
-	// If no rows exist in the primary index span, we still need to check for dangling
-	// secondary index entries. We run the check with an empty predicate, which will
-	// scan the entire secondary index within the span. Any secondary index entries found
-	// will be dangling since there are no corresponding primary index rows.
-	if !hasRows {
-		// Use empty predicate and no query arguments
-		predicate = ""
-		queryArgs = []interface{}{}
-	} else {
-		if len(bounds.Start) == 0 || len(bounds.End) == 0 {
-			return errors.AssertionFailedf("query bounds from span didn't produce start or end: %+v", bounds)
-		}
-
-		// Generate SQL predicate from the bounds
-		// Encode column names for SQL usage
-		encodedPkColNames := make([]string, len(pkColNames))
-		for i, colName := range pkColNames {
-			encodedPkColNames[i] = encodeColumnName(colName)
-		}
-		predicate, err = spanutils.RenderQueryBounds(
-			encodedPkColNames, pkColDirs, pkColTypes,
-			len(bounds.Start), len(bounds.End), true, 1,
-		)
-		if err != nil {
-			return errors.Wrap(err, "rendering query bounds")
-		}
-
-		if strings.TrimSpace(predicate) == "" {
-			return errors.AssertionFailedf("query bounds from span didn't produce predicate: %+v", bounds)
-		}
-
-		// Prepare query arguments: end bounds first, then start bounds
-		queryArgs = make([]interface{}, 0, len(bounds.End)+len(bounds.Start))
-		for _, datum := range bounds.End {
-			queryArgs = append(queryArgs, datum)
-		}
-		for _, datum := range bounds.Start {
-			queryArgs = append(queryArgs, datum)
-		}
+		return err
 	}
 
 	if indexConsistencyHashEnabled.Get(&c.execCfg.Settings.SV) && len(allColNames) > 0 {
