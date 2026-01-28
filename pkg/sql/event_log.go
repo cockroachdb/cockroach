@@ -166,7 +166,9 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		User:            p.SessionData().SessionUser().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
-	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
+	placeholders := p.extendedEvalCtx.Context.Placeholders
+	if placeholders != nil && len(placeholders.Values) > 0 {
+		pls := placeholders.Values
 		// The statement text above substitutes '*****' for password and
 		// sensitive cluster setting literals, but a secret bound via a
 		// placeholder would survive in the recorded placeholder values.
