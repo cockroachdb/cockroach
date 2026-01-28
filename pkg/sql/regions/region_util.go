@@ -419,6 +419,23 @@ func MakeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 	}
 }
 
+// ZoneConfigForMultiRegionValidator is an interface that both schema changers
+// must implement to provide error reporting and state information during
+// multi-region zone config validation.
+type ZoneConfigForMultiRegionValidator interface {
+	// TransitioningRegions returns the regions currently being added or removed
+	TransitioningRegions() catpb.RegionNames
+
+	// NewMismatchFieldError creates an error for when a zone config field doesn't match
+	NewMismatchFieldError(descType, name string, mismatch zonepb.DiffWithZoneMismatch) error
+
+	// NewMissingSubzoneError creates an error for when an expected subzone is missing
+	NewMissingSubzoneError(descType, name string, mismatch zonepb.DiffWithZoneMismatch) error
+
+	// NewExtraSubzoneError creates an error for when an unexpected subzone is present
+	NewExtraSubzoneError(descType, name string, mismatch zonepb.DiffWithZoneMismatch) error
+}
+
 // AddConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
 // that every replica is guaranteed to be constrained to a region within the
 // super region.

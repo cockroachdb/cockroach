@@ -128,6 +128,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecsettings",
+        "//pkg/sql/zoneconfig",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
