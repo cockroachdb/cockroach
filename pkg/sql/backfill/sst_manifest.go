@@ -18,13 +18,13 @@ import (
 // ingestion pipeline.
 type SSTManifestBuffer struct {
 	syncutil.Mutex
-	manifests []jobspb.IndexBackfillSSTManifest
+	manifests []jobspb.BulkSSTManifest
 	dirty     bool
 }
 
 // NewSSTManifestBuffer constructs a buffer initialized with the provided
 // manifests.
-func NewSSTManifestBuffer(initial []jobspb.IndexBackfillSSTManifest) *SSTManifestBuffer {
+func NewSSTManifestBuffer(initial []jobspb.BulkSSTManifest) *SSTManifestBuffer {
 	buf := &SSTManifestBuffer{}
 	buf.manifests = append(buf.manifests, initial...)
 	if len(initial) > 0 {
@@ -33,12 +33,12 @@ func NewSSTManifestBuffer(initial []jobspb.IndexBackfillSSTManifest) *SSTManifes
 	return buf
 }
 
-func (b *SSTManifestBuffer) snapshotLocked() []jobspb.IndexBackfillSSTManifest {
-	return append([]jobspb.IndexBackfillSSTManifest(nil), b.manifests...)
+func (b *SSTManifestBuffer) snapshotLocked() []jobspb.BulkSSTManifest {
+	return append([]jobspb.BulkSSTManifest(nil), b.manifests...)
 }
 
 // Snapshot returns a copy of the buffered manifests.
-func (b *SSTManifestBuffer) Snapshot() []jobspb.IndexBackfillSSTManifest {
+func (b *SSTManifestBuffer) Snapshot() []jobspb.BulkSSTManifest {
 	b.Lock()
 	defer b.Unlock()
 	return b.snapshotLocked()
@@ -46,9 +46,7 @@ func (b *SSTManifestBuffer) Snapshot() []jobspb.IndexBackfillSSTManifest {
 
 // Append adds the provided manifests to the buffer and returns the updated
 // snapshot.
-func (b *SSTManifestBuffer) Append(
-	newManifests []jobspb.IndexBackfillSSTManifest,
-) []jobspb.IndexBackfillSSTManifest {
+func (b *SSTManifestBuffer) Append(newManifests []jobspb.BulkSSTManifest) []jobspb.BulkSSTManifest {
 	if len(newManifests) == 0 {
 		return b.Snapshot()
 	}
@@ -72,7 +70,7 @@ func (b *SSTManifestBuffer) Dirty() bool {
 
 // SnapshotAndMarkClean returns a copy of the buffered manifests and clears the
 // dirty flag. Callers should invoke this once they have persisted the snapshot.
-func (b *SSTManifestBuffer) SnapshotAndMarkClean() []jobspb.IndexBackfillSSTManifest {
+func (b *SSTManifestBuffer) SnapshotAndMarkClean() []jobspb.BulkSSTManifest {
 	if b == nil {
 		return nil
 	}
@@ -86,9 +84,9 @@ func (b *SSTManifestBuffer) SnapshotAndMarkClean() []jobspb.IndexBackfillSSTMani
 // removing tenant prefixes before persisting it in job state. This matches the
 // CompletedSpans handling and keeps job progress tenant-agnostic.
 func StripTenantPrefixFromSSTManifests(
-	codec keys.SQLCodec, manifests []jobspb.IndexBackfillSSTManifest,
-) ([]jobspb.IndexBackfillSSTManifest, error) {
-	ret := make([]jobspb.IndexBackfillSSTManifest, len(manifests))
+	codec keys.SQLCodec, manifests []jobspb.BulkSSTManifest,
+) ([]jobspb.BulkSSTManifest, error) {
+	ret := make([]jobspb.BulkSSTManifest, len(manifests))
 	for i, out := range manifests {
 		ret[i].URI = out.URI
 		ret[i].FileSize = out.FileSize
@@ -117,9 +115,9 @@ func StripTenantPrefixFromSSTManifests(
 // AddTenantPrefixToSSTManifests rehydrates manifests with the executing
 // processor's tenant prefix so they can be used against the local keyspace.
 func AddTenantPrefixToSSTManifests(
-	codec keys.SQLCodec, manifests []jobspb.IndexBackfillSSTManifest,
-) []jobspb.IndexBackfillSSTManifest {
-	ret := make([]jobspb.IndexBackfillSSTManifest, len(manifests))
+	codec keys.SQLCodec, manifests []jobspb.BulkSSTManifest,
+) []jobspb.BulkSSTManifest {
+	ret := make([]jobspb.BulkSSTManifest, len(manifests))
 	for i, out := range manifests {
 		ret[i].URI = out.URI
 		ret[i].FileSize = out.FileSize
