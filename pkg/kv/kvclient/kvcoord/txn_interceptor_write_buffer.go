@@ -1892,11 +1892,24 @@ func separateBatchIsNeeded(ba *kvpb.BatchRequest, optEndTxn kvpb.Request) bool {
 		}
 	}
 
-	return ba.MightStopEarly() ||
+	if ba.MightStopEarly() ||
 		ba.ReadConsistency != 0 ||
 		ba.WaitPolicy != 0 ||
 		ba.WriteOptions != nil && (*ba.WriteOptions != kvpb.WriteOptions{}) ||
-		ba.IsReverse
+		ba.IsReverse {
+		return true
+	}
+
+	// If we find any CPuts, then we need a separate batch because these can
+	// fail which would discard any buffered writes (when evaluated as part of
+	// the same batch).
+	for _, ru := range ba.Requests {
+		if _, ok := ru.GetInner().(*kvpb.ConditionalPutRequest); ok {
+			return true
+		}
+	}
+
+	return false
 }
 
 // clearBatchRequestOptions clears any options that should not be present on a
