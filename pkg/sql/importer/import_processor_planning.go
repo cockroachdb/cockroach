@@ -201,6 +201,16 @@ func distImport(
 	rowProgress := make([]int64, len(from))
 	fractionProgress := make([]uint32, len(from))
 
+	// accumulatedSSTMetadata accumulates SST file metadata as processors complete.
+	// This is persisted periodically via updateJobProgress() for retry safety.
+	var accumulatedSSTMetadata struct {
+		syncutil.Mutex
+		manifests []jobspb.BulkSSTManifest
+		// seenURIs tracks SST URIs to deduplicate entries (belt-and-suspenders defense
+		// against processor-level deduplication bugs).
+		seenURIs map[string]struct{}
+	}
+
 	updateJobProgress := func() error {
 		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
 			ctx context.Context, details jobspb.ProgressDetails,
@@ -219,9 +229,43 @@ func distImport(
 			accumulatedBulkSummary.Lock()
 			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
 			accumulatedBulkSummary.Unlock()
+
+			// Persist accumulated SST metadata for distributed merge
+			if useDistributedMerge {
+				accumulatedSSTMetadata.Lock()
+				if len(accumulatedSSTMetadata.manifests) > 0 {
+					prog.CompletedMapWork = append(prog.CompletedMapWork, accumulatedSSTMetadata.manifests...)
+					accumulatedSSTMetadata.manifests = nil // Clear after persisting
+				}
+				accumulatedSSTMetadata.Unlock()
+			}
+
 			return overall / float32(len(from))
 		},
 		)
+	}
+
+	var res kvpb.BulkOpSummary
+
+	// Initialize processorOutput with SST metadata from prior attempts.
+	// On the first attempt, this will be empty. On retries, it contains metadata
+	// from files that were fully processed in previous attempts.
+	processorOutput := make([]bulksst.SSTFiles, 0)
+	if importProgress := job.Progress().Details.(*jobspb.Progress_Import).Import; importProgress != nil && len(importProgress.CompletedMapWork) > 0 {
+		processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(importProgress.CompletedMapWork))
+
+		// Initialize seenURIs map with SSTs from prior attempts to prevent duplicates.
+		accumulatedSSTMetadata.Lock()
+		accumulatedSSTMetadata.seenURIs = make(map[string]struct{})
+		for _, manifest := range importProgress.CompletedMapWork {
+			accumulatedSSTMetadata.seenURIs[manifest.URI] = struct{}{}
+		}
+		accumulatedSSTMetadata.Unlock()
+	} else if useDistributedMerge {
+		// Initialize empty map for first attempt with distributed merge.
+		accumulatedSSTMetadata.Lock()
+		accumulatedSSTMetadata.seenURIs = make(map[string]struct{})
+		accumulatedSSTMetadata.Unlock()
 	}
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -237,6 +281,29 @@ func distImport(
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
 			accumulatedBulkSummary.Unlock()
 
+			// Accumulate SST metadata emitted by processors during distributed merge.
+			// This metadata is persisted periodically via updateJobProgress() for retry safety.
+			if len(meta.BulkProcessorProgress.SSTMetadata) > 0 {
+				accumulatedSSTMetadata.Lock()
+				// Deduplicate SST metadata as a defense-in-depth measure. While processors
+				// should already deduplicate, this provides additional safety.
+				var newManifests []jobspb.BulkSSTManifest
+				for _, manifest := range meta.BulkProcessorProgress.SSTMetadata {
+					if _, seen := accumulatedSSTMetadata.seenURIs[manifest.URI]; !seen {
+						newManifests = append(newManifests, manifest)
+						accumulatedSSTMetadata.seenURIs[manifest.URI] = struct{}{}
+					}
+				}
+				if len(newManifests) > 0 {
+					accumulatedSSTMetadata.manifests = append(accumulatedSSTMetadata.manifests, newManifests...)
+				}
+				accumulatedSSTMetadata.Unlock()
+
+				// Add to processorOutput for the merge phase (use original metadata, not deduplicated,
+				// since processorOutput is only used temporarily and doesn't persist across retries).
+				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(meta.BulkProcessorProgress.SSTMetadata))
+			}
+
 			// For distributed merge, record storage prefix for nodes that report progress
 			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
 				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
@@ -251,22 +318,12 @@ func distImport(
 		}
 		return nil
 	}
-
-	var res kvpb.BulkOpSummary
-	var processorOutput []bulksst.SSTFiles
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 			return err
 		}
 		res.Add(counts)
-		if len(row) == 3 {
-			var sstFiles bulksst.SSTFiles
-			if err := protoutil.Unmarshal([]byte(*row[2].(*tree.DBytes)), &sstFiles); err != nil {
-				return err
-			}
-			processorOutput = append(processorOutput, sstFiles)
-		}
 		return nil
 	})
 
