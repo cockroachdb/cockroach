@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "flaky-test-notifier_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "formatter.go",
+        "main.go",
+    ],
     embedsrcs = [
         "failed-github-engflow-tests.sql",
         "failed-tc-engflow-tests.sql",
@@ -10,7 +13,12 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/flaky-test-notifier",
     visibility = ["//visibility:private"],
-    deps = ["@com_github_snowflakedb_gosnowflake//:gosnowflake"],
+    deps = [
+        "//pkg/cmd/bazci/githubpost/issues",
+        "//pkg/internal/codeowners",
+        "//pkg/internal/team",
+        "@com_github_snowflakedb_gosnowflake//:gosnowflake",
+    ],
 )
 
 go_binary(
