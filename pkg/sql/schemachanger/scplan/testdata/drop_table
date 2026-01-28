@@ -42,7 +42,7 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON shipments FOR EACH ROW EXECUTE FUN
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 150 MutationType ops
+StatementPhase stage 1 of 1 with 149 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -464,10 +464,6 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerEnabled
       TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
@@ -797,7 +793,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 161 MutationType ops
+PreCommitPhase stage 2 of 2 with 160 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -1219,10 +1215,6 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.TriggerEnabled
       TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109

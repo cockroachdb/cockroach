@@ -38,11 +38,11 @@ func (i *immediateVisitor) SetTriggerName(ctx context.Context, op scop.SetTrigge
 }
 
 func (i *immediateVisitor) SetTriggerEnabled(ctx context.Context, op scop.SetTriggerEnabled) error {
-	trigger, err := i.checkOutTrigger(ctx, op.Enabled.TableID, op.Enabled.TriggerID)
+	trigger, err := i.checkOutTrigger(ctx, op.TableID, op.TriggerID)
 	if err != nil {
 		return err
 	}
-	trigger.Enabled = op.Enabled.Enabled
+	trigger.Enabled = op.Enabled
 	return nil
 }
 

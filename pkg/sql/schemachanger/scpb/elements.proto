@@ -606,10 +606,12 @@ message TriggerName {
   string name = 3;
 }
 
+// TriggerEnabled indicates that a trigger is enabled. If this element is
+// absent, the trigger is disabled.
 message TriggerEnabled {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
-  bool enabled = 3;
+  reserved 3; // was: bool enabled
 }
 
 message TriggerTiming {
