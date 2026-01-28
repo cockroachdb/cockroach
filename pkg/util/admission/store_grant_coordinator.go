@@ -200,11 +200,9 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	// Initialize metrics.
 	sgcMetrics := makeStoreGrantCoordinatorMetrics(metricsRegistry)
 	regularStoreWorkQueueMetrics :=
-		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", KVWork), metricsRegistry,
-			admissionpb.NormalPri, admissionpb.LockingNormalPri)
+		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", KVWork), metricsRegistry)
 	elasticStoreWorkQueueMetrics :=
-		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), metricsRegistry,
-			admissionpb.BulkLowPri, admissionpb.BulkNormalPri)
+		makeWorkQueueMetrics(fmt.Sprintf("%s-stores", admissionpb.ElasticWorkClass), metricsRegistry)
 	storeWorkQMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{
 		regularStoreWorkQueueMetrics, elasticStoreWorkQueueMetrics,
 	}

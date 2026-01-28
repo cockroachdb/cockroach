@@ -2034,9 +2034,7 @@ func (m *WorkQueueMetrics) recordFastPathAdmission(priority admissionpb.WorkPrio
 // MetricStruct implements the metric.Struct interface.
 func (*WorkQueueMetrics) MetricStruct() {}
 
-func makeWorkQueueMetrics(
-	name string, registry *metric.Registry, applicablePriorities ...admissionpb.WorkPriority,
-) *WorkQueueMetrics {
+func makeWorkQueueMetrics(name string, registry *metric.Registry) *WorkQueueMetrics {
 	totalMetric := makeWorkQueueMetricsSingle(name)
 	registry.AddMetricStruct(totalMetric)
 	wqm := &WorkQueueMetrics{
@@ -2044,10 +2042,7 @@ func makeWorkQueueMetrics(
 		total:    totalMetric,
 		registry: registry,
 	}
-	// TODO(abaptist): This is done to pre-register stats. Need to check that we
-	// getOrCreate "enough" of the priorities to be useful. See
-	// https://github.com/cockroachdb/cockroach/issues/88846.
-	for _, pri := range applicablePriorities {
+	for pri := range admissionpb.WorkPriorityDict {
 		wqm.getOrCreate(pri)
 	}
 

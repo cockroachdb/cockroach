@@ -10729,6 +10729,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.bulk-low-pri
+      exported_name: admission_admitted_elastic_cpu_bulk_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.elastic-cpu.bulk-normal-pri
       exported_name: admission_admitted_elastic_cpu_bulk_normal_pri
       description: Number of requests admitted
@@ -10737,8 +10745,56 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.high-pri
+      exported_name: admission_admitted_elastic_cpu_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.locking-normal-pri
+      exported_name: admission_admitted_elastic_cpu_locking_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.locking-pri
+      exported_name: admission_admitted_elastic_cpu_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.low-pri
+      exported_name: admission_admitted_elastic_cpu_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.elastic-cpu.normal-pri
       exported_name: admission_admitted_elastic_cpu_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.user-high-pri
+      exported_name: admission_admitted_elastic_cpu_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-cpu.user-low-pri
+      exported_name: admission_admitted_elastic_cpu_user_low_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10769,6 +10825,62 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.high-pri
+      exported_name: admission_admitted_elastic_stores_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.locking-normal-pri
+      exported_name: admission_admitted_elastic_stores_locking_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.locking-pri
+      exported_name: admission_admitted_elastic_stores_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.low-pri
+      exported_name: admission_admitted_elastic_stores_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.normal-pri
+      exported_name: admission_admitted_elastic_stores_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.user-high-pri
+      exported_name: admission_admitted_elastic_stores_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.elastic-stores.user-low-pri
+      exported_name: admission_admitted_elastic_stores_user_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.kv
       exported_name: admission_admitted_kv
       description: Number of requests admitted
@@ -10779,6 +10891,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.kv-stores
       exported_name: admission_admitted_kv_stores
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv-stores.bulk-low-pri
+      exported_name: admission_admitted_kv_stores_bulk_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv-stores.bulk-normal-pri
+      exported_name: admission_admitted_kv_stores_bulk_normal_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10801,6 +10929,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv-stores.locking-pri
+      exported_name: admission_admitted_kv_stores_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv-stores.low-pri
+      exported_name: admission_admitted_kv_stores_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.kv-stores.normal-pri
       exported_name: admission_admitted_kv_stores_normal_pri
       description: Number of requests admitted
@@ -10811,6 +10955,30 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.kv-stores.user-high-pri
       exported_name: admission_admitted_kv_stores_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv-stores.user-low-pri
+      exported_name: admission_admitted_kv_stores_user_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.bulk-low-pri
+      exported_name: admission_admitted_kv_bulk_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.bulk-normal-pri
+      exported_name: admission_admitted_kv_bulk_normal_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10833,8 +11001,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.locking-pri
+      exported_name: admission_admitted_kv_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.low-pri
+      exported_name: admission_admitted_kv_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.kv.normal-pri
       exported_name: admission_admitted_kv_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.user-high-pri
+      exported_name: admission_admitted_kv_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.kv.user-low-pri
+      exported_name: admission_admitted_kv_user_low_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10849,8 +11049,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.bulk-low-pri
+      exported_name: admission_admitted_sql_kv_response_bulk_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.bulk-normal-pri
+      exported_name: admission_admitted_sql_kv_response_bulk_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.high-pri
+      exported_name: admission_admitted_sql_kv_response_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.sql-kv-response.locking-normal-pri
       exported_name: admission_admitted_sql_kv_response_locking_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.locking-pri
+      exported_name: admission_admitted_sql_kv_response_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.low-pri
+      exported_name: admission_admitted_sql_kv_response_low_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10865,8 +11105,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.user-high-pri
+      exported_name: admission_admitted_sql_kv_response_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-kv-response.user-low-pri
+      exported_name: admission_admitted_sql_kv_response_user_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.sql-sql-response
       exported_name: admission_admitted_sql_sql_response
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.bulk-low-pri
+      exported_name: admission_admitted_sql_sql_response_bulk_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.bulk-normal-pri
+      exported_name: admission_admitted_sql_sql_response_bulk_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.high-pri
+      exported_name: admission_admitted_sql_sql_response_high_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10881,8 +11161,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.locking-pri
+      exported_name: admission_admitted_sql_sql_response_locking_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.low-pri
+      exported_name: admission_admitted_sql_sql_response_low_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.admitted.sql-sql-response.normal-pri
       exported_name: admission_admitted_sql_sql_response_normal_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.user-high-pri
+      exported_name: admission_admitted_sql_sql_response_user_high_pri
+      description: Number of requests admitted
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.admitted.sql-sql-response.user-low-pri
+      exported_name: admission_admitted_sql_sql_response_user_low_pri
       description: Number of requests admitted
       y_axis_label: Requests
       type: COUNTER
@@ -10985,6 +11297,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.bulk-low-pri
+      exported_name: admission_errored_elastic_cpu_bulk_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.elastic-cpu.bulk-normal-pri
       exported_name: admission_errored_elastic_cpu_bulk_normal_pri
       description: Number of requests not admitted due to error
@@ -10993,8 +11313,56 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.high-pri
+      exported_name: admission_errored_elastic_cpu_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.locking-normal-pri
+      exported_name: admission_errored_elastic_cpu_locking_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.locking-pri
+      exported_name: admission_errored_elastic_cpu_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.low-pri
+      exported_name: admission_errored_elastic_cpu_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.elastic-cpu.normal-pri
       exported_name: admission_errored_elastic_cpu_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.user-high-pri
+      exported_name: admission_errored_elastic_cpu_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-cpu.user-low-pri
+      exported_name: admission_errored_elastic_cpu_user_low_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11025,6 +11393,62 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.high-pri
+      exported_name: admission_errored_elastic_stores_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.locking-normal-pri
+      exported_name: admission_errored_elastic_stores_locking_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.locking-pri
+      exported_name: admission_errored_elastic_stores_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.low-pri
+      exported_name: admission_errored_elastic_stores_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.normal-pri
+      exported_name: admission_errored_elastic_stores_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.user-high-pri
+      exported_name: admission_errored_elastic_stores_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.elastic-stores.user-low-pri
+      exported_name: admission_errored_elastic_stores_user_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.kv
       exported_name: admission_errored_kv
       description: Number of requests not admitted due to error
@@ -11035,6 +11459,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.kv-stores
       exported_name: admission_errored_kv_stores
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv-stores.bulk-low-pri
+      exported_name: admission_errored_kv_stores_bulk_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv-stores.bulk-normal-pri
+      exported_name: admission_errored_kv_stores_bulk_normal_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11057,6 +11497,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv-stores.locking-pri
+      exported_name: admission_errored_kv_stores_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv-stores.low-pri
+      exported_name: admission_errored_kv_stores_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.kv-stores.normal-pri
       exported_name: admission_errored_kv_stores_normal_pri
       description: Number of requests not admitted due to error
@@ -11067,6 +11523,30 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.kv-stores.user-high-pri
       exported_name: admission_errored_kv_stores_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv-stores.user-low-pri
+      exported_name: admission_errored_kv_stores_user_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.bulk-low-pri
+      exported_name: admission_errored_kv_bulk_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.bulk-normal-pri
+      exported_name: admission_errored_kv_bulk_normal_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11089,8 +11569,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.locking-pri
+      exported_name: admission_errored_kv_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.low-pri
+      exported_name: admission_errored_kv_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.kv.normal-pri
       exported_name: admission_errored_kv_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.user-high-pri
+      exported_name: admission_errored_kv_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.kv.user-low-pri
+      exported_name: admission_errored_kv_user_low_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11105,8 +11617,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.bulk-low-pri
+      exported_name: admission_errored_sql_kv_response_bulk_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.bulk-normal-pri
+      exported_name: admission_errored_sql_kv_response_bulk_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.high-pri
+      exported_name: admission_errored_sql_kv_response_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.sql-kv-response.locking-normal-pri
       exported_name: admission_errored_sql_kv_response_locking_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.locking-pri
+      exported_name: admission_errored_sql_kv_response_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.low-pri
+      exported_name: admission_errored_sql_kv_response_low_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11121,8 +11673,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.user-high-pri
+      exported_name: admission_errored_sql_kv_response_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-kv-response.user-low-pri
+      exported_name: admission_errored_sql_kv_response_user_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.sql-sql-response
       exported_name: admission_errored_sql_sql_response
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.bulk-low-pri
+      exported_name: admission_errored_sql_sql_response_bulk_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.bulk-normal-pri
+      exported_name: admission_errored_sql_sql_response_bulk_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.high-pri
+      exported_name: admission_errored_sql_sql_response_high_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11137,8 +11729,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.locking-pri
+      exported_name: admission_errored_sql_sql_response_locking_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.low-pri
+      exported_name: admission_errored_sql_sql_response_low_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.errored.sql-sql-response.normal-pri
       exported_name: admission_errored_sql_sql_response_normal_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.user-high-pri
+      exported_name: admission_errored_sql_sql_response_user_high_pri
+      description: Number of requests not admitted due to error
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.errored.sql-sql-response.user-low-pri
+      exported_name: admission_errored_sql_sql_response_user_low_pri
       description: Number of requests not admitted due to error
       y_axis_label: Requests
       type: COUNTER
@@ -11313,6 +11937,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.bulk-low-pri
+      exported_name: admission_requested_elastic_cpu_bulk_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.elastic-cpu.bulk-normal-pri
       exported_name: admission_requested_elastic_cpu_bulk_normal_pri
       description: Number of requests
@@ -11321,8 +11953,56 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.high-pri
+      exported_name: admission_requested_elastic_cpu_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.locking-normal-pri
+      exported_name: admission_requested_elastic_cpu_locking_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.locking-pri
+      exported_name: admission_requested_elastic_cpu_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.low-pri
+      exported_name: admission_requested_elastic_cpu_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.elastic-cpu.normal-pri
       exported_name: admission_requested_elastic_cpu_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.user-high-pri
+      exported_name: admission_requested_elastic_cpu_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-cpu.user-low-pri
+      exported_name: admission_requested_elastic_cpu_user_low_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11353,6 +12033,62 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.high-pri
+      exported_name: admission_requested_elastic_stores_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.locking-normal-pri
+      exported_name: admission_requested_elastic_stores_locking_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.locking-pri
+      exported_name: admission_requested_elastic_stores_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.low-pri
+      exported_name: admission_requested_elastic_stores_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.normal-pri
+      exported_name: admission_requested_elastic_stores_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.user-high-pri
+      exported_name: admission_requested_elastic_stores_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.elastic-stores.user-low-pri
+      exported_name: admission_requested_elastic_stores_user_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.kv
       exported_name: admission_requested_kv
       description: Number of requests
@@ -11363,6 +12099,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.kv-stores
       exported_name: admission_requested_kv_stores
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv-stores.bulk-low-pri
+      exported_name: admission_requested_kv_stores_bulk_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv-stores.bulk-normal-pri
+      exported_name: admission_requested_kv_stores_bulk_normal_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11385,6 +12137,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv-stores.locking-pri
+      exported_name: admission_requested_kv_stores_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv-stores.low-pri
+      exported_name: admission_requested_kv_stores_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.kv-stores.normal-pri
       exported_name: admission_requested_kv_stores_normal_pri
       description: Number of requests
@@ -11395,6 +12163,30 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.kv-stores.user-high-pri
       exported_name: admission_requested_kv_stores_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv-stores.user-low-pri
+      exported_name: admission_requested_kv_stores_user_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.bulk-low-pri
+      exported_name: admission_requested_kv_bulk_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.bulk-normal-pri
+      exported_name: admission_requested_kv_bulk_normal_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11417,8 +12209,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.locking-pri
+      exported_name: admission_requested_kv_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.low-pri
+      exported_name: admission_requested_kv_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.kv.normal-pri
       exported_name: admission_requested_kv_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.user-high-pri
+      exported_name: admission_requested_kv_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.kv.user-low-pri
+      exported_name: admission_requested_kv_user_low_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11433,8 +12257,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.bulk-low-pri
+      exported_name: admission_requested_sql_kv_response_bulk_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.bulk-normal-pri
+      exported_name: admission_requested_sql_kv_response_bulk_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.high-pri
+      exported_name: admission_requested_sql_kv_response_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.sql-kv-response.locking-normal-pri
       exported_name: admission_requested_sql_kv_response_locking_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.locking-pri
+      exported_name: admission_requested_sql_kv_response_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.low-pri
+      exported_name: admission_requested_sql_kv_response_low_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11449,8 +12313,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.user-high-pri
+      exported_name: admission_requested_sql_kv_response_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-kv-response.user-low-pri
+      exported_name: admission_requested_sql_kv_response_user_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.sql-sql-response
       exported_name: admission_requested_sql_sql_response
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.bulk-low-pri
+      exported_name: admission_requested_sql_sql_response_bulk_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.bulk-normal-pri
+      exported_name: admission_requested_sql_sql_response_bulk_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.high-pri
+      exported_name: admission_requested_sql_sql_response_high_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11465,8 +12369,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.locking-pri
+      exported_name: admission_requested_sql_sql_response_locking_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.low-pri
+      exported_name: admission_requested_sql_sql_response_low_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: admission.requested.sql-sql-response.normal-pri
       exported_name: admission_requested_sql_sql_response_normal_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.user-high-pri
+      exported_name: admission_requested_sql_sql_response_user_high_pri
+      description: Number of requests
+      y_axis_label: Requests
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.requested.sql-sql-response.user-low-pri
+      exported_name: admission_requested_sql_sql_response_user_low_pri
       description: Number of requests
       y_axis_label: Requests
       type: COUNTER
@@ -11489,6 +12425,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.bulk-low-pri
+      exported_name: admission_wait_durations_elastic_cpu_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.elastic-cpu.bulk-normal-pri
       exported_name: admission_wait_durations_elastic_cpu_bulk_normal_pri
       description: Wait time durations for requests that waited
@@ -11497,8 +12441,56 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.high-pri
+      exported_name: admission_wait_durations_elastic_cpu_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.locking-normal-pri
+      exported_name: admission_wait_durations_elastic_cpu_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.locking-pri
+      exported_name: admission_wait_durations_elastic_cpu_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.low-pri
+      exported_name: admission_wait_durations_elastic_cpu_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.elastic-cpu.normal-pri
       exported_name: admission_wait_durations_elastic_cpu_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.user-high-pri
+      exported_name: admission_wait_durations_elastic_cpu_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-cpu.user-low-pri
+      exported_name: admission_wait_durations_elastic_cpu_user_low_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11529,6 +12521,78 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.elastic-stores.high-pri
+      exported_name: admission_wait_durations_elastic_stores_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.locking-normal-pri
+      exported_name: admission_wait_durations_elastic_stores_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.locking-pri
+      exported_name: admission_wait_durations_elastic_stores_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.low-pri
+      exported_name: admission_wait_durations_elastic_stores_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.normal-pri
+      exported_name: admission_wait_durations_elastic_stores_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.user-high-pri
+      exported_name: admission_wait_durations_elastic_stores_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.elastic-stores.user-low-pri
+      exported_name: admission_wait_durations_elastic_stores_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv-stores.bulk-low-pri
+      exported_name: admission_wait_durations_kv_stores_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv-stores.bulk-normal-pri
+      exported_name: admission_wait_durations_kv_stores_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.kv-stores.high-pri
       exported_name: admission_wait_durations_kv_stores_high_pri
       description: Wait time durations for requests that waited
@@ -11539,6 +12603,22 @@ layers:
       derivative: NONE
     - name: admission.wait_durations.kv-stores.locking-normal-pri
       exported_name: admission_wait_durations_kv_stores_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv-stores.locking-pri
+      exported_name: admission_wait_durations_kv_stores_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv-stores.low-pri
+      exported_name: admission_wait_durations_kv_stores_low_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11561,6 +12641,30 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.kv-stores.user-low-pri
+      exported_name: admission_wait_durations_kv_stores_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv.bulk-low-pri
+      exported_name: admission_wait_durations_kv_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv.bulk-normal-pri
+      exported_name: admission_wait_durations_kv_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.kv.high-pri
       exported_name: admission_wait_durations_kv_high_pri
       description: Wait time durations for requests that waited
@@ -11577,8 +12681,40 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.kv.locking-pri
+      exported_name: admission_wait_durations_kv_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv.low-pri
+      exported_name: admission_wait_durations_kv_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.kv.normal-pri
       exported_name: admission_wait_durations_kv_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv.user-high-pri
+      exported_name: admission_wait_durations_kv_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.kv.user-low-pri
+      exported_name: admission_wait_durations_kv_user_low_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11601,8 +12737,48 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.bulk-low-pri
+      exported_name: admission_wait_durations_sql_kv_response_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.bulk-normal-pri
+      exported_name: admission_wait_durations_sql_kv_response_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.high-pri
+      exported_name: admission_wait_durations_sql_kv_response_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.sql-kv-response.locking-normal-pri
       exported_name: admission_wait_durations_sql_kv_response_locking_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.locking-pri
+      exported_name: admission_wait_durations_sql_kv_response_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.low-pri
+      exported_name: admission_wait_durations_sql_kv_response_low_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11617,8 +12793,48 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.user-high-pri
+      exported_name: admission_wait_durations_sql_kv_response_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-kv-response.user-low-pri
+      exported_name: admission_wait_durations_sql_kv_response_user_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.sql-sql-response
       exported_name: admission_wait_durations_sql_sql_response
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.bulk-low-pri
+      exported_name: admission_wait_durations_sql_sql_response_bulk_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.bulk-normal-pri
+      exported_name: admission_wait_durations_sql_sql_response_bulk_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.high-pri
+      exported_name: admission_wait_durations_sql_sql_response_high_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11633,8 +12849,40 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.locking-pri
+      exported_name: admission_wait_durations_sql_sql_response_locking_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.low-pri
+      exported_name: admission_wait_durations_sql_sql_response_low_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_durations.sql-sql-response.normal-pri
       exported_name: admission_wait_durations_sql_sql_response_normal_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.user-high-pri
+      exported_name: admission_wait_durations_sql_sql_response_user_high_pri
+      description: Wait time durations for requests that waited
+      y_axis_label: Wait time Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_durations.sql-sql-response.user-low-pri
+      exported_name: admission_wait_durations_sql_sql_response_user_low_pri
       description: Wait time durations for requests that waited
       y_axis_label: Wait time Duration
       type: HISTOGRAM
@@ -11649,6 +12897,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.bulk-low-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_bulk_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.elastic-cpu.bulk-normal-pri
       exported_name: admission_wait_queue_length_elastic_cpu_bulk_normal_pri
       description: Length of wait queue
@@ -11657,8 +12913,56 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.high-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.locking-normal-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_locking_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.locking-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.low-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.elastic-cpu.normal-pri
       exported_name: admission_wait_queue_length_elastic_cpu_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.user-high-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-cpu.user-low-pri
+      exported_name: admission_wait_queue_length_elastic_cpu_user_low_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11689,6 +12993,62 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.high-pri
+      exported_name: admission_wait_queue_length_elastic_stores_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.locking-normal-pri
+      exported_name: admission_wait_queue_length_elastic_stores_locking_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.locking-pri
+      exported_name: admission_wait_queue_length_elastic_stores_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.low-pri
+      exported_name: admission_wait_queue_length_elastic_stores_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.normal-pri
+      exported_name: admission_wait_queue_length_elastic_stores_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.user-high-pri
+      exported_name: admission_wait_queue_length_elastic_stores_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.elastic-stores.user-low-pri
+      exported_name: admission_wait_queue_length_elastic_stores_user_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.kv
       exported_name: admission_wait_queue_length_kv
       description: Length of wait queue
@@ -11699,6 +13059,22 @@ layers:
       derivative: NONE
     - name: admission.wait_queue_length.kv-stores
       exported_name: admission_wait_queue_length_kv_stores
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv-stores.bulk-low-pri
+      exported_name: admission_wait_queue_length_kv_stores_bulk_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv-stores.bulk-normal-pri
+      exported_name: admission_wait_queue_length_kv_stores_bulk_normal_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11721,6 +13097,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.kv-stores.locking-pri
+      exported_name: admission_wait_queue_length_kv_stores_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv-stores.low-pri
+      exported_name: admission_wait_queue_length_kv_stores_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.kv-stores.normal-pri
       exported_name: admission_wait_queue_length_kv_stores_normal_pri
       description: Length of wait queue
@@ -11731,6 +13123,30 @@ layers:
       derivative: NONE
     - name: admission.wait_queue_length.kv-stores.user-high-pri
       exported_name: admission_wait_queue_length_kv_stores_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv-stores.user-low-pri
+      exported_name: admission_wait_queue_length_kv_stores_user_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv.bulk-low-pri
+      exported_name: admission_wait_queue_length_kv_bulk_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv.bulk-normal-pri
+      exported_name: admission_wait_queue_length_kv_bulk_normal_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11753,8 +13169,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.kv.locking-pri
+      exported_name: admission_wait_queue_length_kv_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv.low-pri
+      exported_name: admission_wait_queue_length_kv_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.kv.normal-pri
       exported_name: admission_wait_queue_length_kv_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv.user-high-pri
+      exported_name: admission_wait_queue_length_kv_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.kv.user-low-pri
+      exported_name: admission_wait_queue_length_kv_user_low_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11769,8 +13217,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.bulk-low-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_bulk_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.bulk-normal-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_bulk_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.high-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.sql-kv-response.locking-normal-pri
       exported_name: admission_wait_queue_length_sql_kv_response_locking_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.locking-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.low-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_low_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11785,8 +13273,48 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.user-high-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-kv-response.user-low-pri
+      exported_name: admission_wait_queue_length_sql_kv_response_user_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.sql-sql-response
       exported_name: admission_wait_queue_length_sql_sql_response
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.bulk-low-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_bulk_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.bulk-normal-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_bulk_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.high-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_high_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -11801,8 +13329,40 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.locking-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_locking_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.low-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_low_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: admission.wait_queue_length.sql-sql-response.normal-pri
       exported_name: admission_wait_queue_length_sql_sql_response_normal_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.user-high-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_user_high_pri
+      description: Length of wait queue
+      y_axis_label: Requests
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: admission.wait_queue_length.sql-sql-response.user-low-pri
+      exported_name: admission_wait_queue_length_sql_sql_response_user_low_pri
       description: Length of wait queue
       y_axis_label: Requests
       type: GAUGE
@@ -16434,6 +17994,86 @@ layers:
       exported_name: storage_bytes_decompressed_l6_values
       labeled_name: 'storage.bytes-decompressed{level: 6, type: values}'
       description: Total number of logical bytes decompressed for L6 value blocks.
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-crdb-log.bytes-written
+      exported_name: storage_category_crdb_log_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-encryption-registry.bytes-written
+      exported_name: storage_category_encryption_registry_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-compaction.bytes-written
+      exported_name: storage_category_pebble_compaction_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-ingestion.bytes-written
+      exported_name: storage_category_pebble_ingestion_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-manifest.bytes-written
+      exported_name: storage_category_pebble_manifest_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-memtable-flush.bytes-written
+      exported_name: storage_category_pebble_memtable_flush_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-pebble-wal.bytes-written
+      exported_name: storage_category_pebble_wal_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-raft-snapshot.bytes-written
+      exported_name: storage_category_raft_snapshot_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-sql-col-spill.bytes-written
+      exported_name: storage_category_sql_col_spill_bytes_written
+      description: Bytes written to disk
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.category-unspecified.bytes-written
+      exported_name: storage_category_unspecified_bytes_written
+      description: Bytes written to disk
       y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
