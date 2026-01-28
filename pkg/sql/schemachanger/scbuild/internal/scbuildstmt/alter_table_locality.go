@@ -85,6 +85,10 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 		panic(err)
 	}
 
+	// Post-processing: deflate redundant indexes and rewrite tentative IDs to real IDs
+	maybeDropRedundantPrimaryIndexes(b, tableID)
+	maybeRewriteTempIDsInPrimaryIndexes(b, tableID)
+
 	// Record this table alteration in the event log
 	b.LogEventForExistingTarget(tbl)
 }

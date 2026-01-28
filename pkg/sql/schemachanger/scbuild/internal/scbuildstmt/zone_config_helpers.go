@@ -1404,7 +1404,7 @@ func getMostRecentTableZoneConfig(b BuildCtx, tableID catid.DescID) *scpb.TableZ
 	var tzo *scpb.TableZoneConfig
 	b.QueryByID(tableID).FilterTableZoneConfig().
 		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
-			if elem.SeqNum >= maxSeq {
+			if targetStatus == scpb.ToPublic && elem.SeqNum >= maxSeq {
 				maxSeq = elem.SeqNum
 				tzo = elem
 			}
@@ -1423,8 +1423,7 @@ func configureZoneConfigForNewIndexBackfill(
 	}
 	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
 	if mostRecentTableZoneConfig == nil {
-		return errors.AssertionFailedf("attempting to modify subzone configs for indexID %d"+
-			" on tableID %d that does not a zone config set", oldIndexID, tableID)
+		return nil
 	}
 	// Extract all the new indexes that exist in the primary index chain,
 	// which will all have the zone config applied.
@@ -1466,9 +1465,11 @@ func configureZoneConfigForNewIndexBackfill(
 	}
 	newZoneConfig.Subzones = newSubzones
 	var err error
-	newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
-	if err != nil {
-		return err
+	if len(newZoneConfig.Subzones) > 0 {
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
 	}
 	tzc := &scpb.TableZoneConfig{
 		TableID:    tableID,
@@ -1532,6 +1533,15 @@ func configureZoneConfigForReplacementIndexPartitioning(
 		})
 		if err != nil {
 			return err
+		}
+		if indexSubzone := mostRecentTableZoneConfig.ZoneConfig.GetSubzoneExact(uint32(origIndexID), ""); indexSubzone != nil {
+			zoneConfigModified = true
+			newSubZone := protoutil.Clone(&indexSubzone.Config).(*zonepb.ZoneConfig)
+			newZoneConfig.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(currIndexID),
+				Config:        *newSubZone,
+				PartitionName: "",
+			})
 		}
 	}
 	if zoneConfigModified {
@@ -1647,7 +1657,7 @@ func applyZoneConfigForMultiRegionTable(
 
 	if regionConfig.HasSecondaryRegion() {
 		var newLeasePreferences []zonepb.LeasePreference
-		localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+		localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 		switch {
 		case localityRBR != nil:
 			region := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
@@ -1677,8 +1687,10 @@ func applyZoneConfigForMultiRegionTable(
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
 
 	if deleteZoneConfig {
-		currentZoneConfigElem := b.QueryByID(tableID).FilterTableZoneConfig().MustGetZeroOrOneElement()
-		b.Drop(currentZoneConfigElem)
+		currentZoneConfigElems := b.QueryByID(tableID).FilterTableZoneConfig()
+		currentZoneConfigElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			b.Drop(e)
+		})
 	}
 	if !rewriteZoneConfig {
 		return nil
