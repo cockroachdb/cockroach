@@ -4128,21 +4128,10 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`allow_create_trigger_function_with_argv_references`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`allow_create_trigger_function_with_argv_references`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("allow_create_trigger_function_with_argv_references", s)
-			if err != nil {
-				return err
-			}
-			m.SetAllowCreateTriggerFunctionWithArgvReferences(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`allow_create_trigger_function_with_argv_references`: makeBackwardsCompatBoolVar(
+		"allow_create_trigger_function_with_argv_references", true,
+	),
 
 	// CockroachDB extension.
 	`create_table_with_schema_locked`: {
