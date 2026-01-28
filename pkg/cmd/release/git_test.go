@@ -11,6 +11,89 @@ import (
 	"github.com/cockroachdb/version"
 )
 
+// TestBranchSelectionForVersionBump documents the expected behavior for which
+// branches should receive version bump PRs based on the released version and
+// next version. This test serves as documentation for the branch selection logic
+// in generateRepoList.
+func TestBranchSelectionForVersionBump(t *testing.T) {
+	tests := []struct {
+		name                 string
+		releasedVersion      string
+		nextVersion          string
+		availableBranches    []string          // branches that exist in the repo
+		currentVersions      map[string]string // branch -> current version.txt content
+		expectedBumpBranches []string          // branches that should get version bump PRs
+	}{
+		{
+			name:              "RC release bumps both RC and release branch",
+			releasedVersion:   "v25.1.0-rc.1",
+			nextVersion:       "v25.1.0-rc.2",
+			availableBranches: []string{"release-25.1.0-rc", "release-25.1"},
+			currentVersions: map[string]string{
+				"release-25.1.0-rc": "v25.1.0-rc.1",
+				"release-25.1":      "v25.1.0-rc.1",
+			},
+			expectedBumpBranches: []string{"release-25.1.0-rc", "release-25.1"},
+		},
+		{
+			name:              "stable release bumps both RC and release branch",
+			releasedVersion:   "v25.1.0",
+			nextVersion:       "v25.1.1",
+			availableBranches: []string{"release-25.1.0-rc", "release-25.1"},
+			currentVersions: map[string]string{
+				"release-25.1.0-rc": "v25.1.0",
+				"release-25.1":      "v25.1.0",
+			},
+			expectedBumpBranches: []string{"release-25.1.0-rc", "release-25.1"},
+		},
+		{
+			name:              "patch release bumps both patch RC and release branch",
+			releasedVersion:   "v25.1.1",
+			nextVersion:       "v25.1.2",
+			availableBranches: []string{"release-25.1.1-rc", "release-25.1"},
+			currentVersions: map[string]string{
+				"release-25.1.1-rc": "v25.1.1",
+				"release-25.1":      "v25.1.1",
+			},
+			expectedBumpBranches: []string{"release-25.1.1-rc", "release-25.1"},
+		},
+		{
+			name:              "skips branches that already have next version",
+			releasedVersion:   "v25.1.1",
+			nextVersion:       "v25.1.2",
+			availableBranches: []string{"release-25.1.1-rc", "release-25.1"},
+			currentVersions: map[string]string{
+				"release-25.1.1-rc": "v25.1.2", // already has next version
+				"release-25.1":      "v25.1.1",
+			},
+			expectedBumpBranches: []string{"release-25.1"}, // only release-25.1 gets bumped
+		},
+		{
+			name:              "skips staging branches",
+			releasedVersion:   "v25.1.0",
+			nextVersion:       "v25.1.1",
+			availableBranches: []string{"staging-v25.1.0", "release-25.1"},
+			currentVersions: map[string]string{
+				"staging-v25.1.0": "v25.1.0",
+				"release-25.1":    "v25.1.0",
+			},
+			expectedBumpBranches: []string{"release-25.1"}, // staging branches are skipped
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This test documents the expected behavior.
+			// The actual implementation is in generateRepoList which requires git setup.
+			// See update_versions.go lines 463-480 for the filtering logic.
+			t.Logf("Released version: %s", tt.releasedVersion)
+			t.Logf("Next version: %s", tt.nextVersion)
+			t.Logf("Available branches: %v", tt.availableBranches)
+			t.Logf("Expected branches to bump: %v", tt.expectedBumpBranches)
+		})
+	}
+}
+
 func TestBumpVersion(t *testing.T) {
 	tests := []struct {
 		version     string
