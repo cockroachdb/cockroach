@@ -234,6 +234,11 @@ Output the list of cluster settings known to this binary.
 				defaultVal = setting.String(&s.SV)
 				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
+				} else if key == "sql.stats.automatic_full_concurrency_limit" {
+					// This cluster setting is special - its default value
+					// depends on the number of vCPUs in the VM, so we hard-code
+					// a custom default value.
+					defaultVal = "See description."
 				}
 			}
 

@@ -1223,6 +1223,8 @@ GO_TARGETS = [
     "//pkg/cmd/drtprod/helpers:helpers",
     "//pkg/cmd/drtprod:drtprod",
     "//pkg/cmd/drtprod:drtprod_lib",
+    "//pkg/cmd/flaky-test-notifier:flaky-test-notifier",
+    "//pkg/cmd/flaky-test-notifier:flaky-test-notifier_lib",
     "//pkg/cmd/fuzz:fuzz",
     "//pkg/cmd/fuzz:fuzz_lib",
     "//pkg/cmd/generate-acceptance-tests:generate-acceptance-tests",

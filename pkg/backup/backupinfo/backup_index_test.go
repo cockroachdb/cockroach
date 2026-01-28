@@ -827,12 +827,14 @@ func TestListRestorableBackups(t *testing.T) {
 			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
 
 			backups, _, err := ListRestorableBackups(
-				ctx, externalStorage, afterTS, beforeTS, 0,
+				ctx, externalStorage, afterTS, beforeTS, 0, true, /* withRevStartTime */
 			)
 			require.NoError(t, err)
 
 			actualOutput := util.Map(backups, func(b RestorableBackup) output {
-				return output{end: int(b.EndTime.WallTime / 1e9), rev: !b.RevisionStartTime.IsEmpty()}
+				return output{
+					end: int(b.EndTime.WallTime / 1e9), rev: !b.RevisionStartTime(ctx, &st.SV).IsEmpty(),
+				}
 			})
 			require.Equal(t, tc.expectedOutput, actualOutput)
 		})
@@ -869,13 +871,28 @@ func TestListRestorableBackups(t *testing.T) {
 			beforeTS := hlc.Timestamp{WallTime: int64(tc.before) * 1e9}.GoTime()
 
 			backups, exceeded, err := ListRestorableBackups(
-				ctx, externalStorage, afterTS, beforeTS, tc.maxCount,
+				ctx, externalStorage, afterTS, beforeTS, tc.maxCount, true, /* withRevStartTime */
 			)
 			require.NoError(t, err)
 			require.LessOrEqual(t, len(backups), int(tc.maxCount))
 			require.Equal(t, tc.expectedExceeded, exceeded)
 		})
 	}
+
+	t.Run("withRevStartTime = false omits revision history metadata", func(t *testing.T) {
+		afterTS := hlc.Timestamp{WallTime: 60 * 1e9}.GoTime()
+		beforeTS := hlc.Timestamp{WallTime: 66 * 1e9}.GoTime()
+
+		backups, _, err := ListRestorableBackups(
+			ctx, externalStorage, afterTS, beforeTS, 0, false, /* withRevStartTime */
+		)
+		require.NoError(t, err)
+		require.Len(t, backups, 4)
+
+		for _, b := range backups {
+			require.False(t, b.OpenedIndex())
+		}
+	})
 }
 
 func TestConvertIndexSubdirToSubdir(t *testing.T) {

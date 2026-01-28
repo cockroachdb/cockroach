@@ -1080,7 +1080,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFERENCING REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
 %token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATED REPLICATION
-%token <str> RELEASE RESET RESOLVED RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION_HISTORY
+%token <str> RELEASE RESET RESOLVED RESTART RESTORE RESTRICT RESTRICTED RESTRICTIVE RESUME RETENTION RETURNING RETURN RETURNS REVISION REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUN RUNNING
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
@@ -1488,8 +1488,8 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list source_replication_options source_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
-%type <*tree.ShowBackupTimeFilter> opt_show_backup_time_filter_clause
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options
+%type <*tree.ShowBackupTimeFilter> opt_show_backups_time_filter_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -9032,14 +9032,14 @@ show_histogram_stmt:
 // %Text: SHOW BACKUP [SCHEMAS|FILES|RANGES] <location>
 // %SeeAlso: WEBDOCS/show-backup.html
 show_backup_stmt:
-  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_backup_time_filter_clause
- {
-
-    $$.val = &tree.ShowBackup{
-      InCollection:    $4.stringOrPlaceholderOptList(),
-      TimeRange: *$5.showBackupTimeFilter(),
-    }
-  }
+  SHOW BACKUPS IN string_or_placeholder_opt_list opt_show_backups_time_filter_clause opt_with_show_backups_options
+        {
+                $$.val = &tree.ShowBackup{
+                  InCollection:    $4.stringOrPlaceholderOptList(),
+                  TimeRange: *$5.showBackupTimeFilter(),
+                  Options: *$6.showBackupOptions(),
+                }
+        }
 | SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
@@ -9182,7 +9182,7 @@ show_backup_options:
  $$.val = &tree.ShowBackupOptions{Privileges: true}
  }
 
-opt_show_backup_time_filter_clause:
+opt_show_backups_time_filter_clause:
   NEWER THAN a_expr
   {
     $$.val = &tree.ShowBackupTimeFilter{NewerThan: $3.expr()}
@@ -9202,6 +9202,26 @@ opt_show_backup_time_filter_clause:
   | /* EMPTY */
   {
     $$.val = &tree.ShowBackupTimeFilter{}
+  }
+
+opt_with_show_backups_options:
+  WITH show_backups_options
+  {
+    $$.val = $2.showBackupOptions()
+  }
+  | WITH OPTIONS '(' show_backups_options ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+  | /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
+
+show_backups_options:
+  REVISION START TIME
+  {
+    $$.val = &tree.ShowBackupOptions{RevisionStartTime: true}
   }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
@@ -18991,6 +19011,7 @@ unreserved_keyword:
 | RETENTION
 | RETURN
 | RETURNS
+| REVISION
 | REVISION_HISTORY
 | REVOKE
 | ROLE
@@ -19583,6 +19604,7 @@ bare_label_keywords:
 | RETENTION
 | RETURN
 | RETURNS
+| REVISION
 | REVISION_HISTORY
 | REVOKE
 | RIGHT
