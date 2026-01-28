@@ -36,7 +36,8 @@ spec_details AS (
     id,
     json_array_elements(changefeed_details->'target_specifications') ? 'type' AND (json_array_elements(changefeed_details->'target_specifications')->'type')::int = %d AS is_db, -- database level changefeed
     json_array_elements(changefeed_details->'target_specifications')->>'descriptor_id' AS descriptor_id,
-    changefeed_details->'tables' AS tables
+    changefeed_details->'tables' AS tables,
+    json_array_elements(changefeed_details->'target_specifications')->>'filter_list' AS filter_specification
   FROM payload
 ),
 db_targets AS (
@@ -80,6 +81,27 @@ database as (
     name
   FROM spec_details sd
   INNER JOIN crdb_internal.databases d ON sd.descriptor_id::int = d.id
+),
+filter_targets_map AS (
+  SELECT
+    sd.id,
+    sd.filter_specification::json AS filter_specification_json,
+    (sd.filter_specification::json)->'filter_type' AS filter_type,
+    (sd.filter_specification::json)->'tables' AS filter_tables_map
+  FROM spec_details sd
+),
+filter_targets_array AS (
+  SELECT
+    ftm.id,
+    ftm.filter_type,
+    array_agg(k) AS filter_tables
+  FROM filter_targets_map ftm
+  CROSS JOIN LATERAL (
+    SELECT key
+    FROM json_object_keys(ftm.filter_tables_map) AS key
+    WHERE json_typeof(ftm.filter_tables_map) = 'object'
+  ) AS j(k)
+  GROUP BY ftm.id, ftm.filter_type
 )
 SELECT
   job_id,
@@ -98,7 +120,26 @@ SELECT
     changefeed_details->>'sink_uri',
     '\u0026', '&'
   ) AS sink_uri,
-  targets.names AS full_table_names,
+  CASE
+    -- Include filter is enumerated to 1.
+    WHEN COALESCE((fta.filter_type::string)::INT, 0) = 1 THEN
+      (
+        SELECT COALESCE(array_agg(x), ARRAY[]::STRING[])
+        -- targets.names is the list, before filtering, of fully qualified table names.
+        FROM unnest(targets.names) AS x
+        WHERE x = ANY(COALESCE(fta.filter_tables, ARRAY[]::STRING[]))
+      )
+    -- Exclude filter is enumerated to 0. This is the default value in the 
+    -- protobuf, so it may be omitted from the serialization. 
+    -- We treat exclude or no filter as the same, where if there is no filter,
+    -- in this subquery treat it as an empty exclude filter array.
+    WHEN COALESCE((fta.filter_type::string)::INT, 0) = 0 THEN
+      (
+        SELECT COALESCE(array_agg(x), ARRAY[]::STRING[])
+        FROM unnest(targets.names) AS x
+        WHERE NOT (x = ANY(COALESCE(fta.filter_tables, ARRAY[]::STRING[])))
+      )
+  END AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format,
   database.name AS database_name
@@ -107,6 +148,7 @@ FROM
   LEFT JOIN targets ON job_id = targets.id
   INNER JOIN payload ON job_id = payload.id
   LEFT JOIN database ON job_id = database.id
+  LEFT JOIN filter_targets_array fta ON job_id = fta.id
 `
 	)
 	var whereClause, innerWhereClause, orderbyClause string
