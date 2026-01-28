@@ -470,8 +470,9 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 		return nil, false
 	}
 
-	// replace substitutes variables that are UDF parameters with the
-	// corresponding argument from the invocation of the UDF.
+	// replace makes a copy of the UDF body expressions, and substitutes variables
+	// that are UDF parameters with the corresponding argument from the invocation
+	// of the UDF.
 	var replace ReplaceFunc
 	replace = func(nd opt.Expr) opt.Expr {
 		if t, ok := nd.(*memo.VariableExpr); ok {
@@ -479,7 +480,7 @@ func (c *CustomFuncs) ConvertUDFToSubquery(
 				return arg
 			}
 		}
-		return c.f.Replace(nd, replace)
+		return c.f.CopyAndReplaceDefault(nd, replace)
 	}
 
 	// The presentation and ordering in the physical properties of the UDF

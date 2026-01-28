@@ -340,13 +340,17 @@ func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
 // assigned values. This can trigger additional normalization rules that can
 // substantially rewrite the tree. Once all placeholders are assigned, the
 // exploration phase can begin.
+//
+// NB: it's OK to skip copying and assigning placeholders for expressions inside
+// routines here because (1) they never contain placeholders, and (2) we later
+// copy routine body expressions into a different memo before optimizing and
+// executing those body expressions.
 func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	// Copy the "from" memo to this memo, replacing any Placeholder operators as
 	// the copy proceeds.
 	var replaceFn ReplaceFunc
-	var recursiveRoutines map[*memo.UDFDefinition]struct{}
 	replaceFn = func(e opt.Expr) opt.Expr {
 		switch t := e.(type) {
 		case *memo.PlaceholderExpr:
@@ -355,35 +359,6 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 				panic(err)
 			}
 			return f.ConstructConstVal(d, t.DataType())
-		case *memo.UDFCallExpr:
-			// Statements in the body of a UDF cannot have placeholders, but
-			// they must be copied so that they reference the new memo.
-			if t.Def.IsRecursive {
-				// It is possible for a routine to recursively invoke itself (e.g. for a
-				// loop), so we have to keep track of which recursive routines we have
-				// seen to avoid infinite recursion.
-				if _, seen := recursiveRoutines[t.Def]; seen {
-					return e
-				}
-				if recursiveRoutines == nil {
-					recursiveRoutines = make(map[*memo.UDFDefinition]struct{})
-				}
-				recursiveRoutines[t.Def] = struct{}{}
-			}
-			// Copy the arguments, if any.
-			var newArgs memo.ScalarListExpr
-			if t.Args != nil {
-				copiedArgs := f.CopyAndReplaceDefault(&t.Args, replaceFn).(*memo.ScalarListExpr)
-				newArgs = *copiedArgs
-			}
-			// Make sure to copy the slice that stores the body statements, rather
-			// than mutating the original.
-			newDef := *t.Def
-			newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
-			for i := range t.Def.Body {
-				newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
-			}
-			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: &newDef})
 		case *memo.RecursiveCTEExpr:
 			// A recursive CTE may have the stats change on its Initial expression
 			// after placeholder assignment, if that happens we need to
