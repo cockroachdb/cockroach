@@ -1852,15 +1852,12 @@ type applyZoneConfigForMultiRegionTableOption func(
 // purposes in the declarative schema changer. This extends the shared
 // regions.ZoneConfigForMultiRegionValidator with declarative-schema-changer-specific methods.
 type zoneConfigForMultiRegionValidator interface {
+	regions.ZoneConfigForMultiRegionValidator
 	getExpectedTableZoneConfig(
 		b BuildCtx,
 		tableID catid.DescID,
 		localityConfig catpb.LocalityConfig,
 	) (zonepb.ZoneConfig, error)
-	transitioningRegions() catpb.RegionNames
-	newMismatchFieldError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
-	newMissingSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
-	newExtraSubzoneError(descType string, descName string, mismatch zonepb.DiffWithZoneMismatch) error
 }
 
 // zoneConfigForMultiRegionValidatorModifiedByUser implements
@@ -1887,7 +1884,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) getExpectedTableZoneCo
 	return expectedZoneConfig, nil
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) transitioningRegions() catpb.RegionNames {
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) TransitioningRegions() catpb.RegionNames {
 	return v.regionConfig.TransitioningRegions()
 }
 
@@ -1903,7 +1900,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) err
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMismatchFieldError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1919,7 +1916,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMissingSubzoneError(
 	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1932,7 +1929,7 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError
 	)
 }
 
-func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewExtraSubzoneError(
 	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
 ) error {
 	return v.wrapErr(
@@ -1948,6 +1945,49 @@ func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
 	)
 }
 
+// multiRegionTableValidatorData implements zoneconfig.MultiRegionTableValidatorData
+// for the declarative schema changer.
+type multiRegionTableValidatorData struct {
+	b            BuildCtx
+	tableID      catid.DescID
+	regionConfig multiregion.RegionConfig
+}
+
+var _ regions.MultiRegionTableValidatorData = (*multiRegionTableValidatorData)(nil)
+
+func (v *multiRegionTableValidatorData) GetNonDropIndexes() map[uint32]tree.Name {
+	result := make(map[uint32]tree.Name)
+	v.b.QueryByID(v.tableID).FilterIndexName().
+		ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+			// Only include indexes that are public or being added
+			if status != scpb.Status_ABSENT || target == scpb.ToPublic {
+				result[uint32(e.IndexID)] = tree.Name(e.Name)
+			}
+		})
+	return result
+}
+
+func (v *multiRegionTableValidatorData) GetTransitioningRBRIndexes() map[uint32]struct{} {
+	// todo(shadi): need to find transitioning indexes if an alter locality is running
+	return make(map[uint32]struct{})
+}
+
+func (v *multiRegionTableValidatorData) GetTableLocalitySecondaryRegion() *catpb.RegionName {
+	secondaryRegionElt := v.b.QueryByID(v.tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+	if secondaryRegionElt != nil {
+		return &secondaryRegionElt.RegionName
+	}
+	return nil
+}
+
+func (v *multiRegionTableValidatorData) GetDatabasePrimaryRegion() catpb.RegionName {
+	return v.regionConfig.PrimaryRegion()
+}
+
+func (v *multiRegionTableValidatorData) GetDatabaseSecondaryRegion() catpb.RegionName {
+	return v.regionConfig.SecondaryRegion()
+}
+
 // validateZoneConfigForMultiRegionTable validates that the multi-region
 // fields of the table's zone configuration match what is expected for
 // the given table.
@@ -1957,138 +1997,27 @@ func validateZoneConfigForMultiRegionTable(
 	tableName string,
 	currentZoneConfig *zonepb.ZoneConfig,
 	localityConfig catpb.LocalityConfig,
+	regionConfig multiregion.RegionConfig,
 	validator zoneConfigForMultiRegionValidator,
 ) error {
-	if currentZoneConfig == nil {
-		currentZoneConfig = zonepb.NewZoneConfig()
-	}
-
 	expectedZoneConfig, err := validator.getExpectedTableZoneConfig(b, tableID, localityConfig)
 	if err != nil {
 		return err
 	}
 
-	// Build map of non-drop indexes for filtering subzones
-	subzoneIndexIDsToDiff := make(map[uint32]tree.Name)
-	b.QueryByID(tableID).FilterIndexName().
-		ForEach(func(status scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
-			// Only include indexes that are public or being added
-			if status != scpb.Status_ABSENT && target == scpb.ToPublic {
-				subzoneIndexIDsToDiff[uint32(e.IndexID)] = tree.Name(e.Name)
-			}
-		})
-
-	// Do not compare partitioning for transitioning regions
-	transitioningRegions := make(map[string]struct{}, len(validator.transitioningRegions()))
-	for _, transitioningRegion := range validator.transitioningRegions() {
-		transitioningRegions[string(transitioningRegion)] = struct{}{}
+	validatorData := multiRegionTableValidatorData{
+		b:            b,
+		tableID:      tableID,
+		regionConfig: regionConfig,
 	}
 
-	// Filter current zone config subzones
-	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
-	for _, c := range currentZoneConfig.Subzones {
-		if c.PartitionName != "" {
-			if _, ok := transitioningRegions[c.PartitionName]; ok {
-				continue
-			}
-		}
-		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; !ok {
-			continue
-		}
-		filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
-	}
-	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
-
-	// Strip the placeholder status if there are no active subzones
-	if len(filteredCurrentZoneConfigSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
-		currentZoneConfig.NumReplicas = nil
-	}
-
-	// Filter expected zone config subzones
-	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
-	for _, c := range expectedZoneConfig.Subzones {
-		if c.PartitionName != "" {
-			if _, ok := transitioningRegions[c.PartitionName]; ok {
-				continue
-			}
-		}
-		filteredExpectedZoneConfigSubzones = append(filteredExpectedZoneConfigSubzones, c)
-	}
-	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
-
-	// Mark the expected NumReplicas as 0 if we have a placeholder
-	if currentZoneConfig.IsSubzonePlaceholder() && regions.IsPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
-		expectedZoneConfig.NumReplicas = proto.Int32(0)
-	}
-
-	// Synthesize lease preferences if there's a secondary region
-	regionConfig := validator.(*zoneConfigForMultiRegionValidatorModifiedByUser).regionConfig
-	if regionConfig.HasSecondaryRegion() {
-		var leasePreferences []zonepb.LeasePreference
-		// Check if this is a REGIONAL BY TABLE with a specific region
-		secondaryRegionElt := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
-		if secondaryRegionElt != nil {
-			leasePreferences = regions.SynthesizeLeasePreferences(
-				secondaryRegionElt.RegionName,
-				regionConfig.SecondaryRegion(),
-			)
-		} else {
-			leasePreferences = regions.SynthesizeLeasePreferences(
-				regionConfig.PrimaryRegion(),
-				regionConfig.SecondaryRegion(),
-			)
-		}
-		expectedZoneConfig.LeasePreferences = leasePreferences
-	}
-
-	// Compare the two zone configs
-	same, mismatch, err := currentZoneConfig.DiffWithZone(
+	return regions.ValidateZoneConfigForMultiRegionTable(
+		tree.Name(tableName),
+		currentZoneConfig,
 		expectedZoneConfig,
-		zonepb.MultiRegionZoneConfigFields,
+		&validatorData,
+		validator,
 	)
-	if err != nil {
-		return err
-	}
-	if !same {
-		descType := "table"
-		name := tableName
-		if mismatch.IndexID != 0 {
-			indexName, ok := subzoneIndexIDsToDiff[mismatch.IndexID]
-			if !ok {
-				return errors.AssertionFailedf(
-					"unexpected unknown index id %d on table %s (mismatch %#v)",
-					mismatch.IndexID,
-					tableName,
-					mismatch,
-				)
-			}
-
-			if mismatch.PartitionName != "" {
-				descType = "partition"
-				partitionName := tree.Name(mismatch.PartitionName)
-				name = fmt.Sprintf(
-					"%s of %s@%s",
-					partitionName.String(),
-					tableName,
-					indexName.String(),
-				)
-			} else {
-				descType = "index"
-				name = fmt.Sprintf("%s@%s", tableName, indexName.String())
-			}
-		}
-
-		if mismatch.IsMissingSubzone {
-			return validator.newMissingSubzoneError(descType, name, mismatch)
-		}
-		if mismatch.IsExtraSubzone {
-			return validator.newExtraSubzoneError(descType, name, mismatch)
-		}
-
-		return validator.newMismatchFieldError(descType, name, mismatch)
-	}
-
-	return nil
 }
 
 // validateZoneConfigForMultiRegionTableWasNotModifiedByUser validates that
@@ -2136,6 +2065,7 @@ func validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		tableName,
 		currentZoneConfigProto,
 		currentLocalityConfig,
+		regionConfig,
 		validator,
 	)
 }
