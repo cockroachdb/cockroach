@@ -749,6 +749,20 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP TRIGGER IF EXISTS foo ON xy;
 
+# CASCADE and RESTRICT are accepted for PostgreSQL compatibility. Since triggers
+# don't have dependents, they behave identically to a drop without these options.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy CASCADE;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy RESTRICT;
+
 # ==============================================================================
 # Test dependency tracking for a relation reference.
 # ==============================================================================
@@ -4089,9 +4103,6 @@ subtest unsupported
 
 statement error pgcode 0A000 pq: unimplemented: CREATE OR REPLACE TRIGGER is not supported
 CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
-
-statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
-DROP TRIGGER foo ON xy CASCADE;
 
 statement error pgcode 0A000 pq: unimplemented: statement-level triggers are not yet supported
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH STATEMENT EXECUTE FUNCTION f();
