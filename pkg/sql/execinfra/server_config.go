@@ -250,12 +250,12 @@ type TestingKnobs struct {
 	// AfterDistributedMergeMapPhase is called after the map phase of a distributed
 	// merge index backfill completes, before any merge iterations begin. It receives
 	// the SST manifests produced by the map phase.
-	AfterDistributedMergeMapPhase func(ctx context.Context, manifests []jobspb.IndexBackfillSSTManifest)
+	AfterDistributedMergeMapPhase func(ctx context.Context, manifests []jobspb.BulkSSTManifest)
 
 	// AfterDistributedMergeIteration is called after each iteration of a
 	// distributed merge during index backfill. It receives the iteration number
 	// and the current SST manifests.
-	AfterDistributedMergeIteration func(ctx context.Context, iteration int, manifests []jobspb.IndexBackfillSSTManifest)
+	AfterDistributedMergeIteration func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest)
 
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the
