@@ -248,6 +248,10 @@ type TestClusterInterface interface {
 	// default tenant for testing.
 	StartedDefaultTestTenant() bool
 
+	// IsDRPCEnabled returns whether DRPC is enabled for inter-node
+	// communication in this cluster.
+	IsDRPCEnabled() bool
+
 	// ApplicationLayer calls .ApplicationLayer() on the ith server in
 	// the cluster.
 	ApplicationLayer(idx int) ApplicationLayerInterface

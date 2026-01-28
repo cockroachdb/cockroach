@@ -130,6 +130,12 @@ func (tc *TestCluster) StartedDefaultTestTenant() bool {
 	return tc.Servers[0].TenantController().StartedDefaultTestTenant()
 }
 
+// IsDRPCEnabled returns whether DRPC is enabled for inter-node communication
+// in this cluster.
+func (tc *TestCluster) IsDRPCEnabled() bool {
+	return tc.defaultDRPCOption == base.TestDRPCEnabled
+}
+
 // ApplicationLayer calls .ApplicationLayer() on the ith server in
 // the cluster.
 func (tc *TestCluster) ApplicationLayer(idx int) serverutils.ApplicationLayerInterface {
