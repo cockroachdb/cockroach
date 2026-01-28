@@ -993,7 +993,7 @@ regions: <hidden>
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ execution time: 0µs
-│ actual row count: 0
+│ actual row count: 1
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1046,7 +1046,7 @@ regions: <hidden>
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ execution time: 0µs
-│ actual row count: 0
+│ actual row count: 1
 │ table: t137352
 │ set: a, b
 │ auto commit
@@ -1202,7 +1202,7 @@ regions: <hidden>
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ execution time: 0µs
-│ actual row count: 0
+│ actual row count: 1
 │ table: t137352
 │ set: a, b
 │ auto commit

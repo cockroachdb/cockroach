@@ -127,7 +127,7 @@ func newInvertedFilterer(
 	)
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		ifr.input = newInputStatCollector(ifr.input)
+		ifr.input = NewInputStatCollector(ifr.input)
 		ifr.ExecStatsForTrace = ifr.execStatsForTrace
 	}
 
@@ -321,7 +321,7 @@ func (ifr *invertedFilterer) close() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(ifr.input)
+	is, ok := GetInputStats(ifr.input)
 	if !ok {
 		return nil
 	}

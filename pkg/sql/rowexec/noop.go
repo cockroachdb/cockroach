@@ -65,7 +65,7 @@ func newNoopProcessor(
 	}
 	n.AddInputToDrain(n.input)
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		n.input = newInputStatCollector(n.input)
+		n.input = NewInputStatCollector(n.input)
 		n.ExecStatsForTrace = n.execStatsForTrace
 	}
 	return n, nil
@@ -102,7 +102,7 @@ func (n *noopProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (n *noopProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(n.input)
+	is, ok := GetInputStats(n.input)
 	if !ok {
 		return nil
 	}
