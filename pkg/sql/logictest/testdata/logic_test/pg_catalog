@@ -3023,7 +3023,6 @@ WHERE
 ORDER BY name
 ----
 name                                                             setting             category  short_desc  extra_desc  vartype
-allow_create_trigger_function_with_argv_references               off                 NULL      NULL        NULL        string
 allow_ordinal_column_references                                  off                 NULL      NULL        NULL        string
 allow_role_memberships_to_change_during_transaction              off                 NULL      NULL        NULL        string
 allow_unsafe_internals                                           off                 NULL      NULL        NULL        string
@@ -3276,7 +3275,6 @@ WHERE
 ORDER BY name
 ----
 name                                                             setting             unit  context  enumvals  boot_val            reset_val
-allow_create_trigger_function_with_argv_references               off                 NULL  user     NULL      off                 off
 allow_ordinal_column_references                                  off                 NULL  user     NULL      off                 off
 allow_role_memberships_to_change_during_transaction              off                 NULL  user     NULL      off                 off
 allow_unsafe_internals                                           off                 NULL  user     NULL      off                 off
@@ -3513,7 +3511,6 @@ query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings ORDER BY name
 ----
 name                                                             source  min_val  max_val  sourcefile  sourceline
-allow_create_trigger_function_with_argv_references               NULL    NULL     NULL     NULL        NULL
 allow_ordinal_column_references                                  NULL    NULL     NULL     NULL        NULL
 allow_role_memberships_to_change_during_transaction              NULL    NULL     NULL     NULL        NULL
 allow_unsafe_internals                                           NULL    NULL     NULL     NULL        NULL

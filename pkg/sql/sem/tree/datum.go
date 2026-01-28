@@ -4771,6 +4771,10 @@ type DArray struct {
 
 	// customOid, if non-0, is the oid of this array datum.
 	customOid oid.Oid
+
+	// zeroIndexed, if true, makes FirstIndex() return 0 instead of 1.
+	// This is used for TG_ARGV to match PostgreSQL's 0-indexed behavior.
+	zeroIndexed bool
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -4883,11 +4887,20 @@ func (d *DArray) IsComposite() bool {
 // which are 1-indexed, and 0 for the special Postgers vector types which are
 // 0-indexed.
 func (d *DArray) FirstIndex() int {
+	if d.zeroIndexed {
+		return 0
+	}
 	switch d.customOid {
 	case oid.T_int2vector, oid.T_oidvector:
 		return 0
 	}
 	return 1
+}
+
+// SetZeroIndexed marks this array as 0-indexed. This is used for TG_ARGV
+// to match PostgreSQL's 0-indexed behavior.
+func (d *DArray) SetZeroIndexed() {
+	d.zeroIndexed = true
 }
 
 // Compare implements the Datum interface.
