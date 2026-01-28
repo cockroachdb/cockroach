@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -52,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -61,9 +61,9 @@ type alterTableNode struct {
 	n         *tree.AlterTable
 	prefix    catalog.ResolvedObjectPrefix
 	tableDesc *tabledesc.Mutable
-	// statsData is populated with data for "alter table inject statistics"
+	// statsData is populated with data for "alter table inject|push statistics"
 	// commands - the JSON stats expressions.
-	// It is parallel with n.Cmds (for the inject stats commands).
+	// It is parallel with n.Cmds (for the inject stats / push stats commands).
 	statsData map[int]tree.TypedExpr
 }
 
@@ -116,19 +116,27 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "add_column.references"))
 	})
 
-	// See if there's any "inject statistics" in the query and type check the
+	// See if there's any "inject|push statistics" in the query and type check the
 	// expressions.
 	statsData := make(map[int]tree.TypedExpr)
 	for i, cmd := range n.Cmds {
-		injectStats, ok := cmd.(*tree.AlterTableInjectStats)
-		if !ok {
+		var statsExpr tree.Expr
+		var typingCtx string
+		switch t := cmd.(type) {
+		case *tree.AlterTableInjectStats:
+			statsExpr = t.Stats
+			typingCtx = "INJECT STATISTICS"
+		case *tree.AlterTablePushStats:
+			statsExpr = t.Stats
+			typingCtx = "PUSH STATISTICS"
+		default:
 			continue
 		}
 		typedExpr, err := p.analyzeExpr(
-			ctx, injectStats.Stats,
+			ctx, statsExpr,
 			tree.IndexedVarHelper{},
 			types.Jsonb, true, /* requireType */
-			"INJECT STATISTICS" /* typingContext */)
+			typingCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -732,6 +740,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return errors.New("cannot inject statistics in an explicit transaction")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
+				return err
+			}
+
+		case *tree.AlterTablePushStats:
+			sd, ok := n.statsData[i]
+			if !ok {
+				return errors.AssertionFailedf("missing stats data")
+			}
+			if !params.extendedEvalCtx.TxnIsSingleStmt {
+				return errors.New("cannot push statistics in an explicit transaction")
+			}
+			if err := pushTableStats(params.ctx, params, n.tableDesc, sd, t.ExplicitColumns); err != nil {
 				return err
 			}
 
@@ -1531,29 +1551,9 @@ func updateSequenceDependencies(
 func injectTableStats(
 	params runParams, desc catalog.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	val, err := eval.Expr(params.ctx, params.EvalContext(), statsExpr)
+	jsonStats, err := preprocessStats(params.ctx, params.EvalContext(), statsExpr)
 	if err != nil {
 		return err
-	}
-	if val == tree.DNull {
-		return pgerror.New(pgcode.Syntax,
-			"statistics cannot be NULL")
-	}
-	jsonStr := val.(*tree.DJSON).JSON.String()
-	var jsonStats []stats.JSONStatistic
-	if err := gojson.Unmarshal([]byte(jsonStr), &jsonStats); err != nil {
-		return err
-	}
-
-	// Check that we're not injecting any forecasted stats.
-	for i := range jsonStats {
-		if jsonStats[i].Name == jobspb.ForecastStatsName {
-			return errors.WithHintf(
-				pgerror.New(pgcode.InvalidName, "cannot inject forecasted statistics"),
-				"either remove forecasts from the statement, or rename them from %q to something else",
-				jobspb.ForecastStatsName,
-			)
-		}
 	}
 
 	// First, delete all statistics for the table. (We use the current transaction
@@ -1568,7 +1568,6 @@ func injectTableStats(
 	}
 
 	// Insert each statistic.
-StatsLoop:
 	for i := range jsonStats {
 		s := &jsonStats[i]
 		h, err := s.GetHistogram(params.ctx, &params.p.semaCtx, params.EvalContext())
@@ -1576,47 +1575,37 @@ StatsLoop:
 			return err
 		}
 
-		// Check that the type matches.
-		// TODO(49698): When we support multi-column histograms this check will need
-		// adjustment.
-		if len(s.Columns) == 1 {
-			col := catalog.FindColumnByName(desc, s.Columns[0])
-			// Ignore dropped columns (they are handled below).
-			if col != nil {
-				if err := h.TypeCheck(
-					col.GetType(), desc.GetName(), s.Columns[0], stats.TSFromString(s.CreatedAt),
-				); err != nil {
-					return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
-				}
-			}
+		if err := statsTypeCheck(desc, s, h); err != nil {
+			return err
 		}
 
-		// histogram will be passed to the INSERT statement; we want it to be a
-		// nil interface{} if we don't generate a histogram.
-		var histogram interface{}
-		if h != nil {
-			histogram, err = protoutil.Marshal(h)
-			if err != nil {
-				return err
-			}
+		columnIDs, err := convertColumnNamesToIDs(params, desc, s.Columns)
+		if err != nil {
+			return err
+		}
+		if len(columnIDs) == 0 {
+			continue
 		}
 
-		columnIDs := tree.NewDArray(types.Int)
-		for _, colName := range s.Columns {
-			col := catalog.FindColumnByName(desc, colName)
-			if col == nil {
-				params.p.BufferClientNotice(
-					params.ctx,
-					pgnotice.Newf("column %q does not exist", colName),
-				)
-				continue StatsLoop
-			}
-			if err := columnIDs.Append(tree.NewDInt(tree.DInt(col.GetID()))); err != nil {
-				return err
-			}
-		}
-
-		if err := insertJSONStatistic(params, desc.GetID(), columnIDs, s, histogram); err != nil {
+		// TODO(janexing): Consider unifying the int type for
+		// JSONStatistic.{RowCount|DistinctCount|NullCount|AvgSize} and the parameter
+		// list for stats.InsertNewStat() -- only one of uint64 or int64 should be used.
+		if err := stats.InsertNewStat(
+			params.ctx,
+			params.p.InternalSQLTxn(),
+			desc.GetID(),
+			s.Name,
+			columnIDs,
+			int64(s.RowCount),
+			int64(s.DistinctCount),
+			int64(s.NullCount),
+			int64(s.AvgSize),
+			h,
+			s.PartialPredicate,
+			s.FullStatisticID,
+			s.CreatedAt,
+			s.ID,
+		); err != nil {
 			return errors.Wrap(err, "failed to insert stats")
 		}
 	}
@@ -1629,98 +1618,194 @@ StatsLoop:
 	return nil
 }
 
-func insertJSONStatistic(
-	params runParams,
-	tableID descpb.ID,
-	columnIDs *tree.DArray,
-	s *stats.JSONStatistic,
-	histogram interface{},
+func preprocessStats(
+	ctx context.Context, evalCtx *eval.Context, statsExpr tree.TypedExpr,
+) ([]stats.JSONStatistic, error) {
+	val, err := eval.Expr(ctx, evalCtx, statsExpr)
+	if err != nil {
+		return nil, err
+	}
+	if val == tree.DNull {
+		return nil, pgerror.New(pgcode.Syntax, "statistics cannot be NULL")
+	}
+	jsonStr := val.(*tree.DJSON).JSON.String()
+	var jsonStats []stats.JSONStatistic
+	if err := gojson.Unmarshal([]byte(jsonStr), &jsonStats); err != nil {
+		return nil, err
+	}
+
+	// Check that we're not injecting any forecasted stats.
+	for i := range jsonStats {
+		if jsonStats[i].Name == jobspb.ForecastStatsName {
+			return nil, errors.WithHintf(
+				pgerror.New(pgcode.InvalidName, "cannot inject forecasted statistics"),
+				"either remove forecasts from the statement, or rename them from %q to something else",
+				jobspb.ForecastStatsName,
+			)
+		}
+	}
+	return jsonStats, nil
+}
+
+// convertColumnNamesToIDs converts column names to column IDs. If the
+// columnNames is empty or contains any column name that doesn't exist,
+// we skip the current statistics.
+func convertColumnNamesToIDs(
+	params runParams, desc catalog.TableDescriptor, columnNames []string,
+) ([]descpb.ColumnID, error) {
+	columnIDs := make([]descpb.ColumnID, 0, len(columnNames))
+	for _, colName := range columnNames {
+		col := catalog.FindColumnByName(desc, colName)
+		if col == nil {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("column %q does not exist", colName),
+			)
+			// Skip this statistic.
+			return nil, nil
+		}
+		columnIDs = append(columnIDs, col.GetID())
+	}
+	return columnIDs, nil
+}
+
+// statsTypeCheck checks that the type matches.
+// TODO(49698): When we support multi-column histograms this check will need
+// adjustment.
+func statsTypeCheck(
+	desc catalog.TableDescriptor, s *stats.JSONStatistic, h *stats.HistogramData,
 ) error {
-	var (
-		ctx = params.ctx
-		txn = params.p.InternalSQLTxn()
-	)
-
-	var name interface{}
-	if s.Name != "" {
-		name = s.Name
+	if len(s.Columns) == 1 {
+		col := catalog.FindColumnByName(desc, s.Columns[0])
+		// Ignore dropped columns (they are handled below).
+		if col != nil {
+			if err := h.TypeCheck(
+				col.GetType(), desc.GetName(), s.Columns[0], stats.TSFromString(s.CreatedAt),
+			); err != nil {
+				return pgerror.WithCandidateCode(err, pgcode.DatatypeMismatch)
+			}
+		}
 	}
+	return nil
+}
 
-	var predicateValue interface{}
-	if s.PartialPredicate != "" {
-		predicateValue = s.PartialPredicate
-	}
-
-	var fullStatisticIDValue interface{}
-	if s.FullStatisticID != 0 {
-		fullStatisticIDValue = s.FullStatisticID
-	}
-
-	if s.ID != 0 {
-		_ /* rows */, err := txn.Exec(
-			ctx,
-			"insert-stats",
-			txn.KV(),
-			`INSERT INTO system.table_statistics (
-					"statisticID",
-					"tableID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram,
-					"partialPredicate",
-					"fullStatisticID"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-			s.ID,
-			tableID,
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			s.AvgSize,
-			histogram,
-			predicateValue,
-			fullStatisticIDValue,
-		)
-		return err
-	} else {
-		_ /* rows */, err := txn.Exec(
-			ctx,
-			"insert-stats",
-			txn.KV(),
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram,
-					"partialPredicate",
-					"fullStatisticID"
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			tableID,
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			s.AvgSize,
-			histogram,
-			predicateValue,
-			fullStatisticIDValue,
-		)
+// pushTableStats implements the PUSH STATISTICS command, which uses retention
+// logic to delete old statistics for specific columns and insert new ones.
+// This mimics the behavior of sampleAggregator.writeResults().
+func pushTableStats(
+	ctx context.Context,
+	params runParams,
+	desc catalog.TableDescriptor,
+	statsExpr tree.TypedExpr,
+	explicitColumns bool,
+) error {
+	jsonStats, err := preprocessStats(params.ctx, params.EvalContext(), statsExpr)
+	if err != nil {
 		return err
 	}
+	err = params.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var statsCreationTime string
+		var isAuto bool
+		var usingExtreme bool
+		var columnsUsed [][]descpb.ColumnID
+		// Insert each statistic using retention logic.
+		for i := range jsonStats {
+			s := &jsonStats[i]
+			// Validation check that all the stats in one PUSH STATISTICS
+			// attempt should belong to one stats collection, so they should be
+			// all auto or all manual, and should be of the same creation
+			// timestamp.
+			if i == 0 {
+				isAuto = s.IsAuto()
+			} else {
+				if isAuto != s.IsAuto() {
+					return errors.Newf("expect auto=%t, got auto=%t", isAuto, s.IsAuto())
+				}
+			}
+
+			if s.CreatedAt == "" {
+				return errors.Newf("createdAt must be set")
+			}
+			if len(s.Columns) == 0 {
+				return errors.Newf("columns must be set")
+			}
+			if statsCreationTime == "" {
+				statsCreationTime = s.CreatedAt
+			} else if s.CreatedAt != statsCreationTime {
+				return errors.Newf("stats creation time mismatch: expect %s, got %s", statsCreationTime, s.CreatedAt)
+			}
+
+			if s.FullStatisticID != 0 {
+				usingExtreme = true
+			}
+
+			h, err := s.GetHistogram(ctx, &params.p.semaCtx, params.EvalContext())
+			if err != nil {
+				return err
+			}
+			if err := statsTypeCheck(desc, s, h); err != nil {
+				return err
+			}
+			columnIDs, err := convertColumnNamesToIDs(params, desc, s.Columns)
+			if err != nil {
+				return err
+			}
+			if len(columnIDs) == 0 {
+				continue
+			}
+
+			canaryEnabled := desc.TableDesc().StatsCanaryWindow > 0 && params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn)
+
+			if err := stats.WriteStatsWithOldDeleted(
+				ctx,
+				txn,
+				desc.GetID(),
+				s.Name,
+				columnIDs,
+				int64(s.RowCount),
+				int64(s.DistinctCount),
+				int64(s.NullCount),
+				int64(s.AvgSize),
+				h,
+				s.PartialPredicate,
+				s.FullStatisticID,
+				s.CreatedAt,
+				s.ID,
+				canaryEnabled,
+			); err != nil {
+				return errors.Wrap(err, "failed to push stats")
+			}
+			columnsUsed = append(columnsUsed, columnIDs)
+		}
+
+		// Replicate the retention logic from createStatsNode.makeJobRecord():
+		// deleteOtherStats = len(n.ColumnNames) == 0 && !n.Options.UsingExtremes
+		// Auto stats never specify columns, manual stats without explicit
+		// columns also qualify.
+		shouldDeleteOtherStats := !usingExtreme && (isAuto || !explicitColumns)
+		if shouldDeleteOtherStats && len(columnsUsed) > 0 {
+			keepTime := stats.TableStatisticsRetentionPeriod.Get(&params.p.ExecCfg().Settings.SV)
+			if err := stats.DeleteOldStatsForOtherColumns(
+				ctx,
+				txn,
+				desc.GetID(),
+				columnsUsed,
+				keepTime,
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (the cache would
+	// normally be updated asynchronously).
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.GetID())
+	return nil
 }
 
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
@@ -2549,7 +2634,7 @@ func (p *planner) checkSchemaChangeIsAllowed(
 				*tree.AlterTableResetStorageParams, *tree.AlterTablePartitionByTable,
 				*tree.AlterTableSetOnUpdate, *tree.AlterTableDropNotNull,
 				*tree.AlterTableSetVisible, *tree.AlterTableDropStored,
-				*tree.AlterTableValidateConstraint, *tree.AlterTableInjectStats:
+				*tree.AlterTableValidateConstraint, *tree.AlterTableInjectStats, *tree.AlterTablePushStats:
 			default:
 				preventedBySchemaLocked = true
 			}
