@@ -21,7 +21,7 @@ func init() {
 	// This ensures we don't have two conflicting locality configurations at the same time.
 	registerDepRule(
 		"old locality must become absent before the new locality is public",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"old-locality", "new-locality",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
