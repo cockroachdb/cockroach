@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -525,8 +526,8 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 	// Add all the descriptors that have been modified in this transaction.
 	if err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
 		// Dropped / Offline descriptors can be ignored, since these can no longer be leased.
-		// Note: We still emit a record, but that is to allow the timestamp to move
-		// forward.
+		// Note: We will detect these descriptors instantly in the lease manager, so the locked
+		// timestamp does not need to move forward. See takenOfflineAt in descriptorState.
 		if desc.Dropped() || desc.Offline() {
 			return nil
 		}
@@ -538,6 +539,15 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 		return nil
 	}); err != nil {
 		return err
+	}
+	// Descriptors updated in this batch were either allg offline or dropped,
+	// so nothing to inform the lease manager about.
+	if len(updates.DescriptorIDs) == 0 {
+		return nil
+	}
+	// On test builds confirm we are always selecting a valid ID.
+	if buildutil.CrdbTestBuild && descUpdateID == descpb.InvalidID {
+		return errors.AssertionFailedf("low descriptor key has invalid ID (descriptorIDs=%v)", updates.DescriptorIDs)
 	}
 	descUpdateKey := catalogkeys.MakeDescUpdateKey(tc.codec(), descUpdateID)
 	return txn.Put(ctx, descUpdateKey, updates)
