@@ -512,6 +512,7 @@ object TriggerEnabled
 TriggerEnabled :  TableID
 TriggerEnabled :  TriggerID
 TriggerEnabled :  Enabled
+TriggerEnabled :  SeqNum
 
 object TriggerEvents
 

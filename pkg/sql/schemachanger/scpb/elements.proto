@@ -610,6 +610,10 @@ message TriggerEnabled {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
   bool enabled = 3;
+  // SeqNum differentiates different versions of the enabled state for the same
+  // trigger. When modifying the enabled state, the old element is dropped and
+  // a new one with an incremented SeqNum is added.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message TriggerTiming {
