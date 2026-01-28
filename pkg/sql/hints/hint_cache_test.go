@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -233,10 +234,14 @@ func TestHintCacheMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Skip external mode when running under race to avoid flakes.
+	var serverArgs base.TestServerArgs
+	if util.RaceEnabled {
+		serverArgs.DefaultTestTenant = base.TestSkippedForExternalModeDueToPerformance(161857)
+	}
+
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{},
-	})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{ServerArgs: serverArgs})
 	defer tc.Stopper().Stop(ctx)
 
 	// Use node 0 as the primary node for the cache.
