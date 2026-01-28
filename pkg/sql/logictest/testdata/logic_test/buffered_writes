@@ -622,3 +622,46 @@ COMMIT
 
 statement ok
 RESET enable_durable_locking_for_serializable
+
+# A regression test for the case when a batch with a CPut (for which the
+# condition fails) forced the txnWriteBuffer to flush, and we didn't split
+# buffered writes into a separate batch, while they would be preserved due to
+# usage of the savepoint.
+subtest regression_161722
+
+statement ok
+CREATE TABLE xy (
+  x INT PRIMARY KEY,
+  y INT,
+  FAMILY (x, y)
+)
+
+# Use specific buffer size that allows the first INSERT to be buffered, yet the
+# second one would exceed the limit.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '400B';
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO xy VALUES (1, 1)
+
+statement ok
+SAVEPOINT s
+
+query error duplicate key value violates unique constraint "xy_pkey"
+INSERT INTO xy VALUES (1, 2)
+
+statement ok
+ROLLBACK TO SAVEPOINT s
+
+statement ok
+COMMIT
+
+query II
+SELECT * FROM xy ORDER BY x
+----
+1  1
+
+subtest end
