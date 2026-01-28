@@ -144,6 +144,11 @@
 // range ID.
 package keys
 
+// A reference to the annotated schema for CockroachDB keys. See TestSchemaPrint
+// for the digested summary of this schema.
+// TODO(pav-kv): integrate with the key/value pretty printers.
+var _ = schema
+
 // NB: The sorting order of the symbols below map to the physical layout.
 // Preserve group-wise ordering when adding new constants.
 //
