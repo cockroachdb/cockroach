@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -1689,7 +1690,13 @@ func writeColumnValues(
 	var lastColID descpb.ColumnID
 	for _, col := range columns {
 		val := findColumnValue(col.ColID, colMap, row)
-		if val == tree.DNull || (col.IsComposite && !val.(tree.CompositeDatum).IsComposite()) {
+		var valIsComposite bool
+		if d, ok := val.(tree.CompositeDatum); ok {
+			valIsComposite = d.IsComposite()
+		} else if buildutil.CrdbTestBuild && col.IsComposite && val != tree.DNull {
+			panic(errors.AssertionFailedf("column with ID %d is composite but value is of %T type which is not composite datum", col.ColID, val))
+		}
+		if val == tree.DNull || (col.IsComposite && !valIsComposite) {
 			continue
 		}
 		colIDDelta := valueside.MakeColumnIDDelta(lastColID, col.ColID)
