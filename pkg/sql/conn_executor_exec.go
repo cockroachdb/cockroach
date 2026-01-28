@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
@@ -2755,6 +2757,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 		}
 	}()
+
+	// TODO: Plumb the cpuProvider. There is one per node.
+	var cpuProvider admission.SQLCPUProvider
+	if cpuProvider != nil {
+		var err error
+		ctx, err = flowinfra.MakeCPUHandle(
+			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true)
+		if err != nil {
+			return err
+		}
+	}
 
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
