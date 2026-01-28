@@ -79,6 +79,11 @@ func StartSampler(
 			// goroutines onto processors, i.e. are in the {micro,milli}-second
 			// range during normal operation. See TestHistogramBuckets for more
 			// details.
+			//
+			// NB: Go guarantees that sample().Buckets will be identical across
+			// calls for the lifetime of the process. This allows runtimeHistogram
+			// to rely on exact boundary alignment when aggregating counts. See:
+			// https://pkg.go.dev/runtime/metrics#Float64Histogram
 			cpuSchedulerLatencyBuckets := reBucketExpAndTrim(
 				sample().Buckets,                   // original buckets
 				1.1,                                // base

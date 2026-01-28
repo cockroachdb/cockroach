@@ -57,9 +57,7 @@ var _ metric.WindowedHistogram = (*runtimeHistogram)(nil)
 var _ metric.CumulativeHistogram = (*runtimeHistogram)(nil)
 
 // newRuntimeHistogram creates a histogram with the given metadata configured
-// with the given buckets. The buckets must be a strict subset of what this
-// histogram is updated with and follow the same conventions as those in
-// runtime/metrics.
+// with the given buckets (produced by reBucketExpAndTrim from sample().Buckets).
 func newRuntimeHistogram(metadata metric.Metadata, buckets []float64) *runtimeHistogram {
 	// We need to remove -Inf values. runtime/metrics keeps them around.
 	// But -Inf bucket should not be allowed for prometheus histograms.
@@ -102,6 +100,8 @@ func (h *runtimeHistogram) update(src *metrics.Float64Histogram) {
 	// Example: runtime boundaries [0, 1, 2, 5, 10] with our boundaries [0, 5, 10]
 	//   runtime bins: [0,1)=2  [1,2)=3  [2,5)=1  [5,10)=4
 	//   our bins:     [0,5)=2+3+1=6     [5,10)=4
+	// Note: Our bucket boundaries (0,5,10) are a strict subset of the runtime's
+	// boundaries [0, 1, 2, 5, 10] (guaranteed by reBucketExpAndTrim).
 	dstIdx := 0
 	for srcIdx, count := range counts {
 		h.mu.windowedCounts[dstIdx] += count
@@ -201,8 +201,14 @@ func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
 // result is a roughly exponential (in many cases, perfectly exponential)
 // bucketing scheme. It also trims the bucket range to the specified min and max
 // values -- everything outside the range is merged into (-Inf, ..] and [..,
-// +Inf) buckets. The following example shows how it works, lifted from
-// testdata/histogram_buckets.
+// +Inf) buckets.
+//
+// The returned boundaries are always exact values from the input (never
+// computed), just with some boundaries omitted to create coarser buckets.
+// This is verified by TestHistogramBuckets and required by runtimeHistogram.update
+// which relies on exact equality to align boundaries.
+//
+// The following example shows how it works, lifted from testdata/histogram_buckets.
 //
 //		rebucket base=10 min=0ns max=100000h
 //		----
@@ -262,8 +268,12 @@ func reBucketExpAndTrim(buckets []float64, base, min, max float64) []float64 {
 }
 
 // reBucketExp reduces bucket boundaries to exponential spacing, keeping only
-// boundaries that are roughly 'base' times apart. For example, with base=10:
-// [0, 1, 2, ..., 10, 20, ..., 100] → [0, 1, 10, 100].
+// boundaries that are roughly 'base' times apart. It iterates through the input
+// and selects the next boundary once the current one is at least base times
+// larger than the last selected. Boundaries are always selected from the input
+// (never computed), so the output is a strict subset of the input.
+//
+// For example, with base=10: [0, 1, 2, ..., 10, 20, ..., 100] → [0, 1, 10, 100].
 func reBucketExp(buckets []float64, base float64) []float64 {
 	bucket := buckets[0]
 	var newBuckets []float64
