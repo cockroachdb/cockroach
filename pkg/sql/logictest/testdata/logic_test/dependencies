@@ -111,8 +111,8 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 106            test_kv          NULL      107              fk                 NULL                   NULL               NULL
 106            test_kv          NULL      108              fk                 NULL                   NULL               NULL
 106            test_kv          NULL      109              fk                 NULL                   NULL               NULL
-106            test_kv          NULL      112              view               0                      NULL               Columns: [2]
-112            test_v1          NULL      113              view               0                      NULL               Columns: [1]
+106            test_kv          NULL      112              view               0                      NULL               Columns=[2]
+112            test_v1          NULL      113              view               0                      NULL               Columns=[1]
 114            test_uwi_parent  NULL      115              fk                 NULL                   NULL               NULL
 
 # Checks view dependencies (#17306)
@@ -130,7 +130,7 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-116            moretest_t       NULL      117              view               0                      NULL               Columns: [2]
+116            moretest_t       NULL      117              view               0                      NULL               Columns=[2]
 
 # Check sequence dependencies.
 
@@ -150,4 +150,114 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-118            blog_posts_id_seq  NULL      119              sequence           0                      NULL               Columns: [1]
+118            blog_posts_id_seq  NULL      119              sequence           0                      NULL               Columns=[1]
+
+# Check trigger dependencies.
+# Trigger dependencies require the declarative schema changer.
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_source (id INT PRIMARY KEY, data TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_target (id INT PRIMARY KEY, data TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  cnt INT;
+BEGIN
+  SELECT count(*) INTO cnt FROM trigger_target;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER tr AFTER INSERT ON trigger_source FOR EACH ROW EXECUTE FUNCTION trigger_fn()
+
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT descriptor_name, dependedonby_id::OID::REGCLASS, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_target'
+----
+trigger_target  trigger_source  trigger  Columns=[], TriggerID=1
+
+# Test that dropping a trigger removes only that trigger's backreferences,
+# even when another trigger on the same table references the same relation.
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_dep_t1 (id INT PRIMARY KEY)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_dep_t2 (id INT PRIMARY KEY, a INt, b INT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_dep_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id - b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_dep_f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id + b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_dep_tr1 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f1()
+
+# After creating tr1, trigger_dep_t2 should have 1 backref.
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT descriptor_name, dependedonby_id::OID::REGCLASS, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=1
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_dep_tr2 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f2()
+
+# After creating tr2, trigger_dep_t2 should have 2 backrefs (one per trigger).
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT descriptor_name, dependedonby_id::OID::REGCLASS, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=1
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=2
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TRIGGER trigger_dep_tr1 ON trigger_dep_t1
+
+# After dropping tr1, trigger_dep_t2 should have only 1 backref (from tr2).
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT descriptor_name, dependedonby_id::OID::REGCLASS, dependedonby_type, dependedonby_details
+FROM crdb_internal.forward_dependencies
+WHERE descriptor_name = 'trigger_dep_t2'
+ORDER BY dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=2

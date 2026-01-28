@@ -404,21 +404,23 @@ func ForEachExprStringInTableDesc(
 }
 
 // GetAllReferencedRelationIDsExceptFKs implements the TableDescriptor interface.
-func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() descpb.IDs {
-	var ids catalog.DescriptorIDSet
-
-	// Add trigger dependencies.
+func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() (
+	byTriggerID map[descpb.TriggerID]catalog.DescriptorIDSet,
+	byPolicyID map[descpb.PolicyID]catalog.DescriptorIDSet,
+	fromView catalog.DescriptorIDSet,
+) {
+	byTriggerID = make(map[descpb.TriggerID]catalog.DescriptorIDSet, len(desc.Triggers))
 	for i := range desc.Triggers {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+		byTriggerID[desc.Triggers[i].ID] = catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...)
 	}
-	// Add policy dependencies.
-	for i := range desc.Policies {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...))
-	}
-	// Add view dependencies.
-	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
 
-	return ids.Ordered()
+	byPolicyID = make(map[descpb.PolicyID]catalog.DescriptorIDSet, len(desc.Policies))
+	for i := range desc.Policies {
+		byPolicyID[desc.Policies[i].ID] = catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...)
+	}
+
+	fromView = catalog.MakeDescriptorIDSet(desc.DependsOn...)
+	return byTriggerID, byPolicyID, fromView
 }
 
 // GetAllReferencedTypeIDs implements the TableDescriptor interface.

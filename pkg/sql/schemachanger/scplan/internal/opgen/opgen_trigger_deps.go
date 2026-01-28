@@ -29,6 +29,7 @@ func init() {
 					}
 					return &scop.UpdateTableBackReferencesInRelations{
 						TableID:            this.TableID,
+						TriggerID:          this.TriggerID,
 						RelationReferences: this.UsesRelations,
 					}
 				}),
@@ -62,6 +63,7 @@ func init() {
 					}
 					return &scop.UpdateTableBackReferencesInRelations{
 						TableID:            this.TableID,
+						TriggerID:          this.TriggerID,
 						RelationReferences: this.UsesRelations,
 					}
 				}),
