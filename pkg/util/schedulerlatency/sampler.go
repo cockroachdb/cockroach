@@ -107,7 +107,7 @@ func StartSampler(
 					if schedulingLatenciesHistogram == nil {
 						continue
 					}
-					schedulerLatencyHistogram.update(schedulingLatenciesHistogram)
+					schedulerLatencyHistogram.recordDelta(schedulingLatenciesHistogram)
 				}
 			}
 		})
@@ -247,7 +247,7 @@ func (s *sampler) recordLocked(
 
 // getAndClearLastStatsHistogram returns the accumulated deltas since the last
 // call and resets the accumulator. Called every statsInterval (~10s) to provide
-// delta counts for runtimeHistogram.update().
+// delta counts for runtimeHistogram.recordDelta().
 func (s *sampler) getAndClearLastStatsHistogram() *metrics.Float64Histogram {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -83,13 +83,13 @@ func newRuntimeHistogram(metadata metric.Metadata, buckets []float64) *runtimeHi
 	return h
 }
 
-// update replaces windowedCounts and adds to cumCounts. src is the runtime's
-// histogram with fine-grained buckets containing delta counts accumulated since
-// the last getAndClearLastStatsHistogram() call (~10s ago).
-func (h *runtimeHistogram) update(src *metrics.Float64Histogram) {
+// recordDelta incorporates a delta histogram (not cumulative) into this
+// histogram. It replaces windowedCounts with the delta and adds the delta to
+// cumCounts.
+func (h *runtimeHistogram) recordDelta(delta *metrics.Float64Histogram) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	counts, buckets := src.Counts, src.Buckets
+	counts, buckets := delta.Counts, delta.Buckets
 
 	for i := range h.mu.windowedCounts {
 		h.mu.windowedCounts[i] = 0

@@ -87,7 +87,7 @@ func TestRuntimeHistogram(t *testing.T) {
 					Buckets: parseBuckets(t, d.Input),
 				}
 				require.True(t, len(his.Buckets) == len(his.Counts)+1)
-				rh.update(his)
+				rh.recordDelta(his)
 				return ""
 
 			case "print":
