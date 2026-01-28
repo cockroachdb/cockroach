@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "jobsretry",
+    srcs = ["jobs_retry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsretry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/settings",
+        "//pkg/util/log",
+        "//pkg/util/log/logcrash",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

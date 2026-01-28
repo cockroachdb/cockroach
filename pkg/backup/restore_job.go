@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsretry"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -228,77 +229,97 @@ func restoreWithRetry(
 	retryOpts, progThreshold := getRetryOptionsAndProgressThreshold(execCtx)
 	logRate := restoreRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV)
 	logThrottler := util.EveryMono(logRate)
-	var (
-		res                roachpb.RowCount
-		err                error
-		prevPersistedSpans jobspb.RestoreFrontierEntries
-	)
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		res, err = restore(
-			ctx,
-			execCtx,
-			backupManifests,
-			backupLocalityInfo,
-			endTime,
-			dataToRestore,
-			resumer,
-			encryption,
-			kmsEnv,
-		)
+	var prevPersistedSpans jobspb.RestoreFrontierEntries
 
-		if err == nil {
-			break
-		}
+	const singletonState = 1
+	r := jobsretry.NewDynamicRetry[roachpb.RowCount, int](
+		ctx, "restore", &execCtx.ExecCfg().Settings.SV,
+	).WithStates(map[int]retry.Options{
+		singletonState: retryOpts,
+	}).WithStrategy(
+		func(
+			d jobsretry.DynamicRetry[roachpb.RowCount, int], res roachpb.RowCount, err error,
+		) (jobsretry.RetryTransition, int, error) {
+			if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+				return jobsretry.FastFail, 0, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+			}
 
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
-			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
-		}
+			if shouldFastFailRestore(err) {
+				return jobsretry.FailPermanently, 0, err
+			}
 
-		if shouldFastFailRestore(err) {
-			return roachpb.RowCount{}, jobs.MarkAsPermanentJobError(err)
-		}
-
-		// If we are draining, it is unlikely we can start a
-		// new DistSQL flow. Exit with a retryable error so
-		// that another node can pick up the job.
-		if execCtx.ExecCfg().JobRegistry.IsDraining() {
-			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
-		}
-
-		log.Dev.Warningf(ctx, "encountered retryable error: %+v", err)
-
-		if logThrottler.ShouldProcess(crtime.NowMono()) {
-			// We throttle the logging of errors to the jobs messages table to avoid
-			// flooding the table during the hot loop of a retry.
-			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return resumer.job.Messages().Record(
-					ctx, txn, "error", fmt.Sprintf("restore encountered error: %v", err),
+			// If we are draining, it is unlikely we can start a
+			// new DistSQL flow. Exit with a retryable error so
+			// that another node can pick up the job.
+			if execCtx.ExecCfg().JobRegistry.IsDraining() {
+				return jobsretry.FastFail, 0, jobs.MarkAsRetryJobError(
+					errors.Wrapf(err, "job encountered retryable error on draining node"),
 				)
-			}); err != nil {
-				log.Dev.Warningf(ctx, "failed to record job error message: %v", err)
 			}
-		}
 
-		prevPersistedSpans = maybeResetRetry(ctx, resumer, &r, prevPersistedSpans)
-
-		// Fail fast if no progress has been made after a certain number of retries.
-		if r.CurrentAttempt() >= maxRestoreRetryFastFail &&
-			resumer.job.FractionCompleted() <= progThreshold {
-			return roachpb.RowCount{}, errors.Wrap(err, "restore job exhausted max retries without making progress")
-		}
-
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
-		if testingKnobs != nil && testingKnobs.RunAfterRetryIteration != nil {
-			if err := testingKnobs.RunAfterRetryIteration(err); err != nil {
-				return roachpb.RowCount{}, err
+			var currProgress jobspb.RestoreFrontierEntries = resumer.job.
+				Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+			if !currProgress.Equal(prevPersistedSpans) {
+				prevPersistedSpans = currProgress
+				// If the previous persisted spans are different than the current, it
+				// implies that further progress has been persisted.
+				return jobsretry.Reset, 0, nil
 			}
-		}
-	}
 
-	// Since the restore was able to make some progress before exhausting the
-	// retry counter, we will pause the job and allow the user to determine
-	// whether or not to resume the job or disccard all progress and cancel.
+			if d.Retry().CurrentAttempt() >= maxRestoreRetryFastFail &&
+				resumer.job.FractionCompleted() <= progThreshold {
+				return jobsretry.FailPermanently, 0, errors.Wrap(err, "restore job exhausted max retries without making progress")
+			}
+
+			return jobsretry.Continue, 0, nil
+		},
+	).OnContinue(
+		func(d jobsretry.DynamicRetry[roachpb.RowCount, int], res roachpb.RowCount, err error) error {
+			if logThrottler.ShouldProcess(crtime.NowMono()) {
+				// We throttle the logging of errors to the jobs messages table to avoid
+				// flooding the table during the hot loop of a retry.
+				if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return resumer.job.Messages().Record(
+						ctx, txn, "error", fmt.Sprintf("restore encountered error: %v", err),
+					)
+				}); err != nil {
+					log.Dev.Warningf(ctx, "failed to record job error message: %v", err)
+				}
+			}
+
+			testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+			if testingKnobs != nil && testingKnobs.RunAfterRetryIteration != nil {
+				if err := testingKnobs.RunAfterRetryIteration(err); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	)
+	res, err := r.Do(
+		func(ctx context.Context) (roachpb.RowCount, error) {
+			return restore(
+				ctx,
+				execCtx,
+				backupManifests,
+				backupLocalityInfo,
+				endTime,
+				dataToRestore,
+				resumer,
+				encryption,
+				kmsEnv,
+			)
+		},
+		singletonState,
+	)
 	if err != nil {
+		if r.LastTransition() == jobsretry.FailPermanently || r.LastTransition() == jobsretry.FastFail {
+			// Failure was a fast failure or permanent failure, return as is.
+			return res, err
+		}
+		// Since the restore was able to make some progress before exhausting the
+		// retry counter, we will pause the job and allow the user to determine
+		// whether or not to resume the job or discard all progress and cancel.
 		return res, jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
 	}
 	return res, nil
