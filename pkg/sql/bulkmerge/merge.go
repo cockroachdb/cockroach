@@ -34,12 +34,11 @@ type MergeOptions struct {
 	// writes to KV. If nil, the current cluster time is used.
 	WriteTimestamp *hlc.Timestamp
 
-	// EnforceUniqueness enables duplicate key detection during the final merge
-	// iteration. When true:
+	// EnforceUniqueness enables duplicate key detection during the merge.
+	// When true:
+	// - Cross-SST duplicates within the same merge raise DuplicateKeyError.
 	// - Consecutive duplicates within an SST batch raise DuplicateKeyError.
 	// - Keys conflicting with pre-existing KV data raise KeyCollisionError.
-	// TODO(161447): cross-SST duplicates within the same merge are not yet
-	// detected by this mechanism.
 	//
 	// Should be true when building unique indexes. Callers are responsible for
 	// wrapping errors into user-friendly messages.
