@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/spec",
+        "//pkg/roachprod/logger",
         "@com_github_snowflakedb_gosnowflake//:gosnowflake",
     ],
 )
