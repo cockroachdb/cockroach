@@ -1,24 +1,34 @@
 # This test verifies the allocator's behavior with opposing CPU and write load
-# distributions. The test sets up a 6-node cluster where s1-s3 handle high-CPU
-# read traffic and s4-s6 handle high-write traffic. Initially, all leases are on
-# s1 and s4.
+# distributions, complicated by the presence of many "cold" (idle) ranges that
+# prevent count-based rebalancing from "accidentally" fixing the load imbalance.
 #
-# Expected outcome: The allocator should rebalance both cpu and write load across
-# all stores, with mma achieving better results than sma.
+#   Keyspace          Ranges   Placement   Load
+#   ─────────────────────────────────────────────────────────────
+#   [1, 10000)         36      s1-s3       read-heavy
+#   [10001, 20000)     36      s4-s6       write-heavy
+#   [20001, 30000)    100      s1-s3       (cold)
+#   [30001, 40000)    100      s4-s6       (cold)
+#   ─────────────────────────────────────────────────────────────
 #
-# This test can now roughly equalize both cpu and write bandwidth. It didn't
-# use to be able to do this, because the highest cpu node had the lowest write
-# bandwidth and vice versa, so neither was able to shed to the other. The
-# ignoreLevel logic in rebalanceStores with the grace duration to start
-# shedding more aggressively and other related changes have made this much
-# better.
+# The cold ranges are important to prevent count-based rebalancing from
+# "accidentally" fixing the write imbalance (after CPU-based rebalancing
+# has created a count-imbalance).
+#
+# Expected outcome:
+#
+# MMA balances both CPU and writes intentionally, reaching a stable equilibrium
+# where both metrics are evenly distributed. It moves the hot ranges (both read
+# and write) to achieve this, ignoring the cold ranges.
+#
+# SMA (sma-count) only optimizes for CPU and has no visibility into write load.
+# It balances CPU but leaves writes heavily skewed on s4-s6. The high thrash
+# (~1500% CPU) comes from the store rebalancer (optimizing CPU) and the
+# replicate/lease queues (optimizing counts) working against each other.
 gen_cluster nodes=6 node_cpu_cores=5
 ----
 
-# The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
-# replicas initially and n1/s1 will have every lease. Each range is initially
-# 256 MiB.
-gen_ranges ranges=36 min_key=1 max_key=10000 placement_type=replica_placement bytes_mib=256
+# Hot read ranges on s1-s3: high CPU, no writes
+gen_ranges ranges=36 min_key=1 max_key=10000 placement_type=replica_placement
 {s1,s2,s3}:1
 ----
 {s1:*,s2,s3}:1
@@ -27,65 +37,76 @@ gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=5000000 min_key=1 max_key
 ----
 5.00 access-vcpus
 
-# Write only workload, which generates little CPU and 100_000 (x replication
-# factor) write bytes per second over the second half of the keyspace.
-gen_ranges ranges=36 min_key=10001 max_key=20000 placement_type=replica_placement bytes_mib=256
+# Cold ranges co-located with the hot read ranges on s1-s3.
+#
+# These raise the absolute threshold for count-based rebalancing, preventing
+# small movements from triggering fixes that might accidentally redistribute
+# the hot ranges and fix IO imbalance.
+gen_ranges ranges=100 min_key=20001 max_key=30000 placement_type=replica_placement
+{s1,s2,s3}:1
+----
+{s1:*,s2,s3}:1
+
+# Hot write ranges on s4-s6: high write throughput, minimal CPU
+gen_ranges ranges=36 min_key=10001 max_key=20000 placement_type=replica_placement
 {s4,s5,s6}:1
 ----
 {s4:*,s5,s6}:1
 
+# raft_cpu_per_write=1 makes writes contribute negligible CPU. This isolates the
+# two dimensions: s1-s3 are CPU-hot (reads), and s4-s6 are write-hot but
+# CPU-cold.
 gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
 0.00 raft-vcpus, 19 MiB/s goodput
 
+# Cold ranges co-located with the hot write ranges on s4-s6 (same principle).
+gen_ranges ranges=100 min_key=30001 max_key=40000 placement_type=replica_placement
+{s4,s5,s6}:1
+----
+{s4:*,s5,s6}:1
+
 setting split_queue_enabled=false
 ----
 
-eval duration=38m samples=1 seed=42 cfgs=(mma-only,mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases) full=true
+eval duration=25m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu_util,write_bytes_per_second,replicas,leases)
 ----
-cpu#1: last:  [s1=828832772, s2=828777212, s3=831508475, s4=832387737, s5=844311104, s6=830032953] (stddev=5381626.87, mean=832641708.83, sum=4995850253)
-cpu#1: thrash_pct: [s1=8%, s2=37%, s3=54%, s4=22%, s5=16%, s6=14%]  (sum=152%)
-cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=8%, s2=37%, s3=54%, s4=22%, s5=16%, s6=14%]  (sum=152%)
-leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
-leases#1: last:  [s1=6, s2=13, s3=16, s4=25, s5=6, s6=6] (stddev=7.00, mean=12.00, sum=72)
-leases#1: thrash_pct: [s1=0%, s2=20%, s3=33%, s4=44%, s5=0%, s6=0%]  (sum=98%)
-replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
-replicas#1: last:  [s1=41, s2=52, s3=50, s4=25, s5=25, s6=23] (stddev=12.17, mean=36.00, sum=216)
-replicas#1: thrash_pct: [s1=56%, s2=20%, s3=31%, s4=42%, s5=47%, s6=37%]  (sum=233%)
-write_bytes_per_second#1: last:  [s1=8367672, s2=10580757, s3=10581322, s4=10531763, s5=10531421, s6=9420524] (stddev=840699.22, mean=10002243.17, sum=60013459)
-write_bytes_per_second#1: thrash_pct: [s1=1%, s2=5%, s3=7%, s4=2%, s5=115%, s6=110%]  (sum=241%)
-artifacts[mma-only]: 31964600a8a5db0a
+sma-count:
+cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.19, s4=0.17, s5=0.17, s6=0.14] (stddev=0.02, mean=0.17, sum=1)
+cpu_util#1: thrash_pct: [s1=317%, s2=139%, s3=420%, s4=230%, s5=181%, s6=204%]  (sum=1490%)
+leases#1: first: [s1=136, s2=0, s3=0, s4=136, s5=0, s6=0] (stddev=64.11, mean=45.33, sum=272)
+leases#1: last:  [s1=42, s2=44, s3=41, s4=51, s5=48, s6=46] (stddev=3.45, mean=45.33, sum=272)
+leases#1: thrash_pct: [s1=86%, s2=49%, s3=103%, s4=68%, s5=46%, s6=49%]  (sum=401%)
+replicas#1: first: [s1=136, s2=136, s3=136, s4=136, s5=136, s6=136] (stddev=0.00, mean=136.00, sum=816)
+replicas#1: last:  [s1=135, s2=129, s3=135, s4=138, s5=139, s6=140] (stddev=3.65, mean=136.00, sum=816)
+replicas#1: thrash_pct: [s1=0%, s2=245%, s3=13%, s4=115%, s5=103%, s6=66%]  (sum=543%)
+write_bytes_per_second#1: last:  [s1=0, s2=2772297, s3=0, s4=18336933, s5=20000880, s6=18892529] (stddev=9136363.37, mean=10000439.83, sum=60002639)
+write_bytes_per_second#1: thrash_pct: [s1=0%, s2=2%, s3=0%, s4=89%, s5=100%, s6=101%]  (sum=292%)
+hash: bbe8bd0a4c78e7a1
 ==========================
-cpu#1: last:  [s1=832135023, s2=829718568, s3=829738010, s4=845587865, s5=833948228, s6=829560377] (stddev=5658868.56, mean=833448011.83, sum=5000688071)
-cpu#1: thrash_pct: [s1=59%, s2=84%, s3=90%, s4=46%, s5=47%, s6=44%]  (sum=370%)
+mma-only:
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=59%, s2=84%, s3=90%, s4=46%, s5=47%, s6=44%]  (sum=370%)
-leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
-leases#1: last:  [s1=10, s2=13, s3=16, s4=13, s5=11, s6=9] (stddev=2.31, mean=12.00, sum=72)
-leases#1: thrash_pct: [s1=83%, s2=85%, s3=80%, s4=77%, s5=90%, s6=84%]  (sum=500%)
-replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
-replicas#1: last:  [s1=36, s2=35, s3=37, s4=34, s5=37, s6=37] (stddev=1.15, mean=36.00, sum=216)
-replicas#1: thrash_pct: [s1=815%, s2=525%, s3=571%, s4=680%, s5=632%, s6=402%]  (sum=3624%)
-write_bytes_per_second#1: last:  [s1=8867846, s2=10027943, s3=10524259, s4=10023228, s5=9973422, s6=10582360] (stddev=562404.06, mean=9999843.00, sum=59999058)
-write_bytes_per_second#1: thrash_pct: [s1=160%, s2=129%, s3=99%, s4=244%, s5=250%, s6=228%]  (sum=1111%)
-artifacts[mma-count]: d266bb6748d76c02
+cpu_util#1: thrash_pct: [s1=7%, s2=36%, s3=58%, s4=14%, s5=14%, s6=13%]  (sum=142%)
+leases#1: first: [s1=136, s2=0, s3=0, s4=136, s5=0, s6=0] (stddev=64.11, mean=45.33, sum=272)
+leases#1: last:  [s1=106, s2=15, s3=13, s4=125, s5=7, s6=6] (stddev=50.02, mean=45.33, sum=272)
+leases#1: thrash_pct: [s1=0%, s2=5%, s3=10%, s4=10%, s5=0%, s6=0%]  (sum=25%)
+replicas#1: first: [s1=136, s2=136, s3=136, s4=136, s5=136, s6=136] (stddev=0.00, mean=136.00, sum=816)
+replicas#1: last:  [s1=142, s2=152, s3=148, s4=125, s5=125, s6=124] (stddev=11.70, mean=136.00, sum=816)
+replicas#1: thrash_pct: [s1=53%, s2=20%, s3=37%, s4=37%, s5=43%, s6=37%]  (sum=228%)
+write_bytes_per_second#1: last:  [s1=8365970, s2=10579513, s3=10027499, s4=10523766, s5=10522676, s6=9966826] (stddev=769765.72, mean=9997708.33, sum=59986250)
+write_bytes_per_second#1: thrash_pct: [s1=1%, s2=13%, s3=5%, s4=2%, s5=109%, s6=109%]  (sum=240%)
+hash: 777f2410cca7e6a9
 ==========================
-Cluster Set Up
-	n1(AU_EAST,AU_EAST_1,5vcpu): {s1:(256GiB)}
-	n2(AU_EAST,AU_EAST_1,5vcpu): {s2:(256GiB)}
-	n3(AU_EAST,AU_EAST_1,5vcpu): {s3:(256GiB)}
-	n4(AU_EAST,AU_EAST_1,5vcpu): {s4:(256GiB)}
-	n5(AU_EAST,AU_EAST_1,5vcpu): {s5:(256GiB)}
-	n6(AU_EAST,AU_EAST_1,5vcpu): {s6:(256GiB)}
-Key Space
-	[1,10000): 36(rf=3), 256MiB, [{s1*,s2,s3}:36]
-	[10001,20000): 36(rf=3), 256MiB, [{s4*,s5,s6}:36]
-Event
-	set LBRebalancingMode to 3
-Workload Set Up
-	[1,10000): read-only high-cpu [5000.00cpu-us/op, 1B/op, 1000ops/s]
-	[10001,20000): write-only large-block [0.00cpu-us/write(raft), 1000B/op, 20000ops/s]
-Changed Settings
-	SplitQueueEnabled: false (default: true)
+mma-count:
+cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
+cpu_util#1: thrash_pct: [s1=11%, s2=48%, s3=44%, s4=11%, s5=13%, s6=11%]  (sum=139%)
+leases#1: first: [s1=136, s2=0, s3=0, s4=136, s5=0, s6=0] (stddev=64.11, mean=45.33, sum=272)
+leases#1: last:  [s1=47, s2=48, s3=45, s4=47, s5=42, s6=43] (stddev=2.21, mean=45.33, sum=272)
+leases#1: thrash_pct: [s1=17%, s2=24%, s3=18%, s4=19%, s5=22%, s6=24%]  (sum=125%)
+replicas#1: first: [s1=136, s2=136, s3=136, s4=136, s5=136, s6=136] (stddev=0.00, mean=136.00, sum=816)
+replicas#1: last:  [s1=140, s2=138, s3=138, s4=132, s5=132, s6=136] (stddev=3.06, mean=136.00, sum=816)
+replicas#1: thrash_pct: [s1=215%, s2=313%, s3=269%, s4=226%, s5=237%, s6=289%]  (sum=1550%)
+write_bytes_per_second#1: last:  [s1=10577825, s2=10578721, s3=10579409, s4=8861690, s5=8853122, s6=10519649] (stddev=804723.82, mean=9995069.33, sum=59970416)
+write_bytes_per_second#1: thrash_pct: [s1=82%, s2=104%, s3=99%, s4=300%, s5=252%, s6=291%]  (sum=1129%)
+hash: cc3bfedcbe717adc
 ==========================
