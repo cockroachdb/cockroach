@@ -5987,3 +5987,77 @@ statement ok
 DROP ROLE user_158154;
 
 subtest end
+
+# Regression test for #146722. DROP TABLE CASCADE should drop only the policy,
+# not the table that owns the policy.
+subtest drop_referenced_table_cascade_policy
+
+statement ok
+CREATE TABLE ref_table (id INT PRIMARY KEY, allowed_user TEXT);
+
+statement ok
+INSERT INTO ref_table VALUES (1, 'testuser'), (2, 'admin');
+
+statement ok
+CREATE TABLE policy_table (id INT PRIMARY KEY, data TEXT);
+
+statement ok
+ALTER TABLE policy_table ENABLE ROW LEVEL SECURITY;
+
+# Create a function that references ref_table.
+statement ok
+CREATE FUNCTION check_ref_table(check_id INT) RETURNS BOOL AS $$
+  SELECT EXISTS (SELECT 1 FROM ref_table WHERE id = check_id)
+$$ LANGUAGE SQL;
+
+# Create a policy that uses the function (which references ref_table).
+statement ok
+CREATE POLICY check_access ON policy_table
+  FOR ALL
+  USING (check_ref_table(id));
+
+# Verify both tables and the policy exist.
+query T
+SELECT tablename FROM pg_tables WHERE tablename IN ('policy_table', 'ref_table') ORDER BY tablename;
+----
+policy_table
+ref_table
+
+query T
+SELECT polname FROM pg_policy WHERE polname = 'check_access';
+----
+check_access
+
+# DROP TABLE without CASCADE should fail due to dependency (function depends on it).
+statement error pq: cannot drop table ref_table because other objects depend on it
+DROP TABLE ref_table;
+
+# DROP TABLE with CASCADE should succeed. The function is dropped, which causes
+# the policy to be dropped, but policy_table should remain.
+statement ok
+DROP TABLE ref_table CASCADE;
+
+# Verify policy_table still exists.
+query T
+SELECT tablename FROM pg_tables WHERE tablename = 'policy_table';
+----
+policy_table
+
+# Verify the policy was dropped (because the function it depends on was dropped).
+query T
+SELECT polname FROM pg_policy WHERE polname = 'check_access';
+----
+
+# Verify policy_table still works.
+statement ok
+INSERT INTO policy_table VALUES (1, 'test');
+
+query IT
+SELECT * FROM policy_table;
+----
+1  test
+
+statement ok
+DROP TABLE policy_table;
+
+subtest end

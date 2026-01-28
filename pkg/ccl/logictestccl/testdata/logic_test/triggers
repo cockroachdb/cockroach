@@ -5035,8 +5035,16 @@ INSERT INTO t1(n,k) VALUES (1,1);
 statement ok
 DROP TABLE other CASCADE;
 
-statement error pq: relation "t1" does not exist
+# Table t1 still exists but the trigger was dropped.
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
 DROP TRIGGER audit_trigger ON t1;
+
+# Verify t1 still works.
+statement ok
+SELECT * FROM t1;
+
+statement ok
+DROP TABLE t1;
 
 statement ok
 DROP TYPE e;
