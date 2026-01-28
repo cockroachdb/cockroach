@@ -208,10 +208,7 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 
 	// Runtime provides cumulative counts since process start.
 	latestCumulative := sample()
-	oldestCumulative, ok := s.recordLocked(latestCumulative)
-	if !ok {
-		return
-	}
+	oldestCumulative := s.recordLocked(latestCumulative)
 
 	// Accumulate delta (latest - previous) for export via getAndClearDeltaHistogram().
 	if prevSample != nil {
@@ -224,7 +221,8 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	}
 
 	// Compute p99 over sliding window (latest - oldest) and notify listener.
-	if s.listener != nil {
+	// oldestCumulative is nil until the ring buffer fills up.
+	if s.listener != nil && oldestCumulative != nil {
 		windowHistogram := sub(latestCumulative, oldestCumulative)
 		p99 := time.Duration(int64(percentile(windowHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 		s.listener.SchedulerLatency(p99, period)
@@ -232,17 +230,17 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 }
 
 // recordLocked adds sample to the ring buffer, evicting the oldest if full.
-// Returns the evicted sample (for computing sliding window) or nil if buffer
-// wasn't full.
-func (s *sampler) recordLocked(
-	sample *metrics.Float64Histogram,
-) (oldest *metrics.Float64Histogram, ok bool) {
+//
+// NB: Returns nil until the buffer fills up (after N samples where
+// N = sampleDuration / samplePeriod).
+func (s *sampler) recordLocked(sample *metrics.Float64Histogram) *metrics.Float64Histogram {
+	var oldest *metrics.Float64Histogram
 	if s.mu.ringBuffer.Len() == s.mu.ringBuffer.Cap() { // no more room, clear out the oldest
 		oldest = s.mu.ringBuffer.GetLast()
 		s.mu.ringBuffer.RemoveLast()
 	}
 	s.mu.ringBuffer.AddFirst(sample)
-	return oldest, oldest != nil
+	return oldest
 }
 
 // getAndClearDeltaHistogram returns the accumulated deltas since the last
