@@ -110,7 +110,7 @@ type indexBackfillSink interface {
 	SetOnFlush(func(summary kvpb.BulkOpSummary))
 	// ConsumeFlushManifests returns any SST manifests produced since the last
 	// flush. This is only relevant for sinks that produce SSTs.
-	ConsumeFlushManifests() []jobspb.IndexBackfillSSTManifest
+	ConsumeFlushManifests() []jobspb.BulkSSTManifest
 }
 
 // indexBackfillBulkAdderFactory mirrors kvserverbase.BulkAdderFactory but is
@@ -129,7 +129,7 @@ type bulkAdderIndexBackfillSink struct {
 var _ indexBackfillSink = (*bulkAdderIndexBackfillSink)(nil)
 
 // ConsumeFlushManifests implements the indexBackfillSink interface.
-func (b *bulkAdderIndexBackfillSink) ConsumeFlushManifests() []jobspb.IndexBackfillSSTManifest {
+func (b *bulkAdderIndexBackfillSink) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
 	// The BulkAdder does not produce SST manifests.
 	return nil
 }
@@ -372,7 +372,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		syncutil.Mutex
 		completedSpans []roachpb.Span
 		addedSpans     []roachpb.Span
-		manifests      []jobspb.IndexBackfillSSTManifest
+		manifests      []jobspb.BulkSSTManifest
 	}{}
 
 	// When the bulk adder flushes, the spans which were previously marked as
@@ -392,7 +392,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.CompletedSpans = append(prog.CompletedSpans, mu.completedSpans...)
 		mu.completedSpans = nil
-		manifests := append([]jobspb.IndexBackfillSSTManifest(nil), mu.manifests...)
+		manifests := append([]jobspb.BulkSSTManifest(nil), mu.manifests...)
 		mu.manifests = nil
 		mu.Unlock()
 
