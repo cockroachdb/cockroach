@@ -1616,11 +1616,19 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	delB := delArgs(keyB, txn.Sequence)
 	ba.Add(delB)
 
+	var batchCount int
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 2)
-
-		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+		batchCount++
+		switch batchCount {
+		case 1:
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		case 2:
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[0].GetInner())
+		default:
+			t.Fatalf("too many requests: %d", batchCount)
+		}
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1829,11 +1837,20 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 				b.Add(delRangeArgs(keyA, keyB, b.Txn.Sequence))
 			},
 			baSender: func(t *testing.T) batchSendMock {
+				var batchCount int
 				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-					require.Len(t, ba.Requests, 3)
-					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-					require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[2].GetInner())
+					batchCount++
+					switch batchCount {
+					case 1:
+						require.Len(t, ba.Requests, 2)
+						require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+						require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					case 2:
+						require.Len(t, ba.Requests, 1)
+						require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+					default:
+						t.Fatalf("too many requests: %d", batchCount)
+					}
 
 					br := ba.CreateReply()
 					br.Txn = ba.Txn
@@ -1856,11 +1873,20 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 				})
 			},
 			baSender: func(t *testing.T) batchSendMock {
+				var batchCount int
 				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-					require.Len(t, ba.Requests, 3)
-					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-					require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[2].GetInner())
+					batchCount++
+					switch batchCount {
+					case 1:
+						require.Len(t, ba.Requests, 2)
+						require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+						require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					case 2:
+						require.Len(t, ba.Requests, 1)
+						require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[0].GetInner())
+					default:
+						t.Fatalf("too many requests: %d", batchCount)
+					}
 
 					br := ba.CreateReply()
 					br.Txn = ba.Txn
@@ -2265,8 +2291,8 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	require.False(t, twb.flushOnNextBatch)
 	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 
-	// Both Put and Del should make it to the server in a single bath.
-	require.Equal(t, numCalledBefore+1, mockSender.NumCalled())
+	// Put and Del should make it to the server in different batches.
+	require.Equal(t, numCalledBefore+2, mockSender.NumCalled())
 
 	// Even though we flushed the Put, it shouldn't make it back to the response.
 	require.Len(t, br.Responses, 1)
@@ -3762,16 +3788,30 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 	type testCase struct {
 		ops                []string
 		midTxn             bool
-		validateFinalBatch func(t *testing.T, ba *kvpb.BatchRequest)
+		validateFinalBatch func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool)
 	}
 
-	expectEndTxnOnly := func(t *testing.T, ba *kvpb.BatchRequest) {
+	expectEndTxnOnly := func(t *testing.T, ba *kvpb.BatchRequest, _ bool) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 	}
-	expectRequests := func(strs ...lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest) {
-		return func(t *testing.T, ba *kvpb.BatchRequest) {
-			require.Len(t, ba.Requests, len(strs)+1) // The +1 is whatever flushed us.
+	expectRequests := func(strs ...lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool) {
+		var batchCount int
+		return func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool) {
+			batchCount++
+			if midTxn {
+				switch batchCount {
+				case 1:
+					require.Len(t, ba.Requests, len(strs))
+				case 2:
+					require.Len(t, ba.Requests, 1)
+					return
+				default:
+					t.Fatalf("too many requests: %d", batchCount)
+				}
+			} else {
+				require.Len(t, ba.Requests, len(strs)+1) // The +1 is whatever flushed us.
+			}
 			for i, str := range strs {
 				if str == lock.Intent {
 					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[i].GetInner())
@@ -3995,7 +4035,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				ba.Add(&kvpb.EndTxnRequest{Commit: true})
 			}
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				tc.validateFinalBatch(t, ba)
+				tc.validateFinalBatch(t, ba, tc.midTxn)
 				resp := ba.CreateReply()
 				resp.Txn = ba.Txn
 				return resp, nil
