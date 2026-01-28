@@ -103,7 +103,7 @@ func StartSampler(
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-ticker.C:
-					schedulingLatenciesHistogram := s.getAndClearLastStatsHistogram()
+					schedulingLatenciesHistogram := s.getAndClearDeltaHistogram()
 					if schedulingLatenciesHistogram == nil {
 						continue
 					}
@@ -166,7 +166,7 @@ type sampler struct {
 		ringBuffer ring.Buffer[*metrics.Float64Histogram]
 
 		// deltaAccumulator sums the per-tick deltas (each ~100ms). Cleared and
-		// returned by getAndClearLastStatsHistogram() every ~10s for export to
+		// returned by getAndClearDeltaHistogram() every ~10s for export to
 		// runtimeHistogram.
 		deltaAccumulator *metrics.Float64Histogram
 	}
@@ -213,7 +213,7 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 		return
 	}
 
-	// Accumulate delta (latest - previous) for export via getAndClearLastStatsHistogram().
+	// Accumulate delta (latest - previous) for export via getAndClearDeltaHistogram().
 	if prevSample != nil {
 		sampleDelta := sub(latestCumulative, prevSample)
 		if s.mu.deltaAccumulator == nil {
@@ -245,10 +245,10 @@ func (s *sampler) recordLocked(
 	return oldest, oldest != nil
 }
 
-// getAndClearLastStatsHistogram returns the accumulated deltas since the last
+// getAndClearDeltaHistogram returns the accumulated deltas since the last
 // call and resets the accumulator. Called every statsInterval (~10s) to provide
 // delta counts for runtimeHistogram.recordDelta().
-func (s *sampler) getAndClearLastStatsHistogram() *metrics.Float64Histogram {
+func (s *sampler) getAndClearDeltaHistogram() *metrics.Float64Histogram {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	res := s.mu.deltaAccumulator
