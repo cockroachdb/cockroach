@@ -960,6 +960,12 @@ func (w *walkCtx) buildTriggerRelationDependencies(
 			if dep.ID != tbl.GetID() {
 				return nil
 			}
+			// Only include backreferences for this specific trigger.
+			// TODO(rafi): Test mixed-version case for this. Could the backref have
+			//   a zero trigger ID if it was made on an older version?
+			if dep.TriggerID != t.ID {
+				return nil
+			}
 			usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
 				ID:        id,
 				IndexID:   dep.IndexID,

@@ -28,6 +28,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
         columnids: []
         indexid: 0
       TableID: 104
+      TriggerID: 1
     *scop.RemoveTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1
@@ -55,6 +56,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
         columnids: []
         indexid: 0
       TableID: 104
+      TriggerID: 1
     *scop.RemoveTriggerBackReferencesInRoutines
       BackReferencedTableID: 104
       BackReferencedTriggerID: 1
