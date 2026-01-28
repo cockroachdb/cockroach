@@ -945,7 +945,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 ) error {
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
-	var resumeManifests []jobspb.IndexBackfillSSTManifest
+	var resumeManifests []jobspb.BulkSSTManifest
 	var mutationIdx int
 	jobDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
 	useDistributedMerge := jobDetails.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled
@@ -1184,7 +1184,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			if spansToPersist == nil {
 				spansToPersist = todoSpans
 			}
-			var manifestSnapshot []jobspb.IndexBackfillSSTManifest
+			var manifestSnapshot []jobspb.BulkSSTManifest
 			if manifestDirty {
 				manifestSnapshot = manifestBuf.SnapshotAndMarkClean()
 			} else {

@@ -279,7 +279,7 @@ type BackfillProgress struct {
 
 	// SSTManifests captures SST metadata emitted by the distributed merge
 	// backfill pipeline.
-	SSTManifests []jobspb.IndexBackfillSSTManifest
+	SSTManifests []jobspb.BulkSSTManifest
 
 	// SSTStoragePrefixes identifies the external storage prefixes used to write
 	// distributed-merge SSTs for this backfill. These prefixes are used to clean

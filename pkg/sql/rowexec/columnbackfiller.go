@@ -198,7 +198,7 @@ func GetResumeSpansAndSSTManifests(
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
-) ([]roachpb.Span, []jobspb.IndexBackfillSSTManifest, *jobs.Job, int, error) {
+) ([]roachpb.Span, []jobspb.BulkSSTManifest, *jobs.Job, int, error) {
 	tableDesc, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -291,7 +291,7 @@ func SetResumeSpansAndSSTManifestsInJob(
 	ctx context.Context,
 	codec *keys.SQLCodec,
 	spans []roachpb.Span,
-	manifests []jobspb.IndexBackfillSSTManifest,
+	manifests []jobspb.BulkSSTManifest,
 	mutationIdx int,
 	txn isql.Txn,
 	job *jobs.Job,

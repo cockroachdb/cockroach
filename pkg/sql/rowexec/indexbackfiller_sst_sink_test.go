@@ -69,7 +69,7 @@ func TestSSTIndexBackfillSinkOnFlushCollectsCurrentManifests(t *testing.T) {
 	writer := bulksst.NewUnsortedSSTBatcher(settings, allocator)
 	ts := hlc.Timestamp{WallTime: 42}
 	writer.SetWriteTS(ts)
-	var fromCallback []jobspb.IndexBackfillSSTManifest
+	var fromCallback []jobspb.BulkSSTManifest
 	sink := &sstIndexBackfillSink{
 		writer:           writer,
 		allocator:        allocator,
