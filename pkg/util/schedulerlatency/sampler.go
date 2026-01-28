@@ -215,11 +215,11 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 
 	// Accumulate delta (latest - previous) for export via getAndClearDeltaHistogram().
 	if prevSample != nil {
-		sampleDelta := sub(latestCumulative, prevSample)
+		tickDelta := sub(latestCumulative, prevSample)
 		if s.mu.deltaAccumulator == nil {
-			s.mu.deltaAccumulator = sampleDelta
+			s.mu.deltaAccumulator = tickDelta
 		} else {
-			s.mu.deltaAccumulator = add(s.mu.deltaAccumulator, sampleDelta)
+			s.mu.deltaAccumulator = add(s.mu.deltaAccumulator, tickDelta)
 		}
 	}
 
