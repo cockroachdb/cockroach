@@ -103,11 +103,11 @@ func StartSampler(
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-ticker.C:
-					schedulingLatenciesHistogram := s.getAndClearDeltaHistogram()
-					if schedulingLatenciesHistogram == nil {
+					deltaHist := s.getAndClearDeltaHistogram()
+					if deltaHist == nil {
 						continue
 					}
-					schedulerLatencyHistogram.recordDelta(schedulingLatenciesHistogram)
+					schedulerLatencyHistogram.recordDelta(deltaHist)
 				}
 			}
 		})
