@@ -184,6 +184,20 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 		defer close(idp.progCh)
 		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
+
+		// When using distributed merge, emit any final SST metadata not yet reported.
+		// Most SST metadata is sent incrementally via pushProgress() (synchronized
+		// with ResumePos updates), but there may be final SSTs created during the
+		// last flush that haven't been reported yet.
+		if idp.files != nil && idp.importErr == nil {
+			var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+			prog.SSTMetadata = bulksst.SSTFilesToManifests(idp.files, nil /* writeTS */)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case idp.progCh <- prog:
+			}
+		}
 		return nil
 	})
 }
@@ -218,24 +232,12 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 		return nil, idp.DrainHelper()
 	}
 
-	// When using distributed merge, the processor will emit the SSTs and their
-	// start and end keys.
-	var fileDatums rowenc.EncDatumRow
-	if idp.files != nil {
-		bytes, err := protoutil.Marshal(idp.files)
-		if err != nil {
-			idp.MoveToDraining(err)
-			return nil, idp.DrainHelper()
-		}
-		sstInfo := tree.NewDBytes(tree.DBytes(bytes))
-		fileDatums = rowenc.EncDatumRow{
-			rowenc.DatumToEncDatumUnsafe(types.Bytes, sstInfo),
-		}
-	}
-	return append(rowenc.EncDatumRow{
+	// SST metadata is now emitted via the progress channel (see lines 188-199)
+	// rather than row results, so we only return the bulk summary.
+	return rowenc.EncDatumRow{
 		rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
-	}, fileDatums...), nil
+	}, nil
 }
 
 func (idp *readImportDataProcessor) ConsumerClosed() {
@@ -389,6 +391,12 @@ func ingestKvs(
 		offset++
 	}
 
+	// Track which SST files have been reported by their URI to ensure SST metadata
+	// and ResumePos are synchronized. This prevents orphaned SSTs if the processor
+	// fails before completion. We track by URI rather than count to avoid issues
+	// with file list ordering changes.
+	reportedSSTURIs := make(map[string]struct{})
+
 	pushProgress := func(ctx context.Context) {
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
@@ -406,6 +414,24 @@ func ingestKvs(
 		// job is paused and resumed.
 		if spec.UseDistributedMerge {
 			prog.NodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
+
+			// Emit SST metadata incrementally, synchronized with ResumePos updates.
+			// This ensures that on retry, the coordinator has metadata for all SSTs
+			// created before the failure, preventing orphaned files in external storage.
+			// We track reported files by URI to avoid relying on file list ordering.
+			currentFiles := importAdder.GetFileList()
+			if currentFiles != nil {
+				var newFiles []*bulksst.SSTFileInfo
+				for _, f := range currentFiles.SST {
+					if _, reported := reportedSSTURIs[f.URI]; !reported {
+						newFiles = append(newFiles, f)
+						reportedSSTURIs[f.URI] = struct{}{}
+					}
+				}
+				if len(newFiles) > 0 {
+					prog.SSTMetadata = bulksst.SSTFilesToManifests(&bulksst.SSTFiles{SST: newFiles}, nil /* writeTS */)
+				}
+			}
 		}
 
 		select {
