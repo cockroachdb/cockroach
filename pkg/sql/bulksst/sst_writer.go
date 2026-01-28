@@ -33,6 +33,7 @@ type Writer struct {
 	totalSummary    kvpb.BulkOpSummary
 	writeTS         hlc.Timestamp
 	checkDuplicates bool
+	rowCounter      storage.RowCounter
 }
 
 var _ kvserverbase.BulkAdder = &Writer{}
@@ -147,6 +148,7 @@ func (s *Writer) flushBuffer(ctx context.Context) error {
 	// Reset the buffer for re-use.
 	s.kv = s.kv[:0]
 	s.kvData = s.kvData[:0]
+	s.rowCounter = storage.RowCounter{}
 	return nil
 }
 
@@ -169,6 +171,9 @@ func (s *Writer) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []by
 		Key:   storage.MVCCKey{Key: s.kvData[keyStartOffset : keyStartOffset+len(key.Key)], Timestamp: key.Timestamp},
 		Value: s.kvData[valueStartOffset : valueStartOffset+len(value)],
 	})
+	if err := s.rowCounter.Count(key.Key); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -194,11 +199,10 @@ func (s *Writer) CurrentBufferFill() float32 {
 }
 
 func (s *Writer) getCurrentBufferSummary() kvpb.BulkOpSummary {
-	return kvpb.BulkOpSummary{
-		DataSize:    int64(len(s.kvData)),
-		SSTDataSize: int64(len(s.kvData)),
-		EntryCounts: make(map[uint64]int64),
-	}
+	summary := s.rowCounter.BulkOpSummary
+	summary.DataSize = int64(len(s.kvData))
+	summary.SSTDataSize = int64(len(s.kvData))
+	return summary
 }
 
 // GetSummary implements kvservebase.BulkAdder.
