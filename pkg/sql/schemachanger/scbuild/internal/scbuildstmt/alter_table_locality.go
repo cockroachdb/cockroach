@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -243,6 +244,12 @@ func alterPrimaryKeyForRegionalByRowTable(
 	// Step 5: Call alterPrimaryKey
 	// This will trigger recreation of all secondary indexes with new partitioning
 	alterPrimaryKey(b, nil, tbl, nil, spec)
+	b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+		b,
+		pgnotice.Newf(
+			"LOCALITY changes will be finalized asynchronously; "+
+				"further schema changes on this table may be restricted until the job completes"),
+	)
 }
 
 func getTablePartitioningSpec(
@@ -344,7 +351,7 @@ func createOrVerifyRegionColumn(
 func panicIfTableLocalityRegionalByRowUsingConstraint(
 	b BuildCtx, tableID catid.DescID, currentLocality *tree.Locality, targetColName tree.Name,
 ) {
-	if currentLocality.LocalityLevel != tree.LocalityLevelRow {
+	if !isLocalityRegionalByRow(currentLocality) {
 		return
 	}
 	currColName := explicitRegionColName(currentLocality.RegionalByRowColumn)

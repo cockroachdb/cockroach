@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -145,5 +146,6 @@ func (i *immediateVisitor) UnsetTableLocality(
 	}
 	tbl.SetTableLocalityRegionalByTable(tree.Name(""))
 	tbl.PartitionAllBy = false
+	tbl.RBRUsingConstraint = descpb.ConstraintID(0)
 	return nil
 }
