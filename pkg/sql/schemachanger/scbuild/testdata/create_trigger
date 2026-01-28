@@ -27,7 +27,7 @@ CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f(
 - [[TriggerName:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {name: tr, tableId: 104, triggerId: 1}
 - [[TriggerEnabled:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
-  {enabled: true, tableId: 104, triggerId: 1}
+  {tableId: 104, triggerId: 1}
 - [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]
   {actionTime: BEFORE, forEachRow: true, tableId: 104, triggerId: 1}
 - [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT]

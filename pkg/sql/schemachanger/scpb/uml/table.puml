@@ -511,7 +511,6 @@ object TriggerEnabled
 
 TriggerEnabled :  TableID
 TriggerEnabled :  TriggerID
-TriggerEnabled :  Enabled
 
 object TriggerEvents
 

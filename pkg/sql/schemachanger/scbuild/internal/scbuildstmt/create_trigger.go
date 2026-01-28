@@ -52,7 +52,6 @@ func CreateTrigger(b BuildCtx, n *tree.CreateTrigger) {
 	b.Add(&scpb.TriggerEnabled{
 		TableID:   tableID,
 		TriggerID: triggerID,
-		Enabled:   true, /* triggers are enabled by default */
 	})
 	b.Add(&scpb.TriggerTiming{
 		TableID:    tableID,

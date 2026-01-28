@@ -51,6 +51,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           {fn: alterTableAlterColumnIdentity, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   {fn: AlterTableSetStorageParams, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): {fn: AlterTableResetStorageParams, on: true, checks: isV261Active},
+	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         {fn: alterTableSetTrigger, on: true, checks: isV262Active},
 }
 
 // alterTableSubcommandNames maps ALTER TABLE command types to their subcommand
@@ -80,6 +81,7 @@ var alterTableSubcommandNames = map[reflect.Type]string{
 	reflect.TypeOf((*tree.AlterTableIdentity)(nil)):           "ALTER IDENTITY",
 	reflect.TypeOf((*tree.AlterTableSetStorageParams)(nil)):   "SET STORAGE PARAM",
 	reflect.TypeOf((*tree.AlterTableResetStorageParams)(nil)): "RESET STORAGE PARAM",
+	reflect.TypeOf((*tree.AlterTableSetTrigger)(nil)):         "SET TRIGGER",
 }
 
 func init() {
