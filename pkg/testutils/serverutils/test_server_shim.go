@@ -244,12 +244,26 @@ var globalDefaultDRPCOptionOverride struct {
 	value base.DefaultTestDRPCOption
 }
 
+// resolvedDRPCOption caches the resolved DRPC decision after
+// ShouldEnableDRPC resolves TestDRPCEnabledRandomly to a concrete value.
+var resolvedDRPCOption struct {
+	isSet bool
+	value base.DefaultTestDRPCOption
+}
+
+// IsDRPCEnabled returns true if DRPC has been resolved to enabled.
+// This should be called after a test server/cluster has been started.
+func IsDRPCEnabled() bool {
+	return resolvedDRPCOption.isSet && resolvedDRPCOption.value == base.TestDRPCEnabled
+}
+
 // TestingGlobalDRPCOption sets the package-level DefaultTestDRPCOption.
 func TestingGlobalDRPCOption(v base.DefaultTestDRPCOption) func() {
 	globalDefaultDRPCOptionOverride.isSet = true
 	globalDefaultDRPCOptionOverride.value = v
 	return func() {
 		globalDefaultDRPCOptionOverride.isSet = false
+		resolvedDRPCOption.isSet = false
 	}
 }
 
@@ -674,14 +688,18 @@ func ShouldEnableDRPC(
 		return base.TestDRPCUnset
 	}
 
+	var result base.DefaultTestDRPCOption
 	if enableDRPC {
 		if t != nil {
 			t.Log("DRPC is enabled" + logSuffix)
 		}
-		return base.TestDRPCEnabled
+		result = base.TestDRPCEnabled
+	} else {
+		result = base.TestDRPCDisabled
 	}
-
-	return base.TestDRPCDisabled
+	resolvedDRPCOption.isSet = true
+	resolvedDRPCOption.value = result
+	return result
 }
 
 // SetUnsafeOverride sets an unsafe override for eval.TestingKnobs.UnsafeOverride on

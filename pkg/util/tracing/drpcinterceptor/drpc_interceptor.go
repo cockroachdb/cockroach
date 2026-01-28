@@ -22,6 +22,9 @@ import (
 	"storj.io/drpc/drpcmux"
 )
 
+// rpcMethodKey is the context key type for storing the RPC method name.
+type RpcMethodKey struct{}
+
 // ExtractSpanMetaFromDRPCCtx retrieves trace context (as a SpanMeta) that has
 // been propagated through DRPC metadata in the context.
 func ExtractSpanMetaFromDRPCCtx(
@@ -45,6 +48,7 @@ func ServerInterceptor(tracer *tracing.Tracer) drpcmux.UnaryServerInterceptor {
 		rpc string,
 		handler drpcmux.UnaryHandler,
 	) (interface{}, error) {
+		ctx = context.WithValue(ctx, RpcMethodKey{}, rpc)
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(ctx, req)
 		}
@@ -83,6 +87,7 @@ func StreamServerInterceptor(tracer *tracing.Tracer) drpcmux.StreamServerInterce
 		rpc string,
 		handler drpcmux.StreamHandler,
 	) (interface{}, error) {
+		stream = &rpcContextStream{Stream: stream, rpc: rpc}
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(stream)
 		}
@@ -115,6 +120,19 @@ func StreamServerInterceptor(tracer *tracing.Tracer) drpcmux.StreamServerInterce
 	}
 }
 
+// rpcContextStream wraps a drpc.Stream to inject the rpc method name into
+// the context, allowing determination of the method being called.
+type rpcContextStream struct {
+	drpc.Stream
+	rpc string
+}
+
+// Context overrides the embedded Stream's Context method to return a context
+// that includes the rpc method name.
+func (s *rpcContextStream) Context() context.Context {
+	return context.WithValue(s.Stream.Context(), RpcMethodKey{}, s.rpc)
+}
+
 // tracingServerStream wraps a drpc.Stream to inject a context containing a span.
 type tracingServerStream struct {
 	drpc.Stream
@@ -144,7 +162,7 @@ func ClientInterceptor(
 		cc *drpcclient.ClientConn,
 		invoker drpcclient.UnaryInvoker,
 	) error {
-		if tracingutil.ShouldSkipClientTracing(ctx) {
+		if tracingutil.ShouldSkipClientTracing(ctx) || tracingutil.MethodExcludedFromTracing(rpc) {
 			return invoker(ctx, rpc, enc, in, out, cc)
 		}
 
@@ -154,9 +172,7 @@ func ClientInterceptor(
 		init(clientSpan)
 		defer clientSpan.Finish()
 
-		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		if invoker != nil {
 			err := invoker(ctx, rpc, enc, in, out, cc)
@@ -188,7 +204,7 @@ func StreamClientInterceptor(
 		cc *drpcclient.ClientConn,
 		streamer drpcclient.Streamer,
 	) (drpc.Stream, error) {
-		if tracingutil.ShouldSkipClientTracing(ctx) {
+		if tracingutil.ShouldSkipClientTracing(ctx) || tracingutil.MethodExcludedFromTracing(rpc) {
 			return streamer(ctx, rpc, enc, cc)
 		}
 
@@ -197,9 +213,7 @@ func StreamClientInterceptor(
 		clientSpan := tracer.StartSpan(rpc, tracing.WithParent(parent), tracing.WithClientSpanKind)
 		init(clientSpan)
 
-		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		str, err := streamer(ctx, rpc, enc, cc)
 		if err != nil {

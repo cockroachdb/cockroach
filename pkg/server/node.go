@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -2018,12 +2019,17 @@ func setupSpanForIncomingRPC(
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	remoteParent := !ba.TraceInfo.Empty()
+	// DRPC interceptors set the RPC method in the context; if present, use it.
+	methodName := tracingutil.BatchMethodName
+	if rpc, ok := ctx.Value(drpcinterceptor.RpcMethodKey{}).(string); ok {
+		methodName = rpc
+	}
 	if !remoteParent {
 		// This is either a local request which circumvented gRPC, or a remote
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			tracingutil.BatchMethodName, tracing.WithServerSpanKind)
+			methodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2035,7 +2041,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, tracingutil.BatchMethodName,
+			ctx, methodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
