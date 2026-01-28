@@ -474,6 +474,10 @@ jobs:
           # This branch is temporary and NOT part of the sync PR
           cd generated-diagrams
 
+          # Configure git identity
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           PREVIEW_BRANCH="preview/${{ github.sha }}"
 
           # Create preview branch from current state
