@@ -9,7 +9,6 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /d
 [cluster] requesting data for debug/rangelog... received response... writing JSON output: debug/rangelog.json... done
 [cluster] requesting data for debug/settings... received response... writing JSON output: debug/settings.json... done
 [cluster] requesting data for debug/reports/problemranges... received response... writing JSON output: debug/reports/problemranges.json... done
-<dumping SQL tables>
 [cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
 [cluster] requesting liveness... received response... writing JSON output: debug/liveness.json... done
 [cluster] requesting tenant ranges... received response...
@@ -21,7 +20,6 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /d
 [cluster] profile for node 1... writing binary output: debug/nodes/1/cpu.pprof... done
 [node 1] node status... writing JSON output: debug/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
-<dumping SQL tables>
 [node 1] requesting data for debug/nodes/1/details... received response... writing JSON output: debug/nodes/1/details.json... done
 [node 1] requesting data for debug/nodes/1/gossip... received response... writing JSON output: debug/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/nodes/1/stacks.txt... done
@@ -53,13 +51,9 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /d
 [cluster] requesting data for debug/cluster/test-tenant/reports/problemranges... received response...
 [cluster] requesting data for debug/cluster/test-tenant/reports/problemranges: last request failed: rpc error: ...
 [cluster] requesting data for debug/cluster/test-tenant/reports/problemranges: creating error output: debug/cluster/test-tenant/reports/problemranges.json.err.txt... done
-<dumping SQL tables>
 [cluster] retrieving SQL data for crdb_internal.kv_node_liveness: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [cluster] retrieving SQL data for crdb_internal.kv_node_status: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [cluster] retrieving SQL data for crdb_internal.kv_store_status: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [cluster] requesting nodes... received response... writing JSON output: debug/nodes.json... done
 [cluster] requesting liveness... received response... writing JSON output: debug/cluster/test-tenant/liveness.json... done
 [cluster] requesting tenant ranges... received response...
@@ -71,15 +65,10 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /d
 [cluster] profile for node 1... writing binary output: debug/cluster/test-tenant/nodes/1/cpu.pprof... done
 [node 1] node status... writing JSON output: debug/cluster/test-tenant/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
-<dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
-<dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.node_tenant_capabilities_cache: last request failed: ERROR: operation node_tenant_capabilities_cache supported only by system tenant (SQLSTATE XXUUU)
-<dumping SQL tables>
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/details... received response... writing JSON output: debug/cluster/test-tenant/nodes/1/details.json... done
 [node 1] requesting data for debug/cluster/test-tenant/nodes/1/gossip... received response... writing JSON output: debug/cluster/test-tenant/nodes/1/gossip.json... done
 [node 1] requesting stacks... received response... writing binary output: debug/cluster/test-tenant/nodes/1/stacks.txt... done
