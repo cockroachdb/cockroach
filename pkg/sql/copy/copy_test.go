@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -736,9 +737,13 @@ func TestLargeCopy(t *testing.T) {
 		if err == nil {
 			return true
 		}
-		if atomicCopy && strings.Contains(err.Error(), "restart transaction") {
-			// We can only retry txn errors with non-atomic COPY.
-			return true
+		if atomicCopy {
+			// Ignore retriable errors in atomic COPY mode, since we only have
+			// automatic retries when atomic=false.
+			var pgErr = new(pgconn.PgError)
+			if errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+				return true
+			}
 		}
 		if !doAlterPK {
 			return false
