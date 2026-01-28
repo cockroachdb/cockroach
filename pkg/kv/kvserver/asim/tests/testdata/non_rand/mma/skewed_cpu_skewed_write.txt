@@ -14,14 +14,16 @@
 # "accidentally" fixing the write imbalance (after CPU-based rebalancing
 # has created a count-imbalance).
 #
-# Expected outcome: MMA should rebalance both CPU and write load across all
-# stores by identifying and moving the hot ranges, regardless of the cold
-# range distribution. SMA can deliberately balance CPU, but has no visibility
-# into write load and so can't equalize on that dimension. Because CPU and
-# writes are coupled (via raft processing), SMA ends up thrashing — repeatedly
-# balancing CPU only to have write redistribution destabilize it again. This
-# is reflected in the high thrash percentages for sma-count (~2300% CPU,
-# ~5500% writes) vs mma-only (~150% CPU, ~240% writes).
+# Expected outcome:
+#
+# MMA balances both CPU and writes intentionally, reaching a stable equilibrium
+# where both metrics are evenly distributed. It moves the hot ranges (both read
+# and write) to achieve this, ignoring the cold ranges.
+#
+# SMA (sma-count) only optimizes for CPU and has no visibility into write load.
+# It balances CPU but leaves writes heavily skewed on s4-s6. The high thrash
+# (~1500% CPU) comes from the store rebalancer (optimizing CPU) and the
+# replicate/lease queues (optimizing counts) working against each other.
 gen_cluster nodes=6 node_cpu_cores=5
 ----
 
@@ -36,9 +38,10 @@ gen_load rate=1000 rw_ratio=1.0 request_cpu_per_access=5000000 min_key=1 max_key
 5.00 access-vcpus
 
 # Cold ranges co-located with the hot read ranges on s1-s3.
-# These have no load but contribute to range count, making count-based
-# rebalancing see s1-s3 as having "too many" ranges even though the load
-# problem is actually the opposite (s1-s3 need to shed CPU load, not ranges).
+#
+# These raise the absolute threshold for count-based rebalancing, preventing
+# small movements from triggering fixes that might accidentally redistribute
+# the hot ranges and fix IO imbalance.
 gen_ranges ranges=100 min_key=20001 max_key=30000 placement_type=replica_placement
 {s1,s2,s3}:1
 ----
@@ -50,13 +53,14 @@ gen_ranges ranges=36 min_key=10001 max_key=20000 placement_type=replica_placemen
 ----
 {s4:*,s5,s6}:1
 
+# raft_cpu_per_write=1 makes writes contribute negligible CPU. This isolates the
+# two dimensions: s1-s3 are CPU-hot (reads), and s4-s6 are write-hot but
+# CPU-cold.
 gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
 0.00 raft-vcpus, 19 MiB/s goodput
 
-# Cold ranges co-located with the hot write ranges on s4-s6.
-# Same principle: these pad the range count on s4-s6, obscuring the real
-# problem (write concentration) from count-based rebalancing.
+# Cold ranges co-located with the hot write ranges on s4-s6 (same principle).
 gen_ranges ranges=100 min_key=30001 max_key=40000 placement_type=replica_placement
 {s4,s5,s6}:1
 ----
