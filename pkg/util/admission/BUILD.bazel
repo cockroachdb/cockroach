@@ -6,6 +6,7 @@ go_library(
         "admission.go",
         "cpu_time_token_estimation.go",
         "cpu_time_token_filler.go",
+        "cpu_time_token_grant_coordinator.go",
         "cpu_time_token_granter.go",
         "disk_bandwidth.go",
         "elastic_cpu_grant_coordinator.go",
@@ -63,6 +64,7 @@ go_test(
     name = "admission_test",
     srcs = [
         "cpu_time_token_filler_test.go",
+        "cpu_time_token_grant_coordinator_test.go",
         "cpu_time_token_granter_test.go",
         "disk_bandwidth_test.go",
         "elastic_cpu_granter_test.go",
@@ -97,6 +99,7 @@ go_test(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
