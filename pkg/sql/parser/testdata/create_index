@@ -569,6 +569,14 @@ CREATE INDEX a ON b (c) USING HASH WITH BUCKET_COUNT = _ -- literals removed
 CREATE INDEX _ ON _ (_) USING HASH WITH BUCKET_COUNT = 16 -- identifiers removed
 
 parse
+CREATE INDEX a ON b (c) USING HASH WITH (shard_columns = (c))
+----
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (c)) -- normalized!
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (((c)))) -- fully parenthesized
+CREATE INDEX a ON b (c) USING HASH WITH ('shard_columns' = (c)) -- literals removed
+CREATE INDEX _ ON _ (_) USING HASH WITH ('shard_columns' = (_)) -- identifiers removed
+
+parse
 CREATE INDEX a ON b (c) USING HASH STORING (d)
 ----
 CREATE INDEX a ON b (c) USING HASH STORING (d)

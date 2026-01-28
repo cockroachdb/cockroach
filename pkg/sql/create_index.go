@@ -679,8 +679,19 @@ func setupShardedIndex(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Get shard columns from storage params, if specified.
+	shardColNames, err := tabledesc.EvalShardColumns(storageParams, colNames)
+	if err != nil {
+		return nil, nil, err
+	}
+	// If not specified, use all index columns (default behavior).
+	if shardColNames == nil {
+		shardColNames = colNames
+	}
+
 	shardCol, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
-		colNames, isNewTable)
+		shardColNames, isNewTable)
 
 	if err != nil {
 		return nil, nil, err
@@ -694,7 +705,7 @@ func setupShardedIndex(
 		IsSharded:    true,
 		Name:         shardCol.GetName(),
 		ShardBuckets: buckets,
-		ColumnNames:  colNames,
+		ColumnNames:  shardColNames,
 	}
 	return shardCol, newColumns, nil
 }
