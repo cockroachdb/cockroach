@@ -311,12 +311,12 @@ type raft struct {
 	// the log
 	raftLog *raftLog
 
-	maxMsgSize         entryEncodingSize
+	maxMsgSize         entrySize
 	maxUncommittedSize entryPayloadSize
 	// maxCommittedPageSize limits the size of committed entries that can be
 	// loaded into memory in hasUnappliedConfChanges.
 	// TODO(#131559): avoid this loading in the first place, and remove this.
-	maxCommittedPageSize entryEncodingSize
+	maxCommittedPageSize entrySize
 
 	config               quorum.Config
 	trk                  tracker.ProgressTracker
@@ -449,9 +449,9 @@ func newRaft(c *Config) *raft {
 		id:                          c.ID,
 		isLearner:                   false,
 		raftLog:                     raftlog,
-		maxMsgSize:                  entryEncodingSize(c.MaxSizePerMsg),
+		maxMsgSize:                  entrySize(c.MaxSizePerMsg),
 		maxUncommittedSize:          entryPayloadSize(c.MaxUncommittedEntriesSize),
-		maxCommittedPageSize:        entryEncodingSize(c.MaxCommittedSizePerReady),
+		maxCommittedPageSize:        entrySize(c.MaxCommittedSizePerReady),
 		lazyReplication:             c.LazyReplication,
 		electionTimeout:             c.ElectionTick,
 		electionTimeoutJitter:       c.ElectionJitterTick,
