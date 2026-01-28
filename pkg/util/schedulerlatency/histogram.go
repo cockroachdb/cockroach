@@ -95,7 +95,12 @@ func (h *runtimeHistogram) update(his *metrics.Float64Histogram) {
 }
 
 // writeCountsToMetricLocked converts counts into Prometheus histogram format.
-func writeCountsToMetricLocked(out *prometheusgo.Metric, counts []uint64, buckets []float64, mult float64) {
+func writeCountsToMetricLocked(
+	out *prometheusgo.Metric,
+	counts []uint64,
+	buckets []float64,
+	mult float64,
+) {
 	sum := float64(0)
 	dtoBuckets := make([]*prometheusgo.Bucket, 0, len(counts))
 	totalCount := uint64(0)
