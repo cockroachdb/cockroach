@@ -261,7 +261,7 @@ func TestCloneHistogram(t *testing.T) {
 //	Every 100ms (samplePeriod):
 //	  - Sample Go runtime histogram (cumulative since process start)
 //	  - Compute delta from previous sample
-//	  - Accumulate delta into schedulerLatencyAccumulator
+//	  - Accumulate delta into deltaAccumulator
 //
 //	Every 10s (statsInterval):
 //	  - Pass accumulated delta to rh.recordDelta()

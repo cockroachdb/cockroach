@@ -160,15 +160,15 @@ type sampler struct {
 		// runtime. N = sampleDuration / samplePeriod (default: 2.5s / 100ms =
 		// 25 readings). Used to compute:
 		// (a) delta = current - previous (~100ms, accumulated in
-		// schedulerLatencyAccumulator)
+		// deltaAccumulator)
 		// (b) p99 over the sliding window = current - oldest (~2.5s, for
 		// elastic CPU AC).
 		ringBuffer ring.Buffer[*metrics.Float64Histogram]
 
-		// schedulerLatencyAccumulator sums the deltas from each samplePeriod
-		// tick. Cleared and returned by getAndClearLastStatsHistogram() every
-		// ~10s which will be used to export to runtimeHistogram.
-		schedulerLatencyAccumulator *metrics.Float64Histogram
+		// deltaAccumulator sums the per-tick deltas (each ~100ms). Cleared and
+		// returned by getAndClearLastStatsHistogram() every ~10s for export to
+		// runtimeHistogram.
+		deltaAccumulator *metrics.Float64Histogram
 	}
 }
 
@@ -188,7 +188,7 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 		numSamples = 1 // we need at least one sample to compare (also safeguards against integer division)
 	}
 	s.mu.ringBuffer.Resize(numSamples)
-	s.mu.schedulerLatencyAccumulator = nil
+	s.mu.deltaAccumulator = nil
 }
 
 // sampleOnTickAndInvokeCallbacks is called every samplePeriod (default:
@@ -216,10 +216,10 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	// Accumulate delta (latest - previous) for export via getAndClearLastStatsHistogram().
 	if prevSample != nil {
 		sampleDelta := sub(latestCumulative, prevSample)
-		if s.mu.schedulerLatencyAccumulator == nil {
-			s.mu.schedulerLatencyAccumulator = sampleDelta
+		if s.mu.deltaAccumulator == nil {
+			s.mu.deltaAccumulator = sampleDelta
 		} else {
-			s.mu.schedulerLatencyAccumulator = add(s.mu.schedulerLatencyAccumulator, sampleDelta)
+			s.mu.deltaAccumulator = add(s.mu.deltaAccumulator, sampleDelta)
 		}
 	}
 
@@ -251,8 +251,8 @@ func (s *sampler) recordLocked(
 func (s *sampler) getAndClearLastStatsHistogram() *metrics.Float64Histogram {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res := s.mu.schedulerLatencyAccumulator
-	s.mu.schedulerLatencyAccumulator = nil
+	res := s.mu.deltaAccumulator
+	s.mu.deltaAccumulator = nil
 	return res
 }
 
