@@ -68,6 +68,12 @@ import (
 // stores that satisfy the constraint to compute the lease count mean as well.
 // This approach differs from how mma computes load summary for lease transfers
 // (mma computes load summary over stores that the existing replicas are on).
+// Concretely, in the allocator (allocator.go), candidateLeasesMean is computed
+// over sl (all constraint-satisfying stores). When constructing targetStores to
+// pass to BuildMMARebalanceAdvisor, we use sl.Stores so that MMA computes its
+// load summary over the same set of stores. This ensures both systems reason
+// about the same baseline when validating whether a lease transfer target
+// conflicts with MMA's goals.
 // • On top of the cands list, MMARebalanceAdvisor currently also always include
 // the existing store in the set of stores to compute the load summary with
 // respect to. This is subject to change, but currently it does not make sense
