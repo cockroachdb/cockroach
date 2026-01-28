@@ -144,7 +144,7 @@ func ClientInterceptor(
 		cc *drpcclient.ClientConn,
 		invoker drpcclient.UnaryInvoker,
 	) error {
-		if tracingutil.ShouldSkipClientTracing(ctx) {
+		if tracingutil.ShouldSkipClientTracing(ctx) || tracingutil.MethodExcludedFromTracing(rpc) {
 			return invoker(ctx, rpc, enc, in, out, cc)
 		}
 
@@ -154,9 +154,7 @@ func ClientInterceptor(
 		init(clientSpan)
 		defer clientSpan.Finish()
 
-		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		if invoker != nil {
 			err := invoker(ctx, rpc, enc, in, out, cc)
@@ -188,7 +186,7 @@ func StreamClientInterceptor(
 		cc *drpcclient.ClientConn,
 		streamer drpcclient.Streamer,
 	) (drpc.Stream, error) {
-		if tracingutil.ShouldSkipClientTracing(ctx) {
+		if tracingutil.ShouldSkipClientTracing(ctx) || tracingutil.MethodExcludedFromTracing(rpc) {
 			return streamer(ctx, rpc, enc, cc)
 		}
 
@@ -197,9 +195,7 @@ func StreamClientInterceptor(
 		clientSpan := tracer.StartSpan(rpc, tracing.WithParent(parent), tracing.WithClientSpanKind)
 		init(clientSpan)
 
-		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
-		}
+		ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 
 		str, err := streamer(ctx, rpc, enc, cc)
 		if err != nil {
