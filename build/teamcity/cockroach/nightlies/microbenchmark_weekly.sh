@@ -82,6 +82,7 @@ done
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
+
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 export ROACHPROD_USER=teamcity
 export ROACHPROD_CLUSTER=teamcity-microbench-${TC_BUILD_ID}
@@ -120,8 +121,19 @@ BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GOOGLE_EPHEMERAL_CREDENTIALS -e SANITIZED_BE
 # Log into gcloud again (credentials are removed by teamcity-support in the build script)
 log_into_gcloud
 
+# Check if machine type starts with c4
+# For this machine type we need to specify additional flags
+additional_roachprod_args=""
+if [[ "$GCE_MACHINE_TYPE" == c4* ]]; then
+  additional_roachprod_args="--gce-boot-disk-type=\"hyperdisk-balanced\" \
+    --gce-pd-volume-type=\"hyperdisk-balanced\" \
+    --gce-turbo-mode=ALL_CORE_MAX \
+    --gce-threads-per-core=1"
+fi
+
 # Create roachprod cluster
 ./bin/roachprod create "$ROACHPROD_CLUSTER" -n "$GCE_NODE_COUNT" \
+  ${additional_roachprod_args:+$additional_roachprod_args} \
   --lifetime "$CLUSTER_LIFETIME" \
   --clouds gce \
   --gce-machine-type "$GCE_MACHINE_TYPE" \
