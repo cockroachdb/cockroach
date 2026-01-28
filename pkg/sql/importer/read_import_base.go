@@ -71,6 +71,7 @@ func runImport(
 	spec *execinfrapb.ReadImportDataSpec,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	seqChunkProvider *row.SeqChunkProvider,
+	reportedSSTURIs map[string]struct{},
 ) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
@@ -124,7 +125,7 @@ func runImport(
 	var summary *kvpb.BulkOpSummary
 	var files *bulksst.SSTFiles
 	group.GoCtx(func(ctx context.Context) error {
-		summary, files, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh)
+		summary, files, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh, reportedSSTURIs)
 		return err
 	})
 
