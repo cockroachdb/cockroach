@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
@@ -28,6 +29,8 @@ type CancelChecker struct {
 	// Number of times check() has been called since last context cancellation
 	// check.
 	callsSinceLastCheck uint32
+
+	cpuHandle *admission.GoroutineCPUHandle
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -46,6 +49,10 @@ func (c *CancelChecker) Init(ctx context.Context) {
 		// In some cases, the cancel checker is used as a utility to provide
 		// Check*() methods, and the input remains nil then.
 		c.Input.Init(c.Ctx)
+	}
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
+	if cpuHandle != nil {
+		c.cpuHandle = cpuHandle.RegisterGoroutine()
 	}
 }
 
@@ -81,5 +88,11 @@ func (c *CancelChecker) CheckEveryCall() {
 	case <-c.Ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
+	}
+	// TODO: doing this at cancelCheckInterval may cause no CPU to be reported
+	// for very short running queries. Ideally we need a way for every goroutine
+	// to call this once before termination.
+	if c.cpuHandle != nil {
+		c.cpuHandle.MeasureAndAdmit(c.Ctx, false)
 	}
 }
