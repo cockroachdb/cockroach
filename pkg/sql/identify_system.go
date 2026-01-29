@@ -16,6 +16,7 @@ import (
 
 type identifySystemNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 	clusterID string
 	database  string

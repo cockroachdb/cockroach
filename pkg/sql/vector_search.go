@@ -18,6 +18,7 @@ import (
 
 type vectorSearchNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	vectorSearchPlanningInfo
 }
 
@@ -51,6 +52,7 @@ func (vs *vectorSearchNode) Close(ctx context.Context) {}
 
 type vectorMutationSearchNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	vectorMutationSearchPlanningInfo
 	// columns are the produced columns, namely the input columns, the partition
 	// column, and (optionally) the quantized vector column.

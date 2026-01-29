@@ -17,6 +17,7 @@ import (
 
 type invertedJoinNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	invertedJoinPlanningInfo
 
 	// columns are the produced columns, namely the input columns and (unless the

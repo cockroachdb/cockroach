@@ -19,6 +19,7 @@ import (
 
 type relocateNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	subjectReplicas tree.RelocateSubject

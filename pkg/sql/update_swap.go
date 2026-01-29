@@ -25,6 +25,7 @@ type updateSwapNode struct {
 	// Unlike insertFastPathNode, updateSwapNode reads from input in order to
 	// support projections, which are used by most UPDATE statements.
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a

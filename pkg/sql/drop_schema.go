@@ -31,6 +31,7 @@ import (
 
 type dropSchemaNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.DropSchema
 	d *dropCascadeState
 }
