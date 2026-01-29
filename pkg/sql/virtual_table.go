@@ -262,7 +262,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{Ctx: params.ctx, EvalCtx: params.EvalContext()}
 	if v.joinType == descpb.InnerJoin || v.joinType == descpb.LeftOuterJoin {
 		v.run.rows = rowcontainer.NewRowContainer(
-			params.p.Mon().MakeBoundAccount(),
+			params.p.ExecMon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(v.columns),
 		)
 	} else if v.joinType != descpb.LeftSemiJoin && v.joinType != descpb.LeftAntiJoin {

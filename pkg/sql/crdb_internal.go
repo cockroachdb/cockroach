@@ -6137,7 +6137,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 		}
 		descs := c.OrderedDescriptors()
 		// Collect all marshaled job metadata and account for its memory usage.
-		acct := p.Mon().MakeBoundAccount()
+		acct := p.ExecMon().MakeBoundAccount()
 		defer acct.Close(ctx)
 		jmg, err := collectMarshaledJobMetadataMap(ctx, p, &acct, descs)
 		if err != nil {
@@ -7006,7 +7006,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
-		acc := p.Mon().MakeBoundAccount()
+		acc := p.ExecMon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		// Perform RPC fanout.
@@ -7437,7 +7437,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, _ int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// TODO(azhng): we want to eventually implement memory accounting within the
 		//  RPC handlers. See #69032.
-		acc := p.Mon().MakeBoundAccount()
+		acc := p.ExecMon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		// Perform RPC fanout.
@@ -7768,7 +7768,7 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 		}
 
 		// Account for memory used by the RPC fanout.
-		acc := p.Mon().MakeBoundAccount()
+		acc := p.ExecMon().MakeBoundAccount()
 		defer acc.Close(ctx)
 
 		resp, err := p.extendedEvalCtx.SQLStatusServer.TransactionContentionEvents(
@@ -8373,7 +8373,7 @@ func populateTxnExecutionInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
-	acc := p.Mon().MakeBoundAccount()
+	acc := p.ExecMon().MakeBoundAccount()
 	defer acc.Close(ctx)
 
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
@@ -8574,7 +8574,7 @@ func populateStmtInsights(
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 
-	acct := p.Mon().MakeBoundAccount()
+	acct := p.ExecMon().MakeBoundAccount()
 	defer acct.Close(ctx)
 
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
