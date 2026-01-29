@@ -158,11 +158,13 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	} else {
 		t.Status("installing cockroach")
 		settings := install.MakeClusterSettings()
+
+		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		if opts.extra.useDRPC {
-			settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_DRPC_ENABLED=true")
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--use-new-rpc")
 			t.L().Printf("extra setup to use DRPC")
 		}
-		c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
+		c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 		if len(c.CRDBNodes()) >= 3 {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1))
 			require.NoError(t, err)

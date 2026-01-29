@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -879,7 +880,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 		&execinfra.FlowCtx{
 			Gateway: false,
 			Cfg: &execinfra.ServerConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings:   cluster.MakeTestingClusterSettings(),
+				RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 			},
 		},
 		0, /* processorID */

@@ -91,6 +91,7 @@ go_test(
         "//pkg/kv",
         "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
