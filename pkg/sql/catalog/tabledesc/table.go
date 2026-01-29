@@ -419,17 +419,22 @@ var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
 // GetShardColumnName generates a name for the hidden shard column to be used to create a
 // hash sharded index.
 func GetShardColumnName(colNames []string, buckets int32) string {
-	// We sort the `colNames` here because we want to avoid creating a duplicate shard
-	// column if one already exists for the set of columns in `colNames`. Note this
-	// sort is in-place and modifies the array in the caller. This results in the
-	// columns also being in sorted order as input to the shard column hash expression.
+	// We sort the `colNames` here because we want to avoid creating a duplicate
+	// shard column if one already exists for the set of columns in `colNames`.
+	// Note this sort is in-place and modifies the array in the caller. This
+	// results in the columns also being in sorted order as input to the shard
+	// column hash expression.
+	//
 	// For example, CREATE INDEX idx1 ON t (b, a, c) USING HASH;
-	// Internal shard column name: crdb_internal_a_b_c_shard_16
-	// Hash expression: mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c))), 16:::INT8)
-	// Column rename updates the internal column name but preserves the hash expression.
+	//   - Internal shard column name: crdb_internal_a_b_c_shard_16
+	//   - Hash expression: mod(fnv32(md5(crdb_internal.datums_to_bytes(a, b, c))), 16:::INT8)
+	//
+	// Column rename updates the internal column name but preserves the hash
+	// expression.
+	//
 	// For example, ALTER TABLE t RENAME COLUMN b TO x;
-	// Internal shard column name: crdb_internal_a_c_x_shard_16
-	// Hash expression: mod(fnv32(md5(crdb_internal.datums_to_bytes(a, x, c))), 16:::INT8)
+	//   - Internal shard column name: crdb_internal_a_c_x_shard_16
+	//   - Hash expression: mod(fnv32(md5(crdb_internal.datums_to_bytes(a, x, c))), 16:::INT8)
 	sort.Strings(colNames)
 	return strings.Join(
 		append(append([]string{`crdb_internal`}, colNames...), fmt.Sprintf(`shard_%v`, buckets)), `_`,

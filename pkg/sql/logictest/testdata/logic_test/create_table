@@ -378,7 +378,7 @@ like_hash  CREATE TABLE public.like_hash (
              crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
-             INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+             INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
            );
 
 statement ok
@@ -395,7 +395,7 @@ like_hash  CREATE TABLE public.like_hash (
              crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
-             INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+             INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
            );
 
 statement ok
@@ -892,8 +892,8 @@ CREATE TABLE public.t_good_hash_indexes_1 (
   b INT8 NULL,
   c INT8 NULL,
   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5, shard_columns=(a)),
-  INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5, shard_columns=(b))
+  CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5),
+  INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5)
 );
 
 statement ok
@@ -908,7 +908,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
 CREATE TABLE public.t_good_hash_indexes_2 (
   a INT8 NOT NULL,
   crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5, shard_columns=(a))
+  CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 );
 
 subtest table_settings

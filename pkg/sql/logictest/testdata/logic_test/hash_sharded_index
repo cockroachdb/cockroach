@@ -9,7 +9,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    a INT8 NOT NULL,
-                   CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  );
 
 skipif config schema-locked-disabled
@@ -19,7 +19,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    a INT8 NOT NULL,
-                   CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  ) WITH (schema_locked = true);
 
 statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got -1
@@ -55,7 +55,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  );
 
 skipif config schema-locked-disabled
@@ -65,7 +65,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  ) WITH (schema_locked = true);
 
 query TTT colnames
@@ -76,7 +76,7 @@ WHERE tablename = 'sharded_primary'
 ORDER BY 1, 2, 3
 ----
 tablename        indexname  indexdef
-sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10)
 
 # Test that the indexdef output from pg_indexes is round-trippable. This is a
 # regression test for #161516.
@@ -92,7 +92,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16, shard_columns=(c1, c2))
+store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
 
 # Verify that the CREATE INDEX statement from pg_indexes can be executed.
 # First, save the index definition.
@@ -112,7 +112,7 @@ FROM pg_indexes
 WHERE tablename = 'store_columns_test' AND indexname = 'idx1'
 ----
 tablename           indexname  indexdef
-store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16, shard_columns=(c1, c2))
+store_columns_test  idx1       CREATE INDEX idx1 ON test.public.store_columns_test USING btree (c1 ASC, c2 ASC) USING HASH STORING (c3) WITH (bucket_count=16)
 
 statement ok
 DROP TABLE store_columns_test
@@ -160,7 +160,7 @@ specific_family  CREATE TABLE public.specific_family (
                    crdb_internal_b_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 10:::INT8)) VIRTUAL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    CONSTRAINT specific_family_pkey PRIMARY KEY (rowid ASC),
-                   INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10, shard_columns=(b)),
+                   INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10),
                    FAMILY a_family (a, rowid),
                    FAMILY b_family (b)
                  );
@@ -175,7 +175,7 @@ specific_family  CREATE TABLE public.specific_family (
                    crdb_internal_b_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 10:::INT8)) VIRTUAL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    CONSTRAINT specific_family_pkey PRIMARY KEY (rowid ASC),
-                   INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10, shard_columns=(b)),
+                   INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10),
                    FAMILY a_family (a, rowid),
                    FAMILY b_family (b)
                  ) WITH (schema_locked = true);
@@ -193,7 +193,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                    );
 
 skipif config schema-locked-disabled
@@ -205,7 +205,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                    ) WITH (schema_locked = true);
 
 statement ok
@@ -227,7 +227,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                    );
 
 skipif config schema-locked-disabled
@@ -239,7 +239,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                    ) WITH (schema_locked = true);
 
 statement ok
@@ -268,7 +268,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                    );
 
 skipif config schema-locked-disabled
@@ -280,7 +280,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                    ) WITH (schema_locked = true);
 
 statement ok
@@ -300,8 +300,8 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
                    );
 
 skipif config schema-locked-disabled
@@ -314,8 +314,8 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
                    ) WITH (schema_locked = true);
 
 # Drop a sharded index and ensure that the shard column is dropped with it.
@@ -331,7 +331,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
                    );
 
 statement ok
@@ -415,9 +415,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10)
                    );
 
 skipif config schema-locked-disabled
@@ -429,9 +429,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10),
+                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10)
                    ) WITH (schema_locked = true);
 
 # Ensure that the table descriptor was left in a "valid" state
@@ -451,8 +451,8 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                  );
 
 skipif config schema-locked-disabled
@@ -463,8 +463,8 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                  ) WITH (schema_locked = true);
 
 statement ok
@@ -480,7 +480,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  );
 
 skipif config schema-locked-disabled
@@ -490,7 +490,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  ) WITH (schema_locked = true);
 
 statement ok
@@ -503,8 +503,8 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                  );
 
 skipif config schema-locked-disabled
@@ -514,8 +514,8 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
                    crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
-                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a)),
-                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10, shard_columns=(a))
+                   CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                  ) WITH (schema_locked = true);
 
 statement ok
@@ -681,8 +681,8 @@ weird_names  CREATE TABLE public.weird_names (
                "I am a column with spaces" INT8 NOT NULL,
                "'quotes' in the column's name" INT8 NULL,
                "crdb_internal_'quotes' in the column's name_shard_4" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("'quotes' in the column's name"))), 4:::INT8)) VIRTUAL,
-               CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12, shard_columns=("I am a column with spaces")),
-               INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4, shard_columns=("'quotes' in the column's name"))
+               CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12),
+               INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4)
              );
 
 skipif config schema-locked-disabled
@@ -694,8 +694,8 @@ weird_names  CREATE TABLE public.weird_names (
                "I am a column with spaces" INT8 NOT NULL,
                "'quotes' in the column's name" INT8 NULL,
                "crdb_internal_'quotes' in the column's name_shard_4" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("'quotes' in the column's name"))), 4:::INT8)) VIRTUAL,
-               CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12, shard_columns=("I am a column with spaces")),
-               INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4, shard_columns=("'quotes' in the column's name"))
+               CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12),
+               INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4)
              ) WITH (schema_locked = true);
 
 subtest column_does_not_exist
@@ -770,8 +770,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c2 INT8 NULL,
                  crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c0, c1)),
-                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                );
 
 skipif config schema-locked-disabled
@@ -784,8 +784,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c2 INT8 NULL,
                  crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c0, c1)),
-                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                ) WITH (schema_locked = true);
 
 statement ok
@@ -808,8 +808,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c3 INT8 NULL,
                  crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c1, c2))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c3_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c3))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2)),
-                 INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c3))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8)
                );
 
 skipif config schema-locked-disabled
@@ -822,8 +822,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c3 INT8 NULL,
                  crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c1, c2))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c3_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c3))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2)),
-                 INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c3))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8)
                ) WITH (schema_locked = true);
 
 query III
@@ -845,8 +845,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c2 INT8 NULL,
                  crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c0, c1)),
-                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                );
 
 skipif config schema-locked-disabled
@@ -859,8 +859,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c2 INT8 NULL,
                  crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
                  crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
-                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c0, c1)),
-                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
+                 CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+                 INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                ) WITH (schema_locked = true);
 
 query III
@@ -1068,7 +1068,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 );
 
 skipif config schema-locked-disabled
@@ -1078,7 +1078,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 ) WITH (schema_locked = true);
 
 # Make sure user defined constraint is used if it's equivalent to the shard
@@ -1102,7 +1102,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a)),
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8),
   CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
 );
 
@@ -1113,7 +1113,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a)),
+  CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8),
   CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
 ) WITH (schema_locked = true);
 
@@ -1178,9 +1178,9 @@ CREATE TABLE public.t_default_bucket_16 (
   c INT8 NULL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_internal_c_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 4:::INT8)) VIRTUAL,
-  CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a)),
-  INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
-  INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4, shard_columns=(c)),
+  CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4),
   FAMILY fam_0_a (a),
   FAMILY fam_1_c_b (c, b)
 );
@@ -1196,9 +1196,9 @@ CREATE TABLE public.t_default_bucket_16 (
   c INT8 NULL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_internal_c_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 4:::INT8)) VIRTUAL,
-  CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a)),
-  INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
-  INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4, shard_columns=(c)),
+  CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16),
+  INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4),
   FAMILY fam_0_a (a),
   FAMILY fam_1_c_b (c, b)
 ) WITH (schema_locked = true);
@@ -1216,7 +1216,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_8]
 CREATE TABLE public.t_default_bucket_8 (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
+  CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 );
 
 skipif config schema-locked-disabled
@@ -1226,7 +1226,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_8]
 CREATE TABLE public.t_default_bucket_8 (
   crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
-  CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8, shard_columns=(a))
+  CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 ) WITH (schema_locked = true);
 
 # Make sure that uniqueness is guaranteed with hash index.
@@ -1553,7 +1553,7 @@ idx2  CREATE INDEX idx2 ON test.public.shard_columns_test USING btree (c1 ASC, c
 idx3  CREATE INDEX idx3 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2))
 idx4  CREATE INDEX idx4 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
 idx5  CREATE INDEX idx5 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
-idx6  CREATE INDEX idx6 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2, c3))
+idx6  CREATE INDEX idx6 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8)
 
 statement ok
 DROP TABLE shard_columns_test
