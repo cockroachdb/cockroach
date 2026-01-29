@@ -1018,6 +1018,13 @@ func TestLogic_hidden_columns(
 	runLogicTest(t, "hidden_columns")
 }
 
+func TestLogic_import(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "import")
+}
+
 func TestLogic_impure(
 	t *testing.T,
 ) {

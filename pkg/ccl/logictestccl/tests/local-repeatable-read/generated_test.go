@@ -1008,6 +1008,13 @@ func TestRepeatableReadLogic_hidden_columns(
 	runLogicTest(t, "hidden_columns")
 }
 
+func TestRepeatableReadLogic_import(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "import")
+}
+
 func TestRepeatableReadLogic_impure(
 	t *testing.T,
 ) {

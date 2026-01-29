@@ -219,6 +219,10 @@ const (
 	// immediate removal.
 	V26_2_AddTableStatisticsDelayDeleteColumn
 
+	// V26_2_AddInspectRowCountCheck introduces an INSPECT check that counts the
+	// number of rows in a table. It is used as a validator after IMPORT.
+	V26_2_AddInspectRowCountCheck
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -272,6 +276,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_Start: {Major: 26, Minor: 1, Internal: 2},
 
 	V26_2_AddTableStatisticsDelayDeleteColumn: {Major: 26, Minor: 1, Internal: 4},
+
+	V26_2_AddInspectRowCountCheck: {Major: 26, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

@@ -1049,6 +1049,13 @@ func TestReadCommittedLogic_hidden_columns(
 	runLogicTest(t, "hidden_columns")
 }
 
+func TestReadCommittedLogic_import(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "import")
+}
+
 func TestReadCommittedLogic_impure(
 	t *testing.T,
 ) {
