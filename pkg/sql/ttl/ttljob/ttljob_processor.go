@@ -300,8 +300,8 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 		// Compute the AOST timestamp for SpanToQueryBounds. This aligns the bounds
 		// computation with the historical time used by the SELECT queries, reducing
 		// contention with foreground traffic.
-		aostTimestamp := kvDB.Clock().Now().AddDuration(ttlSpec.AOSTDuration)
 		for i, span := range ttlSpec.Spans {
+			aostTimestamp := kvDB.Clock().Now().AddDuration(ttlSpec.AOSTDuration)
 			if bounds, hasRows, err := spanutils.SpanToQueryBounds(
 				ctx,
 				kvDB,
