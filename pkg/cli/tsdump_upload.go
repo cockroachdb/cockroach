@@ -108,8 +108,9 @@ type FailedRequestsFile struct {
 	Requests []FailedRequest `json:"requests"`
 }
 
-// GapFillProcessor interpolates 30-minute resolution counter metrics to 10-second resolution
+// GapFillProcessor interpolates higher-resolution counter metrics to 10-second resolution
 // by filling gaps with zero values while preserving the original data points.
+// Supports both 30-minute (1800s) and 1-minute (60s) resolution metrics.
 type GapFillProcessor struct{}
 
 func NewGapFillProcessor() *GapFillProcessor {
@@ -122,19 +123,25 @@ type BaseMappingsYAML struct {
 	LegacyMetrics             map[string]string `yaml:"legacy_metrics"`
 }
 
-// processCounterMetric interpolates 30-minute resolution counter metrics to 10-second resolution.
-// It checks if the metric is a counter type with 30-minute interval (1800 seconds) and converts
-// it to 10-second resolution by filling gaps with zero values between original data points.
+// processCounterMetric interpolates counter metrics to 10-second resolution.
+// It checks if the metric is a counter type with 30-minute (1800s) or 1-minute (60s) interval
+// and converts it to 10-second resolution by filling gaps with zero values between data points.
 func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries) error {
 	// Only process counter metrics
 	if series.Type == nil || *series.Type != datadogV2.METRICINTAKETYPE_COUNT {
 		return nil
 	}
 
-	// Only process 30-minute resolution metrics (1800 seconds)
-	if series.Interval == nil || *series.Interval != 1800 {
+	// Skip if interval is nil or already at 10-second target resolution.
+	// Only 60-second (child metrics) and 1800-second (30-min rollups) need gap-filling.
+	if series.Interval == nil || *series.Interval == 10 {
 		return nil
 	}
+
+	interval := *series.Interval
+
+	// Calculate the number of 10-second intervals to fill (e.g. 6 points for 60s, 180 points for 1800s)
+	pointsPerInterval := int(interval / 10)
 
 	// If no points or only one point, nothing to interpolate
 	if len(series.Points) <= 1 {
@@ -150,27 +157,26 @@ func (gfp *GapFillProcessor) processCounterMetric(series *datadogV2.MetricSeries
 		currentValue := *series.Points[i].Value
 		currentTimestamp := *series.Points[i].Timestamp
 
-		// Distribute the delta value across 180 points (1800s / 10s = 180)
-		distributedValue := currentValue / 180.0
+		// For COUNT metrics: distribute the value across all points in the interval
+		distributedValue := currentValue / float64(pointsPerInterval)
 
 		newPoints = append(newPoints, datadogV2.MetricPoint{
 			Timestamp: datadog.PtrInt64(currentTimestamp),
 			Value:     datadog.PtrFloat64(distributedValue),
 		})
 
-		// Add 179 zero points (10-second intervals) between current and next
-		for j := 1; j < 180; j++ {
+		// Add (pointsPerInterval - 1) zero points (10-second intervals) between current and next
+		for j := 1; j < pointsPerInterval; j++ {
 			// We are adding delta of 0 so that same distributed value is getting published
 			// across all points. This would help us to perform roll ups with 10 seconds
-			// for metrics with 30 minute intervals.
-			// metric value = (metric value/180) * 180
+			// for metrics with higher intervals.
+			// metric value = (metric value/pointsPerInterval) * pointsPerInterval
 			interpolatedTimestamp := currentTimestamp + int64(j*10)
 			newPoints = append(newPoints, datadogV2.MetricPoint{
 				Timestamp: datadog.PtrInt64(interpolatedTimestamp),
 				Value:     datadog.PtrFloat64(0.0),
 			})
 		}
-
 	}
 
 	// Update the series with new points and 10-second interval
@@ -312,6 +318,56 @@ func appendTag(series *datadogV2.MetricSeries, tagKey, tagValue string) {
 	series.Tags = append(series.Tags, fmt.Sprintf("%s:%s", tagKey, tagValue))
 }
 
+// parseChildLabels parses a Prometheus-style label string and converts to Datadog tags.
+// Input format: `label1="value1", label2="value2"`
+// Output format: []string{"label1:value1", "label2:value2"}
+func parseChildLabels(labelsStr string) []string {
+	var tags []string
+	if labelsStr == "" {
+		return tags
+	}
+
+	// Split by comma and process each label
+	// Handle format: label="value", label2="value2"
+	parts := strings.Split(labelsStr, ", ")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		// Split by = to get key and value
+		eqIdx := strings.IndexByte(part, '=')
+		if eqIdx == -1 {
+			continue
+		}
+
+		key := part[:eqIdx]
+		value := part[eqIdx+1:]
+
+		// Remove quotes from value if present
+		value = strings.Trim(value, "\"")
+
+		if key != "" && value != "" {
+			tags = append(tags, fmt.Sprintf("%s:%s", key, value))
+		}
+	}
+
+	return tags
+}
+
+// hasTagKey checks if a tag with the given key already exists in the tags slice.
+// Tags are in format "key:value", so we check for "key:" prefix.
+func hasTagKey(tags []string, key string) bool {
+	prefix := key + ":"
+	for _, tag := range tags {
+		if strings.HasPrefix(tag, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, error) {
 	name, source, res, _, err := ts.DecodeDataKey(kv.Key)
 	if err != nil {
@@ -321,43 +377,83 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 	if err := kv.Value.GetProto(&idata); err != nil {
 		return nil, err
 	}
+
+	// Check if this is a child metric with labels (format: metric_name{label1="value1", label2="value2"}[-suffix])
+	// Histogram metrics may have suffixes like -p50, -p99, -avg, -count after the closing brace
+	var childLabels []string
+	isChildMetric := false
+	typeResolutionName := name
 	braceIdx := strings.IndexByte(name, '{')
 	if braceIdx != -1 {
-		// has child labels
-		// TODO(jasonlmfong): support uploading child labels
-		return nil, errors.Errorf("timeseries key with child labels: %s", name)
+		// Find the closing brace explicitly
+		closeBraceIdx := strings.IndexByte(name, '}')
+		if closeBraceIdx == -1 {
+			closeBraceIdx = len(name) - 1
+		}
+
+		// Extract base metric name, labels, and any suffix after the closing brace
+		baseName := name[:braceIdx]
+		labelsStr := name[braceIdx+1 : closeBraceIdx]
+		suffix := ""
+
+		// Extract suffix like -p50, -avg, -count, etc.
+		if closeBraceIdx < len(name)-1 {
+			suffix = name[closeBraceIdx+1:]
+		}
+
+		childLabels = parseChildLabels(labelsStr)
+
+		// Use base metric name (with suffix for histograms) for type resolution
+		typeResolutionName = baseName + suffix
+
+		// Append .child suffix to create a separate metric name for child metrics.
+		// This avoids double-counting in aggregations (parent already contains the
+		// aggregate of all children) and maintains backward compatibility with
+		// existing dashboards that query parent metrics.
+		name = baseName + suffix + ".child"
+		isChildMetric = true
 	}
 
 	series := &datadogV2.MetricSeries{
 		Metric:   name,
-		Tags:     []string{},
-		Type:     d.resolveMetricType(name),
+		Tags:     childLabels,
+		Type:     d.resolveMetricType(typeResolutionName),
 		Points:   make([]datadogV2.MetricPoint, idata.SampleCount()),
 		Interval: datadog.PtrInt64(int64(res.Duration().Seconds())), // convert from time.Duration to number of seconds.
 	}
 
+	// shouldAddTag returns true if the tag should be added. For parent metrics,
+	// tags are always added. For child metrics, skip adding if the tag already
+	// exists in childLabels to avoid duplicates.
+	shouldAddTag := func(tagKey string) bool {
+		return !isChildMetric || !hasTagKey(childLabels, tagKey)
+	}
+
 	sl := reCrStoreNode.FindStringSubmatch(name)
 	if len(sl) >= 3 {
-		// extract the node/store and metric name from the regex match.
 		key := sl[1]
 		series.Metric = sl[2]
 
 		switch key {
 		case "node":
-			appendTag(series, nodeKey, source)
+			if shouldAddTag(nodeKey) {
+				appendTag(series, nodeKey, source)
+			}
 		case "store":
-			appendTag(series, key, source)
-			// We check the node associated with store if store to node mapping
-			// is provided as part of --store-to-node-map-file flag. If exists then
-			// emit node as tag.
-			if nodeID, ok := d.storeToNodeMap[source]; ok {
+			if shouldAddTag(key) {
+				appendTag(series, key, source)
+			}
+			// Add node_id from store-to-node mapping if available
+			if nodeID, ok := d.storeToNodeMap[source]; ok && shouldAddTag(nodeKey) {
 				appendTag(series, nodeKey, nodeID)
 			}
 		default:
-			appendTag(series, key, source)
+			if shouldAddTag(key) {
+				appendTag(series, key, source)
+			}
 		}
-	} else {
-		// add default node_id as 0 as there is no metric match for the regex.
+	} else if shouldAddTag(nodeKey) {
+		// No regex match - add default node_id:0
 		appendTag(series, nodeKey, "0")
 	}
 
@@ -402,7 +498,7 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		}
 	}
 
-	// Process gap-filling for 30-minute resolution counter metrics
+	// Process gap-filling for 30-minute and 1-minute resolution counter metrics
 	if err := d.gapFillProcessor.processCounterMetric(series); err != nil {
 		return nil, err
 	}
