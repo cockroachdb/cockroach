@@ -774,6 +774,10 @@ message LocalOnlySessionData {
   // physical planner from partitioning scans with soft limits into multiple
   // TableReaders. When true, this matches the behavior for hard limits.
   bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
+  // OptimizerBuildRoutineParamsAsPlaceholders, when true, instructs the
+  // optimizer to build routine parameters as placeholders instead of outer
+  // columns.
+  bool optimizer_build_routine_params_as_placeholders = 198;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
