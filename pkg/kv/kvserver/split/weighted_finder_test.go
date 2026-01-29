@@ -247,8 +247,11 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	}
 	expectedFullReservoir[0].left = 0
 	expectedFullReservoir[0].right = 1
-	expectedFullReservoir[1].left = 0.5
-	expectedFullReservoir[1].right = 0.5
+	// Note: sample[1] (/Table/1001) has left=1, right=0 from the loop above.
+	// The span [/Table/1000, /Table/1001) contributes:
+	// - Start key /Table/1000: less than /Table/1001 → left += 0.5
+	// - End key /Table/1001: equals /Table/1001 but exclusive → left += 0.5
+	// Total: left=1.0, right=0 (end key is exclusive, so it doesn't touch /Table/1001)
 
 	// Test recording a spanning query.
 	spanningReservoir := replacementReservoir
