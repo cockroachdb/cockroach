@@ -7,6 +7,7 @@ package physical
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
@@ -84,6 +85,11 @@ type streamIngestionFrontier struct {
 	// replicatedTimeAtLastPositiveLagNodeCheck records the replicated time the
 	// last time the lagging node checker detected a lagging node.
 	replicatedTimeAtLastPositiveLagNodeCheck hlc.Timestamp
+
+	// lastProgressStorageUpdate tracks when we last wrote to ProgressStorage.
+	// This is throttled separately from legacy progress writes since
+	// ProgressStorage.Set is more expensive (includes history writes).
+	lastProgressStorageUpdate time.Time
 
 	rangeStats replicationutils.AggregateRangeStatsCollector
 }
@@ -327,7 +333,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		return nil
 	}
 	f := sf.frontier
-	registry := sf.FlowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
@@ -341,40 +346,67 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	sf.aggregateAndUpdateRangeMetrics()
 
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
-		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-	) error {
-		if err := md.CheckRunningOrReverting(); err != nil {
+	if err := sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := jobs.CheckRunningOrReverting(ctx, txn, jobID); err != nil {
 			return err
 		}
-
-		progress := md.Progress
-		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
+		prog, err := jobs.LoadLegacyProgress(ctx, txn, jobID)
+		if err != nil {
+			return err
+		}
+		streamProgress := prog.(jobspb.StreamIngestionProgress)
 		streamProgress.Checkpoint.ResolvedSpans = frontierResolvedSpans
 
+		var statusMessage string
 		if replicatedTime.IsSet() && streamProgress.ReplicationStatus == jobspb.InitialScan {
 			streamProgress.ReplicationStatus = jobspb.Replicating
-			md.Progress.StatusMessage = streamProgress.ReplicationStatus.String()
+			statusMessage = streamProgress.ReplicationStatus.String()
 		}
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
 		if sf.replicatedTimeAtStart.Less(replicatedTime) {
 			streamProgress.ReplicatedTime = replicatedTime
-			// The HighWater is for informational purposes
-			// only.
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &replicatedTime,
+		}
+
+		// Store the progress details.
+		if err := jobs.StoreLegacyProgress(ctx, txn, jobID, streamProgress); err != nil {
+			return err
+		}
+
+		// Store the highwater to ProgressStorage. We throttle this separately
+		// from the legacy progress writes since ProgressStorage.Set is more
+		// expensive (includes history writes and pruning). Update at most once
+		// per second to avoid contention, or always on status changes.
+		const progressStorageMinInterval = time.Second
+		shouldUpdateProgressStorage := statusMessage != "" ||
+			timeutil.Since(sf.lastProgressStorageUpdate) >= progressStorageMinInterval
+		if shouldUpdateProgressStorage && sf.replicatedTimeAtStart.Less(replicatedTime) {
+			if err := jobs.ProgressStorage(jobID).Set(ctx, txn, math.NaN(), replicatedTime); err != nil {
+				return err
 			}
 		}
 
-		ju.UpdateProgress(progress)
+		// Also update the status storage table for SHOW JOB's running_status column.
+		if statusMessage != "" {
+			if err := jobs.StatusStorage(jobID).Set(ctx, txn, statusMessage); err != nil {
+				return err
+			}
+		}
+
+		if shouldUpdateProgressStorage {
+			sf.lastProgressStorageUpdate = timeutil.Now()
+		}
 
 		// Update the protected timestamp record protecting the destination tenant's
 		// keyspan if the replicatedTime has moved forward since the last time we
 		// recorded progress. This makes older revisions of replicated values with a
 		// timestamp less than replicatedTime - ReplicationTTLSeconds eligible for
 		// garbage collection.
-		replicationDetails := md.Payload.GetStreamIngestion()
+		payload, err := jobs.LoadLegacyPayload(ctx, txn, jobID)
+		if err != nil {
+			return err
+		}
+		replicationDetails := payload.(jobspb.StreamIngestionDetails)
 		if replicationDetails.ProtectedTimestampRecordID == nil {
 			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
 				"record over the destination tenant's keyspan")
@@ -402,7 +434,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 		}
 
 		// No need to protect anything below replication start time.
-		replicationStartTime := md.Payload.GetStreamIngestion().ReplicationStartTime
+		replicationStartTime := replicationDetails.ReplicationStartTime
 		newProtectAbove := replicationutils.ResolveHeartbeatTime(
 			replicatedTime, replicationStartTime, streamProgress.CutoverTime, replicationDetails.ReplicationTTLSeconds)
 
