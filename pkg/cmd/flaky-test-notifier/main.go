@@ -24,7 +24,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	sf "github.com/snowflakedb/gosnowflake"
 )
 
@@ -39,6 +43,9 @@ const (
 	snowflakeUsernameEnv   = "SNOWFLAKE_USER"
 	snowflakePrivateKeyEnv = "SNOWFLAKE_PRIVATE_KEY"
 
+	// githubAPITokenEnv is used for posting GitHub issues
+	githubAPITokenEnv = "GITHUB_API_TOKEN"
+
 	failRateCutoff = 0.05
 	maxAlerts      = 3
 
@@ -50,11 +57,13 @@ The following options are available:
 
     lookback-days (default 7): configure how many days to look back for flaky tests.
     dry-run: do not post any GitHub issues. Just print what would be posted.
+    use-test-data: instead of looking up test data, use a hard-coded set of "flaky tests" (for testing).
 
 The following environment variables must be set:
 
     SNOWFLAKE_USER
     SNOWFLAKE_PRIVATE_KEY
+    GITHUB_API_TOKEN
 `
 )
 
@@ -62,8 +71,10 @@ var (
 	flags                     = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	dryRun                    = flags.Bool("dry-run", false, "if true, only print what would be done without making any changes")
 	lookbackDays              = flags.Int("lookback-days", 7, "number of days to look back for flaky tests")
+	useTestData               = flags.Bool("use-test-data", false, "if true, use hard-coded test data instead of querying Snowflake")
 	snowflakeUsername         = os.Getenv(snowflakeUsernameEnv)
 	snowflakePrivateKeyString = os.Getenv(snowflakePrivateKeyEnv)
+	githubAPIToken            = os.Getenv(githubAPITokenEnv)
 
 	tcHost *url.URL = func() *url.URL {
 		u, err := url.Parse("https://teamcity.cockroachdb.com")
@@ -72,7 +83,20 @@ var (
 		}
 		return u
 	}()
+
+	co             *codeowners.CodeOwners
+	codeownersOnce sync.Once
 )
+
+func initCodeOwners() {
+	codeownersOnce.Do(func() {
+		co_, err := codeowners.DefaultLoadCodeOwners()
+		if err != nil {
+			panic(err)
+		}
+		co = co_
+	})
+}
 
 //go:embed failed-tc-tests.sql
 var failedTeamCityTestsQuery string
@@ -89,6 +113,7 @@ type TestFailure interface {
 	Test() string
 	Links() []*url.URL
 	FailureRate() float64 // 0.0-1.0
+	TotalRuns() int64     // total number of runs (passes + failures)
 }
 
 // A TeamCityTest is a test that is executed directly on TeamCity, not via
@@ -125,6 +150,10 @@ func (tc *TeamCityTest) FailureRate() float64 {
 	return float64(len(tc.FailedBuilds)) / float64(tc.PassCount+int64(len(tc.FailedBuilds)))
 }
 
+func (tc *TeamCityTest) TotalRuns() int64 {
+	return tc.PassCount + int64(len(tc.FailedBuilds))
+}
+
 // A TeamCityEngflowTest is a test that is executed via EngFlow remote execution,
 // but driven by a machine in TeamCity.
 type TeamCityEngflowTest struct {
@@ -157,6 +186,10 @@ func (tce *TeamCityEngflowTest) FailureRate() float64 {
 	return float64(len(tce.FailedBuilds)) / float64(tce.PassCount+int64(len(tce.FailedBuilds)))
 }
 
+func (tce *TeamCityEngflowTest) TotalRuns() int64 {
+	return tce.PassCount + int64(len(tce.FailedBuilds))
+}
+
 // A GithubEngflowTest is a test that is executed via EngFlow remote execution,
 // but driven by a machine in GitHub Actions.
 type GithubEngflowTest struct {
@@ -186,6 +219,10 @@ func (get *GithubEngflowTest) Links() []*url.URL {
 
 func (get *GithubEngflowTest) FailureRate() float64 {
 	return float64(len(get.FailedBuilds)) / float64(get.PassCount+int64(len(get.FailedBuilds)))
+}
+
+func (get *GithubEngflowTest) TotalRuns() int64 {
+	return get.PassCount + int64(len(get.FailedBuilds))
 }
 
 func isSubtest(test string) bool {
@@ -241,11 +278,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if snowflakeUsername == "" {
-		log.Fatalf("must set %s\n", snowflakeUsernameEnv)
+	if !*useTestData {
+		if snowflakeUsername == "" {
+			log.Fatalf("must set %s\n", snowflakeUsernameEnv)
+		}
+		if snowflakePrivateKeyString == "" {
+			log.Fatalf("must set %s\n", snowflakePrivateKeyEnv)
+		}
 	}
-	if snowflakePrivateKeyString == "" {
-		log.Fatalf("must set %s\n", snowflakePrivateKeyEnv)
+	if githubAPIToken == "" && !*dryRun {
+		log.Fatalf("must set %s (or use --dry-run)\n", githubAPITokenEnv)
 	}
 
 	ctx := context.Background()
@@ -256,43 +298,48 @@ func main() {
 }
 
 func impl(ctx context.Context) error {
-	db, err := connectToSnowflake(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
-
-	tcTests, err := loadTeamCityTests(ctx, db)
-	if err != nil {
-		return err
-	}
-
-	tcEngflowTests, err := loadTCEngflowTests(ctx, db)
-	if err != nil {
-		return err
-	}
-
-	ghEngflowTests, err := loadGithubEngflowTests(ctx, db)
-	if err != nil {
-		return err
-	}
-
-	// Aggregate all tests into a single slice
 	var allTests []TestFailure
-	for _, t := range tcTests {
-		allTests = append(allTests, t)
+
+	if *useTestData {
+		allTests = loadTestData()
+	} else {
+		db, err := connectToSnowflake(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = db.Close() }()
+
+		tcTests, err := loadTeamCityTests(ctx, db)
+		if err != nil {
+			return err
+		}
+
+		tcEngflowTests, err := loadTCEngflowTests(ctx, db)
+		if err != nil {
+			return err
+		}
+
+		ghEngflowTests, err := loadGithubEngflowTests(ctx, db)
+		if err != nil {
+			return err
+		}
+
+		// Aggregate all tests into a single slice
+		for _, t := range tcTests {
+			allTests = append(allTests, t)
+		}
+		for _, t := range tcEngflowTests {
+			allTests = append(allTests, t)
+		}
+		for _, t := range ghEngflowTests {
+			allTests = append(allTests, t)
+		}
 	}
-	for _, t := range tcEngflowTests {
-		allTests = append(allTests, t)
-	}
-	for _, t := range ghEngflowTests {
-		allTests = append(allTests, t)
-	}
+
 	testsToAlert := chooseTests(allTests)
 
+	fmt.Printf("\nFound %d flaky tests to alert on:\n", len(testsToAlert))
 	if *dryRun {
-		// Print summary of tests to alert on
-		fmt.Printf("\nFound %d flaky tests to alert on:\n", len(testsToAlert))
 		for _, fs := range testsToAlert {
 			fmt.Printf("Test %s.%s:\n", fs[0].Package(), fs[0].Test())
 			for _, t := range fs {
@@ -300,9 +347,16 @@ func impl(ctx context.Context) error {
 			}
 			fmt.Println("")
 		}
+
+		fmt.Println("Dry run mode - not posting any issues")
+		return nil
 	}
 
-	// TODO: Create GitHub issues for testsToAlert
+	// Post GitHub issues for flaky tests
+	if err := postGitHubIssues(ctx, testsToAlert); err != nil {
+		return fmt.Errorf("posting GitHub issues: %w", err)
+	}
+
 	return nil
 }
 
@@ -425,6 +479,19 @@ func loadGithubEngflowTests(ctx context.Context, db *gosql.DB) ([]*GithubEngflow
 	fmt.Printf("loaded %d tests\n", len(tests))
 
 	return tests, nil
+}
+
+// loadTestData returns hard-coded test data for testing purposes.
+func loadTestData() []TestFailure {
+	return []TestFailure{
+		&TeamCityTest{
+			BuildType:    "Cockroach_UnitTests",
+			BuildName:    "Cockroach Unit Tests",
+			TestName:     "pkg/cmd/dev: TestDataDriven",
+			PassCount:    5,
+			FailedBuilds: []int64{12345, 12346, 12347, 12350, 12355},
+		},
+	}
 }
 
 // parseSnowflakeArray parses a Snowflake array string (JSON format) into a slice of int64
@@ -553,4 +620,63 @@ func chooseTests(failures []TestFailure) [][]TestFailure {
 	}
 
 	return groupedFailures[0:cutoff]
+}
+
+// postGitHubIssues posts GitHub issues for the given flaky tests.
+func postGitHubIssues(ctx context.Context, testsToAlert [][]TestFailure) error {
+	initCodeOwners()
+
+	opts := &issues.Options{
+		Token:  githubAPIToken,
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		Branch: "master",
+	}
+
+	for _, failures := range testsToAlert {
+		first := failures[0]
+		pkgName := first.Package()
+		testName := first.Test()
+
+		// Get code owners for this test.
+		teams, logs := co.GetTestOwner(pkgName, testName)
+		for _, line := range logs {
+			log.Println(line)
+		}
+
+		var mentions []string
+		labels := []string{issues.TestFailureLabel}
+		for _, tm := range teams {
+			if !tm.SilenceMentions {
+				var hasAliases bool
+				for al, purp := range tm.Aliases {
+					if purp == team.PurposeUnittest {
+						hasAliases = true
+						mentions = append(mentions, "@"+strings.TrimSpace(string(al)))
+					}
+				}
+				if !hasAliases {
+					mentions = append(mentions, "@"+string(tm.Name()))
+				}
+			}
+			labels = append(labels, tm.Labels()...)
+		}
+
+		formatter := &flakyTestFormatter{failures: failures}
+
+		req := issues.PostRequest{
+			PackageName:     pkgName,
+			TestName:        testName,
+			Labels:          labels,
+			MentionOnCreate: mentions,
+		}
+
+		result, err := issues.Post(ctx, log.Default(), formatter, req, opts)
+		if err != nil {
+			return fmt.Errorf("posting issue for %s.%s: %w", pkgName, testName, err)
+		}
+		fmt.Printf("Posted issue for %s.%s: %s\n", pkgName, testName, result)
+	}
+
+	return nil
 }

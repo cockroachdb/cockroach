@@ -157,11 +157,13 @@ type Options struct {
 	Token            string // GitHub API token
 	Org              string
 	Repo             string
-	SHA              string
+	SHA              string // optional; if empty, commit info is omitted from issue body
 	Branch           string
 	GetBinaryVersion func() string
-	// One of the following sub-structs is expected to be populated. Post()
-	// will fail if one is not.
+	// At most one of the following sub-structs is expected to be populated.
+	// When neither is set, no build URL is included in the issue. The
+	// IssueFormatter is responsible for providing any necessary links in
+	// this case.
 	TeamCityOptions *TeamCityOptions
 	EngFlowOptions  *EngFlowOptions
 }
@@ -263,16 +265,24 @@ func (p *poster) templateData(
 	if req.Artifacts != "" {
 		artifactsURL = p.teamcityArtifactsURL(req.Artifacts).String()
 	}
+	var commitURL string
+	if p.SHA != "" {
+		commitURL = fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA)
+	}
+	var buildURL string
+	if u := p.buildURL(); u != nil {
+		buildURL = u.String()
+	}
 	return TemplateData{
 		PostRequest:      req,
 		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
 		Parameters:       p.parameters(req.ExtraParams),
 		CondensedMessage: CondensedMessage(req.Message),
 		Commit:           p.SHA,
-		CommitURL:        fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
+		CommitURL:        commitURL,
 		Branch:           p.Branch,
 		ArtifactsURL:     artifactsURL,
-		URL:              p.buildURL().String(),
+		URL:              buildURL,
 		RelatedIssues:    relatedIssues,
 	}
 }
