@@ -249,9 +249,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
 
 		// Check if the table being imported into is starting empty, in which case
-		// we can cheaply clear-range instead of revert-range to cleanup (or if the
-		// cluster has finalized to 22.1, use DeleteRange without predicate
-		// filtering).
+		// we can cheaply clear-range instead of DeleteRange to cleanup.
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
 		res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
@@ -260,6 +258,31 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		details.Table.WasEmpty = len(res) == 0
 		details.Tables[0].WasEmpty = len(res) == 0
+		// If the table is non-empty, query for the row count of the table and
+		// store it to job details.
+		if len(res) > 0 {
+			var rowCount uint64
+			if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				row, err := txn.QueryRowEx(
+					ctx,
+					"import-initial-row-count",
+					txn.KV(),
+					sessiondata.NodeUserSessionDataOverride,
+					fmt.Sprintf("SELECT count(*) FROM [%d AS t]", tblDesc.GetID()),
+				)
+				if err != nil {
+					return errors.Wrap(err, "querying initial row count")
+				}
+				rowCount = uint64(tree.MustBeDInt(row[0]))
+				return nil
+			}); err != nil {
+				return err
+			}
+			details.Table.InitialRowCount = rowCount
+			details.Tables[0].InitialRowCount = rowCount
+		}
 
 		// Update the descriptor in the job record and in the database
 		details.Table.Desc.ImportStartWallTime = details.Walltime
