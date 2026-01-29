@@ -2090,11 +2090,12 @@ func (m *Manager) AcquireByName(
 	// way: look in the database to resolve the name, then acquire a new lease.
 	var err error
 	id, err := m.resolveName(ctx, timestamp.GetTimestamp(), parentID, parentSchemaID, name)
-	if err != nil &&
-		(timestamp.GetTimestamp() == timestamp.GetBaseTimestamp() ||
-			!errors.Is(err, catalog.ErrDescriptorNotFound)) {
-		return nil, err
-	} else if errors.Is(err, catalog.ErrDescriptorNotFound) {
+	if err != nil {
+		if timestamp.GetTimestamp() == timestamp.GetBaseTimestamp() ||
+			(!errors.Is(err, catalog.ErrDescriptorNotFound) &&
+				!errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil))) {
+			return nil, err
+		}
 		// The descriptor was not found at the lease timestamp, so attempt the
 		// real timestamp in use by this txn. This implies the object may have
 		// just been created.
@@ -3735,4 +3736,12 @@ func (m *Manager) GetReadTimestamp(ctx context.Context, timestamp hlc.Timestamp)
 // TestingGetBoundAccount returns the bound account used by the lease manager.
 func (m *Manager) TestingGetBoundAccount() *mon.ConcurrentBoundAccount {
 	return m.boundAccount
+}
+
+// TestingGetGCLeaseTimestamp returns a timestamp that will intentionally be GCed.
+func TestingGetGCLeaseTimestamp(readTimestamp hlc.Timestamp) ReadTimestamp {
+	return &LeaseTimestamp{
+		ReadTimestamp:  readTimestamp,
+		LeaseTimestamp: hlc.Timestamp{}.Next(),
+	}
 }

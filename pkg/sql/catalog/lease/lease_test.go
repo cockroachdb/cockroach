@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -4136,4 +4137,62 @@ func TestLeaseManagerLockedTimestampRenames(t *testing.T) {
 		})
 		require.NoError(t, grp.Wait())
 	})
+}
+
+// TestLeaseBeforeGC validates if a lease timestamp for some reason is before
+// a GC interval, we correctly fallback to the read timestamp from the txn.
+func TestLeaseBeforeGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	lease.WaitForInitialVersion.Override(ctx, &st.SV, false)
+
+	ts, conn, _ := serverutils.StartServer(
+		t, base.TestServerArgs{
+			Settings: st,
+		})
+	defer ts.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	// Drop the table and GC the system tables involved.
+	runner.Exec(t, "CREATE TABLE t1(n int)")
+	var oldID descpb.ID
+	row := runner.QueryRow(t, `SELECT 't1'::REGCLASS::OID`)
+	row.Scan(&oldID)
+	runner.Exec(t, "DROP TABLE t1")
+	runner.Exec(t, "SELECT crdb_internal.unsafe_delete_descriptor($1);", oldID)
+	{
+		gcr := kvpb.GCRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    keys.SystemSQLCodec.TablePrefix(keys.SystemDatabaseID),
+				EndKey: keys.MaxKey,
+			},
+			Threshold: ts.Clock().Now(),
+		}
+		if _, err := kv.SendWrapped(
+			ctx, ts.SystemLayer().DistSenderI().(*kvcoord.DistSender), &gcr,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Recreate the user table.
+	runner.Exec(t, "CREATE TABLE t1(n int)")
+	row = runner.QueryRow(t, `SELECT "parentID", "parentSchemaID" FROM system.namespace WHERE name='t1'`)
+	var parentID, parentSchemaID descpb.ID
+	row.Scan(&parentID, &parentSchemaID)
+
+	now := ts.Clock().Now()
+	// Intentionally ask the user table with a timestamp that
+	// will be GCed.
+	lm := ts.LeaseManager().(*lease.Manager)
+	rs := lease.TestingGetGCLeaseTimestamp(now)
+	systemDesc, err := lm.AcquireByName(ctx, rs, parentID, parentSchemaID, "t1")
+	require.NoError(t, err)
+	defer systemDesc.Release(ctx)
+	systemDesc, err = lm.Acquire(ctx, rs, systemDesc.GetID())
+	require.NoError(t, err)
+	defer systemDesc.Release(ctx)
 }
