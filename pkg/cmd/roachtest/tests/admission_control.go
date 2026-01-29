@@ -42,4 +42,5 @@ func registerAdmission(r registry.Registry) {
 	registerDiskBandwidthOverload(r)
 	registerDiskIOPSOverload(r)
 	registerElasticWorkloadMixedVersion(r)
+	registerSingleNodeIndexBackfill(r)
 }
