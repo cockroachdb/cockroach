@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
@@ -92,6 +93,12 @@ type CatalogBuiltins interface {
 		rowDatums *tree.DTuple,
 		performCast CastFunc,
 	) ([]byte, error)
+
+	// DecodeTableIndexKey decodes an encoded key and resolves it to
+	// table, index, and column information, returning the result as JSON.
+	// Returns an error if the key cannot be decoded.
+	// Returns a partial result if descriptors cannot be found.
+	DecodeTableIndexKey(ctx context.Context, key []byte) (json.JSON, error)
 
 	// NumGeometryInvertedIndexEntries computes the number of inverted index
 	// entries we'd expect to generate from a given geometry value given the

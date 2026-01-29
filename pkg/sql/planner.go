@@ -500,7 +500,7 @@ func newInternalPlanner(
 	p.schemaResolver.sessionDataStack = sds
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
-	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
+	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors(), p)
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 	p.statsCollector = &sslocal.StatsCollector{}
 
@@ -1001,7 +1001,7 @@ func (p *planner) resetPlanner(
 
 	p.schemaResolver.txn = txn
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
-	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
+	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors(), p)
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil

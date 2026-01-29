@@ -27,8 +27,9 @@ func (ec *Builtins) EncodeTableIndexKey(
 	rowDatums *tree.DTuple,
 	performCast func(context.Context, tree.Datum, *types.T) (tree.Datum, error),
 ) ([]byte, error) {
-	// Get the referenced table and index.
-	tableDesc, err := ec.dc.ByIDWithLeased(ec.txn).WithoutNonPublic().Get().Table(ctx, tableID)
+	// Get the referenced table and index. Use ByIDWithoutLeased to avoid
+	// acquiring descriptor leases that could interfere with concurrent schema changes.
+	tableDesc, err := ec.dc.ByIDWithoutLeased(ec.txn).WithoutNonPublic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}
