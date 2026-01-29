@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "zone_config.go",
         "zone_config_helper.go",
+        "zone_config_validation.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/zoneconfig",
     visibility = ["//visibility:public"],
@@ -15,12 +16,17 @@ go_library(
         "//pkg/kv",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/zone",
+        "//pkg/sql/regions",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
