@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	configtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/health"
@@ -43,10 +44,12 @@ type Api struct {
 	metrics     bool
 	metricsPort int
 
-	authenticationDisabled bool
-	authenticationAudience string
-	authenticationHeader   string
-	authenticationIssuer   string
+	// authHeader is the HTTP header to extract authentication tokens from
+	authHeader string
+
+	// authenticator is the pluggable authentication/authorization implementation
+	// Always present - uses DisabledAuthenticator for development/testing
+	authenticator auth.IAuthenticator
 }
 
 func (a *Api) Init(l *logger.Logger) {
@@ -101,30 +104,24 @@ func (a *Api) Init(l *logger.Logger) {
 
 	// Add controllers' handlers and routes
 	for _, controller := range a.controllers {
-		for _, handler := range controller.GetHandlers() {
+		for _, handler := range controller.GetControllerHandlers() {
 
 			var handlers []gin.HandlerFunc
 
-			// Add authentication handler if authentication is enabled
-			// and then endpoint is authenticated (which is the default)
-			switch {
-			case handler.GetAuthenticationType() != controllers.AuthenticationTypeNone:
-				handlers = append(
-					[]gin.HandlerFunc{
-						func(c *gin.Context) {
-							controller.Authentication(
-								c,
-								a.authenticationDisabled,
-								a.authenticationHeader,
-								a.authenticationAudience,
-								a.authenticationIssuer,
-							)
-						},
-					},
-					handler.GetHandlers()...,
-				)
-			default:
-				handlers = handler.GetHandlers()
+			// Add authentication/authorization middleware if required
+			if handler.GetAuthenticationType() != controllers.AuthenticationTypeNone {
+				// Start with authentication middleware using the controller's method
+				middlewares := []gin.HandlerFunc{controller.AuthMiddleware(a.authenticator, a.authHeader)}
+
+				// Add authorization middleware if requirements are specified
+				if authzReq := handler.GetAuthorizationRequirement(); authzReq != nil {
+					middlewares = append(middlewares, controller.AuthzMiddleware(a.authenticator, authzReq))
+				}
+
+				// Append the actual handler functions
+				handlers = append(middlewares, handler.GetRouteHandlers()...)
+			} else {
+				handlers = handler.GetRouteHandlers()
 			}
 
 			ginEngine.Handle(

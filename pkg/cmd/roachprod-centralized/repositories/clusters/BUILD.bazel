@@ -1,22 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "stores",
-    srcs = ["stores.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/stores",
-    visibility = ["//visibility:public"],
-    deps = ["//pkg/roachprod/cloud"],
-)
-
-go_library(
-    name = "repositories",
-    srcs = ["repositories.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories",
-    visibility = ["//visibility:public"],
-    deps = ["//pkg/roachprod/cloud"],
-)
-
-go_library(
     name = "clusters",
     srcs = ["clusters.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters",

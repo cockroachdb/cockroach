@@ -39,12 +39,19 @@ type Config struct {
 			Port    int    `env:"PORT" default:"8081" description:"Metrics HTTP port"`
 		} `env:"METRICS" description:"Metrics configuration"`
 		Authentication struct {
-			Disabled bool `env:"DISABLED" default:"false" description:"Disable API authentication"`
-			JWT      struct {
-				Header   string `env:"HEADER" default:"X-Goog-IAP-JWT-Assertion" description:"JWT authentication header"`
+			Type   string `env:"TYPE" default:"jwt" description:"Authentication type (disabled, jwt, bearer)"`
+			Header string `env:"HEADER" default:"Authorization" description:"HTTP header for authentication token"`
+			JWT    struct {
 				Audience string `env:"AUDIENCE" default:"" description:"JWT audience for authentication"`
 				Issuer   string `env:"ISSUER" default:"https://cloud.google.com/iap" description:"JWT issuer for authentication"`
 			} `env:"JWT" description:"JWT authentication configuration"`
+			Bearer struct {
+				OktaDomain       string `env:"OKTA_DOMAIN" default:"" description:"Okta domain (e.g., dev-123456.okta.com)"`
+				OktaClientID     string `env:"OKTA_CLIENT_ID" default:"" description:"Okta OAuth2 client ID"`
+				OktaClientSecret string `env:"OKTA_CLIENT_SECRET" default:"" description:"Okta OAuth2 client secret"`
+				OktaIssuer       string `env:"OKTA_ISSUER" default:"" description:"Okta issuer URL (e.g., https://dev-123456.okta.com/oauth2/default)"`
+				OktaAudience     string `env:"OKTA_AUDIENCE" default:"" description:"Okta audience for token validation"`
+			} `env:"BEARER" description:"Bearer token authentication configuration"`
 		} `env:"AUTHENTICATION" description:"API authentication configuration"`
 	} `env:"API" description:"API configuration"`
 	InstanceHealthTimeoutSeconds int `env:"INSTANCE_HEALTH_TIMEOUT_SECONDS" default:"3" description:"Timeout in seconds to consider an instance healthy"`
@@ -59,6 +66,9 @@ type Config struct {
 	} `env:"DATABASE" description:"Database configuration"`
 	CloudProviders []CloudProvider `env:"CLOUDPROVIDERS" description:"List of cloud providers"`
 	DNSProviders   []DNSProvider   `env:"DNSPROVIDERS" description:"List of DNS providers"`
+	Bootstrap      struct {
+		SCIMToken string `env:"SCIM_TOKEN" default:"" description:"Bootstrap SCIM service account token (used on first startup when no service accounts exist)"`
+	} `env:"BOOTSTRAP" description:"Bootstrap configuration for initial setup"`
 }
 
 // CloudProvider represents a cloud provider configuration.
