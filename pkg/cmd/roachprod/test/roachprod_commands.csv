@@ -1,0 +1,68 @@
+command,description
+create,create a cluster
+grow,grow a cluster by adding nodes
+populate-etc-hosts,populate /etc/hosts
+shrink,shrink a cluster by removing nodes
+reset,reset VMs in a cluster
+destroy,destroy clusters
+extend,extend the lifetime of a cluster
+load-balancer,manage and query load balancers
+list,list all clusters
+sync,sync ssh keys/config and hosts files
+gc,GC expired clusters and unused AWS keypairs
+setup-ssh,set up ssh for a cluster
+status,retrieve the status of nodes in a cluster
+monitor,monitor the status of nodes in a cluster
+start,start nodes on a cluster
+update-targets,update prometheus target configurations for a cluster
+stop,stop nodes on a cluster
+start-sql,start the SQL/HTTP service for a virtual cluster as a separate process
+stop-sql,stop sql instances on a cluster
+deploy,deploy a new version of cockroach
+init,initialize the cluster
+run,run a command on the nodes in a cluster
+signal,send signal to cluster
+wipe,wipe a cluster
+destroy-dns,cleans up DNS entries for the cluster
+reformat,reformat disks in a cluster
+install,install 3rd party software
+distribute-certs,distribute certificates to the nodes in a cluster
+ssh-keys,manage SSH public keys added to clusters created by roachprod
+put,copy a local file to the nodes in a cluster
+get,copy a remote file from the nodes in a cluster
+stage,stage cockroach binaries
+stageurl,print URL to cockroach binaries
+download,download 3rd party tools
+sql,run `cockroach sql` on a remote cluster
+ip,get the IP addresses of the nodes in a cluster
+pgurl,generate pgurls for the nodes in a cluster
+adminurl,generate admin UI URLs for the nodes in a cluster
+logs,retrieve and merge logs in a cluster
+pprof,capture a pprof profile from the specified nodes
+cached-hosts,list all clusters (and optionally their host numbers) from local cache
+version,print version information
+get-providers,print providers state (active/inactive)
+grafana-start,spins up a prometheus and grafana instance on the last node in the cluster; NOTE: for arm64 clusters use --arch arm64
+grafana-stop,spins down prometheus and grafana instances on the last node in the cluster
+grafana-dump,dump prometheus data to the specified directory
+grafanaurl,returns a url to the grafana dashboard
+grafana-annotation,adds an annotation to the specified grafana instance
+pyroscope,manage pyroscope profiling stack
+storage,storage enables administering storage related commands and configurations
+snapshot,snapshot enables creating/listing/deleting/applying cluster snapshots
+update,check gs://cockroach-nightly for a new roachprod binary; update if available
+jaeger-start,starts a jaeger container on the last node in the cluster
+jaeger-stop,stops a running jaeger container on the last node in the cluster
+jaegerurl,returns the URL of the cluster's jaeger UI
+fluent-bit-start,Install and start Fluent Bit
+fluent-bit-stop,Stop Fluent Bit
+opentelemetry-start,Install and start the OpenTelemetry Collector
+opentelemetry-stop,Stop the OpenTelemetry Collector
+parca-agent-start,Install and start the Parca Agent
+parca-agent-stop,Stop the Parca Agent
+fetchlogs,download the logs from the cluster
+get-latest-pprof,downloads the latest pprof file which is created on or before the provided time-before
+fetch-certs,downloads the PGUrl certs directory from the cluster
+chaos,Failure injection related commands
+help,Help about any command
+completion,Generate the autocompletion script for the specified shell
