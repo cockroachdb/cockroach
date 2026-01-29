@@ -97,12 +97,11 @@ func StartSampler(
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-ticker.C:
-					lastIntervalHistogram := s.lastIntervalHistogram()
-					if lastIntervalHistogram == nil {
+					schedulingLatenciesHistogram := s.getAndClearLastStatsHistogram()
+					if schedulingLatenciesHistogram == nil {
 						continue
 					}
-
-					schedulerLatencyHistogram.update(lastIntervalHistogram)
+					schedulerLatencyHistogram.update(schedulingLatenciesHistogram)
 				}
 			}
 		})
@@ -143,13 +142,27 @@ func StartSampler(
 	})
 }
 
-// sampler contains the local state maintained across scheduler latency samples.
+// sampler reads scheduler latency histograms from the Go runtime every
+// samplePeriod (~100ms). Each read returns cumulative counts since process
+// start.
 type sampler struct {
 	listener LatencyObserver
 	mu       struct {
 		syncutil.Mutex
-		ringBuffer            ring.Buffer[*metrics.Float64Histogram]
-		lastIntervalHistogram *metrics.Float64Histogram
+
+		// ringBuffer holds the last N cumulative histograms read from the
+		// runtime. N = sampleDuration / samplePeriod (default: 2.5s / 100ms =
+		// 25 readings). Used to compute:
+		// (a) delta = current - previous (~100ms, accumulated in
+		// schedulerLatencyAccumulator)
+		// (b) p99 over the sliding window = current - oldest (~2.5s, for
+		// elastic CPU AC).
+		ringBuffer ring.Buffer[*metrics.Float64Histogram]
+
+		// schedulerLatencyAccumulator sums the deltas from each samplePeriod
+		// tick. Cleared and returned by getAndClearLastStatsHistogram() every
+		// ~10s which will be used to export to runtimeHistogram.
+		schedulerLatencyAccumulator *metrics.Float64Histogram
 	}
 }
 
@@ -169,29 +182,52 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 		numSamples = 1 // we need at least one sample to compare (also safeguards against integer division)
 	}
 	s.mu.ringBuffer.Resize(numSamples)
-	s.mu.lastIntervalHistogram = nil
+	s.mu.schedulerLatencyAccumulator = nil
 }
 
-// sampleOnTickAndInvokeCallbacks samples scheduler latency stats as the ticker
-// has ticked. It invokes all callbacks registered with this package.
+// sampleOnTickAndInvokeCallbacks is called every samplePeriod (default:
+// ~100ms). It:
+//  1. Reads the cumulative histogram from runtime/metrics.
+//  2. Computes delta from the previous sample and adds to accumulator.
+//  3. Invokes listener with p99 latency over the sliding window (default: ~2.5s),.
 func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Capture the previous sample before adding the new one.
+	var prevSample *metrics.Float64Histogram
+	if s.mu.ringBuffer.Len() > 0 {
+		prevSample = s.mu.ringBuffer.GetFirst()
+	}
+
+	// Runtime provides cumulative counts since process start.
 	latestCumulative := sample()
 	oldestCumulative, ok := s.recordLocked(latestCumulative)
 	if !ok {
 		return
 	}
-	s.mu.lastIntervalHistogram = sub(latestCumulative, oldestCumulative)
-	p99 := time.Duration(int64(percentile(s.mu.lastIntervalHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 
-	// Perform the callback if there's a listener.
+	// Accumulate delta (latest - previous) for export via getAndClearLastStatsHistogram().
+	if prevSample != nil {
+		sampleDelta := sub(latestCumulative, prevSample)
+		if s.mu.schedulerLatencyAccumulator == nil {
+			s.mu.schedulerLatencyAccumulator = sampleDelta
+		} else {
+			s.mu.schedulerLatencyAccumulator = add(s.mu.schedulerLatencyAccumulator, sampleDelta)
+		}
+	}
+
+	// Compute p99 over sliding window (latest - oldest) and notify listener.
 	if s.listener != nil {
+		windowHistogram := sub(latestCumulative, oldestCumulative)
+		p99 := time.Duration(int64(percentile(windowHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 		s.listener.SchedulerLatency(p99, period)
 	}
 }
 
+// recordLocked adds sample to the ring buffer, evicting the oldest if full.
+// Returns the evicted sample (for computing sliding window) or nil if buffer
+// wasn't full.
 func (s *sampler) recordLocked(
 	sample *metrics.Float64Histogram,
 ) (oldest *metrics.Float64Histogram, ok bool) {
@@ -203,14 +239,19 @@ func (s *sampler) recordLocked(
 	return oldest, oldest != nil
 }
 
-func (s *sampler) lastIntervalHistogram() *metrics.Float64Histogram {
+// getAndClearLastStatsHistogram returns the accumulated deltas since the last
+// call and resets the accumulator. Called every statsInterval (~10s) to provide
+// delta counts for runtimeHistogram.update().
+func (s *sampler) getAndClearLastStatsHistogram() *metrics.Float64Histogram {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.lastIntervalHistogram
+	res := s.mu.schedulerLatencyAccumulator
+	s.mu.schedulerLatencyAccumulator = nil
+	return res
 }
 
-// sample the cumulative (since process start) scheduler latency histogram from
-// the go runtime.
+// sample reads the cumulative scheduler latency histogram from runtime/metrics.
+// Returns counts since process start (not deltas). Has fine-grained buckets.
 func sample() *metrics.Float64Histogram {
 	m := []metrics.Sample{
 		{
@@ -237,13 +278,23 @@ func clone(h *metrics.Float64Histogram) *metrics.Float64Histogram {
 	return res
 }
 
-// sub subtracts the counts of one histogram from another, assuming the bucket
+// sub subtracts the windowedCounts of one histogram from another, assuming the bucket
 // boundaries are the same. For cumulative scheduler latency histograms, this
 // can be used to compute an interval histogram.
 func sub(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
 	res := clone(a)
 	for i := 0; i < len(res.Counts); i++ {
 		res.Counts[i] -= b.Counts[i]
+	}
+	return res
+}
+
+// add adds the windowedCounts of one histogram to another, assuming the bucket
+// boundaries are the same.
+func add(a, b *metrics.Float64Histogram) *metrics.Float64Histogram {
+	res := clone(a)
+	for i := 0; i < len(res.Counts); i++ {
+		res.Counts[i] += b.Counts[i]
 	}
 	return res
 }
