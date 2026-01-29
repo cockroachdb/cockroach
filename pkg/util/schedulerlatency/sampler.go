@@ -79,6 +79,11 @@ func StartSampler(
 			// goroutines onto processors, i.e. are in the {micro,milli}-second
 			// range during normal operation. See TestHistogramBuckets for more
 			// details.
+			//
+			// NB: Go guarantees that sample().Buckets will be identical across
+			// calls for the lifetime of the process. This allows runtimeHistogram
+			// to rely on exact boundary alignment when aggregating counts. See:
+			// https://pkg.go.dev/runtime/metrics#Float64Histogram
 			cpuSchedulerLatencyBuckets := reBucketExpAndTrim(
 				sample().Buckets,                   // original buckets
 				1.1,                                // base
@@ -98,11 +103,11 @@ func StartSampler(
 				case <-stopper.ShouldQuiesce():
 					return
 				case <-ticker.C:
-					schedulingLatenciesHistogram := s.getAndClearLastStatsHistogram()
-					if schedulingLatenciesHistogram == nil {
+					deltaHist := s.getAndClearDeltaHistogram()
+					if deltaHist == nil {
 						continue
 					}
-					schedulerLatencyHistogram.update(schedulingLatenciesHistogram)
+					schedulerLatencyHistogram.recordDelta(deltaHist)
 				}
 			}
 		})
@@ -155,15 +160,15 @@ type sampler struct {
 		// runtime. N = sampleDuration / samplePeriod (default: 2.5s / 100ms =
 		// 25 readings). Used to compute:
 		// (a) delta = current - previous (~100ms, accumulated in
-		// schedulerLatencyAccumulator)
+		// deltaAccumulator)
 		// (b) p99 over the sliding window = current - oldest (~2.5s, for
 		// elastic CPU AC).
 		ringBuffer ring.Buffer[*metrics.Float64Histogram]
 
-		// schedulerLatencyAccumulator sums the deltas from each samplePeriod
-		// tick. Cleared and returned by getAndClearLastStatsHistogram() every
-		// ~10s which will be used to export to runtimeHistogram.
-		schedulerLatencyAccumulator *metrics.Float64Histogram
+		// deltaAccumulator sums the per-tick deltas (each ~100ms). Cleared and
+		// returned by getAndClearDeltaHistogram() every ~10s for export to
+		// runtimeHistogram.
+		deltaAccumulator *metrics.Float64Histogram
 	}
 }
 
@@ -183,7 +188,7 @@ func (s *sampler) setPeriodAndDuration(period, duration time.Duration) {
 		numSamples = 1 // we need at least one sample to compare (also safeguards against integer division)
 	}
 	s.mu.ringBuffer.Resize(numSamples)
-	s.mu.schedulerLatencyAccumulator = nil
+	s.mu.deltaAccumulator = nil
 }
 
 // sampleOnTickAndInvokeCallbacks is called every samplePeriod (default:
@@ -203,23 +208,21 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 
 	// Runtime provides cumulative counts since process start.
 	latestCumulative := sample()
-	oldestCumulative, ok := s.recordLocked(latestCumulative)
-	if !ok {
-		return
-	}
+	oldestCumulative := s.recordLocked(latestCumulative)
 
-	// Accumulate delta (latest - previous) for export via getAndClearLastStatsHistogram().
+	// Accumulate delta (latest - previous) for export via getAndClearDeltaHistogram().
 	if prevSample != nil {
-		sampleDelta := sub(latestCumulative, prevSample)
-		if s.mu.schedulerLatencyAccumulator == nil {
-			s.mu.schedulerLatencyAccumulator = sampleDelta
+		tickDelta := sub(latestCumulative, prevSample)
+		if s.mu.deltaAccumulator == nil {
+			s.mu.deltaAccumulator = tickDelta
 		} else {
-			s.mu.schedulerLatencyAccumulator = add(s.mu.schedulerLatencyAccumulator, sampleDelta)
+			s.mu.deltaAccumulator = add(s.mu.deltaAccumulator, tickDelta)
 		}
 	}
 
 	// Compute p99 over sliding window (latest - oldest) and notify listener.
-	if s.listener != nil {
+	// oldestCumulative is nil until the ring buffer fills up.
+	if s.listener != nil && oldestCumulative != nil {
 		windowHistogram := sub(latestCumulative, oldestCumulative)
 		p99 := time.Duration(int64(percentile(windowHistogram, 0.99) * float64(time.Second.Nanoseconds())))
 		s.listener.SchedulerLatency(p99, period)
@@ -227,27 +230,27 @@ func (s *sampler) sampleOnTickAndInvokeCallbacks(period time.Duration) {
 }
 
 // recordLocked adds sample to the ring buffer, evicting the oldest if full.
-// Returns the evicted sample (for computing sliding window) or nil if buffer
-// wasn't full.
-func (s *sampler) recordLocked(
-	sample *metrics.Float64Histogram,
-) (oldest *metrics.Float64Histogram, ok bool) {
+//
+// NB: Returns nil until the buffer fills up (after N samples where
+// N = sampleDuration / samplePeriod).
+func (s *sampler) recordLocked(sample *metrics.Float64Histogram) *metrics.Float64Histogram {
+	var oldest *metrics.Float64Histogram
 	if s.mu.ringBuffer.Len() == s.mu.ringBuffer.Cap() { // no more room, clear out the oldest
 		oldest = s.mu.ringBuffer.GetLast()
 		s.mu.ringBuffer.RemoveLast()
 	}
 	s.mu.ringBuffer.AddFirst(sample)
-	return oldest, oldest != nil
+	return oldest
 }
 
-// getAndClearLastStatsHistogram returns the accumulated deltas since the last
+// getAndClearDeltaHistogram returns the accumulated deltas since the last
 // call and resets the accumulator. Called every statsInterval (~10s) to provide
-// delta counts for runtimeHistogram.update().
-func (s *sampler) getAndClearLastStatsHistogram() *metrics.Float64Histogram {
+// delta counts for runtimeHistogram.recordDelta().
+func (s *sampler) getAndClearDeltaHistogram() *metrics.Float64Histogram {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res := s.mu.schedulerLatencyAccumulator
-	s.mu.schedulerLatencyAccumulator = nil
+	res := s.mu.deltaAccumulator
+	s.mu.deltaAccumulator = nil
 	return res
 }
 

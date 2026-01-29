@@ -261,10 +261,10 @@ func TestCloneHistogram(t *testing.T) {
 //	Every 100ms (samplePeriod):
 //	  - Sample Go runtime histogram (cumulative since process start)
 //	  - Compute delta from previous sample
-//	  - Accumulate delta into schedulerLatencyAccumulator
+//	  - Accumulate delta into deltaAccumulator
 //
 //	Every 10s (statsInterval):
-//	  - Pass accumulated observations to rh.update()
+//	  - Pass accumulated delta to rh.recordDelta()
 //	  - Clear accumulator
 //
 // Example timeline:
@@ -272,7 +272,7 @@ func TestCloneHistogram(t *testing.T) {
 //	Time 0-10s:  Accumulate ~100 samples of 100ms deltas → 10 total observations
 //	Time 10-20s: Accumulate ~100 samples of 100ms deltas → 6 total observations
 //
-// runtimeHistogram.update() receives these accumulated deltas and must:
+// runtimeHistogram.recordDelta() receives these accumulated deltas and must:
 //   - Accumulate into cumulativeCounts for Prometheus export (10 → 16)
 //   - Replace windowedCounts with latest delta for TSDB percentiles (10 → 6)
 func TestRuntimeHistogramCumulativeVsWindowed(t *testing.T) {
@@ -282,7 +282,7 @@ func TestRuntimeHistogramCumulativeVsWindowed(t *testing.T) {
 
 	// Simulate first statsInterval (e.g., 0s-10s): 10 accumulated observations.
 	// In production, this is the sum of ~100 deltas (one per 100ms sample).
-	rh.update(&metrics.Float64Histogram{
+	rh.recordDelta(&metrics.Float64Histogram{
 		Counts:  []uint64{0, 5, 3, 2, 0}, // 10 total observations
 		Buckets: buckets,
 	})
@@ -298,7 +298,7 @@ func TestRuntimeHistogramCumulativeVsWindowed(t *testing.T) {
 	require.Equal(t, cumSum1, winSum1)
 
 	// Simulate second statsInterval (e.g., 10s-20s): 6 accumulated observations.
-	rh.update(&metrics.Float64Histogram{
+	rh.recordDelta(&metrics.Float64Histogram{
 		Counts:  []uint64{0, 1, 2, 3, 0}, // 6 total observations
 		Buckets: buckets,
 	})
