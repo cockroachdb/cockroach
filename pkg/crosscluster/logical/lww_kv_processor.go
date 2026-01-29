@@ -177,10 +177,14 @@ func (p *kvRowProcessor) processRow(
 		return batchStats{}, errors.Wrap(err, "stripping tenant prefix")
 	}
 
-	row, err := p.decoder.DecodeKV(ctx, keyValue, cdcevent.CurrentRow, keyValue.Value.Timestamp, false)
+	row, status, err := p.decoder.DecodeKV(ctx, keyValue, cdcevent.CurrentRow, keyValue.Value.Timestamp, false)
 	if err != nil {
 		p.lastRow = cdcevent.Row{}
 		return batchStats{}, errors.Wrap(err, "decoding KeyValue")
+	}
+	if status != cdcevent.DecodeOK {
+		p.lastRow = cdcevent.Row{}
+		return batchStats{}, errors.Newf("unexpected decode status: %v", status)
 	}
 	dstTableID, ok := p.dstBySrc[row.TableID]
 	if !ok {
@@ -333,12 +337,15 @@ func (p *kvRowProcessor) addToBatch(
 		return err
 	}
 
-	prevRow, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
+	prevRow, prevStatus, err := p.decoder.DecodeKV(ctx, roachpb.KeyValue{
 		Key:   keyValue.Key,
 		Value: prevValue,
 	}, cdcevent.PrevRow, prevValue.Timestamp, false)
 	if err != nil {
 		return err
+	}
+	if prevStatus != cdcevent.DecodeOK {
+		return errors.Newf("unexpected decode status: %v", prevStatus)
 	}
 
 	if row.IsDeleted() {

@@ -205,13 +205,15 @@ func TestParquetRows(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				v := popRow(t)
 
-				updatedRow, err := decoder.DecodeKV(
+				updatedRow, status, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, cdcevent.CurrentRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, status)
 
-				prevRow, err := decoder.DecodeKV(
+				prevRow, prevStatus, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, prevStatus)
 
 				encodingOpts := changefeedbase.EncodingOptions{}
 
