@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1745,15 +1744,13 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 			name:            "non-final iteration duplicate at start",
 			injectIteration: 2,
 			injectAfterRows: 0,
-			// TODO(156934): have this emit a duplicate key error instead.
-			expErrRegex: `pebble: keys must be added in strictly increasing order`,
+			expErrRegex:     `duplicate key:`,
 		},
 		{
 			name:            "non-final iteration duplicate after few rows",
 			injectIteration: 2,
 			injectAfterRows: 80,
-			// TODO(156934): have this emit a duplicate key error instead.
-			expErrRegex: `pebble: keys must be added in strictly increasing order`,
+			expErrRegex:     `duplicate key:`,
 		},
 		{
 			name:            "final iteration duplicate at start",
@@ -1932,22 +1929,11 @@ func TestKVWriteCrossSSTDuplicateDetection(t *testing.T) {
 
 			require.Error(t, err, "expected duplicate key error for cross-SST duplicates")
 
-			// Verify the error indicates a duplicate key violation.
-			errStr := err.Error()
-			require.True(t,
-				strings.Contains(errStr, "duplicate key value violates unique constraint"),
-				"expected error indicating duplicate key, got: %v", err)
-
-			// Verify that the error comes from ValidateForwardIndexes (which doesn't
-			// include the offending key detail) rather than from
-			// NewUniquenessConstraintViolationError (which includes
-			// "Key (...)=(...) already exists.").
-			// TODO(161447): this error comes from the validation step in CREATE INDEX,
-			// which is _after_ the distributed merge pipeline. As such, it doesn't
-			// indicate the offending key. We should enhance the duplicate detection to
-			// surface the error sooner in the merge process and have it emit what the
-			// offending key was.
-			require.NotRegexp(t, `Key \(.*\)=\(.*\) already exists`, errStr)
+			// Verify the error indicates a duplicate key violation with key details
+			// (e.g., "/Table/104/2/100/0" or "/Tenant/10/Table/104/2/100/0"). The error
+			// is now detected during the merge process and includes the offending key.
+			require.Regexp(t, `duplicate key: (/Tenant/\d+)?/Table/\d+/\d+/\d+`, err.Error(),
+				"expected error to include key details, got: %v", err)
 		})
 	}
 }
