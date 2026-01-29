@@ -108,13 +108,11 @@ function detect_disks() {
 sudo touch {{ .OSInitializedFile }}
 `
 
-// writeStartupScript writes the startup script to a temp file.
-// Returns the path to the file.
-// After use, the caller should delete the temp file.
+// generateStartupScript generates the startup script content and returns it as bytes.
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(
+func generateStartupScript(
 	name string,
 	extraMountOpts string,
 	fileSystem vm.Filesystem,
@@ -122,8 +120,7 @@ func writeStartupScript(
 	enableFips bool,
 	remoteUser string,
 	bootDiskOnly bool,
-) (string, error) {
-
+) ([]byte, error) {
 	// We define a local type in case we need to add more provider-specific params in
 	// the future.
 	type tmplParams struct {
@@ -143,15 +140,46 @@ func writeStartupScript(
 		),
 	}
 
+	var buf bytes.Buffer
+	if err := vm.GenerateStartupScript(&buf, awsStartupScriptTemplate, args); err != nil {
+		return nil, errors.Wrapf(err, "unable to generate startup script")
+	}
+
+	return buf.Bytes(), nil
+}
+
+// writeStartupScript writes the startup script to a temp file.
+// Returns the path to the file.
+// After use, the caller should delete the temp file.
+//
+// extraMountOpts, if not empty, is appended to the default mount options. It is
+// a comma-separated list of options for the "mount -o" flag.
+func writeStartupScript(
+	name string,
+	extraMountOpts string,
+	fileSystem vm.Filesystem,
+	useMultiple bool,
+	enableFips bool,
+	remoteUser string,
+	bootDiskOnly bool,
+) (string, error) {
+	data, err := generateStartupScript(name, extraMountOpts, fileSystem, useMultiple, enableFips, remoteUser, bootDiskOnly)
+	if err != nil {
+		return "", err
+	}
+
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
 	if err != nil {
 		return "", err
 	}
-	defer tmpfile.Close()
 
-	err = vm.GenerateStartupScript(tmpfile, awsStartupScriptTemplate, args)
-	if err != nil {
-		return "", errors.Wrapf(err, "unable to generate startup script")
+	if _, err := tmpfile.Write(data); err != nil {
+		_ = tmpfile.Close()
+		return "", err
+	}
+
+	if err := tmpfile.Close(); err != nil {
+		return "", err
 	}
 
 	return tmpfile.Name(), nil

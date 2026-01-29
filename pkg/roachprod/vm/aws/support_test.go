@@ -6,7 +6,6 @@
 package aws
 
 import (
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -17,14 +16,11 @@ import (
 
 // TestWriteStartupScriptTemplate mainly tests the startup script tpl compiles.
 func TestWriteStartupScriptTemplate(t *testing.T) {
-	file, err := writeStartupScript("vm_name", "", vm.Zfs, false,
+	data, err := generateStartupScript("vm_name", "", vm.Zfs, false,
 		false, "ubuntu", false)
 	require.NoError(t, err)
 
-	f, err := os.ReadFile(file)
-	require.NoError(t, err)
-
-	echotest.Require(t, string(f), datapathutils.TestDataPath(t, "startup_script"))
+	echotest.Require(t, string(data), datapathutils.TestDataPath(t, "startup_script"))
 }
 
 // TestIOPSCalculation tests that IOPS are calculated correctly for io1/io2 volumes,

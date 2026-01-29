@@ -91,7 +91,7 @@ func (p *Provider) listWithSDK(
 			}
 			for _, template := range templates {
 				// Skip templates that are not marked as managed.
-				if managed, ok := template.Properties.Labels[ManagedLabel]; !(ok && managed == "true") {
+				if managed, ok := template.Properties.Labels[vm.TagManaged]; !(ok && managed == "true") {
 					continue
 				}
 				// There can be multiple dangling templates for the same cluster. We
