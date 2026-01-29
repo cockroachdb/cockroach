@@ -64,6 +64,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler",
         "//pkg/jobs/jobsprotectedts",
+        "//pkg/jobs/jobsretry",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/bulk",
