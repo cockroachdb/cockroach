@@ -840,26 +840,14 @@ func (db *DB) readFromDatabase(
 	kd := diskResolution.SlabDuration()
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
 		for _, source := range sources {
-			// If a TenantID is specified we may need to format the source in order to retrieve the correct data.
-			// e.g. if not system tenant we need the source to be of format nodeID-tenantID but if it is the
-			// system tenant we need the source to be of format nodeID. Otherwise we get all the data via the
-			// format nodeID-
-			if tenantID.IsSet() {
-				if !tenantID.IsSystem() {
-					source = tsutil.MakeTenantSource(source, tenantID.String())
-				}
-				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-				b.Get(key)
-			} else {
-				// Otherwise, we get the source associated with the system tenant.
-				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
-				b.Get(key)
-				// Then we scan all keys that match the tenant source prefix since the system tenant
-				// aggregates sources across all tenants.
-				startKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp)
-				endKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp).PrefixEnd()
-				b.Scan(startKey, endKey)
+			// Format the source based on the tenant filter. Non-system tenants
+			// use the format nodeID-tenantID; the system tenant and unfiltered
+			// queries use the bare nodeID which contains the aggregate.
+			if tenantID.IsSet() && !tenantID.IsSystem() {
+				source = tsutil.MakeTenantSource(source, tenantID.String())
 			}
+			key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+			b.Get(key)
 		}
 	}
 	if err := db.db.Run(ctx, b); err != nil {
@@ -904,11 +892,10 @@ func (db *DB) readAllSourcesFromDatabase(
 		return nil, err
 	}
 
-	if !tenantID.IsSet() {
-		return b.Results[0].Rows, nil
-	}
-
-	// Filter out rows that don't belong to the tenant source
+	// Filter rows based on the tenant filter. When no tenant filter is set or
+	// the system tenant is specified, keep only aggregate sources (without a
+	// tenant prefix) to avoid double-counting. For specific tenants, keep only
+	// their individually-tracked data.
 	var rows []kv.KeyValue
 	for _, row := range b.Results[0].Rows {
 		_, source, _, _, err := DecodeDataKey(row.Key)
@@ -916,7 +903,11 @@ func (db *DB) readAllSourcesFromDatabase(
 			return nil, err
 		}
 		_, tenantSource := tsutil.DecodeSource(source)
-		if tenantID.IsSystem() && tenantSource == "" || tenantSource == tenantID.String() {
+		if !tenantID.IsSet() || tenantID.IsSystem() {
+			if tenantSource == "" {
+				rows = append(rows, row)
+			}
+		} else if tenantSource == tenantID.String() {
 			rows = append(rows, row)
 		}
 	}
