@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-const substringTmpl = "pkg/sql/colexec/substring_tmpl.go"
+const substringTmpl = "pkg/sql/colexec/colexecbuiltins/substring_tmpl.go"
 
 func genSubstring(inputFileContents string, wr io.Writer) error {
 	r := strings.NewReplacer(

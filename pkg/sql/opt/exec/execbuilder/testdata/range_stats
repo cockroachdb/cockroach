@@ -9,5 +9,5 @@ EXPLAIN (VEC) SELECT crdb_internal.range_stats(start_key)
 ----
 │
 └ Node 1
-  └ *colexec.rangeStatsOperator
+  └ *colexecbuiltins.rangeStatsOperator
     └ *sql.planNodeToRowSource
