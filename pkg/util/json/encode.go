@@ -205,7 +205,14 @@ func DecodeJSON(b []byte) ([]byte, JSON, error) {
 
 // FromEncoding returns a JSON value which is lazily decoded.
 func FromEncoding(b []byte) (JSON, error) {
-	return newEncodedFromRoot(b)
+	var jsonEncoded JSONEncoded
+	return &jsonEncoded, FromEncodingInto(b, &jsonEncoded)
+}
+
+// FromEncodingInto updates the given JSONEncoded value with lazily-decoded
+// JSON value.
+func FromEncodingInto(b []byte, jsonEncoded *JSONEncoded) error {
+	return jsonEncoded.fromRoot(b)
 }
 
 func decodeJSONArray(containerHeader uint32, b []byte) ([]byte, JSON, error) {
