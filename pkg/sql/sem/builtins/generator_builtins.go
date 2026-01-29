@@ -1274,7 +1274,7 @@ func makeVariadicUnnestGenerator(
 ) (eval.ValueGenerator, error) {
 	var arrays []*tree.DArray
 	for _, a := range args {
-		arrays = append(arrays, tree.MustBeDArray(a))
+		arrays = append(arrays, mustBeDArrayMaybeDString(a))
 	}
 	g := &multipleArrayValueGenerator{arrays: arrays}
 	return g, nil
@@ -1424,7 +1424,7 @@ func (w *WorkloadIndexRecsGenerator) Close(ctx context.Context) {
 func makeArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr := mustBeDArrayMaybeDString(args[0])
 	return &arrayValueGenerator{array: arr}, nil
 }
 
@@ -1466,7 +1466,7 @@ func (s *arrayValueGenerator) Values() (tree.Datums, error) {
 func makeExpandArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr := mustBeDArrayMaybeDString(args[0])
 	g := &expandArrayValueGenerator{avg: arrayValueGenerator{array: arr}}
 	g.buf[1] = tree.NewDInt(tree.DInt(-1))
 	return g, nil
@@ -1522,7 +1522,7 @@ func makeGenerateSubscriptsGenerator(
 	}
 	// We sadly only support 1D arrays right now.
 	if dim == 1 {
-		arr = tree.MustBeDArray(args[0])
+		arr = mustBeDArrayMaybeDString(args[0])
 	} else {
 		arr = &tree.DArray{}
 	}

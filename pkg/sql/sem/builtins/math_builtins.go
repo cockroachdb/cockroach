@@ -613,7 +613,7 @@ var mathBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := args[0]
-				thresholds := tree.MustBeDArray(args[1])
+				thresholds := mustBeDArrayMaybeDString(args[1])
 
 				if !operand.ResolvedType().Equivalent(thresholds.ParamTyp) {
 					return tree.NewDInt(0), errors.New("operand and thresholds must be of the same type")
