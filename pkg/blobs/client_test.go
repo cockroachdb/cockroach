@@ -87,6 +87,7 @@ func setUpService(
 		localDialer,
 		localExternalDir,
 		true, /* allowLocalFastpath */
+		nil,  /* settings - nil uses legacy behavior */
 	)
 }
 
