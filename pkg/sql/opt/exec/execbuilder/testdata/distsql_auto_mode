@@ -202,7 +202,7 @@ RESET distribute_group_by_row_count_threshold;
 
 # Limit after aggregation - distribute.
 query T
-SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k LIMIT 1] WHERE info LIKE 'distribution%'
+SELECT info FROM [EXPLAIN SELECT k, sum(v) FROM kv WHERE k>1 GROUP BY k ORDER BY sum(v) LIMIT 1] WHERE info LIKE 'distribution%'
 ----
 distribution: full
 
