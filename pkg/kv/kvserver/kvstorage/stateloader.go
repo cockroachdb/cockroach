@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -232,18 +233,6 @@ func (s StateLoader) SetMVCCStats(
 	return s.SetRangeAppliedState(ctx, stateRW, as)
 }
 
-// SetClosedTimestamp overwrites the closed timestamp.
-func (s StateLoader) SetClosedTimestamp(
-	ctx context.Context, stateRW StateRW, closedTS hlc.Timestamp,
-) error {
-	as, err := s.LoadRangeAppliedState(ctx, stateRW)
-	if err != nil {
-		return err
-	}
-	as.RaftClosedTimestamp = closedTS
-	return s.SetRangeAppliedState(ctx, stateRW, as)
-}
-
 // LoadGCThreshold loads the GC threshold.
 func (s StateLoader) LoadGCThreshold(ctx context.Context, stateRO StateRO) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
@@ -398,28 +387,51 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 	}
 }
 
-// The rest is not technically part of ReplicaState.
-
-// SynthesizeRaftState creates a Raft state which synthesizes HardState from
-// pre-seeded data in the engine: the state machine state created by
-// WriteInitialReplicaState on a split, and the existing HardState of an
-// uninitialized replica.
+// SynthesizeRaftState returns the initial raft state of an initialized replica,
+// taking into account the HardState of the uninitialized replica it replaces.
 //
-// TODO(sep-raft-log): this is now only used in splits, when initializing a
-// replica. Make the implementation straightforward, most of the stuff here is
-// constant except the existing HardState.
-func (s StateLoader) SynthesizeRaftState(ctx context.Context, stateRO StateRO, raftRW Raft) error {
-	hs, err := s.LoadHardState(ctx, raftRW.RO)
-	if err != nil {
-		return err
+// An uninitialized replica can have a non-empty HardState because such replicas
+// are able to update the Term, participate in raft elections (update Vote and
+// other supporting fields). When initializing the replica, we must not regress
+// this HardState.
+func SynthesizeRaftState(
+	oldHS raftpb.HardState, applied logstore.EntryID,
+) (_ raftpb.HardState, _ kvserverpb.RaftTruncatedState, err error) {
+	// Assert that the replica is uninitialized.
+	if commit := oldHS.Commit; commit != 0 {
+		err = errors.Newf("uninitialized replica with a non-zero commit index %d", commit)
+		return
 	}
-	as, err := s.LoadRangeAppliedState(ctx, stateRO)
-	if err != nil {
-		return err
+	// A raft log always starts at a fixed index/term of the virtual entry that
+	// represents the initial applied state of the range (populated upon the
+	// cluster bootstrap, or inherited by the range when it is split out).
+	initTS := kvserverpb.RaftTruncatedState{
+		Index: RaftInitialLogIndex,
+		Term:  RaftInitialLogTerm,
 	}
-	applied := logstore.EntryID{
-		Index: as.RaftAppliedIndex,
-		Term:  as.RaftAppliedIndexTerm,
+	// Assert that the applied state is initialized correctly.
+	if applied != initTS {
+		err = errors.Newf("applied entry ID %+v mismatches %+v", applied, initTS)
+		return
 	}
-	return s.SynthesizeHardState(ctx, raftRW.WO, hs, applied)
+
+	// If the existing HardState is empty, or has an outdated term, we forget it,
+	// and install one with a newer term. This is a valid transition from raft's
+	// perspective.
+	if oldHS.Term < RaftInitialLogTerm {
+		return raftpb.HardState{
+			Term:   RaftInitialLogTerm,
+			Commit: RaftInitialLogIndex,
+		}, initTS, nil
+	}
+	// Otherwise, the uninitialized replica has already participated in the
+	// initial term or above. It might have voted, and might know the leader.
+	// Preserve this information, and only move the Commit index forward.
+	return raftpb.HardState{
+		Term:      oldHS.Term,
+		Commit:    RaftInitialLogIndex,
+		Vote:      oldHS.Vote,
+		Lead:      oldHS.Lead,
+		LeadEpoch: oldHS.LeadEpoch,
+	}, initTS, nil
 }
