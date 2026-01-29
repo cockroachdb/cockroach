@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -477,6 +478,54 @@ func TestTSDumpRawGenerationWithEmbeddedMetadata(t *testing.T) {
 	defer file.Close()
 
 	dec := gob.NewDecoder(file)
+	readMetadata, err := tsdumpmeta.Read(dec)
+	require.NoError(t, err)
+
+	// Verify store-to-node mapping is embedded
+	require.NotNil(t, readMetadata.StoreToNodeMap)
+	require.Equal(t, "1", readMetadata.StoreToNodeMap["1"])
+}
+
+// TestTSDumpRawZstdGenerationWithEmbeddedMetadata tests that raw-zstd format tsdump generation
+// produces valid ZSTD-compressed output with embedded metadata.
+func TestTSDumpRawZstdGenerationWithEmbeddedMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
+
+	tmpFile, err := os.CreateTemp("", "tsdump_*.gob.zst")
+	require.NoError(t, err)
+	defer func() {
+		_ = os.Remove(tmpFile.Name())
+	}()
+	tmpFile.Close()
+
+	_, err = c.RunWithCapture(fmt.Sprintf(
+		"debug tsdump --format=raw-zstd --output=%s --cluster-name=test-cluster-1 --disable-cluster-name-verification",
+		tmpFile.Name(),
+	))
+	require.NoError(t, err)
+
+	file, err := os.Open(tmpFile.Name())
+	require.NoError(t, err)
+	defer file.Close()
+
+	// Read first 4 bytes to verify ZSTD magic number
+	magic := make([]byte, 4)
+	_, err = file.Read(magic)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x28, 0xB5, 0x2F, 0xFD}, magic, "file should have ZSTD magic number")
+
+	_, err = file.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
+	zstdReader, err := zstd.NewReader(file)
+	require.NoError(t, err)
+	defer zstdReader.Close()
+
+	dec := gob.NewDecoder(zstdReader)
 	readMetadata, err := tsdumpmeta.Read(dec)
 	require.NoError(t, err)
 
