@@ -164,14 +164,6 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if !ok {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(p.spec.DefaultURI, user)
-	if err != nil {
-		return errors.Wrapf(err, "export configuration")
-	}
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorage(ctx, defaultConf)
-	if err != nil {
-		return errors.Wrapf(err, "external storage")
-	}
 
 	compactChain, encryption, err := p.compactionChainFromSpec(ctx, execCfg, user)
 	if err != nil {
@@ -216,6 +208,24 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		), "generate and send import spans")
 	}
 
+	destURI, destLocalityKV, err := selectLocalityMatchingURI(
+		ctx, p.spec.DefaultURI, p.spec.URIsByLocalityKV,
+		// TODO(at): replace with spec field when strict is implemented
+		false, /* strict */
+		p.FlowCtx.EvalCtx.Locality,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "selecting locality matching uri")
+	}
+	destConf, err := cloud.ExternalStorageConfFromURI(destURI, user)
+	if err != nil {
+		return errors.Wrapf(err, "export configuration")
+	}
+	store, err := execCfg.DistSQLSrv.ExternalStorage(ctx, destConf)
+	if err != nil {
+		return errors.Wrapf(err, "external storage")
+	}
+
 	entryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	tasks := []func(context.Context) error{
 		func(ctx context.Context) error {
@@ -224,7 +234,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			return p.processSpanEntries(
-				ctx, execCfg, entryCh, encryption, defaultStore,
+				ctx, execCfg, entryCh, encryption, store, destLocalityKV,
 			)
 		},
 	}
@@ -240,6 +250,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	entryCh chan execinfrapb.RestoreSpanEntry,
 	encryption *jobspb.BackupEncryptionOptions,
 	store cloud.ExternalStorage,
+	destLocality string,
 ) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
 	if encryption != nil {
@@ -252,7 +263,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 		Settings:  &execCfg.Settings.SV,
 		ElideMode: p.spec.ElideMode,
 	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store)
+	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, destLocality)
 	if err != nil {
 		return err
 	}
@@ -276,6 +287,20 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			} else if !assigned {
 				continue
 			}
+
+			// TODO(at): assertion fail if this doesn't match the processor and strict is set
+			entryLocality, err := entryLocality(entry)
+			if err != nil {
+				return errors.Wrap(err, "finding entry locality")
+			}
+			if backupKnobs, ok := p.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+				if backupKnobs.OnCompactionFileAccess != nil && *backupKnobs.OnCompactionFileAccess != nil {
+					if err := (*backupKnobs.OnCompactionFileAccess)(p.FlowCtx.EvalCtx.Locality, entryLocality); err != nil {
+						return err
+					}
+				}
+			}
+
 			sstIter, err := openSSTs(ctx, execCfg, entry, fileEncryption, p.spec.EndTime)
 			if err != nil {
 				return errors.Wrap(err, "opening SSTs")
