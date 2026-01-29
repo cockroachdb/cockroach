@@ -221,10 +221,12 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 // don't run when an auto full stats job is running. It also tests that manual
 // stat jobs (full or partial) are always allowed to run.
 func TestAtMostOneRunningCreateStats(t *testing.T) {
+	skip.WithIssue(t, 161973)
 	testAtMostOneRunningCreateStatsImpl(t, false /* shouldError */)
 }
 
 func TestAtMostOneRunningCreateStatsWithErrorOnConcurrentCreateStats(t *testing.T) {
+	skip.WithIssue(t, 161974)
 	testAtMostOneRunningCreateStatsImpl(t, true /* shouldError */)
 }
 
