@@ -174,16 +174,24 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 		) error {
-			preparedDetails, err := r.prepareTableForIngestion(ctx, p, details, txn.KV(), descsCol)
-			if err != nil {
-				return err
-			}
-
 			// Telemetry for multi-region.
 			table, err := getTable(details)
 			if err != nil {
 				return err
 			}
+
+			// Run the count before making the table unreadable in the IMPORTING
+			// state.
+			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, p, txn, table, details)
+			if err != nil {
+				return err
+			}
+
+			preparedDetails, err := r.prepareTableForIngestion(ctx, p, rowCountDetails, txn.KV(), descsCol)
+			if err != nil {
+				return err
+			}
+
 			dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, table.Desc.GetParentID())
 			if err != nil {
 				return err
@@ -248,24 +256,11 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// will write.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
 
-		// Check if the table being imported into is starting empty, in which case
-		// we can cheaply clear-range instead of revert-range to cleanup (or if the
-		// cluster has finalized to 22.1, use DeleteRange without predicate
-		// filtering).
-		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
-		tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
-		res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
-		if err != nil {
-			return errors.Wrap(err, "checking if existing table is empty")
-		}
-		details.Table.WasEmpty = len(res) == 0
-		details.Tables[0].WasEmpty = len(res) == 0
-
 		// Update the descriptor in the job record and in the database
 		details.Table.Desc.ImportStartWallTime = details.Walltime
 		details.Tables[0].Desc.ImportStartWallTime = details.Walltime
 
-		if err := bindTableDescImportProperties(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+		if err := bindTableDescImportProperties(ctx, p, table.Desc.ID, details.Walltime); err != nil {
 			return err
 		}
 
@@ -405,6 +400,40 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	return nil
 }
 
+// detailsWithInitialRowCount checks if the table being imported into is empty
+// and return an updated details with the initial row count.
+func (r *importResumer) detailsWithInitialRowCount(
+	ctx context.Context,
+	p sql.JobExecContext,
+	txn isql.Txn,
+	table jobspb.ImportDetails_Table,
+	details jobspb.ImportDetails,
+) (jobspb.ImportDetails, error) {
+	rowCountDetails := details
+
+	// Check if the table being imported into is starting empty, in which case
+	// we can cheaply clear-range instead of DeleteRange to cleanup.
+	log.Eventf(ctx, "querying for row count for table %s", table.Name)
+	row, err := txn.QueryRowEx(
+		ctx,
+		"import-initial-row-count",
+		txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf("SELECT count(*) FROM [%d AS t]", table.Desc.ID),
+	)
+	if err != nil {
+		return jobspb.ImportDetails{}, errors.Wrap(err, "querying initial row count")
+	}
+
+	rowCount := uint64(tree.MustBeDInt(row[0]))
+	rowCountDetails.Table.WasEmpty = rowCount == 0
+	rowCountDetails.Tables[0].WasEmpty = rowCount == 0
+	rowCountDetails.Table.InitialRowCount = rowCount
+	rowCountDetails.Tables[0].InitialRowCount = rowCount
+
+	return rowCountDetails, nil
+}
+
 // prepareTableForIngestion prepare the table descriptor for the ingestion
 // step of import. The descriptor is in an IMPORTING state (offline) on
 // successful completion of this method.
@@ -452,10 +481,12 @@ func (r *importResumer) prepareTableForIngestion(
 	}
 
 	importDetails.Table = jobspb.ImportDetails_Table{
-		Desc:       importing.TableDesc(),
-		Name:       table.Name,
-		SeqVal:     table.SeqVal,
-		TargetCols: table.TargetCols,
+		Desc:            importing.TableDesc(),
+		Name:            table.Name,
+		SeqVal:          table.SeqVal,
+		WasEmpty:        table.WasEmpty,
+		InitialRowCount: table.InitialRowCount,
+		TargetCols:      table.TargetCols,
 	}
 	importDetails.Tables = []jobspb.ImportDetails_Table{importDetails.Table}
 
