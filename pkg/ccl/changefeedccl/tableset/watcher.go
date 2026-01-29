@@ -493,9 +493,12 @@ func (w *Watcher) kvToTable(
 		log.Changefeed.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
 	}
 
-	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+	row, status, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		return Table{}, err
+	}
+	if status != cdcevent.DecodeOK {
+		return Table{}, errors.Newf("unexpected decode status: %v", status)
 	}
 
 	var tableID descpb.ID

@@ -52,6 +52,7 @@ go_library(
 go_test(
     name = "cdcevent_test",
     srcs = [
+        "event_bench_test.go",
         "event_test.go",
         "main_test.go",
         "projection_test.go",

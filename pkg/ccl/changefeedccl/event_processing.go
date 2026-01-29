@@ -357,45 +357,45 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
+	updatedRow, status, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
 	if err != nil {
+		// On decode errors, return immediately without releasing the allocation.
+		// The allocation is managed elsewhere for error cases.
+		return err
+	}
+	if status != cdcevent.DecodeOK {
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
-		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
-			// Release the event's allocation since we're not processing it.
-			a := ev.DetachAlloc()
-			a.Release(ctx)
-			return nil
-		}
-		if errors.Is(err, cdcevent.ErrTableOffline) {
-			// An event on an offline table should be silently dropped for db
-			// level changefeeds. Since the descriptor is offline, we can't
-			// safely decode the event.
-			// Release the event's allocation since we're not processing it.
-			a := ev.DetachAlloc()
-			a.Release(ctx)
-			return nil
-		}
-		return err
+		// An event on an offline table should be silently dropped for db
+		// level changefeeds. Since the descriptor is offline, we can't
+		// safely decode the event.
+		// Release the event's allocation since we're skipping this event.
+		// Note: We only release on skip conditions (non-OK status), not on errors.
+		a := ev.DetachAlloc()
+		a.Release(ctx)
+		return nil
 	}
 
 	// Get prev value, if necessary.
-	prevRow, err := func() (cdcevent.Row, error) {
+	prevRow, prevStatus, err := func() (cdcevent.Row, cdcevent.DecodeStatus, error) {
 		if !c.details.Opts.GetFilters().WithDiff {
-			return cdcevent.Row{}, nil
+			return cdcevent.Row{}, cdcevent.DecodeOK, nil
 		}
 		return c.decoder.DecodeKV(ctx, ev.PrevKeyValue(), cdcevent.PrevRow, prevSchemaTimestamp, keyOnly)
 	}()
 	if err != nil {
+		// On decode errors, return immediately without releasing the allocation.
+		// The allocation is managed elsewhere for error cases.
+		return err
+	}
+	if prevStatus != cdcevent.DecodeOK {
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
-		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
-			// Release the event's allocation since we're not processing it.
-			a := ev.DetachAlloc()
-			a.Release(ctx)
-			return nil
-		}
-		return err
+		// Release the event's allocation since we're skipping this event.
+		// Note: We only release on skip conditions (non-OK status), not on errors.
+		a := ev.DetachAlloc()
+		a.Release(ctx)
+		return nil
 	}
 
 	if c.evaluator != nil {

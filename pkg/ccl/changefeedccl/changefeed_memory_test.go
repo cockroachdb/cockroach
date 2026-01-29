@@ -54,7 +54,7 @@ func TestChangefeedUnwatchedFamilyMemoryMonitoring(t *testing.T) {
 		}
 
 		// Start changefeed watching only f1 with diff enabled.
-		// Events from f2 should trigger ErrUnwatchedFamily.
+		// Events from f2 should return DecodeSkipUnwatchedFamily status.
 		feed := feed(t, f,
 			`CREATE CHANGEFEED FOR foo FAMILY f1 WITH diff, initial_scan='no', resolved`, args...)
 		defer closeFeed(t, feed)
