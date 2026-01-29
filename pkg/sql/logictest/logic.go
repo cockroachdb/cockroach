@@ -368,7 +368,7 @@ import (
 //    number of times. For example:
 //      repeat 50
 //      statement ok
-//      INSERT INTO T VALUES ((SELECT MAX(k+1) FROM T))
+//      INSERT INTO T VALUES ((SELECT max(k+1) FROM T))
 //
 //  - let $varname
 //    Executes the query that follows (expecting a single result) and remembers
@@ -377,7 +377,7 @@ import (
 //    variable name must start with a letter, and subsequent characters must be
 //    letters, digits, or underscores. Example:
 //      let $foo
-//      SELECT MAX(v) FROM kv
+//      SELECT max(v) FROM kv
 //
 //      statement ok
 //      SELECT * FROM kv WHERE v = $foo
