@@ -1,0 +1,23 @@
+# This test demonstrates the general case that still needs work: heterogeneous
+# CPU capacities without constraints can leave higher-vCPU nodes underutilized.
+# MMA balances absolute CPU load across stores, which results in uneven CPU
+# utilization when per-node capacities differ and replicas can move freely.
+gen_cluster nodes=4 region=(a,b) nodes_per_region=(2,2) node_cpu_cores=(4,4,12,12)
+----
+
+setting split_queue_enabled=false
+----
+
+gen_ranges ranges=40 min_key=0 max_key=10000 placement_type=even
+----
+
+gen_load rate=12000 rw_ratio=1 min_key=0 max_key=10000 request_cpu_per_access=1000000
+----
+12.00 access-vcpus
+
+assertion type=balance stat=cpu_util upper_bound=1.1 ticks=6
+----
+asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of last 6 ticks
+
+eval duration=6m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,replicas,leases)
+----

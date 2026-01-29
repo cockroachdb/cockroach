@@ -1,0 +1,50 @@
+# This test explores heterogeneous per-region CPU capacity where each region is
+# internally uniform, and span config constraints keep each half of the keyspace
+# within a single region. The load is proportional to each region's capacity, so
+# cpu_util should remain balanced across stores even though absolute CPU differs.
+gen_cluster nodes=6 region=(a,b) nodes_per_region=(3,3) node_cpu_cores=(4,4,4,12,12,12)
+----
+
+setting split_queue_enabled=false
+----
+
+gen_ranges ranges=30 min_key=0 max_key=5000 placement_type=replica_placement
+{s1:*,s2,s3}:10
+{s2:*,s1,s3}:10
+{s3:*,s1,s2}:10
+----
+{s1:*,s2,s3}:10
+{s2:*,s1,s3}:10
+{s3:*,s1,s2}:10
+
+gen_ranges ranges=30 min_key=5000 max_key=10000 placement_type=replica_placement
+{s4:*,s5,s6}:10
+{s5:*,s4,s6}:10
+{s6:*,s4,s5}:10
+----
+{s4:*,s5,s6}:10
+{s5:*,s4,s6}:10
+{s6:*,s4,s5}:10
+
+set_span_config
+[0,5000): num_replicas=3 num_voters=3 constraints={'+region=a':3} lease_preferences=[['+region=a']]
+[5000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
+----
+
+gen_load rate=3000 rw_ratio=1 min_key=0 max_key=5000 request_cpu_per_access=1000000
+----
+3.00 access-vcpus
+
+gen_load rate=9000 rw_ratio=1 min_key=5000 max_key=10000 request_cpu_per_access=1000000
+----
+9.00 access-vcpus
+
+assertion type=conformance violating=0
+----
+
+assertion type=balance stat=cpu_util upper_bound=1.15 ticks=6
+----
+asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.15 at each of last 6 ticks
+
+eval duration=8m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,replicas,leases)
+----
