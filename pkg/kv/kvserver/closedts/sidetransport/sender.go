@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -215,9 +216,16 @@ const (
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
 func NewSender(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, stcf NewSideTransportClient,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	dialer *nodedialer.Dialer,
+	useDRPC bool,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(stcf, connTestingKnobs{}))
+	return newSenderWithConnFactory(stopper, st, clock,
+		newRPCConnFactory(func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
+			return ctpb.DialSideTransportClient(dialer, ctx, nodeID, class, useDRPC)
+		}, connTestingKnobs{}))
 }
 
 func newSenderWithConnFactory(
@@ -821,9 +829,9 @@ type conn interface {
 	getState() connState
 }
 
-// NewSideTransportClient abstracts the creation of side transport clients,
+// sideTransportClientFactory abstracts the creation of side transport clients,
 // allowing the rest of the code to remain agnostic to the RPC used.
-type NewSideTransportClient func(
+type sideTransportClientFactory func(
 	context.Context,
 	roachpb.NodeID,
 	rpcbase.ConnectionClass,
@@ -832,11 +840,11 @@ type NewSideTransportClient func(
 // rpcConnFactory is an implementation of connFactory that establishes
 // connections to other nodes using gRPC.
 type rpcConnFactory struct {
-	stcf         NewSideTransportClient
+	stcf         sideTransportClientFactory
 	testingKnobs connTestingKnobs
 }
 
-func newRPCConnFactory(stcf NewSideTransportClient, testingKnobs connTestingKnobs) connFactory {
+func newRPCConnFactory(stcf sideTransportClientFactory, testingKnobs connTestingKnobs) connFactory {
 	return &rpcConnFactory{
 		stcf:         stcf,
 		testingKnobs: testingKnobs,
@@ -859,7 +867,7 @@ const sleepOnErr = time.Second
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
 	log.AmbientContext
-	stcf         NewSideTransportClient
+	stcf         sideTransportClientFactory
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -878,7 +886,7 @@ type rpcConn struct {
 }
 
 func newRPCConn(
-	stcf NewSideTransportClient,
+	stcf sideTransportClientFactory,
 	producer *Sender,
 	nodeID roachpb.NodeID,
 	testingKnobs connTestingKnobs,

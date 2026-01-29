@@ -644,7 +644,7 @@ func newMockDialer(addrs ...nodeAddr) *mockDialer {
 	return d
 }
 
-func newSideTransportClient(nd rpcbase.NodeDialer) NewSideTransportClient {
+func newMockSideTransportClientFactory(nd rpcbase.NodeDialer) sideTransportClientFactory {
 	return func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
 		return ctpb.DialSideTransportClient(nd, ctx, nodeID, class, false) // TODO(server): enable DRPC
 	}
@@ -705,7 +705,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	defer dialer.Close()
 
 	ch := make(chan struct{})
-	s, stopper := newMockSender(newRPCConnFactory(newSideTransportClient(dialer),
+	s, stopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer),
 		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
 			// Try to send an update to ch, if anyone is still listening.
 			ch <- struct{}{}
@@ -815,7 +815,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s, senderStopper := newMockSender(newRPCConnFactory(newSideTransportClient(dialer), connTestingKnobs{}))
+	s, senderStopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer), connTestingKnobs{}))
 	defer senderStopper.Stop(ctx)
 	s.Run(ctx, roachpb.NodeID(1))
 
@@ -869,7 +869,8 @@ func TestRPCConnStopOnClose(t *testing.T) {
 	sleepTime := time.Millisecond
 
 	dialer := &failingDialer{}
-	factory := newRPCConnFactory(newSideTransportClient(dialer), connTestingKnobs{sleepOnErrOverride: sleepTime})
+	factory := newRPCConnFactory(newMockSideTransportClientFactory(dialer),
+		connTestingKnobs{sleepOnErrOverride: sleepTime})
 
 	s, stopper := newMockSender(factory)
 	defer stopper.Stop(ctx)
