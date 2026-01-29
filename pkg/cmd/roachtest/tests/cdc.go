@@ -1841,7 +1841,7 @@ func runCDCMultiTablePTSBenchmark(
 	// TODO(#158779): When we add back per-table PTS, make sure that this test
 	// sets the cluster setting according to params.perTablePTS.
 
-	initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --ranges=%d --tables=%d {pgurl%s}",
+	initCmd := fmt.Sprintf("./cockroach workload init bank --data-loader=INSERT --rows=%d --ranges=%d --tables=%d {pgurl%s}",
 		params.numRows, numRanges, params.numTables, ct.crdbNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 		t.Fatalf("failed to initialize bank tables: %v", err)
@@ -3181,7 +3181,7 @@ CONFIGURE ZONE USING
 					// to maximize the likelihood of unmerged spans in the span frontier.
 					rows := max(cfg.ranges, 2)
 					initCmd := fmt.Sprintf(
-						"./cockroach workload init bank --tables=%d --ranges=%d --rows=%d {pgurl%s}",
+						"./cockroach workload init bank --data-loader=INSERT --tables=%d --ranges=%d --rows=%d {pgurl%s}",
 						cfg.tables, cfg.ranges, rows, ct.crdbNodes.RandNode())
 					if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
 						t.Fatalf("failed to initialize bank tables: %v", err)
