@@ -16,16 +16,15 @@
 gen_cluster nodes=7 region=(a,b,c) nodes_per_region=(2,2,3) store_byte_capacity_gib=10
 ----
 
-gen_ranges ranges=6 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=0 max_key=10000
-{s1,s2,s3}:1
+gen_ranges ranges=12 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=0 max_key=20000
+{s1,s2,s3}:1 {s1,s2,s4}:1
 ----
 {s1:*,s2,s3}:1
-
-gen_ranges ranges=6 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=10000 max_key=20000
-{s1,s2,s4}:1
-----
 {s1:*,s2,s4}:1
 
+# Note that the number of ranges and their sizes is specifically chosen such
+# that the final disk usage doesn't exceed 95% as that would trigger shedding of
+# replicas even if that violates constraints (#161958)
 gen_ranges ranges=3 repl_factor=3 placement_type=replica_placement bytes_mib=500 min_key=20000 max_key=30000
 {s5,s6,s7}:1
 ----
@@ -38,7 +37,7 @@ set_span_config
 setting split_queue_enabled=false
 ----
 
-eval duration=60m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
+eval duration=10m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
 ----
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
 disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
@@ -49,7 +48,7 @@ leases#1: thrash_pct: [s1=18%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=1
 replicas#1: first: [s1=12, s2=12, s3=6, s4=6, s5=3, s6=3, s7=3] (stddev=3.74, mean=6.43, sum=45)
 replicas#1: last:  [s1=15, s2=15, s3=6, s4=6, s5=1, s6=1, s7=1] (stddev=5.80, mean=6.43, sum=45)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[sma-count]: 92388acc0f95cba8
+artifacts[sma-count]: b398fc0813853498
 ==========================
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
 disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
@@ -60,5 +59,5 @@ leases#1: thrash_pct: [s1=18%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=1
 replicas#1: first: [s1=12, s2=12, s3=6, s4=6, s5=3, s6=3, s7=3] (stddev=3.74, mean=6.43, sum=45)
 replicas#1: last:  [s1=15, s2=15, s3=6, s4=6, s5=1, s6=1, s7=1] (stddev=5.80, mean=6.43, sum=45)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[mma-count]: 92388acc0f95cba8
+artifacts[mma-count]: b398fc0813853498
 ==========================
