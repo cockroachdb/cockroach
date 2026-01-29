@@ -241,6 +241,8 @@ type FlowBase struct {
 		// once the Flow has been cleaned up. Consider using Flow.Cancel
 		// instead when unsure.
 		ctxCancel context.CancelFunc
+
+		cpuHandle *admission.SQLCPUHandle
 	}
 
 	ctxDone <-chan struct{}
@@ -261,10 +263,19 @@ func (f *FlowBase) getStatus() flowStatus {
 	return f.mu.status
 }
 
-func (f *FlowBase) setStatus(status flowStatus) {
+func (f *FlowBase) setStatus(ctx context.Context, status flowStatus) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.mu.status = status
+	if status == flowFinished && f.mu.cpuHandle != nil {
+		// Assuming this goroutine is already registered, and merely using ghandle to
+		// make one last measurement for this goroutine. Other goroutines are at the mercy of
+		// the cancel checkers periodic reporting.
+		ghandle := f.mu.cpuHandle.RegisterGoroutine()
+		ghandle.MeasureAndAdmit(ctx, true)
+		f.mu.cpuHandle.Close()
+		f.mu.cpuHandle = nil
+	}
 }
 
 // Setup is part of the Flow interface.
@@ -461,6 +472,12 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
+	if cpuHandle != nil {
+		f.mu.Lock()
+		f.mu.cpuHandle = cpuHandle
+		f.mu.Unlock()
+	}
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in
@@ -484,7 +501,7 @@ func (f *FlowBase) StartInternal(
 		}
 	}
 
-	f.setStatus(flowRunning)
+	f.setStatus(ctx, flowRunning)
 
 	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&f.Cfg.Settings.SV) &&
 		!f.Gateway && f.CollectStats {
@@ -723,7 +740,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	// Importantly, we must mark the Flow as finished before f.sp is finished in
 	// the defer above.
-	f.setStatus(flowFinished)
+	f.setStatus(ctx, flowFinished)
 	f.mu.ctxCancel()
 }
 
@@ -740,4 +757,38 @@ func (f *FlowBase) cancel() {
 	// Pending streams have yet to be started; send an error to its receivers
 	// and prevent them from being connected.
 	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
+}
+
+// MakeCPUHandle creates a SQLCPUHandle and injects it into the context, and
+// returns the new context. The handle is available to other code, including
+// other goroutines, that use the same context. Additionally, it assumes that
+// the calling goroutine will do work for this query, and so it registers the
+// goroutine, which starts measuring that goroutine at this point (and
+// possibly waits for admission).
+func MakeCPUHandle(
+	ctx context.Context,
+	provider admission.SQLCPUProvider,
+	tenantID roachpb.TenantID,
+	txn *kv.Txn,
+	atGateway bool,
+) (context.Context, error) {
+	var priority admissionpb.WorkPriority
+	var createTime int64
+	if txn == nil {
+		priority = admissionpb.NormalPri
+		createTime = timeutil.Now().UnixNano()
+	} else {
+		h := txn.AdmissionHeader()
+		priority = admissionpb.WorkPriority(h.Priority)
+		createTime = h.CreateTime
+	}
+	cpuHandle := provider.GetHandle(admission.SQLWorkInfo{
+		AtGateway:  atGateway,
+		TenantID:   tenantID,
+		Priority:   priority,
+		CreateTime: createTime,
+	})
+	ctx = admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
+	err := cpuHandle.RegisterGoroutine().MeasureAndAdmit(ctx, false)
+	return ctx, err
 }

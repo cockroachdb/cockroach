@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 )
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
@@ -29,6 +30,8 @@ type CancelChecker struct {
 
 	// The number of Check() calls to skip the context cancellation check.
 	checkInterval uint32
+
+	cpuHandle *admission.GoroutineCPUHandle
 }
 
 // The default interval of Check() calls to wait between checks for context
@@ -47,6 +50,12 @@ func (c *CancelChecker) Check() error {
 			// to Check().
 			return QueryCanceledError
 		default:
+		}
+		// TODO: doing this at cancelCheckInterval may cause no CPU to be reported
+		// for very short running queries. Ideally we need a way for every goroutine
+		// to call this once before termination.
+		if c.cpuHandle != nil {
+			c.cpuHandle.MeasureAndAdmit(c.ctx, false)
 		}
 	}
 
@@ -68,6 +77,10 @@ func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 		c.checkInterval = checkInterval[0]
 	} else {
 		c.checkInterval = cancelCheckInterval
+	}
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
+	if cpuHandle != nil {
+		c.cpuHandle = cpuHandle.RegisterGoroutine()
 	}
 }
 
