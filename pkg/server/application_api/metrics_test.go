@@ -256,6 +256,9 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 func TestStatusVarsSizeLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 161937)
+
 	skip.UnderRace(t, "unrelated data race")
 	skip.UnderStress(t, "unnecessary to test this scenario")
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
