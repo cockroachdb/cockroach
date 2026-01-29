@@ -31,6 +31,12 @@ set_span_config
 setting split_queue_enabled=false
 ----
 
+# Assert that no rebalancing of replicas occurs over the duration of the
+# experiment
+assertion type=steady stat=replicas ticks=180 exact_bound=0
+----
+asserting: |replicas(t)/mean_{T}(replicas) - 1| = 0.00 ∀ t∈T and each store (T=last 180 ticks)
+
 eval duration=3m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
 ----
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.49, s4=0.49, s5=0.49, s6=0.73] (stddev=0.12, mean=0.61, sum=4)
