@@ -252,6 +252,80 @@ func TestCloneHistogram(t *testing.T) {
 	require.Equal(t, cloned.Buckets, hist.Buckets)
 }
 
+// TestRuntimeHistogramCumulativeVsWindowed verifies that runtimeHistogram
+// correctly maintains both cumulative and windowed snapshots. Regression test
+// for #116690 (windowed).
+//
+// This simulates how Go runtime scheduler latency metrics work in practice:
+//
+//	Every 100ms (samplePeriod):
+//	  - Sample Go runtime histogram (cumulative since process start)
+//	  - Compute delta from previous sample
+//	  - Accumulate delta into schedulerLatencyAccumulator
+//
+//	Every 10s (statsInterval):
+//	  - Pass accumulated observations to rh.update()
+//	  - Clear accumulator
+//
+// Example timeline:
+//
+//	Time 0-10s:  Accumulate ~100 samples of 100ms deltas → 10 total observations
+//	Time 10-20s: Accumulate ~100 samples of 100ms deltas → 6 total observations
+//
+// runtimeHistogram.update() receives these accumulated deltas and must:
+//   - Accumulate into cumulativeCounts for Prometheus export (10 → 16)
+//   - Replace windowedCounts with latest delta for TSDB percentiles (10 → 6)
+func TestRuntimeHistogramCumulativeVsWindowed(t *testing.T) {
+	buckets := []float64{0, 10, 20, 30, 40, 50}
+	rh := newRuntimeHistogram(metric.Metadata{Name: "test.histogram"}, buckets)
+	rh.mult = 1.0
+
+	// Simulate first statsInterval (e.g., 0s-10s): 10 accumulated observations.
+	// In production, this is the sum of ~100 deltas (one per 100ms sample).
+	rh.update(&metrics.Float64Histogram{
+		Counts:  []uint64{0, 5, 3, 2, 0}, // 10 total observations
+		Buckets: buckets,
+	})
+
+	cumSnap1 := rh.CumulativeSnapshot()
+	winSnap1 := rh.WindowedSnapshot()
+	cumCount1, cumSum1 := cumSnap1.Total()
+	winCount1, winSum1 := winSnap1.Total()
+
+	// After first update, cumulative and windowed should be the same.
+	require.Equal(t, int64(10), cumCount1)
+	require.Equal(t, int64(10), winCount1)
+	require.Equal(t, cumSum1, winSum1)
+
+	// Simulate second statsInterval (e.g., 10s-20s): 6 accumulated observations.
+	rh.update(&metrics.Float64Histogram{
+		Counts:  []uint64{0, 1, 2, 3, 0}, // 6 total observations
+		Buckets: buckets,
+	})
+
+	cumSnap2 := rh.CumulativeSnapshot()
+	winSnap2 := rh.WindowedSnapshot()
+	cumCount2, cumSum2 := cumSnap2.Total()
+	winCount2, winSum2 := winSnap2.Total()
+
+	// Cumulative must accumulate: 10 + 6 = 16 (not reset to 6). This is what
+	// Prometheus scrapes via /_status/vars for rate() calculations.
+	require.Equal(t, int64(16), cumCount2)
+	require.GreaterOrEqual(t, cumCount2, cumCount1)
+	require.Greater(t, cumSum2, cumSum1)
+
+	// Windowed should be just this window: 6 (not cumulative 16). This is used
+	// for TSDB percentile calculations (p50, p99, etc.).
+	require.Equal(t, int64(6), winCount2)
+	require.Less(t, winSum2, cumSum2)
+
+	// Verify ToPrometheusMetric returns cumulative values (for Prometheus
+	// scraping).
+	promMetric := rh.ToPrometheusMetric().GetHistogram()
+	require.Equal(t, uint64(16), promMetric.GetSampleCount())
+	require.Equal(t, cumSum2, promMetric.GetSampleSum())
+}
+
 // BenchmarkSampleSchedulerLatencies measures the overhead of sampling scheduler
 // latencies.
 //
