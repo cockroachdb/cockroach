@@ -294,6 +294,55 @@ func TestInjectHints(t *testing.T) {
 			expectedSQL:   "SELECT * FROM a JOIN b ON true",
 			expectChanged: true,
 		},
+		{
+			name:          "inject hint on INSERT with CTE",
+			originalSQL:   "WITH cte AS (SELECT * FROM u) INSERT INTO t SELECT * FROM cte",
+			donorSQL:      "WITH cte AS (SELECT * FROM u@idx) INSERT INTO t SELECT * FROM cte",
+			expectedSQL:   "WITH cte AS (SELECT * FROM u@idx) INSERT INTO t SELECT * FROM cte",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on INSERT ON CONFLICT DO UPDATE with CTE",
+			originalSQL:   "WITH cte AS (SELECT * FROM u) INSERT INTO t (a, b) SELECT * FROM cte ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE t.b < 10",
+			donorSQL:      "WITH cte AS (SELECT * FROM u@idx) INSERT INTO t (a, b) SELECT * FROM cte ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE t.b < _",
+			expectedSQL:   "WITH cte AS (SELECT * FROM u@idx) INSERT INTO t(a, b) SELECT * FROM cte ON CONFLICT (a) DO UPDATE SET b = excluded.b WHERE t.b < 10",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on UPSERT with CTE",
+			originalSQL:   "WITH cte AS (SELECT * FROM u) UPSERT INTO t SELECT * FROM cte",
+			donorSQL:      "WITH cte AS (SELECT * FROM u@idx) UPSERT INTO t SELECT * FROM cte",
+			expectedSQL:   "WITH cte AS (SELECT * FROM u@idx) UPSERT INTO t SELECT * FROM cte",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on UPDATE target and FROM",
+			originalSQL:   "UPDATE t SET x = 1 FROM u WHERE t.id = u.id",
+			donorSQL:      "UPDATE t@idx SET x = _ FROM u@idx2 WHERE t.id = u.id",
+			expectedSQL:   "UPDATE t@idx SET x = 1 FROM u@idx2 WHERE t.id = u.id",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on UPDATE FROM with JOIN",
+			originalSQL:   "UPDATE t SET x = 1 FROM u INNER JOIN v ON u.id = v.id WHERE t.id = u.id",
+			donorSQL:      "UPDATE t@idx SET x = _ FROM u@idx2 INNER HASH JOIN v@idx3 ON u.id = v.id WHERE t.id = u.id",
+			expectedSQL:   "UPDATE t@idx SET x = 1 FROM u@idx2 INNER HASH JOIN v@idx3 ON u.id = v.id WHERE t.id = u.id",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on DELETE target and USING",
+			originalSQL:   "DELETE FROM t USING u WHERE t.id = u.id",
+			donorSQL:      "DELETE FROM t@idx USING u@idx2 WHERE t.id = u.id",
+			expectedSQL:   "DELETE FROM t@idx USING u@idx2 WHERE t.id = u.id",
+			expectChanged: true,
+		},
+		{
+			name:          "inject hint on DELETE USING with JOIN",
+			originalSQL:   "DELETE FROM t USING u INNER JOIN v ON u.id = v.id WHERE t.id = u.id",
+			donorSQL:      "DELETE FROM t@idx USING u@idx2 INNER LOOKUP JOIN v@idx3 ON u.id = v.id WHERE t.id = u.id",
+			expectedSQL:   "DELETE FROM t@idx USING u@idx2 INNER LOOKUP JOIN v@idx3 ON u.id = v.id WHERE t.id = u.id",
+			expectChanged: true,
+		},
 	}
 
 	st := cluster.MakeTestingClusterSettings()
