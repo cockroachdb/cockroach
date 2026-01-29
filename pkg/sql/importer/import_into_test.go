@@ -7,6 +7,7 @@ package importer_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -301,4 +303,104 @@ func TestImportIntoWithCompetingTransactionCommits(t *testing.T) {
 		{"1", "initial"},
 		{"2", "imported"},
 	})
+}
+
+// TestImportIntoNonEmptyTableRowCountCheck verifies that IMPORT INTO a
+// non-empty table correctly computes the expected row count as the sum of the
+// initial row count and the imported rows, and that the row count validation
+// inspect job succeeds. It also verifies that a deliberately wrong expected
+// count causes the import to fail in sync mode.
+func TestImportIntoNonEmptyTableRowCountCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Use sync mode so the import blocks until the inspect job completes. If
+	// the row count is wrong the import statement itself will fail. The
+	// interlock key is needed since the cluster setting is marked as unsafe.
+	setUnsafeClusterSetting(t, db, `SET CLUSTER SETTING bulkio.import.row_count_validation.unsafe.mode = 'sync'`)
+
+	runner.Exec(t, `CREATE TABLE foo (k INT PRIMARY KEY, v INT)`)
+	runner.Exec(t, `INSERT INTO foo SELECT i, i*10 FROM generate_series(1, 100) AS g(i)`)
+
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export/' FROM SELECT i, i*10 FROM generate_series(101, 200) AS g(i)`)
+
+	t.Run("match", func(t *testing.T) {
+		runner.Exec(t, `IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export/export*-n*.0.csv')`)
+		runner.CheckQueryResults(t, `SELECT count(*) FROM foo`, [][]string{{"200"}})
+	})
+
+	// Re-export so we can import again with a fresh set of rows.
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export2/' FROM SELECT i, i*10 FROM generate_series(201, 300) AS g(i)`)
+
+	t.Run("mismatch", func(t *testing.T) {
+		// Inject a row count offset so the expected count is wrong, causing the
+		// inspect row count check to fail.
+		s := srv.ApplicationLayer()
+		registry := s.JobRegistry().(*jobs.Registry)
+		registry.TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(resumer jobs.Resumer) jobs.Resumer {
+				resumer.(interface {
+					TestingSetExpectedRowCountOffset(offset int64)
+				}).TestingSetExpectedRowCountOffset(5)
+				return resumer
+			})
+
+		_, err := db.Exec(`IMPORT INTO foo (k, v) CSV DATA ('nodelocal://1/export2/export*-n*.0.csv')`)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "INSPECT found inconsistencies")
+
+		// Extract the inspect job ID from the error hint and verify the error
+		// details contain the expected and actual row counts.
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		var inspectJobID int64
+		_, err = fmt.Sscanf(pqErr.Hint, "Run 'SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS' for more information.", &inspectJobID)
+		require.NoError(t, err)
+
+		var errorType, databaseName, schemaName, tableName, primaryKey, aost, details string
+		var jobID int64
+		runner.QueryRow(t,
+			fmt.Sprintf(`SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS`, inspectJobID),
+		).Scan(&errorType, &databaseName, &schemaName, &tableName, &primaryKey, &jobID, &aost, &details)
+		t.Logf("SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS:\n"+
+			"  error_type:     %s\n"+
+			"  database_name:  %s\n"+
+			"  schema_name:    %s\n"+
+			"  table_name:     %s\n"+
+			"  primary_key:    %s\n"+
+			"  job_id:         %d\n"+
+			"  aost:           %s\n"+
+			"  details:        %s",
+			inspectJobID, errorType, databaseName, schemaName, tableName, primaryKey, jobID, aost, details)
+		require.Contains(t, details, `"actual": 300`)
+		require.Contains(t, details, `"expected": 305`)
+	})
+}
+
+// setUnsafeClusterSetting sets a cluster setting that is marked as unsafe. It
+// extracts the interlock key from the initial error and retries with the key.
+func setUnsafeClusterSetting(t *testing.T, db *sql.DB, stmt string) {
+	t.Helper()
+	_, err := db.Exec(stmt)
+	require.Error(t, err)
+	var pqErr *pq.Error
+	require.True(t, errors.As(err, &pqErr))
+	require.True(t, strings.HasPrefix(pqErr.Detail, "key: "), pqErr.Detail)
+	interlockKey := strings.TrimPrefix(pqErr.Detail, "key: ")
+	_, err = db.Exec("SET unsafe_setting_interlock_key = $1", interlockKey)
+	require.NoError(t, err)
+	_, err = db.Exec(stmt)
+	require.NoError(t, err)
 }
