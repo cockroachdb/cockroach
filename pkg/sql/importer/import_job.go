@@ -12,6 +12,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
@@ -182,6 +183,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Run the count before making the table unreadable in the IMPORTING
 			// state.
+			// The row count runs in the same transaction as the offlining of
+			// the table to ensure a stable count.
 			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, p, txn, table, details)
 			if err != nil {
 				return err
@@ -341,15 +344,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 			tableName = tblDesc.GetName()
 
-			// TODO(bghal): Get the initial row count so it can be included in the expected.
-			if !details.Table.WasEmpty {
-				log.Eventf(ctx, "skipping row count check on table %q: non-empty tables are not supported", tableName)
+			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
+				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
 
 				checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, nil /* expectedRowCount */)
 				return err
 			}
 
-			expectedRowCount := uint64(r.res.Rows)
+			expectedRowCount := uint64(r.res.Rows) + table.InitialRowCount
 			checks, err = inspect.ChecksForTable(ctx, nil /* p */, tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
