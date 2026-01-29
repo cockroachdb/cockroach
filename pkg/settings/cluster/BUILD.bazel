@@ -5,6 +5,9 @@ go_library(
     srcs = ["cluster_settings.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/settings/cluster",
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/settings/cluster.telemetryOptOutCompTimeString": "{STABLE_TELEMETRY_DISABLED}",
+    },
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",

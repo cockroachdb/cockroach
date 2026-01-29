@@ -7,6 +7,7 @@ package cluster
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -64,8 +65,23 @@ type OverridesInformer interface {
 	IsOverridden(settingKey settings.InternalKey) bool
 }
 
+// telemetryOptOutCompTimeString controls wether to opt out of telemetry
+// (including Sentry) or not compile time. The variable is set by bazel via stamping
+// (`stamp.sh -d true/false`). Becuase Go only supports strings for in
+// `-ldflags "-X ..."`, we have to use a string representation here.
+
+var telemetryOptOutCompTimeString = "false"
+
+func telemetryOptOutCompTime(defaultValue bool) bool {
+	ret, err := strconv.ParseBool(telemetryOptOutCompTimeString)
+	if err != nil {
+		return defaultValue
+	}
+	return ret
+}
+
 // TelemetryOptOut controls whether to opt out of telemetry (including Sentry) or not.
-var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
+var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false) || telemetryOptOutCompTime(false)
 
 // NoSettings is used when a func requires a Settings but none is available
 // (for example, a CLI subcommand that does not connect to a cluster).
