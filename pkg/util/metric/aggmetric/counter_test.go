@@ -163,7 +163,7 @@ func initialiseCacheStorageForTesting() *cache.UnorderedCache {
 		},
 		OnEvictedEntry: func(entry *cache.Entry) {
 			if childMetric, ok := entry.Value.(LabelSliceCachedChildMetric); ok {
-				childMetric.DecrementLabelSliceCacheReference()
+				childMetric.UpdateLabelReference()
 			}
 		},
 	})
