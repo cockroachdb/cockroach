@@ -1,0 +1,577 @@
+# LogicTest: multiregion-9node-3region-3azs
+#
+# Test the skip_rbr_unique_rowid_checks table setting for REGIONAL BY ROW
+# tables with unique_rowid() or unordered_unique_rowid() columns.
+
+# ==============================================================================
+# Test basic functionality.
+# ==============================================================================
+
+subtest basic
+
+statement ok
+CREATE DATABASE rbr_test PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+statement ok
+USE rbr_test
+
+# Create a RBR table with unique_rowid() and skip_rbr_unique_rowid_checks
+# enabled. This should display a notice warning about mixing user-supplied values.
+query T noticetrace
+CREATE TABLE rbr_skip_enabled (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+----
+NOTICE: When skip_rbr_unique_rowid_checks is enabled, do not mix user-supplied values with DEFAULT unique_rowid() or unordered_unique_rowid() values. User-supplied values could conflict with future unique_rowid() values that omit uniqueness checks.
+
+# Insert should NOT have unique checks when skip is enabled.
+query T
+EXPLAIN INSERT INTO rbr_skip_enabled (data) VALUES ('test1'), ('test2')
+----
+distribution: local
+·
+• insert
+│ into: rbr_skip_enabled(id, data, crdb_region)
+│ auto commit
+│
+└── • render
+    │
+    └── • values
+          size: 1 column, 2 rows
+
+# Create a RBR table without the skip setting.
+statement ok
+CREATE TABLE rbr_skip_disabled (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) LOCALITY REGIONAL BY ROW
+
+# Insert SHOULD have unique checks with crdb_region filter when skip is disabled.
+query T
+EXPLAIN INSERT INTO rbr_skip_disabled (data) VALUES ('test3'), ('test4')
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: rbr_skip_disabled(id, data, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 1 column, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: rbr_skip_disabled@rbr_skip_disabled_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (id_default = id)
+            │ pred: crdb_region_default != crdb_region
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Create a RBR table with unordered_unique_rowid() and skip enabled.
+statement ok
+CREATE TABLE rbr_unordered_skip (
+  id INT DEFAULT unordered_unique_rowid() PRIMARY KEY,
+  value INT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+# Insert should NOT have unique checks with unordered_unique_rowid() and skip enabled.
+query T
+EXPLAIN INSERT INTO rbr_unordered_skip (value) VALUES (100), (200)
+----
+distribution: local
+·
+• insert
+│ into: rbr_unordered_skip(id, value, crdb_region)
+│ auto commit
+│
+└── • render
+    │
+    └── • values
+          size: 1 column, 2 rows
+
+# Test UPDATE on a RBR table with skip enabled. In RBR tables, unique checks
+# are generated even for UNIQUE and primary indexes.
+statement ok
+CREATE TABLE rbr_update_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+# UPDATE should NOT have unique checks when skip is enabled.
+query T
+EXPLAIN UPDATE rbr_update_test SET id = unique_rowid() WHERE data = 'test'
+----
+distribution: local
+·
+• update
+│ table: rbr_update_test
+│ set: id
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: data = 'test'
+        │
+        └── • scan
+              missing stats
+              table: rbr_update_test@rbr_update_test_pkey
+              spans: FULL SCAN
+
+# A cast to an int is recognized and the optimization still applies.
+statement ok
+CREATE TABLE rbr_casted (
+  id INT DEFAULT unique_rowid()::INT PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+# The cast to INT is unwrapped, so the optimization applies and no uniqueness
+# checks are performed.
+query T
+EXPLAIN INSERT INTO rbr_casted (data) VALUES ('test1'), ('test2')
+----
+distribution: local
+·
+• insert
+│ into: rbr_casted(id, data, crdb_region)
+│ auto commit
+│
+└── • render
+    │
+    └── • values
+          size: 1 column, 2 rows
+
+statement ok
+DROP TABLE rbr_casted
+
+subtest end
+
+# ==============================================================================
+# Test schema changes.
+# ==============================================================================
+
+subtest schema_changes
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE rbr_schema_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT,
+  FAMILY (id, data, crdb_region)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+statement ok
+RESET create_table_with_schema_locked;
+
+# Verify the storage parameter is set in SHOW CREATE.
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, crdb_region)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW;
+
+# Rename the region column.
+statement ok
+ALTER TABLE rbr_schema_test RENAME COLUMN crdb_region TO foo_region;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Unset the storage parameter. This should not display a notice.
+query T noticetrace
+ALTER TABLE rbr_schema_test RESET (skip_rbr_unique_rowid_checks);
+----
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Setting to false should not display a notice.
+query T noticetrace
+ALTER TABLE rbr_schema_test SET (skip_rbr_unique_rowid_checks = false);
+----
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Set the storage parameter again. This should display the notice.
+query T noticetrace
+ALTER TABLE rbr_schema_test SET (skip_rbr_unique_rowid_checks = true);
+----
+NOTICE: When skip_rbr_unique_rowid_checks is enabled, do not mix user-supplied values with DEFAULT unique_rowid() or unordered_unique_rowid() values. User-supplied values could conflict with future unique_rowid() values that omit uniqueness checks.
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Alter the locality to REGIONAL BY TABLE. The storage param should be
+# automatically unset.
+statement ok
+ALTER TABLE rbr_schema_test SET LOCALITY REGIONAL BY TABLE;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+
+# Alter back to REGIONAL BY ROW and set the parameter.
+statement ok
+ALTER TABLE rbr_schema_test SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+query T noticetrace
+ALTER TABLE rbr_schema_test SET (skip_rbr_unique_rowid_checks = true);
+----
+NOTICE: When skip_rbr_unique_rowid_checks is enabled, do not mix user-supplied values with DEFAULT unique_rowid() or unordered_unique_rowid() values. User-supplied values could conflict with future unique_rowid() values that omit uniqueness checks.
+
+# Alter the locality to GLOBAL. The storage param should be automatically unset.
+statement ok
+ALTER TABLE rbr_schema_test SET LOCALITY GLOBAL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) LOCALITY GLOBAL;
+
+# Alter back to REGIONAL BY ROW AS foo_region.
+statement ok
+ALTER TABLE rbr_schema_test SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region)
+) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# The storage parameter should remain set after a transition from one RBR
+# configuration to another.
+statement ok
+ALTER TABLE rbr_schema_test SET (skip_rbr_unique_rowid_checks = true);
+
+statement ok
+ALTER TABLE rbr_schema_test SET LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rbr_schema_test]
+----
+CREATE TABLE public.rbr_schema_test (
+  id INT8 NOT NULL DEFAULT unique_rowid(),
+  data STRING NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT rbr_schema_test_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_data_crdb_region (id, data, foo_region, crdb_region)
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+DROP TABLE rbr_schema_test;
+
+subtest end
+
+# ==============================================================================
+# Test error cases: setting skip_rbr_unique_rowid_checks on non-RBR tables.
+# ==============================================================================
+
+subtest error_cases
+
+# Cannot set the storage parameter on a REGIONAL BY TABLE table via CREATE.
+statement error pgcode 22023 pq: storage parameter "skip_rbr_unique_rowid_checks" can only be set on REGIONAL BY ROW tables
+CREATE TABLE error_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY TABLE
+
+# Cannot set the storage parameter on a GLOBAL table via CREATE.
+statement error pgcode 22023 pq: storage parameter "skip_rbr_unique_rowid_checks" can only be set on REGIONAL BY ROW tables
+CREATE TABLE error_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY GLOBAL
+
+# Cannot set the storage parameter on a non-multiregion table via CREATE.
+statement error pgcode 22023 pq: storage parameter "skip_rbr_unique_rowid_checks" can only be set on REGIONAL BY ROW tables
+CREATE TABLE error_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true)
+
+# Create a REGIONAL BY TABLE table for ALTER tests.
+statement ok
+CREATE TABLE error_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) LOCALITY REGIONAL BY TABLE
+
+# Cannot set the storage parameter on a REGIONAL BY TABLE table via ALTER.
+statement error pgcode 22023 pq: storage parameter "skip_rbr_unique_rowid_checks" can only be set on REGIONAL BY ROW tables
+ALTER TABLE error_test SET (skip_rbr_unique_rowid_checks = true)
+
+statement ok
+DROP TABLE error_test
+
+# Create a GLOBAL table for ALTER tests.
+statement ok
+CREATE TABLE error_test (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) LOCALITY GLOBAL
+
+# Cannot set the storage parameter on a GLOBAL table via ALTER.
+statement error pgcode 22023 pq: storage parameter "skip_rbr_unique_rowid_checks" can only be set on REGIONAL BY ROW tables
+ALTER TABLE error_test SET (skip_rbr_unique_rowid_checks = true)
+
+statement ok
+DROP TABLE error_test
+
+subtest end
+
+# ==============================================================================
+# Test that user-specified values still detect duplicates within and across
+# regions, even when skip_rbr_unique_rowid_checks is enabled.
+# ==============================================================================
+
+subtest user_specified_values
+
+# The skip setting only applies to columns with unique_rowid() or
+# unordered_unique_rowid() defaults. User-specified values should always
+# be checked for uniqueness.
+
+statement ok
+CREATE TABLE rbr_user_values (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+# Insert with explicit ID values should have uniqueness checks.
+query T
+EXPLAIN INSERT INTO rbr_user_values (id, data) VALUES (1, 'test1'), (2, 'test2')
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: rbr_user_values(id, data, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: rbr_user_values@rbr_user_values_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = id)
+            │ pred: crdb_region_default != crdb_region
+            │
+            └── • scan buffer
+                  estimated row count: 2
+                  label: buffer 1
+
+# Insert a row to set up duplicate tests.
+statement ok
+INSERT INTO rbr_user_values (id, data, crdb_region)
+VALUES (100, 'first', 'ca-central-1')
+
+# Attempt to insert duplicate ID in the same region - should fail.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "rbr_user_values_pkey"
+INSERT INTO rbr_user_values (id, data, crdb_region)
+VALUES (100, 'duplicate_same_region', 'ca-central-1')
+
+# Attempt to insert duplicate ID in a different region - should fail.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "rbr_user_values_pkey"
+INSERT INTO rbr_user_values (id, data, crdb_region)
+VALUES (100, 'duplicate_cross_region', 'us-east-1')
+
+# Verify the original row is still there and unchanged.
+query ITT rowsort
+SELECT id, data, crdb_region FROM rbr_user_values
+----
+100  first  ca-central-1
+
+# Test UPDATE with user-specified values - should have uniqueness checks.
+statement ok
+INSERT INTO rbr_user_values (id, data, crdb_region) VALUES (200, 'second', 'us-east-1')
+
+query T
+EXPLAIN UPDATE rbr_user_values SET id = 300 WHERE data = 'second'
+----
+distribution: local
+·
+• root
+│
+├── • update
+│   │ table: rbr_user_values
+│   │ set: id
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • filter
+│               │ filter: data = 'second'
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: rbr_user_values@rbr_user_values_pkey
+│                     spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: rbr_user_values@rbr_user_values_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (id_new = id)
+            │ pred: crdb_region != crdb_region
+            │
+            └── • scan buffer
+                  label: buffer 1
+
+# Attempt to UPDATE to a duplicate ID - should fail.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "rbr_user_values_pkey"
+UPDATE rbr_user_values SET id = 100 WHERE data = 'second'
+
+# Verify both rows are unchanged.
+query ITT rowsort
+SELECT id, data, crdb_region FROM rbr_user_values
+----
+100  first   ca-central-1
+200  second  us-east-1
+
+# Clean up.
+statement ok
+DROP TABLE rbr_user_values
+
+# Test mixed multi-row INSERT with both DEFAULT and explicit values.
+statement ok
+CREATE TABLE rbr_mixed (
+  id INT DEFAULT unique_rowid() PRIMARY KEY,
+  data TEXT
+) WITH (skip_rbr_unique_rowid_checks = true) LOCALITY REGIONAL BY ROW
+
+# When some rows use DEFAULT and some use explicit values, uniqueness checks
+# should still be performed because not all values come from unique_rowid().
+query T
+EXPLAIN INSERT INTO rbr_mixed (id, data) VALUES (DEFAULT, 'test1'), (12345, 'test2'), (DEFAULT, 'test3')
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: rbr_mixed(id, data, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • values
+│                 size: 2 columns, 3 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: rbr_mixed@rbr_mixed_pkey
+            │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = id)
+            │ pred: crdb_region_default != crdb_region
+            │
+            └── • scan buffer
+                  estimated row count: 3
+                  label: buffer 1
+
+statement ok
+DROP TABLE rbr_mixed
+
+subtest end
+
+# ==============================================================================
+# Test telemetry counter for skip_rbr_unique_rowid_checks setting.
+# ==============================================================================
+
+subtest telemetry
+
+# Verify the telemetry counter is incremented when the setting is used.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.schema.skip_rbr_unique_rowid_checks'
+AND usage_count > 0
+----
+sql.schema.skip_rbr_unique_rowid_checks
+
+subtest end
