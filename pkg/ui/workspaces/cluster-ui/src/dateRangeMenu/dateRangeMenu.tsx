@@ -86,11 +86,15 @@ export function DateRangeMenu({
   );
 
   const onChangeStart = (m?: Moment) => {
-    m && setStartMoment(m);
+    // Use keepLocalTime=true to preserve the wall clock time the user entered
+    // while interpreting it in the configured timezone, instead of the user's
+    // timezone.
+    m && setStartMoment(m.tz(timezone, true));
   };
 
   const onChangeEnd = (m?: Moment) => {
-    m && setEndMoment(m);
+    // Same as onChangeStart.
+    m && setEndMoment(m.tz(timezone, true));
   };
 
   const isDisabled = allowedInterval
