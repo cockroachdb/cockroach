@@ -33,7 +33,6 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
 	false,
-	settings.WithPublic,
 )
 
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
@@ -43,7 +42,6 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 		"buffer that will be used to buffer transactional writes per-transaction",
 	1<<22, // 4MB
 	settings.NonNegativeInt,
-	settings.WithPublic,
 )
 
 // txnWriteBuffer is a txnInterceptor that buffers transactional writes until
