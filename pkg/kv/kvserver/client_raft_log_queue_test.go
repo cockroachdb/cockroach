@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -462,6 +464,157 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+// TestReproGCRace is a repro for a GC race: 4-node cluster, scratch range with
+// 2 voters, puts/deletes, MVCC GC, split at 5th key, relocate RHS replica, consistency check.
+func TestReproGCRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Enable vmodule to print all BatchRequests (dist_sender logs at V(2)).
+	require.NoError(t, log.SetVModule("dist_sender=2,mvcc_gc_queue=2"))
+	defer func() { _ = log.SetVModule("") }()
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	gc.ClearRangeMinKeys.Override(ctx, &settings.SV, 3)
+
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GC = &zonepb.GCPolicy{TTLSeconds: 1}
+
+	applyThrottle := newAtomicFunc(func(roachpb.FullReplicaID) {})
+
+	var splitCmdID kvserverbase.CmdIDKey
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DefaultZoneConfigOverride: &zoneConfig,
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					DisableGCQueue:            true,
+					DisableConsistencyQueue:   true,
+					DisableLastProcessedCheck: true, // ensure GC heuristics don't skip or delay
+					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+						if len(ba.Requests) == 0 {
+							return nil
+						}
+						log.KvExec.Infof(ctx, "BatchRequest: %s", ba.String())
+						gc := ba.Requests[0].GetGc()
+						if gc != nil {
+							log.KvExec.Infof(ctx, "GC req: %+v", gc)
+						}
+						return nil
+					},
+					TestingAfterRaftLogSync: func(id roachpb.FullReplicaID) { applyThrottle.get()(id) },
+					TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+						if args.StoreID == 1 && args.RangeID == 81 && args.Split != nil {
+							splitCmdID = args.CmdID
+						}
+						return 0, nil
+					},
+					TestingPostApplySideEffectsFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+						if args.StoreID == 1 && splitCmdID != "" && args.CmdID == splitCmdID {
+							log.KvExec.Infof(ctx, "REPRO: post-split LHS pause: s%d/r%d/%d",
+								args.StoreID, args.RangeID, args.ReplicaID)
+							applyThrottle.set(func(id roachpb.FullReplicaID) {
+								if id.RangeID == args.RangeID && id.ReplicaID == args.ReplicaID {
+									time.Sleep(4 * time.Second)
+									log.KvExec.Infof(ctx, "REPRO: post-split LHS unpause")
+									applyThrottle.reset()
+								}
+							})
+						}
+						return 0, nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+	tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Put 100 different keys in the scratch range.
+	var keys []roachpb.Key
+	for i := 0; i < 100; i++ {
+		k := testutils.MakeKey(key, []byte(fmt.Sprintf("foo-%d", i)))
+		keys = append(keys, k)
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), putArgs(k, []byte("value")))
+		require.NoError(t, pErr.GoError())
+	}
+
+	// Delete keys 10-89.
+	for _, k := range keys[10:90] {
+		_, pErr := kv.SendWrapped(ctx, store.TestSender(), &kvpb.DeleteRequest{
+			RequestHeader: kvpb.RequestHeader{Key: k},
+		})
+		require.NoError(t, pErr.GoError())
+	}
+	// Wait for TTL (1s) so GC threshold will include all deleted data.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Trigger MVCC GC on the scratch range; wait for it to complete so all
+	// deleted data is removed before the split (heuristics are disabled via
+	// DisableLastProcessedCheck and zone TTL=1s).
+	repl := store.LookupReplica(roachpb.RKey(key))
+	require.NotNil(t, repl)
+	var gcErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		log.KvExec.Infof(ctx, "REPRO: MVCCGC")
+		gcErr = store.ManualMVCCGC(repl)
+	}()
+
+	// Split the scratch range in the middle.
+	time.Sleep(1 * time.Second)
+	log.KvExec.Infof(ctx, "REPRO: RUN SPLIT")
+	tc.SplitRangeOrFatal(t, keys[50])
+	require.NoError(t, tc.WaitForSplitAndInitialization(keys[50]))
+
+	// Relocate the RHS range's replica from 3rd to 4th node.
+	time.Sleep(2 * time.Second)
+	log.KvExec.Infof(ctx, "REPRO: RUN REBALANCE")
+	tc.RebalanceVoterOrFatal(ctx, t, keys[50], tc.Target(0), tc.Target(3))
+
+	// Run a consistency check on the RHS range.
+	log.KvExec.Infof(ctx, "REPRO: CONSISTENCY CHECK")
+	rhsDesc := tc.LookupRangeOrFatal(t, keys[50])
+	checkReq := &kvpb.CheckConsistencyRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    rhsDesc.StartKey.AsRawKey(),
+			EndKey: rhsDesc.EndKey.AsRawKey(),
+		},
+		Mode: kvpb.ChecksumMode_CHECK_FULL,
+	}
+	checkResp, pErr := kv.SendWrappedWith(ctx, store.DB().NonTransactionalSender(), kvpb.Header{
+		Timestamp: store.Clock().Now(),
+	}, checkReq)
+	require.NoError(t, pErr.GoError())
+	ccResp := checkResp.(*kvpb.CheckConsistencyResponse)
+	for _, res := range ccResp.Result {
+		require.Contains(t,
+			[]kvpb.CheckConsistencyResponse_Status{
+				kvpb.CheckConsistencyResponse_RANGE_CONSISTENT,
+				kvpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_ESTIMATED,
+			}, res.Status, "RHS range consistency check: %s", res.Detail)
+	}
+
+	<-done
+	require.NoError(t, gcErr)
+
+	t.FailNow()
 }
 
 func makeAddSST(

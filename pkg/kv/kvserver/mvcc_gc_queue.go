@@ -614,6 +614,8 @@ func (r *replicaGCer) SetGCThreshold(ctx context.Context, thresh gc.Threshold) e
 	return r.send(ctx, req)
 }
 
+var hiccup = true
+
 func (r *replicaGCer) GC(
 	ctx context.Context,
 	keys []kvpb.GCRequest_GCKey,
@@ -622,6 +624,12 @@ func (r *replicaGCer) GC(
 ) error {
 	if len(keys) == 0 && len(rangeKeys) == 0 && clearRange == nil {
 		return nil
+	}
+	if clearRange != nil && hiccup {
+		log.KvExec.Infof(ctx, "REPRO: HICCUP")
+		time.Sleep(2 * time.Second)
+		log.KvExec.Infof(ctx, "REPRO: HICCUP END")
+		hiccup = false
 	}
 	req := r.template()
 	req.Keys = keys
@@ -673,6 +681,7 @@ func (mgcq *mvccGCQueue) process(
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
 	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	log.KvExec.Infof(ctx, "thresholds: %v, %v, %v, %v", canGC, gcTimestamp, oldThreshold, newThreshold)
 	if err != nil {
 		return false, err
 	}

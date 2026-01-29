@@ -507,9 +507,12 @@ func processReplicatedKeyRange(
 					// key.
 					it.step()
 				default:
+					log.KvExec.Infof(ctx, "kkk: %v %v %v %v %v", threshold, s.cur, s.next, s.curIsNewest(), s.firstRangeTombstoneTsAtOrBelowGC)
 					if isGarbage(threshold, s.cur, s.next, s.curIsNewest(), s.firstRangeTombstoneTsAtOrBelowGC) {
+						log.KvExec.Infof(ctx, "isGarbage")
 						err = b.foundGarbage(ctx, s.cur, s.curLastKeyVersion())
 					} else {
+						log.KvExec.Infof(ctx, "nonGC")
 						err = b.foundNonGCableData(ctx, s.cur, s.curLastKeyVersion())
 					}
 				}
