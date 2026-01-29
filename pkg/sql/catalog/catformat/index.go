@@ -372,18 +372,23 @@ func formatStorageConfigs(
 	if index.IsSharded() {
 		writeCustomSetting(`bucket_count`, strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
 
-		// Write out shard_columns as shard_columns=(col1, col2, ...)
-		var buf strings.Builder
-		buf.WriteByte('(')
-		for i, colName := range index.Sharded.ColumnNames {
-			if i > 0 {
-				buf.WriteString(", ")
+		// Write out shard_columns as shard_columns=(col1, col2, ...). Only
+		// show this if shard_columns is a strict subset of the index columns;
+		// the default behavior is to hash all the index columns.
+		// We ignore all the implicit columns like the shard column or crdb_region..
+		if len(index.Sharded.ColumnNames) < len(index.KeyColumnNames)-index.ExplicitColumnStartIdx() {
+			var buf strings.Builder
+			buf.WriteByte('(')
+			for i, colName := range index.Sharded.ColumnNames {
+				if i > 0 {
+					buf.WriteString(", ")
+				}
+				// Use tree.NameString to properly quote column names if needed.
+				buf.WriteString(tree.NameString(colName))
 			}
-			// Use tree.NameString to properly quote column names if needed.
-			buf.WriteString(tree.NameString(colName))
+			buf.WriteByte(')')
+			writeCustomSetting(`shard_columns`, buf.String())
 		}
-		buf.WriteByte(')')
-		writeCustomSetting(`shard_columns`, buf.String())
 	}
 
 	if numCustomSettings > 0 {

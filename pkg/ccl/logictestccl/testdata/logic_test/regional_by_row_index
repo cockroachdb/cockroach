@@ -71,7 +71,7 @@ CREATE TABLE public.t_to_be_hashed (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
-  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
@@ -87,8 +87,8 @@ CREATE TABLE public.t_to_be_hashed (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
-  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
-  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
@@ -104,9 +104,9 @@ CREATE TABLE public.t_to_be_hashed (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
   crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(pk))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16, shard_columns=(pk)),
-  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
-  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
@@ -127,8 +127,8 @@ CREATE TABLE public.t_regional_pk_hashed_1 (
   b INT8 NULL,
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_regional_pk_hashed_1_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16, shard_columns=(pk)),
-  INDEX t_regional_pk_hashed_1_b_idx (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
+  CONSTRAINT t_regional_pk_hashed_1_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_regional_pk_hashed_1_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
@@ -150,8 +150,8 @@ CREATE TABLE public.t_regional_pk_hashed_2 (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(pk))), 16:::INT8)) VIRTUAL,
   crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_regional_pk_hashed_2_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16, shard_columns=(pk)),
-  INDEX t_regional_pk_hashed_2_b_idx (b ASC) USING HASH WITH (bucket_count=16, shard_columns=(b)),
+  CONSTRAINT t_regional_pk_hashed_2_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_regional_pk_hashed_2_b_idx (b ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
 ) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
 
