@@ -237,9 +237,11 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.TriggerFunctionCall:
 			dropCascadeDescriptor(next, t.FuncID)
 		case *scpb.TriggerDeps:
-			dropCascadeDescriptor(next, t.TableID)
+			// Drop only the trigger, not the entire table that owns it.
+			dropTrigger(next, t.TableID, t.TriggerID)
 		case *scpb.PolicyDeps:
-			dropCascadeDescriptor(next, t.TableID)
+			// Drop only the policy, not the entire table that owns it.
+			dropPolicy(next, t.TableID, t.PolicyID)
 		case *scpb.Column, *scpb.ColumnType:
 			// These only have type references.
 			break
@@ -297,6 +299,48 @@ func constraintElements(
 	) bool {
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID
+	})
+}
+
+// triggerElements returns all elements for a specific trigger on a table.
+func triggerElements(b BuildCtx, tableID catid.DescID, triggerID catid.TriggerID) ElementResultSet {
+	return b.QueryByID(tableID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.TriggerID, e)
+		return idI != nil && idI.(catid.TriggerID) == triggerID
+	})
+}
+
+// dropTrigger drops all elements for a specific trigger on a table.
+func dropTrigger(b BuildCtx, tableID catid.DescID, triggerID catid.TriggerID) {
+	triggerElems := triggerElements(b, tableID, triggerID)
+	triggerElems.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if target != scpb.ToPublic {
+			return
+		}
+		b.Drop(e)
+	})
+}
+
+// policyElements returns all elements for a specific policy on a table.
+func policyElements(b BuildCtx, tableID catid.DescID, policyID catid.PolicyID) ElementResultSet {
+	return b.QueryByID(tableID).Filter(func(
+		current scpb.Status, target scpb.TargetStatus, e scpb.Element,
+	) bool {
+		idI, _ := screl.Schema.GetAttribute(screl.PolicyID, e)
+		return idI != nil && idI.(catid.PolicyID) == policyID
+	})
+}
+
+// dropPolicy drops all elements for a specific policy on a table.
+func dropPolicy(b BuildCtx, tableID catid.DescID, policyID catid.PolicyID) {
+	policyElems := policyElements(b, tableID, policyID)
+	policyElems.ForEach(func(_ scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+		if target != scpb.ToPublic {
+			return
+		}
+		b.Drop(e)
 	})
 }
 
