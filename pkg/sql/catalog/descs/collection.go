@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -538,6 +539,15 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 		return nil
 	}); err != nil {
 		return err
+	}
+	// Descriptors updated in this batch were either allg offline or dropped,
+	// so nothing to inform the lease manager about.
+	if len(updates.DescriptorIDs) == 0 {
+		return nil
+	}
+	// On test builds confirm we are always selecting a valid ID.
+	if buildutil.CrdbTestBuild && descUpdateID == descpb.InvalidID {
+		return errors.AssertionFailedf("low descriptor key has invalid ID (descriptorIDs=%v)", updates.DescriptorIDs)
 	}
 	descUpdateKey := catalogkeys.MakeDescUpdateKey(tc.codec(), descUpdateID)
 	return txn.Put(ctx, descUpdateKey, updates)
