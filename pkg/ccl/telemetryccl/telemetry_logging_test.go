@@ -201,7 +201,10 @@ func (l *telemetrySpy) Intercept(entry []byte) {
 		l.recoveryEvents = append(l.recoveryEvents, re)
 		return
 	} else {
-		l.t.Errorf("failed unmarshaling %s: %s", rawLog.Message, err)
+		// If the log message cannot be unmarshalled into a recovery event, we're not testing
+		// its existsence in this test.
+		l.t.Logf("not a recovery event: %s", rawLog.Message)
+		return
 	}
 }
 
