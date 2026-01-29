@@ -6,11 +6,9 @@
 package rttanalysis
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
@@ -76,20 +73,13 @@ func runRoundTripBenchmarkTest(
 	tests []RoundTripBenchTestCase,
 	cc ClusterConstructor,
 	numRuns int,
-	limit *quotapool.IntPool,
 ) {
 	skip.UnderMetamorphic(t, "changes the RTTs")
-	var wg sync.WaitGroup
 	for _, tc := range tests {
-		wg.Add(1)
-		go func(tc RoundTripBenchTestCase) {
-			defer wg.Done()
-			t.Run(tc.Name, func(t *testing.T) {
-				runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns, limit)
-			})
-		}(tc)
+		t.Run(tc.Name, func(t *testing.T) {
+			runRoundTripBenchmarkTestCase(t, scope, results, tc, cc, numRuns)
+		})
 	}
-	wg.Wait()
 }
 
 func runRoundTripBenchmarkTestCase(
@@ -99,25 +89,15 @@ func runRoundTripBenchmarkTestCase(
 	tc RoundTripBenchTestCase,
 	cc ClusterConstructor,
 	numRuns int,
-	limit *quotapool.IntPool,
 ) {
 	if tc.SkipIssue != 0 {
 		skip.WithIssue(t, tc.SkipIssue)
 	}
-	var wg sync.WaitGroup
 	for i := 0; i < numRuns; i++ {
-		alloc, err := limit.Acquire(context.Background(), 1)
-		require.NoError(t, err)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer alloc.Release()
-			executeRoundTripTest(tShim{
-				T: t, results: results, scope: scope,
-			}, tc, cc, true /* measureRoundTrips */)
-		}()
+		executeRoundTripTest(tShim{
+			T: t, results: results, scope: scope,
+		}, tc, cc, true /* measureRoundTrips */)
 	}
-	wg.Wait()
 }
 
 // executeRoundTripTest executes a RoundTripBenchCase on with the provided SQL runner
