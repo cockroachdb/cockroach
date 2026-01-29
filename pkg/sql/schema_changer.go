@@ -552,7 +552,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	// as a permanent error.
 	if errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil)) {
 		return jobs.MarkAsPermanentJobError(
-			pgerror.Wrap(err, pgcode.InvalidParameterValue, "unable to retry backfill since fixed timestamp is before the GC timestamp"),
+			pgerror.Wrap(err, pgcode.InvalidParameterValue, "unable to backfill since fixed timestamp is before the GC timestamp"),
 		)
 	}
 	if err != nil {
