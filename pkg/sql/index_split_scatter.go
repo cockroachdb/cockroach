@@ -214,6 +214,9 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	const backfillSplitExpiration = time.Hour
 	tableID := table.GetID()
 	preservedSplitsMultiple := int(PreservedSplitCountMultiple.Get(is.sv))
+	if preservedSplitsMultiple == 0 {
+		return nil
+	}
 	nNodes := is.nodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 	var copySplitsFromIndexID descpb.IndexID
