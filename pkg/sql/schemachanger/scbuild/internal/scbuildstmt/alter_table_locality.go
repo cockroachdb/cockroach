@@ -6,6 +6,8 @@
 package scbuildstmt
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -48,14 +50,16 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 
 	// Determine current locality by querying existing locality elements
 	targetLocality := t.Locality
-	currentLocality, currentLocalityElem := getCurrentTableLocality(b, tableID, tableName)
-	if currentLocalityElem == nil {
-		// No locality found - this shouldn't happen for multi-region tables
-		panic(pgerror.Newf(pgcode.AssertFailure, "table %s has undefined locality", tableName))
-	}
+	currentLocalityElem, currentLocality := getCurrentTableLocality(b, tableID, tableName)
 
 	if isLocalityRegionalByRow(currentLocality) || isLocalityRegionalByRow(targetLocality) {
 		panic(scerrors.NotImplementedErrorf(t, "alter locality to or from RBR not implemented yet"))
+	}
+
+	// Validate region name for REGIONAL BY TABLE IN <region>
+	if targetLocality.LocalityLevel == tree.LocalityLevelTable &&
+		targetLocality.TableRegion != tree.PrimaryRegionNotSpecifiedName {
+		validateRegionName(b, tableID, regionEnumTypeID, catpb.RegionName(targetLocality.TableRegion))
 	}
 
 	// Increase telemetry stats
@@ -107,40 +111,37 @@ func getDatabaseMultiRegionEnumTypeID(b BuildCtx, tableID catid.DescID) catid.De
 // by examining its locality elements.
 func getCurrentTableLocality(
 	b BuildCtx, tableID catid.DescID, tableName string,
-) (locality *tree.Locality, elem scpb.Element) {
+) (scpb.Element, *tree.Locality) {
 	tblElts := b.QueryByID(tableID)
 	// Check for GLOBAL
-	if glob := tblElts.FilterTableLocalityGlobal().MustGetZeroOrOneElement(); glob != nil {
-		locality = &tree.Locality{
+	if globalElt := tblElts.FilterTableLocalityGlobal().MustGetZeroOrOneElement(); globalElt != nil {
+		return globalElt, &tree.Locality{
 			LocalityLevel: tree.LocalityLevelGlobal,
 		}
-		elem = glob
 	}
 	// Check for REGIONAL BY TABLE (primary region)
 	if primaryRegionElt := tblElts.FilterTableLocalityPrimaryRegion().MustGetZeroOrOneElement(); primaryRegionElt != nil {
-		locality = &tree.Locality{
+		return primaryRegionElt, &tree.Locality{
 			LocalityLevel: tree.LocalityLevelTable,
 			TableRegion:   tree.PrimaryRegionNotSpecifiedName,
 		}
-		elem = primaryRegionElt
 	}
 	// Check for REGIONAL BY TABLE with secondary region
 	if secRegionElt := tblElts.FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement(); secRegionElt != nil {
-		locality = &tree.Locality{
+		return secRegionElt, &tree.Locality{
 			LocalityLevel: tree.LocalityLevelTable,
 			TableRegion:   tree.Name(secRegionElt.RegionName),
 		}
-		elem = secRegionElt
 	}
 	// Check for REGIONAL BY ROW
 	if rbrElt := tblElts.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement(); rbrElt != nil {
-		locality = &tree.Locality{
+		return rbrElt, &tree.Locality{
 			LocalityLevel:       tree.LocalityLevelRow,
 			RegionalByRowColumn: tree.Name(rbrElt.As),
 		}
-		elem = rbrElt
 	}
-	return locality, elem
+	// No locality found - this shouldn't happen for multi-region tables
+	panic(pgerror.Newf(pgcode.AssertFailure, "table %s has undefined locality", tableName))
 }
 
 func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName string) {
@@ -164,8 +165,8 @@ func checkPrivilegesForMultiRegionOp(b BuildCtx, tbl *scpb.Table, tableName stri
 		// Wrap an insufficient privileges error a bit better to reflect the lack
 		// of ownership as well.
 		if err != nil {
-			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s must be owner of %s or have %s privilege on relation %s",
+			panic(pgerror.Wrapf(err, pgcode.InsufficientPrivilege,
+				"user %s must be owner of %s or have %v privilege on relation %s",
 				b.SessionData().User(),
 				tableName,
 				privilege.CREATE,
@@ -206,6 +207,7 @@ func buildLocalityConfig(locality *tree.Locality) catpb.LocalityConfig {
 		}
 	case tree.LocalityLevelRow:
 		// REGIONAL BY ROW
+		// Note that changes to/from RBR is not supported in the declarative schema changer yet
 		return catpb.LocalityConfig{
 			Locality: &catpb.LocalityConfig_RegionalByRow_{
 				RegionalByRow: &catpb.LocalityConfig_RegionalByRow{},
@@ -240,6 +242,7 @@ func addTargetLocalityElements(
 			})
 		}
 	case tree.LocalityLevelRow:
+		// Note that changes to/from RBR is not supported in the declarative schema changer yet
 		// Determine the column name to use
 		colName := locality.RegionalByRowColumn
 		if colName == tree.RegionalByRowRegionNotSpecifiedName {
@@ -254,4 +257,44 @@ func addTargetLocalityElements(
 
 func isLocalityRegionalByRow(locality *tree.Locality) bool {
 	return locality.LocalityLevel == tree.LocalityLevelRow
+}
+
+// validateRegionName checks if the specified region name exists in the database's
+// multi-region configuration.
+func validateRegionName(
+	b BuildCtx, tableID, regionEnumTypeID catid.DescID, regionName catpb.RegionName,
+) {
+	// Query all enum values for the region enum type
+	enumValues := b.QueryByID(regionEnumTypeID).FilterEnumTypeValue()
+
+	// Collect all valid region names
+	var validRegions []string
+	enumValues.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.EnumTypeValue) {
+		validRegions = append(validRegions, e.LogicalRepresentation)
+	})
+
+	// Check if the specified region exists
+	foundRegion := false
+	for _, r := range validRegions {
+		if regionName == catpb.RegionName(r) {
+			foundRegion = true
+			break
+		}
+	}
+
+	// If region not found, return error with hint
+	if !foundRegion {
+		namespace := mustRetrieveNamespaceElem(b, tableID)
+		dbName := mustRetrieveNamespaceElem(b, namespace.DatabaseID).Name
+		panic(errors.WithHintf(
+			pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				`region "%s" has not been added to database "%s"`,
+				regionName,
+				dbName,
+			),
+			"available regions: %s",
+			strings.Join(validRegions, ", "),
+		))
+	}
 }
