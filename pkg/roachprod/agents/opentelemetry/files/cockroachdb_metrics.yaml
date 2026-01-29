@@ -1332,6 +1332,7 @@ leases_leader: leases.leader
 leases_liveness: leases.liveness
 leases_preferences_less_preferred: leases.preferences.less_preferred
 leases_preferences_violating: leases.preferences.violating
+leases_read_summary_local_compression: leases.read_summary.local_compression
 leases_requests_latency: leases.requests.latency
 leases_requests_latency_bucket: leases.requests.latency.bucket
 leases_requests_latency_count: leases.requests.latency.count
