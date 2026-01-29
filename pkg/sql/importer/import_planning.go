@@ -391,19 +391,26 @@ func importPlanHook(
 				if len(prefix) < len(uri.Path) {
 					pattern := uri.Path[len(prefix):]
 					uri.Path = prefix
-					s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri.String(), p.User())
-					if err != nil {
-						return err
-					}
-					var expandedFiles []string
-					if err := s.List(ctx, "", cloud.ListOptions{}, func(s string) error {
-						ok, err := path.Match(pattern, s)
-						if ok {
-							uri.Path = prefix + s
-							expandedFiles = append(expandedFiles, uri.String())
+					expandedFiles, err := func() ([]string, error) {
+						s, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri.String(), p.User())
+						if err != nil {
+							return nil, err
 						}
-						return err
-					}); err != nil {
+						defer s.Close()
+						var expandedFiles []string
+						if err := s.List(ctx, "", cloud.ListOptions{}, func(s string) error {
+							ok, err := path.Match(pattern, s)
+							if ok {
+								uri.Path = prefix + s
+								expandedFiles = append(expandedFiles, uri.String())
+							}
+							return err
+						}); err != nil {
+							return nil, err
+						}
+						return expandedFiles, nil
+					}()
+					if err != nil {
 						return err
 					}
 					if len(expandedFiles) < 1 {

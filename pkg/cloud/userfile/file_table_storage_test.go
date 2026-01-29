@@ -118,6 +118,7 @@ func TestUserScoping(t *testing.T) {
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, db, nil,
 		cloud.NilMetrics)
 	require.NoError(t, err)
+	defer fileTableSystem1.Close()
 	require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Attempt to read/write file as user2 and expect to fail.
@@ -125,6 +126,7 @@ func TestUserScoping(t *testing.T) {
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, db, nil,
 		cloud.NilMetrics)
 	require.NoError(t, err)
+	defer fileTableSystem2.Close()
 	_, _, err = fileTableSystem2.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	require.Error(t, err)
 	require.Error(t, cloud.WriteFile(ctx, fileTableSystem2, filename, bytes.NewReader([]byte("aaa"))))
@@ -134,6 +136,7 @@ func TestUserScoping(t *testing.T) {
 		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), db,
 		nil, cloud.NilMetrics)
 	require.NoError(t, err)
+	defer fileTableSystem3.Close()
 	_, _, err = fileTableSystem3.ReadFile(ctx, filename, cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 }

@@ -217,6 +217,7 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+		defer info.Close()
 		defer mem.Shrink(ctx, memReserved)
 
 		if err := infoReader.showBackup(
@@ -258,9 +259,7 @@ func collectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, errors.Wrapf(err, "make storage")
 	}
-	defer besteffort.Error(ctx, "close-root-store", func(_ context.Context) error {
-		return defaultRootStore.Close()
-	})
+	defer besteffort.Cleanup(ctx, "close-root-store", defaultRootStore.Close)
 
 	var backupIdx backuppb.BackupIndexMetadata
 	var backupID string
@@ -291,9 +290,7 @@ func collectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
-	defer besteffort.Error(ctx, "close-enc-store", func(_ context.Context) error {
-		return encStore.Close()
-	})
+	defer besteffort.Cleanup(ctx, "close-enc-store", encStore.Close)
 	encryption, err := backupencryption.ResolveEncryptionOptionsFromExpr(
 		ctx, p, p.ExprEvaluator("SHOW BACKUP"), encStore,
 		stmt.Options.EncryptionPassphrase, tree.Exprs(stmt.Options.DecryptionKMSURI),
@@ -310,9 +307,7 @@ func collectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
-	defer besteffort.Error(ctx, "close-backup-store", func(_ context.Context) error {
-		return backupStore.Close()
-	})
+	defer besteffort.Cleanup(ctx, "close-backup-store", backupStore.Close)
 	manifest, memReserved, err := backupinfo.ReadBackupManifestFromStore(
 		ctx, mem, backupStore, mainBackupURI, encryption, kmsEnv,
 	)
@@ -332,9 +327,7 @@ func collectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
-	defer besteffort.Error(ctx, "close-root-stores", func(_ context.Context) error {
-		return cleanupStores()
-	})
+	defer besteffort.Cleanup(ctx, "close-root-stores", cleanupStores)
 	localityInfo, err := backupinfo.GetLocalityInfo(
 		ctx, rootStores, collectionURIs, manifest, encryption, kmsEnv, backupIdx.Path,
 	)
@@ -347,6 +340,11 @@ func collectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
+	defer func() {
+		if err != nil {
+			iter.Close()
+		}
+	}()
 
 	info.collectionURI = defaultURI
 	info.subdir = fullSubdir
@@ -412,9 +410,7 @@ func legacyCollectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
-	defer besteffort.Error(ctx, "cleanup-backup-stores", func(_ context.Context) error {
-		return cleanup()
-	})
+	defer besteffort.Cleanup(ctx, "cleanup-backup-stores", cleanup)
 
 	encryption, err := backupencryption.ResolveEncryptionOptionsFromExpr(
 		ctx, p, exprEval, baseStores[0],
@@ -479,6 +475,11 @@ func legacyCollectBackupInfo(
 	if err != nil {
 		return backupInfo{}, 0, err
 	}
+	defer func() {
+		if err != nil {
+			info.layerToIterFactory.Close()
+		}
+	}()
 
 	// If backup is locality aware, check that user passed at least some localities.
 
@@ -665,6 +666,12 @@ type backupInfo struct {
 	enc                *jobspb.BackupEncryptionOptions
 	kmsEnv             cloud.KMSEnv
 	fileSizes          [][]int64
+}
+
+func (b *backupInfo) Close() {
+	if b.layerToIterFactory != nil {
+		b.layerToIterFactory.Close()
+	}
 }
 
 type backupShower struct {
@@ -1466,9 +1473,7 @@ func showBackupsInCollectionPlanHook(
 		if err != nil {
 			return errors.Wrapf(err, "connect to external storage")
 		}
-		defer besteffort.Error(ctx, "show-backups-close-store", func(_ context.Context) error {
-			return store.Close()
-		})
+		defer besteffort.Cleanup(ctx, "close-store", store.Close)
 
 		if useIDs {
 			newerThan, olderThan, maxCount, err := getTimeRangeOrDefaults(ctx, p, showStmt.TimeRange)

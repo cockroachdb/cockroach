@@ -116,6 +116,7 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer externalStorage.Close()
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
@@ -237,6 +238,7 @@ func TestListIndexesHandlesInvalidFiles(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer externalStorage.Close()
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
@@ -354,6 +356,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
+		defer externalStorage.Close()
 		execCfg := &sql.ExecutorConfig{Settings: st}
 
 		start := hlc.Timestamp{}
@@ -393,6 +396,7 @@ func TestDontWriteBackupIndexMetadata(t *testing.T) {
 			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
+		defer externalStorage.Close()
 		execCfg := &sql.ExecutorConfig{Settings: st}
 
 		start := hlc.Timestamp{WallTime: 10}
@@ -550,6 +554,7 @@ func TestIndexExists(t *testing.T) {
 				cloud.NilMetrics,
 			)
 			require.NoError(t, err)
+			defer externalStorage.Close()
 			makeExternalStorage := func(
 				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 			) (cloud.ExternalStorage, error) {
@@ -613,6 +618,7 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer externalStorage.Close()
 	storageFactory := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
@@ -715,6 +721,7 @@ func TestListRestorableBackups(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer externalStorage.Close()
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {
@@ -1060,6 +1067,7 @@ func TestFindLatestBackup(t *testing.T) {
 				cloud.NilMetrics,
 			)
 			require.NoError(t, err)
+			defer externalStorage.Close()
 			makeExternalStorage := func(
 				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 			) (cloud.ExternalStorage, error) {
@@ -1209,6 +1217,7 @@ func TestResolveBackupIDtoIndex(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer externalStorage.Close()
 	makeExternalStorage := func(
 		_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
 	) (cloud.ExternalStorage, error) {

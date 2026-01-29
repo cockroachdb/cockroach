@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -522,6 +523,7 @@ func makeCloudStorageSink(
 	if encodingOpts.Format == changefeedbase.OptFormatParquet {
 		parquetSinkWithEncoder, err := makeParquetCloudStorageSink(s)
 		if err != nil {
+			besteffort.Cleanup(ctx, "cleanup-cloud-storage", s.es.Close)
 			return nil, err
 		}
 		// For parquet, we will always use the compression internally supported by

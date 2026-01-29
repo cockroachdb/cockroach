@@ -59,6 +59,7 @@ func TestManifestHandlingIteratorOperations(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer store.Close()
 
 	m := makeMockManifest(numFiles, numDescriptors, changesPerDescriptor)
 	require.NoError(t, backupinfo.WriteMetadataWithExternalSSTs(ctx, store, nil, nil, &m))
@@ -129,6 +130,7 @@ func TestManifestHandlingEmptyIterators(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer store.Close()
 
 	m := makeMockManifest(0, 0, 0)
 	require.NoError(t, backupinfo.WriteMetadataWithExternalSSTs(ctx, store, nil, nil, &m))
