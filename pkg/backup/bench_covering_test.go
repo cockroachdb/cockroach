@@ -85,6 +85,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage,
 												backups, nil, nil)
 											require.NoError(b, err)
+											defer layerToBackupManifestFileIterFactory.Close()
 
 											spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 

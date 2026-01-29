@@ -51,6 +51,7 @@ func TestAlterBackupStatement(t *testing.T) {
 	ctx := context.Background()
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
+	defer store.Close()
 
 	files, err := backupencryption.GetEncryptionInfoFiles(ctx, store)
 	require.NoError(t, err)

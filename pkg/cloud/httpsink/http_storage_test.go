@@ -365,6 +365,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
+	defer s.Close()
 	stream, _, err := s.ReadFile(context.Background(), "file", cloud.ReadOptions{NoFileSize: true})
 	require.NoError(t, err)
 	defer stream.Close(ctx)

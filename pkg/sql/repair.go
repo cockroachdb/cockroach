@@ -791,6 +791,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
+	defer conn.Close()
 
 	file, _, err := conn.ReadFile(ctx, "", cloud.ReadOptions{NoFileSize: true})
 	if err != nil {
@@ -808,6 +809,7 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
 }
 

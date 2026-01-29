@@ -1778,9 +1778,19 @@ func NewIterFactory(
 	}
 }
 
+func (f *IterFactory) Close() {
+	f.store.Close()
+}
+
 // LayerToBackupManifestFileIterFactory is the mapping from the idx of the
 // backup layer to an IterFactory.
 type LayerToBackupManifestFileIterFactory map[int]*IterFactory
+
+func (l LayerToBackupManifestFileIterFactory) Close() {
+	for _, f := range l {
+		f.Close()
+	}
+}
 
 // NewFileIter creates a new Iterator over BackupManifest_Files. It is assumed
 // that the BackupManifest_File are sorted by FileCmp.
@@ -1807,18 +1817,20 @@ func (f *IterFactory) NewFileIter(
 }
 
 // GetBackupManifestIterFactories constructs a mapping from the idx of the
-// backup layer to an IterFactory.
+// backup layer to an IterFactory. Callers must call Close() on the returned
+// LayerToBackupManifestFileIterFactory to release resources.
 func GetBackupManifestIterFactories(
 	ctx context.Context,
 	storeFactory cloud.ExternalStorageFactory,
 	backupManifests []backuppb.BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (map[int]*IterFactory, error) {
-	layerToFileIterFactory := make(map[int]*IterFactory)
+) (LayerToBackupManifestFileIterFactory, error) {
+	layerToFileIterFactory := make(LayerToBackupManifestFileIterFactory)
 	for layer := range backupManifests {
 		es, err := storeFactory(ctx, backupManifests[layer].Dir)
 		if err != nil {
+			layerToFileIterFactory.Close()
 			return nil, err
 		}
 

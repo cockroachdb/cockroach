@@ -114,7 +114,7 @@ func maybeStartCompactionJob(
 		return 0, err
 	}
 
-	chain, _, _, _, err := getBackupChain(
+	chain, _, _, allIters, err := getBackupChain(
 		ctx,
 		execCfg,
 		user,
@@ -126,6 +126,7 @@ func maybeStartCompactionJob(
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get backup chain")
 	}
+	defer allIters.Close()
 	if int64(len(chain)) < threshold {
 		return 0, nil
 	}
@@ -302,8 +303,10 @@ func (b *backupResumer) ResumeCompaction(
 		allIters,
 	)
 	if err != nil {
+		allIters.Close()
 		return err
 	}
+	defer compactChain.Close()
 
 	var backupManifest *backuppb.BackupManifest
 	updatedDetails := initialDetails
@@ -548,6 +551,10 @@ type compactionChain struct {
 	compactedIterFactory backupinfo.LayerToBackupManifestFileIterFactory
 }
 
+func (c compactionChain) Close() {
+	c.allIters.Close()
+}
+
 // lastBackup returns the last backup of the chain to compact.
 func (c *compactionChain) lastBackup() backuppb.BackupManifest {
 	return c.backupChain[c.endIdx-1]
@@ -771,7 +778,7 @@ func getBackupChain(
 	[]backuppb.BackupManifest,
 	[]jobspb.RestoreDetails_BackupLocalityInfo,
 	*jobspb.BackupEncryptionOptions,
-	map[int]*backupinfo.IterFactory,
+	backupinfo.LayerToBackupManifestFileIterFactory,
 	error,
 ) {
 	defaultCollectionURI, _, err := backupdest.GetURIsByLocalityKV(dest.To, "")

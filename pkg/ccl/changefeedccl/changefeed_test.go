@@ -10782,7 +10782,8 @@ func TestChangefeedFlushesSinkToReleaseMemory(t *testing.T) {
 	// Arrange for custom sink to be used -- a sink that does not
 	// release its resources.
 	sink := &memoryHoggingSink{}
-	knobs.WrapSink = func(_ Sink, _ jobspb.JobID) Sink {
+	knobs.WrapSink = func(inner Sink, _ jobspb.JobID) Sink {
+		require.NoError(t, inner.Close())
 		return sink
 	}
 

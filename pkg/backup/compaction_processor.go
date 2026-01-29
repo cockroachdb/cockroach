@@ -172,11 +172,13 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "external storage")
 	}
+	defer defaultStore.Close()
 
 	compactChain, encryption, err := p.compactionChainFromSpec(ctx, execCfg, user)
 	if err != nil {
 		return err
 	}
+	defer compactChain.Close()
 
 	backupLocalityMap, err := makeBackupLocalityMap(compactChain.compactedLocalityInfo, p.spec.User())
 	if err != nil {
@@ -331,6 +333,7 @@ func (p *compactBackupsProcessor) compactionChainFromSpec(
 		prevManifests, p.spec.StartTime, p.spec.EndTime, localityInfo, allIters,
 	)
 	if err != nil {
+		allIters.Close()
 		return compactionChain{}, nil, err
 	}
 	return compactChain, encryption, nil
