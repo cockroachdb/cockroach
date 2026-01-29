@@ -220,6 +220,7 @@ var mappedPopulateFunctions = map[string]string{
 	"addPGTypeRow":           "PGCatalogType",
 	"addPgProcUDFRow":        "PGCatalogProc",
 	"addPgProcBuiltinRow":    "PgCatalogProc",
+	"addRowForPgIndex":       "PGCatalogIndex",
 	"addRowForTimezoneNames": "PgCatalogTimezoneNames",
 	"populatePgDescription":  "PGCatalogDescription",
 }

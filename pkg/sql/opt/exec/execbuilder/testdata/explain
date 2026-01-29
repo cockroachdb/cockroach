@@ -656,36 +656,37 @@ distribution: local
 └── • render
     │
     └── • virtual table lookup join
-        │ table: pg_namespace@pg_namespace_oid_idx
-        │ equality: (relnamespace) = (oid)
-        │ pred: nspname = index_schema
+        │ table: pg_class@pg_class_oid_idx
+        │ equality: (indexrelid) = (oid)
+        │ pred: (relname = index_name) AND (relnamespace = relnamespace)
         │
-        └── • hash join
-            │ equality: (indexrelid, indrelid) = (oid, oid)
-            │
-            ├── • virtual table
-            │     table: pg_index@primary
+        └── • virtual table lookup join
+            │ table: pg_index@pg_index_indrelid_idx
+            │ equality: (oid) = (indrelid)
             │
             └── • hash join
-                │ equality: (relname, relnamespace) = (index_name, relnamespace)
+                │ equality: (relname, nspname) = (table_name, index_schema)
                 │
-                ├── • virtual table
-                │     table: pg_class@primary
+                ├── • merge join
+                │   │ equality: (oid) = (relnamespace)
+                │   │
+                │   ├── • virtual table
+                │   │     table: pg_namespace@pg_namespace_oid_idx
+                │   │
+                │   └── • sort
+                │       │ order: +relnamespace
+                │       │
+                │       └── • filter
+                │           │ filter: relname = 'foo'
+                │           │
+                │           └── • virtual table
+                │                 table: pg_class@primary
                 │
-                └── • merge join
-                    │ equality: (relname) = (table_name)
+                └── • filter
+                    │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
                     │
-                    ├── • filter
-                    │   │ filter: relname = 'foo'
-                    │   │
-                    │   └── • virtual table
-                    │         table: pg_class@primary
-                    │
-                    └── • filter
-                        │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
-                        │
-                        └── • virtual table
-                              table: statistics@primary
+                    └── • virtual table
+                          table: statistics@primary
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
