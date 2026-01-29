@@ -21,3 +21,23 @@ asserting: max_{stores}(cpu_util)/mean_{stores}(cpu_util) ≤ 1.10 at each of la
 
 eval duration=6m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,replicas,leases)
 ----
+cpu#1: last:  [s1=2400641666, s2=2403058333, s3=3595617819, s4=3596894817] (stddev=597203941.12, mean=2999053158.75, sum=11996212635)
+cpu#1: thrash_pct: [s1=19%, s2=17%, s3=66%, s4=69%]  (sum=170%)
+cpu_util#1: last:  [s1=0.60, s2=0.60, s3=0.30, s4=0.30] (stddev=0.15, mean=0.45, sum=2)
+cpu_util#1: thrash_pct: [s1=14%, s2=13%, s3=16%, s4=17%]  (sum=61%)
+leases#1: first: [s1=10, s2=10, s3=10, s4=10] (stddev=0.00, mean=10.00, sum=40)
+leases#1: last:  [s1=8, s2=8, s3=12, s4=12] (stddev=2.00, mean=10.00, sum=40)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=45%, s4=45%]  (sum=90%)
+replicas#1: first: [s1=30, s2=30, s3=30, s4=30] (stddev=0.00, mean=30.00, sum=120)
+replicas#1: last:  [s1=30, s2=30, s3=30, s4=30] (stddev=0.00, mean=30.00, sum=120)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%]  (sum=0%)
+artifacts[mma-count]: e22c490133c454f0
+failed assertion sample 1
+  balance stat=cpu_util threshold=(≤1.10) ticks=6
+	max/mean=1.33 tick=0
+	max/mean=1.33 tick=1
+	max/mean=1.33 tick=2
+	max/mean=1.33 tick=3
+	max/mean=1.33 tick=4
+	max/mean=1.33 tick=5
+==========================
