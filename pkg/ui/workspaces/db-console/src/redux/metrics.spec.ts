@@ -284,26 +284,26 @@ describe("metrics reducer", function () {
     });
 
     describe("batchAndSendRequests", function () {
-      it("sendBatches correctly batches multiple requests", function () {
+      it("sendBatches correctly batches multiple requests by timespan", function () {
         const shortRequests = [
-          metrics.requestMetrics("id", createRequest(shortTimespan, "short.1"))
+          metrics.requestMetrics("1", createRequest(shortTimespan, "short.1"))
             .payload,
           metrics.requestMetrics(
-            "id",
+            "2",
             createRequest(shortTimespan, "short.2", "short.3"),
           ).payload,
-          metrics.requestMetrics("id", createRequest(shortTimespan, "short.4"))
+          metrics.requestMetrics("3", createRequest(shortTimespan, "short.4"))
             .payload,
         ];
         const longRequests = [
-          metrics.requestMetrics("id", createRequest(longTimespan, "long.1"))
+          metrics.requestMetrics("4", createRequest(longTimespan, "long.1"))
             .payload,
           metrics.requestMetrics(
-            "id",
+            "5",
             createRequest(longTimespan, "long.2", "long.3"),
           ).payload,
           metrics.requestMetrics(
-            "id",
+            "6",
             createRequest(longTimespan, "long.4", "long.5"),
           ).payload,
         ];
@@ -328,6 +328,32 @@ describe("metrics reducer", function () {
             call(metrics.sendRequestBatch, longRequests),
           ])
           // After completion, puts "fetchMetricsComplete" to store.
+          .next()
+          .put(metrics.fetchMetricsComplete())
+          .next()
+          .isDone();
+      });
+
+      it("deduplicates requests by component ID, keeping the most recent", function () {
+        // Two requests for the same component ID with different timespans.
+        // This simulates the race condition where a component dispatches a
+        // request, then the time window updates, and it dispatches again.
+        const oldRequest = metrics.requestMetrics(
+          "same-id",
+          createRequest(shortTimespan, "metric.1"),
+        ).payload;
+        const newRequest = metrics.requestMetrics(
+          "same-id",
+          createRequest(longTimespan, "metric.1"),
+        ).payload;
+
+        // Send old, then new for same ID - new should win.
+        testSaga(metrics.batchAndSendRequests, [oldRequest, newRequest])
+          .next()
+          .put(metrics.fetchMetrics())
+          .next()
+          // Should have 1 batch: new request beat out the old request.
+          .all([call(metrics.sendRequestBatch, [newRequest])])
           .next()
           .put(metrics.fetchMetricsComplete())
           .next()
