@@ -1917,3 +1917,107 @@ FROM crdb_internal.node_metrics
 WHERE name = 'sql.query.with_statement_hints.count'
 ----
 true
+
+# Test hints in update and delete statements.
+
+onlyif config local
+query T
+EXPLAIN UPDATE abc SET c = c + 1 WHERE a > 5 AND b = 6
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: abc
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • index join
+        │ table: abc@abc_pkey
+        │ locking strength: for update
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_b_idx
+              spans: [/6/6 - /6]
+              locking strength: for update
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'UPDATE abc SET c = c + _ WHERE (a > _) AND (b = _)',
+  'UPDATE abc@abc_pkey SET c = c + _ WHERE (a > _) AND (b = _)'
+);
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN UPDATE abc SET c = c + 1 WHERE a > 5 AND b = 6
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• update
+│ table: abc
+│ set: c
+│ auto commit
+│
+└── • render
+    │
+    └── • filter
+        │ filter: b = 6
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_pkey
+              spans: [/6 - ]
+
+onlyif config local
+query T
+EXPLAIN DELETE FROM abc WHERE a > 5 AND b = 6
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ from: abc
+│ auto commit
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: [/6/6 - /6]
+      locking strength: for update
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'DELETE FROM abc WHERE (a > _) AND (b = _)',
+  'DELETE FROM abc@abc_pkey WHERE (a > _) AND (b = _)'
+);
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+onlyif config local
+query T
+EXPLAIN DELETE FROM abc WHERE a > 5 AND b = 6
+----
+distribution: local
+vectorized: true
+statement hints count: 1
+·
+• delete
+│ from: abc
+│ auto commit
+│
+└── • filter
+    │ filter: b = 6
+    │
+    └── • scan
+          missing stats
+          table: abc@abc_pkey
+          spans: [/6 - ]
