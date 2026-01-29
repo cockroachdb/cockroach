@@ -851,14 +851,10 @@ func (db *DB) readFromDatabase(
 				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
 				b.Get(key)
 			} else {
-				// Otherwise, we get the source associated with the system tenant.
+				// When no tenant filter is set, only retrieve the aggregate source.
+				// The aggregate already contains the sum of all tenants' data.
 				key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
 				b.Get(key)
-				// Then we scan all keys that match the tenant source prefix since the system tenant
-				// aggregates sources across all tenants.
-				startKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp)
-				endKey := MakeDataKey(seriesName, tsutil.MakeTenantSourcePrefix(source), diskResolution, currentTimestamp).PrefixEnd()
-				b.Scan(startKey, endKey)
 			}
 		}
 	}
@@ -905,7 +901,20 @@ func (db *DB) readAllSourcesFromDatabase(
 	}
 
 	if !tenantID.IsSet() {
-		return b.Results[0].Rows, nil
+		// Filter out tenant-prefixed sources to avoid double-counting.
+		// The aggregate source already contains the sum of all tenants' data.
+		var rows []kv.KeyValue
+		for _, row := range b.Results[0].Rows {
+			_, source, _, _, err := DecodeDataKey(row.Key)
+			if err != nil {
+				return nil, err
+			}
+			_, tenantSource := tsutil.DecodeSource(source)
+			if tenantSource == "" {
+				rows = append(rows, row)
+			}
+		}
+		return rows, nil
 	}
 
 	// Filter out rows that don't belong to the tenant source
