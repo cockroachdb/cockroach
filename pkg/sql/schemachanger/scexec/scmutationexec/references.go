@@ -756,7 +756,9 @@ func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
 	}
 	// Collect all forward references from this table, excluding foreign keys.
 	// Foreign key dependencies are not tracked via DependedOnBy, so we skip them here.
-	forwardRefs := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
+	// References are separated by source to allow trigger-specific backref management.
+	refsByTriggerID, refsByPolicyID, refsFromView := backRefTbl.GetAllReferencedRelationIDsExceptFKs()
+
 	for _, ref := range op.RelationReferences {
 		referenced, err := i.checkOutTable(ctx, ref.ID)
 		if err != nil {
@@ -768,11 +770,28 @@ func (i *immediateVisitor) UpdateTableBackReferencesInRelations(
 			IndexID:   ref.IndexID,
 			ColumnIDs: ref.ColumnIDs,
 			ByID:      referenced.IsSequence(),
+			TriggerID: op.TriggerID,
 		}
-		removeBackRefs := !forwardRefs.Contains(referenced.GetID())
+
+		// Check if this relation is still referenced by this specific trigger,
+		// any policy, or the view's direct dependencies.
+		isInForwardRefs := false
+		if op.TriggerID != 0 {
+			// For trigger-based references, only check if THIS trigger still refs it.
+			if triggerRefs, ok := refsByTriggerID[op.TriggerID]; ok {
+				isInForwardRefs = triggerRefs.Contains(ref.ID)
+			}
+		}
+		// Also check policies and view dependencies.
+		for _, policyRefs := range refsByPolicyID {
+			isInForwardRefs = isInForwardRefs || policyRefs.Contains(ref.ID)
+		}
+		isInForwardRefs = isInForwardRefs || refsFromView.Contains(ref.ID)
+
+		removeBackRefs := !isInForwardRefs
 		newDependedOnBy := referenced.DependedOnBy[:0]
 		for _, backRef := range referenced.DependedOnBy {
-			if removeBackRefs && backRef.ID == op.TableID {
+			if removeBackRefs && backRef.ID == op.TableID && backRef.TriggerID == op.TriggerID {
 				continue
 			}
 			newBackRefIsDupe = newBackRefIsDupe || backRef.Equal(newBackRef)

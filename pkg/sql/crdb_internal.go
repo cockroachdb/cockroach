@@ -4341,6 +4341,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		fkDep := tree.NewDString("fk")
 		viewDep := tree.NewDString("view")
+		triggerDep := tree.NewDString("trigger")
 		sequenceDep := tree.NewDString("sequence")
 		opts := forEachTableDescOptions{
 			virtualOpts: hideVirtual, /* virtual tables have no backward/forward dependencies*/
@@ -4367,6 +4368,10 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				reportDependedOnBy := func(
 					dep *descpb.TableDescriptor_Reference, depTypeString *tree.DString,
 				) error {
+					details := fmt.Sprintf("Columns=%v", dep.ColumnIDs)
+					if dep.TriggerID != 0 {
+						details = fmt.Sprintf("%s, TriggerID=%d", details, dep.TriggerID)
+					}
 					return addRow(
 						tableID, tableName,
 						tree.DNull,
@@ -4374,16 +4379,22 @@ CREATE TABLE crdb_internal.forward_dependencies (
 						depTypeString,
 						tree.NewDInt(tree.DInt(dep.IndexID)),
 						tree.DNull,
-						tree.NewDString(fmt.Sprintf("Columns: %v", dep.ColumnIDs)),
+						tree.NewDString(details),
 					)
 				}
 
 				if table.IsTable() || table.IsView() {
 					return table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						if dep.TriggerID != 0 {
+							return reportDependedOnBy(dep, triggerDep)
+						}
 						return reportDependedOnBy(dep, viewDep)
 					})
 				} else if table.IsSequence() {
 					return table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+						if dep.TriggerID != 0 {
+							return reportDependedOnBy(dep, triggerDep)
+						}
 						return reportDependedOnBy(dep, sequenceDep)
 					})
 				}

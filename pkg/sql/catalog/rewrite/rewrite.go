@@ -481,13 +481,15 @@ func TableDescs(
 						newDependedOnBy = append(newDependedOnBy, ref)
 					} else {
 						// Sequences are a special case: we remove only the backref created
-						// by the trigger or policy. This is represented as a minimal
-						// TableDescriptor_Reference with just ID and ByID=true. Other
+						// by the trigger or policy. This is represented as a
+						// TableDescriptor_Reference with just ID and ByID=true, and
+						// optionally a TriggerID (for trigger-based references). Other
 						// backrefs, such as those created by column usage, are preserved.
 						if table.IsSequence() {
 							seqRefUsedInTriggerOrPolicy := descpb.TableDescriptor_Reference{
-								ID:   ref.ID,
-								ByID: true,
+								ID:        ref.ID,
+								ByID:      true,
+								TriggerID: ref.TriggerID,
 							}
 							if !seqRefUsedInTriggerOrPolicy.Equal(ref) {
 								newDependedOnBy = append(newDependedOnBy, ref)
