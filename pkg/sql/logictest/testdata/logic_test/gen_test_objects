@@ -179,17 +179,18 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-%qusers
-descriptor_id_seq
-job_status
-migrations
-privi 😢leges
-replication_constraint_stats
+J,obs
+com̉ments
+database_role_settings 😢
+descriptor_i"d_seq
+job_m%pessage
+name
+space
+replication_critical_localities
+span_stats_tenant_boundaries
+statement_bundle_chunks
 sta😣tement_statistics
-tenant_settings
-transaction_diagno"stics
-transaction_statistics
-😖statem😐ent_bun🙁dle_chunks
+us̸ers
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +199,27 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"%qusers"          e😰stimated_last_login_time  timestamp with time zone
-"%qusers"          "hashedPassword"            bytea
-"%qusers"          "isRo le"                   boolean
-"%qusers"          rowid                       bigint
-"%qusers"          user_id                     oid
-"%qusers"          username                    text
-descriptor_id_seq  rowid                       bigint
-descriptor_id_seq  value                       bigint
-job_status         job_id                      bigint
-job_status         rowid                       bigint
-job_status         status                      text
-job_status         "wriTten"                   timestamp with time zone
-migrations         comp😺leted_at               timestamp with time zone
-migrations         internal                    bigint
-migrations         major                       bigint
-migrations         "min or"                    bigint
-migrations         "patc'h"                    bigint
-migrations         rowid                       bigint
-"privi 😢leges"     grant_options               ARRAY
-"privi 😢leges"     path                        text
+"J,obs"  """id"       bigint
+"J,obs"  "claim_in😋s  tance_id"  bigint
+"J,obs"  "claim_sessi
+on_id"     bytea
+"J,obs"    "created_by!_id"  bigint
+"J,obs"    created_by_type   text
+"J,obs"    creat́ed          timestamp without time zone
+"J,obs"    "descr  iption"   text
+"J,obs"    er😋ro😔r_msg       text
+"J,obs"    "fi)nished"       timestamp with time zone
+"J,obs"    job_type          text
+"J,obs"    last_run          timestamp without time zone
+"J,obs"    num_runs          bigint
+"J,obs"    owner             text
+"J,obs"    rowid             bigint
+"J,obs"    "st%patus"        text
+com̉ments  "c\\u1D02omment"  text
+com̉ments  object_id         bigint
+com̉ments  rowid             bigint
+com̉ments  "sub_%qid"       bigint
+com̉ments  "ty pe"           bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +237,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  " lo                     catio\nns"
-"d%qbt_1"  public  job_message
-"d%qbt_1"  public  transaction_activity
-"d%qbt_2"  public  "job\\xc4_progress"
-"d%qbt_2"  public  statement_activ🙂ity
-"d%qbt_2"  public  tenant_settings
-dbt_3      public  " job_progress_history"
-dbt_3      public  jobs
-dbt_3      public  "tenants%q"
+"d%qbt_1"  public  "'sp%qan_stats_samples"
+"d%qbt_1"  public  prepared_transactions
+"d%qbt_1"  public  rangelog
+"d%qbt_2"  public  "replication_critical_local%pities"
+"d%qbt_2"  public  replication_c͔onstraint_stats
+"d%qbt_2"  public  "ta\\x2csk_payloads"
+dbt_3      public  replication͉_critical_localities
+dbt_3      public  r😱ole_members
+dbt_3      public  "st atement_diagnostics_requests"
 
 
 statement ok
