@@ -9,6 +9,7 @@ go_library(
         "demo.go",
         "flags.go",
         "mt.go",
+        "mt_http_test_directory.go",
         "mt_proxy.go",
         "mt_test_directory.go",
     ],
@@ -17,6 +18,7 @@ go_library(
     deps = [
         "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/sqlproxyccl",
+        "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl/cliccl",
@@ -27,6 +29,7 @@ go_library(
         "//pkg/cli/cliflags",
         "//pkg/cli/democluster",
         "//pkg/cli/exit",
+        "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/log/severity",
         "//pkg/util/stop",
@@ -36,6 +39,7 @@ go_library(
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 
