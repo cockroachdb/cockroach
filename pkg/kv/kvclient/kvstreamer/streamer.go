@@ -355,7 +355,8 @@ const (
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
-	"maximum number of asynchronous requests by a single streamer",
+	"maximum number of asynchronous requests by a single streamer. "+
+		"The default value is computed as the number of vCPUs in a node times 96.",
 	defaultStreamerStreamsPerVCPU*max(kvcoord.MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
 )

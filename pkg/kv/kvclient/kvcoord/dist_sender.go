@@ -413,7 +413,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
-	"maximum number of asynchronous send requests",
+	"maximum number of asynchronous send requests. "+
+		"The default value is computed as the number of vCPUs in a node times 384.",
 	DefaultSenderStreamsPerVCPU*max(MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
 )

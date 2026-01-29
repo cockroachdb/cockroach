@@ -72,7 +72,8 @@ import (
 var settingDistSQLNumRunners = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.num_runners",
-	"determines the number of DistSQL runner goroutines used for issuing SetupFlow RPCs",
+	"determines the number of DistSQL runner goroutines used for issuing SetupFlow RPCs. "+
+		"The default value is computed as the number of vCPUs in a node times 4.",
 	// We use GOMAXPROCS instead of NumCPU because the former could be adjusted
 	// based on cgroup limits (see cgroups.AdjustMaxProcs).
 	//
@@ -2730,11 +2731,12 @@ var parallelizeChecks = settings.RegisterBoolSetting(
 var parallelChecksConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.parallelize_checks.concurrency_limit",
-	"maximum number of additional goroutines to run checks in parallel",
+	"maximum number of additional goroutines to run checks in parallel. "+
+		"The default value is computed as the number of vCPUs in a node times 16.",
 	// The default here is picked somewhat arbitrarily - the thinking is that we
 	// want it to be proportional to the number of CPUs we have, yet this limit
-	// should probably be smaller than kvcoord.senderConcurrencyLimit (which is
-	// 64 x CPUs).
+	// should probably be smaller than kvcoord.senderConcurrencyLimit (which
+	// used to be 64 x CPUs).
 	int64(16*runtime.GOMAXPROCS(0)),
 	settings.NonNegativeInt,
 )
