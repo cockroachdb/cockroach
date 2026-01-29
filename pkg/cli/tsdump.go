@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 )
 
@@ -127,7 +128,7 @@ will then convert it to the --format requested in the current invocation.
 
 		var w tsWriter
 		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
-		case tsDumpRaw:
+		case tsDumpRaw, tsDumpRawZstd:
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
 			}
@@ -263,7 +264,7 @@ will then convert it to the --format requested in the current invocation.
 			}
 
 			tsClient := conn.NewTimeSeriesClient()
-			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
+			if debugTimeSeriesDumpOpts.format == tsDumpRaw || debugTimeSeriesDumpOpts.format == tsDumpRawZstd {
 				// get the node details so that we can get the SQL port
 				statusClient := conn.NewStatusClient()
 				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
@@ -298,7 +299,18 @@ will then convert it to the --format requested in the current invocation.
 
 				// Buffer the writes since we're going to
 				// be writing potentially a lot of data.
-				w := bufio.NewWriterSize(output, 1024*1024)
+				bufWriter := bufio.NewWriterSize(output, 1024*1024)
+
+				// Wrap with ZSTD compressor if raw-zstd format
+				var w io.Writer = bufWriter
+				var zstdWriter *zstd.Encoder
+				if debugTimeSeriesDumpOpts.format == tsDumpRawZstd {
+					zstdWriter, err = zstd.NewWriter(bufWriter)
+					if err != nil {
+						return errors.Wrap(err, "creating zstd writer")
+					}
+					w = zstdWriter
+				}
 
 				// Write embedded metadata first
 				if err := tsdumpmeta.Write(w, metadata); err != nil {
@@ -309,7 +321,14 @@ will then convert it to the --format requested in the current invocation.
 					return err
 				}
 
-				if err := w.Flush(); err != nil {
+				// Close ZSTD writer before flushing buffer
+				if zstdWriter != nil {
+					if err := zstdWriter.Close(); err != nil {
+						return err
+					}
+				}
+
+				if err := bufWriter.Flush(); err != nil {
 					return err
 				}
 
@@ -839,6 +858,8 @@ const (
 	// to push older timestamps. There's no way to enable historical
 	// ingestion if DD doesn't already know your metric name.
 	tsDumpDatadogInit
+	// tsDumpRawZstd is like tsDumpRaw but with ZSTD compression.
+	tsDumpRawZstd
 )
 
 // Type implements the pflag.Value interface.
@@ -863,6 +884,8 @@ func (m *tsDumpFormat) String() string {
 		return "datadog"
 	case tsDumpDatadogInit:
 		return "datadoginit"
+	case tsDumpRawZstd:
+		return "raw-zstd"
 	}
 	return ""
 }
@@ -886,6 +909,8 @@ func (m *tsDumpFormat) Set(s string) error {
 		*m = tsDumpDatadog
 	case "datadoginit":
 		*m = tsDumpDatadogInit
+	case "raw-zstd":
+		*m = tsDumpRawZstd
 
 	default:
 		return fmt.Errorf("invalid value for --format: %s", s)
