@@ -589,13 +589,15 @@ $$`)
 					expect, tc.expectFGFamily = popExpectation(t, tc.expectFGFamily)
 				}
 
-				updatedRow, err := decodeRowErr(decoder, &v, cdcevent.CurrentRow)
+				updatedRow, status, err := decodeRowErr(decoder, &v, cdcevent.CurrentRow)
 				if expect.expectUnwatchedErr {
-					require.ErrorIs(t, err, cdcevent.ErrUnwatchedFamily)
+					require.NoError(t, err)
+					require.Equal(t, cdcevent.DecodeSkipUnwatchedFamily, status)
 					continue
 				}
 
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, status)
 				require.True(t, updatedRow.IsInitialized())
 				prevRow := decodeRow(t, decoder, &v, cdcevent.PrevRow)
 				require.NoError(t, err)
@@ -688,7 +690,7 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 
 func decodeRowErr(
 	decoder cdcevent.Decoder, v *kvpb.RangeFeedValue, rt cdcevent.RowType,
-) (cdcevent.Row, error) {
+) (cdcevent.Row, cdcevent.DecodeStatus, error) {
 	keyVal := roachpb.KeyValue{Key: v.Key}
 	if rt == cdcevent.PrevRow {
 		keyVal.Value = v.PrevValue
@@ -702,8 +704,9 @@ func decodeRowErr(
 func decodeRow(
 	t *testing.T, decoder cdcevent.Decoder, v *kvpb.RangeFeedValue, rt cdcevent.RowType,
 ) cdcevent.Row {
-	r, err := decodeRowErr(decoder, v, rt)
+	r, status, err := decodeRowErr(decoder, v, rt)
 	require.NoError(t, err)
+	require.Equal(t, cdcevent.DecodeOK, status)
 	return r
 }
 

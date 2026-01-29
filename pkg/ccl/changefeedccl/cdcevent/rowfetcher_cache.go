@@ -234,26 +234,19 @@ func (c *rowFetcherCache) tableDescForKey(
 	return tableDesc, family, nil
 }
 
-// ErrUnwatchedFamily is a sentinel error that indicates this part of the row
-// is not being watched and does not need to be decoded.
-var ErrUnwatchedFamily = errors.New("watched table but unwatched family")
-
-// ErrTableOffline is a sentinel error that indicates the watched table is offline.
-var ErrTableOffline = errors.New("watched table is offline")
-
 // RowFetcherForColumnFamily returns row.Fetcher for the specified column family.
-// Returns ErrUnwatchedFamily error if family is not watched.
+// Returns (nil, nil, DecodeSkipUnwatchedFamily, nil) if family is not watched.
 func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	tableDesc catalog.TableDescriptor,
 	family descpb.FamilyID,
 	sysCols []descpb.ColumnDescriptor,
 	keyOnly bool,
-) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, error) {
+) (*row.Fetcher, *descpb.ColumnFamilyDescriptor, DecodeStatus, error) {
 	idVer := CacheKey{ID: tableDesc.GetID(), Version: tableDesc.GetVersion(), FamilyID: family}
 	if v, ok := c.fetchers.Get(idVer); ok {
 		f := v.(*cachedFetcher)
 		if f.skip {
-			return nil, nil, ErrUnwatchedFamily
+			return nil, nil, DecodeSkipUnwatchedFamily, nil
 		}
 		// Ensure that all user defined types are up to date with the cached
 		// version and the desired version to use the cache. It is safe to use
@@ -261,15 +254,15 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		// guaranteed that the tables have the same version. Additionally, these
 		// fetchers are always initialized with a single tabledesc.Get.
 		if safe, err := catalog.UserDefinedTypeColsInFamilyHaveSameVersion(tableDesc, f.tableDesc, family); err != nil {
-			return nil, nil, err
+			return nil, nil, DecodeOK, err
 		} else if safe {
-			return &f.fetcher, &f.familyDesc, nil
+			return &f.fetcher, &f.familyDesc, DecodeOK, nil
 		}
 	}
 
 	familyDesc, err := catalog.MustFindFamilyByID(tableDesc, family)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, DecodeOK, err
 	}
 
 	f := &cachedFetcher{
@@ -283,7 +276,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		_, familyWatched := c.watchedFamilies[watchedFamily{tableID: tableDesc.GetID(), familyName: familyDesc.Name}]
 		if !familyWatched {
 			f.skip = true
-			return nil, nil, ErrUnwatchedFamily
+			return nil, nil, DecodeSkipUnwatchedFamily, nil
 		}
 	}
 
@@ -296,13 +289,13 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		relevantColumns, err = getRelevantColumnsForFamily(tableDesc, familyDesc)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, DecodeOK, err
 	}
 
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), relevantColumns,
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, DecodeOK, err
 	}
 
 	// Add system columns.
@@ -325,11 +318,11 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			TraceKVEvery:      &util.EveryN[crtime.Mono]{N: c.rfArgs.traceKVLogFrequency},
 		},
 	); err != nil {
-		return nil, nil, err
+		return nil, nil, DecodeOK, err
 	}
 
 	c.fetchers.Add(idVer, f)
-	return rf, familyDesc, nil
+	return rf, familyDesc, DecodeOK, nil
 }
 
 // fixedDescFetcher is a tableDescFetcher that returns descriptors from a given

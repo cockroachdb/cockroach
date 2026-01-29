@@ -186,9 +186,12 @@ func (d *eventDecoder) decodeAndCoalesceEvents(
 func (d *eventDecoder) decodeEvent(
 	ctx context.Context, first streampb.StreamEvent_KV, last streampb.StreamEvent_KV,
 ) (decodedEvent, error) {
-	decodedRow, err := d.decoder.DecodeKV(ctx, last.KeyValue, cdcevent.CurrentRow, last.KeyValue.Value.Timestamp, false)
+	decodedRow, status, err := d.decoder.DecodeKV(ctx, last.KeyValue, cdcevent.CurrentRow, last.KeyValue.Value.Timestamp, false)
 	if err != nil {
 		return decodedEvent{}, err
+	}
+	if status != cdcevent.DecodeOK {
+		return decodedEvent{}, errors.Newf("unexpected decode status: %v", status)
 	}
 
 	dstTable, ok := d.srcToDest[decodedRow.TableID]
@@ -206,9 +209,12 @@ func (d *eventDecoder) decodeEvent(
 	prevKV.Key = first.KeyValue.Key
 	prevKV.Value = first.PrevValue
 
-	decodedPrevRow, err := d.decoder.DecodeKV(ctx, prevKV, cdcevent.PrevRow, first.PrevValue.Timestamp, false)
+	decodedPrevRow, prevStatus, err := d.decoder.DecodeKV(ctx, prevKV, cdcevent.PrevRow, first.PrevValue.Timestamp, false)
 	if err != nil {
 		return decodedEvent{}, err
+	}
+	if prevStatus != cdcevent.DecodeOK {
+		return decodedEvent{}, errors.Newf("unexpected decode status: %v", prevStatus)
 	}
 
 	prevRow, err := dstTable.toLocalDatums(decodedPrevRow)
