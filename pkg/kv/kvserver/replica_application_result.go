@@ -484,7 +484,7 @@ func (r *Replica) handleMergeResult(ctx context.Context, merge *kvserverpb.Merge
 }
 
 func (r *Replica) handleDescResult(ctx context.Context, desc *roachpb.RangeDescriptor) {
-	r.setDescRaftMuLocked(ctx, desc)
+	r.setDescRaftMuLocked(ctx, desc, nil)
 }
 
 func (r *Replica) handleLeaseResult(
