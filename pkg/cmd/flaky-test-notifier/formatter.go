@@ -31,22 +31,21 @@ func (f *flakyTestFormatter) Body(r *issues.Renderer, data issues.TemplateData) 
 	r.Escaped(fmt.Sprintf("%s.%s is flaky on %s. It is one of the top %d flakiest tests in the last %d days.\n\n",
 		data.PackageNameShort, data.TestName, data.Branch, maxAlerts, *lookbackDays))
 
-	r.Escaped("This test has failed across the following builds:\n\n")
+	r.Escaped("This test has failed across the following builds. Please check the links to see each failure.\n\n")
 
 	for _, failure := range f.failures {
-		r.Escaped(fmt.Sprintf("### %s (%.1f%% failure rate out of %d total test runs)\n\n",
+		r.Escaped(fmt.Sprintf("- **%s** (%.1f%% failure rate, %d total runs): ",
 			failure.Build(), failure.FailureRate()*100, failure.TotalRuns()))
-
 		links := failure.Links()
-		r.Escaped("Failed runs: (")
 		for i, link := range links {
 			if i > 0 {
 				r.Escaped(", ")
 			}
 			r.A(fmt.Sprintf("%d", i+1), link.String())
 		}
-		r.Escaped(")\n\n")
+		r.Escaped("\n")
 	}
+	r.Escaped("\n")
 
 	if len(data.RelatedIssues) > 0 {
 		r.Collapsed("Same failure on other branches", func() {

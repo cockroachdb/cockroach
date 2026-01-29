@@ -1,0 +1,26 @@
+name: Flaky Test Notifier
+
+on:
+  schedule:
+    # Run every Monday at 6:00 AM UTC (1:00 AM EST)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: [self-hosted, ubuntu_2004]
+    timeout-minutes: 30
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build/github/get-engflow-keys.sh
+      - name: Run flaky-test-notifier
+        env:
+          SNOWFLAKE_USER: SNOWFLAKE_FLAKY_TEST_NOTIFIER_USER
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.FLAKY_TEST_NOTIFIER_SNOWFLAKE_PRIVATE_KEY }}
+          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./build/github/flaky-test-notifier.sh
+      - name: clean up
+        run: ./build/github/cleanup-engflow-keys.sh
+        if: always()
