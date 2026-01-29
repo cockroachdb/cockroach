@@ -2060,6 +2060,10 @@ type optTableStat struct {
 
 var _ cat.TableStatistic = &optTableStat{}
 
+// statFailedTypeCheckLogLimiter is used to minimize spamming the log with
+// "skipping stat ... due to failed type check" errors.
+var statFailedTypeCheckLogLimiter = log.Every(time.Second)
+
 func (os *optTableStat) init(
 	ctx context.Context, tab *optTable, stat *stats.TableStatistic,
 ) (ok bool, _ error) {
@@ -2092,7 +2096,9 @@ func (os *optTableStat) init(
 				)
 			}
 			// For release builds, skip over the stat and log a warning.
-			log.Dev.Warningf(ctx, "skipping stat %d due to failed type check: %v", stat.StatisticID, err)
+			if statFailedTypeCheckLogLimiter.ShouldLog() {
+				log.Dev.Warningf(ctx, "skipping stat %d due to failed type check: %v", stat.StatisticID, err)
+			}
 			return false, nil
 		}
 	}

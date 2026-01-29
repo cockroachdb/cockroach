@@ -792,8 +792,8 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 	r := Refresher{
 		st:        st,
-		mutations: make(chan mutation, refreshChanBufferLen),
-		settings:  make(chan settingOverride, refreshChanBufferLen),
+		mutations: make(chan mutation, mutationsChanBufferLen),
+		settings:  make(chan settingOverride, settingsChanBufferLen),
 	}
 
 	tbl := descpb.TableDescriptor{ID: 53, ParentID: 52, Name: "foo"}
@@ -801,11 +801,11 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 
 	// Test that the mutations channel doesn't block even when we add 10 more
 	// items than can fit in the buffer.
-	for i := 0; i < refreshChanBufferLen+10; i++ {
+	for i := 0; i < mutationsChanBufferLen+10; i++ {
 		r.NotifyMutation(ctx, tableDesc, 5 /* rowsAffected */)
 	}
 
-	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
+	if expected, actual := mutationsChanBufferLen, len(r.mutations); expected != actual {
 		t.Fatalf("expected channel size %d but found %d", expected, actual)
 	}
 
@@ -815,13 +815,13 @@ func TestMutationsAndSettingOverrideChannels(t *testing.T) {
 	tableDesc.TableDesc().AutoStatsSettings = autoStatsSettings
 	minStaleRows := int64(1)
 	autoStatsSettings.MinStaleRows = &minStaleRows
-	for i := 0; i < refreshChanBufferLen+10; i++ {
+	for i := 0; i < settingsChanBufferLen+10; i++ {
 		int64CurrIteration := int64(i)
 		autoStatsSettings.MinStaleRows = &int64CurrIteration
 		r.NotifyMutation(ctx, tableDesc, 5 /* rowsAffected */)
 	}
 
-	if expected, actual := refreshChanBufferLen, len(r.settings); expected != actual {
+	if expected, actual := settingsChanBufferLen, len(r.settings); expected != actual {
 		t.Fatalf("expected channel size %d but found %d", expected, actual)
 	}
 }
