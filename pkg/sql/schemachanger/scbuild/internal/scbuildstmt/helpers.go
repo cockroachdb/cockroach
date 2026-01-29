@@ -2143,7 +2143,7 @@ func retrieveColumnComment(
 func mustRetrievePartitioningFromIndexPartitioning(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
 ) catalog.Partitioning {
-	idxPart := b.QueryByID(tableID).FilterIndexPartitioning().
+	idxPart := b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)).FilterIndexPartitioning().
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexPartitioning) bool {
 			return e.IndexID == indexID
 		}).MustGetZeroOrOneElement()

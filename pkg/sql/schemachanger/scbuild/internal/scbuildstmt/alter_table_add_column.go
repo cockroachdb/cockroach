@@ -814,7 +814,7 @@ func addSecondaryIndexTargetsForAddColumn(
 	}
 	populateColumnsFromIndexDesc(tbl, index.IndexID, desc, &spec)
 	// Populate partitioning information next.
-	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID*/, nil /*prevSpec*/, &spec, false /* isPrimary */, nil /* partitionByIndex */)
+	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID*/, nil /*prevSpec*/, &spec, false /* isPrimary */, nil /* partitionByIndex */, nil)
 	if err != nil {
 		panic(err)
 	}

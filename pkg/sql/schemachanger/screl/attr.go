@@ -62,6 +62,8 @@ const (
 	// use includes:
 	//   1. comment metadata on descriptors.
 	//   2. string representation of column generated as identity sequence options
+	//   3. region name for TableLocalitySecondaryRegion.
+	//   4. regional by row AS
 	Value
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
@@ -279,9 +281,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableLocalitySecondaryRegion)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
+		rel.EntityAttr(Value, "RegionName"),
 	),
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRow)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Value, "As"),
 	),
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

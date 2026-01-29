@@ -11,7 +11,121 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
+
+// ZoneConfigForMultiRegionTable generates a ZoneConfig stub for a
+// regional-by-table or global table in a multi-region database.
+//
+// At the table/partition level, the only attributes that are set are
+// `num_voters`, `voter_constraints`, and `lease_preferences`. We expect that
+// the attributes `num_replicas` and `constraints` will be inherited from the
+// database level zone config.
+//
+// This function can return a nil zonepb.ZoneConfig, meaning no table level zone
+// configuration is required.
+//
+// Relevant multi-region configured fields (as defined in
+// `zonepb.MultiRegionZoneConfigFields`) will be overwritten by the calling function
+// into an existing ZoneConfig.
+func ZoneConfigForMultiRegionTable(
+	localityConfig catpb.LocalityConfig, regionConfig multiregion.RegionConfig,
+) (zonepb.ZoneConfig, error) {
+	zc := *zonepb.NewZoneConfig()
+
+	switch l := localityConfig.Locality.(type) {
+	case *catpb.LocalityConfig_Global_:
+		// Enable non-blocking transactions.
+		zc.GlobalReads = proto.Bool(true)
+
+		if !regionConfig.GlobalTablesInheritDatabaseConstraints() {
+			// For GLOBAL tables, we want non-voters in all regions for fast reads, so
+			// we always use a DEFAULT placement config, even if the database is using
+			// RESTRICTED placement.
+			regionConfig = regionConfig.WithPlacementDefault()
+
+			numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
+			zc.NumVoters = &numVoters
+			zc.NumReplicas = &numReplicas
+
+			constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			zc.Constraints = constraints
+			zc.InheritedConstraints = false
+
+			voterConstraints, err := SynthesizeVoterConstraints(regionConfig.PrimaryRegion(), regionConfig)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			zc.VoterConstraints = voterConstraints
+			zc.NullVoterConstraintsIsEmpty = true
+			zc.LeasePreferences = SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), "" /* secondaryRegion */)
+			zc.InheritedLeasePreferences = false
+
+			zc, err = regionConfig.ExtendZoneConfigWithGlobal(zc)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+		}
+		// Inherit lease preference from the database. We do
+		// nothing here because `NewZoneConfig()` already marks the field as
+		// 'inherited'.
+		return zc, nil
+	case *catpb.LocalityConfig_RegionalByTable_:
+		affinityRegion := regionConfig.PrimaryRegion()
+		if l.RegionalByTable.Region != nil {
+			affinityRegion = *l.RegionalByTable.Region
+		}
+		if l.RegionalByTable.Region == nil && !regionConfig.IsMemberOfSuperRegion(affinityRegion) {
+			// If we don't have an explicit affinity region, use the same
+			// configuration as the database and return a blank zcfg here.
+			return zc, nil
+		}
+
+		numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
+		zc.NumVoters = &numVoters
+
+		if regionConfig.IsMemberOfSuperRegion(affinityRegion) {
+			err := AddConstraintsForSuperRegion(&zc, regionConfig, affinityRegion)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+		} else if !regionConfig.RegionalInTablesInheritDatabaseConstraints(affinityRegion) {
+			// If the database constraints can't be inherited to serve as the
+			// constraints for this table, define the constraints ourselves.
+			zc.NumReplicas = &numReplicas
+
+			constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			zc.Constraints = constraints
+			zc.InheritedConstraints = false
+		}
+
+		// If the table has a user-specified affinity region, use it.
+		voterConstraints, err := SynthesizeVoterConstraints(affinityRegion, regionConfig)
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+		zc.VoterConstraints = voterConstraints
+		zc.NullVoterConstraintsIsEmpty = true
+		zc.LeasePreferences = SynthesizeLeasePreferences(affinityRegion, "" /* secondaryRegion */)
+		zc.InheritedLeasePreferences = false
+
+		return regionConfig.ExtendZoneConfigWithRegionalIn(zc, affinityRegion)
+
+	case *catpb.LocalityConfig_RegionalByRow_:
+		// We purposely do not set anything here at table level - this should be done at
+		// partition level instead.
+		return zc, nil
+	default:
+		return zonepb.ZoneConfig{}, errors.AssertionFailedf(
+			"unexpected unknown locality type %T", localityConfig.Locality)
+	}
+}
 
 // ZoneConfigForMultiRegionPartition generates a ZoneConfig stub for a partition
 // that belongs to a regional by row table in a multi-region database.
