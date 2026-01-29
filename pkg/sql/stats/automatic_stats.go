@@ -197,12 +197,16 @@ const (
 	// table.
 	defaultAverageTimeBetweenRefreshes = 12 * time.Hour
 
-	// refreshChanBufferLen is the length of the buffered channel used by the
-	// automatic statistics refresher. If the channel overflows, all SQL mutations
-	// will be ignored by the refresher until it processes some existing mutations
-	// in the buffer and makes space for new ones. SQL mutations will never block
-	// waiting on the refresher.
-	refreshChanBufferLen = 256
+	// mutationsChanBufferLen is the length of the buffered channel used by the
+	// automatic statistics refresher. If the channel overflows, all SQL
+	// mutations will be ignored by the refresher until it processes some
+	// existing mutations in the buffer and makes space for new ones. SQL
+	// mutations will never block waiting on the refresher.
+	mutationsChanBufferLen = 1 << 15
+
+	// settingsChanBufferLen is the same as mutationsChanBufferLen but for the
+	// settings' overrides buffered channel.
+	settingsChanBufferLen = 1 << 8
 )
 
 // Refresher is responsible for automatically refreshing the table statistics
@@ -371,8 +375,8 @@ func MakeRefresher(
 		knobs:            knobs,
 		readOnlyTenant:   readOnlyTenant,
 		rng:              rand.New(rand.NewSource(rand.Int63())),
-		mutations:        make(chan mutation, refreshChanBufferLen),
-		settings:         make(chan settingOverride, refreshChanBufferLen),
+		mutations:        make(chan mutation, mutationsChanBufferLen),
+		settings:         make(chan settingOverride, settingsChanBufferLen),
 		asOfTime:         asOfTime,
 		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
 		mutationCounts:   make(map[descpb.ID]int64, 16),
@@ -712,7 +716,9 @@ func (r *Refresher) Start(
 			case <-r.drainAutoStats:
 				log.Dev.Infof(ctx, "draining auto stats refresher")
 				return
+
 			case <-ctx.Done():
+				log.Dev.Infof(ctx, "quiescing auto stats refresher")
 				return
 			}
 		}
