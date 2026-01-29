@@ -6,6 +6,7 @@
 package admission
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -114,10 +115,10 @@ type cpuTimeTokenFiller struct {
 	tickCh *chan struct{}
 }
 
-func (f *cpuTimeTokenFiller) start() {
+func (f *cpuTimeTokenFiller) start(ctx context.Context) {
 	// The token buckets should start full. The first call to resetInterval will
 	// fill the buckets.
-	f.allocator.resetInterval()
+	f.allocator.resetInterval(ctx)
 
 	ticker := f.timeSource.NewTicker(timePerTick)
 	intervalStart := f.timeSource.Now()
@@ -159,7 +160,7 @@ func (f *cpuTimeTokenFiller) start() {
 						f.allocator.allocateTokens(1)
 					}
 					intervalStart = t
-					f.allocator.resetInterval()
+					f.allocator.resetInterval(ctx)
 					remainingTicks = int64(time.Second / timePerTick)
 				} else {
 					remainingSinceIntervalStart := time.Second - elapsedSinceIntervalStart
@@ -185,10 +186,14 @@ func (f *cpuTimeTokenFiller) start() {
 	}()
 }
 
+func (f *cpuTimeTokenFiller) close() {
+	close(f.closeCh)
+}
+
 // cpuTimeTokenAllocatorI abstracts cpuTimeTokenAllocator for testing.
 type cpuTimeTokenAllocatorI interface {
 	allocateTokens(expectedRemainingTicksInInterval int64)
-	resetInterval()
+	resetInterval(context.Context)
 }
 
 var _ cpuTimeTokenAllocatorI = &cpuTimeTokenAllocator{}
@@ -273,7 +278,7 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 
 // resetInterval is called to signal the beginning of a new interval.
 // allocateTokens adds the desired number of tokens every interval.
-func (a *cpuTimeTokenAllocator) resetInterval() {
+func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// Compute target utilizations from cluster settings. The noBurst targets are
 	// configurable by cluster settings. A canBurst target adds a delta to the
 	// corresponding noBurst target, and the delta is also configurable by a
@@ -293,7 +298,7 @@ func (a *cpuTimeTokenAllocator) resetInterval() {
 	targets[systemTenant][noBurst] = systemTarget
 	targets[systemTenant][canBurst] = systemTarget + burstDelta
 
-	newRefillRates := a.model.fit(targets)
+	newRefillRates := a.model.fit(ctx, targets)
 
 	// deltaRefillRates is the difference in tokens to add per interval (1s)
 	// from the previous call to fit to this one. We add it immediately to the
@@ -326,7 +331,7 @@ func (a *cpuTimeTokenAllocator) resetInterval() {
 
 // cpuTimeModel abstracts cpuTimeLinearModel for testing.
 type cpuTimeModel interface {
-	fit(targetUtilizations) rates
+	fit(context.Context, targetUtilizations) rates
 }
 
 var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
@@ -392,17 +397,16 @@ var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
 // Due to this, higher priority buckets have more tokens added per second than
 // lower priority buckets.
 type cpuTimeTokenLinearModel struct {
-	granter           tokenUsageTracker
-	cpuMetricProvider CPUMetricProvider
-	timeSource        timeutil.TimeSource
+	granter            tokenUsageTracker
+	cpuMetricsProvider CPUMetricsProvider
+	timeSource         timeutil.TimeSource
 
 	// True after first call to fit.
 	init bool
 	// The time that fit was called last.
 	lastFitTime time.Time
-	// The cumulative user/sys CPU time used since process start in
-	// milliseconds.
-	totalCPUTimeMillis int64
+	// The cumulative user/sys CPU time used since process start.
+	totalCPUTime time.Duration
 	// The linear correction term, see the docs above cpuTimeTokenLinearModel.
 	tokenToCPUTimeMultiplier float64
 }
@@ -419,10 +423,12 @@ type tokenUsageTracker interface {
 
 var _ tokenUsageTracker = &cpuTimeTokenGranter{}
 
-type CPUMetricProvider interface {
-	// GetCPUInfo returns the cumulative user/sys CPU time used since process
-	// start in milliseconds, and the cpuCapacity measured in vCPUs.
-	GetCPUInfo() (totalCPUTimeMillis int64, cpuCapacity float64)
+type CPUMetricsProvider interface {
+	// GetCPUUsage returns the cumulative user/sys CPU time used since process
+	// start.
+	GetCPUUsage() (totalCPUTime time.Duration, err error)
+	// GetCPUCapacity returns the cpuCapacity measured in vCPUs.
+	GetCPUCapacity() (cpuCapacity float64)
 }
 
 // fit adjusts tokenToCPUTimeMultiplier based on CPU usage & token usage.
@@ -430,15 +436,35 @@ type CPUMetricProvider interface {
 // parameter. targets tracks a target CPU utilization for all buckets in
 // the multi-dimensional token buckets owned by cpuTimeTokenGranter. fit
 // returns the refill rates.
-func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
+func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtilizations) rates {
 	if !m.init {
 		m.init = true
 		m.lastFitTime = m.timeSource.Now()
-		totalCPUTimeMillis, cpuCapacity := m.cpuMetricProvider.GetCPUInfo()
-		m.totalCPUTimeMillis = totalCPUTimeMillis
+		totalCPUTime, err := m.cpuMetricsProvider.GetCPUUsage()
+		if err != nil {
+			panic(fmt.Sprintf("GetCPUUsage returned %q in cpuTimeTokenLinearModel.fit init", err))
+		}
+		m.totalCPUTime = totalCPUTime
 		m.tokenToCPUTimeMultiplier = 1
-		return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+		return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, m.cpuMetricsProvider.GetCPUCapacity())
 	}
+
+	cpuCapacity := m.cpuMetricsProvider.GetCPUCapacity()
+	totalCPUTime, err := m.cpuMetricsProvider.GetCPUUsage()
+	if err != nil {
+		// We do not expect the syscall that fetches CPU usage to ever fail.
+		panic(fmt.Sprintf("GetCPUUsage returned %q in cpuTimeTokenLinearModel.fit", err))
+	}
+
+	intCPUTime := totalCPUTime - m.totalCPUTime
+	// totalCPUTime is not necessarily monotonic in all environments,
+	// e.g. in case of VM live migration on a public cloud provider. In this
+	// case, we set intCPUTime to 0, so that the computation of
+	// tokenToCPUTimeMultiplier is well-behaved.
+	if intCPUTime < 0 {
+		intCPUTime = 0
+	}
+	m.totalCPUTime = totalCPUTime
 
 	now := m.timeSource.Now()
 	elapsedSinceLastFit := now.Sub(m.lastFitTime)
@@ -457,21 +483,8 @@ func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
 		tokensUsed = 1
 	}
 
-	// Get used CPU time.
-	totalCPUTimeMillis, cpuCapacity := m.cpuMetricProvider.GetCPUInfo()
-	intCPUTimeMillis := totalCPUTimeMillis - m.totalCPUTimeMillis
-	// totalCPUTimeMillis is not necessarily monotonic in all environments,
-	// e.g. in case of VM live migration on a public cloud provider. In this
-	// case, we set intCPUTimeMillis to 0, so that the computation of
-	// tokenToCPUTimeMultiplier is well-behaved.
-	if intCPUTimeMillis < 0 {
-		intCPUTimeMillis = 0
-	}
-	m.totalCPUTimeMillis = totalCPUTimeMillis
-	intCPUTimeNanos := intCPUTimeMillis * 1e6
-
 	// Update multiplier.
-	isLowCPUUtil := intCPUTimeNanos < int64(float64(elapsedSinceLastFit.Nanoseconds())*cpuCapacity*lowCPUUtilFrac)
+	isLowCPUUtil := int64(intCPUTime) < int64(float64(elapsedSinceLastFit.Nanoseconds())*cpuCapacity*lowCPUUtilFrac)
 	if isLowCPUUtil {
 		// With good integration with admission control, most foreground
 		// work will be tracked by AC and reflected in the model, and the
@@ -541,7 +554,7 @@ func (m *cpuTimeTokenLinearModel) fit(targets targetUtilizations) rates {
 		}
 	} else {
 		tokenToCPUTimeMultiplier :=
-			float64(intCPUTimeNanos) / float64(tokensUsed)
+			float64(intCPUTime) / float64(tokensUsed)
 		// We clamp tokenToCPUTimeMultiplier to be in the interval [1, 20]. The
 		// lower bound 1 reflects our knowledge that whatever is measured by
 		// tracked requests was actually consumed (i.e. consumed tokens represent
