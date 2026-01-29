@@ -5308,15 +5308,6 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 		return 0, makeUnsupportedComparisonMessage(d, other)
 	}
 
-	// We should never be comparing two different versions of the same enum.
-	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
-		return 0, errors.AssertionFailedf(
-			"comparison of two different versions of enum %s oid %d: versions %d and %d",
-			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()),
-			d.EnumTyp.TypeMeta.Version, v.EnumTyp.TypeMeta.Version,
-		)
-	}
-
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
 	return res, nil
 }
