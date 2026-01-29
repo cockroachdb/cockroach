@@ -12,6 +12,14 @@ import (
 
 const (
 	StepInit = StepID(iota)
+	StepGCStart
+	StepGCSnapshotTaken
+	StepSplitStart
+	StepSplitApplied
+	StepRebalancedRHS
+	StepFirstClearRange
+	StepGCSent
+	StepConsistencyRHS
 )
 
 type Bus struct{}
