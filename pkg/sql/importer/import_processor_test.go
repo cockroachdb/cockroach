@@ -446,7 +446,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -523,7 +523,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
+			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}

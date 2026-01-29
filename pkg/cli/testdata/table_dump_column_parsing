@@ -14,7 +14,7 @@ progress  \x10effdc3929b9f8a030d0000803fa8019984a0c1e09cd9e3486a0d1204000000002a
 ----
 {"Progress":null,"modified_micros":1733902763383997,"Details":{"table_metadata_cache":{}},"trace_id":0}
 {"Progress":null,"modified_micros":1733902768876277,"Details":{"AutoSpanConfigReconciliation":{"checkpoint":{"wall_time":1733902763154984000}}},"trace_id":0}
-{"Progress":{"fraction_completed":1},"modified_micros":1733902763884271,"Details":{"import":{"read_progress":[0],"span_progress":null,"resume_pos":[0],"sequence_details":[{}],"summary":{}}},"trace_id":5244271230238327321}
+{"Progress":{"fraction_completed":1},"modified_micros":1733902763884271,"Details":{"import":{"read_progress":[0],"span_progress":null,"resume_pos":[0],"sequence_details":[{}],"summary":{},"completed_map_work":null}},"trace_id":5244271230238327321}
 
 
 system.tenants.txt

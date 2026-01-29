@@ -287,7 +287,7 @@ func TestResumeSpanSSTManifestRoundTrip(t *testing.T) {
 	require.NotZero(t, jobID)
 	sqlRunner.Exec(t, fmt.Sprintf("UPDATE system.jobs SET status = 'running' WHERE id = %d", jobID))
 
-	var expected jobspb.IndexBackfillSSTManifest
+	var expected jobspb.BulkSSTManifest
 	ts := s.Clock().Now()
 	expected.URI = "nodelocal://1/index-backfill/test"
 	prefix := s.Codec().TenantPrefix()
@@ -316,7 +316,7 @@ func TestResumeSpanSSTManifestRoundTrip(t *testing.T) {
 		}
 		codec := s.Codec()
 		return rowexec.SetResumeSpansAndSSTManifestsInJob(
-			ctx, &codec, spans, []jobspb.IndexBackfillSSTManifest{expected}, mutationIdx, txn, job,
+			ctx, &codec, spans, []jobspb.BulkSSTManifest{expected}, mutationIdx, txn, job,
 		)
 	}); err != nil {
 		t.Fatal(err)
@@ -329,7 +329,7 @@ func TestResumeSpanSSTManifestRoundTrip(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		require.Equal(t, []jobspb.IndexBackfillSSTManifest{expected}, manifests)
+		require.Equal(t, []jobspb.BulkSSTManifest{expected}, manifests)
 		return nil
 	}); err != nil {
 		t.Fatal(err)
