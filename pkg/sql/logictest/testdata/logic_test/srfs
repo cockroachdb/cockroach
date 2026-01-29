@@ -1426,10 +1426,10 @@ NULL
 
 # Regression test for #110952 - providing invalid arguments to unnest should
 # not trigger an internal error.
-statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string\)
+statement error pgcode 42883 pq: unknown signature: unnest\(string\)
 SELECT unnest('{}');
 
-statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(string, string, string\)
+statement error pgcode 42883 pq: unknown signature: unnest\(string, string, string\)
 SELECT unnest('{}', '{}', '{}');
 
 statement error pgcode 42883 pq: unknown signature: unnest\(int\)
@@ -1445,7 +1445,7 @@ statement error pgcode 42804 pq: could not determine polymorphic type: unnest\(u
 SELECT unnest(NULL, NULL, NULL);
 
 # pg_expandarray handles return types similarly to unnest.
-statement error pgcode 42804 pq: could not determine polymorphic type: information_schema._pg_expandarray\(string\)
+statement error pgcode 42883 pq: unknown signature: information_schema._pg_expandarray\(string\)
 SELECT information_schema._pg_expandarray('{}');
 
 query T
@@ -1453,17 +1453,26 @@ SELECT unnest('{1}'::int[], '{2}', '{3}');
 ----
 (1,2,3)
 
+statement error pgcode 42883 pq: unknown signature: unnest\(int\[\], string, string\)
+SELECT unnest('{1}'::int[], '{}', '{}');
+
+# Sanity check that the session variable gives us pre-26.2 behavior which
+# allowed this query.
+statement ok
+SET disable_empty_array_type_checking_fix = true
+
 query T
 SELECT unnest('{1}'::int[], '{}', '{}');
 ----
 (1,,)
+
+statement ok
+RESET disable_empty_array_type_checking_fix
 
 query T
 SELECT unnest('{1}', '{2}', '{3}'::int[]);
 ----
 (1,2,3)
 
-query T
+statement error pgcode 42883 pq: unknown signature: unnest\(string, string, int\[\]\)
 SELECT unnest('{}', '{}', '{3}'::int[]);
-----
-(,,3)

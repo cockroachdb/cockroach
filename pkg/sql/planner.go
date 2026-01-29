@@ -996,6 +996,7 @@ func (p *planner) resetPlanner(
 		p.execCfg.Settings.Version, utc,
 	)
 	p.semaCtx.UsePre_25_2VariadicBuiltins = sd.UsePre_25_2VariadicBuiltins
+	p.semaCtx.DisableEmptyArrayTypeCheckingFix = sd.DisableEmptyArrayTypeCheckingFix
 
 	p.autoCommit = false
 

@@ -774,6 +774,11 @@ message LocalOnlySessionData {
   // physical planner from partitioning scans with soft limits into multiple
   // TableReaders. When true, this matches the behavior for hard limits.
   bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
+  // DisableEmptyArrayTypeCheckingFix, if set, indicates that the fix (to the
+  // special case for empty arrays parsed as a string without explicit type
+  // casts nor type hints within builtins where the input parameter is of the
+  // AnyArray type) should not be used.
+  bool disable_empty_array_type_checking_fix = 198;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
