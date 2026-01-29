@@ -692,7 +692,11 @@ message ImportDetails {
     sqlbase.TableDescriptor desc = 1;
     string name = 18;
     int64 seq_val = 19;
-    bool was_empty = 22;
+    // WasEmpty is true if the table was empty at the start of the import. It is
+    // deprecated; use InitialRowCount.
+    // TODO(bghal): remove when v26.1 is past support.
+    bool was_empty = 22 [deprecated = true];
+    uint64 initial_row_count = 23;
     repeated string target_cols = 21;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20;
   }
