@@ -1123,6 +1123,10 @@ func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val b
 	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
 }
 
+func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
+	m.Data.OptimizerInlineAnyUnnestSubquery = val
+}
+
 func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
 	m.Data.UseBackupsWithIDs = val
 }

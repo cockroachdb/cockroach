@@ -774,6 +774,9 @@ message LocalOnlySessionData {
   // physical planner from partitioning scans with soft limits into multiple
   // TableReaders. When true, this matches the behavior for hard limits.
   bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
+  // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
+  // normalization rule that inlines unnest subqueries in ANY comparisons.
+  bool optimizer_inline_any_unnest_subquery = 198;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

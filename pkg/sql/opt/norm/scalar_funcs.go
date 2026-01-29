@@ -401,3 +401,9 @@ func (c *CustomFuncs) SplitTupleEq(lhs, rhs *memo.TupleExpr) memo.FiltersExpr {
 func (c *CustomFuncs) CanNormalizeArrayFlatten(input memo.RelExpr, p *memo.SubqueryPrivate) bool {
 	return c.HasOuterCols(input) || p.WithinUDF
 }
+
+// CanInlineAnyUnnestSubquery returns true if the InlineAnyProjectSet rule is
+// enabled by the session setting.
+func (c *CustomFuncs) CanInlineAnyUnnestSubquery() bool {
+	return c.f.evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery
+}

@@ -1998,7 +1998,8 @@ select
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── k:1 = ANY $1 [outer=(1)]
+      ├── k:1 = ANY $1 [outer=(1)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
 
 # Different comparison operator.
 norm expect=InlineAnyProjectSet
@@ -2012,7 +2013,8 @@ select
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── k:1 > ANY $1 [outer=(1)]
+      ├── k:1 > ANY $1 [outer=(1)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS INT8[])
 
 # String array.
 norm expect=InlineAnyProjectSet
@@ -2024,7 +2026,8 @@ select
  ├── scan a
  │    └── columns: s:4
  └── filters
-      └── s:4 = ANY $1 [outer=(4)]
+      ├── s:4 = ANY $1 [outer=(4)]
+      └── $1 IS DISTINCT FROM CAST(NULL AS STRING[])
 
 # Using a column reference for the array.
 norm expect=InlineAnyProjectSet
@@ -2034,7 +2037,7 @@ project
  ├── columns: k:1!null
  ├── key: (1)
  └── select
-      ├── columns: k:1!null arr:5
+      ├── columns: k:1!null arr:5!null
       ├── key: (1)
       ├── fd: (1)-->(5)
       ├── scan a
@@ -2042,7 +2045,8 @@ project
       │    ├── key: (1)
       │    └── fd: (1)-->(5)
       └── filters
-           └── k:1 = ANY arr:5 [outer=(1,5)]
+           ├── k:1 = ANY arr:5 [outer=(1,5)]
+           └── arr:5 IS DISTINCT FROM CAST(NULL AS INT8[]) [outer=(5), constraints=(/5: (/NULL - ]; tight)]
 
 # Case with an array-returning expression inside other than a placeholder.
 norm expect=InlineAnyProjectSet
@@ -2056,7 +2060,8 @@ select
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── k:1 = ANY (ARRAY[1] || array_remove($1, 5)) [outer=(1), immutable]
+      ├── k:1 = ANY (ARRAY[1] || array_remove($1, 5)) [outer=(1), immutable]
+      └── (ARRAY[1] || array_remove($1, 5)) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
 
 # Case with an array containing NULL.
 norm expect=InlineAnyProjectSet
@@ -2070,7 +2075,8 @@ select
  │    ├── columns: k:1!null
  │    └── key: (1)
  └── filters
-      └── k:1 = ANY array_append($1, NULL) [outer=(1), immutable]
+      ├── k:1 = ANY array_append($1, NULL) [outer=(1), immutable]
+      └── array_append($1, NULL) IS DISTINCT FROM CAST(NULL AS INT8[]) [immutable]
 
 # Case with a NULL array.
 norm expect=InlineAnyProjectSet
@@ -2095,6 +2101,29 @@ select
  │    └── key: (1)
  └── filters
       └── k:1 IN ($1, NULL) [outer=(1)]
+
+# Rule should not fire when the session variable is disabled.
+norm set=optimizer_inline_any_unnest_subquery=false expect-not=InlineAnyProjectSet
+SELECT k FROM a WHERE k = ANY(SELECT * FROM unnest($1:::INT[]))
+----
+semi-join (hash)
+ ├── columns: k:1!null
+ ├── immutable, has-placeholder
+ ├── key: (1)
+ ├── scan a
+ │    ├── columns: k:1!null
+ │    └── key: (1)
+ ├── project-set
+ │    ├── columns: unnest:8
+ │    ├── immutable, has-placeholder
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest($1) [immutable]
+ └── filters
+      └── k:1 = unnest:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Rule should not fire when ProjectSet has multiple zip items.
 norm expect-not=InlineAnyProjectSet
