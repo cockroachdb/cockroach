@@ -96,6 +96,8 @@ type BackupRestoreTestingKnobs struct {
 	AfterRevertRestoreDropDescriptors func() error
 
 	RestoreSpanConfigConformanceRetryPolicy *retry.Options
+
+	OnCompactionFileAccess *func(processorLocality roachpb.Locality, fileLocality string) error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
