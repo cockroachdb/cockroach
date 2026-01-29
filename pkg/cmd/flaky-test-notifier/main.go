@@ -13,6 +13,7 @@ import (
 	"crypto/x509"
 	gosql "database/sql"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"flag"
@@ -179,7 +180,7 @@ func (tce *TeamCityEngflowTest) Test() string {
 }
 
 func (tce *TeamCityEngflowTest) Links() []*url.URL {
-	return invocationsToLinks(tce.Server, tce.FailedBuilds)
+	return invocationsToLinks(tce.Label, tce.Server, tce.FailedBuilds)
 }
 
 func (tce *TeamCityEngflowTest) FailureRate() float64 {
@@ -214,7 +215,7 @@ func (get *GithubEngflowTest) Test() string {
 }
 
 func (get *GithubEngflowTest) Links() []*url.URL {
-	return invocationsToLinks(get.Server, get.FailedBuilds)
+	return invocationsToLinks(get.Label, get.Server, get.FailedBuilds)
 }
 
 func (get *GithubEngflowTest) FailureRate() float64 {
@@ -234,14 +235,17 @@ func labelToPkg(label string) string {
 	return strings.Split(label, ":")[0]
 }
 
-func invocationsToLinks(server string, invocations []string) []*url.URL {
+func invocationsToLinks(label string, server string, invocations []string) []*url.URL {
 	host, err := url.Parse(fmt.Sprintf("https://%s.cluster.engflow.com", server))
 	if err != nil {
 		panic(err)
 	}
 	var ret []*url.URL
 	for _, b := range invocations {
-		ret = append(ret, host.JoinPath("invocation", b))
+		u := host.JoinPath("invocations", "default", b)
+		base64Target := base64.StdEncoding.EncodeToString([]byte(label))
+		u.Fragment = fmt.Sprintf("targets-%s", base64Target)
+		ret = append(ret, u)
 	}
 	return ret
 }
@@ -665,7 +669,7 @@ func postGitHubIssues(ctx context.Context, testsToAlert [][]TestFailure) error {
 		formatter := &flakyTestFormatter{failures: failures}
 
 		req := issues.PostRequest{
-			PackageName:     pkgName,
+			PackageName:     strings.TrimPrefix(pkgName, "pkg/"),
 			TestName:        testName,
 			Labels:          labels,
 			MentionOnCreate: mentions,

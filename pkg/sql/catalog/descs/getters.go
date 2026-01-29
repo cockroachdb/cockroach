@@ -41,6 +41,9 @@ func (g ByIDGetter) Descs(ctx context.Context, ids []descpb.ID) ([]catalog.Descr
 func (g ByIDGetter) Desc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 	var arr [1]catalog.Descriptor
 	if err := getDescriptorsByID(ctx, g.Descriptors(), g.KV(), g.flags, arr[:], id); err != nil {
+		if g.flags.isOptional && errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return arr[0], nil
@@ -59,6 +62,9 @@ func (g ByIDGetter) Database(
 	}
 	db, ok := desc.(catalog.DatabaseDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
@@ -75,6 +81,9 @@ func (g ByIDGetter) Schema(ctx context.Context, id descpb.ID) (catalog.SchemaDes
 	}
 	sc, ok := desc.(catalog.SchemaDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
 	return sc, nil
@@ -91,6 +100,9 @@ func (g ByIDGetter) Table(ctx context.Context, id descpb.ID) (catalog.TableDescr
 	}
 	tbl, ok := desc.(catalog.TableDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
 	}
 	return tbl, nil
@@ -122,6 +134,9 @@ func (g ByIDGetter) Type(ctx context.Context, id descpb.ID) (catalog.TypeDescrip
 		}
 		return typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 	}
+	if g.flags.isOptional {
+		return nil, nil
+	}
 	return nil, pgerror.Newf(
 		pgcode.UndefinedObject, "type with ID %d does not exist", id)
 }
@@ -146,6 +161,9 @@ func (g ByIDGetter) Function(
 	}
 	fn, ok := desc.(catalog.FunctionDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, errors.Mark(
 			pgerror.Newf(pgcode.UndefinedFunction, "function %d does not exist", id),
 			tree.ErrRoutineUndefined,
@@ -588,6 +606,13 @@ func (b ByIDGetterBuilder) Get() ByIDGetter {
 		b.flags.isMutable = false
 	}
 	return ByIDGetter(b)
+}
+
+// MaybeGet builds a ByIDGetter which returns a nil descriptor instead of
+// an error when the descriptor is not found.
+func (b ByIDGetterBuilder) MaybeGet() ByIDGetter {
+	b.flags.contextFlags.isOptional = true
+	return b.Get()
 }
 
 // ByName returns a ByNameGetterBuilder set up to look up
