@@ -352,7 +352,7 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		m.flowCtx.EvalCtx.Settings,
 		disallowShadowingBelow,
 		false, // writeAtBatchTs
-		false, // scatterSplitRanges
+		true,  // scatterSplitRanges
 		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		m.flowCtx.Cfg.BulkSenderLimiter,
 		nil, // range cache
