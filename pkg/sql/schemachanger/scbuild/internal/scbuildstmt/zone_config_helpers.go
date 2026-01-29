@@ -1545,9 +1545,8 @@ func configureZoneConfigForReplacementIndexPartitioning(
 	return nil
 }
 
-// configureZoneConfigForNewIndexPartitioning configures the zone config for any
-// new index in a REGIONAL BY ROW table.
-// This *must* be done after the index ID has been allocated.
+// configureZoneConfigForNewTableLocality configures the zoneconfig after running
+// ALTER TABLE LOCALITY
 func configureZoneConfigForNewTableLocality(
 	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
 ) error {
@@ -1555,7 +1554,7 @@ func configureZoneConfigForNewTableLocality(
 	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
 	regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	if err := applyZoneConfigForMultiRegionTable(
@@ -1673,7 +1672,11 @@ func applyZoneConfigForMultiRegionTable(
 
 	if deleteZoneConfig {
 		currentZoneConfigElem := b.QueryByID(tableID).FilterTableZoneConfig().MustGetZeroOrOneElement()
-		b.Drop(currentZoneConfigElem)
+		// since current zoneconfig is not empty, we should have an element present
+		// Check for nil anyways to avoid unexpected errors.
+		if currentZoneConfigElem != nil {
+			b.Drop(currentZoneConfigElem)
+		}
 	}
 	if !rewriteZoneConfig {
 		return nil
