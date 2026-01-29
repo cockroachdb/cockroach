@@ -715,7 +715,10 @@ func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	localBudget := ReadSummaryLocalBudget.Get(&r.store.ClusterSettings().SV)
 	globalBudget := ReadSummaryGlobalBudget.Get(&r.store.ClusterSettings().SV)
-	sum := collectReadSummaryFromTimestampCache(ctx, r.store.tsCache, r.Desc(), localBudget, globalBudget)
+	sum, localCompressed, _ := collectReadSummaryFromTimestampCache(ctx, r.store.tsCache, r.Desc(), localBudget, globalBudget)
+	if localCompressed {
+		r.store.metrics.ReadSummaryLocalCompressionCount.Inc(1)
+	}
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
@@ -728,42 +731,43 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 // with the specified descriptor using the timestamp cache. The function accepts
 // two size budgets, which are used to limit the size of the local and global
 // segments of the read summary, respectively.
+//
+// In addition to the read summary, we also return whether the local and global
+// segments lost precission due to compression or not.
 func collectReadSummaryFromTimestampCache(
 	ctx context.Context,
 	tc tscache.Cache,
 	desc *roachpb.RangeDescriptor,
 	localBudget, globalBudget int64,
-) rspb.ReadSummary {
-	serializeSegment := func(start, end roachpb.Key, budget int64) rspb.Segment {
+) (sum rspb.ReadSummary, localCompressed, globalCompressed bool) {
+	serializeSegment := func(start, end roachpb.Key, budget int64) (rspb.Segment, bool) {
 		var seg rspb.Segment
+		var compressed bool
 		if budget > 0 {
 			// Serialize the key range and then compress to the budget.
 			seg = tc.Serialize(ctx, start, end)
-			// TODO(nvanbenschoten): return a boolean from this function indicating
-			// whether the segment lost precision when being compressed. Then use that
-			// to increment a metric to provide observability.
-			seg.Compress(budget)
+			compressed = seg.Compress(budget)
 		} else {
 			// If the budget is 0, just return the maximum timestamp in the key range.
 			// This is equivalent to serializing the key range and then compressing
 			// the resulting segment to 0 bytes, but much cheaper.
 			seg.LowWater, _ = tc.GetMax(ctx, start, end)
+			compressed = true
 		}
-		return seg
+		return seg, compressed
 	}
-	var s rspb.ReadSummary
-	s.Local = serializeSegment(
+	sum.Local, localCompressed = serializeSegment(
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 		localBudget,
 	)
 	userKeys := desc.KeySpan()
-	s.Global = serializeSegment(
+	sum.Global, globalCompressed = serializeSegment(
 		userKeys.Key.AsRawKey(),
 		userKeys.EndKey.AsRawKey(),
 		globalBudget,
 	)
-	return s
+	return sum, localCompressed, globalCompressed
 }
 
 // applyReadSummaryToTimestampCache updates the timestamp cache to reflect the

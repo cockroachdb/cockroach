@@ -136,14 +136,15 @@ func filterSpans(spans []ReadSpan, minTs hlc.Timestamp) []ReadSpan {
 
 // Compress compresses the segment to fit within the provided size budget,
 // provide in bytes. The compression is performed in-place and may mutate the
-// segment.
+// segment. Returns true if the segment lost precision during compression (i.e.
+// if any read spans were truncated).
 //
 // Compression is performed by truncating the read spans in the segment while
 // advancing the low water mark to account for the loss in resolution.
-func (c *Segment) Compress(budget int64) {
+func (c *Segment) Compress(budget int64) bool {
 	sizeBefore := int64(c.Size())
 	if sizeBefore <= budget {
-		return // already under budget
+		return false // already under budget
 	}
 
 	// Sort the read spans by decreasing timestamp.
@@ -182,6 +183,7 @@ func (c *Segment) Compress(budget int64) {
 		sort.Sort(readSpansByKey(spans))
 		c.ReadSpans = spans
 	}
+	return true
 }
 
 // readSpansByDecrTime implements sorting of a slice of ReadSpans by timestamp,

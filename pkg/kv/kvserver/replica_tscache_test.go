@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -90,7 +91,60 @@ func TestReadSummaryCollectForR1(t *testing.T) {
 
 	// Assert that r1's summary was not influenced by the r2 range-local key we
 	// set above.
-	summary := collectReadSummaryFromTimestampCache(ctx, tc, &r1desc, 0, 0)
+	summary, _, _ := collectReadSummaryFromTimestampCache(ctx, tc, &r1desc, 0, 0)
 	require.Equal(t, baseTS, summary.Global.LowWater)
 	require.Equal(t, baseTS, summary.Local.LowWater)
+}
+
+// TestReadSummaryCompression ensures we correctly return whether the local
+// and/or global segments were compressed when collecting the read summary.
+func TestReadSummaryCompression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	baseTS := hlc.Timestamp{WallTime: 123}
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(baseTS.GoTime()))
+	tc := tscache.New(clock)
+
+	// Populate the local segment of the timestamp cache.
+	localKeyPrefix := keys.MakeRangeKeyPrefix(roachpb.RKey("a"))
+	for i := 0; i < 100; i++ {
+		key := append(localKeyPrefix.Clone(), byte(i))
+		ts := hlc.Timestamp{WallTime: int64(1000 + i)}
+		tc.Add(ctx, key, nil, ts, uuid.Nil)
+	}
+
+	// Populate the global segment of the timestamp cache.
+	for i := 0; i < 100; i++ {
+		key := roachpb.Key(fmt.Sprintf("a%d", i))
+		ts := hlc.Timestamp{WallTime: int64(2000 + i)}
+		tc.Add(ctx, key, nil, ts, uuid.Nil)
+	}
+
+	desc := &roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+
+	budgetSizes := []struct {
+		budget            int64
+		expectCompression bool
+	}{
+		{0, true},        // zero budget
+		{100, true},      // small budget
+		{1 << 20, false}, // large budget
+	}
+
+	for _, localBudget := range budgetSizes {
+		for _, globalBudget := range budgetSizes {
+			_, localCompressed, globalCompressed := collectReadSummaryFromTimestampCache(
+				ctx, tc, desc, localBudget.budget, globalBudget.budget,
+			)
+
+			require.Equal(t, localBudget.expectCompression, localCompressed)
+			require.Equal(t, globalBudget.expectCompression, globalCompressed)
+		}
+	}
 }
