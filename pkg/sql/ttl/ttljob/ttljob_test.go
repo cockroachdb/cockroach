@@ -1359,6 +1359,7 @@ func TestMakeTTLJobDescription(t *testing.T) {
 func TestRowLevelTTLJobCancelPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "job adoption interval is longer under duress, so the test is too slow")
 
 	type testCase struct {
 		name string
@@ -1487,7 +1488,7 @@ func TestRowLevelTTLJobCancelPrivileges(t *testing.T) {
 						return errors.Newf("job status is %q, waiting for 'canceled'", status)
 					}
 					return nil
-				}, 30*time.Second)
+				}, 5*time.Minute)
 			} else {
 				require.Errorf(t, err, "expected %s to not be able to cancel the job", tc.cancelUser)
 				require.ErrorContains(t, err, "does not have privileges")
