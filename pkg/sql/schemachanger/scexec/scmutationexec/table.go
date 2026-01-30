@@ -124,26 +124,10 @@ func (i *immediateVisitor) SetTableLocalitySecondaryRegion(
 	return nil
 }
 
-func (i *immediateVisitor) SetTableLocalityRegionalByRow(
-	ctx context.Context, op scop.SetTableLocalityRegionalByRow,
-) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	tbl.SetTableLocalityRegionalByRow(tree.Name(op.As))
-	tbl.PartitionAllBy = true
-	return nil
-}
-
 func (i *immediateVisitor) UnsetTableLocality(
 	ctx context.Context, op scop.UnsetTableLocality,
 ) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	tbl.LocalityConfig = nil
-	tbl.PartitionAllBy = false
+	// todo (shadi): add logic for RBR table
+	// no-op
 	return nil
 }
