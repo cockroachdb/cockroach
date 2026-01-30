@@ -4,7 +4,8 @@ WITH TC_BUILDS AS (
     SELECT
         id AS build_id,
         name AS build_name,
-        build_type_id AS build_type
+        build_type_id AS build_type,
+        start_date
     FROM
         DATAMART_PROD.TEAMCITY.BUILDS
     WHERE
@@ -26,11 +27,12 @@ WITH TC_BUILDS AS (
 ),
 TC_EXECUTED_TESTS AS (
     SELECT
-	b.build_name AS build_name,
+        b.build_name AS build_name,
         b.build_id AS build_id,
         build_type,
         test_name,
-        lower(status) AS test_status
+        lower(status) AS test_status,
+        b.start_date
     FROM
         datamart_prod.teamcity.tests a
         INNER JOIN TC_BUILDS b ON (a.BUILD_ID = b.BUILD_ID)
@@ -43,7 +45,8 @@ SELECT
     build_name,
     test_name,
     sum(CASE WHEN test_status = 'success' THEN 1 ELSE 0 END) AS pass_cnt,
-    array_agg(CASE WHEN test_status = 'failure' THEN build_id END) AS failed_builds
+    array_agg(CASE WHEN test_status = 'failure' THEN build_id END) AS failed_builds,
+    sum(CASE WHEN test_status = 'failure' AND start_date > dateadd(DAY, -?, current_date()) THEN 1 ELSE 0 END) AS recent_fail_cnt
 FROM TC_EXECUTED_TESTS
 GROUP BY 1, 2, 3
-HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01
+HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1

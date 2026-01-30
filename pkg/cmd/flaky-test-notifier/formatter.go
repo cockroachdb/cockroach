@@ -32,16 +32,30 @@ func (f *flakyTestFormatter) Body(r *issues.Renderer, data issues.TemplateData) 
 		data.PackageNameShort, data.TestName, data.Branch, maxAlerts, *lookbackDays))
 
 	r.Escaped("This test has failed across the following builds. Please check the links to see each failure.\n\n")
+	r.Escaped("<sub>This analysis uses historical data. If you have already addressed this flake, please disregard this.</sub>\n\n")
 
 	for _, failure := range f.failures {
 		r.Escaped(fmt.Sprintf("- **%s** (%.1f%% failure rate, %d total runs): ",
 			failure.Build(), failure.FailureRate()*100, failure.TotalRuns()))
 		links := failure.Links()
-		for i, link := range links {
-			if i > 0 {
+
+		// Count occurrences of each link.
+		counts := make(map[string]int)
+		for _, link := range links {
+			counts[link.String()]++
+		}
+
+		linkNum := 0
+		for urlStr, count := range counts {
+			if linkNum > 0 {
 				r.Escaped(", ")
 			}
-			r.A(fmt.Sprintf("%d", i+1), link.String())
+			linkNum++
+			if count > 1 {
+				r.A(fmt.Sprintf("%d (x%d)", linkNum, count), urlStr)
+			} else {
+				r.A(fmt.Sprintf("%d", linkNum), urlStr)
+			}
 		}
 		r.Escaped("\n")
 	}
