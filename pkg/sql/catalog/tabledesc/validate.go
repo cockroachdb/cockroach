@@ -1778,14 +1778,12 @@ func (desc *wrapper) validateTableIndexes(
 					idx.GetName())
 			}
 
-			// Get the index key column names (excluding the shard column itself).
-			// For sharded indexes, the shard column is always first in key columns.
+			// Get the index key column names, excluding implicit columns like the
+			// shard column itself or the crdb_region column used for partitioning.
 			var indexColNames []string
-			for i := 0; i < idx.NumKeyColumns(); i++ {
+			for i := idx.ExplicitColumnStartIdx(); i < idx.NumKeyColumns(); i++ {
 				colName := idx.GetKeyColumnName(i)
-				if colName != shardedDesc.Name {
-					indexColNames = append(indexColNames, colName)
-				}
+				indexColNames = append(indexColNames, colName)
 			}
 
 			// We avoid running this validation if the number of shard columns is

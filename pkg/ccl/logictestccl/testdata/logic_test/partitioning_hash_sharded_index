@@ -132,7 +132,7 @@ CREATE TABLE public.t_to_be_hashed (
   c INT8 NULL,
   crdb_internal_c_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC),
-  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_a_b_c (a, b, c)
 ) PARTITION ALL BY LIST (b) (
   PARTITION us_west VALUES IN (('seattle')),
@@ -154,8 +154,8 @@ CREATE TABLE public.t_to_be_hashed (
   c INT8 NULL,
   crdb_internal_c_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 16:::INT8)) VIRTUAL,
   CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC),
-  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
-  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_a_b_c (a, b, c)
 ) PARTITION ALL BY LIST (b) (
   PARTITION us_west VALUES IN (('seattle')),
@@ -177,9 +177,9 @@ CREATE TABLE public.t_to_be_hashed (
   c INT8 NULL,
   crdb_internal_c_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 16:::INT8)) VIRTUAL,
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a)),
-  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
-  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_a_b_c (a, b, c)
 ) PARTITION ALL BY LIST (b) (
   PARTITION us_west VALUES IN (('seattle')),
@@ -210,8 +210,8 @@ CREATE TABLE public.t_idx_pk_hashed_1 (
   b STRING NOT NULL,
   c INT8 NULL,
   crdb_internal_c_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_idx_pk_hashed_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a)),
-  INDEX t_idx_pk_hashed_1_c_idx (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
+  CONSTRAINT t_idx_pk_hashed_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_idx_pk_hashed_1_c_idx (c ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_a_b_c (a, b, c)
 ) PARTITION ALL BY LIST (b) (
   PARTITION us_west VALUES IN (('seattle')),
@@ -243,8 +243,8 @@ CREATE TABLE public.t_idx_pk_hashed_2 (
   c INT8 NULL,
   crdb_internal_c_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 16:::INT8)) VIRTUAL,
   crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
-  CONSTRAINT t_idx_pk_hashed_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16, shard_columns=(a)),
-  INDEX t_idx_pk_hashed_2_c_idx (c ASC) USING HASH WITH (bucket_count=16, shard_columns=(c)),
+  CONSTRAINT t_idx_pk_hashed_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_idx_pk_hashed_2_c_idx (c ASC) USING HASH WITH (bucket_count=16),
   FAMILY fam_0_a_b_c (a, b, c)
 ) PARTITION ALL BY LIST (b) (
   PARTITION us_west VALUES IN (('seattle')),
