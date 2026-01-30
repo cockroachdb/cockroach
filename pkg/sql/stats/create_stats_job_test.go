@@ -221,12 +221,10 @@ func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 // don't run when an auto full stats job is running. It also tests that manual
 // stat jobs (full or partial) are always allowed to run.
 func TestAtMostOneRunningCreateStats(t *testing.T) {
-	skip.WithIssue(t, 161973)
 	testAtMostOneRunningCreateStatsImpl(t, false /* shouldError */)
 }
 
 func TestAtMostOneRunningCreateStatsWithErrorOnConcurrentCreateStats(t *testing.T) {
-	skip.WithIssue(t, 161974)
 	testAtMostOneRunningCreateStatsImpl(t, true /* shouldError */)
 }
 
@@ -262,6 +260,8 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, shouldError bool) {
 	// Disable automatic cleanup of completed jobs since we might block on a job
 	// until it succeeds.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_stats_job_auto_cleanup.enabled = false`)
+	// Lower the concurrency limit to allow at most one auto full stats job.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_concurrency_limit = 1`)
 	sqlDB.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.error_on_concurrent_create_stats.enabled = %t", shouldError))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
