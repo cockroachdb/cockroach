@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import classNames from "classnames/bind";
-import React from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 
 import styles from "./outsideEventHandler.module.scss";
 
@@ -17,63 +17,52 @@ export interface OutsideEventHandlerProps {
   ignoreClickOnRefs?: React.RefObject<HTMLDivElement>[];
 }
 
-export class OutsideEventHandler extends React.Component<OutsideEventHandlerProps> {
-  nodeRef: React.RefObject<HTMLDivElement>;
+export function OutsideEventHandler({
+  onOutsideClick,
+  children,
+  mountNodePosition = "initial",
+  ignoreClickOnRefs = [],
+}: OutsideEventHandlerProps): React.ReactElement {
+  const nodeRef = useRef<HTMLDivElement>(null);
 
-  constructor(props: OutsideEventHandlerProps) {
-    super(props);
-    this.nodeRef = React.createRef();
-  }
-
-  componentDidMount(): void {
-    this.addEventListener();
-  }
-
-  componentWillUnmount(): void {
-    this.removeEventListener();
-  }
-
-  onClick = (event: MouseEvent): void => {
-    if (!(event.target instanceof Node)) {
-      return;
-    }
-    const target = event.target;
-
-    const { onOutsideClick, ignoreClickOnRefs = [] } = this.props;
-    const isChildEl =
-      this.nodeRef.current && this.nodeRef.current.contains(target);
-
-    const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
-      if (!outsideIgnoredRef || !outsideIgnoredRef.current) {
-        return false;
+  const onClick = useCallback(
+    (event: MouseEvent): void => {
+      if (!(event.target instanceof Node)) {
+        return;
       }
-      return outsideIgnoredRef.current.contains(target);
-    });
+      const target = event.target;
 
-    if (!isChildEl && !isOutsideIgnoredEl) {
-      onOutsideClick();
-    }
-  };
+      const isChildEl = nodeRef.current && nodeRef.current.contains(target);
 
-  addEventListener = (): void => {
-    document.addEventListener("click", this.onClick);
-  };
+      const isOutsideIgnoredEl = ignoreClickOnRefs.some(outsideIgnoredRef => {
+        if (!outsideIgnoredRef || !outsideIgnoredRef.current) {
+          return false;
+        }
+        return outsideIgnoredRef.current.contains(target);
+      });
 
-  removeEventListener = (): void => {
-    document.removeEventListener("click", this.onClick);
-  };
+      if (!isChildEl && !isOutsideIgnoredEl) {
+        onOutsideClick();
+      }
+    },
+    [onOutsideClick, ignoreClickOnRefs],
+  );
 
-  render(): React.ReactElement {
-    const { children, mountNodePosition = "initial" } = this.props;
-    const classes = cx(
-      "outside-event-handler",
-      `outside-event-handler--position-${mountNodePosition}`,
-    );
+  useEffect(() => {
+    document.addEventListener("click", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+    };
+  }, [onClick]);
 
-    return (
-      <div ref={this.nodeRef} className={classes}>
-        {children}
-      </div>
-    );
-  }
+  const classes = cx(
+    "outside-event-handler",
+    `outside-event-handler--position-${mountNodePosition}`,
+  );
+
+  return (
+    <div ref={nodeRef} className={classes}>
+      {children}
+    </div>
+  );
 }

@@ -22,7 +22,7 @@ import { Timestamp, Timezone } from "../../timestamp";
 import styles from "../schedules.module.scss";
 const cx = classNames.bind(styles);
 
-class SchedulesSortedTable extends SortedTable<Schedule> {}
+const SchedulesSortedTable = SortedTable<Schedule>;
 
 const schedulesTableColumns: ColumnDescriptor<Schedule>[] = [
   {

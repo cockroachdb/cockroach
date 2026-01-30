@@ -44,8 +44,6 @@ const columns: ColumnDescriptor<TestRow>[] = [
   },
 ];
 
-class TestSortedTable extends SortedTable<TestRow> {}
-
 function makeTable(
   data: TestRow[],
   sortSetting?: SortSetting,
@@ -53,7 +51,7 @@ function makeTable(
   pagination?: ISortedTablePagination,
 ) {
   return mount(
-    <TestSortedTable
+    <SortedTable<TestRow>
       data={data}
       sortSetting={sortSetting}
       onChangeSortSetting={onChangeSortSetting}
@@ -65,7 +63,7 @@ function makeTable(
 
 function makeExpandableTable(data: TestRow[], sortSetting: SortSetting) {
   return mount(
-    <TestSortedTable
+    <SortedTable<TestRow>
       data={data}
       columns={columns}
       sortSetting={sortSetting}
