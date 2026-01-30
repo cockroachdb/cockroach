@@ -1982,10 +1982,26 @@ func (m *WorkQueueMetrics) getOrCreate(priority admissionpb.WorkPriority) *workQ
 		statPrefix := fmt.Sprintf("%v.%v", m.name, priority.String())
 		val, ok = m.byPriority.LoadOrStore(priority, makeWorkQueueMetricsSingle(statPrefix))
 		if !ok {
-			m.registry.AddMetricStruct(val)
+			m.registerPriorityMetrics(priority, val)
 		}
 	}
 	return val
+}
+
+func (m *WorkQueueMetrics) registerPriorityMetrics(
+	priority admissionpb.WorkPriority, stats *workQueueMetricsSingle,
+) {
+	if !m.shouldSkipRequestedMetric(priority) {
+		m.registry.AddMetric(stats.Requested)
+	}
+	m.registry.AddMetric(stats.Admitted)
+	m.registry.AddMetric(stats.Errored)
+	m.registry.AddMetric(stats.WaitDurations)
+	m.registry.AddMetric(stats.WaitQueueLength)
+}
+
+func (m *WorkQueueMetrics) shouldSkipRequestedMetric(priority admissionpb.WorkPriority) bool {
+	return m.name == SQLKVResponseWork.String() && priority == admissionpb.NormalPri
 }
 
 type workQueueMetricsSingle struct {
