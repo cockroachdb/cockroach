@@ -104,6 +104,35 @@ var (
 		regexp.MustCompile(`^storage_l\d_`),
 		regexp.MustCompile(`^storage_sstable_compression_`),
 	}
+	datadogMappingsToDrop = map[string]struct{}{
+		"admission_admitted_sql_leaf_start":                             {},
+		"admission_admitted_sql_leaf_start_locking_normal_pri":          {},
+		"admission_admitted_sql_leaf_start_normal_pri":                  {},
+		"admission_admitted_sql_root_start":                             {},
+		"admission_admitted_sql_root_start_locking_normal_pri":          {},
+		"admission_admitted_sql_root_start_normal_pri":                  {},
+		"admission_granter_used_slots_sql_leaf_start":                   {},
+		"admission_granter_used_slots_sql_root_start":                   {},
+		"admission_requested_sql_kv_response_normal_pri":                {},
+		"admission_requested_sql_leaf_start":                            {},
+		"admission_requested_sql_leaf_start_locking_normal_pri":         {},
+		"admission_requested_sql_leaf_start_normal_pri":                 {},
+		"admission_requested_sql_root_start":                            {},
+		"admission_requested_sql_root_start_locking_normal_pri":         {},
+		"admission_requested_sql_root_start_normal_pri":                 {},
+		"admission_wait_durations_sql_leaf_start":                       {},
+		"admission_wait_durations_sql_leaf_start_locking_normal_pri":    {},
+		"admission_wait_durations_sql_leaf_start_normal_pri":            {},
+		"admission_wait_durations_sql_root_start":                       {},
+		"admission_wait_durations_sql_root_start_locking_normal_pri":    {},
+		"admission_wait_durations_sql_root_start_normal_pri":            {},
+		"admission_wait_queue_length_sql_leaf_start":                    {},
+		"admission_wait_queue_length_sql_leaf_start_locking_normal_pri": {},
+		"admission_wait_queue_length_sql_leaf_start_normal_pri":         {},
+		"admission_wait_queue_length_sql_root_start":                    {},
+		"admission_wait_queue_length_sql_root_start_locking_normal_pri": {},
+		"admission_wait_queue_length_sql_root_start_normal_pri":         {},
+	}
 
 	// Regex to convert CRDB metric names to Prometheus format
 	prometheusNameRegex = regexp.MustCompile(`[^a-zA-Z0-9]`)
@@ -179,7 +208,14 @@ func loadDatadogMappings(path string) (map[string]string, error) {
 	}
 	defer file.Close()
 
-	return parseDatadogMappings(file)
+	mappings, err := parseDatadogMappings(file)
+	if err != nil {
+		return nil, err
+	}
+	for name := range datadogMappingsToDrop {
+		delete(mappings, name)
+	}
+	return mappings, nil
 }
 
 // parseDatadogMappings parses the Python file to extract dictionaries
