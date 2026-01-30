@@ -1,14 +1,12 @@
-# This test verifies allocator's behavior in a heterogeneous cluster where nodes
-# have different CPU capacities. The test sets up a 3-node cluster with nodes n1
-# and n2 having 8vcpu capacity each, and node n3 having 16vcpu capacity. It
-# creates 200 ranges evenly distributed across all stores and generates a
-# read-only workload.
+# This test verifies allocator behavior in a heterogeneous cluster where nodes
+# have different CPU capacities and there are no placement constraints. The test
+# sets up a 3-node cluster with nodes n1 and n2 having 8vCPU capacity each, and
+# node n3 having 16vCPU capacity. It creates 200 ranges evenly distributed across
+# all stores and generates a read-only workload.
 #
-# Expected outcome: mma should balance cpu load based on cpu utilization
-# percentage rather than absolute cpu nanos. However, both mma and sma currently
-# balance on absolute cpu-nanos. n3 should handle more load due to its higher
-# capacity, but the current implementation doesn't account for this. This is
-# tracked in issue: https://github.com/cockroachdb/cockroach/issues/153777.
+# Expected outcome: MMA and SMA balance on absolute CPU nanos, so the higher
+# capacity node n3 is underutilized in terms of CPU utilization. This is tracked
+# in issue: https://github.com/cockroachdb/cockroach/issues/153777.
 gen_cluster nodes=3 node_cpu_cores=(8,8,16)
 ----
 
@@ -18,7 +16,7 @@ gen_ranges ranges=200 min_key=1 max_key=10000 placement_type=even
 
 # Read-only workload on first 30 ranges. 20 cores (out of 24 total in the cluster).
 # Because the ranges are placed evenly, initially each node will have about the same
-# cpu nanos per second.
+# CPU nanos per second.
 gen_load rate=40000 rw_ratio=1 request_cpu_per_access=500000 min_key=1 max_key=10000
 ----
 20.00 access-vcpus
