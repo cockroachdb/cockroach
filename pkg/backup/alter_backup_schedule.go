@@ -332,13 +332,31 @@ func processScheduleOptions(
 
 func processOptions(spec *alterBackupScheduleSpec, s scheduleDetails) error {
 	opts := spec.backupOptions
+
+	// Revision history only applies to incremental backups. If the user is
+	// trying to enable it but there's no incremental schedule, that's an error.
+	if opts.CaptureRevisionHistory != nil {
+		if v, ok := opts.CaptureRevisionHistory.(*tree.DBool); ok && bool(*v) {
+			if s.incStmt == nil {
+				return errors.Newf("revision_history is not supported for schedules with FULL BACKUP ALWAYS; " +
+					"revision history requires incremental backups")
+			}
+		}
+	}
+
+	// For the full backup statement, apply all options.
 	fullOpts := &s.fullStmt.Options
 	if err := processOptionsForArgs(opts, fullOpts); err != nil {
 		return err
 	}
+	// Clear revision_history from the full backup since it only applies to
+	// incremental backups.
+	fullOpts.CaptureRevisionHistory = nil
+
 	if s.incStmt == nil {
 		return nil
 	}
+	// For the incremental backup statement, apply all options including revision_history.
 	incOpts := &s.incStmt.Options
 	if err := processOptionsForArgs(opts, incOpts); err != nil {
 		return err

@@ -114,6 +114,16 @@ func (e *scheduledBackupExecutor) executeBackup(
 		backupStmt.Options.UpdatesClusterMonitoringMetrics = tree.DBoolTrue
 	}
 
+	// Revision history only applies to incremental backups. For existing full
+	// backup schedules that may have revision_history set, strip it before
+	// executing.
+	if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL &&
+		backupStmt.Options.CaptureRevisionHistory != nil {
+		log.Dev.Warningf(ctx, "removing revision_history from full backup schedule %d; "+
+			"revision_history only applies to incremental backups", sj.ScheduleID())
+		backupStmt.Options.CaptureRevisionHistory = nil
+	}
+
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
