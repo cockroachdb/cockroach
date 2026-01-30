@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -95,6 +96,9 @@ type transientCluster struct {
 	// latencyEnabled controls whether simulated latency is currently enabled.
 	// It is only relevant when using SimulateLatency.
 	latencyEnabled atomic.Bool
+
+	// cleanupFns holds cleanup functions to call on Close.
+	cleanupFns []func()
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
@@ -208,6 +212,16 @@ func NewDemoCluster(
 	}
 
 	c.stickyVFSRegistry = fs.NewStickyRegistry()
+
+	// Enable nodelocal early boot access for features like online restore's
+	// LinkExternalSSTable. The root is the demo's nodelocal directory so that
+	// files written via nodelocal:// URIs can be accessed by Pebble.
+	nodelocalDir := filepath.Join(c.demoDir, "nodelocal")
+	if err := os.MkdirAll(nodelocalDir, 0755); err != nil {
+		return c, err
+	}
+	c.cleanupFns = append(c.cleanupFns, nodelocal.EnableEarlyBootForDemo(nodelocalDir))
+
 	return c, nil
 }
 
@@ -1031,6 +1045,10 @@ func (c *transientCluster) Close(ctx context.Context) {
 			// There's nothing to do here anymore if err != nil.
 			_ = err
 		}
+	}
+	// Run any cleanup functions registered during setup.
+	for _, fn := range c.cleanupFns {
+		fn()
 	}
 }
 
