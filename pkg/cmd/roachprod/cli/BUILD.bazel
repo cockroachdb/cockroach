@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cli",
@@ -10,7 +10,9 @@ go_library(
         "chaos_process.go",
         "chaos_reset.go",
         "commands.go",
+        "create_opts.go",
         "flags.go",
+        "gce_machine_type.go",
         "handlers.go",
         "registry.go",
         "update.go",
@@ -48,5 +50,14 @@ go_library(
         "@org_golang_x_term//:term",
         "@org_golang_x_text//language",
         "@org_golang_x_text//message",
+    ],
+)
+
+go_test(
+    name = "cli_test",
+    srcs = ["gce_machine_type_test.go"],
+    embed = [":cli"],
+    deps = [
+        "@com_github_stretchr_testify//require",
     ],
 )
