@@ -89,10 +89,13 @@ func (c *CancelChecker) CheckEveryCall() {
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
 	}
-	// TODO: doing this at cancelCheckInterval may cause no CPU to be reported
-	// for very short running queries. Ideally we need a way for every goroutine
-	// to call this once before termination.
 	if c.cpuHandle != nil {
-		c.cpuHandle.MeasureAndAdmit(c.Ctx, false)
+		err := c.cpuHandle.MeasureAndAdmit(c.Ctx)
+		if err != nil {
+			// TODO: this is ignoring the actual error returned by MeasureAndAdmit, though
+			// it can only be a context cancellation error. So we follow the pattern above and
+			// use QueryCanceledError. Confirm why that pattern is reasonable.
+			colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
+		}
 	}
 }
