@@ -3022,9 +3022,22 @@ message Header {
   // evaluated in descending range order.
   bool is_reverse = 38;
 
+  // DisallowIntentTimestampChange, if set, indicates that any intents written
+  // by this batch must not have their timestamps changed if the intent needs
+  // to be rewritten (e.g., due to a transaction timestamp push during a
+  // refresh). This is used by Read Committed transactions to ensure that
+  // locking reads for constraint checks and cascades only need to be refreshed
+  // up to the intent timestamp, rather than the transaction's final commit
+  // timestamp. Without this, a Read Committed transaction could observe stale
+  // data if the intent timestamp is advanced during a refresh.
+  //
+  // Note: This does NOT prevent all intent modifications. Intents can still be
+  // removed or rewritten during savepoint rollback operations.
+  bool disallow_intent_timestamp_change = 39;
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 39
+  // Next ID: 40
 }
 
 message WriteOptions {

@@ -111,12 +111,13 @@ func ResolveIntent(
 
 	// Handle replicated lock releases.
 	if replLocksReleased && update.Status == roachpb.COMMITTED {
-		// A replicated {shared, exclusive} lock was released for a committed
-		// transaction. Now that the lock is no longer there, we still need to make
-		// sure other transactions can't write underneath the transaction's commit
-		// timestamp to the key. We return the transaction's commit timestamp on the
-		// response and update the timestamp cache a few layers above to ensure
-		// this.
+		// A replicated {shared, exclusive} lock was released, or an intent with
+		// preserve_timestamp was committed at its original timestamp. Now that the
+		// lock is no longer there (or the intent metadata is removed), we still
+		// need to make sure other transactions can't write underneath the
+		// transaction's commit timestamp to the key. We return the transaction's
+		// commit timestamp on the response and update the timestamp cache a few
+		// layers above to ensure this.
 		reply.ReplicatedLocksReleasedCommitTimestamp = update.Txn.WriteTimestamp
 	}
 

@@ -338,9 +338,9 @@ func (r *Replica) updateTimestampCache(
 			}
 		case *kvpb.ResolveIntentRequest:
 			// Update the timestamp cache on the key the request resolved if there
-			// was a replicated {shared, exclusive} lock on that key which was
-			// released, and the transaction that has acquired that lock was
-			// successfully committed[1].
+			// was a replicated {shared, exclusive} lock or intent with
+			// PreserveTimestamp=true on that key which was released, and the
+			// transaction that has acquired that lock was successfully committed[1].
 			//
 			// [1] This is indicated by releasedTs being non-empty.
 			releasedTs := resp.(*kvpb.ResolveIntentResponse).ReplicatedLocksReleasedCommitTimestamp
