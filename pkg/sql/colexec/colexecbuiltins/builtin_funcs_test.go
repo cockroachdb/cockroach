@@ -48,7 +48,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 	testCases := []struct {
 		desc         string
 		expr         string
-		inputCols    []int
 		inputTuples  colexectestutils.Tuples
 		inputTypes   []*types.T
 		outputTuples colexectestutils.Tuples
@@ -56,7 +55,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "AbsVal",
 			expr:         "abs(@1)",
-			inputCols:    []int{0},
 			inputTuples:  colexectestutils.Tuples{{1}, {-2}},
 			inputTypes:   []*types.T{types.Int},
 			outputTuples: colexectestutils.Tuples{{1, 1}, {-2, 2}},
@@ -64,15 +62,13 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "StringLen",
 			expr:         "length(@1)",
-			inputCols:    []int{0},
 			inputTuples:  colexectestutils.Tuples{{"Hello"}, {"The"}},
 			inputTypes:   []*types.T{types.String},
 			outputTuples: colexectestutils.Tuples{{"Hello", 5}, {"The", 3}},
 		},
 		{
-			desc:      "Substr",
-			expr:      "substr(@1, @2, @3)",
-			inputCols: []int{0},
+			desc: "Substr",
+			expr: "substr(@1, @2, @3)",
 			inputTuples: colexectestutils.Tuples{
 				{"Hello", 1, 4},
 				{"Hello", 4, 2},
@@ -108,7 +104,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "FNV64",
 			expr:         "fnv64(@1)",
-			inputCols:    []int{0},
 			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
 			inputTypes:   []*types.T{types.String},
 			outputTuples: colexectestutils.Tuples{{"abc", int64(-2820157060406071861)}, {"", int64(-3750763034362895579)}, {"hello world", int64(9065573210506989167)}, {"x", int64(-5808590958014384217)}, {"123", int64(-2774223862635011909)}},
@@ -116,7 +111,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "FNV64a",
 			expr:         "fnv64a(@1)",
-			inputCols:    []int{0},
 			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
 			inputTypes:   []*types.T{types.String},
 			outputTuples: colexectestutils.Tuples{{"abc", int64(-1792535898324117685)}, {"", int64(-3750763034362895579)}, {"hello world", int64(8618312879776256743)}, {"x", int64(-5808529385363204345)}, {"123", int64(5003431119771845851)}},
@@ -124,7 +118,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "FNV64 with 3 values",
 			expr:         "fnv64(@1, @2, @3)",
-			inputCols:    []int{0, 1, 2},
 			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
 			inputTypes:   []*types.T{types.String, types.String, types.String},
 			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-2820157060406071861)}, {"hello", "world", "test", int64(1178316459888765213)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(590622495169253564)}},
@@ -132,10 +125,23 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 		{
 			desc:         "FNV64a with 3 values",
 			expr:         "fnv64a(@1, @2, @3)",
-			inputCols:    []int{0, 1, 2},
 			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
 			inputTypes:   []*types.T{types.String, types.String, types.String},
 			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-1792535898324117685)}, {"hello", "world", "test", int64(7507279486104997145)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(644383116220033818)}},
+		},
+		{
+			desc:         "DatumsToBytes single int",
+			expr:         "crdb_internal.datums_to_bytes(@1)",
+			inputTuples:  colexectestutils.Tuples{{1}, {2}, {-1}},
+			inputTypes:   []*types.T{types.Int},
+			outputTuples: colexectestutils.Tuples{{1, []byte{0x89}}, {2, []byte{0x8A}}, {-1, []byte{0x87, 0xFF}}},
+		},
+		{
+			desc:         "DatumsToBytes multiple args",
+			expr:         "crdb_internal.datums_to_bytes(@1, @3)",
+			inputTuples:  colexectestutils.Tuples{{1, 0, "a"}, {2, 0, "b"}},
+			inputTypes:   []*types.T{types.Int, types.Int, types.String},
+			outputTuples: colexectestutils.Tuples{{1, 0, "a", []byte{0x89, 0x12, 'a', 0x00, 0x01}}, {2, 0, "b", []byte{0x8A, 0x12, 'b', 0x00, 0x01}}},
 		},
 	}
 
