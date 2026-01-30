@@ -356,7 +356,7 @@ reusing cached memo
 reusing cached memo
 
 # ------------------------------------------------------------------------------
-# TODO(#162055): Queries with UDFs don't cache properly.
+# Plan caching should work for queries with UDFs.
 # ------------------------------------------------------------------------------
 statement ok
 PREPARE p1 AS SELECT f();
@@ -379,8 +379,28 @@ SET TRACING = "off";
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+reusing cached memo
+
+# Modifying the function should force a rebuild.
+statement ok
+ALTER FUNCTION f() LEAKPROOF;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p1;
+EXECUTE p1;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
 rebuilding cached memo
-rebuilding cached memo
-rebuilding cached memo
-rebuilding cached memo
-rebuilding cached memo
+reusing cached memo

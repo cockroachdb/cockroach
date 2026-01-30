@@ -560,15 +560,20 @@ func (md *Metadata) CheckDependencies(
 					false, /* inDropContext */
 					tryDefaultExprs,
 				)
-				if err != nil || toCheck.Oid != overload.Oid || toCheck.Version != overload.Version {
+				// We cannot check the version here, because we only resolve the
+				// function signature by name. We will check the version below when
+				// resolving by OID.
+				if err != nil || toCheck.Oid != overload.Oid {
 					return false, maybeSwallowMetadataResolveErr(err)
 				}
 			}
-		} else {
-			_, toCheck, err := optCatalog.ResolveFunctionByOID(ctx, overload.Oid)
-			if err != nil || overload.Version != toCheck.Version {
-				return false, maybeSwallowMetadataResolveErr(err)
-			}
+		}
+		// Resolve the routine by OID regardless of whether it was referenced
+		// by name or by ID. This allows us to check the version using the full
+		// overload, rather than just the signature.
+		_, toCheck, err := optCatalog.ResolveFunctionByOID(ctx, overload.Oid)
+		if err != nil || overload.Version != toCheck.Version {
+			return false, maybeSwallowMetadataResolveErr(err)
 		}
 	}
 
