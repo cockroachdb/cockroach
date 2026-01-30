@@ -37,9 +37,10 @@ import (
 )
 
 const (
-	ProviderName = "gce"
-	DefaultImage = "ubuntu-2204-jammy-v20260414"
-	ARM64Image   = "ubuntu-2204-jammy-arm64-v20260414"
+	ProviderName       = "gce"
+	DefaultMachineType = "n2-standard-4"
+	DefaultImage       = "ubuntu-2204-jammy-v20260414"
+	ARM64Image         = "ubuntu-2204-jammy-arm64-v20260414"
 	// TODO(DarrylWong): Upgrade FIPS to Ubuntu 22 when it is available.
 	FIPSImage           = "ubuntu-pro-fips-2004-focal-v20230811"
 	defaultImageProject = "ubuntu-os-cloud"
@@ -325,7 +326,7 @@ func DefaultProviderOpts() *ProviderOpts {
 	return &ProviderOpts{
 		// N.B. we set minCPUPlatform to "Intel Ice Lake" by default because it's readily available in the majority of GCE
 		// regions. Furthermore, it gets us closer to AWS instances like m6i which exclusively run Ice Lake.
-		MachineType:          "n2-standard-4",
+		MachineType:          DefaultMachineType,
 		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
 		Image:                DefaultImage,
@@ -352,7 +353,10 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	MachineType                   string
+	MachineType string
+	// MachineTypeSpecs captures the raw --gce-machine-type flag values.
+	// See ParseMachineTypeSpecs for the supported syntax.
+	MachineTypeSpecs              []string
 	MinCPUPlatform                string
 	BootDiskType                  string
 	Zones                         []string
@@ -1131,7 +1135,7 @@ func (p *Provider) GetProjects() []string {
 
 // ConfigureCreateFlags implements vm.ProviderOptions.
 func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	flags.StringVar(&o.MachineType, "machine-type", "n2-standard-4", "DEPRECATED")
+	flags.StringVar(&o.MachineType, "machine-type", DefaultMachineType, "DEPRECATED")
 	_ = flags.MarkDeprecated("machine-type", "use "+ProviderName+"-machine-type instead")
 	flags.StringSliceVar(&o.Zones, "zones", nil, "DEPRECATED")
 	_ = flags.MarkDeprecated("zones", "use "+ProviderName+"-zones instead")
@@ -1145,8 +1149,10 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Service account to use if the default project is in use and no "+
 			"--gce-service-account was specified")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
-		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
+	flags.StringArrayVar(&o.MachineTypeSpecs, ProviderName+"-machine-type",
+		[]string{DefaultMachineType},
+		"Machine type (see https://cloud.google.com/compute/docs/machine-types). "+
+			"Supports TYPE or TYPE=COUNT, and may be repeated or comma-separated.")
 	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "pd-ssd",
 		"Type of the boot disk volume")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "Intel Ice Lake",
