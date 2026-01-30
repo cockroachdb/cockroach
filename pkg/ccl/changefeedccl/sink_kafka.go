@@ -662,6 +662,8 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 
 	for {
 		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
 		case <-s.stopWorkerCh:
 			log.Infof(s.ctx, "kafka sink ending retries due to worker close")
 			return lastSendErr
