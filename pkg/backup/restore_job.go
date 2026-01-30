@@ -404,6 +404,10 @@ func restore(
 	job := resumer.job
 	details := job.Details().(jobspb.RestoreDetails)
 
+	// resolvedURIs holds the main URIs after resolving any external:// aliases.
+	// This is set in the OnlineImpl block below and used by runRestore.
+	resolvedURIs := details.URIs
+
 	if details.OnlineImpl() {
 		var linkPhaseComplete bool
 		if err := execCtx.ExecCfg().InternalDB.Txn(restoreCtx, func(ctx context.Context, txn isql.Txn) error {
@@ -416,6 +420,18 @@ func restore(
 		}
 		if linkPhaseComplete {
 			return emptyRowCount, nil
+		}
+
+		// If any URIs utilize external:// aliases, we need to resolve the alias
+		// to its underlying URI before feeding it into online restore. This
+		// applies to the main URIs, the locality info URIs, and the backup
+		// manifest Dir fields.
+		var err error
+		resolvedURIs, backupLocalityInfo, err = resolveExternalStorageURIs(
+			restoreCtx, execCtx, details.URIs, backupLocalityInfo, backupManifests,
+		)
+		if err != nil {
+			return emptyRowCount, errors.Wrap(err, "resolving external storage URIs for online restore")
 		}
 	}
 
@@ -510,6 +526,7 @@ func restore(
 			filter,
 			fsc,
 			spanCh,
+			false, /* useLink */
 		), "generate and send import spans")
 	}
 
@@ -553,9 +570,15 @@ func restore(
 		tasks = append(tasks, jobProgressLoop)
 	}
 
+	// Check if online restore should use the distributed flow with file linking
+	// instead of the simpler sendAddRemoteSSTs loop.
+	useDistFlow := onlineRestoreUseDistFlow.Get(&execCtx.ExecCfg().Settings.SV)
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	if !details.OnlineImpl() {
-		// Online restore tracks progress by pinging requestFinishedCh instead
+	// Start the progress checkpoint loop if this is a traditional restore OR
+	// an online restore using the distributed flow (which also sends progress
+	// updates via progCh).
+	if !details.OnlineImpl() || useDistFlow {
 		generativeCheckpointLoop := func(ctx context.Context) error {
 			defer close(requestFinishedCh)
 			for progress := range progCh {
@@ -599,7 +622,10 @@ func restore(
 	}
 
 	resumeClusterVersion := execCtx.ExecCfg().Settings.Version.ActiveVersion(restoreCtx).Version
-	if clusterversion.V24_3.Version().LessEq(resumeClusterVersion) && !details.OnlineImpl() {
+	// Start the countCompletedProcLoop if this is a traditional restore OR
+	// an online restore using the distributed flow (which also sends processor
+	// completion signals via procCompleteCh).
+	if clusterversion.V24_3.Version().LessEq(resumeClusterVersion) && (!details.OnlineImpl() || useDistFlow) {
 		tasks = append(tasks, countCompletedProcLoop)
 	}
 
@@ -626,27 +652,66 @@ func restore(
 	tasks = append(tasks, tracingAggLoop)
 
 	runRestore := func(ctx context.Context) error {
+		restoreURIs := resolvedURIs
+
 		if details.OnlineImpl() {
 			log.Dev.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
-			approxRows, approxDataSize, err := sendAddRemoteSSTs(
-				ctx,
-				execCtx,
-				job,
-				dataToRestore,
-				encryption,
-				details.URIs,
-				backupLocalityInfo,
-				requestFinishedCh,
-				tracingAggCh,
-				genSpan,
-			)
-			progressTracker.mu.Lock()
-			defer progressTracker.mu.Unlock()
-			//  During the link phase of online restore, we do not update stats
-			// progress as job occurs.  We merely reuse the `progressTracker.mu.res`
-			// var to reduce the number of local vars floating around in `restore`.
-			progressTracker.mu.res = roachpb.RowCount{Rows: approxRows, DataSize: approxDataSize}
-			return errors.Wrap(err, "sending remote AddSSTable requests")
+
+			// Use the bespoke online restore path that directly splits and links from
+			// the coordinator without a distSQL restore flow.
+			if !useDistFlow {
+				approxRows, approxDataSize, err := sendAddRemoteSSTs(
+					ctx,
+					execCtx,
+					job,
+					dataToRestore,
+					encryption,
+					resolvedURIs,
+					backupLocalityInfo,
+					requestFinishedCh,
+					tracingAggCh,
+					genSpan,
+				)
+				progressTracker.mu.Lock()
+				defer progressTracker.mu.Unlock()
+				//  During the link phase of online restore, we do not update stats
+				// progress as job occurs.  We merely reuse the `progressTracker.mu.res`
+				// var to reduce the number of local vars floating around in `restore`.
+				progressTracker.mu.res = roachpb.RowCount{Rows: approxRows, DataSize: approxDataSize}
+				return errors.Wrap(err, "sending remote AddSSTable requests")
+			}
+
+			// If we did not switch to the bespoke online restore path, we'll proceed
+			// to the normal restore distSQL flow and let its split and scattter
+			// processor direct the restore data processors to link files rather than
+			// ingest them. But we do need to pre-split at the top-level logical spans
+			// that are being restored, as stored in DownloadSpan, as these are what
+			// we will clear via kv/pebble excises if we fail at any point after we
+			// start linking files.
+			//
+			// TODO(dt): we should record in persisted progress when we are ready to
+			// enter the linking/ingesting phase, i.e. *after* we make these splits,
+			// so any failures prior to it can skip cleanup, as that cleanup could
+			// fail if we failed prior to making these splits.
+			var prevSplit roachpb.Key
+			for _, span := range details.DownloadSpans {
+				if !span.Key.Equal(prevSplit) {
+					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, span.Key, hlc.MaxTimestamp); err != nil {
+						return errors.Wrapf(err, "pre-splitting at key %s", span.Key)
+					}
+				}
+				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, span.EndKey, hlc.MaxTimestamp); err != nil {
+					return errors.Wrapf(err, "pre-splitting at key %s", span.EndKey)
+				}
+				prevSplit = span.EndKey
+			}
+		}
+
+		// Use the distributed restore flow. If this is an online restore with
+		// useDistFlow enabled, set useLink to link files instead of ingesting.
+		useLink := details.OnlineImpl() && useDistFlow
+		if useLink {
+			log.Dev.Infof(ctx, "online restore using distributed flow with file linking")
 		}
 		md := restoreJobMetadata{
 			jobID:                job.ID(),
@@ -654,13 +719,14 @@ func restore(
 			restoreTime:          endTime,
 			encryption:           encryption,
 			kmsEnv:               kmsEnv,
-			uris:                 details.URIs,
+			uris:                 restoreURIs,
 			backupLocalityInfo:   backupLocalityInfo,
 			spanFilter:           filter,
 			numImportSpans:       numImportSpans,
 			execLocality:         details.ExecutionLocality,
 			exclusiveEndKeys:     fsc.isExclusive(),
 			resumeClusterVersion: resumeClusterVersion,
+			useLink:              useLink,
 		}
 		return errors.Wrap(distRestore(
 			ctx,
