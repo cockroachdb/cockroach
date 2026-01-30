@@ -10,6 +10,7 @@ go_library(
         "chaos_process.go",
         "chaos_reset.go",
         "commands.go",
+        "create_opts.go",
         "flags.go",
         "handlers.go",
         "registry.go",
