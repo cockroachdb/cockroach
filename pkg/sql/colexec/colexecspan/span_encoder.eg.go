@@ -25,12 +25,12 @@ var (
 	_ tree.Datum
 )
 
-// newSpanEncoder creates a new utility operator that, given input batches,
+// NewSpanEncoder creates a new utility operator that, given input batches,
 // generates the encoding for the given key column. It is used by SpanAssembler
 // operators to generate spans for index joins and lookup joins.
-func newSpanEncoder(
+func NewSpanEncoder(
 	allocator *colmem.Allocator, typ *types.T, asc bool, encodeColIdx int,
-) spanEncoder {
+) SpanEncoder {
 	base := spanEncoderBase{
 		allocator:    allocator,
 		encodeColIdx: encodeColIdx,
@@ -163,16 +163,19 @@ func newSpanEncoder(
 	return nil
 }
 
-type spanEncoder interface {
-	// next generates the encoding for the current key column for each row from
+// SpanEncoder generates the encoding for a key column for each row from a
+// batch.
+type SpanEncoder interface {
+	// Next generates the encoding for the current key column for each row from
 	// the given batch in the range [startIdx, endIdx), then returns each row's
 	// encoding as a value in a Bytes column. The returned Bytes column is owned
-	// by the spanEncoder operator and should not be modified. Calling next
-	// invalidates previous calls to next. next assumes that startIdx and endIdx
+	// by the SpanEncoder operator and should not be modified. Calling Next
+	// invalidates previous calls to Next. Next assumes that startIdx and endIdx
 	// constitute a valid range of the given batch.
-	next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes
+	Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes
 
-	close()
+	// Close releases any resources held by the encoder.
+	Close()
 }
 
 type spanEncoderBase struct {
@@ -193,10 +196,10 @@ type spanEncoderBoolAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderBoolAsc{}
+var _ SpanEncoder = &spanEncoderBoolAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderBoolAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderBoolAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -302,10 +305,10 @@ type spanEncoderBytesAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderBytesAsc{}
+var _ SpanEncoder = &spanEncoderBytesAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderBytesAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderBytesAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -381,10 +384,10 @@ type spanEncoderDecimalAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderDecimalAsc{}
+var _ SpanEncoder = &spanEncoderDecimalAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderDecimalAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderDecimalAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -462,10 +465,10 @@ type spanEncoderInt16Asc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt16Asc{}
+var _ SpanEncoder = &spanEncoderInt16Asc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt16Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt16Asc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -543,10 +546,10 @@ type spanEncoderInt32Asc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt32Asc{}
+var _ SpanEncoder = &spanEncoderInt32Asc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt32Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt32Asc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -624,10 +627,10 @@ type spanEncoderInt64Asc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt64Asc{}
+var _ SpanEncoder = &spanEncoderInt64Asc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt64Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt64Asc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -705,10 +708,10 @@ type spanEncoderFloat64Asc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderFloat64Asc{}
+var _ SpanEncoder = &spanEncoderFloat64Asc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderFloat64Asc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderFloat64Asc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -786,10 +789,10 @@ type spanEncoderTimestampAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderTimestampAsc{}
+var _ SpanEncoder = &spanEncoderTimestampAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderTimestampAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderTimestampAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -867,10 +870,10 @@ type spanEncoderIntervalAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderIntervalAsc{}
+var _ SpanEncoder = &spanEncoderIntervalAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderIntervalAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderIntervalAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -972,10 +975,10 @@ type spanEncoderJSONAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderJSONAsc{}
+var _ SpanEncoder = &spanEncoderJSONAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderJSONAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderJSONAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1075,10 +1078,10 @@ type spanEncoderDatumAsc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderDatumAsc{}
+var _ SpanEncoder = &spanEncoderDatumAsc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderDatumAsc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderDatumAsc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1178,10 +1181,10 @@ type spanEncoderBoolDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderBoolDesc{}
+var _ SpanEncoder = &spanEncoderBoolDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderBoolDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderBoolDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1287,10 +1290,10 @@ type spanEncoderBytesDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderBytesDesc{}
+var _ SpanEncoder = &spanEncoderBytesDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderBytesDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderBytesDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1366,10 +1369,10 @@ type spanEncoderDecimalDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderDecimalDesc{}
+var _ SpanEncoder = &spanEncoderDecimalDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderDecimalDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderDecimalDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1447,10 +1450,10 @@ type spanEncoderInt16Desc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt16Desc{}
+var _ SpanEncoder = &spanEncoderInt16Desc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt16Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt16Desc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1528,10 +1531,10 @@ type spanEncoderInt32Desc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt32Desc{}
+var _ SpanEncoder = &spanEncoderInt32Desc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt32Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt32Desc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1609,10 +1612,10 @@ type spanEncoderInt64Desc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderInt64Desc{}
+var _ SpanEncoder = &spanEncoderInt64Desc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderInt64Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderInt64Desc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1690,10 +1693,10 @@ type spanEncoderFloat64Desc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderFloat64Desc{}
+var _ SpanEncoder = &spanEncoderFloat64Desc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderFloat64Desc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderFloat64Desc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1771,10 +1774,10 @@ type spanEncoderTimestampDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderTimestampDesc{}
+var _ SpanEncoder = &spanEncoderTimestampDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderTimestampDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderTimestampDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1852,10 +1855,10 @@ type spanEncoderIntervalDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderIntervalDesc{}
+var _ SpanEncoder = &spanEncoderIntervalDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderIntervalDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderIntervalDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -1957,10 +1960,10 @@ type spanEncoderJSONDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderJSONDesc{}
+var _ SpanEncoder = &spanEncoderJSONDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderJSONDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderJSONDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -2060,10 +2063,10 @@ type spanEncoderDatumDesc struct {
 	spanEncoderBase
 }
 
-var _ spanEncoder = &spanEncoderDatumDesc{}
+var _ SpanEncoder = &spanEncoderDatumDesc{}
 
-// next implements the spanEncoder interface.
-func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
+// Next implements the SpanEncoder interface.
+func (op *spanEncoderDatumDesc) Next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
 	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
@@ -2159,8 +2162,8 @@ func (op *spanEncoderDatumDesc) next(batch coldata.Batch, startIdx, endIdx int) 
 	return op.outputBytes
 }
 
-// close implements the spanEncoder interface.
-func (b *spanEncoderBase) close() {
+// Close implements the SpanEncoder interface.
+func (b *spanEncoderBase) Close() {
 	*b = spanEncoderBase{}
 }
 
