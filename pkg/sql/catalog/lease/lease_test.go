@@ -792,11 +792,22 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	// Block until the Manager has processed the gossip update.
 	<-deleted
 
-	// We should still be able to acquire, because we have an active lease.
-	lease3, err := acquire(ctx, s, tableDesc.GetID())
+	// Ensure that dropped descriptors cannot be acquired.
+	_, err = acquire(ctx, s, tableDesc.GetID())
+	if !testutils.IsError(err, "descriptor is being dropped") {
+		t.Fatalf("got a different error than expected: %v", err)
+	}
+
+	// We should still be able to acquire because we have an active lease.
+	// Note: If we use a timestamp after the dropped time, an error
+	// is expected.
+	lease3, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableDesc.GetID())
 	if err != nil {
 		t.Fatal(err)
 	}
+	active, refcount := lease.TestingLeasedVersionIsActive(lease3)
+	require.GreaterOrEqualf(t, refcount, 3, "we expect at least 3 references to this descriptor")
+	require.Truef(t, active, "descriptor is historical")
 
 	// Release everything.
 	lease1.Release(ctx)
