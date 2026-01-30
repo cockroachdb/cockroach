@@ -434,7 +434,10 @@ type ProviderOpts struct {
 	// projects represent the GCE projects to operate on. Accessed through
 	// GetProject() or GetProjects() depending on whether the command accepts
 	// multiple projects or a single one.
-	MachineType                   string
+	MachineType string
+	// MachineTypeSpecs captures the raw --gce-machine-type flag values.
+	// See ParseMachineTypeSpecs for the supported syntax.
+	MachineTypeSpecs              []string
 	MinCPUPlatform                string
 	BootDiskType                  string
 	Zones                         []string
@@ -1250,8 +1253,9 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		"Service account to use if the default project is in use and no "+
 			"--gce-service-account was specified")
 
-	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", "n2-standard-4",
-		"Machine type (see https://cloud.google.com/compute/docs/machine-types)")
+	flags.StringArrayVar(&o.MachineTypeSpecs, ProviderName+"-machine-type", nil,
+		"Machine type (see https://cloud.google.com/compute/docs/machine-types). "+
+			"Supports TYPE or TYPE=COUNT, and may be repeated or comma-separated.")
 	flags.StringVar(&o.BootDiskType, ProviderName+"-boot-disk-type", "auto",
 		"Type of the boot disk volume; defaults to pd-ssd if supported, otherwise hyperdisk-balanced")
 	flags.StringVar(&o.MinCPUPlatform, ProviderName+"-min-cpu-platform", "best",

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cli",
@@ -10,6 +10,7 @@ go_library(
         "chaos_process.go",
         "chaos_reset.go",
         "commands.go",
+        "create_opts.go",
         "flags.go",
         "handlers.go",
         "registry.go",
@@ -50,3 +51,4 @@ go_library(
         "@org_golang_x_text//message",
     ],
 )
+
