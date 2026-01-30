@@ -6,12 +6,15 @@
 package bulkmerge
 
 import (
+	"bytes"
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,15 +46,54 @@ func newBulkMergePlan(
 	// Use the gateway node as the coordinator, which is where the job was initiated.
 	coordinatorID := plan.GatewaySQLInstanceID
 
-	keys := make([][]byte, 0, len(sqlInstanceIDs))
+	// Read the setting to determine how many processors to create per node.
+	processorsPerNodeCount := int(processorsPerNode.Get(&execCtx.ExecCfg().Settings.SV))
+
+	// Build routing keys for all processors across all SQL instances.
+	// Each SQL instance gets processorsPerNodeCount processors.
+	type processorInfo struct {
+		sqlInstanceID base.SQLInstanceID
+		processorID   int
+	}
+	var processorInfos []processorInfo
+	keys := make([][]byte, 0, len(sqlInstanceIDs)*processorsPerNodeCount)
 	for _, id := range sqlInstanceIDs {
-		keys = append(keys, physicalplan.RoutingKeyForSQLInstance(id))
+		for procID := 0; procID < processorsPerNodeCount; procID++ {
+			processorInfos = append(processorInfos, processorInfo{
+				sqlInstanceID: id,
+				processorID:   procID,
+			})
+			keys = append(keys, physicalplan.RoutingKeyForProcessor(id, procID))
+		}
 	}
 
-	router, err := physicalplan.MakeInstanceRouter(sqlInstanceIDs)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "unable to make instance router")
+	// Create router that maps routing keys to stream IDs.
+	rangeRouterSpec := execinfrapb.OutputRouterSpec_RangeRouterSpec{
+		Spans:       nil,
+		DefaultDest: nil,
+		Encodings: []execinfrapb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding{
+			{
+				Column:   0,
+				Encoding: catenumpb.DatumEncoding_ASCENDING_KEY,
+			},
+		},
 	}
+	for stream, info := range processorInfos {
+		startBytes, endBytes, err := physicalplan.RoutingSpanForProcessor(info.sqlInstanceID, info.processorID)
+		if err != nil {
+			return nil, nil, err
+		}
+		span := execinfrapb.OutputRouterSpec_RangeRouterSpec_Span{
+			Start:  startBytes,
+			End:    endBytes,
+			Stream: int32(stream),
+		}
+		rangeRouterSpec.Spans = append(rangeRouterSpec.Spans, span)
+	}
+	// The router expects the spans to be sorted.
+	slices.SortFunc(rangeRouterSpec.Spans, func(a, b execinfrapb.OutputRouterSpec_RangeRouterSpec_Span) int {
+		return bytes.Compare(a.Start, b.Start)
+	})
 
 	loopbackID := plan.AddProcessor(physicalplan.Processor{
 		SQLInstanceID: coordinatorID,
@@ -62,7 +104,7 @@ func newBulkMergePlan(
 			Post: execinfrapb.PostProcessSpec{},
 			Output: []execinfrapb.OutputRouterSpec{{
 				Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
-				RangeRouterSpec: router,
+				RangeRouterSpec: rangeRouterSpec,
 			}},
 			StageID:     plan.NewStageOnNodes([]base.SQLInstanceID{coordinatorID}),
 			ResultTypes: mergeLoopbackOutputTypes,
@@ -74,10 +116,11 @@ func newBulkMergePlan(
 	if opts.WriteTimestamp != nil {
 		writeTimestamp = *opts.WriteTimestamp
 	}
-	for streamID, sqlInstanceID := range sqlInstanceIDs {
+	// Create processors for all SQL instances and processor IDs.
+	for streamID, info := range processorInfos {
 		var outputStorageConf cloudpb.ExternalStorage
 		if opts.Iteration < opts.MaxIterations {
-			outputURI, err := genOutputURIAndRecordPrefix(sqlInstanceID)
+			outputURI, err := genOutputURIAndRecordPrefix(info.sqlInstanceID)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -93,7 +136,7 @@ func newBulkMergePlan(
 			outputStorage.Close()
 		}
 		pIdx := plan.AddProcessor(physicalplan.Processor{
-			SQLInstanceID: sqlInstanceID,
+			SQLInstanceID: info.sqlInstanceID,
 			Spec: execinfrapb.ProcessorSpec{
 				Input: []execinfrapb.InputSyncSpec{{
 					ColumnTypes: mergeLoopbackOutputTypes,
@@ -128,8 +171,8 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID, execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			TaskCount:            int64(len(spans)),
-			WorkerSqlInstanceIds: keys,
+			TaskCount:           int64(len(spans)),
+			WorkerProcessorKeys: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes, nil /* finalizeLastStageCb */)
 

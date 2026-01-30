@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/bulksst",
         "//pkg/sql/bulkutil",
+        "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/physicalplan",

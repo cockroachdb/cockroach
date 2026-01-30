@@ -45,6 +45,14 @@ var (
 		"target size for individual data files produced during merge phase",
 		60<<20,
 		settings.WithPublic)
+
+	processorsPerNode = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"bulkio.merge.processors_per_node",
+		"number of merge processors to run per SQL instance",
+		4,
+		settings.IntInRange(1, 64),
+		settings.WithPublic)
 )
 
 // Output row format for the bulk merge processor. The third column contains
@@ -73,8 +81,8 @@ type bulkMergeProcessor struct {
 }
 
 type mergeProcessorInput struct {
-	sqlInstanceID string
-	taskID        taskset.TaskID
+	processorKey string
+	taskID       taskset.TaskID
 }
 
 func parseMergeProcessorInput(
@@ -89,17 +97,17 @@ func parseMergeProcessorInput(
 	if err := row[1].EnsureDecoded(typs[1], nil); err != nil {
 		return mergeProcessorInput{}, err
 	}
-	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
+	processorKey, ok := row[0].Datum.(*tree.DBytes)
 	if !ok {
-		return mergeProcessorInput{}, errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
+		return mergeProcessorInput{}, errors.Newf("expected bytes column for processorKey, got %s", row[0].Datum.String())
 	}
 	taskID, ok := row[1].Datum.(*tree.DInt)
 	if !ok {
 		return mergeProcessorInput{}, errors.Newf("expected int4 column for taskID, got %s", row[1].Datum.String())
 	}
 	return mergeProcessorInput{
-		sqlInstanceID: string(*sqlInstanceID),
-		taskID:        taskset.TaskID(*taskID),
+		processorKey: string(*processorKey),
+		taskID:       taskset.TaskID(*taskID),
 	}, nil
 }
 
@@ -180,7 +188,7 @@ func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumR
 	}
 
 	return rowenc.EncDatumRow{
-		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.sqlInstanceID))},
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.processorKey))},
 		rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(input.taskID))},
 		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(marshaled))},
 	}, nil
@@ -352,7 +360,7 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 		m.flowCtx.EvalCtx.Settings,
 		disallowShadowingBelow,
 		false, // writeAtBatchTs
-		false, // scatterSplitRanges
+		true,  // scatterSplitRanges
 		m.flowCtx.Cfg.BackupMonitor.MakeConcurrentBoundAccount(),
 		m.flowCtx.Cfg.BulkSenderLimiter,
 		nil, // range cache

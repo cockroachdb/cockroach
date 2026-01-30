@@ -23,6 +23,13 @@ func RoutingKeyForSQLInstance(sqlInstanceID base.SQLInstanceID) roachpb.Key {
 	return roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
 }
 
+// RoutingKeyForProcessor returns a routing key for a specific processor on a
+// SQL instance. This is used when multiple processors need to be created per
+// SQL instance for parallel processing.
+func RoutingKeyForProcessor(sqlInstanceID base.SQLInstanceID, processorID int) roachpb.Key {
+	return roachpb.Key(fmt.Sprintf("node%d-proc%d", sqlInstanceID, processorID))
+}
+
 // RoutingDatumsForSQLInstance returns a pair of encoded datums representing the
 // start and end keys for routing data to a specific SQL instance. This is used
 // when setting up range-based routing in DistSQL physical plans.
@@ -35,11 +42,43 @@ func RoutingDatumsForSQLInstance(
 	return startDatum, endDatum
 }
 
+// RoutingDatumsForProcessor returns a pair of encoded datums representing the
+// start and end keys for routing data to a specific processor on a SQL instance.
+func RoutingDatumsForProcessor(
+	sqlInstanceID base.SQLInstanceID, processorID int,
+) (rowenc.EncDatum, rowenc.EncDatum) {
+	routingBytes := RoutingKeyForProcessor(sqlInstanceID, processorID)
+	startDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
+	endDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
+	return startDatum, endDatum
+}
+
 // RoutingSpanForSQLInstance provides the encoded byte ranges to be used during
 // DistSQL planning when setting up the output router for a specific SQL instance.
 func RoutingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
 	var alloc tree.DatumAlloc
 	startDatum, endDatum := RoutingDatumsForSQLInstance(sqlInstanceID)
+
+	var startBytes, endBytes []byte
+	startBytes, err := startDatum.Encode(types.Bytes, &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, startBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	endBytes, err = endDatum.Encode(types.Bytes, &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, endBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	return startBytes, endBytes, nil
+}
+
+// RoutingSpanForProcessor provides the encoded byte ranges to be used during
+// DistSQL planning when setting up the output router for a specific processor
+// on a SQL instance.
+func RoutingSpanForProcessor(
+	sqlInstanceID base.SQLInstanceID, processorID int,
+) ([]byte, []byte, error) {
+	var alloc tree.DatumAlloc
+	startDatum, endDatum := RoutingDatumsForProcessor(sqlInstanceID, processorID)
 
 	var startBytes, endBytes []byte
 	startBytes, err := startDatum.Encode(types.Bytes, &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, startBytes)

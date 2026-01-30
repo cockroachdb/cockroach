@@ -46,9 +46,10 @@ type mergeCoordinator struct {
 }
 
 type mergeCoordinatorInput struct {
-	sqlInstanceID string
-	taskID        taskset.TaskID
-	outputSSTs    []execinfrapb.BulkMergeSpec_SST
+	// processorKey is the routing key for the processor (e.g., "node1-proc0").
+	processorKey string
+	taskID       taskset.TaskID
+	outputSSTs   []execinfrapb.BulkMergeSpec_SST
 }
 
 // parseCoordinatorInput ensures each column has the correct type and unmarshals
@@ -60,10 +61,10 @@ func parseCoordinatorInput(row rowenc.EncDatumRow) (mergeCoordinatorInput, error
 	if err := row[0].EnsureDecoded(types.Bytes, nil); err != nil {
 		return mergeCoordinatorInput{}, err
 	}
-	sqlInstanceID, ok := row[0].Datum.(*tree.DBytes)
+	processorKey, ok := row[0].Datum.(*tree.DBytes)
 	if !ok {
 		return mergeCoordinatorInput{},
-			errors.Newf("expected bytes column for sqlInstanceID, got %s", row[0].Datum.String())
+			errors.Newf("expected bytes column for processorKey, got %s", row[0].Datum.String())
 	}
 	if err := row[1].EnsureDecoded(types.Int4, nil); err != nil {
 		return mergeCoordinatorInput{}, err
@@ -86,9 +87,9 @@ func parseCoordinatorInput(row rowenc.EncDatumRow) (mergeCoordinatorInput, error
 		return mergeCoordinatorInput{}, err
 	}
 	return mergeCoordinatorInput{
-		sqlInstanceID: string(*sqlInstanceID),
-		taskID:        taskset.TaskID(*taskID),
-		outputSSTs:    results.SSTs,
+		processorKey: string(*processorKey),
+		taskID:       taskset.TaskID(*taskID),
+		outputSSTs:   results.SSTs,
 	}, nil
 }
 
@@ -133,14 +134,14 @@ func (m *mergeCoordinator) emitResults() (rowenc.EncDatumRow, *execinfrapb.Produ
 }
 
 func (m *mergeCoordinator) publishInitialTasks() {
-	for _, sqlInstanceID := range m.spec.WorkerSqlInstanceIds {
+	for _, processorKey := range m.spec.WorkerProcessorKeys {
 		taskID := m.tasks.ClaimFirst()
 		if taskID.IsDone() {
 			m.closeLoopback()
 			return
 		}
 		m.loopback <- rowenc.EncDatumRow{
-			rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(sqlInstanceID))},
+			rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(processorKey))},
 			rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(taskID))},
 		}
 	}
@@ -154,7 +155,7 @@ func (m *mergeCoordinator) closeLoopback() {
 }
 
 // handleRow accepts a row output by the merge processor, marks its task as
-// complete
+// complete, and assigns the next task to the same processor.
 func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 	input, err := parseCoordinatorInput(row)
 	if err != nil {
@@ -170,7 +171,7 @@ func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 	}
 
 	m.loopback <- rowenc.EncDatumRow{
-		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.sqlInstanceID))},
+		rowenc.EncDatum{Datum: tree.NewDBytes(tree.DBytes(input.processorKey))},
 		rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(next))},
 	}
 
@@ -196,7 +197,7 @@ func init() {
 		channel, cleanup := loopback.create(flow)
 		mc := &mergeCoordinator{
 			input:    input,
-			tasks:    taskset.MakeTaskSet(spec.TaskCount, int64(len(spec.WorkerSqlInstanceIds))),
+			tasks:    taskset.MakeTaskSet(spec.TaskCount, int64(len(spec.WorkerProcessorKeys))),
 			loopback: channel,
 			cleanup:  cleanup,
 			spec:     spec,

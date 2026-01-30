@@ -58,7 +58,7 @@ func (e *externalStorageBuilder) init(
 		blobClientFactory = p.BlobClientFactory
 	}
 	if blobClientFactory == nil {
-		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, externalIODir, allowLocalFastpath)
+		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, externalIODir, allowLocalFastpath, settings)
 	}
 	if p, ok := testingKnobs.CloudStorageKnobs.(*cloud.TestingKnobs); ok {
 		e.testingKnobs = p
