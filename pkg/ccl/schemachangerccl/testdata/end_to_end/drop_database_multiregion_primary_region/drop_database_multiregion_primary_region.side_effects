@@ -75,14 +75,6 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 108
-  -  localityConfig:
-  -    regionalByTable:
-  -      region: us-east2
-     modificationTime: {}
-     name: table_regional_by_table
-  ...
      replacementOf:
        time: {}
   -  schemaLocked: true
@@ -229,14 +221,6 @@ upsert descriptor #108
   +  dropTime: <redacted>"
      families:
      - columnIds:
-  ...
-     formatVersion: 3
-     id: 108
-  -  localityConfig:
-  -    regionalByTable:
-  -      region: us-east2
-     modificationTime: {}
-     name: table_regional_by_table
   ...
      replacementOf:
        time: {}
