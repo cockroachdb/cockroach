@@ -341,7 +341,8 @@ func alterPKInPrimaryIndexAndItsTemp(
 //  5. no nullable columns;
 //  6. no virtual columns (starting from v22.1);
 //  7. No columns that are scheduled to be dropped (target status set to `ABSENT`);
-//  8. add more here
+//  8. no new implicit columns that are part of the key and are not a suffix of it
+//  9. add more here
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
@@ -407,6 +408,20 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		if !colinfo.ColumnTypeIsIndexable(columnType.Type) {
 			panic(sqlerrors.NewColumnNotIndexableError(
 				col.Column.String(), columnType.Type.Name(), columnType.Type.DebugString()))
+		}
+	}
+
+	if t.Partitioning != nil {
+		newImplicitCols := t.Partitioning.NewImplicitColumns
+		for i := 0; i < min(len(t.Columns), len(newImplicitCols)); i++ {
+			partCol := tree.Name(newImplicitCols[i].Name)
+			if partCol != t.Columns[i].Column && usedColumns[partCol] {
+				panic(errors.WithHint(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"cannot add column %q as an implicit partitioning column", partCol),
+					"partitioning columns should already exist in the index or they must be a suffix of the keys",
+				))
+			}
 		}
 	}
 }

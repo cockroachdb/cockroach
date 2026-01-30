@@ -342,6 +342,14 @@ func createPartitioning(
 		if overridePartitioning != nil {
 			newImplicitCols = overridePartitioning.NewImplicitColumns
 			allowedNewColumnNames = overridePartitioning.AllowedNewColumnNames
+			i := 0
+			// no need to add the implicit key if column is already part of the index keys
+			for ; i < min(len(newImplicitCols), len(oldKeyColumnNames)); i++ {
+				if newImplicitCols[i].Name != oldKeyColumnNames[i] {
+					break
+				}
+			}
+			newImplicitCols = newImplicitCols[i:]
 		} else {
 			newImplicitCols, err = collectImplicitPartitionColumns(
 				b,
