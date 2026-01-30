@@ -12,6 +12,12 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
+# TODO: remove this block after we upgrade to Ubuntu 22.04+
+# this is needed to support s390x builds on Ubuntu 20.04 hosts
+docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --uninstall qemu-s390x
+docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --install s390x
+# End of TODO
+#
 tc_start_block "Variable Setup"
 
 platform="${PLATFORM:?PLATFORM must be specified}"
@@ -108,10 +114,13 @@ $BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts releas
 EOF
 tc_end_block "Compile and publish artifacts"
 
-if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "linux-amd64-fips" ]]; then
+if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "linux-amd64-fips" || $platform == "linux-s390x" ]]; then
   arch="amd64"
   if [[ $platform == "linux-arm64" ]]; then
     arch="arm64"
+  fi
+  if [[ $platform == "linux-s390x" ]]; then
+    arch="s390x"
   fi
 
   tc_start_block "Make and push docker image"
