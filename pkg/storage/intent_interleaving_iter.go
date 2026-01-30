@@ -1484,10 +1484,17 @@ type unsafeMVCCIterator struct {
 	rawMVCCKeyBuf []byte
 }
 
+var rng *rand.Rand
+
+func init() {
+	if util.RaceEnabled {
+		rng, _ = randutil.NewLockedPseudoRand()
+	}
+}
+
 // gcassert:inline
 func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
 	if util.RaceEnabled {
-		rng, _ := randutil.NewPseudoRand()
 		return &unsafeMVCCIterator{MVCCIterator: iter, rng: rng}
 	}
 	return iter

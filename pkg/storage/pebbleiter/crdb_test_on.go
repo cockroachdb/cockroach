@@ -24,10 +24,15 @@ import (
 // twice, allowing concurrent use of the same iterator struct.
 type Iterator = *assertionIter
 
+var rng *rand.Rand
+
+func init() {
+	rng, _ = randutil.NewLockedPseudoRand()
+}
+
 // MaybeWrap returns the provided Pebble iterator, wrapped with double close
 // detection.
 func MaybeWrap(iter *pebble.Iterator) Iterator {
-	rng, _ := randutil.NewPseudoRand()
 	return &assertionIter{Iterator: iter, rng: rng, closedCh: make(chan struct{})}
 }
 
