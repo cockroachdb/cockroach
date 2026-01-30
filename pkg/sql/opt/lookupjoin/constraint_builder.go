@@ -297,7 +297,7 @@ func (b *ConstraintBuilder) Build(
 				}
 				return b.f.Replace(e, replace)
 			}
-			projection := b.f.ConstructProjectionsItem(b.f.Replace(expr, replace).(opt.ScalarExpr), compEqCol)
+			projection := b.f.ConstructProjectionsItem(replace(expr).(opt.ScalarExpr), compEqCol)
 			inputProjections = append(inputProjections, projection)
 			addEqualityColumns(compEqCol, idxCol)
 			derivedEquivCols.Add(compEqCol)
