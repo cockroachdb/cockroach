@@ -1345,8 +1345,6 @@ func createRestoreFlows(
 		}
 	}
 
-	// postRestoreTables will have system tables during a cluster or system users
-	// restore, so they will have the id of the temp system db.
 	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables)
 
 	var rekeys []execinfrapb.TableRekey
@@ -2314,18 +2312,16 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
 	} else if isSystemUserRestore(details) {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	}
+
+	if err := r.cleanupTempSystemTables(ctx); err != nil {
+		return err
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
@@ -2657,18 +2653,9 @@ func (r *restoreResumer) MaybeWaitForSpanConfigConformance(
 		len(lastReport.Unavailable), len(lastReport.UnderReplicated), len(lastReport.OverReplicated), len(lastReport.ViolatingConstraints))
 }
 
-// tempSystemDatabaseID returns the ID of the descriptor for the temporary
-// system database used in full cluster restores, by finding a table in the
-// rewrites that had the static system database ID as its parent and returning
-// the new parent assigned in the rewrites during planning. Returns InvalidID if
-// no such table appears in the rewrites.
 func tempSystemDatabaseID(
 	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
 ) descpb.ID {
-	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
-		return descpb.InvalidID
-	}
-
 	for _, tbl := range tables {
 		if tbl.GetParentID() == keys.SystemDatabaseID {
 			if details.DescriptorRewrites[tbl.GetID()].ParentID != 0 {
@@ -3131,14 +3118,9 @@ func (r *restoreResumer) OnFailOrCancel(
 		}
 	}
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
-		// The temporary system table descriptors should already have been dropped
-		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	if err := r.cleanupTempSystemTables(ctx); err != nil {
+		return err
 	}
-
 	// Emit to the event log that the job has completed reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StateFailed, r.job)
 	return nil

@@ -11413,3 +11413,43 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 		require.Zero(t, revStartTime)
 	})
 }
+
+// TestDatabaseRestoreDownloadsZoneConfig verifies that when restoring a
+// database from a backup that contains the zones table, the restore creates
+// the temporary system database and downloads the zones table into it.
+func TestDatabaseRestoreDownloadsZoneConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test'`)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_pre_data'`)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`).Scan(&jobID)
+
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	checkTempDBExists := "SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'crdb_temp_system'"
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"1"}})
+
+	sqlDB.CheckQueryResults(t,
+		`SELECT table_name FROM [SHOW TABLES FROM crdb_temp_system]`,
+		[][]string{{"zones"}})
+
+	var zoneCount int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM crdb_temp_system.zones`).Scan(&zoneCount)
+	require.Greater(t, zoneCount, 0, "zones table should contain data")
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"0"}})
+}
