@@ -7,6 +7,7 @@ package kvcoord
 
 import (
 	"sort"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,21 +26,22 @@ import (
 //
 // It is designed to be used roughly as follows:
 //
-//	rs := keys.Range(requests)
-//	ri.Seek(scanDir, rs.Key)
-//	if !ri.NeedAnother(rs) {
-//	  // All requests fit within a single range, don't use the helper.
-//	  ...
-//	}
-//	helper := NewBatchTruncationHelper(scanDir, requests)
-//	for ri.Valid() {
-//	  curRangeRS := rs.Intersect(ri.Token().Desc())
-//	  curRangeReqs, positions, seekKey := helper.Truncate(curRangeRS)
-//	  // Process curRangeReqs that touch a single range and then use positions
-//	  // to reassemble the result.
-//	  ...
-//	  ri.Seek(scanDir, seekKey)
-//	}
+//		rs := keys.Range(requests)
+//		ri.Seek(scanDir, rs.Key)
+//		if !ri.NeedAnother(rs) {
+//		  // All requests fit within a single range, don't use the helper.
+//		  ...
+//		}
+//		helper := NewBatchTruncationHelper(scanDir, requests)
+//	 defer helper.Release()
+//		for ri.Valid() {
+//		  curRangeRS := rs.Intersect(ri.Token().Desc())
+//		  curRangeReqs, positions, seekKey := helper.Truncate(curRangeRS)
+//		  // Process curRangeReqs that touch a single range and then use positions
+//		  // to reassemble the result.
+//		  ...
+//		  ri.Seek(scanDir, seekKey)
+//		}
 //
 // The helper utilizes two different strategies depending on whether the
 // requests use local keys or not:
@@ -75,15 +77,12 @@ import (
 type BatchTruncationHelper struct {
 	scanDir ScanDirection
 	// requests are the original requests this helper needs to process (possibly
-	// in non-original order).
+	// in non-original order). This slice might be owned by the caller or by the
+	// helper.
 	requests []kvpb.RequestUnion
-	// ownRequestsSlice indicates whether a separate slice was allocated for
-	// requests. It is used for the purposes of the memory accounting.
-	//
-	// It is the same as !canReorderRequestsSlice in most cases, except for when
-	// the local keys are present. In such a scenario, even if
-	// canReorderRequestsSlice is false, ownRequestsSlice might remain false.
-	ownRequestsSlice bool
+	// requestsScratch is a scratch space owned by the helper which is reused
+	// whenever a copy of requests needs to be made.
+	requestsScratch []kvpb.RequestUnion
 	// mustPreserveOrder indicates whether the requests must be returned by
 	// Truncate() in the original order.
 	mustPreserveOrder bool
@@ -163,9 +162,15 @@ func (h descBatchTruncationHelper) Less(i, j int) bool {
 	return h.headers[i].EndKey.Compare(h.headers[j].EndKey) > 0
 }
 
+var batchTruncationHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &BatchTruncationHelper{}
+	},
+}
+
 // NewBatchTruncationHelper returns a new BatchTruncationHelper for the given
 // requests. The helper can be reused later for a different set of requests via
-// a separate Init() call.
+// a separate Init() call. Release() must be called after it's no longer needed.
 //
 // mustPreserveOrder, if true, indicates that the caller requires that requests
 // are returned by Truncate() in the original order (i.e. with strictly
@@ -182,12 +187,32 @@ func NewBatchTruncationHelper(
 	mustPreserveOrder bool,
 	canReorderRequestsSlice bool,
 ) (*BatchTruncationHelper, error) {
-	ret := &BatchTruncationHelper{
-		scanDir:                 scanDir,
-		mustPreserveOrder:       mustPreserveOrder,
-		canReorderRequestsSlice: canReorderRequestsSlice,
-	}
+	ret := batchTruncationHelperPool.Get().(*BatchTruncationHelper)
+	ret.scanDir = scanDir
+	ret.mustPreserveOrder = mustPreserveOrder
+	ret.canReorderRequestsSlice = canReorderRequestsSlice
 	return ret, ret.Init(requests)
+}
+
+func (h *BatchTruncationHelper) Release() {
+	for i := range h.requestsScratch {
+		h.requestsScratch[i] = kvpb.RequestUnion{}
+	}
+	for i := range h.headers {
+		h.headers[i] = kvpb.RequestHeader{}
+	}
+	for i := range h.helper.scratch {
+		h.helper.scratch[i] = kvpb.RequestUnion{}
+	}
+	h.helper.scratch = h.helper.scratch[:0]
+	*h = BatchTruncationHelper{
+		requestsScratch: h.requestsScratch[:0],
+		headers:         h.headers[:0],
+		positions:       h.positions[:0],
+		isRange:         h.isRange[:0],
+		helper:          h.helper,
+	}
+	batchTruncationHelperPool.Put(h)
 }
 
 // Init sets up the helper for the provided requests. It can be called multiple
@@ -210,23 +235,23 @@ func (h *BatchTruncationHelper) Init(requests []kvpb.RequestUnion) error {
 		h.requests = requests
 	} else {
 		// If we can't reorder the original requests slice, we must make a copy.
-		if cap(h.requests) < len(requests) {
-			h.requests = make([]kvpb.RequestUnion, len(requests))
-			h.ownRequestsSlice = true
+		if cap(h.requestsScratch) < len(requests) {
+			h.requestsScratch = make([]kvpb.RequestUnion, len(requests))
+			h.requests = h.requestsScratch
 		} else {
-			if len(requests) < len(h.requests) {
+			if len(requests) < len(h.requestsScratch) {
 				// Ensure that we lose references to the old requests that will
 				// not be overwritten by copy.
 				//
 				// Note that we only need to go up to the number of old requests
 				// and not the capacity of the slice since we assume that
 				// everything past the length is already nil-ed out.
-				oldRequests := h.requests[len(requests):len(h.requests)]
+				oldRequests := h.requestsScratch[len(requests):len(h.requests)]
 				for i := range oldRequests {
 					oldRequests[i] = kvpb.RequestUnion{}
 				}
 			}
-			h.requests = h.requests[:len(requests)]
+			h.requests = h.requestsScratch[:len(requests)]
 		}
 		copy(h.requests, requests)
 	}
@@ -234,7 +259,7 @@ func (h *BatchTruncationHelper) Init(requests []kvpb.RequestUnion) error {
 		h.headers = make([]kvpb.RequestHeader, len(requests))
 	} else {
 		if len(requests) < len(h.headers) {
-			// Ensure that we lose references to the old header that will
+			// Ensure that we lose references to the old headers that will
 			// not be overwritten in the loop below.
 			//
 			// Note that we only need to go up to the number of old headers and
@@ -302,10 +327,9 @@ const (
 // MemUsage returns the memory usage of the internal state of the helper.
 func (h *BatchTruncationHelper) MemUsage() int64 {
 	var memUsage int64
-	if h.ownRequestsSlice {
-		// Only account for the requests slice if we own it.
-		memUsage += int64(cap(h.requests)) * requestUnionOverhead
-	}
+	// Note that we deliberately ignore h.requests because either we don't own
+	// it or it's aliased with h.requestsScratch.
+	memUsage += int64(cap(h.requestsScratch)) * requestUnionOverhead
 	memUsage += int64(cap(h.headers)) * requestHeaderOverhead
 	memUsage += int64(cap(h.positions)) * intOverhead
 	memUsage += int64(cap(h.isRange)) * boolOverhead
@@ -508,6 +532,8 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 	if numReqs == 0 {
 		return nil, nil, nil
 	}
+	// Note that we always make fresh allocations here since we need to ensure
+	// to not mutate requests and positions returned to the caller.
 	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
 	truncPositions := make([]int, 0, numReqs)
 
@@ -697,6 +723,8 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 	if numReqs == 0 {
 		return nil, nil, nil
 	}
+	// Note that we always make fresh allocations here since we need to ensure
+	// to not mutate requests and positions returned to the caller.
 	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
 	truncPositions := make([]int, 0, numReqs)
 
@@ -1122,6 +1150,9 @@ func (h *orderRestorationHelper) restoreOrder(
 		// Make sure that the found map is set up for the next call.
 		h.found[pos] = -1
 	}
+	// We allocated truncReqs in truncate* methods, and it's not going to be
+	// returned to the caller, so we can keep it as the scratch space for the
+	// next time.
 	h.scratch = truncReqs
 	return toReturn, positions
 }

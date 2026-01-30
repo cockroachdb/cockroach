@@ -867,6 +867,9 @@ func (s *Streamer) Close(ctx context.Context) {
 		// exited.
 		s.results.close(ctx)
 	}
+	if s.truncationHelper != nil {
+		s.truncationHelper.Release()
+	}
 	s.metrics.OperatorsCount.Dec(1)
 	*s = Streamer{}
 }
