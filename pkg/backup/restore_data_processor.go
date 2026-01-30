@@ -310,17 +310,17 @@ type resumeEntry struct {
 // multiplexed SST iterator over the files.
 func (rd *restoreDataProcessor) openSSTs(
 	ctx context.Context, entry execinfrapb.RestoreSpanEntry, resume *resumeEntry,
-) (mergedSST, *resumeEntry, error) {
+) (_ mergedSST, _ *resumeEntry, retErr error) {
 	// TODO(msbutler): use a a map of external storage factories to avoid reopening the same dir
 	// in a given restore span entry
 	var dirs []cloud.ExternalStorage
 
-	// If we bail early and haven't handed off responsibility of the dirs/iters to
-	// the channel, close anything that we had open.
 	defer func() {
-		for _, dir := range dirs {
-			if err := dir.Close(); err != nil {
-				log.Dev.Warningf(ctx, "close export storage failed %v", err)
+		if retErr != nil {
+			for _, dir := range dirs {
+				if err := dir.Close(); err != nil {
+					log.Dev.Warningf(ctx, "close export storage failed %v", err)
+				}
 			}
 		}
 	}()
@@ -348,7 +348,6 @@ func (rd *restoreDataProcessor) openSSTs(
 			completeUpTo: completeUpTo,
 		}
 
-		dirs = make([]cloud.ExternalStorage, 0)
 		return mSST
 	}
 
@@ -392,6 +391,73 @@ func (rd *restoreDataProcessor) openSSTs(
 	return mSST, res, nil
 }
 
+// openSSTsForFiles opens the specified files and returns a multiplexed SST
+// iterator. If emitDeletes is true, the iterator will emit tombstones instead
+// of skipping them (needed when ingesting over linked layers).
+func (rd *restoreDataProcessor) openSSTsForFiles(
+	ctx context.Context,
+	entry execinfrapb.RestoreSpanEntry,
+	files []execinfrapb.RestoreFileSpec,
+	emitDeletes bool,
+) (_ mergedSST, retErr error) {
+	var dirs []cloud.ExternalStorage
+
+	defer func() {
+		if retErr != nil {
+			for _, dir := range dirs {
+				if err := dir.Close(); err != nil {
+					log.Dev.Warningf(ctx, "close export storage failed %v", err)
+				}
+			}
+		}
+	}()
+
+	storeFiles := make([]storageccl.StoreFile, 0, len(files))
+	for _, file := range files {
+		dir, err := rd.FlowCtx.Cfg.ExternalStorage(ctx, file.Dir)
+		if err != nil {
+			return mergedSST{}, err
+		}
+		dirs = append(dirs, dir)
+		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+	}
+
+	iterOpts := storage.IterOptions{
+		RangeKeyMaskingBelow: rd.spec.RestoreTime,
+		KeyTypes:             storage.IterKeyTypePointsAndRanges,
+		LowerBound:           keys.LocalMax,
+		UpperBound:           keys.MaxKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
+	if err != nil {
+		return mergedSST{}, err
+	}
+
+	var readAsOfIter *storage.ReadAsOfIterator
+	if emitDeletes {
+		readAsOfIter = storage.NewReadAsOfIteratorWithEmitDeletes(iter, rd.spec.RestoreTime)
+	} else {
+		readAsOfIter = storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
+	}
+
+	cleanup := func() {
+		log.Dev.VInfof(ctx, 1, "finished with and closing %d files in span %d [%s-%s)", len(files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
+		readAsOfIter.Close()
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}
+	}
+
+	return mergedSST{
+		entry:        entry,
+		iter:         readAsOfIter,
+		cleanup:      cleanup,
+		completeUpTo: rd.spec.RestoreTime,
+	}, nil
+}
+
 func (rd *restoreDataProcessor) runRestoreWorkers(
 	ctx context.Context, entries chan execinfrapb.RestoreSpanEntry,
 ) error {
@@ -406,7 +472,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return errors.Wrap(err, "creating key rewriter from rekeys")
 		}
 
-		var sstIter mergedSST
 		for {
 			done, err := func() (done bool, _ error) {
 				entry, ok := <-entries
@@ -421,47 +486,63 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				ctx, sp := tracing.ChildSpan(ctx, "restore.processRestoreSpanEntry")
 				defer sp.Finish()
 
-				// Check if the first file has UseLink set. If so, link all files
-				// in this entry via LinkExternalSSTable instead of ingesting.
-				// TODO(dt): support entries where some layers are link and some are not.
-				if entry.Files[0].UseLink {
-					for _, file := range entry.Files {
-						if !file.UseLink {
-							return done, errors.AssertionFailedf("invalid non-linked file in linking restore")
-						}
-					}
-					summary, err := rd.linkFiles(ctx, kr, entry)
+				// Partition files into linkable and ingestable based on their UseLink flag.
+				linkable, ingestable := partitionFilesByLinkability(entry.Files)
+
+				if log.V(2) {
+					log.Dev.Infof(ctx, "processing restore span entry %d: %d linkable files, %d ingestable files",
+						entry.ProgressIdx, len(linkable), len(ingestable))
+				}
+
+				var summary kvpb.BulkOpSummary
+
+				// First, link all linkable files.
+				if len(linkable) > 0 {
+					linkEntry := entry
+					linkEntry.Files = linkable
+					linkSummary, err := rd.linkFiles(ctx, kr, linkEntry)
 					if err != nil {
 						return done, errors.Wrap(err, "linking files")
 					}
-					select {
-					case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs, rd.spec.RestoreTime):
-					case <-ctx.Done():
-						return done, errors.Wrap(ctx.Err(), "sending progress update")
+					summary.DataSize += linkSummary.DataSize
+					for k, v := range linkSummary.EntryCounts {
+						if summary.EntryCounts == nil {
+							summary.EntryCounts = make(map[uint64]int64)
+						}
+						summary.EntryCounts[k] += v
 					}
-					return done, nil
 				}
 
-				var res *resumeEntry
-				for {
-					sstIter, res, err = rd.openSSTs(ctx, entry, res)
+				// Then, ingest files that cannot be linked.
+				if len(ingestable) > 0 {
+					// When there are linked files, we need to emit deletes to shadow
+					// any keys in the linked layers that have been deleted.
+					emitDeletes := len(linkable) > 0
+					ingestEntry := entry
+					ingestEntry.Files = ingestable
+
+					sstIter, err := rd.openSSTsForFiles(ctx, ingestEntry, ingestable, emitDeletes)
 					if err != nil {
 						return done, errors.Wrap(err, "opening SSTs")
 					}
 
-					summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
+					ingestSummary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
 					if err != nil {
 						return done, errors.Wrap(err, "processing restore span entry")
 					}
+					summary.DataSize += ingestSummary.DataSize
+					for k, v := range ingestSummary.EntryCounts {
+						if summary.EntryCounts == nil {
+							summary.EntryCounts = make(map[uint64]int64)
+						}
+						summary.EntryCounts[k] += v
+					}
+				}
 
-					select {
-					case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs, sstIter.completeUpTo):
-					case <-ctx.Done():
-						return done, errors.Wrap(ctx.Err(), "sending progress update")
-					}
-					if res.done {
-						break
-					}
+				select {
+				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs, rd.spec.RestoreTime):
+				case <-ctx.Done():
+					return done, errors.Wrap(ctx.Err(), "sending progress update")
 				}
 				return done, nil
 			}()
@@ -782,6 +863,21 @@ func makeProgressUpdate(
 	progDetails.DataSpan = entry.Span
 	progDetails.CompleteUpTo = completeUpTo
 	return progDetails
+}
+
+// partitionFilesByLinkability splits files into those that can be linked
+// (UseLink=true) and those that must be ingested (UseLink=false).
+func partitionFilesByLinkability(
+	files []execinfrapb.RestoreFileSpec,
+) (linkable, ingestable []execinfrapb.RestoreFileSpec) {
+	for i := range files {
+		if files[i].UseLink {
+			linkable = append(linkable, files[i])
+		} else {
+			ingestable = append(ingestable, files[i])
+		}
+	}
+	return linkable, ingestable
 }
 
 // Next is part of the RowSource interface.
