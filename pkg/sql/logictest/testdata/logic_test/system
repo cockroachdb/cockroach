@@ -17,6 +17,13 @@ public  locations            table     node  NULL
 public  span_configurations  table     node  NULL
 
 skipif config local-mixed-25.4
+skipif config local-mixed-26.1
+query I rowsort
+SELECT count(id) FROM system.descriptor
+----
+75
+
+onlyif config local-mixed-26.1
 query I rowsort
 SELECT count(id) FROM system.descriptor
 ----
