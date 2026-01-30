@@ -709,7 +709,7 @@ func selectLocalityMatchingURI(
 	processorLocality roachpb.Locality,
 ) (string, string, error) {
 	destURI := defaultURI
-	var destLocalityKV string
+	destLocalityKV := "default"
 
 	if len(urisByLocalityKV) > 0 {
 		var localitySinkURI string

@@ -76,8 +76,6 @@ func maybeStartCompactionJob(
 		return 0, errors.New("only scheduled backups can be compacted")
 	case len(triggerJob.SpecificTenantIds) != 0 || triggerJob.IncludeAllSecondaryTenants:
 		return 0, errors.New("backups of tenants not supported for compaction")
-	case triggerJob.StrictLocalityFiltering:
-		return 0, errors.New("WITH STRICT STORAGE LOCALITY not supported in backup compactions")
 	}
 
 	env := scheduledjobs.ProdJobSchedulerEnv
@@ -209,6 +207,9 @@ func StartCompactionJob(
 
 	var executionLocality roachpb.Locality
 	if options.ExecutionLocality != nil {
+		if options.Strict {
+			return 0, errors.New("cannot set both EXECUTION LOCALITY and WITH STRICT STORAGE LOCALITY")
+		}
 		if strVal, ok := options.ExecutionLocality.(*tree.StrVal); ok {
 			s := strVal.RawString()
 			if s != "" {
@@ -221,11 +222,6 @@ func StartCompactionJob(
 				"expected string value, got %+v", options.ExecutionLocality,
 			)
 		}
-	}
-	if options.Strict {
-		return jobspb.InvalidJobID, errors.AssertionFailedf(
-			"WITH STRICT STORAGE LOCALITY not supported in backup compactions",
-		)
 	}
 
 	encryption := jobspb.BackupEncryptionOptions{
@@ -254,9 +250,10 @@ func StartCompactionJob(
 			Subdir: fullBackupPath,
 			Exists: true,
 		},
-		EncryptionOptions: &encryption,
-		ExecutionLocality: executionLocality,
-		Compact:           true,
+		EncryptionOptions:       &encryption,
+		ExecutionLocality:       executionLocality,
+		StrictLocalityFiltering: options.Strict,
+		Compact:                 true,
 	}
 	jobID := planHook.ExecCfg().JobRegistry.MakeJobID()
 	description, err := compactionJobDescription(details)
