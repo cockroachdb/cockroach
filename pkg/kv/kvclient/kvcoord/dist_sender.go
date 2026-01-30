@@ -1971,6 +1971,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
+	defer truncationHelper.Release()
 	// Iterate over the ranges that the batch touches. The iteration is done in
 	// key order - the order of requests in the batch is not relevant for the
 	// iteration. Each iteration sends for evaluation one sub-batch to one range.
