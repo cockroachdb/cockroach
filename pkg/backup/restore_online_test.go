@@ -869,6 +869,258 @@ func assertOnlineRestoreWithRekeying(
 	require.NotEqual(t, originalID, restoreID)
 }
 
+// TestOnlineRestoreRevisionHistoryLayers tests online restore with backup chains
+// that include revision history layers. When a backup chain contains layers with
+// revision history, those layers must be ingested (not linked) by the distributed
+// restore flow. This test exercises various combinations of:
+//   - Layers without revision history (linkable)
+//   - Layers with revision history (must be ingested)
+//   - Restores to specific timestamps covered by revision history
+//   - DELETE operations that create tombstones which must shadow linked data
+//
+// The test creates a table split into multiple ranges and makes mutations across
+// different ranges in different backup layers to exercise the hybrid link/ingest
+// path thoroughly.
+func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	// Use enough accounts to create multiple ranges.
+	const numAccounts = 500
+
+	srcTC, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	dstTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	defer cleanupFnRestored()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup-rev-history", "backup-rev-history", sqlDB, rSQLDB)
+
+	// Split the bank table into multiple ranges so we have mutations affecting
+	// different ranges in different layers.
+	sqlDB.Exec(t, "ALTER TABLE data.bank SPLIT AT VALUES (100), (200), (300), (400)")
+
+	// Layer 0: Full backup (no revision history).
+	// Initial balance is the account id (set by backupRestoreTestSetup).
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	// Layer 1: First incremental without revision history.
+	// Update balance for range 0-100 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 1000 WHERE id < 100")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Layer 2: Second incremental without revision history.
+	// Update balance for range 100-200 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 2000 WHERE id >= 100 AND id < 200")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Now we start revision history layers.
+	// Layer 3: First incremental WITH revision history.
+	// Update balance for range 200-300.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3000 WHERE id >= 200 AND id < 300")
+	var ts3 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts3)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Capture a timestamp in the middle of the revision history for AOST testing.
+	// Make another mutation WITHIN the revision history period.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3500 WHERE id >= 200 AND id < 250")
+	var tsMidRevision string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsMidRevision)
+
+	// Layer 4: Second incremental WITH revision history.
+	// Update balance for range 300-400 and DELETE some rows.
+	// The deletions test that tombstones in revision history layers correctly
+	// shadow keys in the linked layers below.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 4000 WHERE id >= 300 AND id < 400")
+	// Delete rows 350-359 (10 rows) - these existed in linked layers and must be
+	// shadowed by tombstones from the ingested revision history layer.
+	sqlDB.Exec(t, "DELETE FROM data.bank WHERE id >= 350 AND id < 360")
+	var tsAfterDelete string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsAfterDelete)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 5: Third incremental WITH revision history.
+	// Update balance for range 400-500 and delete more rows.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 5000 WHERE id >= 400")
+	// Delete rows 450-454 (5 rows).
+	sqlDB.Exec(t, "DELETE FROM data.bank WHERE id >= 450 AND id < 455")
+	var ts5 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts5)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 6: Final incremental WITHOUT revision history (after the revision history layers).
+	// Update all balances to a final value.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 6000 WHERE true")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Total deleted rows: 10 (ids 350-359) + 5 (ids 450-454) = 15
+	const deletedInLayer4 = 10 // ids 350-359
+	const deletedInLayer5 = 5  // ids 450-454
+	const totalDeleted = deletedInLayer4 + deletedInLayer5
+
+	// Test cases for different restore scenarios.
+	testCases := []struct {
+		name             string
+		restoreTime      string  // AS OF SYSTEM TIME, empty for latest
+		expectedBalances [][]int // expected [minID, maxID, balance] ranges
+		expectedRows     int     // expected row count
+		deletedIDs       []int   // IDs that should NOT exist after restore
+		expectError      string  // expected error, empty if success expected
+		desc             string  // description for debugging
+	}{
+		{
+			name:        "restore-to-latest",
+			restoreTime: "",
+			expectedBalances: [][]int{
+				{0, 349, 6000},               // accounts before first deletion
+				{360, 449, 6000},             // accounts between deletions
+				{455, numAccounts - 1, 6000}, // accounts after second deletion
+			},
+			expectedRows: numAccounts - totalDeleted,
+			deletedIDs:   []int{350, 355, 359, 450, 454}, // sample of deleted IDs
+			desc:         "restore to latest backup (after all layers, with deletions)",
+		},
+		{
+			name:        "restore-to-layer-3-end",
+			restoreTime: ts3,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 299, 3000}, // layer 3 update (first rev history layer)
+			},
+			expectedRows: numAccounts, // no deletions yet at this timestamp
+			deletedIDs:   nil,
+			desc:         "restore to end of first revision history layer",
+		},
+		{
+			name:        "restore-to-mid-revision",
+			restoreTime: tsMidRevision,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500}, // mid-revision update
+				{250, 299, 3000}, // still at layer 3 value
+			},
+			expectedRows: numAccounts, // no deletions yet at this timestamp
+			deletedIDs:   nil,
+			desc:         "restore to a point in time within revision history",
+		},
+		{
+			name:        "restore-after-delete",
+			restoreTime: tsAfterDelete,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 349, 4000},
+				{360, 399, 4000}, // 350-359 deleted
+			},
+			expectedRows: numAccounts - deletedInLayer4,
+			deletedIDs:   []int{350, 355, 359}, // sample of deleted IDs from layer 4
+			desc:         "restore to timestamp after first deletion",
+		},
+		{
+			name:        "restore-to-layer-5-end",
+			restoreTime: ts5,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 349, 4000},
+				{360, 399, 4000},
+				{400, 449, 5000},
+				{455, numAccounts - 1, 5000}, // 450-454 deleted
+			},
+			expectedRows: numAccounts - totalDeleted,
+			deletedIDs:   []int{350, 355, 359, 450, 454}, // sample of deleted IDs
+			desc:         "restore to end of last revision history layer (with all deletions)",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clean up before each test case.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Enable the distributed flow for online restore (required for revision history).
+			rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+
+			restoreStmt := fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage)
+			if tc.restoreTime != "" {
+				restoreStmt = fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH EXPERIMENTAL DEFERRED COPY",
+					externalStorage, tc.restoreTime)
+			}
+
+			if tc.expectError != "" {
+				rSQLDB.ExpectErr(t, tc.expectError, restoreStmt)
+				return
+			}
+
+			rSQLDB.Exec(t, restoreStmt)
+
+			// Verify row count.
+			var restoreRowCount int
+			rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+			require.Equal(t, tc.expectedRows, restoreRowCount, "row count mismatch for %s", tc.desc)
+
+			// Verify expected balances for each range.
+			for _, expected := range tc.expectedBalances {
+				minID, maxID, expectedBalance := expected[0], expected[1], expected[2]
+				var actualBalance int
+				rSQLDB.QueryRow(t,
+					"SELECT balance FROM data.bank WHERE id = $1", minID,
+				).Scan(&actualBalance)
+				require.Equal(t, expectedBalance, actualBalance,
+					"balance mismatch at id=%d for %s", minID, tc.desc)
+
+				// Check a few more points in the range.
+				if maxID > minID {
+					midID := (minID + maxID) / 2
+					rSQLDB.QueryRow(t,
+						"SELECT balance FROM data.bank WHERE id = $1", midID,
+					).Scan(&actualBalance)
+					require.Equal(t, expectedBalance, actualBalance,
+						"balance mismatch at id=%d for %s", midID, tc.desc)
+				}
+			}
+
+			// Verify deleted rows are not present. This is critical for testing
+			// that tombstones from revision history layers correctly shadow keys
+			// in the linked layers below.
+			for _, deletedID := range tc.deletedIDs {
+				var count int
+				rSQLDB.QueryRow(t,
+					"SELECT count(*) FROM data.bank WHERE id = $1", deletedID,
+				).Scan(&count)
+				require.Equal(t, 0, count,
+					"deleted id=%d should not exist for %s", deletedID, tc.desc)
+			}
+
+			// For latest restore, also verify via fingerprint comparison.
+			if tc.restoreTime == "" {
+				fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, srcTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				fpDst, err := fingerprintutils.FingerprintDatabase(ctx, dstTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+			}
+
+			// Wait for the download job to complete.
+			waitForLatestDownloadJobToSucceed(t, rSQLDB)
+		})
+	}
+}
+
 // TestOnlineRestoreWithDistFlow tests that online restore works correctly when
 // using the distributed restore flow (distRestore with RestoreDataProcessor)
 // instead of the simpler sendAddRemoteSSTs loop. This is enabled via the

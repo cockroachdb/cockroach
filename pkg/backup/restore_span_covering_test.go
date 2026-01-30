@@ -314,6 +314,60 @@ func makeImportSpans(
 	return cover, nil
 }
 
+func makeImportSpansWithLink(
+	ctx context.Context,
+	spans []roachpb.Span,
+	backups []backuppb.BackupManifest,
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory,
+	targetSize int64,
+	introducedSpanFrontier spanUtils.Frontier,
+	completedSpans []jobspb.RestoreProgress_FrontierEntry,
+	useLink bool,
+) ([]execinfrapb.RestoreSpanEntry, error) {
+	cover := make([]execinfrapb.RestoreSpanEntry, 0)
+	spanCh := make(chan execinfrapb.RestoreSpanEntry)
+	g := ctxgroup.WithContext(context.Background())
+	g.Go(func() error {
+		for entry := range spanCh {
+			cover = append(cover, entry)
+		}
+		return nil
+	})
+
+	filter, err := makeSpanCoveringFilter(
+		spans,
+		completedSpans,
+		introducedSpanFrontier,
+		targetSize,
+		defaultMaxFileCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer filter.close()
+
+	err = generateAndSendImportSpans(
+		ctx,
+		spans,
+		backups,
+		layerToIterFactory,
+		nil,
+		filter,
+		&inclusiveEndKeyComparator{},
+		spanCh,
+		useLink,
+	)
+	close(spanCh)
+
+	if err != nil {
+		return nil, err
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return cover, nil
+}
+
 type coverutils struct {
 	dir cloudpb.ExternalStorage
 }
@@ -1020,5 +1074,131 @@ func TestRestoreEntryCoverZeroSizeFiles(t *testing.T) {
 
 			require.Equal(t, expectedCover, simpleCover)
 		})
+	}
+}
+
+// TestUseLinkLayerOrdering verifies that UseLink is correctly set based on
+// layer ordering: once a layer with revision history is encountered, that
+// layer and all subsequent layers must have UseLink=false.
+func TestUseLinkLayerOrdering(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
+	defer cleanupFn()
+	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
+
+	c := makeCoverUtils(ctx, t, &execCfg)
+
+	makeSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+
+	// Create backup manifests with different revision history configurations.
+	// Layer 0: no revision history (can link)
+	// Layer 1: no revision history (can link)
+	// Layer 2: HAS revision history (cannot link)
+	// Layer 3: no revision history (cannot link - because layer 2 has rev history)
+	backups := []backuppb.BackupManifest{
+		{
+			Spans:             roachpb.Spans{makeSpan("a", "z")},
+			EndTime:           hlc.Timestamp{WallTime: 1},
+			RevisionStartTime: hlc.Timestamp{}, // no revision history
+			MVCCFilter:        backuppb.MVCCFilter_Latest,
+			Dir:               c.dir,
+			Files: []backuppb.BackupManifest_File{
+				{Span: makeSpan("a", "m"), Path: "layer0-file1"},
+			},
+		},
+		{
+			Spans:             roachpb.Spans{makeSpan("a", "z")},
+			StartTime:         hlc.Timestamp{WallTime: 1},
+			EndTime:           hlc.Timestamp{WallTime: 2},
+			RevisionStartTime: hlc.Timestamp{}, // no revision history
+			MVCCFilter:        backuppb.MVCCFilter_Latest,
+			Dir:               c.dir,
+			Files: []backuppb.BackupManifest_File{
+				{Span: makeSpan("a", "m"), Path: "layer1-file1"},
+			},
+		},
+		{
+			Spans:             roachpb.Spans{makeSpan("a", "z")},
+			StartTime:         hlc.Timestamp{WallTime: 2},
+			EndTime:           hlc.Timestamp{WallTime: 3},
+			RevisionStartTime: hlc.Timestamp{WallTime: 2}, // HAS revision history!
+			MVCCFilter:        backuppb.MVCCFilter_All,
+			Dir:               c.dir,
+			Files: []backuppb.BackupManifest_File{
+				{Span: makeSpan("a", "m"), Path: "layer2-file1"},
+			},
+		},
+		{
+			Spans:             roachpb.Spans{makeSpan("a", "z")},
+			StartTime:         hlc.Timestamp{WallTime: 3},
+			EndTime:           hlc.Timestamp{WallTime: 4},
+			RevisionStartTime: hlc.Timestamp{}, // no revision history, but after layer with rev history
+			MVCCFilter:        backuppb.MVCCFilter_Latest,
+			Dir:               c.dir,
+			Files: []backuppb.BackupManifest_File{
+				{Span: makeSpan("a", "m"), Path: "layer3-file1"},
+			},
+		},
+	}
+
+	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
+	require.NoError(t, err)
+
+	emptySpanFrontier, err := spanUtils.MakeFrontierAt(hlc.Timestamp{})
+	require.NoError(t, err)
+
+	// Test with useLink=true to verify per-layer UseLink assignment.
+	cover, err := makeImportSpansWithLink(
+		ctx,
+		roachpb.Spans{makeSpan("a", "z")},
+		backups,
+		layerToIterFactory,
+		noSpanTargetSize,
+		emptySpanFrontier,
+		nil,
+		true, /* useLink */
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, cover)
+
+	// Check UseLink values for each file.
+	for _, entry := range cover {
+		for _, file := range entry.Files {
+			switch file.Layer {
+			case 0:
+				require.True(t, file.UseLink, "layer 0 file should be linkable")
+			case 1:
+				require.True(t, file.UseLink, "layer 1 file should be linkable")
+			case 2:
+				require.False(t, file.UseLink, "layer 2 file should NOT be linkable (has revision history)")
+			case 3:
+				require.False(t, file.UseLink, "layer 3 file should NOT be linkable (after layer with revision history)")
+			}
+		}
+	}
+
+	// Test with useLink=false to verify all files have UseLink=false.
+	coverNoLink, err := makeImportSpansWithLink(
+		ctx,
+		roachpb.Spans{makeSpan("a", "z")},
+		backups,
+		layerToIterFactory,
+		noSpanTargetSize,
+		emptySpanFrontier,
+		nil,
+		false, /* useLink */
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, coverNoLink)
+
+	for _, entry := range coverNoLink {
+		for _, file := range entry.Files {
+			require.False(t, file.UseLink, "all files should have UseLink=false when useLink=false")
+		}
 	}
 }
