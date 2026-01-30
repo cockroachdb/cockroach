@@ -45,6 +45,7 @@ go_test(
     srcs = ["main_test.go"],
     data = glob(["testdata/**"]),
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/ccl",
         "//pkg/server",
