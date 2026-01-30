@@ -1325,6 +1325,14 @@ func createRestoreFlows(
 		}
 	}
 
+	mayContainSystemTables := preRestoreTables
+	if len(mayContainSystemTables) == 0 {
+		// This is not normal: happens for RESTORE SYSTEM USERS or direct system
+		// table targets.
+		mayContainSystemTables = postRestoreTables
+	}
+	tempSystemDBID := tempSystemDatabaseID(details, mayContainSystemTables, r.job.Payload().CreationClusterVersion)
+
 	// We get the spans of the restoring tables _as they appear in the backup_,
 	// that is, in the 'old' keyspace, before we reassign the table IDs.
 	preRestoreSpans, err := spansForAllRestoreTableIndexes(backupCodec, preRestoreTables, nil, details.SchemaOnly, details.OnlineImpl())
@@ -1344,11 +1352,6 @@ func createRestoreFlows(
 			return nil, nil, nil, err
 		}
 	}
-
-	// postRestoreTables will have system tables during a cluster or system users
-	// restore, so they will have the id of the temp system db.
-	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables)
-
 	var rekeys []execinfrapb.TableRekey
 	var systemTables []catalog.TableDescriptor
 	for i := range details.TableDescs {
@@ -1478,6 +1481,7 @@ func createImportingDescriptors(
 	ctx context.Context, p sql.JobExecContext, sqlDescs []catalog.Descriptor, r *restoreResumer,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+
 	if details.PrepareCompleted {
 		return nil
 	}
@@ -1547,10 +1551,9 @@ func createImportingDescriptors(
 			allMutableDescs = append(allMutableDescs, mut)
 		}
 	}
-
-	tempSystemDBID := tempSystemDatabaseID(details, tables)
+	tempSystemDBID := tempSystemDatabaseID(details, tables, r.job.Payload().CreationClusterVersion)
 	if tempSystemDBID != descpb.InvalidID {
-		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
+		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDBPrefix,
 			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
 	}
@@ -1710,7 +1713,7 @@ func createImportingDescriptors(
 		typesByID,
 		dbsByID,
 		details.RemoveRegions,
-		restoreTempSystemDB,
+		restoreTempSystemDBPrefix,
 	); err != nil {
 		return err
 	}
@@ -1731,7 +1734,7 @@ func createImportingDescriptors(
 		includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 		if err := ingesting.WriteDescriptors(
 			ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
-			details.DescriptorCoverage, nil /* extra */, restoreTempSystemDB, includePublicSchemaCreatePriv,
+			details.DescriptorCoverage, nil /* extra */, restoreTempSystemDBPrefix, includePublicSchemaCreatePriv,
 			true, /* deprecatedAllowCrossDatabaseRefs */
 		); err != nil {
 			return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -2314,18 +2317,16 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
 	} else if isSystemUserRestore(details) {
 		if err := r.restoreSystemUsers(ctx, p.ExecCfg().InternalDB, mainData.getSystemTables()); err != nil {
 			return err
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	}
+
+	if err := r.cleanupTempSystemTables(ctx); err != nil {
+		return err
 	}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
@@ -2657,14 +2658,15 @@ func (r *restoreResumer) MaybeWaitForSpanConfigConformance(
 		len(lastReport.Unavailable), len(lastReport.UnderReplicated), len(lastReport.OverReplicated), len(lastReport.ViolatingConstraints))
 }
 
-// tempSystemDatabaseID returns the ID of the descriptor for the temporary
-// system database used in full cluster restores, by finding a table in the
-// rewrites that had the static system database ID as its parent and returning
-// the new parent assigned in the rewrites during planning. Returns InvalidID if
-// no such table appears in the rewrites.
 func tempSystemDatabaseID(
-	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
+	details jobspb.RestoreDetails,
+	tables []catalog.TableDescriptor,
+	jobCreationClusterVersion roachpb.Version,
 ) descpb.ID {
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
+		return details.TempSystemID
+	}
+
 	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
 		return descpb.InvalidID
 	}
@@ -3131,14 +3133,9 @@ func (r *restoreResumer) OnFailOrCancel(
 		}
 	}
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
-		// The temporary system table descriptors should already have been dropped
-		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := r.cleanupTempSystemTables(ctx); err != nil {
-			return err
-		}
+	if err := r.cleanupTempSystemTables(ctx); err != nil {
+		return err
 	}
-
 	// Emit to the event log that the job has completed reverting.
 	emitRestoreJobEvent(ctx, p, jobs.StateFailed, r.job)
 	return nil
@@ -3715,7 +3712,7 @@ func (r *restoreResumer) restoreSystemTables(
 	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
 	for _, table := range tables {
 		systemTableName := table.GetName()
-		stagingTableName := restoreTempSystemDB + "." + systemTableName
+		stagingTableName := restoreTempSystemDBPrefix + "." + systemTableName
 
 		config, ok := systemTableBackupConfiguration[systemTableName]
 		if !ok {
@@ -3796,7 +3793,7 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
 	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
-	if row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, restoreTempSystemDB); err != nil {
+	if row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, restoreTempSystemDBPrefix); err != nil {
 		return errors.Wrap(err, "checking for temporary system db")
 	} else if row == nil {
 		// Temporary system DB might already have been dropped by the restore job.
@@ -3805,11 +3802,11 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 
 	// After restoring the system tables, drop the temporary database holding the
 	// system tables.
-	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDB)
+	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDBPrefix)
 	if _, err := executor.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, nil /* txn */, gcTTLQuery); err != nil {
-		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDB, err)
+		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDBPrefix, err)
 	}
-	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDB)
+	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDBPrefix)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {
 		return errors.Wrap(err, "dropping temporary system db")
 	}

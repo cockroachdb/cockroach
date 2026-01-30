@@ -72,6 +72,10 @@ exec-sql
 BACKUP INTO 'nodelocal://1/cluster/dropped-database';
 ----
 
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
 # Restore from the database backup to ensure it is valid.
 # Sanity check that we did not backup the table 'foo' that belonged to the
 # dropped database 'd'.

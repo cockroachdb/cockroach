@@ -317,7 +317,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	t.Run("allocateDescriptorRewrite", func(t *testing.T) {
 		t.Run("succeeds on empty input", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				nil,
@@ -334,7 +334,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 			require.Equal(t, jobspb.DescRewriteMap{}, rewrites)
 		})
 		t.Run("allocates into existing db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -392,7 +392,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -460,7 +460,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates functions into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -504,7 +504,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 			// Get a new plan state after dropping the DB.
 			setupPlanner()
 
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{

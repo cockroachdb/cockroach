@@ -444,7 +444,33 @@ func selectTargets(
 		}
 	}
 
+	addZones, zoneDesc := maybeAddZoneTableToRestoreTargets(descriptorCoverage, allDescs, matched.Descs)
+	if addZones {
+		matched.Descs = append(matched.Descs, zoneDesc)
+	}
+
 	return matched.Descs, matched.RequestedDBs, matched.DescsByTablePattern, nil, nil
+}
+
+func maybeAddZoneTableToRestoreTargets(
+	coverage tree.DescriptorCoverage,
+	backupDescs []catalog.Descriptor,
+	matchedDescs []catalog.Descriptor,
+) (bool, catalog.Descriptor) {
+	if coverage != tree.RequestedDescriptors {
+		return false, nil
+	}
+	for _, desc := range matchedDescs {
+		if desc.GetParentID() == keys.SystemDatabaseID {
+			return false, nil
+		}
+	}
+	for _, desc := range backupDescs {
+		if desc.GetID() == keys.ZonesTableID {
+			return true, desc
+		}
+	}
+	return false, nil
 }
 
 // EntryFiles is a group of sst files of a backup table range
