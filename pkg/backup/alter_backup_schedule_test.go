@@ -357,3 +357,31 @@ func scheduleStatusAndRecurrence(
 		Scan(&status, &recurrence)
 	return status, recurrence
 }
+
+// TestAlterBackupScheduleRevisionHistoryOnFullOnly tests that ALTER BACKUP
+// SCHEDULE returns an error when trying to enable revision_history on a
+// full-backup-only schedule (one created with FULL BACKUP ALWAYS).
+func TestAlterBackupScheduleRevisionHistoryOnFullOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	th, cleanup := newAlterSchedulesTestHelper(t, nil)
+	defer cleanup()
+
+	// Create a full-backup-only schedule (no incremental).
+	rows := th.sqlDB.QueryStr(t,
+		`CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup/full-only' RECURRING '@hourly' FULL BACKUP ALWAYS`,
+	)
+	require.Len(t, rows, 1)
+	fullID, err := strconv.Atoi(rows[0][0])
+	require.NoError(t, err)
+
+	// Trying to enable revision_history on a full-only schedule should fail.
+	th.sqlDB.ExpectErr(t,
+		"revision_history is not supported for schedules with FULL BACKUP ALWAYS",
+		fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET WITH revision_history = true`, fullID),
+	)
+
+	// Setting revision_history = false should succeed (it's a no-op).
+	th.sqlDB.Exec(t, fmt.Sprintf(`ALTER BACKUP SCHEDULE %d SET WITH revision_history = false`, fullID))
+}
