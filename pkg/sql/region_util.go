@@ -1825,6 +1825,18 @@ func (p *planner) checkNoRegionalByRowChangeUnderway(
 			// a primary index to detect primary key changes.
 			if table.GetDeclarativeSchemaChangerState() != nil {
 				for idx, target := range table.GetDeclarativeSchemaChangerState().Targets {
+					if target.GetTableLocalityRegionalByRow() != nil &&
+						table.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
+						return wrapErr(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes while a REGIONAL BY ROW transition is underway",
+							),
+							"is currently transitioning to or from REGIONAL BY ROW",
+						)
+					}
+				}
+				for idx, target := range table.GetDeclarativeSchemaChangerState().Targets {
 					if target.GetPrimaryIndex() != nil &&
 						table.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] != scpb.Status_PUBLIC {
 						return wrapErr(

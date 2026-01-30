@@ -60,10 +60,10 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 108
-  -  localityConfig:
+     localityConfig:
   -    regionalByRow: {}
+  +    regionalByTable: {}
      modificationTime: {}
      name: table_regional_by_row
   ...
@@ -158,10 +158,10 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 108
-  -  localityConfig:
+     localityConfig:
   -    regionalByRow: {}
+  +    regionalByTable: {}
      modificationTime: {}
      name: table_regional_by_row
   ...

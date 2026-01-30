@@ -75,11 +75,11 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 108
-  -  localityConfig:
+     localityConfig:
   -    regionalByTable:
   -      region: us-east2
+  +    regionalByTable: {}
      modificationTime: {}
      name: table_regional_by_table
   ...
@@ -230,11 +230,11 @@ upsert descriptor #108
      families:
      - columnIds:
   ...
-     formatVersion: 3
      id: 108
-  -  localityConfig:
+     localityConfig:
   -    regionalByTable:
   -      region: us-east2
+  +    regionalByTable: {}
      modificationTime: {}
      name: table_regional_by_table
   ...
