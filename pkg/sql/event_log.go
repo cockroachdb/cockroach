@@ -170,7 +170,9 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		commonSQLEventDetails.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
 	}
 
-	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
+	placeholders := p.extendedEvalCtx.Context.Placeholders
+	if placeholders != nil && len(placeholders.Values) > 0 {
+		pls := placeholders.Values
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
 			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
