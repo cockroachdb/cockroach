@@ -28,10 +28,11 @@ ENGFLOW_TC AS (
     SELECT
         server,
         teamcity_build_id as build_id,
-	label,
-	test_name,
+        label,
+        test_name,
         lower(status) as status,
-	invocation_id
+        invocation_id,
+        started_at
     FROM
         DATAMART_PROD.ENGINEERING.ENGFLOW_DATA_DAILY_SNAPSHOT
     WHERE
@@ -46,7 +47,8 @@ SELECT
     a.test_name,
     a.server,
     sum(CASE WHEN a.status = 'success' THEN 1 ELSE 0 END) AS pass_cnt,
-    array_agg(CASE WHEN a.status = 'failure' THEN invocation_id END) AS failed_builds
+    array_agg(CASE WHEN a.status = 'failure' THEN invocation_id END) AS failed_builds,
+    sum(CASE WHEN a.status = 'failure' AND a.started_at > dateadd(DAY, -?, current_date()) THEN 1 ELSE 0 END) AS recent_fail_cnt
 FROM
     ENGFLOW_TC a
     INNER JOIN TC_BUILDS b ON (a.build_id = b.build_id)
@@ -54,4 +56,4 @@ WHERE
     test_name IS NOT NULL
     AND a.status NOT IN ('unknown', 'skipped', 'error')
 GROUP BY 1, 2, 3, 4, 5
-HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01
+HAVING array_size(failed_builds) > 0 AND pass_cnt + array_size(failed_builds) > 5 AND TO_NUMBER((array_size(failed_builds) / (array_size(failed_builds) + pass_cnt)) * 100, 10, 1) > 0.01 AND recent_fail_cnt > 1

@@ -57,6 +57,7 @@ const (
 The following options are available:
 
     lookback-days (default 7): configure how many days to look back for flaky tests.
+    recent-days (default 2): configure how many recent days to count failures (tests must have >1 failure in this period).
     dry-run: do not post any GitHub issues. Just print what would be posted.
     use-test-data: instead of looking up test data, use a hard-coded set of "flaky tests" (for testing).
 
@@ -72,6 +73,7 @@ var (
 	flags                     = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	dryRun                    = flags.Bool("dry-run", false, "if true, only print what would be done without making any changes")
 	lookbackDays              = flags.Int("lookback-days", 7, "number of days to look back for flaky tests")
+	recentDays                = flags.Int("recent-days", 2, "number of recent days to count failures (tests must have >1 failure in this period)")
 	useTestData               = flags.Bool("use-test-data", false, "if true, use hard-coded test data instead of querying Snowflake")
 	snowflakeUsername         = os.Getenv(snowflakeUsernameEnv)
 	snowflakePrivateKeyString = os.Getenv(snowflakePrivateKeyEnv)
@@ -372,7 +374,7 @@ func loadTeamCityTests(ctx context.Context, db *gosql.DB) ([]*TeamCityTest, erro
 	}
 	defer func() { _ = statement.Close() }()
 
-	rows, err := statement.QueryContext(ctx, *lookbackDays)
+	rows, err := statement.QueryContext(ctx, *lookbackDays, *recentDays)
 	if err != nil {
 		return nil, fmt.Errorf("executing query: %w", err)
 	}
@@ -382,7 +384,10 @@ func loadTeamCityTests(ctx context.Context, db *gosql.DB) ([]*TeamCityTest, erro
 	for rows.Next() {
 		var test TeamCityTest
 		var failedBuildsRaw string
-		if err := rows.Scan(&test.BuildType, &test.BuildName, &test.TestName, &test.PassCount, &failedBuildsRaw); err != nil {
+		// NB: recentFailCnt is just going to be discarded. We already
+		// filter on finding the recent failures in the query.
+		var recentFailCnt int64
+		if err := rows.Scan(&test.BuildType, &test.BuildName, &test.TestName, &test.PassCount, &failedBuildsRaw, &recentFailCnt); err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
@@ -413,7 +418,7 @@ func loadTCEngflowTests(ctx context.Context, db *gosql.DB) ([]*TeamCityEngflowTe
 	}
 	defer func() { _ = statement.Close() }()
 
-	rows, err := statement.QueryContext(ctx, *lookbackDays, *lookbackDays)
+	rows, err := statement.QueryContext(ctx, *lookbackDays, *lookbackDays, *recentDays)
 	if err != nil {
 		return nil, fmt.Errorf("executing query: %w", err)
 	}
@@ -423,7 +428,8 @@ func loadTCEngflowTests(ctx context.Context, db *gosql.DB) ([]*TeamCityEngflowTe
 	for rows.Next() {
 		var test TeamCityEngflowTest
 		var failedBuildsRaw string
-		if err := rows.Scan(&test.BuildType, &test.BuildName, &test.Label, &test.TestName, &test.Server, &test.PassCount, &failedBuildsRaw); err != nil {
+		var recentFailCnt int64
+		if err := rows.Scan(&test.BuildType, &test.BuildName, &test.Label, &test.TestName, &test.Server, &test.PassCount, &failedBuildsRaw, &recentFailCnt); err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
@@ -453,7 +459,7 @@ func loadGithubEngflowTests(ctx context.Context, db *gosql.DB) ([]*GithubEngflow
 	}
 	defer func() { _ = statement.Close() }()
 
-	rows, err := statement.QueryContext(ctx, *lookbackDays)
+	rows, err := statement.QueryContext(ctx, *lookbackDays, *recentDays)
 	if err != nil {
 		return nil, fmt.Errorf("executing query: %w", err)
 	}
@@ -463,7 +469,8 @@ func loadGithubEngflowTests(ctx context.Context, db *gosql.DB) ([]*GithubEngflow
 	for rows.Next() {
 		var test GithubEngflowTest
 		var failedBuildsRaw string
-		if err := rows.Scan(&test.Server, &test.BuildType, &test.Label, &test.TestName, &test.PassCount, &failedBuildsRaw); err != nil {
+		var recentFailCnt int64
+		if err := rows.Scan(&test.Server, &test.BuildType, &test.Label, &test.TestName, &test.PassCount, &failedBuildsRaw, &recentFailCnt); err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
 
