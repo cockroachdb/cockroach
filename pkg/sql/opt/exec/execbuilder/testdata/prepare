@@ -143,3 +143,126 @@ regions: <hidden>
   estimated row count: 1
   table: ab@ab_pkey
   spans: [/2 - /2]
+
+# Regression test for #161978. Identity computed columns (where the
+# computed expression is just another column) should work correctly with
+# generic plans and lookup joins.
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+CREATE TABLE t161978 (
+  x INT NOT NULL,
+  y INT NOT NULL,
+  y_identity INT AS (y) STORED NOT NULL,
+  INDEX t_y (y_identity, x)
+)
+
+statement ok
+PREPARE p161978 AS SELECT t0.y
+FROM t161978@t_y t0
+WHERE t0.x = $1::INT AND y = $2::INT
+
+# This query was failing with "cannot map variable 2 to an indexed var" before
+# the fix. The issue was that identity column (y_identity) weren't properly
+# replaced with the placeholder `$2` when generating the projection.
+query T
+EXPLAIN ANALYZE EXECUTE p161978(1, 20)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• lookup join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t161978@t161978_pkey
+│ equality: (rowid) = (rowid)
+│ equality cols are key
+│ pred: y = "$2"
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ table: t161978@t_y
+    │ equality: (y_identity_eq, $1) = (y_identity, x)
+    │
+    └── • render
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 2 columns, 1 row
+
+# Also test with a non-identity virtual column to ensure it still works.
+statement ok
+CREATE TABLE t161978_nonidentity (
+  x INT NOT NULL,
+  y INT NOT NULL,
+  y_notidentity INT AS (y + 13) VIRTUAL NOT NULL,
+  INDEX t_y (y_notidentity, x)
+)
+
+statement ok
+PREPARE p161978_nonidentity AS SELECT t0.y
+  FROM t161978_nonidentity@t_y t0
+  WHERE t0.x = $1::INT AND y = $2::INT
+
+query T
+EXPLAIN ANALYZE EXECUTE p161978_nonidentity(1, 20)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• lookup join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t161978_nonidentity@t161978_nonidentity_pkey
+│ equality: (rowid) = (rowid)
+│ equality cols are key
+│ pred: y = "$2"
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ table: t161978_nonidentity@t_y
+    │ equality: (y_notidentity_eq, $1) = (y_notidentity, x)
+    │
+    └── • render
+        │ execution time: 0µs
+        │ actual row count: 1
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 2 columns, 1 row
+
+statement ok
+RESET plan_cache_mode
