@@ -2746,14 +2746,29 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// TODO: Plumb the cpuProvider. There is one per node.
 	var cpuProvider admission.SQLCPUProvider
+	var cpuHandle *admission.SQLCPUHandle
+	var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
 	if cpuProvider != nil {
 		var err error
-		ctx, err = flowinfra.MakeCPUHandle(
+		ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
 			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true)
 		if err != nil {
 			return err
 		}
 	}
+	defer func() {
+		// Close the main goroutine's CPU handle at the flow boundary. This must
+		// happen before cpuHandle.Close() which will pool the GoroutineCPUHandle.
+		if mainGoroutineCPUHandle != nil {
+			mainGoroutineCPUHandle.Close(ctx)
+		}
+		// Close the SQLCPUHandle after all GoroutineCPUHandles are closed.
+		// At this point, all flow goroutines have exited (Wait() was called in
+		// flow.Cleanup), and the main goroutine's handle was just closed above.
+		if cpuHandle != nil {
+			cpuHandle.Close()
+		}
+	}()
 
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())

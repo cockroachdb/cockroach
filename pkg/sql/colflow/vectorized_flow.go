@@ -719,8 +719,17 @@ func (s *vectorizedFlowCreator) accumulateAsyncComponent(run runFn) {
 		flowinfra.StartableFn(func(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel context.CancelFunc) {
 			wg.Add(1)
 			go func() {
+				var gh *admission.GoroutineCPUHandle
+				if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+					gh = cpuHandle.RegisterGoroutine()
+				}
+				defer func() {
+					if gh != nil {
+						gh.Close(ctx)
+					}
+					wg.Done()
+				}()
 				growstack.Grow()
-				defer wg.Done()
 				run(ctx, flowCtxCancel)
 			}()
 		}))
