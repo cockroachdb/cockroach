@@ -2765,8 +2765,11 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
 	// will force its replica of the new RHS to become up to date, which
 	// indirectly tests that the replica GC queue cleans up both the LHS replica
-	// and the old RHS replica.
-	tc.TransferRangeLeaseOrFatal(t, *newRHSDesc, tc.Target(2))
+	// and the old RHS replica. The replica may still be in StateSnapshot, so we
+	// retry the lease transfer until it succeeds.
+	testutils.SucceedsSoon(t, func() error {
+		return tc.TransferRangeLease(*newRHSDesc, tc.Target(2))
+	})
 	testutils.SucceedsSoon(t, func() error {
 		rhsRepl, err := store2.GetReplica(newRHSDesc.RangeID)
 		if err != nil {
