@@ -1211,6 +1211,35 @@ CREATE TABLE system.statement_hints (
     FAMILY "primary" (row_id, hash, fingerprint, hint, created_at)
   );`
 
+	// ClusterMetricsTableSchema defines the schema for the system.cluster_metrics
+	// table, which stores cluster metrics with labels, types, and values.
+	// * id: unique identifier for the metric entry.
+	// * name: the name of the metric.
+	// * labels: JSONB labels associated with the metric.
+	// * type: the type of metric (e.g., 'literal').
+	// * value: the integer value of the metric.
+	// * stopwatch_ts: optional timestamp for stopwatch-type metrics.
+	// * unit: the unit of measurement.
+	// * help_text: description of the metric.
+	// * last_updated: timestamp when the metric was last updated.
+	ClusterMetricsTableSchema = `
+CREATE TABLE system.cluster_metrics (
+    id           INT8 NOT NULL DEFAULT unique_rowid(),
+    name         STRING NOT NULL,
+    labels       JSONB NOT NULL DEFAULT '{}',
+    type         STRING NOT NULL DEFAULT 'literal',
+    value        INT8,
+    stopwatch_ts TIMESTAMPTZ,
+    unit         INT8 NOT NULL,
+    help_text    STRING NOT NULL,
+    measurement  STRING NOT NULL,
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    UNIQUE INDEX name_labels_idx (name ASC, labels ASC),
+    INDEX last_updated_idx (last_updated DESC) STORING (name, labels, type, value, stopwatch_ts, unit, help_text, measurement),
+    FAMILY "primary" (id, name, labels, type, value, stopwatch_ts, unit, help_text, measurement, last_updated)
+);`
+
 	// TableStatisticsLocksTableSchema defines the schema for the
 	// system.table_statistics_locks table which allows us to limit concurrency
 	// of automatic table statistics collections "globally" as well as to ensure
@@ -1291,7 +1320,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddSystemClusterMetricsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1491,6 +1520,7 @@ func MakeSystemTables() []SystemTable {
 		TransactionDiagnosticsRequestsTable,
 		TransactionDiagnosticsTable,
 		StatementHintsTable,
+		ClusterMetricsTable,
 		TableStatisticsLocksTable,
 	}
 }
@@ -5324,6 +5354,76 @@ var (
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			},
+		),
+	)
+
+	clusterMetricsDefaultLabels = "'{}':::JSONB"
+	clusterMetricsDefaultType   = "'literal':::STRING"
+	ClusterMetricsTable         = makeSystemTable(
+		ClusterMetricsTableSchema,
+		systemTable(
+			catconstants.ClusterMetricsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "labels", ID: 3, Type: types.Jsonb, DefaultExpr: &clusterMetricsDefaultLabels},
+				{Name: "type", ID: 4, Type: types.String, DefaultExpr: &clusterMetricsDefaultType},
+				{Name: "value", ID: 5, Type: types.Int, Nullable: true},
+				{Name: "stopwatch_ts", ID: 6, Type: types.TimestampTZ, Nullable: true},
+				{Name: "unit", ID: 7, Type: types.Int},
+				{Name: "help_text", ID: 8, Type: types.String},
+				{Name: "measurement", ID: 9, Type: types.String},
+				{Name: "last_updated", ID: 10, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"id", "name", "labels", "type", "value", "stopwatch_ts", "unit", "help_text", "measurement", "last_updated"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:   "name_labels_idx",
+				ID:     2,
+				Unique: true,
+				KeyColumnNames: []string{
+					"name", "labels",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2, 3},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				CompositeColumnIDs: []descpb.ColumnID{3},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:   "last_updated_idx",
+				ID:     3,
+				Unique: false,
+				KeyColumnNames: []string{
+					"last_updated",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{10},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				StoreColumnIDs:     []descpb.ColumnID{2, 3, 4, 5, 6, 7, 8, 9},
+				StoreColumnNames:   []string{"name", "labels", "type", "value", "stopwatch_ts", "unit", "help_text", "measurement"},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
 	)
