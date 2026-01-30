@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -468,11 +470,15 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 				t.Logf("%s running backfill with PTS not setup early enough", timeutil.Now().Format(time.RFC3339))
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
-				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
-					if err == nil {
-						return errors.AssertionFailedf("expected error was not hit")
-					}
+				if err == nil {
+					return errors.AssertionFailedf("expected error was not hit; got nil")
+				}
+				if !testutils.IsError(err, "unable to backfill since fixed timestamp is before the GC timestamp") {
 					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error was not hit")
+				}
+				if pgErr := (*pq.Error)(nil); !errors.As(err, &pgErr) ||
+					pgcode.MakeCode(string(pgErr.Code)) != pgcode.InvalidParameterValue {
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error code was not found")
 				}
 				err = testutils.SucceedsSoonError(func() error {
 					// Wait until schema change is fully rolled back.
