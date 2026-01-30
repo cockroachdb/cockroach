@@ -9,6 +9,7 @@ go_library(
         "fast_dns.go",
         "gcloud.go",
         "infra_provider.go",
+        "machine_type.go",
         "provider_options.go",
         "sdk.go",
         "utils.go",
@@ -50,6 +51,7 @@ go_test(
     size = "small",
     srcs = [
         "gcloud_test.go",
+        "machine_type_test.go",
         "utils_test.go",
     ],
     data = glob(["testdata/**"]),
