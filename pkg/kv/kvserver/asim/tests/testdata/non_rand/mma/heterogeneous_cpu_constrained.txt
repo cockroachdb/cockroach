@@ -1,0 +1,79 @@
+# This test explores heterogeneous per-region CPU capacity where each region is
+# internally uniform, and span config constraints keep each half of the keyspace
+# within a single region. The load is deliberately skewed so the beefier region
+# runs at higher CPU utilization, highlighting that balancing does not occur
+# across regions when constraints apply.
+gen_cluster nodes=6 region=(a,b) nodes_per_region=(3,3) node_cpu_cores=(4,4,4,12,12,12)
+----
+
+setting split_queue_enabled=false
+----
+
+gen_ranges ranges=30 min_key=0 max_key=5000 placement_type=replica_placement
+{s1:*,s2,s3}:10
+{s2:*,s1,s3}:10
+{s3:*,s1,s2}:10
+----
+{s1:*,s2,s3}:10
+{s2:*,s1,s3}:10
+{s3:*,s1,s2}:10
+
+gen_ranges ranges=30 min_key=5000 max_key=10000 placement_type=replica_placement
+{s4:*,s5,s6}:10
+{s5:*,s4,s6}:10
+{s6:*,s4,s5}:10
+----
+{s4:*,s5,s6}:10
+{s5:*,s4,s6}:10
+{s6:*,s4,s5}:10
+
+set_span_config
+[0,5000): num_replicas=3 num_voters=3 constraints={'+region=a':3} lease_preferences=[['+region=a']]
+[5000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
+----
+
+gen_load rate=3000 rw_ratio=1 min_key=0 max_key=5000 request_cpu_per_access=1000000
+----
+3.00 access-vcpus
+
+gen_load rate=24000 rw_ratio=1 min_key=5000 max_key=10000 request_cpu_per_access=1000000
+----
+24.00 access-vcpus
+
+assertion type=conformance violating=0
+----
+
+assertion type=stat stat=cpu_util stores=(4,5,6) ticks=6 lower_bound=0.6
+----
+
+assertion type=stat stat=cpu_util stores=(1,2,3) ticks=6 upper_bound=0.26
+----
+
+eval duration=8m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,replicas,leases)
+----
+sma-count:
+cpu#1: last:  [s1=994941666, s2=996216666, s3=1008841666, s4=7966591666, s5=7969985416, s6=8063422916] (stddev=3500146604.88, mean=4499999999.33, sum=26999999996)
+cpu#1: thrash_pct: [s1=2%, s2=2%, s3=2%, s4=5%, s5=5%, s6=5%]  (sum=20%)
+cpu_util#1: last:  [s1=0.25, s2=0.25, s3=0.25, s4=0.66, s5=0.66, s6=0.67] (stddev=0.21, mean=0.46, sum=3)
+cpu_util#1: thrash_pct: [s1=8%, s2=7%, s3=8%, s4=7%, s5=7%, s6=7%]  (sum=43%)
+leases#1: first: [s1=10, s2=10, s3=10, s4=10, s5=10, s6=11] (stddev=0.37, mean=10.17, sum=61)
+leases#1: last:  [s1=10, s2=10, s3=10, s4=10, s5=10, s6=11] (stddev=0.37, mean=10.17, sum=61)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+replicas#1: first: [s1=30, s2=30, s3=30, s4=31, s5=31, s6=31] (stddev=0.50, mean=30.50, sum=183)
+replicas#1: last:  [s1=30, s2=30, s3=30, s4=31, s5=31, s6=31] (stddev=0.50, mean=30.50, sum=183)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+hash: 692f29f2a5eda8c1
+==========================
+mma-count:
+cpu#1: last:  [s1=994941666, s2=996216666, s3=1008841666, s4=7966591666, s5=7969985416, s6=8063422916] (stddev=3500146604.88, mean=4499999999.33, sum=26999999996)
+cpu#1: thrash_pct: [s1=2%, s2=2%, s3=2%, s4=5%, s5=5%, s6=5%]  (sum=20%)
+cpu_util#1: last:  [s1=0.25, s2=0.25, s3=0.25, s4=0.66, s5=0.66, s6=0.67] (stddev=0.21, mean=0.46, sum=3)
+cpu_util#1: thrash_pct: [s1=8%, s2=7%, s3=8%, s4=7%, s5=7%, s6=7%]  (sum=43%)
+leases#1: first: [s1=10, s2=10, s3=10, s4=10, s5=10, s6=11] (stddev=0.37, mean=10.17, sum=61)
+leases#1: last:  [s1=10, s2=10, s3=10, s4=10, s5=10, s6=11] (stddev=0.37, mean=10.17, sum=61)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+replicas#1: first: [s1=30, s2=30, s3=30, s4=31, s5=31, s6=31] (stddev=0.50, mean=30.50, sum=183)
+replicas#1: last:  [s1=30, s2=30, s3=30, s4=31, s5=31, s6=31] (stddev=0.50, mean=30.50, sum=183)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
+hash: 692f29f2a5eda8c1
+==========================
