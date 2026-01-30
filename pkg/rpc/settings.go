@@ -45,7 +45,7 @@ var useDialback = settings.RegisterBoolSetting(
 	true,
 )
 
-var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
+var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", false)
 
 func getWindowSize(
 	ctx context.Context, name string, c rpcbase.ConnectionClass, defaultSize int,
