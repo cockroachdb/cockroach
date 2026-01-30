@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -360,7 +361,7 @@ func distImport(
 			if err := addStoragePrefix(ctx, prefix); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("%sjob/%d/merge/", prefix, job.ID()), nil
+			return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(1), nil
 		}, bulkmerge.MergeOptions{
 			Iteration:      1,
 			MaxIterations:  1,
