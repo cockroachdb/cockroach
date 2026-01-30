@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -52,6 +53,32 @@ func newBulkMergePlan(
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "unable to make instance router")
 	}
+
+	// For non-final iterations, use the full span with one task per node.
+	// Each node merges its local SSTs across the entire key range, producing
+	// one merged output per node. The final iteration then merges these N
+	// node-level outputs using split spans for balanced work distribution.
+	var mergeSpans []roachpb.Span
+	var taskCount int
+	if opts.Iteration < opts.MaxIterations {
+		// Compute full span from the input spans (they're contiguous and sorted).
+		fullSpan := roachpb.Span{
+			Key:    spans[0].Key,
+			EndKey: spans[len(spans)-1].EndKey,
+		}
+		// One task per node, each covering the full span.
+		mergeSpans = make([]roachpb.Span, len(sqlInstanceIDs))
+		for i := range mergeSpans {
+			mergeSpans[i] = fullSpan
+		}
+		taskCount = len(sqlInstanceIDs)
+	} else {
+		// Final iteration uses split spans for balanced work distribution.
+		mergeSpans = spans
+		taskCount = len(spans)
+	}
+
+	log.Dev.Infof(ctx, "bulk merge plan: taskCount=%d", taskCount)
 
 	loopbackID := plan.AddProcessor(physicalplan.Processor{
 		SQLInstanceID: coordinatorID,
@@ -101,7 +128,7 @@ func newBulkMergePlan(
 				Core: execinfrapb.ProcessorCoreUnion{
 					BulkMerge: &execinfrapb.BulkMergeSpec{
 						SSTs:              ssts,
-						Spans:             spans,
+						Spans:             mergeSpans,
 						OutputStorage:     outputStorageConf,
 						Iteration:         int32(opts.Iteration),
 						MaxIterations:     int32(opts.MaxIterations),
@@ -128,7 +155,7 @@ func newBulkMergePlan(
 
 	plan.AddSingleGroupStage(ctx, coordinatorID, execinfrapb.ProcessorCoreUnion{
 		MergeCoordinator: &execinfrapb.MergeCoordinatorSpec{
-			TaskCount:            int64(len(spans)),
+			TaskCount:            int64(taskCount),
 			WorkerSqlInstanceIds: keys,
 		},
 	}, execinfrapb.PostProcessSpec{}, mergeCoordinatorOutputTypes, nil /* finalizeLastStageCb */)

@@ -1017,7 +1017,6 @@ func TestDistributedMergeStoragePrefixPreservedAcrossPauseResume(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 4`)
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '10ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
 
@@ -1153,7 +1152,6 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 4`)
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
 
 	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v TEXT)`)
@@ -1165,11 +1163,9 @@ func TestMultiMergeIndexBackfill(t *testing.T) {
 	// created and recorded in job progress for each iteration.
 	tdb.Exec(t, `CREATE INDEX idx ON t (v)`)
 
-	// Verify that we saw all intermediate iterations (1, 2, 3) via the testing knob.
-	// Iteration 4 is the final one that ingests to KV, so it doesn't generate manifests.
+	// Verify that we saw iteration 1 (local-only merge) via the testing knob.
+	// Iteration 2 is the final one that ingests to KV, so it doesn't generate manifests.
 	require.GreaterOrEqual(t, manifestCountByIteration[1], 12)
-	require.GreaterOrEqual(t, manifestCountByIteration[2], 12)
-	require.GreaterOrEqual(t, manifestCountByIteration[3], 12)
 }
 
 // TestDistributedMergeAcrossNodes verifies that the distributed merge pipeline
@@ -1236,7 +1232,6 @@ func TestDistributedMergeAcrossNodes(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-	tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 25`)
 	tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
 
 	tdb.Exec(t, `CREATE TABLE t (k INT PRIMARY KEY, v TEXT)`)
@@ -1492,7 +1487,6 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 4`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
 
 	// Create a table and splits that we can use for all subtests.
@@ -1532,18 +1526,6 @@ func TestDistributedMergeResumePreservesProgress(t *testing.T) {
 		{
 			name:                "pause after iteration 1 with checkpoint",
 			pauseAfterIteration: 1,
-			checkpointInterval:  "10ms",
-			waitForCheckpoint:   true,
-		},
-		{
-			name:                "pause after iteration 2 with checkpoint",
-			pauseAfterIteration: 2,
-			checkpointInterval:  "10ms",
-			waitForCheckpoint:   true,
-		},
-		{
-			name:                "pause after iteration 3 with checkpoint",
-			pauseAfterIteration: 3,
 			checkpointInterval:  "10ms",
 			waitForCheckpoint:   true,
 		},
@@ -1733,7 +1715,7 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t)
 
-	const maxMergeIterations int32 = 10
+	const maxMergeIterations int32 = 2
 
 	testCases := []struct {
 		name            string
@@ -1743,14 +1725,14 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 	}{
 		{
 			name:            "non-final iteration duplicate at start",
-			injectIteration: 2,
+			injectIteration: 1,
 			injectAfterRows: 0,
 			// TODO(156934): have this emit a duplicate key error instead.
 			expErrRegex: `pebble: keys must be added in strictly increasing order`,
 		},
 		{
 			name:            "non-final iteration duplicate after few rows",
-			injectIteration: 2,
+			injectIteration: 1,
 			injectAfterRows: 80,
 			// TODO(156934): have this emit a duplicate key error instead.
 			expErrRegex: `pebble: keys must be added in strictly increasing order`,
@@ -1833,7 +1815,6 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 
 			// Configure merge settings.
 			tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-			tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = %d`, maxMergeIterations))
 			tdb.Exec(t, `SET CLUSTER SETTING bulkio.merge.file_size = '50KiB'`)
 
 			// Create table with data.
@@ -1914,7 +1895,6 @@ func TestKVWriteCrossSSTDuplicateDetection(t *testing.T) {
 			tdb := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 
 			tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = 'declarative'`)
-			tdb.Exec(t, `SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.iterations = 10`)
 
 			// Configure distributed merge with very small SST file size. Each index entry
 			// goes to its own SST file.
