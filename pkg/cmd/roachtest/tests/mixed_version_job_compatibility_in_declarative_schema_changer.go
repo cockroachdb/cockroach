@@ -205,21 +205,25 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 			}
 		}
 
-		setUpQuery := `
-CREATE DATABASE IF NOT EXISTS testdb;
-CREATE SCHEMA IF NOT EXISTS testdb.testsc;
-CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
-INSERT INTO testdb.testsc.t VALUES (1, 1);
-CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL, l INT GENERATED ALWAYS AS IDENTITY);
-INSERT INTO testdb.testsc.t2 VALUES (2, 3, 'foo');
-CREATE TABLE IF NOT EXISTS testdb.testsc.t3 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
-INSERT INTO testdb.testsc.t3 VALUES (3, 3, 'bar');
-CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');
-CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;
-CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
-`
-		if err := helper.Exec(r, setUpQuery); err != nil {
-			return err
+		setUpQueries := []string{
+			"CREATE DATABASE IF NOT EXISTS testdb;",
+			"CREATE SCHEMA IF NOT EXISTS testdb.testsc;",
+			"CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));",
+			"INSERT INTO testdb.testsc.t VALUES (1, 1);",
+			"CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL, l INT GENERATED ALWAYS AS IDENTITY);",
+			"INSERT INTO testdb.testsc.t2 VALUES (2, 3, 'foo');",
+			"CREATE TABLE IF NOT EXISTS testdb.testsc.t3 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);",
+			"INSERT INTO testdb.testsc.t3 VALUES (3, 3, 'bar');",
+			"CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');",
+			"CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;",
+			"CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);",
+		}
+		// Execute queries one at a time with an implicit txn, since otherwise
+		// retryable errors will be problematic (especially on DML operations).
+		for _, setupQuery := range setUpQueries {
+			if err := helper.Exec(r, setupQuery); err != nil {
+				return err
+			}
 		}
 
 		// Set all nodes to always use declarative schema changer
