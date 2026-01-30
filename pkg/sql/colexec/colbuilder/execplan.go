@@ -1939,7 +1939,7 @@ func (r opResult) planAndMaybeWrapFilter(
 	factory coldata.ColumnFactory,
 ) error {
 	err := r.planFilterExpr(
-		ctx, flowCtx, args.SemaCtx, filter, getStreamingAllocator(ctx, args, flowCtx),
+		ctx, flowCtx, args.SemaCtx, filter, getStreamingAllocator(ctx, args, flowCtx), args.CloserRegistry,
 	)
 	if err != nil {
 		// Filter expression planning failed. Fall back to planning the filter
@@ -2072,7 +2072,7 @@ func (r *postProcessResult) planPostProcessSpec(
 		for _, expr := range exprs {
 			var outputIdx int
 			r.Op, outputIdx, r.ColumnTypes, err = planProjectionOperators(
-				ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Op, getStreamingAllocator(ctx, args, flowCtx), releasables,
+				ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Op, getStreamingAllocator(ctx, args, flowCtx), releasables, args.CloserRegistry,
 			)
 			if err != nil {
 				if log.ExpensiveLogEnabled(ctx, 1) {
@@ -2155,6 +2155,7 @@ func (r opResult) planFilterExpr(
 	semaCtx *tree.SemaContext,
 	filter execinfrapb.Expression,
 	allocator *colmem.Allocator,
+	closerRegistry *colexecargs.CloserRegistry,
 ) error {
 	expr, err := processExpr(ctx, filter, flowCtx.EvalCtx, semaCtx, r.ColumnTypes)
 	if err != nil {
@@ -2167,7 +2168,7 @@ func (r opResult) planFilterExpr(
 		return nil
 	}
 	op, _, filterColumnTypes, err := planSelectionOperators(
-		ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Root, allocator, &r.Releasables,
+		ctx, flowCtx.EvalCtx, expr, r.ColumnTypes, r.Root, allocator, &r.Releasables, closerRegistry,
 	)
 	if err != nil {
 		if log.ExpensiveLogEnabled(ctx, 1) {
@@ -2202,6 +2203,7 @@ func planSelectionOperators(
 	input colexecop.Operator,
 	allocator *colmem.Allocator,
 	releasables *[]execreleasable.Releasable,
+	closerRegistry *colexecargs.CloserRegistry,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	switch t := expr.(type) {
 	case *tree.AndExpr:
@@ -2211,18 +2213,18 @@ func planSelectionOperators(
 		// tuples that are true on the right side.
 		var leftOp, rightOp colexecop.Operator
 		leftOp, _, typs, err = planSelectionOperators(
-			ctx, evalCtx, t.TypedLeft(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedLeft(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
 		rightOp, resultIdx, typs, err = planSelectionOperators(
-			ctx, evalCtx, t.TypedRight(), typs, leftOp, allocator, releasables,
+			ctx, evalCtx, t.TypedRight(), typs, leftOp, allocator, releasables, closerRegistry,
 		)
 		return rightOp, resultIdx, typs, err
 	case *tree.CaseExpr, *tree.CastExpr, *tree.CoalesceExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, expr, columnTypes, input, allocator, releasables,
+			ctx, evalCtx, expr, columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return op, resultIdx, typs, err
@@ -2232,7 +2234,7 @@ func planSelectionOperators(
 	case *tree.ComparisonExpr:
 		cmpOp := t.Operator
 		leftOp, leftIdx, ct, err := planProjectionOperators(
-			ctx, evalCtx, t.TypedLeft(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedLeft(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, ct, err
@@ -2289,7 +2291,7 @@ func planSelectionOperators(
 			return op, resultIdx, ct, err
 		}
 		rightOp, rightIdx, ct, err := planProjectionOperators(
-			ctx, evalCtx, t.TypedRight(), ct, leftOp, allocator, releasables,
+			ctx, evalCtx, t.TypedRight(), ct, leftOp, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, ct, err
@@ -2306,7 +2308,7 @@ func planSelectionOperators(
 		return op, -1, columnTypes, err
 	case *tree.IsNotNullExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return op, resultIdx, typs, err
@@ -2317,7 +2319,7 @@ func planSelectionOperators(
 		return op, resultIdx, typs, err
 	case *tree.IsNullExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return op, resultIdx, typs, err
@@ -2328,7 +2330,7 @@ func planSelectionOperators(
 		return op, resultIdx, typs, err
 	case *tree.NotExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return op, resultIdx, typs, err
@@ -2357,7 +2359,7 @@ func planSelectionOperators(
 			return nil, resultIdx, typs, err
 		}
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables,
+			ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, err
@@ -2404,6 +2406,7 @@ func planProjectionOperators(
 	input colexecop.Operator,
 	allocator *colmem.Allocator,
 	releasables *[]execreleasable.Releasable,
+	closerRegistry *colexecargs.CloserRegistry,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	// projectDatum is a helper function that adds a new constant projection
 	// operator for the given datum. typs are updated accordingly.
@@ -2422,7 +2425,7 @@ func planProjectionOperators(
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.AndExpr:
-		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, allocator, releasables)
+		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, allocator, releasables, closerRegistry)
 	case *tree.BinaryExpr:
 		if err = checkSupportedBinaryExpr(t.TypedLeft(), t.TypedRight(), t.ResolvedType()); err != nil {
 			return op, resultIdx, typs, err
@@ -2450,7 +2453,7 @@ func planProjectionOperators(
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), leftExpr, rightExpr,
-			columnTypes, input, allocator, t.Op.EvalOp, nil /* cmpExpr */, releasables, t.Op.CalledOnNullInput,
+			columnTypes, input, allocator, t.Op.EvalOp, nil /* cmpExpr */, releasables, closerRegistry, t.Op.CalledOnNullInput,
 		)
 	case *tree.CaseExpr:
 		caseOutputType := t.ResolvedType()
@@ -2481,7 +2484,7 @@ func planProjectionOperators(
 			// final result of the case projection.
 			whenTyped := when.Cond.(tree.TypedExpr)
 			caseOps[i], resultIdx, typs, err = planProjectionOperators(
-				ctx, evalCtx, whenTyped, typs, buffer, allocator, releasables,
+				ctx, evalCtx, whenTyped, typs, buffer, allocator, releasables, closerRegistry,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err
@@ -2499,7 +2502,7 @@ func planProjectionOperators(
 				right := tree.NewTypedOrdinalReference(resultIdx, whenTyped.ResolvedType())
 				cmpExpr := tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), left, right)
 				caseOps[i], resultIdx, typs, err = planProjectionOperators(
-					ctx, evalCtx, cmpExpr, typs, caseOps[i], allocator, releasables,
+					ctx, evalCtx, cmpExpr, typs, caseOps[i], allocator, releasables, closerRegistry,
 				)
 				if err != nil {
 					return nil, resultIdx, typs, err
@@ -2512,7 +2515,7 @@ func planProjectionOperators(
 
 			// Run the "then" clause on those tuples that were selected.
 			caseOps[i], thenIdxs[i], typs, err = planProjectionOperators(
-				ctx, evalCtx, when.Val.(tree.TypedExpr), typs, caseOps[i], allocator, releasables,
+				ctx, evalCtx, when.Val.(tree.TypedExpr), typs, caseOps[i], allocator, releasables, closerRegistry,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err
@@ -2537,7 +2540,7 @@ func planProjectionOperators(
 			elseExpr = tree.DNull
 		}
 		elseOp, thenIdxs[len(t.Whens)], typs, err = planProjectionOperators(
-			ctx, evalCtx, elseExpr.(tree.TypedExpr), typs, buffer, allocator, releasables,
+			ctx, evalCtx, elseExpr.(tree.TypedExpr), typs, buffer, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, err
@@ -2562,7 +2565,7 @@ func planProjectionOperators(
 	case *tree.CastExpr:
 		expr := t.Expr.(tree.TypedExpr)
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, expr, columnTypes, input, allocator, releasables,
+			ctx, evalCtx, expr, columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, 0, nil, err
@@ -2598,14 +2601,14 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables)
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables, closerRegistry)
 	case *tree.ComparisonExpr:
 		if err = checkSupportedComparisonExpr(t.TypedLeft(), t.TypedRight()); err != nil {
 			return op, resultIdx, typs, err
 		}
 		return planProjectionExpr(
 			ctx, evalCtx, t.Operator, t.ResolvedType(), t.TypedLeft(), t.TypedRight(),
-			columnTypes, input, allocator, nil /* binFn */, t, releasables, t.Op.CalledOnNullInput,
+			columnTypes, input, allocator, nil /* binFn */, t, releasables, closerRegistry, t.Op.CalledOnNullInput,
 		)
 	case tree.Datum:
 		op, err = projectDatum(t)
@@ -2621,7 +2624,7 @@ func planProjectionOperators(
 			// of constant arguments, because the vectorized engine right now
 			// creates a new column full of the constant value.
 			op, resultIdx, typs, err = planProjectionOperators(
-				ctx, evalCtx, e.(tree.TypedExpr), typs, op, allocator, releasables,
+				ctx, evalCtx, e.(tree.TypedExpr), typs, op, allocator, releasables, closerRegistry,
 			)
 			if err != nil {
 				return nil, resultIdx, nil, err
@@ -2634,6 +2637,9 @@ func planProjectionOperators(
 		)
 		if r, ok := op.(execreleasable.Releasable); ok {
 			*releasables = append(*releasables, r)
+		}
+		if c, ok := op.(colexecop.Closer); ok {
+			closerRegistry.AddCloser(c)
 		}
 		typs = append(typs, t.ResolvedType())
 		return op, resultIdx, typs, err
@@ -2649,16 +2655,16 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables)
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables, closerRegistry)
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, nil
 	case *tree.IsNotNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, allocator, true /* negate */, releasables)
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, allocator, true /* negate */, releasables, closerRegistry)
 	case *tree.IsNullExpr:
-		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, allocator, false /* negate */, releasables)
+		return planIsNullProjectionOp(ctx, evalCtx, t.ResolvedType(), t.TypedInnerExpr(), columnTypes, input, allocator, false /* negate */, releasables, closerRegistry)
 	case *tree.NotExpr:
 		op, resultIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables,
+			ctx, evalCtx, t.TypedInnerExpr(), columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return op, resultIdx, typs, err
@@ -2692,9 +2698,9 @@ func planProjectionOperators(
 		if err != nil {
 			return nil, resultIdx, typs, err
 		}
-		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables)
+		return planProjectionOperators(ctx, evalCtx, caseExpr, columnTypes, input, allocator, releasables, closerRegistry)
 	case *tree.OrExpr:
-		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, allocator, releasables)
+		return planLogicalProjectionOp(ctx, evalCtx, expr, columnTypes, input, allocator, releasables, closerRegistry)
 	case *tree.Tuple:
 		tuple, isConstTuple := evalTupleIfConst(ctx, evalCtx, t)
 		if isConstTuple {
@@ -2709,7 +2715,7 @@ func planProjectionOperators(
 		tupleContentsIdxs := make([]int, len(t.Exprs))
 		for i, expr := range t.Exprs {
 			input, tupleContentsIdxs[i], typs, err = planProjectionOperators(
-				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, allocator, releasables,
+				ctx, evalCtx, expr.(tree.TypedExpr), typs, input, allocator, releasables, closerRegistry,
 			)
 			if err != nil {
 				return nil, resultIdx, typs, err
@@ -2816,6 +2822,7 @@ func planProjectionExpr(
 	binOp tree.BinaryEvalOp,
 	cmpExpr *tree.ComparisonExpr,
 	releasables *[]execreleasable.Releasable,
+	closerRegistry *colexecargs.CloserRegistry,
 	calledOnNullInput bool,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	resultIdx = -1
@@ -2840,7 +2847,7 @@ func planProjectionExpr(
 		// this case.
 		var rightIdx int
 		input, rightIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, right, columnTypes, input, allocator, releasables,
+			ctx, evalCtx, right, columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, err
@@ -2861,7 +2868,7 @@ func planProjectionExpr(
 	} else {
 		var leftIdx int
 		input, leftIdx, typs, err = planProjectionOperators(
-			ctx, evalCtx, left, columnTypes, input, allocator, releasables,
+			ctx, evalCtx, left, columnTypes, input, allocator, releasables, closerRegistry,
 		)
 		if err != nil {
 			return nil, resultIdx, typs, err
@@ -2949,7 +2956,7 @@ func planProjectionExpr(
 			// Case 3: neither are constant.
 			var rightIdx int
 			input, rightIdx, typs, err = planProjectionOperators(
-				ctx, evalCtx, right, typs, input, allocator, releasables,
+				ctx, evalCtx, right, typs, input, allocator, releasables, closerRegistry,
 			)
 			if err != nil {
 				return nil, resultIdx, nil, err
@@ -2981,6 +2988,7 @@ func planLogicalProjectionOp(
 	input colexecop.Operator,
 	allocator *colmem.Allocator,
 	releasables *[]execreleasable.Releasable,
+	closerRegistry *colexecargs.CloserRegistry,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	// Add a new boolean column that will store the result of the projection.
 	resultIdx = len(columnTypes)
@@ -3003,13 +3011,13 @@ func planLogicalProjectionOp(
 		colexecerror.InternalError(errors.AssertionFailedf("unexpected logical expression type %s", t.String()))
 	}
 	leftProjOpChain, leftIdx, typs, err = planProjectionOperators(
-		ctx, evalCtx, typedLeft, typs, leftFeedOp, allocator, releasables,
+		ctx, evalCtx, typedLeft, typs, leftFeedOp, allocator, releasables, closerRegistry,
 	)
 	if err != nil {
 		return nil, resultIdx, typs, err
 	}
 	rightProjOpChain, rightIdx, typs, err = planProjectionOperators(
-		ctx, evalCtx, typedRight, typs, rightFeedOp, allocator, releasables,
+		ctx, evalCtx, typedRight, typs, rightFeedOp, allocator, releasables, closerRegistry,
 	)
 	if err != nil {
 		return nil, resultIdx, typs, err
@@ -3048,9 +3056,10 @@ func planIsNullProjectionOp(
 	allocator *colmem.Allocator,
 	negate bool,
 	releasables *[]execreleasable.Releasable,
+	closerRegistry *colexecargs.CloserRegistry,
 ) (op colexecop.Operator, resultIdx int, typs []*types.T, err error) {
 	op, resultIdx, typs, err = planProjectionOperators(
-		ctx, evalCtx, expr, columnTypes, input, allocator, releasables,
+		ctx, evalCtx, expr, columnTypes, input, allocator, releasables, closerRegistry,
 	)
 	if err != nil {
 		return op, resultIdx, typs, err

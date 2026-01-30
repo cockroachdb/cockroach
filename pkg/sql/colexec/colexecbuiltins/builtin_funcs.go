@@ -151,6 +151,8 @@ func NewBuiltinFunctionOperator(
 			hash = fnv.New64a()
 		}
 		return newFNV64Op(argumentCols, outputIdx, input, hash), nil
+	case tree.DatumsToBytes:
+		return newDatumsToBytesOp(allocator, argumentCols, columnTypes, outputIdx, input), nil
 	default:
 		return &defaultBuiltinFuncOperator{
 			OneInputHelper:      colexecop.MakeOneInputHelper(input),
