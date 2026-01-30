@@ -137,6 +137,23 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 			inputTypes:   []*types.T{types.String, types.String, types.String},
 			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-1792535898324117685)}, {"hello", "world", "test", int64(7507279486104997145)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(644383116220033818)}},
 		},
+		// TODO: fix the RunTests harness comparison.
+		//{
+		//	desc:         "DatumsToBytes single int",
+		//	expr:         "crdb_internal.datums_to_bytes(@1)",
+		//	inputCols:    []int{0},
+		//	inputTuples:  colexectestutils.Tuples{{1}, {2}, {-1}},
+		//	inputTypes:   []*types.T{types.Int},
+		//	outputTuples: colexectestutils.Tuples{{1, []byte{0x03, 0x88}}, {2, []byte{0x03, 0x89}}, {-1, []byte{0x03, 0x7f}}},
+		//},
+		//{
+		//	desc:         "DatumsToBytes multiple args",
+		//	expr:         "crdb_internal.datums_to_bytes(@1, @2)",
+		//	inputCols:    []int{0, 1},
+		//	inputTuples:  colexectestutils.Tuples{{1, "a"}, {2, "b"}},
+		//	inputTypes:   []*types.T{types.Int, types.String},
+		//	outputTuples: colexectestutils.Tuples{{1, "a", []byte{0x03, 0x88, 0x15, 'a', 0x00, 0x01}}, {2, "b", []byte{0x03, 0x89, 0x15, 'b', 0x00, 0x01}}},
+		//},
 	}
 
 	for _, tc := range testCases {

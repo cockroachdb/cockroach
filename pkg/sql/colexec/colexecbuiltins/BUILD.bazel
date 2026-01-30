@@ -5,6 +5,7 @@ go_library(
     name = "colexecbuiltins",
     srcs = [
         "builtin_funcs.go",
+        "datums_to_bytes.go",
         "fnv64.go",
         "range_stats.go",
         ":gen-exec",  # keep
@@ -15,6 +16,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/roachpb",
         "//pkg/sql/colconv",
+        "//pkg/sql/colexec/colexecspan",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
