@@ -7,6 +7,8 @@ package admission
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,6 +62,13 @@ func SQLCPUHandleFromContext(ctx context.Context) *SQLCPUHandle {
 	return h
 }
 
+// goroutineCPUHandlePool is a sync.Pool for GoroutineCPUHandle objects.
+var goroutineCPUHandlePool = sync.Pool{
+	New: func() interface{} {
+		return &GoroutineCPUHandle{}
+	},
+}
+
 // SQLCPUHandle manages CPU accounting and admission for SQL work across
 // multiple goroutines.
 //
@@ -75,9 +84,6 @@ type SQLCPUHandle struct {
 	}
 }
 
-// TODO(sumeer): try strengthening the cleanup story, so one could use a
-// sync.Pool for at least the GoroutineCPUHandle.
-
 func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLCPUHandle {
 	h := &SQLCPUHandle{
 		workInfo: workInfo,
@@ -85,6 +91,10 @@ func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLC
 	}
 	return h
 }
+
+// TODO(sumeer): see the comment
+// https://github.com/cockroachdb/cockroach/pull/161952#pullrequestreview-3741525716
+// on additional integrations that may need to call RegisterGoroutine.
 
 // RegisterGoroutine returns a GoroutineCPUHandle to use for reporting and
 // admission.
@@ -101,17 +111,33 @@ func (h *SQLCPUHandle) RegisterGoroutine() *GoroutineCPUHandle {
 	// Not registered, create a new handle.
 	gh := newGoroutineCPUHandle(gid, h)
 	h.mu.gHandles = append(h.mu.gHandles, gh)
+
 	return gh
 }
 
-// Close is called when no more reporting is needed. It is ok for some stray
-// reporting to be attempted after Close, but it will be ignored.
+// Close is called when no more reporting is needed. It pools
+// GoroutineCPUHandles that have been closed. Handles that are not yet closed
+// are left for GC.
 func (h *SQLCPUHandle) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.closed = true
+	for i, gh := range h.mu.gHandles {
+		if gh.closed.Load() {
+			gh.reset()
+			goroutineCPUHandlePool.Put(gh)
+		}
+		h.mu.gHandles[i] = nil
+	}
+	h.mu.gHandles = nil
 }
 
+// GoroutineCPUHandle is used for CPU accounting on a single goroutine. It
+// must be closed by calling Close() when the goroutine's flow-related work is
+// done. The Close() call must be at the goroutine boundary, to structurally
+// guarantee that MeasureAndAdmit is never called after Close(). This
+// structural guarantee is essential for safe pooling - the handle may be
+// reused for a different goroutine after being pooled.
 type GoroutineCPUHandle struct {
 	gid int64
 	h   *SQLCPUHandle
@@ -126,10 +152,16 @@ type GoroutineCPUHandle struct {
 	pauseDur   time.Duration
 	paused     int
 	pauseStart time.Duration
+
+	// closed is set to true when Close() is called. This is primarily for
+	// debugging - the structural guarantee (Close at goroutine boundary)
+	// is the primary safety mechanism, not this field.
+	closed atomic.Bool
 }
 
 func newGoroutineCPUHandle(gid int64, h *SQLCPUHandle) *GoroutineCPUHandle {
-	gh := &GoroutineCPUHandle{
+	gh := goroutineCPUHandlePool.Get().(*GoroutineCPUHandle)
+	*gh = GoroutineCPUHandle{
 		gid:      gid,
 		h:        h,
 		cpuStart: grunning.Time(),
@@ -137,16 +169,35 @@ func newGoroutineCPUHandle(gid int64, h *SQLCPUHandle) *GoroutineCPUHandle {
 	return gh
 }
 
+// reset clears all fields in preparation for returning to the pool.
+func (h *GoroutineCPUHandle) reset() {
+	*h = GoroutineCPUHandle{}
+}
+
+// Close marks this handle as closed. It must be called at the goroutine
+// boundary when the goroutine's SQL work is done. After Close(), the handle
+// will be pooled when SQLCPUHandle.Close() is called, so MeasureAndAdmit must
+// never be called after Close().
+func (h *GoroutineCPUHandle) Close(ctx context.Context) {
+	_ = h.measureAndAdmit(ctx, true)
+	h.closed.Store(true)
+}
+
 // MeasureAndAdmit must be called frequently. The callee will measure the CPU
 // time spent in the goroutine and decide whether more CPU needs to be
-// allocated. If more CPU is needed, it can block in acquiring CPU tokens,
-// unless noWait is true. The noWait parameter should only be set to true when
-// the work is finished, so only measurement is desired (blocking is no longer
-// productive). Returns a non-nil error iff the context is canceled while
-// waiting. CPU time after the last call to MeasureAndAdmit is not observed.
+// allocated. If more CPU is needed, it can block in acquiring CPU tokens.
+// Returns a non-nil error iff the context is canceled while waiting.
 //
 // TODO(sumeer): implement the measurement and admission logic.
-func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context, noWait bool) error {
+func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
+	return h.measureAndAdmit(ctx, false)
+}
+
+// measureAndAdmit is the internal implementation of MeasureAndAdmit. The
+// noWait parameter should only be set to true when the work is finished, so
+// only measurement is desired (blocking is no longer productive). When noWait
+// is true, this function never returns an error.
+func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) error {
 	if h.paused > 0 {
 		return nil
 	}

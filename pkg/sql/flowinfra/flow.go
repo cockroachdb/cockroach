@@ -241,8 +241,6 @@ type FlowBase struct {
 		// once the Flow has been cleaned up. Consider using Flow.Cancel
 		// instead when unsure.
 		ctxCancel context.CancelFunc
-
-		cpuHandle *admission.SQLCPUHandle
 	}
 
 	ctxDone <-chan struct{}
@@ -263,19 +261,10 @@ func (f *FlowBase) getStatus() flowStatus {
 	return f.mu.status
 }
 
-func (f *FlowBase) setStatus(ctx context.Context, status flowStatus) {
+func (f *FlowBase) setStatus(status flowStatus) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.mu.status = status
-	if status == flowFinished && f.mu.cpuHandle != nil {
-		// Assuming this goroutine is already registered, and merely using ghandle to
-		// make one last measurement for this goroutine. Other goroutines are at the mercy of
-		// the cancel checkers periodic reporting.
-		ghandle := f.mu.cpuHandle.RegisterGoroutine()
-		ghandle.MeasureAndAdmit(ctx, true)
-		f.mu.cpuHandle.Close()
-		f.mu.cpuHandle = nil
-	}
 }
 
 // Setup is part of the Flow interface.
@@ -473,11 +462,6 @@ func (f *FlowBase) StartInternal(
 	)
 
 	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
-	if cpuHandle != nil {
-		f.mu.Lock()
-		f.mu.cpuHandle = cpuHandle
-		f.mu.Unlock()
-	}
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in
@@ -501,7 +485,7 @@ func (f *FlowBase) StartInternal(
 		}
 	}
 
-	f.setStatus(ctx, flowRunning)
+	f.setStatus(flowRunning)
 
 	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&f.Cfg.Settings.SV) &&
 		!f.Gateway && f.CollectStats {
@@ -522,6 +506,10 @@ func (f *FlowBase) StartInternal(
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
+			if cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
 			processors[i].Run(ctx, outputs[i])
 			f.waitGroup.Done()
 		}(i)
@@ -740,7 +728,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	// Importantly, we must mark the Flow as finished before f.sp is finished in
 	// the defer above.
-	f.setStatus(ctx, flowFinished)
+	f.setStatus(flowFinished)
 	f.mu.ctxCancel()
 }
 
@@ -760,18 +748,24 @@ func (f *FlowBase) cancel() {
 }
 
 // MakeCPUHandle creates a SQLCPUHandle and injects it into the context, and
-// returns the new context. The handle is available to other code, including
-// other goroutines, that use the same context. Additionally, it assumes that
-// the calling goroutine will do work for this query, and so it registers the
-// goroutine, which starts measuring that goroutine at this point (and
+// returns the new context along with the SQLCPUHandle and the GoroutineCPUHandle
+// for the calling goroutine. The SQLCPUHandle is available to other code,
+// including other goroutines, that use the same context. The calling goroutine
+// is registered, which starts measuring that goroutine at this point (and
 // possibly waits for admission).
+//
+// The caller is responsible for:
+//  1. Calling gh.Close() when the calling goroutine's flow-related work is done
+//     (typically in a defer at the flow entry point).
+//  2. Calling cpuHandle.Close() after all goroutines have closed their
+//     GoroutineCPUHandles.
 func MakeCPUHandle(
 	ctx context.Context,
 	provider admission.SQLCPUProvider,
 	tenantID roachpb.TenantID,
 	txn *kv.Txn,
 	atGateway bool,
-) (context.Context, error) {
+) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
 	var priority admissionpb.WorkPriority
 	var createTime int64
 	if txn == nil {
@@ -789,6 +783,7 @@ func MakeCPUHandle(
 		CreateTime: createTime,
 	})
 	ctx = admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
-	err := cpuHandle.RegisterGoroutine().MeasureAndAdmit(ctx, false)
-	return ctx, err
+	gh := cpuHandle.RegisterGoroutine()
+	err := gh.MeasureAndAdmit(ctx)
+	return ctx, cpuHandle, gh, err
 }
