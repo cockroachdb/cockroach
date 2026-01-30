@@ -300,7 +300,9 @@ func makeImportSpans(
 		nil,
 		filter,
 		&inclusiveEndKeyComparator{},
-		spanCh)
+		spanCh,
+		false, /* useLink */
+	)
 	close(spanCh)
 
 	if err != nil {

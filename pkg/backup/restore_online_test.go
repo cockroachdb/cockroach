@@ -868,3 +868,113 @@ func assertOnlineRestoreWithRekeying(
 	rSQLDB.QueryRow(t, bankTableIDQuery).Scan(&restoreID)
 	require.NotEqual(t, originalID, restoreID)
 }
+
+// TestOnlineRestoreWithDistFlow tests that online restore works correctly when
+// using the distributed restore flow (distRestore with RestoreDataProcessor)
+// instead of the simpler sendAddRemoteSSTs loop. This is enabled via the
+// backup.restore.online_use_dist_flow.enabled cluster setting.
+//
+// The test runs restores both with and without the dist flow enabled and
+// compares the results to ensure they are consistent, including the approx_rows
+// and approx_bytes reported in the restore result.
+func TestOnlineRestoreWithDistFlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	const numAccounts = 100
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	defer cleanupFnRestored()
+
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
+		// Defer cleanup so we clean up even if the test fails.
+		defer rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+		// Create the backup once per incremental setting. Use a subdir to
+		// separate full from incremental test runs.
+		backupSubdir := "full"
+		if incremental {
+			backupSubdir = "incr"
+		}
+		backupURI := fmt.Sprintf("nodelocal://1/backup-dist-flow/%s", backupSubdir)
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+		if incremental {
+			sqlDB.Exec(t, "UPDATE data.bank SET balance = balance + 100 WHERE true")
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", backupURI))
+		}
+
+		// restoreResult holds the results of a restore operation.
+		type restoreResult struct {
+			approxRows  int64
+			approxBytes int64
+		}
+
+		// runRestore performs an online restore with the given dist flow setting
+		// and returns the result.
+		runRestore := func(t *testing.T, useDistFlow bool) restoreResult {
+			// Clean up before restore.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Set the dist flow setting.
+			rSQLDB.Exec(t, fmt.Sprintf(
+				"SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = %t", useDistFlow))
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+			rows := rSQLDB.Query(t, fmt.Sprintf(
+				"RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", backupURI))
+			defer rows.Close()
+
+			// Parse the restore result.
+			require.True(t, rows.Next(), "expected restore to return a row")
+			var jobID, tables, approxRows, approxBytes, downloadJobID int64
+			require.NoError(t, rows.Scan(&jobID, &tables, &approxRows, &approxBytes, &downloadJobID))
+			require.False(t, rows.Next(), "expected only one row from restore")
+
+			// Verify data is accessible.
+			var restoreRowCount int
+			rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+			require.Equal(t, numAccounts, restoreRowCount)
+
+			// Verify data integrity by comparing fingerprints.
+			fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			// Wait for the download job to complete.
+			waitForLatestDownloadJobToSucceed(t, rSQLDB)
+
+			return restoreResult{approxRows: approxRows, approxBytes: approxBytes}
+		}
+
+		// Run restore with dist flow disabled (coordinator path).
+		coordResult := runRestore(t, false /* useDistFlow */)
+
+		// Run restore with dist flow enabled (distributed path).
+		distResult := runRestore(t, true /* useDistFlow */)
+
+		// Compare the results. Both paths should report the same approximate
+		// rows and bytes since they're restoring the same data.
+		require.Equal(t, coordResult.approxRows, distResult.approxRows,
+			"approx_rows mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxRows, distResult.approxRows)
+		require.Equal(t, coordResult.approxBytes, distResult.approxBytes,
+			"approx_bytes mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxBytes, distResult.approxBytes)
+
+		// Sanity check that we actually got non-zero values.
+		require.Greater(t, coordResult.approxRows, int64(0),
+			"expected non-zero approx_rows from coordinator path")
+		require.Greater(t, coordResult.approxBytes, int64(0),
+			"expected non-zero approx_bytes from coordinator path")
+	})
+}
