@@ -180,7 +180,9 @@ func createCompactionPlan(
 		}
 		instanceLocalities[i] = desc.Locality
 	}
-	localitySets, err := buildLocalitySets(ctx, instanceIDs, instanceLocalities, genSpan)
+	localitySets, err := buildLocalitySets(
+		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,
+	)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "building locality sets")
 	}
@@ -241,16 +243,17 @@ func (set *localitySet) maybeUpdateTargetInstance() {
 // If there is no data in the default URI to compact, the default set will not be in the returned map.
 //
 // If any of our sets (including the default set) has a locality which does not match any
-// available nodes, we assign all available nodes to that set. In that case, compactions may
-// output data to a different URI than they recieved it from. This is an edge case that would occur
-// if the cluster topology has changed between backup time and compaction time such that all nodes
-// matching one of our URIs become unavailable (for example, a region going down).
-//
-// TODO(at): update comment with implications for strict
+// available nodes, this function has two behaviors, depending on whether strict is set.
+// If strict is true, this function will return an error. If strict is false, we fall back to
+// assigning all available nodes. In that case, compactions may output data to a different URI
+// than they recieved it from. This is an edge case that would occur if the cluster topology has
+// changed between backup time and compaction time such that all nodes matching one of our URIs
+// become unavailable (for example, a region going down).
 func buildLocalitySets(
 	ctx context.Context,
 	instanceIDs []base.SQLInstanceID,
 	instanceLocalities []roachpb.Locality,
+	strict bool,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) (map[string]*localitySet, error) {
 	localitySets := make(map[string]*localitySet)
@@ -263,6 +266,10 @@ func buildLocalitySets(
 				if err != nil {
 					return err
 				}
+				if locality == "" {
+					locality = "default"
+				}
+
 				if set, ok := localitySets[locality]; ok {
 					set.totalEntries += 1
 				} else {
@@ -311,12 +318,16 @@ func buildLocalitySets(
 		}
 	}
 
-	for _, set := range localitySets {
+	for setLocality, set := range localitySets {
 		if len(set.instanceIDs) == 0 {
+			if strict {
+				return nil, errors.Newf(
+					"no nodes available for processing data from locality %s in strict locality-aware compaction",
+					setLocality,
+				)
+			}
 			// In a non-strict setting, if we don't have any nodes available that match the locality
 			// filter, we just evenly distribute the work across all available nodes.
-			//
-			// TODO(at): add WITH STRICT STORAGE LOCALITY support
 			set.instanceIDs = instanceIDs
 		}
 		slices.Sort(set.instanceIDs)
@@ -358,6 +369,9 @@ func createCompactionCorePlacements(
 			if err != nil {
 				return err
 			}
+			if entryLocality == "" {
+				entryLocality = "default"
+			}
 
 			set, ok := localitySets[entryLocality]
 			if !ok {
@@ -393,6 +407,7 @@ func createCompactionCorePlacements(
 					TargetSize:       targetSize,
 					MaxFiles:         maxFiles,
 					URIsByLocalityKV: details.URIsByLocalityKV,
+					StrictLocality:   details.StrictLocalityFiltering,
 					AssignedSpans:    entries.Slice(),
 				}}})
 	}
@@ -401,7 +416,7 @@ func createCompactionCorePlacements(
 }
 
 // entryLocality returns the locality filter string attached to the URI of the most recent file in
-// the entry. If the URI does not have a locality filter attached to it, it will return "default".
+// the entry. If the URI does not have a locality filter attached to it, it will return an empty string.
 func entryLocality(entry execinfrapb.RestoreSpanEntry) (string, error) {
 	if len(entry.Files) == 0 {
 		return "", errors.AssertionFailedf("restore span entry has no files")
@@ -411,13 +426,7 @@ func entryLocality(entry execinfrapb.RestoreSpanEntry) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	loc := uri.Query().Get("COCKROACH_LOCALITY")
-	switch loc {
-	case "", "default":
-		return "default", nil
-	default:
-		return loc, nil
-	}
+	return uri.Query().Get("COCKROACH_LOCALITY"), nil
 }
 
 // getSpansToCompact returns all remaining spans the backup manifest that

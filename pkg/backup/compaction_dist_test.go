@@ -197,7 +197,9 @@ func TestCreateCompactionCorePlacements(t *testing.T) {
 				return nil
 			}
 
-			localitySets, err := buildLocalitySets(ctx, tc.topology.ids, tc.topology.localities, genSpan)
+			localitySets, err := buildLocalitySets(
+				ctx, tc.topology.ids, tc.topology.localities, false /* strict */, genSpan,
+			)
 			require.NoError(t, err)
 
 			placements, err := createCompactionCorePlacements(
@@ -299,7 +301,6 @@ func TestBuildLocalitySets(t *testing.T) {
 				"dc=dc4": {instanceIDs: []base.SQLInstanceID{1, 2, 3}, totalEntries: 1},
 			},
 		},
-		// TODO(at): add cases for strict
 	}
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -311,10 +312,10 @@ func TestBuildLocalitySets(t *testing.T) {
 			}
 
 			localitySets, err := buildLocalitySets(
-				t.Context(), tc.topology.ids, tc.topology.localities, genSpan,
+				t.Context(), tc.topology.ids, tc.topology.localities, false /* strict */, genSpan,
 			)
 			require.NoError(t, err)
-			require.Equal(t, len(localitySets), len(tc.expectedSets))
+			require.Equal(t, len(tc.expectedSets), len(localitySets))
 
 			for locality, actualSet := range localitySets {
 				expectedSet, ok := tc.expectedSets[locality]
@@ -323,6 +324,115 @@ func TestBuildLocalitySets(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuildLocalitySetsStrict tests expected behavior for buildLocalitySets when
+// `WITH STRICT STORAGE LOCALITY` is set. Note that we only unit test buildLocalitySets in this
+// setting because, in the context of locality-aware compaction, this option simply indicates that
+// if we have a localitySet which we have no nodes assigned to, rather than falling back to even
+// assignment, we should instead error. This error occurs entirely in buildLocalitySets, and
+// createCompactionCorePlacements is ignorant of whether or not the option is set.
+func TestBuildLocalitySetsStrict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("no-matching-nodes", func(t *testing.T) {
+		// This combination of entries and topology means that we will have data from a locality (dc=dc3)
+		// which does not have any matching nodes. In a non strict setting, we expect this to fall back
+		// to even assignment. In a strict setting, we expect this to trigger an error.
+		entries := entries(
+			entry("a", "b", "dc=dc1"),
+			entry("c", "d", "dc=dc2"),
+			entry("e", "f", "dc=dc3"),
+		)
+		topology := topology(
+			instance(1, "dc=dc1"),
+			instance(2, "dc=dc2"),
+			instance(3, "dc=dc4"),
+		)
+		genSpan := func(_ context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
+			for _, entry := range entries {
+				spanCh <- entry
+			}
+			return nil
+		}
+
+		// Validate that even assignment occurs when strict is not set.
+		expectedSets := map[string]*localitySet{
+			"dc=dc1": {instanceIDs: []base.SQLInstanceID{1}, totalEntries: 1},
+			"dc=dc2": {instanceIDs: []base.SQLInstanceID{2}, totalEntries: 1},
+			// Since no nodes match dc=dc3, we fall back to even assignment.
+			"dc=dc3": {instanceIDs: []base.SQLInstanceID{1, 2, 3}, totalEntries: 1},
+			// Since node 3 has locality dc=dc4, which does not match any of our entries,
+			// it is assigned to the default set, though this set has no data to process.
+			"default": {instanceIDs: []base.SQLInstanceID{3}, totalEntries: 0},
+		}
+		sets, err := buildLocalitySets(
+			t.Context(), topology.ids, topology.localities, false /* strict */, genSpan,
+		)
+		require.NoError(t, err)
+		require.Equal(t, len(expectedSets), len(sets))
+		for locality, actualSet := range sets {
+			expectedSet, ok := expectedSets[locality]
+			require.True(t, ok)
+			require.Equal(t, expectedSet, actualSet)
+		}
+
+		// Validate that the same inputs produce an error when strict is set.
+		_, err = buildLocalitySets(
+			t.Context(), topology.ids, topology.localities, true /* strict */, genSpan,
+		)
+		require.Error(t, err)
+	})
+
+	// The same behavior as the above subtest is expected for the default set as well.
+	t.Run("fully-matching-nodes", func(t *testing.T) {
+		// Since all nodes match a specific locality, no nodes will be assigned to the default set.
+		// This means entry ("g", "h") will have no nodes to process it, creating the same fallback
+		// vs error scenario as above.
+		entries := entries(
+			entry("a", "b", "dc=dc1"),
+			entry("c", "d", "dc=dc2"),
+			entry("e", "f", "dc=dc3"),
+			entry("g", "h", ""),
+		)
+		topology := topology(
+			instance(1, "dc=dc1"),
+			instance(2, "dc=dc2"),
+			instance(3, "dc=dc3"),
+		)
+		genSpan := func(_ context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
+			for _, entry := range entries {
+				spanCh <- entry
+			}
+			return nil
+		}
+
+		expectedSets := map[string]*localitySet{
+			"dc=dc1": {instanceIDs: []base.SQLInstanceID{1}, totalEntries: 1},
+			"dc=dc2": {instanceIDs: []base.SQLInstanceID{2}, totalEntries: 1},
+			"dc=dc3": {instanceIDs: []base.SQLInstanceID{3}, totalEntries: 1},
+			// Since all of our nodes matched a specific locality, we fall back to even assignment
+			// for the default set in a non strict setting.
+			"default": {instanceIDs: []base.SQLInstanceID{1, 2, 3}, totalEntries: 1},
+		}
+		sets, err := buildLocalitySets(
+			t.Context(), topology.ids, topology.localities, false /* strict */, genSpan,
+		)
+		require.NoError(t, err)
+		require.Equal(t, len(expectedSets), len(sets))
+		for locality, actualSet := range sets {
+			expectedSet, ok := expectedSets[locality]
+			require.True(t, ok)
+			require.Equal(t, expectedSet, actualSet)
+		}
+
+		_, err = buildLocalitySets(
+			t.Context(), topology.ids, topology.localities, true /* strict */, genSpan,
+		)
+		require.Error(t, err)
+	})
+
 }
 
 type mockEntry struct {

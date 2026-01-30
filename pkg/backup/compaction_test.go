@@ -1113,7 +1113,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 			processorAZ, ok := processorLocality.Find("az")
 			if !ok {
 				return errors.Newf(
-					"processor has no dc locality but is processing file from %s",
+					"processor has no az locality but is processing file from %s",
 					fileLocality,
 				)
 			}
@@ -1142,6 +1142,67 @@ func TestBackupCompactionLocAware(t *testing.T) {
 		)
 
 		validateCounts(uris, "az=az1", "az=az2")
+		validateCompactedBackupForTables(t, db, uris, []string{"bank"},
+			start, end, noOpts, noOpts, 2)
+	})
+
+	// This sub test does a dry run of locality-aware compaction with `STRICT STORAGE LOCALITY` set.
+	// Note that this test only performs the expected/recommended happy path. This is because, for
+	// testing the actual edge cases of this option, we would need to alter the topology of the cluster
+	// between backup time and compaction time, which is difficult and slow with a test cluster.
+	//
+	// This option is largely just a directive for us to error in situations where we would otherwise
+	// fall back to even assignment. This error occurs in buildLocalitySets, and thus the edge cases
+	// surrounding this option are tested in TestBuildLocalitySetsStrict.
+	t.Run("dry-run-strict", func(t *testing.T) {
+		ensureLeaseholder(t, db)
+
+		testSubDir := t.Name()
+		uris := []string{
+			localFoo + "/" + testSubDir + "/1?COCKROACH_LOCALITY=" + url.QueryEscape("default"),
+			localFoo + "/" + testSubDir + "/2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1"),
+			localFoo + "/" + testSubDir + "/3?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc2"),
+			localFoo + "/" + testSubDir + "/4?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc3"),
+		}
+
+		hookFn = func(processorLocality roachpb.Locality, fileLocality string) error {
+			if fileLocality == "" || fileLocality == "default" {
+				return errors.New("unexpected default data")
+			}
+
+			processorDC, ok := processorLocality.Find("dc")
+			if !ok {
+				return errors.Newf(
+					"processor has no dc locality but is processing file from %s",
+					fileLocality,
+				)
+			}
+
+			expectedFileLocality := "dc=" + processorDC
+			if fileLocality != expectedFileLocality {
+				return errors.Newf(
+					"processor in %s attempted to read file from %s",
+					expectedFileLocality, fileLocality,
+				)
+			}
+
+			return nil
+		}
+
+		const strictOpts = "WITH STRICT STORAGE LOCALITY"
+		start, end := initBackupChain(uris, strictOpts)
+		fullBackupPath := getLatestFullDir(uris)
+		jobutils.WaitForJobToSucceed(
+			t, db,
+			triggerCompaction(
+				t, db,
+				incBackupQuery(targets, uris, end, strictOpts),
+				fullBackupPath,
+				start, end,
+			),
+		)
+
+		validateCounts(uris, "dc=dc1", "dc=dc2", "dc=dc3")
 		validateCompactedBackupForTables(t, db, uris, []string{"bank"},
 			start, end, noOpts, noOpts, 2)
 	})
