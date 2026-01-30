@@ -51,11 +51,11 @@ func (c *CancelChecker) Check() error {
 			return QueryCanceledError
 		default:
 		}
-		// TODO: doing this at cancelCheckInterval may cause no CPU to be reported
-		// for very short running queries. Ideally we need a way for every goroutine
-		// to call this once before termination.
 		if c.cpuHandle != nil {
-			c.cpuHandle.MeasureAndAdmit(c.ctx, false)
+			err := c.cpuHandle.MeasureAndAdmit(c.ctx)
+			if err != nil {
+				return QueryCanceledError
+			}
 		}
 	}
 

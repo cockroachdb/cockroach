@@ -331,6 +331,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 		}
 	} else {
+		// Not running on the gateway.
 		onFlowCleanupEnd = func(ctx context.Context) {
 			reserved.Close(ctx)
 			onFlowCleanup.Do()
@@ -382,17 +383,33 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
-	}
 
-	// TODO: Plumb the cpuProvider. There is one per node.
-	var cpuProvider admission.SQLCPUProvider
-	if cpuProvider != nil && !localState.IsLocal {
-		var err error
-		// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
-		ctx, err = flowinfra.MakeCPUHandle(
-			ctx, cpuProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false)
-		if err != nil {
-			return nil, nil, nil, err
+		// TODO: Plumb the cpuProvider. There is one per node.
+		var cpuProvider admission.SQLCPUProvider
+		if cpuProvider != nil {
+			var cpuHandle *admission.SQLCPUHandle
+			var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
+			var err error
+			// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
+			ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
+				ctx, cpuProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			// Wrap onFlowCleanupEnd to close the CPU handles at the flow boundary.
+			// This is called at the end of Flow.Cleanup(), after all goroutines have
+			// exited (Wait() has returned).
+			origOnFlowCleanupEnd := onFlowCleanupEnd
+			onFlowCleanupEnd = func(ctx context.Context) {
+				// Close the main goroutine's CPU handle first. At this point, all other
+				// goroutines have already closed their handles (via their defers).
+				mainGoroutineCPUHandle.Close(ctx)
+				// Close the SQLCPUHandle, which will pool all closed GoroutineCPUHandles.
+				cpuHandle.Close()
+				if origOnFlowCleanupEnd != nil {
+					origOnFlowCleanupEnd(ctx)
+				}
+			}
 		}
 	}
 
