@@ -1,0 +1,58 @@
+# This test explores uneven region sizes with per-region constraints. Region a
+# has 3 nodes and region b has 5 nodes, with identical per-node CPU capacity.
+# The load is proportional to the number of nodes per region so that absolute
+# CPU balancing should still yield even CPU utilization across all stores.
+gen_cluster nodes=8 region=(a,b) nodes_per_region=(3,5) node_cpu_cores=8
+----
+
+setting split_queue_enabled=false
+----
+
+gen_ranges ranges=30 min_key=0 max_key=5000 placement_type=replica_placement
+{s1,s2,s3}:30
+----
+{s1:*,s2,s3}:30
+
+gen_ranges ranges=50 min_key=5000 max_key=10000 placement_type=replica_placement
+{s4,s5,s6}:20
+{s6,s7,s8}:15
+{s4,s7,s8}:15
+----
+{s4:*,s5,s6}:20
+{s6:*,s7,s8}:15
+{s4:*,s7,s8}:15
+
+set_span_config
+[0,5000): num_replicas=3 num_voters=3 constraints={'+region=a':3} lease_preferences=[['+region=a']]
+[5000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
+----
+
+gen_load rate=3000 rw_ratio=0.95 min_block=128 max_block=128 request_cpu_per_access=1000000 raft_cpu_per_write=200000 min_key=0 max_key=5000
+----
+3.00 access-vcpus, 0.03 raft-vcpus, 19 KiB/s goodput
+
+gen_load rate=5000 rw_ratio=0.95 min_block=128 max_block=128 request_cpu_per_access=1000000 raft_cpu_per_write=200000 min_key=5000 max_key=10000
+----
+5.00 access-vcpus, 0.05 raft-vcpus, 31 KiB/s goodput
+
+assertion type=conformance violating=0
+----
+
+assertion type=balance stat=cpu upper_bound=1.15 ticks=6
+----
+asserting: max_{stores}(cpu)/mean_{stores}(cpu) ≤ 1.15 at each of last 6 ticks
+
+eval duration=8m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,replicas,leases)
+----
+cpu#1: last:  [s1=1127247829, s2=1125067455, s3=837281651, s4=1128979735, s5=1028666146, s6=1130476090, s7=1030605532, s8=829999829] (stddev=120171553.99, mean=1029790533.38, sum=8238324267)
+cpu#1: thrash_pct: [s1=6%, s2=8%, s3=6%, s4=7%, s5=5%, s6=19%, s7=8%, s8=7%]  (sum=67%)
+cpu_util#1: last:  [s1=0.14, s2=0.14, s3=0.10, s4=0.14, s5=0.13, s6=0.14, s7=0.13, s8=0.10] (stddev=0.02, mean=0.13, sum=1)
+cpu_util#1: thrash_pct: [s1=6%, s2=8%, s3=6%, s4=7%, s5=5%, s6=19%, s7=8%, s8=7%]  (sum=67%)
+leases#1: first: [s1=30, s2=0, s3=0, s4=36, s5=0, s6=15, s7=0, s8=0] (stddev=14.15, mean=10.12, sum=81)
+leases#1: last:  [s1=11, s2=11, s3=8, s4=12, s5=10, s6=11, s7=10, s8=8] (stddev=1.36, mean=10.12, sum=81)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=13%, s7=0%, s8=0%]  (sum=13%)
+replicas#1: first: [s1=30, s2=30, s3=30, s4=36, s5=20, s6=35, s7=31, s8=31] (stddev=4.50, mean=30.38, sum=243)
+replicas#1: last:  [s1=30, s2=30, s3=30, s4=31, s5=29, s6=31, s7=30, s8=32] (stddev=0.86, mean=30.38, sum=243)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=26%, s8=13%]  (sum=39%)
+artifacts[mma-count]: bf87302eb7b126c9
+==========================
