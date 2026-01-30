@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -420,6 +421,27 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				ctx, sp := tracing.ChildSpan(ctx, "restore.processRestoreSpanEntry")
 				defer sp.Finish()
 
+				// Check if the first file has UseLink set. If so, link all files
+				// in this entry via LinkExternalSSTable instead of ingesting.
+				// TODO(dt): support entries where some layers are link and some are not.
+				if entry.Files[0].UseLink {
+					for _, file := range entry.Files {
+						if !file.UseLink {
+							return done, errors.AssertionFailedf("invalid non-linked file in linking restore")
+						}
+					}
+					summary, err := rd.linkFiles(ctx, kr, entry)
+					if err != nil {
+						return done, errors.Wrap(err, "linking files")
+					}
+					select {
+					case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs, rd.spec.RestoreTime):
+					case <-ctx.Done():
+						return done, errors.Wrap(ctx.Err(), "sending progress update")
+					}
+					return done, nil
+				}
+
 				var res *resumeEntry
 				for {
 					sstIter, res, err = rd.openSSTs(ctx, entry, res)
@@ -452,6 +474,134 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			}
 		}
 	})
+}
+
+// linkFiles links all files in the entry via LinkExternalSSTable instead of
+// downloading and ingesting them. This is used for online restore when the
+// UseLink flag is set on files.
+func (rd *restoreDataProcessor) linkFiles(
+	ctx context.Context, kr *KeyRewriter, entry execinfrapb.RestoreSpanEntry,
+) (kvpb.BulkOpSummary, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "restore.linkFiles")
+	defer sp.Finish()
+
+	var summary kvpb.BulkOpSummary
+	kvDB := rd.FlowCtx.Cfg.DB.KV()
+
+	if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
+		return summary, err
+	}
+
+	var currentLayer int32
+	for i := range entry.Files {
+		file := &entry.Files[i]
+		if file.Layer < currentLayer {
+			return summary, errors.AssertionFailedf("files not sorted by layer")
+		}
+		currentLayer = file.Layer
+		if file.HasRangeKeys {
+			return summary, errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
+		}
+		if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
+			return summary, err
+		}
+
+		restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
+		if !restoringSubspan.Valid() {
+			return summary, errors.AssertionFailedf("file %s with span %s has no overlap with restore span %s",
+				file.Path,
+				file.BackupFileEntrySpan,
+				entry.Span,
+			)
+		}
+
+		var rewriteErr error
+		restoringSubspan, rewriteErr = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+		if rewriteErr != nil {
+			return summary, rewriteErr
+		}
+
+		log.VEventf(ctx, 2, "linking file %s (file span: %s) to span %s", file.Path, file.BackupFileEntrySpan, restoringSubspan)
+
+		counts := file.BackupFileEntryCounts
+		fileSize := file.ApproximatePhysicalSize
+		if fileSize == 0 {
+			fileSize = uint64(counts.DataSize)
+		}
+		if fileSize == 0 {
+			fileSize = 16 << 20 // guess
+		}
+
+		// The synthetic prefix is computed from the REWRITTEN span key, not the
+		// original file span key. This matches the old online restore path which
+		// overwrites file.BackupFileEntrySpan before computing the prefix.
+		syntheticPrefix, err := backupsink.ElidedPrefix(restoringSubspan.Key, entry.ElidedPrefix)
+		if err != nil {
+			return summary, err
+		}
+
+		fileStats := &enginepb.MVCCStats{
+			ContainsEstimates: 1,
+			KeyBytes:          counts.DataSize / 2,
+			ValBytes:          counts.DataSize / 2,
+			LiveBytes:         counts.DataSize,
+			KeyCount:          counts.Rows + counts.IndexEntries,
+			LiveCount:         counts.Rows + counts.IndexEntries,
+		}
+
+		var batchTimestamp hlc.Timestamp
+		if writeAtBatchTS(ctx, restoringSubspan, kr.fromSystemTenant) {
+			batchTimestamp = kvDB.Clock().Now()
+		}
+
+		loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
+			Locator:                 file.Dir.URI,
+			Path:                    file.Path,
+			ApproximatePhysicalSize: fileSize,
+			BackingFileSize:         file.BackingFileSize,
+			SyntheticPrefix:         syntheticPrefix,
+			UseSyntheticSuffix:      batchTimestamp.IsSet(),
+			MVCCStats:               fileStats,
+		}
+
+		if err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
+			return summary, errors.Wrap(err, "linking external SSTable")
+		}
+
+		// Call testing knob after each file link, matching the old online restore path.
+		if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+			if restoreKnobs.AfterAddRemoteSST != nil {
+				if err := restoreKnobs.AfterAddRemoteSST(); err != nil {
+					return summary, err
+				}
+			}
+		}
+
+		// Use ApproximatePhysicalSize for DataSize to match the coordinator path.
+		summary.DataSize += int64(fileSize)
+
+		// Populate EntryCounts so that countRows() can compute row counts for
+		// progress tracking. We need to use a key that's in pkIDs for rows to be
+		// counted correctly. Pick any key from pkIDs (the specific key doesn't
+		// matter since we're just summing totals).
+		if counts.Rows > 0 || counts.IndexEntries > 0 {
+			if summary.EntryCounts == nil {
+				summary.EntryCounts = make(map[uint64]int64)
+			}
+			// Use a pkID key for rows so countRows counts them as rows.
+			for pkID := range rd.spec.PKIDs {
+				summary.EntryCounts[pkID] += counts.Rows
+				break // only need one key
+			}
+			// Use key 0 for index entries (won't be in pkIDs, so counted as index entries).
+			if counts.IndexEntries > 0 {
+				summary.EntryCounts[0] += counts.IndexEntries
+			}
+		}
+	}
+
+	rd.progressMade = true
+	return summary, nil
 }
 
 var backupFileReadError = errors.New("error reading backup file")

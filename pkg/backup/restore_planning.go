@@ -1721,6 +1721,10 @@ func doRestorePlan(
 		if err := checkManifestsForOnlineCompat(ctx, p.ExecCfg().Settings, mainBackupManifests); err != nil {
 			return err
 		}
+		if encryption != nil {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"experimental online restore: encryption not supported")
+		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
