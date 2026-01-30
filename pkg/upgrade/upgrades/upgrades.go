@@ -79,6 +79,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"create cluster_metrics table",
+		clusterversion.V26_2_AddSystemClusterMetricsTable.Version(),
+		upgrade.NoPrecondition,
+		createClusterMetricsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

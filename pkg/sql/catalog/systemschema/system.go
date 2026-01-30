@@ -1211,6 +1211,37 @@ CREATE TABLE system.statement_hints (
     FAMILY "primary" (row_id, hash, fingerprint, hint, created_at)
   );`
 
+	// ClusterMetricsTableSchema defines the schema for the system.cluster_metrics
+	// table, which stores cluster metrics with labels, types, and values.
+	// * id: unique identifier for the metric entry.
+	// * name: the name of the metric.
+	// * labels: JSONB labels associated with the metric.
+	// * type: the type of metric (e.g., 'literal').
+	// * value: the integer value of the metric.
+	// * node_id: the node that reported the metric.
+	// * unit: the unit of measurement.
+	// * help_text: description of the metric.
+	// * measurement: measurement identifier.
+	// * last_updated: timestamp when the metric was last updated.
+	ClusterMetricsTableSchema = `
+CREATE TABLE system.cluster_metrics (
+    id           INT8 NOT NULL DEFAULT unique_rowid(),
+    name         STRING NOT NULL,
+    labels       JSONB NOT NULL DEFAULT '{}',
+    type         STRING NOT NULL,
+    value        INT8,
+    node_id      INT8 NOT NULL,
+    unit         INT8 NOT NULL,
+    help_text    STRING NOT NULL,
+    measurement  STRING NOT NULL,
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT now(),
+    crdb_internal_last_updated_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(last_updated))), 8:::INT8)) VIRTUAL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    UNIQUE INDEX name_labels_idx (name ASC, labels ASC),
+    INDEX last_updated_idx (last_updated DESC) USING HASH STORING (name, labels, type, value, node_id, unit, help_text, measurement) WITH (bucket_count=8),
+    FAMILY "primary" (id, name, labels, type, value, node_id, unit, help_text, measurement, last_updated)
+);`
+
 	// TableStatisticsLocksTableSchema defines the schema for the
 	// system.table_statistics_locks table which allows us to limit concurrency
 	// of automatic table statistics collections "globally" as well as to ensure
@@ -1291,7 +1322,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddSystemClusterMetricsTable.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -1491,6 +1522,7 @@ func MakeSystemTables() []SystemTable {
 		TransactionDiagnosticsRequestsTable,
 		TransactionDiagnosticsTable,
 		StatementHintsTable,
+		ClusterMetricsTable,
 		TableStatisticsLocksTable,
 	}
 }
@@ -5326,6 +5358,104 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),
+	)
+
+	clusterMetricsDefaultLabels        = "'{}':::JSONB"
+	clusterMetricsLastUpdatedShardExpr = `mod(fnv32(md5(crdb_internal.datums_to_bytes(last_updated))), 8:::INT8)`
+	ClusterMetricsTable                = makeSystemTable(
+		ClusterMetricsTableSchema,
+		systemTable(
+			catconstants.ClusterMetricsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "labels", ID: 3, Type: types.Jsonb, DefaultExpr: &clusterMetricsDefaultLabels},
+				{Name: "type", ID: 4, Type: types.String},
+				{Name: "value", ID: 5, Type: types.Int, Nullable: true},
+				{Name: "node_id", ID: 6, Type: types.Int},
+				{Name: "unit", ID: 7, Type: types.Int},
+				{Name: "help_text", ID: 8, Type: types.String},
+				{Name: "measurement", ID: 9, Type: types.String},
+				{Name: "last_updated", ID: 10, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{
+					Name:        "crdb_internal_last_updated_shard_8",
+					ID:          11,
+					Type:        types.Int4,
+					Nullable:    false,
+					ComputeExpr: &clusterMetricsLastUpdatedShardExpr,
+					Hidden:      true,
+					Virtual:     true,
+				},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"id", "name", "labels", "type", "value", "node_id", "unit", "help_text", "measurement", "last_updated"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:   "name_labels_idx",
+				ID:     2,
+				Unique: true,
+				KeyColumnNames: []string{
+					"name", "labels",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_ASC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{2, 3},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				CompositeColumnIDs: []descpb.ColumnID{3},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:   "last_updated_idx",
+				ID:     3,
+				Unique: false,
+				KeyColumnNames: []string{
+					"crdb_internal_last_updated_shard_8",
+					"last_updated",
+				},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+					catenumpb.IndexColumn_ASC,
+					catenumpb.IndexColumn_DESC,
+				},
+				KeyColumnIDs:       []descpb.ColumnID{11, 10},
+				KeySuffixColumnIDs: []descpb.ColumnID{1},
+				StoreColumnIDs:     []descpb.ColumnID{2, 3, 4, 5, 6, 7, 8, 9},
+				StoreColumnNames:   []string{"name", "labels", "type", "value", "node_id", "unit", "help_text", "measurement"},
+				Version:            descpb.StrictIndexColumnIDGuaranteesVersion,
+				Sharded: catpb.ShardedDescriptor{
+					IsSharded:    true,
+					Name:         "crdb_internal_last_updated_shard_8",
+					ShardBuckets: 8,
+					ColumnNames:  []string{"last_updated"},
+				},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.Checks = []*descpb.TableDescriptor_CheckConstraint{{
+				Expr:                  "crdb_internal_last_updated_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8)",
+				Name:                  "check_crdb_internal_last_updated_shard_8",
+				Validity:              descpb.ConstraintValidity_Validated,
+				ColumnIDs:             []descpb.ColumnID{11},
+				FromHashShardedColumn: true,
+				ConstraintID:          tbl.NextConstraintID,
+			}}
+			tbl.NextConstraintID++
+		},
 	)
 
 	TableStatisticsLocksTable = makeSystemTable(

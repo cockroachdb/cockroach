@@ -1273,6 +1273,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 //   - system.users: avoid downloading passwords.
 //   - system.web_sessions: avoid downloading active session tokens.
 var disabledSystemTables = map[string]struct{}{
+	"system.cluster_metrics":                {},
 	"system.comments":                       {},
 	"system.join_tokens":                    {},
 	"system.span_count":                     {},

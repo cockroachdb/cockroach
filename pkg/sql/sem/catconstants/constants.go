@@ -66,6 +66,7 @@ const (
 	TableStatisticsTableName                SystemTableName = "table_statistics"
 	LocationsTableName                      SystemTableName = "locations"
 	RoleMembersTableName                    SystemTableName = "role_members"
+	ClusterMetricsTableName                 SystemTableName = "cluster_metrics"
 	CommentsTableName                       SystemTableName = "comments"
 	ReportsMetaTableName                    SystemTableName = "reports_meta"
 	ReplicationConstraintStatsTableName     SystemTableName = "replication_constraint_stats"
