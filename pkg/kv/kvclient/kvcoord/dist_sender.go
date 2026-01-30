@@ -1968,6 +1968,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	truncationHelper, err := NewBatchTruncationHelper(
 		scanDir, ba.Requests, mustPreserveOrder, canReorderRequestsSlice,
 	)
+	defer truncationHelper.Release()
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
