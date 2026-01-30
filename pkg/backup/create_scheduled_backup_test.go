@@ -504,16 +504,10 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			},
 		},
 		{
-			name:  "full-cluster-always",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
-			user:  enterpriseUser,
-			expectedSchedules: []expectedSchedule{
-				{
-					nameRe:     "BACKUP .+",
-					backupStmt: "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
-					period:     time.Hour,
-				},
-			},
+			name:   "full-cluster-always",
+			query:  "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://1/backup' WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
+			user:   enterpriseUser,
+			errMsg: "revision_history is not supported with FULL BACKUP ALWAYS",
 		},
 		{
 			name: "multiple-tables-with-revision-history",
@@ -534,7 +528,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				{
 					nameRe: "BACKUP .+",
 					backupStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
+						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -557,7 +551,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP DATABASE system INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
+					backupStmt:                    "BACKUP DATABASE system INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -580,7 +574,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				},
 				{
 					nameRe:                        "BACKUP .+",
-					backupStmt:                    "BACKUP TABLE system.* INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
+					backupStmt:                    "BACKUP TABLE system.* INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -602,7 +596,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				},
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -624,7 +618,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 				},
 				{
 					nameRe:                        "my_backup_name",
-					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (revision_history = true, detached)",
+					backupStmt:                    "BACKUP INTO 'nodelocal://1/backup' WITH OPTIONS (detached)",
 					period:                        24 * time.Hour,
 					runsNow:                       true,
 					chainProtectedTimestampRecord: true,
@@ -637,18 +631,9 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			query: `
 		CREATE SCHEDULE FOR BACKUP TABLE system.jobs, system.scheduled_jobs INTO 'nodelocal://1/backup'
 		WITH revision_history, encryption_passphrase = 'secret' RECURRING '@weekly'`,
-			expectedSchedules: []expectedSchedule{
-				{
-					nameRe: "BACKUP .*",
-					backupStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH" +
-						" OPTIONS (revision_history = true, encryption_passphrase = 'secret', detached)",
-					shownStmt: "BACKUP TABLE system.public.jobs, " +
-						"system.public.scheduled_jobs INTO 'nodelocal://1/backup' WITH" +
-						" OPTIONS (revision_history = true, encryption_passphrase = '*****', detached)",
-					period: 7 * 24 * time.Hour,
-				},
-			},
+			// @weekly is too infrequent for incremental backups, so it becomes
+			// full-only. revision_history is not supported with full-only schedules.
+			errMsg: "revision_history is not supported with FULL BACKUP ALWAYS",
 		},
 		{
 			name: "partitioned-backup",
@@ -662,15 +647,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH SCHEDULE OPTIONS first_run=$1
 		`,
 			queryArgs: []interface{}{th.env.Now().Add(time.Minute)},
-			expectedSchedules: []expectedSchedule{
-				{
-					nameRe: "BACKUP .+",
-					backupStmt: "BACKUP DATABASE system INTO " +
-						"('nodelocal://1/backup?COCKROACH_LOCALITY=x%3Dy', 'nodelocal://1/backup2?COCKROACH_LOCALITY=default') " +
-						"WITH OPTIONS (revision_history = true, detached)",
-					period: 24 * time.Hour,
-				},
-			},
+			errMsg:    "revision_history is not supported with FULL BACKUP ALWAYS",
 		},
 		{
 			name: "exec-loc",
@@ -684,14 +661,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 		WITH SCHEDULE OPTIONS first_run=$1
 		`,
 			queryArgs: []interface{}{th.env.Now().Add(time.Minute)},
-			expectedSchedules: []expectedSchedule{
-				{
-					nameRe: "BACKUP .+",
-					backupStmt: "BACKUP DATABASE system INTO 'nodelocal://1/backup' " +
-						"WITH OPTIONS (revision_history = true, detached, execution locality = 'region=of-france')",
-					period: 24 * time.Hour,
-				},
-			},
+			errMsg:    "revision_history is not supported with FULL BACKUP ALWAYS",
 		},
 		{
 			name:   "missing-destination-placeholder",
@@ -893,8 +863,8 @@ INSERT INTO t1 values (-1), (10), (-100);
 			),
 		},
 		{
-			name:         "tables-backup-with-history",
-			schedule:     "CREATE SCHEDULE FOR BACKUP db.t2, db.t3 INTO $1 WITH revision_history RECURRING '@hourly' FULL BACKUP ALWAYS",
+			name:         "tables-backup",
+			schedule:     "CREATE SCHEDULE FOR BACKUP db.t2, db.t3 INTO $1 RECURRING '@hourly' FULL BACKUP ALWAYS",
 			verifyTables: expectBackupTables(dbTables{"db", []string{"t2", "t3"}}),
 		},
 		{
