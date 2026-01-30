@@ -461,6 +461,7 @@ func runGenerativeSplitAndScatter(
 ) error {
 	log.Dev.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
+
 	g := ctxgroup.WithContext(ctx)
 
 	chunkSplitAndScatterWorkers := len(chunkSplitAndScatterers)
@@ -512,6 +513,7 @@ func runGenerativeSplitAndScatter(
 			filter,
 			fsc,
 			restoreSpanEntriesCh,
+			spec.UseLink,
 		), "generating and sending import spans")
 	})
 

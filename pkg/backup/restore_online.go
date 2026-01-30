@@ -69,6 +69,18 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 	settings.WithVisibility(settings.Reserved),
 )
 
+// onlineRestoreUseDistFlow controls whether online restore uses the distributed
+// restore flow (distRestore with RestoreDataProcessor) instead of the simpler
+// sendAddRemoteSSTs loop. When enabled, the RestoreDataProcessor will link
+// files via LinkExternalSSTable instead of downloading and ingesting them.
+var onlineRestoreUseDistFlow = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_use_dist_flow.enabled",
+	"if enabled, online restore uses the distributed restore flow with file linking",
+	false,
+	settings.WithVisibility(settings.Reserved),
+)
+
 const linkCompleteKey = "link_complete"
 const maxDownloadAttempts = 5
 
@@ -186,10 +198,6 @@ func sendAddRemoteSSTs(
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) (approxRows int64, approxDataSize int64, err error) {
 	defer close(tracingAggCh)
-
-	if encryption != nil {
-		return 0, 0, errors.AssertionFailedf("encryption not supported with online restore")
-	}
 
 	const targetRangeSize = 440 << 20
 
@@ -310,8 +318,6 @@ func sendAddRemoteSSTWorker(
 	return func(ctx context.Context) error {
 		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 
-		extConnCache := make(map[string]externalconn.ExternalConnection)
-
 		for entry := range restoreSpanEntriesCh {
 			log.Dev.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
 
@@ -348,40 +354,6 @@ func sendAddRemoteSSTWorker(
 
 				log.Dev.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
-
-				// swap out any external connections for their underlying uris and revalidate
-				uri, err := url.Parse(file.Dir.URI)
-				if err != nil {
-					return errors.Wrap(err, "invalid URI")
-				}
-				if uri.Scheme == externalconn.Scheme {
-					var ec externalconn.ExternalConnection
-					var ok bool
-					if ec, ok = extConnCache[uri.Host]; !ok {
-						if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
-							ec, err = externalconn.LoadExternalConnection(ctx, uri.Host, t)
-							if err != nil {
-								return err
-							}
-							extConnCache[uri.Host] = ec
-							return nil
-						}); err != nil {
-							return errors.Wrap(err, "failed to load external connection")
-						}
-					}
-
-					materialized, err := externalconn.Materialize(ec, uri)
-					if err != nil {
-						return errors.Wrap(err, "failed to materialize external connection URI")
-					}
-					// revalidate in case the user changed the underlying uri in the external connection
-					// to a non early boot uri since the job was created
-					if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
-						return errors.Wrap(err, "backup URI not supported for online restore")
-					}
-
-					file.Dir.URI = materialized.String()
-				}
 
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
 					return err
@@ -1148,4 +1120,120 @@ func uriCompatibleWithOnlineRestore(ctx context.Context, txn isql.Txn, path stri
 		return errors.Wrap(err, "backup URI not supported for online restore")
 	}
 	return nil
+}
+
+// resolveExternalStorageURIs resolves any external:// URIs in the provided
+// URI slice, locality info, and backup manifests to their underlying URIs.
+// This is needed for online restore because the external:// scheme is not
+// available at early boot time when SSTs are ingested.
+func resolveExternalStorageURIs(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	urisIn []string,
+	localityInfoIn []jobspb.RestoreDetails_BackupLocalityInfo,
+	backupManifests []backuppb.BackupManifest,
+) ([]string, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	extConnCache := make(map[string]externalconn.ExternalConnection)
+
+	// resolveURI resolves a single URI if it uses the external:// scheme.
+	resolveURI := func(uriStr string) (string, bool, error) {
+		uri, err := url.Parse(uriStr)
+		if err != nil {
+			return "", false, errors.Wrap(err, "invalid URI")
+		}
+		if uri.Scheme != externalconn.Scheme {
+			return uriStr, false, nil
+		}
+
+		var ec externalconn.ExternalConnection
+		var ok bool
+		if ec, ok = extConnCache[uri.Host]; !ok {
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+				ec, err = externalconn.LoadExternalConnection(ctx, uri.Host, t)
+				if err != nil {
+					return err
+				}
+				extConnCache[uri.Host] = ec
+				return nil
+			}); err != nil {
+				return "", false, errors.Wrap(err, "failed to load external connection")
+			}
+		}
+
+		materialized, err := externalconn.Materialize(ec, uri)
+		if err != nil {
+			return "", false, errors.Wrap(err, "failed to materialize external connection URI")
+		}
+		// Revalidate in case the user changed the underlying uri in the external
+		// connection to a non early boot uri since the job was created.
+		if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
+			return "", false, errors.Wrap(err, "backup URI not supported for online restore")
+		}
+
+		return materialized.String(), true, nil
+	}
+
+	// Resolve main URIs.
+	var urisOut []string
+	for i, uriStr := range urisIn {
+		resolved, changed, err := resolveURI(uriStr)
+		if err != nil {
+			return nil, nil, err
+		}
+		if changed {
+			if urisOut == nil {
+				urisOut = append(urisOut, urisIn...)
+			}
+			urisOut[i] = resolved
+		}
+	}
+	if urisOut == nil {
+		urisOut = urisIn
+	}
+
+	// Resolve locality info URIs.
+	var localityInfoOut []jobspb.RestoreDetails_BackupLocalityInfo
+	for i, localityInfo := range localityInfoIn {
+		if localityInfo.URIsByOriginalLocalityKV == nil {
+			continue
+		}
+		for kv, uriStr := range localityInfo.URIsByOriginalLocalityKV {
+			resolved, changed, err := resolveURI(uriStr)
+			if err != nil {
+				return nil, nil, err
+			}
+			if changed {
+				// Lazily initialize the output slice.
+				if localityInfoOut == nil {
+					localityInfoOut = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(localityInfoIn))
+					for j := range localityInfoIn {
+						if localityInfoIn[j].URIsByOriginalLocalityKV != nil {
+							localityInfoOut[j].URIsByOriginalLocalityKV = make(map[string]string)
+							for k, v := range localityInfoIn[j].URIsByOriginalLocalityKV {
+								localityInfoOut[j].URIsByOriginalLocalityKV[k] = v
+							}
+						}
+					}
+				}
+				localityInfoOut[i].URIsByOriginalLocalityKV[kv] = resolved
+			}
+		}
+	}
+	if localityInfoOut == nil {
+		localityInfoOut = localityInfoIn
+	}
+
+	// Resolve backup manifest Dir URIs. The Dir field in each manifest is used
+	// to construct file paths for LinkExternalSSTable requests.
+	for i := range backupManifests {
+		resolved, changed, err := resolveURI(backupManifests[i].Dir.URI)
+		if err != nil {
+			return nil, nil, err
+		}
+		if changed {
+			backupManifests[i].Dir.URI = resolved
+		}
+	}
+
+	return urisOut, localityInfoOut, nil
 }
