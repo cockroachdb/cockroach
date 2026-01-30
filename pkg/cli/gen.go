@@ -175,6 +175,16 @@ var showSettingClass bool
 var classHeaderLabel string
 var classLabels []string
 
+// vCPUDependentClusterSettings contains all cluster settings which have default
+// values computed based on the number of vCPUs.
+var vCPUDependentClusterSettings = map[settings.InternalKey]struct{}{
+	"kv.dist_sender.concurrency_limit":                 {},
+	"kv.streamer.concurrency_limit":                    {},
+	"sql.distsql.num_runners":                          {},
+	"sql.distsql.parallelize_checks.concurrency_limit": {},
+	"sql.stats.automatic_full_concurrency_limit":       {},
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
@@ -234,9 +244,8 @@ Output the list of cluster settings known to this binary.
 				defaultVal = setting.String(&s.SV)
 				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
-				} else if key == "sql.stats.automatic_full_concurrency_limit" {
-					// This cluster setting is special - its default value
-					// depends on the number of vCPUs in the VM, so we hard-code
+				} else if _, ok := vCPUDependentClusterSettings[key]; ok {
+					// These cluster settings are special, so we hard-code
 					// a custom default value.
 					defaultVal = "See description."
 				}
