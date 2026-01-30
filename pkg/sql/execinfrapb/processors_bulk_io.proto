@@ -190,7 +190,10 @@ message ReadImportDataSpec {
 
 message MergeCoordinatorSpec {
   optional int64 task_count = 1 [(gogoproto.nullable) = false];
-  repeated bytes worker_sql_instance_ids = 2;
+  // worker_processor_keys contains the routing keys for all worker processors.
+  // Each key identifies a specific processor on a SQL instance and is used for
+  // task assignment and routing.
+  repeated bytes worker_processor_keys = 2;
   // NEXT ID: 3.
 }
 
