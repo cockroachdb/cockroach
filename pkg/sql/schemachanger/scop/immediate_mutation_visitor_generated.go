@@ -177,7 +177,6 @@ type ImmediateMutationVisitor interface {
 	SetTableLocalityGlobal(context.Context, SetTableLocalityGlobal) error
 	SetTableLocalityPrimaryRegion(context.Context, SetTableLocalityPrimaryRegion) error
 	SetTableLocalitySecondaryRegion(context.Context, SetTableLocalitySecondaryRegion) error
-	SetTableLocalityRegionalByRow(context.Context, SetTableLocalityRegionalByRow) error
 	UnsetTableLocality(context.Context, UnsetTableLocality) error
 	MarkRecreatedIndexAsInvisible(context.Context, MarkRecreatedIndexAsInvisible) error
 	MarkRecreatedIndexesAsVisible(context.Context, MarkRecreatedIndexesAsVisible) error
@@ -986,11 +985,6 @@ func (op SetTableLocalityPrimaryRegion) Visit(ctx context.Context, v ImmediateMu
 // Visit is part of the ImmediateMutationOp interface.
 func (op SetTableLocalitySecondaryRegion) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.SetTableLocalitySecondaryRegion(ctx, op)
-}
-
-// Visit is part of the ImmediateMutationOp interface.
-func (op SetTableLocalityRegionalByRow) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.SetTableLocalityRegionalByRow(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
