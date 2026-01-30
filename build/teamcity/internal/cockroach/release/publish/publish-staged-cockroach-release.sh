@@ -12,6 +12,12 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 source "$dir/release/teamcity-support.sh"
 
+# TODO: remove this block after we upgrade to Ubuntu 22.04+
+# this is needed to support s390x builds on Ubuntu 20.04 hosts
+docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --uninstall qemu-s390x
+docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --install s390x
+# End of TODO
+
 tc_start_block "Variable Setup"
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 prerelease=false
@@ -117,7 +123,7 @@ declare -a dockerhub_arch_tags
 dockerhub_tag="${dockerhub_repository}:${version}"
 gcr_tag="${gcr_repository}:${version}"
 
-for platform_name in amd64 arm64; do
+for platform_name in amd64 arm64 s390x; do
   dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${version}"
   gcr_arch_tag="${gcr_repository}:${platform_name}-${version}"
   gcr_staged_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
@@ -240,7 +246,7 @@ if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
 fi
 
 for img in "${images[@]}"; do
-  for platform_name in amd64 arm64; do
+  for platform_name in amd64 arm64 s390x; do
     tc_start_block "Verify $img on $platform_name"
     if ! verify_docker_image "$img" "linux/$platform_name" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1
