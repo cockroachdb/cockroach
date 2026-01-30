@@ -3620,6 +3620,37 @@ Note that because stats are scoped to the lifetime of the process, counters
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+## TELEMETRY
+
+Events in this file are related to bulk ingest operations performance metrics.
+
+Events in this category are logged to the `TELEMETRY` channel.
+
+
+### `bulk_ingest_completed`
+
+An event of type `bulk_ingest_completed` is an event that is logged when a bulk ingest job
+(restore, import, etc.) completes successfully.
+It captures key performance metrics for the operation.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `JobID` | JobID is the ID of the bulk ingest job. | no |
+| `JobType` | JobType identifies the type of bulk ingest job (e.g., "restore", "import"). | no |
+| `NumRows` | NumRows is the number of rows successfully ingested. | no |
+| `DurationSeconds` | Duration of the ingest operation in seconds. | no |
+| `DataSizeMb` | Total logical size of data ingested in megabytes. | no |
+| `NodeCount` | Number of nodes that participated in the ingest operation. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Telemetry events
 
 
