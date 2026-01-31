@@ -466,10 +466,6 @@ func generateRepoList(
 			log.Printf("not bumping version on staging branch %s", branch)
 			continue
 		}
-		if branch == releasedVersion.Format("release-%X.%Y.%Z-rc") {
-			log.Printf("not bumping version on the same branch %s", branch)
-			continue
-		}
 		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFile)
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
