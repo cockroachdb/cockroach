@@ -572,7 +572,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.HintsGeneration = ps.HintsGeneration
 		stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
 		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
-		res.ResetStmtType(ps.AST)
+		// Don't reset the statement type if we're within EXPLAIN ANALYZE, as this
+		// would break the special case handling in GetFormatCode that relies on
+		// cmdCompleteTag being "EXPLAIN". For EXPLAIN ANALYZE EXECUTE, the format
+		// codes are set up for the EXPLAIN output (1 column), but the inner query
+		// may have more columns. See issue #161382.
+		if ih.outputMode == unmodifiedOutput {
+			res.ResetStmtType(ps.AST)
+		}
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
@@ -1477,7 +1484,14 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.HintsGeneration = ps.HintsGeneration
 		vars.stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
 		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
-		res.ResetStmtType(ps.AST)
+		// Don't reset the statement type if we're within EXPLAIN ANALYZE, as this
+		// would break the special case handling in GetFormatCode that relies on
+		// cmdCompleteTag being "EXPLAIN". For EXPLAIN ANALYZE EXECUTE, the format
+		// codes are set up for the EXPLAIN output (1 column), but the inner query
+		// may have more columns. See issue #161382.
+		if ih.outputMode == unmodifiedOutput {
+			res.ResetStmtType(ps.AST)
+		}
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
