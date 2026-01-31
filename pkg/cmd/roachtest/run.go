@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -300,6 +301,14 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 		fmt.Printf("Detected 'arm64' in 'local mode', setting 'metamorphic-arm64-probability' to 1; use --metamorphic-arm64-probability to run (emulated) with other binaries\n")
 		roachtestflags.ARM64Probability = 1
 	}
+
+	// Initialize logger vmodule if specified.
+	if roachtestflags.RoachtestVModule != "" {
+		if err := log.SetVModule(roachtestflags.RoachtestVModule); err != nil {
+			return fmt.Errorf("failed to set roachtest vmodule: %w", err)
+		}
+	}
+
 	// Find and validate all required binaries and libraries.
 	initBinariesAndLibraries()
 
