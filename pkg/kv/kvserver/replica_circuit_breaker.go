@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -220,7 +221,9 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 		// Breakers are disabled now.
 		return nil
 	}
-	_, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba)
+	// Pass empty AdmissionInfo since this is an internal probe request that
+	// bypasses admission control.
+	_, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
 	writeBytes.Release()
 	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)

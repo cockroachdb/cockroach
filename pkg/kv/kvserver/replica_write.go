@@ -74,7 +74,10 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	g *concurrency.Guard,
+	admissionInfo kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
 	_ *concurrency.Guard,
@@ -184,7 +187,7 @@ func (r *Replica) executeWriteBatch(
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose. If we return with an error from executeWriteBatch, we
 	// also return the guard which the caller reassumes ownership of.
-	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
+	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx), admissionInfo)
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
