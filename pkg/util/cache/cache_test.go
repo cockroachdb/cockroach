@@ -59,7 +59,7 @@ func TestCacheGet(t *testing.T) {
 		val, ok := mc.Get(tt.keyToGet)
 		if ok != tt.expectedOk {
 			t.Fatalf("%s: cache hit = %v; want %v", tt.name, ok, !ok)
-		} else if ok && val != 1234 {
+		} else if ok && val.(int) != 1234 {
 			t.Fatalf("%s expected get to return 1234 but got %v", tt.name, val)
 		}
 	}
