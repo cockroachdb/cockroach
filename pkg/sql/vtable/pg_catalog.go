@@ -434,7 +434,8 @@ CREATE TABLE pg_catalog.pg_index (
     indoption INT2VECTOR,
     indexprs STRING,
     indpred STRING,
-	indnkeyatts INT2
+	indnkeyatts INT2,
+    INDEX(indrelid)
 )`
 
 // PGCatalogIndexes describes the schema of the pg_catalog.pg_indexes table.

@@ -944,6 +944,125 @@ ORDER BY
 		},
 
 		{
+			Name:    "sqlalchemy_indexes",
+			SetupEx: buildNTablesWithIndexes(50, 3),
+			Stmt: `
+  -- Subquery 1: idx_sq - expand index columns
+  WITH idx AS (
+      SELECT
+          pg_index.indexrelid,
+          pg_index.indrelid,
+          unnest(pg_index.indkey) AS attnum,
+          unnest(pg_index.indclass) AS att_opclass,
+          generate_subscripts(pg_index.indkey, 1) AS ord
+      FROM pg_index
+      WHERE
+          NOT pg_index.indisprimary
+          AND pg_index.indrelid IN (104, 105, 106)
+  ),
+
+  -- Subquery 2: attr_sq - get column names or expressions
+  idx_attr AS (
+      SELECT
+          idx.indexrelid,
+          idx.indrelid,
+          idx.ord,
+          CASE
+              WHEN idx.attnum = 0 THEN pg_get_indexdef(idx.indexrelid, idx.ord + 1, true)
+              ELSE pg_attribute.attname::text
+          END AS element,
+          (idx.attnum = 0) AS is_expr,
+          idx.att_opclass::bigint
+      FROM idx
+      LEFT OUTER JOIN pg_attribute ON
+          pg_attribute.attnum = idx.attnum
+          AND pg_attribute.attrelid = idx.indrelid
+      WHERE idx.indrelid IN (104, 105, 106)
+  ),
+
+  -- Subquery 3: cols_sq - aggregate columns back into arrays
+  idx_cols AS (
+      SELECT
+          idx_attr.indexrelid,
+          min(idx_attr.indrelid),
+          array_agg(idx_attr.element ORDER BY idx_attr.ord) AS elements,
+          array_agg(idx_attr.is_expr ORDER BY idx_attr.ord) AS elements_is_expr,
+          array_agg(idx_attr.att_opclass ORDER BY idx_attr.ord) AS elements_opclass
+      FROM idx_attr
+      GROUP BY idx_attr.indexrelid
+  )
+
+  -- Main query
+  SELECT
+      pg_index.indrelid,
+      pg_class.relname,
+      pg_index.indisunique,
+      (pg_constraint.conrelid IS NOT NULL) AS has_constraint,
+      pg_index.indoption,
+      pg_class.reloptions,
+      pg_class.relam,
+      CASE
+          WHEN pg_index.indpred IS NOT NULL
+          THEN pg_get_expr(pg_index.indpred, pg_index.indrelid)
+          ELSE NULL
+      END AS filter_definition,
+      pg_index.indnkeyatts,           -- PG 11+, else use indnatts
+      pg_index.indnullsnotdistinct,   -- PG 15+, else use false
+      idx_cols.elements,
+      idx_cols.elements_is_expr,
+      idx_cols.elements_opclass
+  FROM pg_index
+  JOIN pg_class ON pg_index.indexrelid = pg_class.oid
+  LEFT OUTER JOIN idx_cols ON pg_index.indexrelid = idx_cols.indexrelid
+  LEFT OUTER JOIN pg_constraint ON
+      pg_index.indrelid = pg_constraint.conrelid
+      AND pg_index.indexrelid = pg_constraint.conindid
+      AND pg_constraint.contype = ANY(ARRAY['p', 'u', 'x'])
+  WHERE
+      pg_index.indrelid IN (110, 111, 112)
+      AND NOT pg_index.indisprimary
+  ORDER BY pg_index.indrelid, pg_class.relname`,
+		},
+
+		{
+			Name:    `django_indexes`,
+			SetupEx: buildNTablesWithIndexes(50, 3),
+			Stmt: `SELECT
+                indexname,
+                array_agg(attname ORDER BY arridx),
+                indisunique,
+                indisprimary,
+                array_agg(ordering ORDER BY arridx),
+                amname,
+                exprdef,
+                s2.attoptions
+            FROM (
+                SELECT
+                    c2.relname as indexname, idx.*, attr.attname, am.amname,
+                    CASE
+                        WHEN idx.indexprs IS NOT NULL THEN
+                            pg_get_indexdef(idx.indexrelid)
+                    END AS exprdef,
+                    'ASC' as ordering,
+                    c2.reloptions as attoptions
+                FROM (
+                    SELECT *
+                    FROM
+                        pg_index i,
+                        unnest(i.indkey, i.indoption)
+                            WITH ORDINALITY koi(key, option, arridx)
+                ) idx
+                LEFT JOIN pg_class c ON idx.indrelid = c.oid
+                LEFT JOIN pg_class c2 ON idx.indexrelid = c2.oid
+                LEFT JOIN pg_am am ON c2.relam = am.oid
+                LEFT JOIN
+                    pg_attribute attr ON attr.attrelid = c.oid AND attr.attnum = idx.key
+                WHERE c.relname = 't0' AND pg_catalog.pg_table_is_visible(c.oid)
+            ) s2
+            GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions;`,
+		},
+
+		{
 			Name: `liquibase migrations on multiple dbs`,
 			// 15 databases, each with 40 tables.
 			SetupEx: liquibaseSetup,
