@@ -402,7 +402,8 @@ func TestServerQueryTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Undefined tenant ID should aggregate across all tenants.
+	// Undefined tenant ID should return aggregate values only (no double-counting).
+	// The aggregate source "1" has values 100.0 and 200.0, and source "10" has 200.0 and 400.0.
 	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -413,11 +414,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          101.0,
+						Value:          100.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          202.0,
+						Value:          200.0,
 					},
 				},
 			},
@@ -429,11 +430,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          305.0,
+						Value:          300.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          607.0,
+						Value:          600.0,
 					},
 				},
 			},
