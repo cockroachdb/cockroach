@@ -15,7 +15,7 @@ import (
 
 // StepID identifies a discrete step in the execution. All steps are unique, and
 // there is a sequence of consecutive IDs that represents the entire execution.
-type StepID uint32
+type StepID = uint32
 
 // Logger is used to log reproduction events.
 type Logger interface {
@@ -108,7 +108,7 @@ func (r *Bloke[Bus]) Done(id StepID) bool {
 }
 
 func (r *Bloke[Bus]) waitLocked(id StepID) {
-	for StepID(r.step) != id {
+	for r.step != id {
 		r.cond.Wait()
 	}
 }
@@ -120,5 +120,5 @@ func (r *Bloke[Bus]) doneLocked(id StepID, msg string) {
 }
 
 func (r *Bloke[Bus]) stepID() StepID {
-	return StepID(atomic.LoadUint32(&r.step))
+	return atomic.LoadUint32(&r.step)
 }
