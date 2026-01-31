@@ -4012,13 +4012,11 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 
 	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	// Write the range state that will be consulted and copied during the split.
-	lease := roachpb.Lease{
+	require.NoError(t, sl.SetLease(ctx, batch, nil, roachpb.Lease{
 		Replica:       desc.InternalReplicas[0],
 		Term:          10,
 		MinExpiration: hlc.Timestamp{WallTime: 100},
-	}
-	err := sl.SetLease(ctx, batch, nil, lease)
-	require.NoError(t, err)
+	}))
 
 	// Set up the store and LHS replica.
 	cfg := TestStoreConfig(clock)
@@ -4037,16 +4035,22 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	rightDesc.InternalReplicas[0].ReplicaID++
 
 	// Create an uninitialized replica for the RHS. splitPreApply expects this.
-	_, _, err = store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+	_, _, err := store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
 		RangeID:   rightDesc.RangeID,
 		ReplicaID: rightDesc.InternalReplicas[0].ReplicaID,
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
+	// Populate the RangeAppliedState of the RHS that splitPreApply asserts on.
+	require.NoError(t, kvstorage.MakeStateLoader(rightDesc.RangeID).SetRangeAppliedState(
+		ctx, batch, &kvserverpb.RangeAppliedState{
+			RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
+			RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
+		},
+	))
 	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil)
 	require.NoError(t, err)
-
-	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in)
+	require.NoError(t, splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), in))
 
 	// Verify that the RHS truncated state is initialized as expected.
 	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
@@ -4087,12 +4091,18 @@ func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
 	raftBatch := e.LogEngine().NewBatch()
 	defer raftBatch.Close()
 
-	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+	rsl := kvstorage.MakeStateLoader(rhsRangeID)
+	require.NoError(t, rsl.SetRangeAppliedState(ctx, stateBatch,
+		&kvserverpb.RangeAppliedState{
+			RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
+			RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
+		}))
+	require.NoError(t, splitPreApply(
+		ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in,
+	))
 
 	require.NoError(t, stateBatch.Commit(false /* sync */))
 	require.NoError(t, raftBatch.Commit(false /* sync */))
-
-	rsl := kvstorage.MakeStateLoader(rhsRangeID)
 
 	// Check that the RaftTruncatedState is written to the raft engine.
 	truncState, err := rsl.LoadRaftTruncatedState(ctx, raftEng)

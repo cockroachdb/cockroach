@@ -337,7 +337,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					// evaluation.
 					require.NoError(t, stateBatch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
 					// Then run splitPreApply which does the apply-time tweaks.
-					splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in)
+					require.NoError(t, splitPreApply(
+						ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), in,
+					))
 					// If the RHS replica wasn't destroyed, it is now initialized.
 					// Update the in-memory state to reflect this.
 					if !destroyed {
