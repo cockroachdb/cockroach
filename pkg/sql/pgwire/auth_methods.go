@@ -426,8 +426,16 @@ func authCert(
 	hbaEntry *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
+	clientCertSANRequired := security.ClientCertSANRequired.Get(&execCfg.Settings.SV)
 	b := &AuthBehaviors{}
-	b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
+	// Choose the appropriate mapper based on whether we have a map option
+	if hbaEntry.GetOption("map") != "" && clientCertSANRequired {
+		// Use enhanced mapper for SAN auth with mapping
+		b.SetEnhancedRoleMapper(HbaEnhancedMapper(hbaEntry, identMap))
+	} else {
+		// Use regular mapper for non-SAN authentication.
+		b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
+	}
 	b.SetAuthenticator(func(
 		ctx context.Context,
 		systemIdentity string,
@@ -463,10 +471,30 @@ func authCert(
 		return hook(ctx, systemIdentity, clientConnection)
 	})
 	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
-		// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
-		b.SetReplacementIdentity(
-			lexbase.NormalizeName(tlsState.PeerCertificates[0].Subject.CommonName),
-		)
+		if clientCertSANRequired {
+			identityList := make([]string, 0)
+			for _, uri := range tlsState.PeerCertificates[0].URIs {
+				identityList = append(identityList, fmt.Sprintf("SAN:URI:%s", lexbase.NormalizeName(uri.String())))
+			}
+
+			for _, ip := range tlsState.PeerCertificates[0].IPAddresses {
+				identityList = append(identityList, fmt.Sprintf("SAN:IP:%s", lexbase.NormalizeName(ip.String())))
+			}
+
+			for _, dns := range tlsState.PeerCertificates[0].DNSNames {
+				identityList = append(identityList, fmt.Sprintf("SAN:DNS:%s", lexbase.NormalizeName(dns)))
+			}
+
+			if len(identityList) == 0 {
+				return nil, errors.New("Client certificate SAN is required, but no SAN found in the certificate.")
+			}
+			b.SetSANIdentities(identityList)
+		} else {
+			// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
+			b.SetReplacementIdentity(
+				lexbase.NormalizeName(tlsState.PeerCertificates[0].Subject.CommonName),
+			)
+		}
 	}
 	return b, nil
 }
