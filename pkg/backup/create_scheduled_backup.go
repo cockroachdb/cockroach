@@ -212,16 +212,19 @@ func doCreateBackupSchedules(
 		return errors.AssertionFailedf(" full backup recurrence should be set")
 	}
 
+	// Revision history is only meaningful for incremental backups; disallow it
+	// when FULL BACKUP ALWAYS is specified (no incremental schedule exists).
+	if eval.captureRevisionHistory != nil && *eval.captureRevisionHistory && incRecurrence == nil {
+		return errors.Newf("revision_history is not supported with FULL BACKUP ALWAYS; " +
+			"revision history requires incremental backups")
+	}
+
 	// Prepare backup statement (full).
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
 			Detached: tree.DBoolTrue,
 		},
 		AppendToLatest: false,
-	}
-
-	if eval.captureRevisionHistory != nil {
-		backupNode.Options.CaptureRevisionHistory = tree.MakeDBool(tree.DBool(*eval.captureRevisionHistory))
 	}
 
 	// Evaluate encryption passphrase if set.
@@ -336,6 +339,11 @@ func doCreateBackupSchedules(
 		chainProtectedTimestampRecords = scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV)
 		backupNode.AppendToLatest = true
 
+		// Revision history only applies to incremental backups, not full backups.
+		if eval.captureRevisionHistory != nil {
+			backupNode.Options.CaptureRevisionHistory = tree.MakeDBool(tree.DBool(*eval.captureRevisionHistory))
+		}
+
 		inc, incScheduledBackupArgs, err = makeBackupSchedule(
 			env, p.User(), scheduleLabel, incRecurrence, incrementalScheduleDetails, unpauseOnSuccessID,
 			updateMetricOnSuccess, backupNode, chainProtectedTimestampRecords)
@@ -355,8 +363,10 @@ func doCreateBackupSchedules(
 		unpauseOnSuccessID = inc.ScheduleID()
 	}
 
-	// Create FULL backup schedule.
+	// Create FULL backup schedule. Clear revision_history since it only
+	// applies to incremental backups.
 	backupNode.AppendToLatest = false
+	backupNode.Options.CaptureRevisionHistory = nil
 	var fullScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	full, fullScheduledBackupArgs, err := makeBackupSchedule(
 		env, p.User(), scheduleLabel, fullRecurrence, details, unpauseOnSuccessID,
