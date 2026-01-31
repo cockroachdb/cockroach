@@ -2088,8 +2088,9 @@ func (os *optTableStat) init(
 			col.GetType(), string(tab.Name()), col.GetName(), stats.TSFromTime(stat.CreatedAt),
 		); err != nil {
 			// Column type in the histogram differs from column type in the
-			// table. This is only possible if we somehow re-used the same column ID
-			// during an ALTER TABLE statement, which we shouldn't.
+			// table. This can happen after a metadata-only ALTER COLUMN TYPE that
+			// changes the type family (e.g., TIMESTAMPTZ to TIMESTAMP) without
+			// rewriting data or invalidating histograms.
 			if buildutil.CrdbTestBuild {
 				return false, errors.NewAssertionErrorWithWrappedErrf(
 					err, "type check failed while initializing stat %d", stat.StatisticID,
