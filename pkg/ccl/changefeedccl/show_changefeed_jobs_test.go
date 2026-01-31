@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"database/sql"
 	gosql "database/sql"
 	"fmt"
 	"net/url"
@@ -740,4 +741,133 @@ func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), updateKnobs)
+}
+
+func TestShowChangefeedJobOpaque(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	compareOutput := func(t *testing.T, rowA *sqlutils.Row, rowB *sqlutils.Row) {
+
+		var (
+			aJobID                        int64
+			aDesc, aUser, aStatus         string
+			aRun                          sql.NullString
+			aCreated, aStarted, aModified time.Time
+			aFinished                     sql.NullTime
+			aHighWaterTimestamp           sql.NullFloat64
+			aReadableHighWaterTimestamp   sql.NullTime
+			aError                        sql.NullString
+			aSinkURI                      sql.NullString
+			aFullTableNames               sql.NullString
+			aTopics                       sql.NullString
+			aFormat                       sql.NullString
+			aDatabaseName                 sql.NullString
+		)
+		rowA.Scan(&aJobID, &aDesc, &aUser, &aStatus, &aRun, &aCreated, &aStarted, &aFinished, &aModified, &aHighWaterTimestamp, &aReadableHighWaterTimestamp, &aError, &aSinkURI, &aFullTableNames, &aTopics, &aFormat, &aDatabaseName)
+		var (
+			bJobID                        int64
+			bDesc, bUser, bStatus         string
+			bRun                          sql.NullString
+			bCreated, bStarted, bModified time.Time
+			bFinished                     sql.NullTime
+			bHighWaterTimestamp           sql.NullFloat64
+			bReadableHighWaterTimestamp   sql.NullTime
+			bError                        sql.NullString
+			bSinkURI                      sql.NullString
+			bFullTableNames               sql.NullString
+			bTopics                       sql.NullString
+			bFormat                       sql.NullString
+			bDatabaseName                 sql.NullString
+		)
+		rowB.Scan(&bJobID, &bDesc, &bUser, &bStatus, &bRun, &bCreated, &bStarted, &bFinished, &bModified, &bHighWaterTimestamp, &bReadableHighWaterTimestamp, &bError, &bSinkURI, &bFullTableNames, &bTopics, &bFormat, &bDatabaseName)
+
+		// Assert equality (started == created by definition).
+		require.Equal(t, aJobID, bJobID)
+		require.Equal(t, aDesc, bDesc)
+		require.Equal(t, aUser, bUser)
+		require.Equal(t, aStatus, bStatus)
+		require.Equal(t, aRun, bRun)
+		require.True(t, aCreated.Equal(bCreated))
+		require.True(t, aStarted.Equal(bStarted))
+		require.Equal(t, aFinished.Valid, bFinished.Valid)
+		if aFinished.Valid && bFinished.Valid {
+			require.True(t, aFinished.Time.Equal(bFinished.Time))
+		}
+		require.Equal(t, aError.Valid, bError.Valid)
+		if aError.Valid && bError.Valid {
+			require.Equal(t, aError.String, bError.String)
+		}
+		require.Equal(t, aSinkURI.Valid, bSinkURI.Valid)
+		if aSinkURI.Valid && bSinkURI.Valid {
+			require.Equal(t, aSinkURI.String, bSinkURI.String)
+		}
+		require.Equal(t, aFullTableNames.Valid, bFullTableNames.Valid)
+		if aFullTableNames.Valid && bFullTableNames.Valid {
+			require.Equal(t, aFullTableNames.String, bFullTableNames.String)
+		}
+		require.Equal(t, aTopics.Valid, bTopics.Valid)
+		if aTopics.Valid && bTopics.Valid {
+			require.Equal(t, aTopics.String, bTopics.String)
+		}
+		require.Equal(t, aDatabaseName.Valid, bDatabaseName.Valid)
+		if aDatabaseName.Valid && bDatabaseName.Valid {
+			require.Equal(t, aDatabaseName.String, bDatabaseName.String)
+		}
+	}
+	const cols = `
+			job_id, description, user_name, status, running_status,
+			created, started, finished, modified,
+			high_water_timestamp, readable_high_water_timestamptz, error,
+			sink_uri, full_table_names, topics, format,
+			database_name
+`
+	testFnTable := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, feed)
+		efeed, ok := feed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+		jobID := efeed.JobID()
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `paused`)
+
+		var rows []*sqlutils.Row
+		// rows = append(rows, sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOB %d]", cols, jobID)))
+		// rows = append(rows, sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOBS]", cols)))
+		// rows = append(rows, sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOB $1::INT]", cols), jobID))
+		rows = append(rows, sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOBS SELECT $1]", cols), jobID))
+		// rows = append(rows, sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOBS SELECT $1::INT]", cols), jobID))
+
+		for _, rowA := range rows {
+			rowB := sqlDB.QueryRow(t, fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOB %d]", cols, jobID))
+			compareOutput(t, rowA, rowB)
+		}
+	}
+	t.Run("show table changefeed job opaque", func(t *testing.T) {
+		cdcTest(t, testFnTable, feedTestEnterpriseSinks)
+	})
+
+	// testFnDatabase := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+	// 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	// 	sqlDB.Exec(t, `CREATE TABLE d.public.foo (a INT PRIMARY KEY, b STRING)`)
+	// 	sqlDB.Exec(t, `CREATE TABLE d.public.bar (a INT PRIMARY KEY)`)
+	// 	feed := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+	// 	defer closeFeed(t, feed)
+	// 	efeed, ok := feed.(cdctest.EnterpriseTestFeed)
+	// 	require.True(t, ok)
+	// 	jobID := efeed.JobID()
+
+	// 	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+	// 	waitForJobState(sqlDB, t, jobID, `paused`)
+
+	// 	queryA := fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOB %d]", cols, jobID)
+	// 	queryB := fmt.Sprintf("SELECT %s FROM [SHOW CHANGEFEED JOBS]", cols)
+	// 	compareOutput(t, sqlDB, jobID, queryA, queryB)
+	// }
+	// t.Run("show database changefeed job opaque", func(t *testing.T) {
+	// 	cdcTest(t, testFnDatabase, feedTestEnterpriseSinks)
+	// })
 }
