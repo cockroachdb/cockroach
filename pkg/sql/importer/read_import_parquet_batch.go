@@ -233,3 +233,37 @@ func (b *parquetColumnBatch) Read() error {
 	}
 	return nil
 }
+
+// GetValueAt extracts the raw Parquet value at the given row index.
+// Returns (value, isNull, error).
+// The value is returned as an interface{} but is typed according to the physical type.
+func (b *parquetColumnBatch) GetValueAt(rowIdx int) (any, bool, error) {
+	if rowIdx < 0 || rowIdx >= int(b.rowCount) {
+		return nil, false, errors.Newf("row index %d out of bounds [0, %d)", rowIdx, b.rowCount)
+	}
+
+	if b.isNull[rowIdx] {
+		return nil, true, nil
+	}
+
+	switch b.physicalType {
+	case parquet.Types.Boolean:
+		return b.boolValues[rowIdx], false, nil
+	case parquet.Types.Int32:
+		return b.int32Values[rowIdx], false, nil
+	case parquet.Types.Int64:
+		return b.int64Values[rowIdx], false, nil
+	case parquet.Types.Int96:
+		return b.int96Values[rowIdx], false, nil
+	case parquet.Types.Float:
+		return b.float32Values[rowIdx], false, nil
+	case parquet.Types.Double:
+		return b.float64Values[rowIdx], false, nil
+	case parquet.Types.ByteArray:
+		return b.byteArrayValues[rowIdx], false, nil
+	case parquet.Types.FixedLenByteArray:
+		return b.fixedLenByteArrayValues[rowIdx], false, nil
+	default:
+		return nil, false, errors.Newf("unsupported Parquet type: %v", b.physicalType)
+	}
+}
