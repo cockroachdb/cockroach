@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -162,6 +163,11 @@ type StartOpts struct {
 	// PreStartHooks are hooks that are run after service registration has occurred,
 	// but before starting the cockroach process.
 	PreStartHooks []PreStartHook
+
+	// Enable Cloud Profiler (see https://cloud.google.com/profiler/docs).
+	EnableCloudProfiler bool
+	// Probability that a given node should have the Cloud Profiler enabled.
+	CloudProfilerProbability float64
 }
 
 func (s *StartOpts) IsVirtualCluster() bool {
@@ -611,7 +617,6 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return err
 		}
 	}
-
 	// Start cockroach processes and `init` cluster, if necessary.
 	if startOpts.Target != StartSharedProcessForVirtualCluster {
 		if parsedVersion, err := c.fetchVersion(ctx, l, startOpts); err == nil {
@@ -995,18 +1000,31 @@ func (c *SyncedCluster) generateStartCmd(
 	if err != nil {
 		return "", err
 	}
+	enableCloudProfiler := startOpts.EnableCloudProfiler &&
+		randutil.DeterministicChoice(startOpts.CloudProfilerProbability, []byte(strconv.Itoa(int(node))), randutil.Salt(c.Name+"-cloud-profiler"))
+
+	baseEnvVars := append([]string{
+		fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
+		"GOTRACEBACK=crash",
+		// N.B. disable telemetry (see `TelemetryOptOut`).
+		"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+		// N.B. set crash reporting URL (see `crashReportURL()`) to the empty string to disable Sentry crash reports.
+		"COCKROACH_CRASH_REPORTS=",
+		fmt.Sprintf("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED=%t", enableCloudProfiler),
+		// N.B. append additional cluster-specified env (overrides)
+	}, c.Env...)
+
+	if enableCloudProfiler {
+		profilerServiceNameEnv := fmt.Sprintf("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_SERVICE_NAME=%s", c.Name)
+		baseEnvVars = append(baseEnvVars, profilerServiceNameEnv)
+	}
 
 	return execStartTemplate(startTemplateData{
 		LogDir: c.LogDir(node, startOpts.VirtualClusterName, startOpts.SQLInstance),
 		KeyCmd: keyCmd,
-		EnvVars: append(append([]string{
-			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
-			"GOTRACEBACK=crash",
-			// N.B. disable telemetry (see `TelemetryOptOut`).
-			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
-			// N.B. set crash reporting URL (see `crashReportURL()`) to the empty string to disable Sentry crash reports.
-			"COCKROACH_CRASH_REPORTS=",
-		}, c.Env...), getEnvVars()...),
+		EnvVars: append(baseEnvVars,
+			// N.B. append COCKROACH_ env (overrides)
+			getEnvVars()...),
 		Binary:              cockroachNodeBinary(c, node),
 		Args:                args,
 		MemoryMax:           config.MemoryMax,
