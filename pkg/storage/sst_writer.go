@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/sstable/blob"
+	"github.com/cockroachdb/pebble/valsep"
 )
 
 // IngestionValueBlocksEnabled controls whether older versions of MVCC keys in
@@ -36,7 +38,10 @@ var IngestionValueBlocksEnabled = settings.RegisterBoolSetting(
 
 // SSTWriter writes SSTables.
 type SSTWriter struct {
-	fw *sstable.Writer
+	// fw wraps the underlying sstable.Writer via SSTBlobWriter. It can write blob files
+	// when enabled, or behave like a regular sstable.Writer when blob files are
+	// disabled. Access the underlying sstable.Writer via fw.SSTWriter.
+	fw *valsep.SSTBlobWriter
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
@@ -112,8 +117,74 @@ func MakeTransportSSTWriter(
 	opts.BlockSize = 128 << 10
 	opts.Compression = CompressionAlgorithmBackupTransport.Get(&cs.SV).CompressionProfile()
 	opts.MergerName = "nullptr"
+	// Create a blob writer with blob files disabled for transport SSTs.
+	blobOpts := blob.FileWriterOptions{
+		Compression: opts.Compression,
+	}
+	blobWriterOpts := valsep.SSTBlobWriterOptions{
+		SSTWriterOpts:     opts,
+		BlobWriterOpts:    blobOpts,
+		BlobFilesDisabled: true, // Disable blob files for transport
+		NewBlobFileFn: func() (objstorage.Writable, error) {
+			return nil, errors.AssertionFailedf("blob files disabled")
+		},
+	}
+	blobWriter := valsep.NewSSTBlobWriter(f, blobWriterOpts)
 	return SSTWriter{
-		fw: sstable.NewWriter(f, opts),
+		fw: blobWriter,
+	}
+}
+
+// MakeIngestionSSTWriterWithBlobs creates a new SSTWriter tailored for writing
+// ingestion SSTs that may have values separated into blob files.
+// These SSTs have bloom filters enabled (as set in DefaultPebbleOptions).
+func MakeIngestionSSTWriterWithBlobs(
+	ctx context.Context,
+	cs *cluster.Settings,
+	sstHandle objstorage.Writable,
+	newBlobFile func() (objstorage.Writable, error),
+	overrides ...SSTWriterOption,
+) SSTWriter {
+	sstOpts := MakeIngestionWriterOptions(ctx, cs)
+	for _, o := range overrides {
+		o(&sstOpts)
+	}
+	// Configure blob writer options based on cluster settings.
+	blobOpts := blob.FileWriterOptions{
+		// Use the same compression as the SST.
+		Compression: sstOpts.Compression,
+	}
+
+	// Get value separation settings.
+	valueSepEnabled := ValueSeparationEnabled.Get(&cs.SV)
+	valueSepMinSize := int(ValueSeparationMinimumSize.Get(&cs.SV))
+	mvccGarbageMinSize := int(valueSeparationMVCCGarbageMinimumSize.Get(&cs.SV))
+
+	// Blob files require FormatIngestBlobFiles or higher. If the cluster hasn't
+	// fully upgraded to a version that supports blob files, we must disable
+	// them to avoid ingestion failures.
+	formatSupportsBlobs := minPebbleFormatVersionInCluster(cs.Version.ActiveVersion(ctx).Version) >= pebble.FormatIngestBlobFiles
+
+	// Create blob writer options. We use zero-value SpanPolicy which will use
+	// the default policies. The ValueSeparationMinSize and related settings
+	// will control blob file separation.
+	// Note: SpanPolicy field is omitted here - it will be zero-initialized.
+	// We can't directly set it because it's from pebble/internal/base which
+	// is an internal package we can't import. The zero value will work fine
+	// as the valsep package handles zero SpanPolicy correctly.
+	blobWriterOpts := valsep.SSTBlobWriterOptions{
+		SSTWriterOpts:                     sstOpts,
+		BlobWriterOpts:                    blobOpts,
+		BlobFilesDisabled:                 !valueSepEnabled || !formatSupportsBlobs,
+		ValueSeparationMinSize:            valueSepMinSize,
+		MVCCGarbageValueSeparationMinSize: mvccGarbageMinSize,
+		NewBlobFileFn:                     newBlobFile,
+	}
+
+	blobWriter := valsep.NewSSTBlobWriter(sstHandle, blobWriterOpts)
+
+	return SSTWriter{
+		fw: blobWriter,
 	}
 }
 
@@ -159,6 +230,9 @@ func WithCompressionFromClusterSetting(
 // for the same key, should pass in a WithValueBlocksDisabled option. This is
 // because value blocks are buffered in-memory while writing the SST (see
 // https://github.com/cockroachdb/cockroach/issues/117113).
+//
+// This creates a SSTBlobWriter with blob files disabled, so it behaves like
+// a regular sstable.Writer.
 func MakeIngestionSSTWriterWithOverrides(
 	ctx context.Context, cs *cluster.Settings, w objstorage.Writable, overrides ...SSTWriterOption,
 ) SSTWriter {
@@ -166,8 +240,17 @@ func MakeIngestionSSTWriterWithOverrides(
 	for _, o := range overrides {
 		o(&opts)
 	}
+	// Create a SSTBlobWriter writer with blob files disabled for regular ingestion SSTs.
+	blobWriterOpts := valsep.SSTBlobWriterOptions{
+		SSTWriterOpts:     opts,
+		BlobFilesDisabled: true,
+		NewBlobFileFn: func() (objstorage.Writable, error) {
+			return nil, errors.AssertionFailedf("blob files disabled")
+		},
+	}
+	blobWriter := valsep.NewSSTBlobWriter(w, blobWriterOpts)
 	return SSTWriter{
-		fw: sstable.NewWriter(w, opts),
+		fw: blobWriter,
 	}
 }
 
@@ -181,7 +264,7 @@ func (fw *SSTWriter) Finish() error {
 		return err
 	}
 	var err error
-	fw.Meta, err = fw.fw.Raw().Metadata()
+	fw.Meta, err = fw.fw.SSTWriter.Raw().Metadata()
 	fw.fw = nil
 	return err
 }
@@ -192,13 +275,13 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys 
 	endRaw := EngineKey{Key: end}.Encode()
 	if pointKeys {
 		fw.DataSize += int64(len(start)) + int64(len(end))
-		if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+		if err := fw.fw.SSTWriter.DeleteRange(fw.scratch, endRaw); err != nil {
 			return err
 		}
 	}
 	if rangeKeys {
 		fw.DataSize += int64(len(start)) + int64(len(end))
-		if err := fw.fw.RangeKeyDelete(fw.scratch, endRaw); err != nil {
+		if err := fw.fw.SSTWriter.RangeKeyDelete(fw.scratch, endRaw); err != nil {
 			return err
 		}
 	}
@@ -258,7 +341,7 @@ func (fw *SSTWriter) PutEngineRangeKey(start, end roachpb.Key, suffix, value []b
 	// MVCC values don't account for the timestamp, so we don't account
 	// for the suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end)) + int64(len(value))
-	return fw.fw.RangeKeySet(
+	return fw.fw.SSTWriter.RangeKeySet(
 		EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix, value)
 }
 
@@ -267,7 +350,7 @@ func (fw *SSTWriter) ClearEngineRangeKey(start, end roachpb.Key, suffix []byte) 
 	// MVCC values don't account for the timestamp, so we don't account for the
 	// suffix here.
 	fw.DataSize += int64(len(start)) + int64(len(end))
-	return fw.fw.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
+	return fw.fw.SSTWriter.RangeKeyUnset(EngineKey{Key: start}.Encode(), EngineKey{Key: end}.Encode(), suffix)
 }
 
 // ClearEngineRange clears point keys in the specified EngineKey range.
@@ -275,7 +358,7 @@ func (fw *SSTWriter) ClearEngineRange(start, end EngineKey) error {
 	fw.scratch = start.EncodeToBuf(fw.scratch[:0])
 	endRaw := end.Encode()
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
-	if err := fw.fw.DeleteRange(fw.scratch, endRaw); err != nil {
+	if err := fw.fw.SSTWriter.DeleteRange(fw.scratch, endRaw); err != nil {
 		return err
 	}
 	return nil
@@ -292,7 +375,7 @@ func (fw *SSTWriter) ClearRawEncodedRange(start, end []byte) error {
 		return errors.New("cannot decode end engine key")
 	}
 	fw.DataSize += int64(len(startEngine.Key)) + int64(len(endEngine.Key))
-	return fw.fw.DeleteRange(start, end)
+	return fw.fw.SSTWriter.DeleteRange(start, end)
 }
 
 // PutInternalRangeKey implements the InternalWriter interface.
@@ -308,11 +391,11 @@ func (fw *SSTWriter) PutInternalRangeKey(start, end []byte, key rangekey.Key) er
 	fw.DataSize += int64(len(startEngine.Key)) + int64(len(endEngine.Key)) + int64(len(key.Value))
 	switch key.Kind() {
 	case pebble.InternalKeyKindRangeKeyUnset:
-		return fw.fw.RangeKeyUnset(start, end, key.Suffix)
+		return fw.fw.SSTWriter.RangeKeyUnset(start, end, key.Suffix)
 	case pebble.InternalKeyKindRangeKeySet:
-		return fw.fw.RangeKeySet(start, end, key.Suffix, key.Value)
+		return fw.fw.SSTWriter.RangeKeySet(start, end, key.Suffix, key.Value)
 	case pebble.InternalKeyKindRangeKeyDelete:
-		return fw.fw.RangeKeyDelete(start, end)
+		return fw.fw.SSTWriter.RangeKeyDelete(start, end)
 	default:
 		return errors.AssertionFailedf("unexpected range key kind")
 	}
@@ -325,7 +408,7 @@ func (fw *SSTWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) 
 		return errors.New("cannot decode engine key")
 	}
 	fw.DataSize += int64(len(ek.Key)) + int64(len(value))
-	return fw.fw.Raw().Add(*key, value, false /* forceObsolete */, sstable.KVMeta{})
+	return fw.fw.SSTWriter.Raw().Add(*key, value, false /* forceObsolete */, sstable.KVMeta{})
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble
@@ -338,7 +421,7 @@ func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	}
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], start)
-	return fw.fw.DeleteRange(fw.scratch, EncodeMVCCKey(end))
+	return fw.fw.SSTWriter.DeleteRange(fw.scratch, EncodeMVCCKey(end))
 }
 
 // Put puts a kv entry into the sstable being built. An error is returned if it
@@ -353,6 +436,7 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
+	// Use blob writer Set() to enable blob file separation when enabled.
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -400,6 +484,7 @@ func (fw *SSTWriter) PutEngineKey(key EngineKey, value []byte) error {
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = key.EncodeToBuf(fw.scratch[:0])
+	// Use blob writer Set() to enable blob file separation when enabled.
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -412,6 +497,7 @@ func (fw *SSTWriter) put(key MVCCKey, value []byte) error {
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
+	// Use blob writer Set() to enable blob file separation when enabled.
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -454,7 +540,7 @@ func (fw *SSTWriter) ClearEngineKey(key EngineKey, opts ClearOptions) error {
 	// V23_2_UseSizedPebblePointTombstones. It's probably not worth it until we
 	// can unconditionally use it; I don't believe we ever write point
 	// tombstones to sstables constructed within Cockroach.
-	return fw.fw.Delete(fw.scratch)
+	return fw.fw.SSTWriter.Delete(fw.scratch)
 }
 
 // An error is returned if it is not greater than any previous point key
@@ -471,7 +557,7 @@ func (fw *SSTWriter) clear(key MVCCKey, opts ClearOptions) error {
 	// V23_2_UseSizedPebblePointTombstones. It's probably not worth it until we
 	// can unconditionally use it; I don't believe we ever write point
 	// tombstones to sstables constructed within Cockroach.
-	return fw.fw.Delete(fw.scratch)
+	return fw.fw.SSTWriter.Delete(fw.scratch)
 }
 
 // SingleClearEngineKey implements the Writer interface.
@@ -491,7 +577,7 @@ func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
-	return fw.fw.Merge(fw.scratch, value)
+	return fw.fw.SSTWriter.Merge(fw.scratch, value)
 }
 
 // LogData implements the Writer interface.
@@ -533,7 +619,7 @@ func (fw *SSTWriter) BufferedSize() int {
 // this size is an estimate as if the writer were to be closed at the time of
 // calling.
 func (fw *SSTWriter) EstimatedSize() uint64 {
-	return fw.fw.Raw().EstimatedSize()
+	return fw.fw.SSTWriter.Raw().EstimatedSize()
 }
 
 // MemObject is an in-memory implementation of objstorage.Writable, intended

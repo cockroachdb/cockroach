@@ -197,11 +197,11 @@ func (s *snapWriter) commit(
 	if !s.eng.Separated() {
 		ingestTo = s.eng.Engine()
 	}
-	stats, err := ingestTo.IngestAndExciseFiles(
-		ctx, ing.paths, ing.shared, ing.external, ing.exciseSpan)
+	stats, err := ingestTo.IngestAndExciseWithBlobs(
+		ctx, ing.localSSTs, ing.shared, ing.external, ing.exciseSpan)
 	if err != nil {
 		return pebble.IngestOperationStats{}, errors.Wrapf(err,
-			"while ingesting %s and excising %v", ing.paths, ing.exciseSpan)
+			"while ingesting %s and excising %v", ing.localSSTs, ing.exciseSpan)
 	}
 	return stats, nil
 }
@@ -356,7 +356,7 @@ func (s *snapWriter) subsumeReplica(ctx context.Context, sub kvstorage.DestroyRe
 // TODO(sep-raft-log): this information needs to be stored in the corresponding
 // WAG node. Use the proto counterparts of this type (see wagpb.Ingestion).
 type snapIngestion struct {
-	paths      []string
+	localSSTs  pebble.LocalSSTables
 	shared     []pebble.SharedSSTMeta
 	external   []pebble.ExternalFile
 	exciseSpan roachpb.Span
