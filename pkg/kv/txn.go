@@ -538,6 +538,20 @@ func (txn *Txn) RequiredFrontier() hlc.Timestamp {
 	return txn.mu.sender.RequiredFrontier()
 }
 
+// MaybeRefreshSpans refreshes all tracked read spans up to the transaction's
+// current provisional commit timestamp (WriteTimestamp). This is used by Read
+// Committed transactions to validate constraint check and foreign key cascade
+// reads before committing, ensuring they remain valid at the final commit
+// timestamp even though the intents were written at earlier timestamps.
+//
+// Returns an error if the refresh fails, indicating that reads are no longer
+// valid at the current WriteTimestamp and the transaction cannot commit.
+func (txn *Txn) MaybeRefreshSpans(ctx context.Context) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.MaybeRefreshSpans(ctx)
+}
+
 // DisablePipelining instructs the transaction not to pipeline requests. It
 // should rarely be necessary to call this method.
 //

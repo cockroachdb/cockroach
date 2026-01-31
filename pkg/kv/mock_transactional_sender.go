@@ -292,6 +292,11 @@ func (m *MockTransactionalSender) TestingShouldRetry() bool {
 	return false
 }
 
+// MaybeRefreshSpans is part of the TxnSender interface.
+func (m *MockTransactionalSender) MaybeRefreshSpans(context.Context) error {
+	panic("unimplemented")
+}
+
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
 	senderFunc func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest) (
