@@ -908,7 +908,10 @@ var geoBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				outer := tree.MustBeDGeometry(args[0])
-				interiorArr := tree.MustBeDArray(args[1])
+				interiorArr, err := checkIfDArrayErrOnDString(args[1])
+				if err != nil {
+					return nil, err
+				}
 				interior := make([]geo.Geometry, len(interiorArr.Array))
 				for i, v := range interiorArr.Array {
 					g, ok := v.(*tree.DGeometry)

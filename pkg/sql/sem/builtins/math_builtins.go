@@ -609,11 +609,18 @@ var mathBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "operand", Typ: types.AnyElement}, {Name: "thresholds", Typ: types.AnyArray}},
+			Types: tree.ParamTypes{
+				{Name: "operand", Typ: types.AnyElement},
+				// TODO(yuzefovich): this is anycompatiblearray in PG.
+				{Name: "thresholds", Typ: types.AnyArray},
+			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				operand := args[0]
-				thresholds := tree.MustBeDArray(args[1])
+				thresholds, err := checkIfDArrayErrOnDString(args[1])
+				if err != nil {
+					return nil, err
+				}
 
 				if !operand.ResolvedType().Equivalent(thresholds.ParamTyp) {
 					return tree.NewDInt(0), errors.New("operand and thresholds must be of the same type")
