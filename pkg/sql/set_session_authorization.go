@@ -17,6 +17,7 @@ func (p *planner) SetSessionAuthorizationDefault() (planNode, error) {
 
 type setSessionAuthorizationDefaultNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 }
 
 func (n *setSessionAuthorizationDefaultNode) Next(_ runParams) (bool, error) { return false, nil }

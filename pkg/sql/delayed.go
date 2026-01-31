@@ -17,6 +17,7 @@ import (
 // constructor must be delayed during query execution (as opposed to
 // SQL prepare) for resource tracking purposes.
 type delayedNode struct {
+	nonReusablePlanNode
 	name        string
 	columns     colinfo.ResultColumns
 	constructor nodeConstructor

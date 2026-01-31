@@ -27,6 +27,7 @@ import (
 
 type dropTypeNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n      *tree.DropType
 	toDrop map[descpb.ID]*typedesc.Mutable
 }

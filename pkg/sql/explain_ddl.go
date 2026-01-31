@@ -21,6 +21,7 @@ import (
 )
 
 type explainDDLNode struct {
+	nonReusablePlanNode
 	optColumnsSlot
 	options *tree.ExplainOptions
 	plan    planComponents
