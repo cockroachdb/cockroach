@@ -21,6 +21,7 @@ EVENTPB_PROTOS = [
     "telemetry.proto",
     "changefeed_events.proto",
     "contention_events.proto",
+    "bulk_ingest_perf.proto",
 ]
 
 EVENTPB_PROTO_DEPS = [ "//pkg/util/log/logpb:event.proto", ] + EVENTPB_PROTOS

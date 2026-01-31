@@ -1,0 +1,43 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+import "util/log/logpb/event.proto";
+
+// Category: TELEMETRY
+// Channel: TELEMETRY
+//
+// Events in this file are related to bulk ingest operations performance metrics.
+
+// BulkIngestCompleted is an event that is logged when a bulk ingest job
+// (restore, import, etc.) completes successfully.
+// It captures key performance metrics for the operation.
+message BulkIngestCompleted {
+  // Common fields for all events.
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // JobID is the ID of the bulk ingest job.
+  uint64 job_id = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customname) = "JobID"];
+
+  // JobType identifies the type of bulk ingest job (e.g., "restore", "import").
+  string job_type = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // NumRows is the number of rows successfully ingested.
+  int64 num_rows = 4 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Duration of the ingest operation in seconds.
+  int64 duration_seconds = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Total logical size of data ingested in megabytes.
+  int64 data_size_mb = 6 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Number of nodes that participated in the ingest operation.
+  int32 node_count = 7 [(gogoproto.jsontag) = ",omitempty"];
+}
