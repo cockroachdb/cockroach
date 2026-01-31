@@ -147,8 +147,9 @@ func getEventSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) (EventSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, knobs)
 }
 
 func getResolvedTimestampSink(
@@ -160,8 +161,9 @@ func getResolvedTimestampSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) (ResolvedTimestampSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, knobs)
 }
 
 func getAndDialSink(
@@ -173,8 +175,9 @@ func getAndDialSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) (Sink, error) {
-	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, knobs)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +210,7 @@ func getSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -246,10 +250,7 @@ func getSink(
 
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			nullIsAccounted := false
-			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
-			}
+			nullIsAccounted := knobs.NullSinkIsExternalIOAccounted
 			return makeNullSink(&changefeedbase.SinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
@@ -258,24 +259,24 @@ func getSink(
 					return nil, err
 				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
+					createTopics, err := opts.GetCreateKafkaTopics()
+					if err != nil {
+						return nil, err
+					}
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
+						serverCfg.Settings, metricsBuilder, knobs.KafkaSinkV2Knobs, createTopics)
 				} else {
 					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
 				}
 			})
 		case isPulsarSink(u):
-			var testingKnobs *TestingKnobs
-			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-				testingKnobs = knobs
-			}
 			sinkOpts, err := opts.GetKafkaSinkOptions()
 			if err != nil {
 				return nil, err
 			}
 			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, targets, sinkOpts.JSONConfig,
-				serverCfg.Settings, metricsBuilder, testingKnobs)
+				serverCfg.Settings, metricsBuilder, &knobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
 			if err != nil {
@@ -287,21 +288,12 @@ func getSink(
 					metricsBuilder, serverCfg.Settings)
 			})
 		case isPubsubSink(u):
-			var testingKnobs *TestingKnobs
-			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-				testingKnobs = knobs
-			}
 			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), targets,
 				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
 				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
-				metricsBuilder, serverCfg.Settings, testingKnobs)
+				metricsBuilder, serverCfg.Settings, &knobs)
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
-				var testingKnobs *TestingKnobs
-				if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-					testingKnobs = knobs
-				}
-
 				// Placeholder id for canary sink
 				var nodeID base.SQLInstanceID = 0
 				if serverCfg.NodeID != nil {
@@ -309,7 +301,7 @@ func getSink(
 				}
 				return makeCloudStorageSink(
 					ctx, &changefeedbase.SinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
-					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, testingKnobs,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, &knobs,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
@@ -320,7 +312,7 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
 				return makeExternalConnectionSink(
 					ctx, &changefeedbase.SinkURL{URL: u}, user, makeExternalConnectionProvider(ctx, serverCfg.DB),
-					serverCfg, feedCfg, timestampOracle, jobID, m, targets,
+					serverCfg, feedCfg, timestampOracle, jobID, m, targets, knobs,
 				)
 			})
 		case u.Scheme == "":
@@ -335,7 +327,7 @@ func getSink(
 		return nil, err
 	}
 
-	if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+	if knobs.WrapSink != nil {
 		// External connections call getSink recursively and wrap the sink then.
 		if u.Scheme != changefeedbase.SinkSchemeExternalConnection {
 			sink = knobs.WrapSink(sink, jobID)
