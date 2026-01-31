@@ -13,11 +13,15 @@ import (
 )
 
 const (
-	TaskServiceName = "public_dns"
+	TaskServiceName = "public-dns"
 )
 
 // PublicDNSTaskType is the type of the task.
 type PublicDNSTaskType string
+
+const (
+	PermissionSync = TaskServiceName + ":sync"
+)
 
 // IService is the interface for the clusters service.
 type IService interface {

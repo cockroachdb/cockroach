@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	tasksmodel "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	taskssmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/mocks"
@@ -37,8 +38,9 @@ type request struct {
 	body   string
 }
 type serviceResult struct {
-	val interface{}
-	err error
+	val        interface{}
+	totalCount int
+	err        error
 }
 type expected struct {
 	code          int
@@ -60,10 +62,8 @@ func TestGetAll(t *testing.T) {
 			},
 			serviceResult: serviceResult{},
 			expected: expected{
-				code: http.StatusOK,
-				arguments: stypes.InputGetAllTasksDTO{
-					Filters: *filters.NewFilterSet(), // Empty filters
-				},
+				code:      http.StatusOK,
+				arguments: stypes.NewInputGetAllTasksDTO(),
 			},
 		},
 		{
@@ -160,7 +160,7 @@ func TestGetAll(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockTasksService)),
 			)
@@ -174,8 +174,9 @@ func TestGetAll(t *testing.T) {
 					"GetTasks",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
-				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
+				).Return(tc.serviceResult.val, tc.serviceResult.totalCount, tc.serviceResult.err).Once()
 			}
 
 			app.GetApi().GetGinEngine().ServeHTTP(w, req)
@@ -271,7 +272,7 @@ func TestGetOne(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockTasksService)),
 			)
@@ -285,6 +286,7 @@ func TestGetOne(t *testing.T) {
 					"GetTask",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}

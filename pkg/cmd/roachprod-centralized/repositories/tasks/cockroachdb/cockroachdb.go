@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
@@ -53,46 +54,64 @@ func NewTasksRepository(db *gosql.DB, opts Options) *CRDBTasksRepo {
 	}
 }
 
-// GetTasks returns tasks based on the provided filters.
+// GetTasks returns tasks based on the provided filters with total count for pagination.
 func (r *CRDBTasksRepo) GetTasks(
 	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
-) ([]tasks.ITask, error) {
-	baseQuery := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error FROM tasks"
+) ([]tasks.ITask, int, error) {
 
-	// Build WHERE clause using the filtering framework
-	qb := filters.NewSQLQueryBuilder()
-	whereClause, args, err := qb.BuildWhere(&filterSet)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to build query filters")
+	// Build both SELECT and COUNT queries
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(tasks.Task{}),
+	)
+	baseSelectQuery := "SELECT id, type, state, consumer_id, creation_datetime, update_datetime, payload, error FROM tasks"
+	baseCountQuery := "SELECT count(*) FROM tasks"
+
+	// Default sort: creation_datetime DESC
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "CreationDatetime",
+		SortOrder: filtertypes.SortDescending,
 	}
 
-	// Construct final query
-	query := baseQuery
-	if whereClause != "" {
-		query += " " + whereClause
-	}
-	query += " ORDER BY creation_datetime"
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to query tasks")
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	l.Debug("querying tasks from database",
+		slog.String("select_query", selectQuery),
+		slog.String("count_query", countQuery),
+		slog.Int("args_count", len(args)),
+		slog.Any("args", args),
+	)
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count tasks")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to query tasks")
 	}
 	defer rows.Close()
 
+	// Scan results
 	var result []tasks.ITask
 	for rows.Next() {
 		task, err := r.scanTask(rows)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to scan task")
+			return nil, 0, errors.Wrap(err, "failed to scan task")
 		}
 		result = append(result, task)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, errors.Wrap(err, "error iterating rows")
+		return nil, 0, errors.Wrap(err, "error iterating rows")
 	}
 
-	return result, nil
+	return result, totalCount, nil
 }
 
 // GetTask returns a single task by ID.

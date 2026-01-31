@@ -8,6 +8,7 @@ package memory
 import (
 	"context"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
@@ -50,7 +51,9 @@ func (s *MemClustersRepo) GetClusters(
 	}
 
 	// Use the memory filter evaluator to filter tasks
-	evaluator := filters.NewMemoryFilterEvaluator()
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(cloudcluster.Cluster{}),
+	)
 	filteredClusters := make(cloudcluster.Clusters)
 
 	for clusterName, cluster := range s.clusters {
