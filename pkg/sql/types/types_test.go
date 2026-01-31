@@ -655,6 +655,56 @@ func TestEquivalent(t *testing.T) {
 	}
 }
 
+func TestHasIdenticalHistogramEncoding(t *testing.T) {
+	testCases := []struct {
+		typ1     *T
+		typ2     *T
+		expected bool
+	}{
+		// Same types are always compatible.
+		{Int, Int, true},
+		{String, String, true},
+		{Timestamp, Timestamp, true},
+		{TimestampTZ, TimestampTZ, true},
+
+		// Equivalent types (same family) are compatible.
+		{Int2, Int4, true},
+		{Int4, Int, true},
+		{MakeString(10), MakeString(100), true},
+
+		// TIMESTAMP and TIMESTAMPTZ have identical encoding.
+		{Timestamp, TimestampTZ, true},
+		{TimestampTZ, Timestamp, true},
+		{MakeTimestamp(3), TimestampTZ, true},
+		{TimestampTZ, MakeTimestamp(6), true},
+		{MakeTimestamp(3), MakeTimestampTZ(6), true},
+
+		// Different type families that are not encoding-compatible.
+		{Int, String, false},
+		{Timestamp, Date, false},
+		{TimestampTZ, Date, false},
+		{Time, TimeTZ, false}, // TIME and TIMETZ have different encodings
+		{String, Bytes, false},
+		{Float, Decimal, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s-%s", tc.typ1.String(), tc.typ2.String()), func(t *testing.T) {
+			result := tc.typ1.HasIdenticalHistogramEncoding(tc.typ2)
+			if result != tc.expected {
+				t.Errorf("HasIdenticalHistogramEncoding(%s, %s) = %v, expected %v",
+					tc.typ1.DebugString(), tc.typ2.DebugString(), result, tc.expected)
+			}
+			// Test symmetry.
+			resultReverse := tc.typ2.HasIdenticalHistogramEncoding(tc.typ1)
+			if resultReverse != tc.expected {
+				t.Errorf("HasIdenticalHistogramEncoding(%s, %s) = %v, expected %v (reverse)",
+					tc.typ2.DebugString(), tc.typ1.DebugString(), resultReverse, tc.expected)
+			}
+		})
+	}
+}
+
 func TestIdentical(t *testing.T) {
 	testCases := []struct {
 		typ1      *T

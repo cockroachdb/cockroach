@@ -458,7 +458,7 @@ func (histogramData *HistogramData) TypeCheck(
 	if histogramData.ColumnType.Family() == types.BytesFamily {
 		return nil
 	}
-	if !histogramData.ColumnType.Equivalent(colType) {
+	if !histogramData.ColumnType.HasIdenticalHistogramEncoding(colType) {
 		return errors.Newf(
 			"histogram for table %v column %v created_at %s does not match column type %v: %v",
 			table, column, createdAt, colType.SQLStringForError(),

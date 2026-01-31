@@ -2434,6 +2434,30 @@ func (t *T) Equivalent(other *T) bool {
 	return true
 }
 
+// HasIdenticalHistogramEncoding returns true if values of the two types have
+// identical binary encodings for histogram bucket upper bounds. This allows
+// reusing histograms after metadata-only ALTER COLUMN TYPE conversions where
+// the underlying encoding doesn't change.
+//
+// This is specifically needed because ALTER COLUMN TYPE from TIMESTAMP to
+// TIMESTAMPTZ (or vice versa) is a metadata-only change that doesn't rewrite
+// data, but the histogram's ColumnType still references the old type. Since
+// both types use identical encoding (both store time.Time), the histogram
+// remains valid.
+func (t *T) HasIdenticalHistogramEncoding(other *T) bool {
+	if t.Equivalent(other) {
+		return true
+	}
+	// TIMESTAMP and TIMESTAMPTZ have identical encoding (both store time.Time).
+	// This is the only cross-family trivial conversion defined in the schema
+	// changer where both types share the same encoding.
+	if (t.Family() == TimestampFamily || t.Family() == TimestampTZFamily) &&
+		(other.Family() == TimestampFamily || other.Family() == TimestampTZFamily) {
+		return true
+	}
+	return false
+}
+
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
 // * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
