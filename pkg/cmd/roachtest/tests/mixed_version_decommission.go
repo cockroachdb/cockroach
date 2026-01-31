@@ -42,9 +42,16 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 	mvt.OnStartup(
 		"set suspect duration",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			return h.System.Exec(
+			if err := h.System.Exec(
 				rng,
 				"SET CLUSTER SETTING server.time_after_store_suspect = $1",
+				suspectDuration.String(),
+			); err != nil {
+				return err
+			}
+			return h.System.Exec(
+				rng,
+				"SET CLUSTER SETTING server.time_after_store_suspect_in_store_liveness = $1",
 				suspectDuration.String(),
 			)
 		})
