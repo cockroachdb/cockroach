@@ -34,79 +34,166 @@ func TestRowCountCheck(t *testing.T) {
 	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
 	r := sqlutils.MakeSQLRunner(db)
 
-	// Create a table and populate it with 100 rows.
-	r.ExecMultiple(t,
-		`CREATE DATABASE test`,
-		`CREATE TABLE test.t (id INT PRIMARY KEY, INDEX idx (id))`,
-		`INSERT INTO test.t SELECT * FROM generate_series(1, 100)`,
-	)
+	r.Exec(t, `CREATE DATABASE test`)
 
-	// Get the table descriptor
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
+	testCases := []struct {
+		name              string
+		createTableStmts  []string // statements to create and populate the table
+		skipTablePopulate bool     // if true, do not populate the table with data
+	}{
+		{
+			name:             "primary_index_only",
+			createTableStmts: []string{`CREATE TABLE test.t (id INT PRIMARY KEY)`},
+		},
+		{
+			name:             "with_secondary_index",
+			createTableStmts: []string{`CREATE TABLE test.t (id INT PRIMARY KEY, INDEX idx (id))`},
+		},
+		{
+			name:             "with_unsupported_index_type",
+			createTableStmts: []string{`CREATE TABLE test.t (id INT PRIMARY KEY, data JSONB DEFAULT '{}'::JSONB, INVERTED INDEX idx (data))`},
+		},
+		{
+			name:             "hash_sharded_primary_index_only",
+			createTableStmts: []string{`CREATE TABLE test.t (id INT PRIMARY KEY USING HASH)`},
+		},
+		{
+			name:             "hash_sharded_primary_index_with_secondary_index",
+			createTableStmts: []string{`CREATE TABLE test.t (id INT PRIMARY KEY USING HASH, INDEX idx (id))`},
+		},
+		{
+			name:              "empty_table",
+			createTableStmts:  []string{`CREATE TABLE test.t (id INT PRIMARY KEY)`},
+			skipTablePopulate: true,
+		},
+		{
+			name: "multiple_spans",
+			createTableStmts: []string{
+				`CREATE TABLE test.t (id INT PRIMARY KEY)`,
+				`ALTER TABLE test.t SPLIT AT VALUES (33), (36)`},
+		},
+	}
 
-	// Create checks for the table with expected row count of 105 which will
-	// report an error.
-	badExpectedRowCount := uint64(105)
-	checks, err := ChecksForTable(ctx, nil /* PlanHookState */, tableDesc, &badExpectedRowCount)
-	require.NoError(t, err)
-	require.Len(t, checks, 2)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a table and populate it with 100 rows.
+			actualRowCount := uint64(100)
+			var stmts []string
+			stmts = append(stmts, tc.createTableStmts...)
+			if !tc.skipTablePopulate {
+				stmts = append(stmts, `INSERT INTO test.t SELECT * FROM generate_series(1, 100)`)
+			} else {
+				actualRowCount = 0
+			}
 
-	// Get a timestamp for AS OF SYSTEM TIME
-	var timestampStr string
-	r.QueryRow(t, "SELECT cluster_logical_timestamp()::STRING").Scan(&timestampStr)
-	asOfTimestamp, err := hlc.ParseHLC(timestampStr)
-	require.NoError(t, err)
+			r.ExecMultiple(t,
+				stmts...,
+			)
+			defer r.Exec(t, `DROP TABLE test.t`)
 
-	// Trigger the inspect job directly
-	job, err := TriggerJob(
-		ctx,
-		"test row count check",
-		&execCfg,
-		checks,
-		asOfTimestamp,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, job)
+			// Get the table descriptor
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
 
-	// Wait for the job to complete
-	err = job.AwaitCompletion(ctx)
-	require.Error(t, err, "inspect job should error on the row count mismatch")
+			// Create checks for the table with expected row count of 105 which will
+			// report an error.
+			badExpectedRowCount := uint64(105)
 
-	// Verify the job succeeded
-	var jobStatus string
-	var fractionCompleted float64
-	r.QueryRow(t,
-		`SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1`,
-	).Scan(&jobStatus, &fractionCompleted)
-	require.Equal(t, "failed", jobStatus, "inspect job should fail with mismatching row count")
-	require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100% on successful completion")
+			testCases := []struct {
+				name             string
+				expectedRowCount uint64
+			}{
+				{
+					name:             "match",
+					expectedRowCount: actualRowCount,
+				},
+				{
+					name:             "mismatch",
+					expectedRowCount: badExpectedRowCount,
+				},
+			}
 
-	// Query the inspect_errors table to verify a row count mismatch issue was reported
-	// There should be exactly one error (row count checks produce one error per table)
-	var errorType string
-	var databaseName, schemaName, tableName, primaryKey, aost, details string
-	var jobID int64
-	var errorCount int
-	r.QueryRow(t,
-		fmt.Sprintf(`SELECT count(*) FROM [SHOW INSPECT ERRORS FOR JOB %d]`, job.ID()),
-	).Scan(&errorCount)
-	require.Equal(t, 1, errorCount, "should have exactly one row count mismatch error")
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					checks, err := ChecksForTable(ctx, nil /* PlanHookState */, tableDesc, &tc.expectedRowCount)
+					require.NoError(t, err)
 
-	r.QueryRow(t,
-		fmt.Sprintf(`SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS`, job.ID()),
-	).Scan(&errorType, &databaseName, &schemaName, &tableName, &primaryKey, &jobID, &aost, &details)
+					// Get a timestamp for AS OF SYSTEM TIME
+					var timestampStr string
+					r.QueryRow(t, "SELECT cluster_logical_timestamp()::STRING").Scan(&timestampStr)
+					asOfTimestamp, err := hlc.ParseHLC(timestampStr)
+					require.NoError(t, err)
 
-	require.Equal(t, string(RowCountMismatch), errorType)
-	require.Equal(t, "test", databaseName, "issue should reference the correct database")
-	require.Equal(t, "public", schemaName, "issue should reference the correct schema")
-	require.Equal(t, "t", tableName, "issue should reference the correct table")
+					// Trigger the inspect job directly
+					job, err := TriggerJob(
+						ctx,
+						"test row count check",
+						&execCfg,
+						checks,
+						asOfTimestamp,
+					)
+					require.NoError(t, err)
+					require.NotNil(t, job)
 
-	// Parse the details JSON to verify expected and actual counts
-	var detailsMap map[string]interface{}
-	err = json.Unmarshal([]byte(details), &detailsMap)
-	require.NoError(t, err, "details should be valid JSON")
-	require.Contains(t, detailsMap, "expected", "details should contain expected count")
-	require.Contains(t, detailsMap, "actual", "details should contain actual count")
-	require.Equal(t, float64(badExpectedRowCount), detailsMap["expected"], "expected count should match")
-	require.Equal(t, float64(100), detailsMap["actual"], "actual count should be 100")
+					expectedSuccess := tc.expectedRowCount == actualRowCount
+
+					// Wait for the job to complete
+					err = job.AwaitCompletion(ctx)
+					if expectedSuccess {
+						require.NoError(t, err, "inspect job should complete successfully")
+					} else {
+						require.Error(t, err, "inspect job should error on the row count mismatch")
+					}
+
+					// Verify the job succeeded
+					var jobStatus string
+					var fractionCompleted float64
+					r.QueryRow(t,
+						`SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_id = $1`,
+						job.ID(),
+					).Scan(&jobStatus, &fractionCompleted)
+					if expectedSuccess {
+						require.Equal(t, "succeeded", jobStatus, "inspect job should complete successfully")
+					} else {
+						require.Equal(t, "failed", jobStatus, "inspect job should fail with mismatching row count")
+					}
+					require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100% on successful completion")
+
+					// Query the inspect_errors table to verify a row count mismatch
+					// issue was reported. There should be exactly zero or one errors:
+					// Row count checks produce one error per table.
+					var errorType string
+					var databaseName, schemaName, tableName, primaryKey, aost, details string
+					var jobID int64
+					var errorCount int
+					r.QueryRow(t,
+						fmt.Sprintf(`SELECT count(*) FROM [SHOW INSPECT ERRORS FOR JOB %d]`, job.ID()),
+					).Scan(&errorCount)
+					if expectedSuccess {
+						require.Equal(t, 0, errorCount, "should be no row count mismatch errors")
+						return
+					} else {
+						require.Equal(t, 1, errorCount, "should have exactly one row count mismatch error")
+					}
+
+					r.QueryRow(t,
+						fmt.Sprintf(`SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS`, job.ID()),
+					).Scan(&errorType, &databaseName, &schemaName, &tableName, &primaryKey, &jobID, &aost, &details)
+
+					require.Equal(t, string(RowCountMismatch), errorType)
+					require.Equal(t, "test", databaseName, "issue should reference the correct database")
+					require.Equal(t, "public", schemaName, "issue should reference the correct schema")
+					require.Equal(t, "t", tableName, "issue should reference the correct table")
+
+					// Parse the details JSON to verify expected and actual counts
+					var detailsMap map[string]interface{}
+					err = json.Unmarshal([]byte(details), &detailsMap)
+					require.NoError(t, err, "details should be valid JSON")
+					require.Contains(t, detailsMap, "expected", "details should contain expected count")
+					require.Contains(t, detailsMap, "actual", "details should contain actual count")
+					require.Equal(t, float64(badExpectedRowCount), detailsMap["expected"], "expected count should match")
+					require.Equal(t, float64(actualRowCount), detailsMap["actual"], "actual count should be 100")
+				})
+			}
+		})
+	}
 }

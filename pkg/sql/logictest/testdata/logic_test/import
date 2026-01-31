@@ -1,0 +1,31 @@
+# LogicTest: local
+
+subtest import_into_non_empty_table
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.t_for_import(i INT PRIMARY KEY, a STRING, b STRING)
+
+statement ok
+INSERT INTO d.t_for_import (i) VALUES (1)
+
+let $exp_file
+WITH cte AS (EXPORT INTO CSV 'nodelocal://1/import_test_data' FROM SELECT 2 AS i, 'hello' AS a, 'world' AS b UNION ALL SELECT 3, 'foo', 'bar') SELECT filename FROM cte;
+
+statement ok
+IMPORT INTO d.t_for_import CSV DATA ('nodelocal://1/import_test_data/$exp_file')
+
+query I rowsort
+SELECT count(*) FROM d.t_for_import
+----
+3
+
+statement ok
+DROP TABLE d.t_for_import
+
+statement ok
+DROP DATABASE d
+
+subtest end
