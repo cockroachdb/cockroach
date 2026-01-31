@@ -100,5 +100,5 @@ export const ExecutionContentionTable: React.FC<
   ContentionTableProps
 > = props => {
   const columns = props.execType === "statement" ? stmtColumns : txnColumns;
-  return <SortedTable columns={columns} {...props} />;
+  return <SortedTable<ContendedExecution> columns={columns} {...props} />;
 };

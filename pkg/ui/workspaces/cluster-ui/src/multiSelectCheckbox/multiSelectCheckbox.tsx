@@ -7,8 +7,6 @@ import classNames from "classnames/bind";
 import React from "react";
 import Select, { components, OptionsType } from "react-select";
 
-import { Filter } from "../queryFilter";
-
 import styles from "./multiSelectCheckbox.module.scss";
 
 const cx = classNames.bind(styles);
@@ -22,9 +20,9 @@ export interface SelectOption {
 export interface MultiSelectCheckboxProps {
   field: string;
   options: SelectOption[];
-  parent: Filter;
   placeholder: string;
   value?: SelectOption[];
+  onChange: (field: string, selected: string) => void;
 }
 
 /**
@@ -83,10 +81,8 @@ const customStyles = {
 
 /**
  * Creates the MultiSelectCheckbox from the props
- * parent (any): the element creating this multiselect that will have its state
- * updated when a new value is selected
- * field (string): the name of the state's field on the parent that will be
- * updated
+ * onChange (callback): called when selection changes with (field, selected) args
+ * field (string): the name of the field that will be updated
  * options (SelectOption[]): a list of options. Each option object must contain a
  * label, value and isSelected parameters
  * placeholder (string): the placeholder for the multiselect
@@ -95,23 +91,14 @@ const customStyles = {
  * @param props
  */
 export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
-  const handleChange = (
-    selectedOptions: OptionsType<SelectOption>,
-    field: string,
-    parent: Filter,
-  ) => {
+  const handleChange = (selectedOptions: OptionsType<SelectOption>) => {
     const selected =
       selectedOptions
         ?.map(function (option: SelectOption) {
           return option.label;
         })
         .toString() || "";
-    parent.setState({
-      filters: {
-        ...parent.state.filters,
-        [field]: selected,
-      },
-    });
+    props.onChange(props.field, selected);
   };
 
   return (
@@ -120,7 +107,7 @@ export const MultiSelectCheckbox = (props: MultiSelectCheckboxProps) => {
       options={props.options}
       placeholder={props.placeholder}
       value={props.value}
-      onChange={selected => handleChange(selected, props.field, props.parent)}
+      onChange={handleChange}
       hideSelectedOptions={false}
       closeMenuOnSelect={false}
       components={{ Option: CheckboxOption }}

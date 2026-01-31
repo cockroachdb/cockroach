@@ -27,7 +27,7 @@ import {
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
-export class PlansSortedTable extends SortedTable<PlanHashStats> {}
+export const PlansSortedTable = SortedTable<PlanHashStats>;
 
 const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
