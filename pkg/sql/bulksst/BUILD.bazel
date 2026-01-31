@@ -23,6 +23,7 @@ go_library(
     name = "bulksst",
     srcs = [
         "combine_file_info.go",
+        "manifest_conversion.go",
         "sst_file_allocator.go",
         "sst_writer.go",
     ],
@@ -31,6 +32,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cloud",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
