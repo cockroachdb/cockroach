@@ -120,6 +120,7 @@ go_test(
         "main_test.go",
         "pgtest_test.go",
         "pgwire_test.go",
+        "role_mapper_test.go",
         "types_test.go",
     ],
     data = glob(["testdata/**"]),
