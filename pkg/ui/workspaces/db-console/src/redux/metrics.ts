@@ -325,10 +325,19 @@ export function* queryMetricsSaga() {
  * smallest number of batches possible.
  */
 export function* batchAndSendRequests(requests: WithID<TSRequest>[]) {
+  // Dedupe requests by component ID, keeping the most recent (last) request
+  // for each component. This handles race conditions where a component
+  // dispatches multiple requests during the same batching window (e.g.,
+  // when the time window updates while components are mounting).
+  const deduped = new Map<string, WithID<TSRequest>>();
+  for (const request of requests) {
+    deduped.set(request.id, request);
+  }
+  const dedupedRequests = Array.from(deduped.values());
+
   // Construct queryable batches from the set of queued queries. Queries can
   // be dispatched in a batch if they are querying over the same timespan.
-  const batches = groupBy(requests, qr => timespanKey(qr.data));
-  requests = [];
+  const batches = groupBy(dedupedRequests, qr => timespanKey(qr.data));
 
   yield put(fetchMetrics());
   yield all(map(batches, batch => call(sendRequestBatch, batch)));
