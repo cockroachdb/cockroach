@@ -40,6 +40,32 @@ func UseProvidedIdentity(_ context.Context, id string) ([]username.SQLUsername, 
 
 var _ RoleMapper = UseProvidedIdentity
 
+// EnhancedRoleMapper is like RoleMapper but also returns which specific
+// system identity was matched to each database user. This is useful for
+// certificate SAN authentication where multiple identities exist.
+type EnhancedRoleMapper = func(
+	ctx context.Context,
+	systemIdentities []string,
+) ([]identmap.IdentityMapping, error)
+
+// UseProvidedIdentities is the enhanced version that handles multiple identities.
+func UseProvidedIdentities(_ context.Context, ids []string) ([]identmap.IdentityMapping, error) {
+	mappings := make([]identmap.IdentityMapping, 0, len(ids))
+	for _, id := range ids {
+		u, err := username.MakeSQLUsernameFromUserInput(id, username.PurposeValidation)
+		if err != nil {
+			return nil, err
+		}
+		mappings = append(mappings, identmap.IdentityMapping{
+			SystemIdentity: id,
+			MappedUser:     u,
+		})
+	}
+	return mappings, nil
+}
+
+var _ EnhancedRoleMapper = UseProvidedIdentities
+
 // UseSpecifiedIdentity is a RoleMapper that always returns a fixed user.
 func UseSpecifiedIdentity(user username.SQLUsername) RoleMapper {
 	return func(_ context.Context, _ string) ([]username.SQLUsername, error) {
@@ -71,5 +97,28 @@ func HbaMapper(hbaEntry *hba.Entry, identMap *identmap.Conf) RoleMapper {
 			}
 		}
 		return users, nil
+	}
+}
+
+// HbaEnhancedMapper is like HbaMapper but returns the enhanced mapping information
+// that includes which specific system identity mapped to each user. This is used
+// for certificate SAN authentication.
+func HbaEnhancedMapper(hbaEntry *hba.Entry, identMap *identmap.Conf) EnhancedRoleMapper {
+	mapName := hbaEntry.GetOption("map")
+	if mapName == "" {
+		return UseProvidedIdentities
+	}
+	return func(_ context.Context, ids []string) ([]identmap.IdentityMapping, error) {
+		mappings, _, err := identMap.MapMultiple(mapName, ids)
+		if err != nil {
+			return nil, err
+		}
+		for _, mapping := range mappings {
+			if mapping.MappedUser.IsRootUser() || mapping.MappedUser.IsReserved() {
+				return nil, errors.Newf("system identity %q mapped to reserved database role %q",
+					mapping.SystemIdentity, mapping.MappedUser.Normalized())
+			}
+		}
+		return mappings, nil
 	}
 }
