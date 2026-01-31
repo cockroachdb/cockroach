@@ -111,6 +111,7 @@ const (
 	PreparedTransactionsTableName           SystemTableName = "prepared_transactions"
 	InspectErrorsTableName                  SystemTableName = "inspect_errors"
 	StatementHintsTableName                 SystemTableName = "statement_hints"
+	StatementsTableName                     SystemTableName = "statements"
 	TableStatisticsLocksTableName           SystemTableName = "table_statistics_locks"
 )
 
