@@ -1,0 +1,76 @@
+flag,description
+--arch,"architecture override for VM [amd64, arm64, fips]; N.B. fips implies amd64 with openssl"
+--aws-boot-disk-only,Only attach the boot disk. No additional volumes will be provisioned even if specified.
+--aws-config,Path to json for aws configuration; defaults to predefined configuration (default see config.json)
+--aws-cpu-options,Options to specify number of cores and threads per core
+--aws-create-rate-limit,"aws rate limit (per second) for instance creation. This is used to avoid hitting the request limits from aws, which can vary based on the region, and the size of the cluster being created. Try lowering this limit when hitting 'Request limit exceeded' errors. (default 2)"
+--aws-ebs-iops,"Number of IOPs to provision for supported disk types (io1, io2, gp3)"
+--aws-ebs-throughput,"Additional throughput to provision, in MiB/s"
+--aws-ebs-volume,"Additional EBS disk to attached, repeated for extra disks; specified as JSON: {""VolumeType"":""io2"",""VolumeSize"":213,""Iops"":321}"
+--aws-ebs-volume-count,"Number of EBS volumes to create, only used if local-ssd=false and superseded by --aws-ebs-volume (default 1)"
+--aws-ebs-volume-size,"Size in GB of EBS volume, only used if local-ssd=false (default 500)"
+--aws-ebs-volume-type,"Type of the EBS volume, only used if local-ssd=false (default ""gp3"")"
+--aws-enable-multiple-stores,Enable the use of multiple stores by creating one store directory per disk. Default is to raid0 stripe all disks. See repeating --aws-ebs-volume for adding extra volumes.
+--aws-iam-profile,the IAM instance profile to associate with created VMs if non-empty (default "roachprod-testing")
+--aws-image-ami,Override image AMI to use
+--aws-machine-type,Machine type (default "m6i.xlarge")
+--aws-machine-type-ssd,Machine type for --local-ssd (default "m6id.xlarge")
+--aws-profile,Profile to manage cluster in (default "CRLShared-541263489771")
+--aws-use-spot,"use AWS Spot VMs, which are significantly cheaper, but can be preempted by AWS"
+--aws-user,Name of the remote user to SSH as (default "ubuntu")
+--aws-zones,"aws availability zones to use for cluster creation. If zones are formatted as AZ:N where N is an integer, the zone will be repeated N times. If > 1 zone specified, the cluster will be spread out evenly by zone regardless of geo (default [us-east-2a,us-west-2b,eu-west-2b])"
+--azure-boot-disk-only,Only attach the boot disk. No additional volumes will be provisioned even if specified.
+--azure-disk-caching,"Disk caching behavior for attached storage. Valid values are: none, read-only, read-write. Not applicable to Ultra disks. (default ""none"")"
+--azure-enable-multiple-stores,Enable the use of multiple stores by creating one store directory per disk. Default is to raid0 stripe all disks or use ZFS (if --file-system=zfs).
+--azure-machine-type,Machine type (default "Standard_D4_v3")
+--azure-network-disk-count,"Number of network disks to attach, only used if local-ssd=false (default 1)"
+--azure-network-disk-type,"type of network disk [standard-ssd, premium-ssd, premium-ssd-v2, ultra-disk]. only used if local-ssd is false (default ""premium-ssd"")"
+--azure-sync-delete,Wait for deletions to finish before returning
+--azure-timeout,The maximum amount of time for an Azure API operation to take (default 10m0s)
+--azure-ultra-disk-iops,"Number of IOPS provisioned for ultra disk, only used if network-disk-type=ultra-disk (default 5000)"
+--azure-vnet-name,The name of the VNet to use (default "common")
+--azure-volume-size,"Size in GB of network disk volume, only used if local-ssd=false (default 500)"
+--azure-zones,"Zones for cluster, where a zone is a location and availability zone separated by a dash. If zones are formatted as Location-AZ:N where N is an integer, the zone will be repeated N times. If > 1 zone specified, nodes will be geo-distributed regardless of geo (default [eastus-1,canadacentral-1,westus3-1])"
+-c/--clouds,"The cloud provider(s) to use when creating new vm instances: [aws gce azure ibm local] (default [gce])"
+--filesystem,The underlying file system(ext4/zfs/xfs/f2fs/btrfs). ext4 is used by default. (default "ext4")
+--gce-boot-disk-only,Only attach the boot disk. No additional volumes will be provisioned even if specified.
+--gce-boot-disk-type,Type of the boot disk volume (default "pd-ssd")
+--gce-default-project,google cloud project to use to run core roachprod services (default "cockroach-ephemeral")
+--gce-default-service-account,Service account to use if the default project is in use and no --gce-service-account was specified (default "21965078311-compute@developer.gserviceaccount.com")
+--gce-dns-domain,zone domain in gcloud project to use to set up public DNS records (default "roachprod.crdb.io")
+--gce-dns-project,project to use to set up DNS (default "cockroach-shared")
+--gce-dns-zone,zone file in gcloud project to use to set up public DNS records (default "roachprod")
+--gce-enable-cron,Enables the cron service (it is disabled by default)
+--gce-enable-multiple-stores,Enable the use of multiple stores by creating one store directory per disk. Default is to raid0 stripe all disks.
+--gce-image,"Image to use to create the vm, use gcloud compute images list to list available images. Note: this option is ignored if --fips is passed. (default ""ubuntu-2204-jammy-v20240319"")"
+--gce-local-ssd-count,"Number of local SSDs to create, only used if local-ssd=true (default 1)"
+--gce-machine-type,Machine type (default "n2-standard-4")
+--gce-managed,use a managed instance group (enables resizing; load balancing; and health monitoring)
+--gce-managed-dns-domain,zone file in gcloud project to use to set up DNS SRV records (default "roachprod-managed.crdb.io")
+--gce-managed-dns-zone,zone file in gcloud project to use to set up DNS SRV records (default "roachprod-managed")
+--gce-managed-spot-zones,subset of zones in managed instance groups that will use spot instances
+--gce-metadata-project,google cloud project to use to store and fetch SSH keys (default "cockroach-ephemeral")
+--gce-min-cpu-platform,Minimum CPU platform (default "Intel Ice Lake")
+--gce-pd-volume-count,"Number of persistent disk volumes, only used if local-ssd=false (default 1)"
+--gce-pd-volume-provisioned-iops,Provisioned IOPS for the disk volume (required for hyperdisk-balanced; optional for pd-extreme)
+--gce-pd-volume-provisioned-throughput,Provisioned throughput in MiB/s for the disk volume (required for hyperdisk-balanced)
+--gce-pd-volume-size,"Size in GB of persistent disk volume, only used if local-ssd=false (default 500)"
+--gce-pd-volume-type,"Type of the persistent disk volume, only used if local-ssd=false (pd-ssd, pd-balanced, pd-extreme, pd-standard, hyperdisk-balanced) (default ""pd-ssd"")"
+--gce-preemptible,use preemptible GCE instances (lifetime cannot exceed 24h)
+--gce-project,GCE project to manage (default cockroach-ephemeral)
+--gce-service-account,Service account to use
+--gce-terminateOnMigration,use 'TERMINATE' maintenance policy (for GCE live migrations)
+--gce-threads-per-core,"the number of visible threads per physical core (valid values: 1 or 2), default is 0 (auto)"
+--gce-turbo-mode,"enable turbo mode for the instance (only supported on C4 VM families, valid value: 'ALL_CORE_MAX')"
+--gce-use-bulk-insert,use GCP Compute SDK's BulkInsert API for creating VMs (more efficient for large clusters) (default true)
+--gce-use-spot,use spot GCE instances (like preemptible but lifetime can exceed 24h)
+--gce-zones,"Zones for cluster. If zones are formatted as AZ:N where N is an integer, the zone will be repeated N times. If > 1 zone specified, nodes will be geo-distributed regardless of geo (default [us-east1-d,us-west1-b,europe-west2-b,us-east1-b,us-west1-c,europe-west2-c,us-east1-c,us-west1-a,europe-west2-a])"
+--geo,Create geo-distributed cluster
+-h/--help,help for create
+--label,"The label(s) to be used when creating new vm instances, must be in '--label name=value' format and value can't be empty string after trimming space, a value that has space must be quoted by single quotes, gce label name only allows hyphens (-), underscores (_), lowercase characters, numbers and international characters (default [usage=roachprod])"
+-l/--lifetime,Lifetime of the cluster (default 12h0m0s)
+--local-ssd,Use local SSD (default true)
+--local-ssd-no-ext4-barrier,"Mount the local SSD with the ""-o nobarrier"" flag. Ignored if --local-ssd=false is specified. (default true)"
+-n/--nodes,"Total number of nodes, distributed across all clouds (default 4)"
+--os-volume-size,OS disk volume size in GB (default 10)
+-u/--username,"Username to run under, detect if blank (default ""will.choe"")"

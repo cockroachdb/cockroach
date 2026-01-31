@@ -1,0 +1,1478 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+go_test(
+    name = "help_test",
+    size = "small",
+    srcs = [
+        "help_test.go",
+        "main_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "adminurl",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "adminurl_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "cached_hosts",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "cached_hosts_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "chaos",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "chaos_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "completion",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "completion_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "create",
+    size = "enormous",
+    srcs = [
+        "main_test.go",
+        "create_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "deploy",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "deploy_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "destroy_dns",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "destroy_dns_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "destroy",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "destroy_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "distribute_certs",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "distribute_certs_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "download",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "download_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "extend",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "extend_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "fetch_certs",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "fetch_certs_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "fetchlogs",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "fetchlogs_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "fluent_bit_start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "fluent_bit_start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "fluent_bit_stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "fluent_bit_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "gc",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "gc_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "get_latest_pprof",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "get_latest_pprof_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "get_providers",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "get_providers_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "get",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "get_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grafana_annotation",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grafana_annotation_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grafana_dump",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grafana_dump_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grafana_start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grafana_start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grafana_stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grafana_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grafanaurl",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grafanaurl_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "grow",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "grow_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "init",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "init_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "install",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "install_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "ip",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "ip_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "jaeger_start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "jaeger_start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "jaeger_stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "jaeger_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "jaegerurl",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "jaegerurl_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "list",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "list_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "load_balancer",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "load_balancer_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "logs",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "logs_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "monitor",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "monitor_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "opentelemetry_start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "opentelemetry_start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "opentelemetry_stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "opentelemetry_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "parca_agent_start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "parca_agent_start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "parca_agent_stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "parca_agent_stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "pgurl",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "pgurl_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "populate_etc_hosts",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "populate_etc_hosts_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "pprof",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "pprof_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "put",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "put_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "pyroscope",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "pyroscope_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "reformat",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "reformat_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "reset",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "reset_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "run",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "run_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "setup_ssh",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "setup_ssh_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "shrink",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "shrink_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "signal",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "signal_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "snapshot",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "snapshot_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "sql",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "sql_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "ssh_keys",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "ssh_keys_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "stage",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "stage_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "stageurl",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "stageurl_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "start_sql",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "start_sql_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "start",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "start_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "status",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "status_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "stop_sql",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "stop_sql_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "stop",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "stop_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "storage",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "storage_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "sync",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "sync_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "update_targets",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "update_targets_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "update",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "update_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "version",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "version_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+go_test(
+    name = "wipe",
+    size = "small",
+    srcs = [
+        "main_test.go",
+        "wipe_test.go",
+    ],
+    data = [
+        "//pkg/cmd/roachprod",
+    ],
+    env = {
+        "ROACHPROD_BINARY": "$(location //pkg/cmd/roachprod)",
+        "HOME": "$$TEST_TMPDIR",
+    },
+    tags = [
+        "integration",
+    ],
+    deps = [
+        "//pkg/cmd/roachprod/test/framework",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
