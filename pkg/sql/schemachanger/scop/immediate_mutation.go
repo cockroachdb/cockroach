@@ -1070,6 +1070,7 @@ type UpdateFunctionRelationReferences struct {
 type UpdateTableBackReferencesInRelations struct {
 	immediateMutationOp
 	TableID            descpb.ID
+	TriggerID          descpb.TriggerID
 	RelationReferences []scpb.TriggerDeps_RelationReference
 }
 

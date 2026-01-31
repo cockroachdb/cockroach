@@ -82,7 +82,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
- │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104,"TriggerID":1}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}
@@ -239,7 +239,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
- │              ├── UpdateTableBackReferencesInRelations {"TableID":104}
+ │              ├── UpdateTableBackReferencesInRelations {"TableID":104,"TriggerID":1}
  │              ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"t","SchemaID":101}}

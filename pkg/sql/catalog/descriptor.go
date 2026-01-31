@@ -655,9 +655,16 @@ type TableDescriptor interface {
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 
 	// GetAllReferencedRelationIDsExceptFKs returns the IDs of all relations
-	// this table depends on, excluding foreign key dependencies. Dependencies can
-	// originate from triggers, policies, or direct references in views.
-	GetAllReferencedRelationIDsExceptFKs() descpb.IDs
+	// this table depends on, excluding foreign key dependencies. Dependencies are
+	// returned separately by source:
+	//   - byTriggerID: maps each trigger ID to the set of relation IDs it references
+	//   - byPolicyID: maps each policy ID to the set of relation IDs it references
+	//   - fromView: relation IDs referenced directly by the view's DependsOn
+	GetAllReferencedRelationIDsExceptFKs() (
+		byTriggerID map[descpb.TriggerID]DescriptorIDSet,
+		byPolicyID map[descpb.PolicyID]DescriptorIDSet,
+		fromView DescriptorIDSet,
+	)
 
 	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 	// this table references. It takes in a function that returns the TypeDescriptor

@@ -1137,6 +1137,10 @@ message TableDescriptor {
     // Sequences referenced only by its ID have the ability to be renamed.
     optional bool by_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ByID"];
+    // TriggerID is set when this dependency originates from a trigger on the
+    // dependent relation. A value of 0 indicates no trigger.
+    optional uint32 trigger_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "TriggerID"];
   }
 
   // All references to this table/view from other views and sequences in the system,
