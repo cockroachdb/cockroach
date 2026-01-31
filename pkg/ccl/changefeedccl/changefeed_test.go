@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // multi-tenant tests
@@ -111,9 +112,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/golang/mock/gomock"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kfake"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 var testServerRegion = "us-east-1"
@@ -12674,6 +12680,167 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 			time.Sleep(checkStatusInterval)
 		}
 	})
+}
+
+func TestChangefeedCreateKafkaTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	setupTables := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+		sqlDB.Exec(t, `CREATE TABLE bar (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1);`)
+	}
+	for _, createKafkaTopics := range []string{"yes", "no", "auto", ""} {
+		name := fmt.Sprintf("create_kafka_topics=%s", createKafkaTopics)
+		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			kcli := mocks.NewMockKafkaClientV2(ctrl)
+			kadminCli := mocks.NewMockKafkaAdminClientV2(ctrl)
+			kcli.EXPECT().Close().AnyTimes().Return()
+
+			// Channel to signal when topic creation is complete (only used for create_kafka_topics=yes).
+			topicsCreatedCh := make(chan struct{})
+			var closeOnce sync.Once
+
+			if createKafkaTopics == "yes" {
+				listTopicsReturn := kadm.TopicDetails{
+					"foo": {Topic: "foo", Err: kerr.UnknownTopicOrPartition},
+					"bar": {Topic: "bar", Err: kerr.UnknownTopicOrPartition},
+				}
+				createTopicsReturn := kadm.CreateTopicResponses{
+					"foo": {Err: nil},
+					"bar": {Err: nil},
+				}
+				kadminCli.EXPECT().ListTopics(gomock.Any(), gomock.Any(), gomock.Any()).Return(listTopicsReturn, nil).MinTimes(1)
+				kadminCli.EXPECT().ValidateCreateTopics(gomock.Any(), int32(-1), int16(-1), nil, gomock.Any(), gomock.Any()).Return(createTopicsReturn, nil).MinTimes(1)
+				kadminCli.EXPECT().CreateTopics(gomock.Any(), int32(-1), int16(-1), nil, gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, _ int32, _ int16, _ map[string]*string, _ ...string) (kadm.CreateTopicResponses, error) {
+						closeOnce.Do(func() { close(topicsCreatedCh) })
+						return createTopicsReturn, nil
+					}).MinTimes(1)
+			}
+
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				setupTables(t, sqlDB)
+				KafkaV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+				sqlDB.Exec(t, "select crdb_internal.set_vmodule('changefeed_stmt=9')")
+
+				withCreateKafkaTopics := ""
+				if createKafkaTopics != "" {
+					withCreateKafkaTopics = fmt.Sprintf("WITH create_kafka_topics='%s'", createKafkaTopics)
+				}
+				// Opt out of enriched envelope since it can change topic naming behavior.
+				feed := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR FOO, BAR %s", withCreateKafkaTopics),
+					optOutOfMetamorphicEnrichedEnvelope{reason: "enriched envelope changes topic naming"})
+				defer closeFeed(t, feed)
+
+				// For create_kafka_topics=yes, wait for topic creation to complete before closing the feed.
+				if createKafkaTopics == "yes" {
+					select {
+					case <-topicsCreatedCh:
+					case <-time.After(30 * time.Second):
+						t.Fatal("timed out waiting for topics to be created")
+					}
+				}
+			}
+
+			updateKnobsFn := func(knobs *base.TestingKnobs) {
+				cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+				cfKnobs.KafkaSinkV2Knobs.OverrideClient = func(opts []kgo.Opt) (KafkaClientV2, KafkaAdminClientV2) {
+					return kcli, kadminCli
+				}
+				cfKnobs.KafkaSinkV2Knobs.SkipCreateTopicVersionCheck = createKafkaTopics == "yes"
+			}
+
+			cdcTest(t, testFn, feedTestRestrictSinks("kafka"), feedTestNoExternalConnection, withKnobsFn(updateKnobsFn))
+		})
+	}
+}
+
+type kfakeLogAdapter struct {
+	t *testing.T
+}
+
+func (k *kfakeLogAdapter) Logf(level kfake.LogLevel, msg string, args ...any) {
+	k.t.Logf(msg, args...)
+}
+
+func (k *kfakeLogAdapter) Level() kfake.LogLevel {
+	return kfake.LogLevelDebug
+}
+
+var _ kfake.Logger = &kfakeLogAdapter{}
+
+func TestDatabaseLevelChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Headers are not supported in the v1 kafka sink.
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true`)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+
+		cases := []struct {
+			name        string
+			headersArg  string
+			wantHeaders cdctest.Headers
+			expectErr   bool
+		}{
+			{
+				name:        "single header",
+				headersArg:  `{"X-Someheader": "somevalue"}`,
+				wantHeaders: cdctest.Headers{{K: "X-Someheader", V: []byte("somevalue")}},
+			},
+			{
+				name:       "multiple headers",
+				headersArg: `{"X-Someheader": "somevalue", "X-Someotherheader": "someothervalue"}`,
+				wantHeaders: cdctest.Headers{
+					{K: "X-Someheader", V: []byte("somevalue")},
+					{K: "X-Someotherheader", V: []byte("someothervalue")},
+				},
+			},
+			{
+				name:       "inappropriate json",
+				headersArg: `4`,
+				expectErr:  true,
+			},
+			{
+				name:       "also inappropriate json",
+				headersArg: `["X-Someheader", "somevalue"]`,
+				expectErr:  true,
+			},
+			{
+				name:       "invalid json",
+				headersArg: `xxxx`,
+				expectErr:  true,
+			},
+		}
+
+		for _, c := range cases {
+			feed, err := f.Feed(fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH extra_headers='%s'`, c.headersArg))
+			if c.expectErr {
+				require.Error(t, err)
+				continue
+			} else {
+				require.NoError(t, err)
+			}
+
+			assertPayloads(t, feed, []string{
+				fmt.Sprintf(`foo: [1]%s->{"after": {"key": 1}}`, c.wantHeaders.String()),
+			})
+			closeFeed(t, feed)
+		}
+	}
+
+	cdcTest(t, testFn, feedTestRestrictSinks("kafka", "webhook"))
 }
 
 func TestChangefeedExtraHeaders(t *testing.T) {
