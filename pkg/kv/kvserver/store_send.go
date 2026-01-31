@@ -26,7 +26,7 @@ import (
 // return value for admission control integration.
 type SenderWithWriteBytes interface {
 	SendWithWriteBytes(
-		ctx context.Context, ba *kvpb.BatchRequest,
+		ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 	) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error)
 }
 
@@ -34,7 +34,7 @@ type SenderWithWriteBytes interface {
 // the StoreWriteBytes after each call.
 func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
 	return kv.SenderFunc(func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		br, writeBytes, pErr := swb.SendWithWriteBytes(ctx, ba)
+		br, writeBytes, pErr := swb.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
 		writeBytes.Release()
 		return br, pErr
 	})
@@ -59,7 +59,7 @@ func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
@@ -194,7 +194,7 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
-		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
@@ -443,7 +443,9 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		})
 	}
 
-	br, writeBytes, pErr := s.SendWithWriteBytes(ctx, queryResBa)
+	// Pass empty AdmissionInfo since this is an internal request that bypasses
+	// admission control.
+	br, writeBytes, pErr := s.SendWithWriteBytes(ctx, queryResBa, kvadmission.AdmissionInfo{})
 	writeBytes.Release()
 	if pErr != nil {
 		return ba, pErr
