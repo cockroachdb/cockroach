@@ -418,7 +418,7 @@ EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
 ----
 │
 └ Node 1
-  └ *sql.planNodeToRowSource
+  └ *sql.insertProcessor
     └ *colexecjoin.crossJoiner
       ├ *sql.planNodeToRowSource
       └ *colfetcher.ColBatchScan
@@ -475,7 +475,7 @@ EXPLAIN (VEC) DELETE FROM t70438 WHERE k=3 OR v=6
 ----
 │
 └ Node 1
-  └ *sql.planNodeToRowSource
+  └ *sql.deleteProcessor
     └ *colexec.UnorderedDistinct
       └ *colexec.SerialUnorderedSynchronizer
         ├ *colfetcher.ColBatchScan

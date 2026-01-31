@@ -15,17 +15,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -109,14 +117,14 @@ type insertFastPathCheck struct {
 	spanSplitter span.Splitter
 }
 
-func (c *insertFastPathCheck) init(params runParams) error {
+func (c *insertFastPathCheck) init(evalCtx *eval.Context, execCfg *ExecutorConfig) error {
 	idx := c.ReferencedIndex.(*optIndex)
 	c.tabDesc = c.ReferencedTable.(*optTable).desc
 	c.idx = idx.idx
 
-	codec := params.ExecCfg().Codec
+	codec := execCfg.Codec
 	c.keyPrefix = rowenc.MakeIndexKeyPrefix(codec, c.tabDesc.GetID(), c.idx.GetID())
-	c.spanBuilder.InitAllowingExternalRowData(params.EvalContext(), codec, c.tabDesc, c.idx)
+	c.spanBuilder.InitAllowingExternalRowData(evalCtx, codec, c.tabDesc, c.idx)
 
 	if c.Locking.MustLockAllRequestedColumnFamilies() {
 		c.spanSplitter = span.MakeSplitterForSideEffect(
@@ -304,65 +312,281 @@ func (r *insertFastPathRun) addFKChecks(
 	return nil
 }
 
+func (n *insertFastPathNode) startExec(params runParams) error {
+	panic("insertFastPathNode cannot be run in local mode")
+}
+
+// Next implements the planNode interface.
+func (n *insertFastPathNode) Next(_ runParams) (bool, error) {
+	panic("insertFastPathNode cannot be run in local mode")
+}
+
+// Values implements the planNode interface.
+func (n *insertFastPathNode) Values() tree.Datums {
+	panic("insertFastPathNode cannot be run in local mode")
+}
+
+func (n *insertFastPathNode) Close(ctx context.Context) {
+	n.run.close(ctx)
+	*n = insertFastPathNode{}
+	insertFastPathNodePool.Put(n)
+}
+
+func (n *insertFastPathNode) returnsRowsAffected() bool {
+	return !n.run.rowsNeeded
+}
+
+// See planner.autoCommit.
+func (n *insertFastPathNode) enableAutoCommit() {
+	n.run.ti.enableAutoCommit()
+}
+
+// insertFastPathProcessor is a LocalProcessor that wraps insertFastPathNode execution logic.
+type insertFastPathProcessor struct {
+	execinfra.ProcessorBase
+
+	node *insertFastPathNode
+
+	outputTypes []*types.T
+
+	encDatumScratch rowenc.EncDatumRow
+
+	cancelChecker cancelchecker.CancelChecker
+}
+
+var _ execinfra.LocalProcessor = &insertFastPathProcessor{}
+var _ execopnode.OpNode = &insertFastPathProcessor{}
+
+// Init initializes the insertFastPathProcessor.
+func (i *insertFastPathProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowCtx.Txn != nil {
+			i.node.run.contentionEventsListener.Init(flowCtx.Txn.ID())
+		}
+		i.ExecStatsForTrace = i.execStatsForTrace
+	}
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("insert-fast-path-mem"))
+	return i.InitWithEvalCtx(
+		ctx, i, post, i.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				metrics := execinfrapb.GetMetricsMeta()
+				metrics.RowsWritten = i.node.run.rowsAffected()
+				metrics.IndexRowsWritten = i.node.run.ti.indexRowsWritten
+				metrics.IndexBytesWritten = i.node.run.ti.indexBytesWritten
+				metrics.KVCPUTime = i.node.run.kvCPUTime
+				meta := []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+				i.close()
+				return meta
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the insertFastPathProcessor.
+func (i *insertFastPathProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	panic(errors.AssertionFailedf("insertFastPathProcessor does not have an input RowSource"))
+}
+
+// Start begins execution of the insertFastPathProcessor.
+func (i *insertFastPathProcessor) Start(ctx context.Context) {
+	i.StartInternal(ctx, "insertFastPathProcessor",
+		&i.node.run.contentionEventsListener, &i.node.run.tenantConsumptionListener,
+	)
+	i.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
+	i.node.run.traceKV = i.FlowCtx.TraceKV
+	i.node.run.init(i.FlowCtx.EvalCtx, i.MemMonitor, i.node.columns)
+
+	i.node.run.numInputCols = len(i.node.input[0])
+	i.node.run.inputBuf = make(tree.Datums, len(i.node.input)*i.node.run.numInputCols)
+
+	if len(i.node.input) > 1 {
+		i.node.run.fkSpanMap = make(map[string]struct{})
+	}
+
+	if len(i.node.run.fkChecks) > 0 {
+		for j := range i.node.run.fkChecks {
+			if err := i.node.run.fkChecks[j].init(i.FlowCtx.EvalCtx, i.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)); err != nil {
+				i.MoveToDraining(err)
+				return
+			}
+		}
+		maxSpans := len(i.node.run.fkChecks) * len(i.node.input)
+		// Any FK checks using locking should have lock wait policy BLOCK.
+		i.node.run.fkBatch.Header.WaitPolicy = lock.WaitPolicy_Block
+		i.node.run.fkBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
+		i.node.run.fkSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
+		if len(i.node.input) > 1 {
+			i.node.run.fkSpanMap = make(map[string]struct{}, maxSpans)
+		}
+	}
+
+	if len(i.node.run.uniqChecks) > 0 {
+		numChecksPerInputRow := 0
+		for j := range i.node.run.uniqChecks {
+			if err := i.node.run.uniqChecks[j].init(i.FlowCtx.EvalCtx, i.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)); err != nil {
+				i.MoveToDraining(err)
+				return
+			}
+			// Each row inserted may result in multiple KV requests to perform the
+			// uniqueness checks (1 KV request per entry in DatumsFromConstraint).
+			numChecksPerInputRow += len(i.node.run.uniqChecks[j].DatumsFromConstraint)
+		}
+		maxSpans := len(i.node.input) * numChecksPerInputRow
+		i.node.run.uniqBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
+		i.node.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
+	}
+
+	if err := i.node.run.ti.init(i.Ctx(), i.FlowCtx.Txn, i.FlowCtx.EvalCtx); err != nil {
+		i.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion. InsertFastPath does everything in one
+	// batch, so no need to loop.
+	if err := i.processBatch(); err != nil {
+		i.MoveToDraining(err)
+	}
+}
+
+// processBatch implements the batch processing logic moved from insertFastPathNode.processBatch.
+func (i *insertFastPathProcessor) processBatch() error {
+	// The fast path node does everything in one batch.
+	for rowIdx, tupleRow := range i.node.input {
+		if err := i.cancelChecker.Check(); err != nil {
+			return err
+		}
+		inputRow := i.node.run.inputRow(rowIdx)
+		for col, typedExpr := range tupleRow {
+			var err error
+			inputRow[col], err = eval.Expr(i.Ctx(), i.FlowCtx.EvalCtx, typedExpr)
+			if err != nil {
+				err = interceptAlterColumnTypeParseError(i.node.run.insertCols, col, err)
+				return err
+			}
+		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			execCfg := i.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)
+			if fn := execCfg.TestingKnobs.AfterArbiterRead; fn != nil {
+				fn(i.FlowCtx.EvalCtx.Planner.(*planner).stmt.SQL)
+			}
+		}
+
+		// Process the insertion for the current source row, potentially.
+		// accumulating the result row for later.
+		if err := i.node.run.processSourceRow(i.Ctx(), i.FlowCtx.EvalCtx, &i.SemaCtx, i.FlowCtx.EvalCtx.SessionData(), inputRow); err != nil {
+			return err
+		}
+
+		// Add uniqueness checks.
+		if len(i.node.run.uniqChecks) > 0 {
+			if _, err := i.node.run.addUniqChecks(i.Ctx(), rowIdx, inputRow, false /* forTesting */); err != nil {
+				return err
+			}
+		}
+
+		// Add FK existence checks.
+		if len(i.node.run.fkChecks) > 0 {
+			if err := i.node.run.addFKChecks(i.Ctx(), rowIdx, inputRow); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(i.node.run.fkBatch.Requests) > 0 && len(i.node.run.uniqBatch.Requests) > 0 {
+		// Perform the foreign key and uniqueness checks in a single batch.
+		if err := i.runFKUniqChecks(); err != nil {
+			return err
+		}
+	} else {
+		// Perform the uniqueness checks.
+		if err := i.runUniqChecks(); err != nil {
+			return err
+		}
+
+		// Perform the FK checks.
+		// TODO(radu): we could run the FK batch in parallel with the main batch (if
+		// we aren't auto-committing).
+		if err := i.runFKChecks(); err != nil {
+			return err
+		}
+	}
+	i.node.run.ti.setRowsWrittenLimit(i.FlowCtx.EvalCtx.SessionData())
+	if err := i.node.run.ti.finalize(i.Ctx()); err != nil {
+		return err
+	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	i.FlowCtx.Cfg.StatsRefresher.NotifyMutation(i.Ctx(), i.node.run.ti.ri.Helper.TableDesc, len(i.node.input))
+
+	return nil
+}
+
 // runUniqChecks runs the uniqBatch and checks that no spans return rows.
-func (n *insertFastPathNode) runUniqChecks(params runParams) error {
-	if len(n.run.uniqBatch.Requests) == 0 {
+func (i *insertFastPathProcessor) runUniqChecks() error {
+	if len(i.node.run.uniqBatch.Requests) == 0 {
 		return nil
 	}
-	defer n.run.uniqBatch.Reset()
+	defer i.node.run.uniqBatch.Reset()
 
 	// Run the uniqueness checks batch.
-	ba := n.run.uniqBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "uniqueness check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	ba := i.node.run.uniqBatch.ShallowCopy()
+	log.VEventf(i.Ctx(), 2, "uniqueness check: sending a batch with %d requests", len(ba.Requests))
+	br, err := i.FlowCtx.Txn.Send(i.Ctx(), ba)
 	if err != nil {
 		return err.GoError()
 	}
 
 	// Accumulate CPU time from the BatchResponse.
 	if br.CPUTime > 0 {
-		n.run.kvCPUTime += br.CPUTime
+		i.node.run.kvCPUTime += br.CPUTime
 	}
 
-	for i := range br.Responses {
-		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
+	for j := range br.Responses {
+		resp := br.Responses[j].GetInner().(*kvpb.ScanResponse)
 		if len(resp.Rows) > 0 {
 			// Found results for lookup; generate the uniqueness violation error.
-			info := n.run.uniqSpanInfo[i]
-			return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+			info := i.node.run.uniqSpanInfo[j]
+			return info.check.errorForRow(i.node.run.inputRow(info.rowIdx))
 		}
 	}
 
 	return nil
 }
 
-// runFKChecks runs the fkBatch and checks that all spans return at least one
-// key.
-func (n *insertFastPathNode) runFKChecks(params runParams) error {
-	if len(n.run.fkBatch.Requests) == 0 {
+// runFKChecks runs the fkBatch and checks that all spans return at least one key.
+func (i *insertFastPathProcessor) runFKChecks() error {
+	if len(i.node.run.fkBatch.Requests) == 0 {
 		return nil
 	}
-	defer n.run.fkBatch.Reset()
+	defer i.node.run.fkBatch.Reset()
 
 	// Run the FK checks batch.
-	ba := n.run.fkBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "fk check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	ba := i.node.run.fkBatch.ShallowCopy()
+	log.VEventf(i.Ctx(), 2, "fk check: sending a batch with %d requests", len(ba.Requests))
+	br, err := i.FlowCtx.Txn.Send(i.Ctx(), ba)
 	if err != nil {
 		return err.GoError()
 	}
 
 	// Accumulate CPU time from the BatchResponse.
 	if br.CPUTime > 0 {
-		n.run.kvCPUTime += br.CPUTime
+		i.node.run.kvCPUTime += br.CPUTime
 	}
 
-	for i := range br.Responses {
-		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
+	for j := range br.Responses {
+		resp := br.Responses[j].GetInner().(*kvpb.ScanResponse)
 		if len(resp.Rows) == 0 {
 			// No results for lookup; generate the violation error.
-			info := n.run.fkSpanInfo[i]
-			return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+			info := i.node.run.fkSpanInfo[j]
+			return info.check.errorForRow(i.node.run.inputRow(info.rowIdx))
 		}
 	}
 
@@ -372,41 +596,39 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 // runFKUniqChecks combines the fkBatch and uniqBatch into a single batch and
 // then sends the combined batch, so that the requests may be processed in
 // parallel. Responses are processed to generate appropriate errors, similar to
-// what's done in runFKChecks and runUniqChecks. It is expected that both
-// `n.run.uniqBatch.Requests` and `n.run.fkBatch.Requests` hold requests when
-// this function is called.
-func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
-	defer n.run.uniqBatch.Reset()
-	defer n.run.fkBatch.Reset()
+// what's done in runFKChecks and runUniqChecks.
+func (i *insertFastPathProcessor) runFKUniqChecks() error {
+	defer i.node.run.uniqBatch.Reset()
+	defer i.node.run.fkBatch.Reset()
 
-	n.run.uniqBatch.Requests = append(n.run.uniqBatch.Requests, n.run.fkBatch.Requests...)
+	i.node.run.uniqBatch.Requests = append(i.node.run.uniqBatch.Requests, i.node.run.fkBatch.Requests...)
 
 	// Run the combined uniqueness and FK checks batch.
-	ba := n.run.uniqBatch.ShallowCopy()
-	log.VEventf(params.ctx, 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
-	br, err := params.p.txn.Send(params.ctx, ba)
+	ba := i.node.run.uniqBatch.ShallowCopy()
+	log.VEventf(i.Ctx(), 2, "fk / uniqueness check: sending a batch with %d requests", len(ba.Requests))
+	br, err := i.FlowCtx.Txn.Send(i.Ctx(), ba)
 	if err != nil {
 		return err.GoError()
 	}
 
 	// Accumulate CPU time from the BatchResponse.
 	if br.CPUTime > 0 {
-		n.run.kvCPUTime += br.CPUTime
+		i.node.run.kvCPUTime += br.CPUTime
 	}
 
-	for i := range br.Responses {
-		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
-		if i < len(n.run.uniqSpanInfo) {
+	for j := range br.Responses {
+		resp := br.Responses[j].GetInner().(*kvpb.ScanResponse)
+		if j < len(i.node.run.uniqSpanInfo) {
 			if len(resp.Rows) > 0 {
 				// Found results for lookup; generate the uniqueness violation error.
-				info := n.run.uniqSpanInfo[i]
-				return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+				info := i.node.run.uniqSpanInfo[j]
+				return info.check.errorForRow(i.node.run.inputRow(info.rowIdx))
 			}
 		} else {
 			if len(resp.Rows) == 0 {
 				// No results for lookup; generate the FK violation error.
-				info := n.run.fkSpanInfo[i-len(n.run.uniqSpanInfo)]
-				return info.check.errorForRow(n.run.inputRow(info.rowIdx))
+				info := i.node.run.fkSpanInfo[j-len(i.node.run.uniqSpanInfo)]
+				return info.check.errorForRow(i.node.run.inputRow(info.rowIdx))
 			}
 		}
 	}
@@ -414,171 +636,48 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 	return nil
 }
 
-func (n *insertFastPathNode) startExec(params runParams) error {
-	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	n.run.init(params, n.columns)
-
-	n.run.numInputCols = len(n.input[0])
-	n.run.inputBuf = make(tree.Datums, len(n.input)*n.run.numInputCols)
-
-	if len(n.input) > 1 {
-		n.run.fkSpanMap = make(map[string]struct{})
+// Next implements the RowSource interface.
+func (i *insertFastPathProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if i.State != execinfra.StateRunning {
+		return nil, i.DrainHelper()
 	}
 
-	if len(n.run.fkChecks) > 0 {
-		for i := range n.run.fkChecks {
-			if err := n.run.fkChecks[i].init(params); err != nil {
-				return err
-			}
+	// Return next row from accumulated results.
+	var err error
+	for i.node.run.next() {
+		datumRow := i.node.run.values()
+		if cap(i.encDatumScratch) < len(datumRow) {
+			i.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
 		}
-		maxSpans := len(n.run.fkChecks) * len(n.input)
-		// Any FK checks using locking should have lock wait policy BLOCK.
-		n.run.fkBatch.Header.WaitPolicy = lock.WaitPolicy_Block
-		n.run.fkBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
-		n.run.fkSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
-		if len(n.input) > 1 {
-			n.run.fkSpanMap = make(map[string]struct{}, maxSpans)
-		}
-	}
-
-	if len(n.run.uniqChecks) > 0 {
-		numChecksPerInputRow := 0
-		for i := range n.run.uniqChecks {
-			if err := n.run.uniqChecks[i].init(params); err != nil {
-				return err
-			}
-			// Each row inserted may result in multiple KV requests to perform the
-			// uniqueness checks (1 KV request per entry in DatumsFromConstraint).
-			numChecksPerInputRow += len(n.run.uniqChecks[i].DatumsFromConstraint)
-		}
-		maxSpans := len(n.input) * numChecksPerInputRow
-		n.run.uniqBatch.Requests = make([]kvpb.RequestUnion, 0, maxSpans)
-		n.run.uniqSpanInfo = make([]insertFastPathFKUniqSpanInfo, 0, maxSpans)
-	}
-
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
-		return err
-	}
-
-	// Run the mutation to completion. InsertFastPath does everything in one
-	// batch, so no need to loop.
-	return n.processBatch(params)
-}
-
-// Next implements the planNode interface.
-func (n *insertFastPathNode) Next(_ runParams) (bool, error) {
-	return n.run.next(), nil
-}
-
-// Values implements the planNode interface.
-func (n *insertFastPathNode) Values() tree.Datums {
-	return n.run.values()
-}
-
-func (n *insertFastPathNode) processBatch(params runParams) error {
-	// The fast path node does everything in one batch.
-	for rowIdx, tupleRow := range n.input {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return err
-		}
-		inputRow := n.run.inputRow(rowIdx)
-		for col, typedExpr := range tupleRow {
-			var err error
-			inputRow[col], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
+		encRow := i.encDatumScratch[:len(datumRow)]
+		for j, datum := range datumRow {
+			encRow[j], err = rowenc.DatumToEncDatum(i.outputTypes[j], datum)
 			if err != nil {
-				err = interceptAlterColumnTypeParseError(n.run.insertCols, col, err)
-				return err
+				i.MoveToDraining(err)
+				return nil, i.DrainHelper()
 			}
 		}
-
-		if buildutil.CrdbTestBuild {
-			// This testing knob allows us to suspend execution to force a race condition.
-			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn(params.p.stmt.SQL)
-			}
-		}
-
-		// Process the insertion for the current source row, potentially
-		// accumulating the result row for later.
-		if err := n.run.processSourceRow(params, inputRow); err != nil {
-			return err
-		}
-
-		// Add uniqueness checks.
-		if len(n.run.uniqChecks) > 0 {
-			if _, err := n.run.addUniqChecks(params.ctx, rowIdx, inputRow, false /* forTesting */); err != nil {
-				return err
-			}
-		}
-
-		// Add FK existence checks.
-		if len(n.run.fkChecks) > 0 {
-			if err := n.run.addFKChecks(params.ctx, rowIdx, inputRow); err != nil {
-				return err
-			}
+		if outRow := i.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
 		}
 	}
 
-	if len(n.run.fkBatch.Requests) > 0 && len(n.run.uniqBatch.Requests) > 0 {
-		// Perform the foreign key and uniqueness checks in a single batch.
-		if err := n.runFKUniqChecks(params); err != nil {
-			return err
-		}
-	} else {
-		// Perform the uniqueness checks.
-		if err := n.runUniqChecks(params); err != nil {
-			return err
-		}
+	// No more rows to return.
+	i.MoveToDraining(nil)
+	return nil, i.DrainHelper()
+}
 
-		// Perform the FK checks.
-		// TODO(radu): we could run the FK batch in parallel with the main batch (if
-		// we aren't auto-committing).
-		if err := n.runFKChecks(params); err != nil {
-			return err
-		}
+func (i *insertFastPathProcessor) close() {
+	if i.InternalClose() {
+		i.node.run.close(i.Ctx())
+		i.MemMonitor.Stop(i.Ctx())
 	}
-	n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-	if err := n.run.ti.finalize(params.ctx); err != nil {
-		return err
-	}
-
-	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, n.run.ti.ri.Helper.TableDesc, len(n.input))
-
-	return nil
 }
 
-func (n *insertFastPathNode) Close(ctx context.Context) {
-	n.run.close(ctx)
-	*n = insertFastPathNode{}
-	insertFastPathNodePool.Put(n)
-}
-
-func (n *insertFastPathNode) rowsWritten() int64 {
-	return n.run.rowsAffected()
-}
-
-func (n *insertFastPathNode) indexRowsWritten() int64 {
-	return n.run.ti.indexRowsWritten
-}
-
-func (n *insertFastPathNode) indexBytesWritten() int64 {
-	return n.run.ti.indexBytesWritten
-}
-
-func (n *insertFastPathNode) returnsRowsAffected() bool {
-	return !n.run.rowsNeeded
-}
-
-func (n *insertFastPathNode) kvCPUTime() int64 {
-	return n.run.ti.kvCPUTime + n.run.kvCPUTime
-}
-
-// See planner.autoCommit.
-func (n *insertFastPathNode) enableAutoCommit() {
-	n.run.ti.enableAutoCommit()
+// ConsumerClosed implements the RowSource interface.
+func (i *insertFastPathProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	i.close()
 }
 
 // interceptAlterColumnTypeParseError wraps a type parsing error with a warning
@@ -640,4 +739,21 @@ func interceptAlterColumnTypeParseError(insertCols []catalog.Column, colNum int,
 	}
 
 	return err
+}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (i *insertFastPathProcessor) ChildCount(verbose bool) int {
+	return 0
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (i *insertFastPathProcessor) Child(nth int, verbose bool) execopnode.OpNode {
+	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (i *insertFastPathProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	ret := &execinfrapb.ComponentStats{Output: i.OutputHelper.Stats()}
+	i.node.run.populateExecStatsForTrace(ret)
+	return ret
 }

@@ -55,7 +55,29 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeUnqualifiedTypeName(desc.GetName())
+
+	// Get the schema name for proper qualification. This ensures type names
+	// include the schema qualifier (e.g., "public.greeting" instead of just
+	// "greeting") which is important for error messages and display.
+	var name tree.TypeName
+	if parentSchemaID := desc.GetParentSchemaID(); parentSchemaID != descpb.InvalidID {
+		schemaDesc, err := dt.g.Desc(ctx, parentSchemaID)
+		if err != nil {
+			// If the schema descriptor isn't found, it may have been dropped or this
+			// is an inconsistent state. Fall back to unqualified name rather than
+			// failing entirely, since the type name is often used in error messages.
+			if !errors.Is(err, catalog.ErrDescriptorNotFound) {
+				// For non-"not found" errors, propagate them.
+				return tree.TypeName{}, nil, err
+			}
+			name = tree.MakeUnqualifiedTypeName(desc.GetName())
+		} else {
+			name = tree.MakeSchemaQualifiedTypeName(schemaDesc.GetName(), desc.GetName())
+		}
+	} else {
+		name = tree.MakeUnqualifiedTypeName(desc.GetName())
+	}
+
 	switch t := desc.(type) {
 	case catalog.TypeDescriptor:
 		// User-defined type.

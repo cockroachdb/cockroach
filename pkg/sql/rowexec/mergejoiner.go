@@ -64,8 +64,8 @@ func newMergeJoiner(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		m.leftSource = newInputStatCollector(m.leftSource)
-		m.rightSource = newInputStatCollector(m.rightSource)
+		m.leftSource = NewInputStatCollector(m.leftSource)
+		m.rightSource = NewInputStatCollector(m.rightSource)
 		m.ExecStatsForTrace = m.execStatsForTrace
 	}
 
@@ -260,11 +260,11 @@ func (m *mergeJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	lis, ok := getInputStats(m.leftSource)
+	lis, ok := GetInputStats(m.leftSource)
 	if !ok {
 		return nil
 	}
-	ris, ok := getInputStats(m.rightSource)
+	ris, ok := GetInputStats(m.rightSource)
 	if !ok {
 		return nil
 	}

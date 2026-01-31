@@ -59,7 +59,7 @@ func newOrdinalityProcessor(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		o.input = newInputStatCollector(o.input)
+		o.input = NewInputStatCollector(o.input)
 		o.ExecStatsForTrace = o.execStatsForTrace
 	}
 
@@ -101,7 +101,7 @@ func (o *ordinalityProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(o.input)
+	is, ok := GetInputStats(o.input)
 	if !ok {
 		return nil
 	}

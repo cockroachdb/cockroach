@@ -126,7 +126,7 @@ func newDistinct(
 	d.arena = stringarena.Make(&d.memAcc)
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		d.input = newInputStatCollector(d.input)
+		d.input = NewInputStatCollector(d.input)
 		d.ExecStatsForTrace = d.execStatsForTrace
 	}
 
@@ -336,7 +336,7 @@ func (d *distinct) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (d *distinct) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(d.input)
+	is, ok := GetInputStats(d.input)
 	if !ok {
 		return nil
 	}

@@ -67,7 +67,7 @@ func newFiltererProcessor(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		f.input = newInputStatCollector(f.input)
+		f.input = NewInputStatCollector(f.input)
 		f.ExecStatsForTrace = f.execStatsForTrace
 	}
 	return f, nil
@@ -112,7 +112,7 @@ func (f *filtererProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (f *filtererProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(f.input)
+	is, ok := GetInputStats(f.input)
 	if !ok {
 		return nil
 	}
