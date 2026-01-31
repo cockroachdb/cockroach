@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -415,6 +416,15 @@ func generateMockTSDumpFromCSV(t *testing.T, csvInput string, options ...mockTSD
 		writer, err := zipWriter.Create("tsdump.gob")
 		require.NoError(t, err)
 		encoder = gob.NewEncoder(writer)
+
+	case "zstd":
+		filePattern = "mock_tsdump_*.gob.zst"
+		zstdWriter, err := zstd.NewWriter(tmpFile)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, zstdWriter.Close(), "failed to close zstd writer")
+		}()
+		encoder = gob.NewEncoder(zstdWriter)
 
 	default:
 		filePattern = "mock_tsdump_*.gob"
