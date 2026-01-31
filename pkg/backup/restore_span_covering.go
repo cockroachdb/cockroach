@@ -279,6 +279,7 @@ func generateAndSendImportSpans(
 	filter spanCoveringFilter,
 	fsc fileSpanComparator,
 	spanCh chan execinfrapb.RestoreSpanEntry,
+	useLink bool,
 ) error {
 
 	startKeyIt, err := newFileSpanStartKeyIterator(ctx, backups, layerToBackupManifestFileIterFactory)
@@ -327,6 +328,7 @@ func generateAndSendImportSpans(
 					ApproximatePhysicalSize: f.ApproximatePhysicalSize,
 					Layer:                   int32(layer),
 					HasRangeKeys:            f.HasRangeKeys,
+					UseLink:                 useLink,
 				}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec.Dir = dir
