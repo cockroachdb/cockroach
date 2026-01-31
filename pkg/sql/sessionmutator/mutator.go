@@ -1031,10 +1031,6 @@ func (m *SessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
 	m.Data.OptimizerUseDeleteRangeFastPath = val
 }
 
-func (m *SessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
-	m.Data.AllowCreateTriggerFunctionWithArgvReferences = val
-}
-
 func (m *SessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
 	m.Data.CreateTableWithSchemaLocked = val
 }

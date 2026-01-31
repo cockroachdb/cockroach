@@ -4795,8 +4795,7 @@ DROP FUNCTION f4();
 
 subtest end
 
-# Until #135311 can be fixed, disallow TG_ARGV references by default. There is
-# a setting to allow them if necessary.
+# Regression test for #135311: TG_ARGV should be 0-indexed like PostgreSQL.
 subtest regression_135311
 
 statement ok
@@ -4806,36 +4805,21 @@ statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
     RAISE NOTICE 'g()';
+    RAISE NOTICE 'TG_ARGV[0]: %', TG_ARGV[0];
     RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
     RETURN NEW;
   END
 $$;
 
-statement error pgcode 0A000 pq: unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
-
 statement ok
-SET allow_create_trigger_function_with_argv_references = true;
-
-statement ok
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('first', 'second');
 
 query T noticetrace
 INSERT INTO xy VALUES (1, 2);
 ----
 NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
-
-statement ok
-RESET allow_create_trigger_function_with_argv_references;
-
-# The setting only disallows creating the trigger - not executing it if it was
-# already created.
-query T noticetrace
-INSERT INTO xy VALUES (3, 4);
-----
-NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
+NOTICE: TG_ARGV[0]: first
+NOTICE: TG_ARGV[1]: second
 
 statement ok
 DROP TRIGGER foo ON xy;
