@@ -727,6 +727,7 @@ var debugDecodeProtoEmitDefaults bool
 var debugDecodeProtoSingleProto bool
 var debugDecodeProtoBinaryOutput bool
 var debugDecodeProtoOutputFile string
+var debugDecodeProtoDumpDescriptorSet bool
 var debugDecodeProtoCmd = &cobra.Command{
 	Use:   "decode-proto",
 	Short: "decode-proto <proto> --name=<fully qualified proto name>",
@@ -756,6 +757,11 @@ $ curl -X POST  'http://localhost:8080/ts/query' \
   -H 'Accept: application/json' \
   -H 'Content-Type: application/x-protobuf' \
   --data-binary @<file>
+
+If --dump-descriptor-set is specified, the tool will output a FileDescriptorSet
+containing all registered .proto files instead of decoding input.
+Use --out to specify the output file:
+cockroach debug decode-proto --dump-descriptor-set --out=descriptors.pb
 `,
 	Args: cobra.ArbitraryArgs,
 	RunE: runDebugDecodeProto,
@@ -1605,6 +1611,8 @@ func init() {
 		"output the protos as binary instead of JSON. If specified, --out also needs to be specified.")
 	f.StringVar(&debugDecodeProtoOutputFile, "out", "",
 		"path to output file. If not specified, output goes to stdout.")
+	f.BoolVar(&debugDecodeProtoDumpDescriptorSet, "dump-descriptor-set", false,
+		"dump the file descriptor set for the specified proto schema instead of decoding input")
 
 	f = debugCheckLogConfigCmd.Flags()
 	f.Var(&debugLogChanSel, "only-channels", "selection of channels to include in the output diagram.")
