@@ -222,6 +222,6 @@ func (s *Store) MergeRange(
 		}
 	}
 
-	leftRepl.setDescLockedRaftMuLocked(ctx, &newLeftDesc)
+	leftRepl.setDescLockedRaftMuLocked(ctx, &newLeftDesc, nil)
 	return nil
 }
