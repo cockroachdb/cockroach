@@ -1778,21 +1778,23 @@ ALTER TABLE t0 INJECT STATISTICS '[
 norm
 SELECT * FROM v0 WHERE v0.c0 > 0
 ----
-select
- ├── columns: c0:5(int!null)
- ├── stats: [rows=1, distinct(5)=1, null(5)=0]
- ├── project
- │    ├── columns: rowid:5(int)
- │    ├── stats: [rows=2, distinct(5)=2, null(5)=0]
+project
+ ├── columns: c0:5(int)
+ ├── stats: [rows=1]
+ ├── select
+ │    ├── columns: c0:1(int) t0.rowid:2(int!null)
+ │    ├── stats: [rows=1]
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(1)
  │    ├── scan t0
  │    │    ├── columns: c0:1(int) t0.rowid:2(int!null)
- │    │    ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0]
+ │    │    ├── stats: [rows=2]
  │    │    ├── key: (2)
  │    │    └── fd: (2)-->(1)
- │    └── projections
- │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:5, type=int, outer=(1,2)]
- └── filters
-      └── rowid:5 > 0 [type=bool, outer=(5), constraints=(/5: [/1 - ]; tight)]
+ │    └── filters
+ │         └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END > 0 [type=bool, outer=(1,2)]
+ └── projections
+      └── CASE WHEN c0:1 > 0 THEN 1 ELSE t0.rowid:2 END [as=rowid:5, type=int, outer=(1,2)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
