@@ -79,6 +79,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add computed columns and covering index to system.statement_statistics",
+		clusterversion.V26_2_AddStatementStatisticsComputedColumns.Version(),
+		upgrade.NoPrecondition,
+		statementStatisticsComputedColumnsMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
