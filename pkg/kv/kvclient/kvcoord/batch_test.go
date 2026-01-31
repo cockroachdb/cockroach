@@ -208,8 +208,10 @@ func TestBatchPrevNext(t *testing.T) {
 			const canReorderRequestsSlice = false
 			ascHelper, err := NewBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
+			defer ascHelper.Release()
 			descHelper, err := NewBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
+			defer descHelper.Release()
 			if _, _, next, err := ascHelper.Truncate(
 				roachpb.RSpan{
 					Key:    roachpb.RKeyMin,
@@ -562,6 +564,7 @@ func TestTruncateLoop(t *testing.T) {
 						scanDir, requests, mustPreserveOrder, canReorderRequestsSlice,
 					)
 					require.NoError(t, err)
+					defer helper.Release()
 					for i := 0; i < len(ranges); i++ {
 						curRangeRS := ranges[i]
 						if scanDir == Descending {
@@ -702,6 +705,7 @@ func BenchmarkTruncateLoop(b *testing.B) {
 									_, _, _, err := h.Truncate(rs)
 									require.NoError(b, err)
 								}
+								h.Release()
 							}
 						})
 					}
