@@ -3131,6 +3131,36 @@ alter_table_cmd:
       Mode: $1.rlsTableMode(),
     }
   }
+  // ALTER TABLE <name> ENABLE TRIGGER <trigger_name>
+| ENABLE TRIGGER name
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: true, Scope: tree.TriggerScopeName, Name: tree.Name($3)}
+  }
+  // ALTER TABLE <name> ENABLE TRIGGER ALL
+| ENABLE TRIGGER ALL
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: true, Scope: tree.TriggerScopeAll}
+  }
+  // ALTER TABLE <name> ENABLE TRIGGER USER
+| ENABLE TRIGGER USER
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: true, Scope: tree.TriggerScopeUser}
+  }
+  // ALTER TABLE <name> DISABLE TRIGGER <trigger_name>
+| DISABLE TRIGGER name
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: false, Scope: tree.TriggerScopeName, Name: tree.Name($3)}
+  }
+  // ALTER TABLE <name> DISABLE TRIGGER ALL
+| DISABLE TRIGGER ALL
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: false, Scope: tree.TriggerScopeAll}
+  }
+  // ALTER TABLE <name> DISABLE TRIGGER USER
+| DISABLE TRIGGER USER
+  {
+    $$.val = &tree.AlterTableSetTrigger{Enable: false, Scope: tree.TriggerScopeUser}
+  }
 
 audit_mode:
   READ WRITE { $$.val = tree.AuditModeReadWrite }
