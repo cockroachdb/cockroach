@@ -54,9 +54,8 @@ type OpWithMetaInfo struct {
 // NewColOperatorArgs is a helper struct that encompasses all of the input
 // arguments to NewColOperator call.
 type NewColOperatorArgs struct {
-	Spec   *execinfrapb.ProcessorSpec
-	Inputs []OpWithMetaInfo
-	// StreamingMemAccount, if nil, is allocated lazily in NewColOperator.
+	Spec                *execinfrapb.ProcessorSpec
+	Inputs              []OpWithMetaInfo
 	StreamingMemAccount *mon.BoundAccount
 	// StreamingAllocator will be allocated lazily in NewColOperator.
 	StreamingAllocator   *colmem.Allocator

@@ -1078,6 +1078,7 @@ func (p *planner) preparePlannerForCopy(
 	p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
 
 	return func(ctx context.Context, prevErr error) error {
+		defer p.execMon.Stop(ctx)
 		// Ensure that we commit the transaction if atomic copy is off. If it's
 		// on, the conn executor will commit the transaction.
 		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled {

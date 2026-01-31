@@ -212,12 +212,20 @@ type Planner interface {
 	TypeResolver
 	tree.FunctionReferenceResolver
 
-	// Mon returns the Planner's monitor.
+	// TxnMon returns the monitor bound to the txn. It should be used whenever
+	// the memory allocation outlives the scope of a single query planning and
+	// execution step.
 	//
-	// TODO(yuzefovich): memory usage against this monitor doesn't count against
-	// sql.mem.distsql.current metric, audit the callers to see whether this is
-	// undesirable in some places.
-	Mon() *mon.BytesMonitor
+	// Usage against this monitor is tracked by sql.mem.txn.current metric.
+	TxnMon() *mon.BytesMonitor
+
+	// ExecMon returns the monitor bound to the scope of a single query planning
+	// and execution step, and it (or its child) should be used for all planning
+	// and execution allocations.
+	//
+	// Usage against this monitor is tracked by sql.mem.distsql.current metric
+	// and is also reported on EXPLAIN ANALYZE.
+	ExecMon() *mon.BytesMonitor
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}

@@ -78,9 +78,6 @@ func (c *rowContainerHelper) InitWithParentMon(
 	opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	// TODO(yuzefovich): currently the memory usage of c.memMonitor and
-	// c.unlimitedMemMonitor don't count against sql.mem.distsql.current metric.
-	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, parent, distSQLCfg, evalContext.SessionData(),
 		mon.MakeName(opName).Limited(),
@@ -88,6 +85,9 @@ func (c *rowContainerHelper) InitWithParentMon(
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
 		ctx, parent, mon.MakeName(opName).Unlimited(),
 	)
+	// TODO(yuzefovich): the disk usage against this monitor will not show up in
+	// EXPLAIN ANALYZE since we use the root disk monitor as its parent.
+	// Consider fixing it.
 	c.diskMonitor = execinfra.NewMonitor(
 		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeName(opName).Disk(),
 	)
@@ -103,15 +103,12 @@ func (c *rowContainerHelper) initMonitors(
 	ctx context.Context, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	// TODO(yuzefovich): currently the memory usage of c.memMonitor and
-	// c.unlimitedMemMonitor don't count against sql.mem.distsql.current metric.
-	// Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
-		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
+		ctx, evalContext.Planner.ExecMon(), distSQLCfg, evalContext.SessionData(),
 		mon.MakeName(opName).Limited(),
 	)
 	c.unlimitedMemMonitor = execinfra.NewMonitor(
-		ctx, evalContext.Planner.Mon(), mon.MakeName(opName).Unlimited(),
+		ctx, evalContext.Planner.ExecMon(), mon.MakeName(opName).Unlimited(),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
 		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeName(opName).Disk(),

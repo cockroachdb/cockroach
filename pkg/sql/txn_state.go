@@ -124,9 +124,10 @@ type txnState struct {
 	// flag.
 	injectedTxnRetryCounter int
 
-	// mon tracks txn-bound objects like the running state of
-	// planNode in the midst of performing a computation.
-	mon *mon.BytesMonitor
+	// txnMon tracks txn-bound objects like the cursor state that outlives a
+	// single query execution step. Its children will also track query planning
+	// and execution state.
+	txnMon *mon.BytesMonitor
 
 	// adv is overwritten after every transition. It represents instructions for
 	// for moving the cursor over the stream of input statements to the next
@@ -250,7 +251,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
-	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
+	ts.txnMon.StartNoReserved(ts.Ctx, tranCtx.connMon)
 	txnID = func() (txnID uuid.UUID) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
@@ -317,7 +318,7 @@ func (ts *txnState) shouldCollectTxnDiagnostics(
 // called for starting another SQL txn. The ID of the finalized transaction is
 // returned.
 func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timestamp) {
-	ts.mon.Stop(ts.Ctx)
+	ts.txnMon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 
 	elapsed := timeutil.Since(ts.recordingStart)
@@ -365,9 +366,9 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 // but still want to clean up other stuff.
 func (ts *txnState) finishExternalTxn() {
 	if ts.Ctx == nil {
-		ts.mon.Stop(ts.connCtx)
+		ts.txnMon.Stop(ts.connCtx)
 	} else {
-		ts.mon.Stop(ts.Ctx)
+		ts.txnMon.Stop(ts.Ctx)
 	}
 
 	if ts.Ctx != nil {

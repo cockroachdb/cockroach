@@ -31,8 +31,13 @@ func (r *MonitorRegistry) GetMonitors() []*mon.BytesMonitor {
 	return r.monitors
 }
 
-// NewStreamingMemAccount creates a new memory account bound to the monitor in
-// flowCtx.
+// NewStreamingMemAccount creates a new memory account bound to the "flow"
+// monitor.
+// TODO(yuzefovich): binding the memory account to the flow monitor means that
+// on EXPLAIN ANALYZE output the memory usage against this account will show up
+// correctly at the query-level exec stats but will not be attributed to a
+// particular planNode in the plan. Audit all callers (including transitive) to
+// ensure that this is acceptable.
 func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mon.BoundAccount {
 	r.mu.Lock()
 	defer r.mu.Unlock()

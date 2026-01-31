@@ -327,8 +327,15 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 	return errors.WithStack(errEvalPlanner)
 }
 
-// Mon is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) Mon() *mon.BytesMonitor {
+// TxnMon is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) TxnMon() *mon.BytesMonitor {
+	// DummyEvalPlanner is only used for remote flows during the execution, so
+	// it doesn't really have a txn-bound monitor.
+	return nil
+}
+
+// ExecMon is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ExecMon() *mon.BytesMonitor {
 	return ep.Monitor
 }
 
