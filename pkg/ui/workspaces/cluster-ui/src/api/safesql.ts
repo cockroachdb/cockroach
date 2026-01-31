@@ -101,7 +101,7 @@ function QuoteLiteral(literal: string): string {
   // This follows the PostgreSQL internal algorithm for handling quoted literals
   // from libpq, which can be found in the "PQEscapeStringInternal" function,
   // which is found in the libpq/fe-exec.c source file:
-  // https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/interfaces/libpq/fe-exec.c
+  // https://github.com/postgres/postgres/blob/d814d7fc3d5257ae258b502229fc7ca97c97270a/src/interfaces/libpq/fe-exec.c#L4082
   //
   // substitute any single-quotes (') with two single-quotes ('')
 

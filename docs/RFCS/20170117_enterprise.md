@@ -137,5 +137,5 @@ and/or in an email to the cluster administrator (address provided when they
 register for the license).
 
 [#14114]: https://github.com/cockroachdb/cockroach/pull/14114
-[business model]: https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/
+[business model]: https://web.archive.org/web/20240529205150/https://www.cockroachlabs.com/blog/how-were-building-a-business-to-last/
 [settings table]: https://github.com/cockroachdb/cockroach/pull/14230

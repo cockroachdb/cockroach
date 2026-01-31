@@ -130,7 +130,7 @@ import "gogoproto/gogo.proto";
 //
 // [^2]: 1995, https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf
 //
-// [^3]: 1999, https://pmg.csail.mit.edu/papers/adya-phd.pdf
+// [^3]: 1999, https://web.archive.org/web/20250820175955/http://pmg.csail.mit.edu/papers/adya-phd.pdf 
 //
 enum Level {
   option (gogoproto.goproto_enum_prefix) = false;
@@ -151,8 +151,8 @@ enum Level {
   // Serializable Isolation.
   //
   // [2PL]: https://en.wikipedia.org/wiki/Two-phase_locking
-  // [SSI]: https://dl.acm.org/doi/10.1145/1620585.1620587
-  // [WSI]: https://dl.acm.org/doi/10.1145/2168836.2168853
+  // [SSI]: https://web.archive.org/web/20250812103842/https://dl.acm.org/doi/10.1145/1620585.1620587 
+  // [WSI]: https://arxiv.org/pdf/2405.18393 
   Serializable = 0;
 
   // Snapshot provides moderately strict transaction isolation. A transaction
