@@ -8,12 +8,15 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -25,18 +28,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -388,8 +399,7 @@ func TestCloudStorageSink(t *testing.T) {
 		s2R.(*cloudStorageSink).sinkID = 7
 
 		// Again, force deterministic job session IDs to force ordering of output
-		// files. Note that making s1R have the same job session ID as s1 should make
-		// its output overwrite s1's output.
+		// files.
 		s1R.(*cloudStorageSink).jobSessionID = "a"
 		s2R.(*cloudStorageSink).jobSessionID = "b"
 		// Each resends the data it did before.
@@ -397,10 +407,11 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s2R.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc, nil))
 		require.NoError(t, s1R.Flush(ctx))
 		require.NoError(t, s2R.Flush(ctx))
-		// s1 data ends up being overwritten, s2 data ends up duplicated.
+		// s1 & s2 data ends up duplicated.
 		require.Equal(t, []string{
 			"v1\n",
 			"w1\n",
+			"v1\n",
 			"w1\n",
 		}, slurpDir(t))
 	})
@@ -450,8 +461,8 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s1.Flush(ctx))
 		require.Equal(t, []string{
 			"v1\nv2\n",
-			"v3\n",
 			"v1\n",
+			"v3\n",
 		}, slurpDir(t))
 	})
 
@@ -1009,4 +1020,277 @@ func (n *mockSinkStorage) Delete(_ context.Context, _ string) error {
 
 func (n *mockSinkStorage) Size(_ context.Context, _ string) (int64, error) {
 	return 0, nil
+}
+
+// TestCloudStorageOrderingWhileLaggingAndRestarting tests ordering while lagging
+// and restarting.
+// It tests approximately the following scenario:
+// - start changefeed with hacked session id = S
+// - hwm = 1
+// - emit F(ile)1 with K@1 and K@2
+// - checkpoint K's span at K@1.5
+// - restart. override session id = S' where S' orders before S.
+// - emit F2 with K@2
+// - look at the result.
+//
+// What we see today is that F1 and F2 share the same timestamp (because the HWM
+// hasn't advanced). This results in F2 being ordered before F1. But since F2
+// has K@2 and not K@1, this results in a violation of the cloud storage
+// ordering guarantee.
+func TestCloudStorageOrderingWhileLaggingAndRestarting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "takes too long for the feed to start")
+	skip.UnderRace(t, "takes too long for the feed to start")
+	skip.UnderDeadlock(t, "takes too long for the feed to start")
+
+	ctx := context.Background()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Speed up checkpointing to force periodic span-level checkpoints.
+		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.SpanCheckpointMaxBytes.Override(ctx, &s.Server.ClusterSettings().SV, 100<<20 /* 100 MiB */)
+		changefeedbase.SpanCheckpointLagThreshold.Override(ctx, &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `
+		CREATE TABLE foo (key INT PRIMARY KEY, v STRING);
+		INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+		ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
+		`)
+
+		const nonLaggingKeyVal = 1
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.Server.DB(), s.Server.Codec(), "d", "foo")
+		nonLaggingKey, err := randgen.TestingMakePrimaryIndexKeyForTenant(fooDesc, s.Server.Codec(), nonLaggingKeyVal)
+		require.NoError(t, err)
+
+		// Skip checkpoints for spans that don't contain the non-lagging key to simulate lag in other spans.
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.FeedKnobs.ShouldSkipCheckpoint = func(rfc *kvpb.RangeFeedCheckpoint) bool {
+			return !rfc.Span.ContainsKey(nonLaggingKey)
+		}
+
+		// Override the session ID to ensure the first session orders after the second session.
+		sessionID := "2_begin"
+		knobs.WrapSink = func(s Sink, jobID jobspb.JobID) Sink {
+			if sessionID != "" {
+				s.(*cloudStorageSink).jobSessionID = sessionID
+			}
+			return s
+		}
+
+		// Start a cloudstorage changefeed.
+		// Force frequent resolved and checkpoint writes; no initial scan so we control emitted rows.
+		// We also set a small file size (in cdcTest call) so the feed writes files even
+		// though Flush isn't called (this can also happen due to backpressure
+		// but that seems hard to simulate)
+		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', initial_scan='no', updated, format='json'`
+		cf := feed(t, f, feedStmt)
+		defer closeFeed(t, cf)
+
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+		loadProgress := func() jobspb.Progress {
+			job, err := jobRegistry.LoadJob(ctx, cf.(cdctest.EnterpriseTestFeed).JobID())
+			require.NoError(t, err)
+			return job.Progress()
+		}
+
+		getHwmAndChkpt := func() (hwm *hlc.Timestamp, chkTS hlc.Timestamp) {
+			progress := loadProgress()
+			chk := maps.Collect(loadCheckpoint(t, progress).All())
+			for ts, sp := range chk {
+				if sp.ContainsKey(nonLaggingKey) {
+					chkTS = ts
+					break
+				}
+			}
+			return progress.GetHighWater(), chkTS
+		}
+
+		// Make sure we have a checkpoint including the non-lagging key.
+		var hwm *hlc.Timestamp
+		var chkTS hlc.Timestamp
+		testutils.SucceedsSoon(t, func() error {
+			hwm, chkTS = getHwmAndChkpt()
+			if chkTS.IsEmpty() || hwm == nil || hwm.IsEmpty() {
+				return errors.Newf("waiting for non-zero hwm & checkpoint with non-lagging key: hwm: %v, chkTS: %s", hwm, chkTS)
+			}
+			return nil
+		})
+		// Now we have the span with the non-lagging key ahead of the hwm. Make sure of that.
+		require.False(t, hwm.IsEmpty())
+		require.NotZero(t, chkTS)
+		require.True(t, hwm.Less(chkTS))
+
+		T1TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T1' WHERE key = $1 RETURNING cluster_logical_timestamp()`, nonLaggingKeyVal)[0][0]
+		T1Ts, err := hlc.ParseHLC(T1TsStr)
+		require.NoError(t, err)
+		t.Logf("T1Ts: %s", T1TsStr)
+
+		// Wait for checkpoint after T1.
+		testutils.SucceedsSoon(t, func() error {
+			hwm2, chkTS2 := getHwmAndChkpt()
+			if T1Ts.Less(chkTS2) {
+				require.True(t, hwm2.Less(chkTS2))
+				t.Logf("hwm2: %s; chkTS2: %s", hwm2.String(), chkTS2.String())
+				return nil
+			}
+			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS2)
+		})
+
+		// Make subsequent checkpoints not happen.
+		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
+
+		// Make sure we saw k@T1.
+		waitForContentInSessionFile(t, cf.(*cloudFeed).dir, sessionID, "T1")
+		t.Logf("found T1")
+
+		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = $1 RETURNING cluster_logical_timestamp()`, nonLaggingKeyVal)[0][0]
+		T2Ts, err := hlc.ParseHLC(T2TsStr)
+		require.NoError(t, err)
+		t.Logf("T2Ts: %s", T2TsStr)
+
+		// Pause.
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+		t.Logf("paused")
+
+		// Make sure we didn't checkpoint >= T2.
+		_, chkTS = getHwmAndChkpt()
+		t.Logf("chkTS: %s", chkTS.String())
+		require.False(t, T2Ts.LessEq(chkTS))
+
+		// Resume (with a lower session id).
+		sessionID = "1_after"
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Resume())
+		t.Logf("resumed")
+		status, err := cf.(cdctest.EnterpriseTestFeed).FetchStatusMessage()
+		t.Logf("status: %s; err: %v", status, err)
+
+		_, chkTS = getHwmAndChkpt()
+		t.Logf("chkTS: %s", chkTS.String())
+
+		// Write T3 and T4 just to make sure we'll trigger a size-based flush for T2.
+		sqlDB.Exec(t, `UPDATE foo SET v = 'T3' WHERE key = $1`, nonLaggingKeyVal)
+		sqlDB.Exec(t, `UPDATE foo SET v = 'T4' WHERE key = $1`, nonLaggingKeyVal)
+
+		// Wait for k@T2 to be emitted / re-emitted.
+		waitForContentInSessionFile(t, cf.(*cloudFeed).dir, sessionID, "T2")
+
+		// Stop and validate results.
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+		validateCloudStorageDirResults(t, cf.(*cloudFeed).dir)
+	}
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"), withCloudStorageFileSize(100))
+}
+
+// waitForContentInSessionFile waits for a file path containing the given
+// session substring whose contents contain the provided needle. Uses
+// SucceedsSoon for retries.
+// NOTE: We use this rather than assertPayloads
+// because the cloudfeed is wrapped by a sinkSynchronizer which makes it not
+// scan for new data until a Flush(), which may or may not happen in the test.
+func waitForContentInSessionFile(t *testing.T, root, session, needle string) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		// Dump all file contents for debugging.
+		contents, err := exec.Command("bash", "-c", fmt.Sprintf("cd %s && grep -RH . .", root)).Output()
+		if err != nil {
+			t.Logf("error dumping dir contents: %v", err)
+		} else {
+			t.Logf("dir contents: %s", string(contents))
+		}
+
+		found := false
+		walkErr := filepath.Walk(root, func(path string, d os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if !strings.Contains(path, session) {
+				return nil
+			}
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if strings.Contains(string(contents), needle) {
+				found = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if walkErr != nil {
+			return walkErr
+		}
+		if !found {
+			return errors.Newf("no %s found for session %s", needle, session)
+		}
+		return nil
+	})
+}
+
+func validateCloudStorageDirResults(t *testing.T, dir string) {
+	t.Helper()
+	waitForNoTmpFiles(t, dir)
+
+	validator := cdctest.NewOrderValidator("foo")
+	require.NoError(t, filepath.Walk(dir, func(path string, d os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || strings.Contains(d.Name(), "crdb_external_storage_location") {
+			return nil
+		}
+
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		for _, line := range strings.Split(string(contents), "\n") {
+			if line == "" {
+				continue
+			}
+
+			var row struct {
+				After struct {
+					ID int `json:"id"`
+				} `json:"after"`
+				Key      gojson.RawMessage `json:"key"`
+				Topic    string            `json:"topic"`
+				Updated  string            `json:"updated"`
+				Resolved string            `json:"resolved"`
+			}
+
+			require.NoError(t, gojson.Unmarshal([]byte(line), &row))
+			if row.Resolved != "" {
+				require.NoError(t, validator.NoteResolved(cloudFeedPartition, parseTimeToHLC(t, row.Resolved)))
+				continue
+			}
+			updated := parseTimeToHLC(t, row.Updated)
+			require.NoError(t, validator.NoteRow(cloudFeedPartition, string(row.Key), row.Topic, updated, "foo"))
+		}
+		return nil
+	}))
+	require.Empty(t, validator.Failures())
+}
+
+func waitForNoTmpFiles(t *testing.T, dir string) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		return filepath.Walk(dir, func(path string, d os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(path, `.tmp`) {
+				return errors.New("tmp file found")
+			}
+			return nil
+		})
+	})
 }
