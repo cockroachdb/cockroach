@@ -84,6 +84,13 @@ func TestAllRegisteredImportFixture(t *testing.T) {
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
+			// Run tpcc in parallel to avoid timeout issues. tpcc takes a long time and
+			// we have a 15-minute timeout, so running it in parallel with other
+			// tests helps stay within the limit. See #161919.
+			if meta.Name == `tpcc` {
+				t.Parallel()
+			}
+
 			if bigInitialData(meta) {
 				skip.UnderShort(t, fmt.Sprintf(`%s loads a lot of data`, meta.Name))
 			}
