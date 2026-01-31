@@ -276,6 +276,23 @@ func (r *Registry) ReinitialiseChildMetrics(isDBNameEnabled, isAppNameEnabled bo
 
 }
 
+type TenantRegistries struct {
+	appRegistry            *Registry
+	clusterMetricsRegistry *Registry
+}
+
+func (r *TenantRegistries) AppRegistry() *Registry {
+	return r.appRegistry
+}
+
+func (r *TenantRegistries) ClusterMetricsRegistry() *Registry {
+	return r.clusterMetricsRegistry
+}
+
+func NewTenantRegistries(appRegistry, clusterMetricsRegistry *Registry) *TenantRegistries {
+	return &TenantRegistries{appRegistry, clusterMetricsRegistry}
+}
+
 var (
 	// Prometheus metric names and labels have fairly strict rules, they
 	// must match the regexp [a-zA-Z_:][a-zA-Z0-9_:]*
