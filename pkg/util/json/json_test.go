@@ -502,7 +502,7 @@ func TestJSONSize(t *testing.T) {
 					t.Fatal(err)
 				}
 				if encodedFromLargeBuf.Size() != encoded.Size() {
-					t.Errorf("expected jsonEncoded on a large buf for %v to have size %d, found %d", j, encoded.Size(), encodedFromLargeBuf.Size())
+					t.Errorf("expected JSONEncoded on a large buf for %v to have size %d, found %d", j, encoded.Size(), encodedFromLargeBuf.Size())
 				}
 			})
 		})

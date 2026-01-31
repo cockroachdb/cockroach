@@ -5,6 +5,8 @@
 
 package coldata
 
+import "math/bits"
+
 // zeroedNulls is a zeroed out slice representing a bitmap of size MaxBatchSize.
 // This is copied to efficiently set all nulls.
 var zeroedNulls [(MaxBatchSize-1)/8 + 1]byte
@@ -402,4 +404,16 @@ func (n *Nulls) Copy(other *Nulls) {
 		n.nulls = n.nulls[:len(other.nulls)]
 	}
 	copy(n.nulls, other.nulls)
+}
+
+// Count returns the number of NULL elements in Nulls.
+func (n *Nulls) Count() int {
+	if !n.maybeHasNulls {
+		return 0
+	}
+	var count int
+	for _, b := range n.nulls {
+		count += 8 - bits.OnesCount8(b)
+	}
+	return count
 }
