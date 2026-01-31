@@ -5,6 +5,7 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "execinfra",
     srcs = [
+        "admission.go",
         "base.go",
         "flow_context.go",
         "metrics.go",
@@ -61,6 +62,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/intsets",
         "//pkg/util/limit",
