@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -311,7 +312,16 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
-			defer wg.Done()
+			var gh *admission.GoroutineCPUHandle
+			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+				gh = cpuHandle.RegisterGoroutine()
+			}
+			defer func() {
+				if gh != nil {
+					gh.Close(ctx)
+				}
+				wg.Done()
+			}()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, rb.flowCtx, "router output", rb.processorID)

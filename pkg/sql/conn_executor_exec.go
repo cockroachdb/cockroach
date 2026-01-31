@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -54,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
@@ -2739,6 +2741,32 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				ppInfo.resumableFlow.cleanup.run(ctx)
 				ppInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			}
+		}
+	}()
+
+	// TODO: Plumb the cpuProvider. There is one per node.
+	var cpuProvider admission.SQLCPUProvider
+	var cpuHandle *admission.SQLCPUHandle
+	var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
+	if cpuProvider != nil {
+		var err error
+		ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
+			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true)
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		// Close the main goroutine's CPU handle at the flow boundary. This must
+		// happen before cpuHandle.Close() which will pool the GoroutineCPUHandle.
+		if mainGoroutineCPUHandle != nil {
+			mainGoroutineCPUHandle.Close(ctx)
+		}
+		// Close the SQLCPUHandle after all GoroutineCPUHandles are closed.
+		// At this point, all flow goroutines have exited (Wait() was called in
+		// flow.Cleanup), and the main goroutine's handle was just closed above.
+		if cpuHandle != nil {
+			cpuHandle.Close()
 		}
 	}()
 
