@@ -244,16 +244,30 @@ type Handle struct {
 	cpuKVAdmissionQResp admission.AdmitResponse
 }
 
-// AnnotateCtx annotates the given context with request-scoped admission
-// data, plumbed through the KV stack using context.Contexts.
+// AnnotateCtx annotates the given context with the ElasticCPUWorkHandle,
+// which is used deep in the storage layer (e.g., mvccExportToWriter) to pace
+// CPU intensive operations.
 func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	if h.elasticCPUWorkHandle != nil {
 		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, h.elasticCPUWorkHandle)
 	}
-	if h.raftAdmissionMeta != nil {
-		ctx = kvflowcontrol.ContextWithMeta(ctx, h.raftAdmissionMeta)
-	}
 	return ctx
+}
+
+// AdmissionInfo returns admission control state that should be plumbed
+// through the KV layer via explicit function parameters.
+func (h *Handle) AdmissionInfo() AdmissionInfo {
+	return AdmissionInfo{
+		RaftAdmissionMeta: h.raftAdmissionMeta,
+	}
+}
+
+// AdmissionInfo contains admission control state that is plumbed through the
+// KV layer via explicit function parameters rather than context.
+type AdmissionInfo struct {
+	// RaftAdmissionMeta is the metadata used for replication flow control.
+	// It is populated for requests that will be proposed to Raft.
+	RaftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
 }
 
 // MakeController returns a Controller. All three parameters must together be

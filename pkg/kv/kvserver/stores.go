@@ -181,7 +181,8 @@ func (ls *Stores) GetReplicaForRangeID(
 func (ls *Stores) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
+	// Pass empty AdmissionInfo since this path bypasses admission control.
+	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
 	writeBytes.Release()
 	return br, pErr
 }
@@ -189,7 +190,7 @@ func (ls *Stores) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
 		return nil, nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
@@ -200,7 +201,7 @@ func (ls *Stores) SendWithWriteBytes(
 		return nil, nil, kvpb.NewError(err)
 	}
 
-	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
+	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba, admissionInfo)
 	if br != nil && br.Error != nil {
 		panic(kvpb.ErrorUnexpectedlySet(store, br))
 	}

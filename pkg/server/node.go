@@ -1641,7 +1641,12 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
+	// AnnotateCtx embeds ElasticCPUWorkHandle in the context for use deep in
+	// the storage layer (e.g., mvccExportToWriter).
 	ctx = handle.AnnotateCtx(ctx)
+	// AdmissionInfo is passed explicitly through the call chain to evalAndPropose
+	// for replication flow control.
+	admissionInfo := handle.AdmissionInfo()
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
@@ -1666,7 +1671,7 @@ func (n *Node) batchInternal(
 		originalRequest = args.ShallowCopy()
 	}
 	var pErr *kvpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
+	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo)
 	if pErr != nil {
 		if originalRequest != nil {
 			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {

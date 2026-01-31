@@ -41,8 +41,9 @@ import (
 func (s *Store) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
+	// Pass empty AdmissionInfo since this path bypasses admission control.
 	var writeBytes *kvadmission.StoreWriteBytes
-	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
+	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
 	writeBytes.Release()
 	return br, pErr
 }
@@ -50,7 +51,7 @@ func (s *Store) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
@@ -185,7 +186,7 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
-		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
