@@ -30,14 +30,16 @@ const (
 	// argument of functions in this package. It should typically be used with
 	// the CloseFraction constant for the fraction argument.
 	//
-	// It is set to the square of CloseFraction so it is only used when the
-	// smaller of the absolute expected and actual values is in the range:
-	//
-	//   -CloseFraction <= 0 <= CloseFraction
+	// It is set to CloseFraction / 10 to handle cases where one value is zero
+	// (or very close to zero) and the other is a small non-zero value resulting
+	// from floating-point errors in different execution paths. This allows
+	// values that differ by up to ~1e-15 to be considered equal when comparing
+	// against zero, which is appropriate for numerical noise from distributed
+	// vs local query execution.
 	//
 	// CloseMargin is greater than 0 otherwise if either expected or actual were
 	// 0 the calculated tolerance from the fraction would be 0.
-	CloseMargin = CloseFraction * CloseFraction
+	CloseMargin = CloseFraction / 10
 )
 
 // EqualApprox reports whether expected and actual are deeply equal with the

@@ -195,6 +195,36 @@ func TestFloatsMatch(t *testing.T) {
 	}
 }
 
+// TestFloatsMatchApproxNearZero tests that FloatsMatchApprox correctly handles
+// tiny rounding errors near zero using CloseMargin (Category 1 issues from
+// #150902). These are floating-point errors from distributed vs local execution.
+func TestFloatsMatchApproxNearZero(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, tc := range []struct {
+		f1, f2 string
+		match  bool
+	}{
+		// Tiny rounding errors that should match using CloseMargin.
+		{f1: "0", f2: "1.0460605364671256e-16", match: true},                     // Issue #150902
+		{f1: "0", f2: "5.5364876533711863e-17", match: true},                     // Issue #161244
+		{f1: "3.1622215731111327e-16", f2: "3.031894168212123e-16", match: true}, // Issue #152409
+		{f1: "0", f2: "1e-15", match: true},
+		{f1: "0", f2: "-1e-15", match: true},
+		// Values larger than CloseMargin (1e-15) should not match zero.
+		{f1: "0", f2: "2e-15", match: false},
+		{f1: "0", f2: "-2e-15", match: false},
+		{f1: "0", f2: "1e-14", match: false},
+	} {
+		match, err := FloatsMatchApprox(tc.f1, tc.f2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if match != tc.match {
+			t.Fatalf("FloatsMatchApprox(%q, %q) = %v, want %v", tc.f1, tc.f2, match, tc.match)
+		}
+	}
+}
+
 // TestFloatArraysMatch is a unit test for FloatArraysMatch() and
 // FloatArraysMatchApprox() functions.
 //
