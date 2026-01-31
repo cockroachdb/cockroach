@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package colexec
+package colexecbuiltins
 
 import (
 	"context"
@@ -105,6 +105,55 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 				{"hi你好吗ciao", 6, 4, "ciao"},
 			},
 		},
+		{
+			desc:         "FNV64",
+			expr:         "fnv64(@1)",
+			inputCols:    []int{0},
+			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
+			inputTypes:   []*types.T{types.String},
+			outputTuples: colexectestutils.Tuples{{"abc", int64(-2820157060406071861)}, {"", int64(-3750763034362895579)}, {"hello world", int64(9065573210506989167)}, {"x", int64(-5808590958014384217)}, {"123", int64(-2774223862635011909)}},
+		},
+		{
+			desc:         "FNV64a",
+			expr:         "fnv64a(@1)",
+			inputCols:    []int{0},
+			inputTuples:  colexectestutils.Tuples{{"abc"}, {""}, {"hello world"}, {"x"}, {"123"}},
+			inputTypes:   []*types.T{types.String},
+			outputTuples: colexectestutils.Tuples{{"abc", int64(-1792535898324117685)}, {"", int64(-3750763034362895579)}, {"hello world", int64(8618312879776256743)}, {"x", int64(-5808529385363204345)}, {"123", int64(5003431119771845851)}},
+		},
+		{
+			desc:         "FNV64 with 3 values",
+			expr:         "fnv64(@1, @2, @3)",
+			inputCols:    []int{0, 1, 2},
+			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
+			inputTypes:   []*types.T{types.String, types.String, types.String},
+			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-2820157060406071861)}, {"hello", "world", "test", int64(1178316459888765213)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(590622495169253564)}},
+		},
+		{
+			desc:         "FNV64a with 3 values",
+			expr:         "fnv64a(@1, @2, @3)",
+			inputCols:    []int{0, 1, 2},
+			inputTuples:  colexectestutils.Tuples{{"a", "b", "c"}, {"hello", "world", "test"}, {"", "", ""}, {"x", "", "y"}},
+			inputTypes:   []*types.T{types.String, types.String, types.String},
+			outputTuples: colexectestutils.Tuples{{"a", "b", "c", int64(-1792535898324117685)}, {"hello", "world", "test", int64(7507279486104997145)}, {"", "", "", int64(-3750763034362895579)}, {"x", "", "y", int64(644383116220033818)}},
+		},
+		// TODO: fix the RunTests harness comparison.
+		//{
+		//	desc:         "DatumsToBytes single int",
+		//	expr:         "crdb_internal.datums_to_bytes(@1)",
+		//	inputCols:    []int{0},
+		//	inputTuples:  colexectestutils.Tuples{{1}, {2}, {-1}},
+		//	inputTypes:   []*types.T{types.Int},
+		//	outputTuples: colexectestutils.Tuples{{1, []byte{0x03, 0x88}}, {2, []byte{0x03, 0x89}}, {-1, []byte{0x03, 0x7f}}},
+		//},
+		//{
+		//	desc:         "DatumsToBytes multiple args",
+		//	expr:         "crdb_internal.datums_to_bytes(@1, @2)",
+		//	inputCols:    []int{0, 1},
+		//	inputTuples:  colexectestutils.Tuples{{1, "a"}, {2, "b"}},
+		//	inputTypes:   []*types.T{types.Int, types.String},
+		//	outputTuples: colexectestutils.Tuples{{1, "a", []byte{0x03, 0x88, 0x15, 'a', 0x00, 0x01}}, {2, "b", []byte{0x03, 0x89, 0x15, 'b', 0x00, 0x01}}},
+		//},
 	}
 
 	for _, tc := range testCases {

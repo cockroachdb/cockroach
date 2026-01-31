@@ -23,6 +23,8 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra/execagg",
         "//pkg/sql/execinfrapb",
+    	"//pkg/sql/pgwire/pgcode",  # keep
+    	"//pkg/sql/pgwire/pgerror",  # keep
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
@@ -44,6 +46,7 @@ targets = [
     ("hash_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
     ("hash_sum_agg.eg.go", "sum_agg_tmpl.go"),
     ("hash_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+    ("hash_xor_agg.eg.go", "xor_agg_tmpl.go"),
     ("ordered_any_not_null_agg.eg.go", "any_not_null_agg_tmpl.go"),
     ("ordered_avg_agg.eg.go", "avg_agg_tmpl.go"),
     ("ordered_bool_and_or_agg.eg.go", "bool_and_or_agg_tmpl.go"),
@@ -53,6 +56,7 @@ targets = [
     ("ordered_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
     ("ordered_sum_agg.eg.go", "sum_agg_tmpl.go"),
     ("ordered_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+    ("ordered_xor_agg.eg.go", "xor_agg_tmpl.go"),
     ("window_avg_agg.eg.go", "avg_agg_tmpl.go"),
     ("window_bool_and_or_agg.eg.go", "bool_and_or_agg_tmpl.go"),
     ("window_concat_agg.eg.go", "concat_agg_tmpl.go"),
@@ -60,6 +64,7 @@ targets = [
     ("window_min_max_agg.eg.go", "min_max_agg_tmpl.go"),
     ("window_sum_agg.eg.go", "sum_agg_tmpl.go"),
     ("window_sum_int_agg.eg.go", "sum_agg_tmpl.go"),
+    ("window_xor_agg.eg.go", "xor_agg_tmpl.go"),
 ]
 
 # Define a file group for all the .eg.go targets.

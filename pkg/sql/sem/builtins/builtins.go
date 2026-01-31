@@ -1395,11 +1395,13 @@ var regularBuiltins = map[string]builtinDefinition{
 	"fnv64": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64() },
 		"Calculates the 64-bit FNV-1 hash value of a set of values.",
+		tree.FNV64,
 	),
 
 	"fnv64a": hash64Builtin(
 		func() hash.Hash64 { return fnv.New64a() },
 		"Calculates the 64-bit FNV-1a hash value of a set of values.",
+		tree.FNV64a,
 	),
 
 	"crc32ieee": hash32Builtin(
@@ -11181,11 +11183,14 @@ func hash32Builtin(newHash func() hash.Hash32, info string) builtinDefinition {
 	)
 }
 
-func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
+func hash64Builtin(
+	newHash func() hash.Hash64, info string, vecBuiltin tree.SpecializedVectorizedBuiltin,
+) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.String},
-			ReturnType: tree.FixedReturnType(types.Int),
+			Types:                 tree.VariadicType{VarType: types.String},
+			SpecializedVecBuiltin: vecBuiltin,
+			ReturnType:            tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				if ok, err := feedHash(h, args); !ok || err != nil {
@@ -11198,8 +11203,9 @@ func hash64Builtin(newHash func() hash.Hash64, info string) builtinDefinition {
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types:      tree.VariadicType{VarType: types.Bytes},
-			ReturnType: tree.FixedReturnType(types.Int),
+			Types:                 tree.VariadicType{VarType: types.Bytes},
+			SpecializedVecBuiltin: vecBuiltin,
+			ReturnType:            tree.FixedReturnType(types.Int),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				h := newHash()
 				if ok, err := feedHash(h, args); !ok || err != nil {
@@ -12832,8 +12838,9 @@ var datumsToBytesOverload = tree.Overload{
 	// Note that datums_to_bytes(a) == datums_to_bytes(b) iff (a IS NOT DISTINCT FROM b)
 	Info: "Converts datums into key-encoded bytes. " +
 		"Supports NULLs and all data types which may be used in index keys",
-	Types:      tree.VariadicType{VarType: types.Any},
-	ReturnType: tree.FixedReturnType(types.Bytes),
+	Types:             tree.VariadicType{VarType: types.Any},
+	ReturnType:        tree.FixedReturnType(types.Bytes),
+	SpecializedVecBuiltin: tree.DatumsToBytes,
 	Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 		var out []byte
 		for i, arg := range args {

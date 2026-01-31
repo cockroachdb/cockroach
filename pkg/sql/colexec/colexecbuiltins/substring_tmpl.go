@@ -13,7 +13,7 @@
 //
 // */}}
 
-package colexec
+package colexecbuiltins
 
 import (
 	"unicode/utf8"
