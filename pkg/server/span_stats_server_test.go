@@ -119,6 +119,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 	}
 
 	var testCases []testCase
+	nonEmptyTotalStats := enginepb.MVCCStats{LiveBytes: 100}
 
 	// test case 1
 	tc1 := testCase{
@@ -132,6 +133,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 						ExternalFileBytes:    1,
 						StoreIDs:             []roachpb.StoreID{1},
 						ReplicaCount:         1,
+						TotalStats:           nonEmptyTotalStats,
 					},
 				},
 			}},
@@ -143,6 +145,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 						ExternalFileBytes:    1,
 						StoreIDs:             []roachpb.StoreID{2},
 						ReplicaCount:         1,
+						TotalStats:           nonEmptyTotalStats,
 					},
 				},
 			}},
@@ -155,6 +158,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 					ExternalFileBytes:    1,
 					StoreIDs:             []roachpb.StoreID{1},
 					ReplicaCount:         1,
+					TotalStats:           nonEmptyTotalStats,
 				},
 				"span2": {RangeCount: 1,
 					ApproximateDiskBytes: 1,
@@ -162,6 +166,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 					ExternalFileBytes:    1,
 					StoreIDs:             []roachpb.StoreID{2},
 					ReplicaCount:         1,
+					TotalStats:           nonEmptyTotalStats,
 				},
 			},
 		},
@@ -175,7 +180,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 	expectedApproxTotalStats.Add(totalStats1)
 	expectedApproxTotalStats.Add(totalStats2)
 	tc2 := testCase{
-		actualRes: createSpanStatsResponse("span1", "span2"),
+		actualRes: createSpanStatsResponse("span1"),
 		nodeResponses: []nodeResponse{
 			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
 				SpanToStats: map[string]*roachpb.SpanStats{
@@ -234,6 +239,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 						ExternalFileBytes:    1,
 						StoreIDs:             []roachpb.StoreID{1},
 						ReplicaCount:         1,
+						TotalStats:           nonEmptyTotalStats,
 					},
 				},
 			}},
@@ -252,6 +258,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 					ExternalFileBytes:    1,
 					StoreIDs:             []roachpb.StoreID{1},
 					ReplicaCount:         1,
+					TotalStats:           nonEmptyTotalStats,
 				},
 				"span2": {},
 			},
@@ -272,6 +279,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 						ExternalFileBytes:    1,
 						StoreIDs:             []roachpb.StoreID{1},
 						ReplicaCount:         1,
+						TotalStats:           nonEmptyTotalStats,
 					},
 				},
 			}},
@@ -284,6 +292,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 						ExternalFileBytes:    1,
 						StoreIDs:             []roachpb.StoreID{2},
 						ReplicaCount:         1,
+						TotalStats:           nonEmptyTotalStats,
 					},
 				},
 			}},
@@ -297,6 +306,7 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 					ExternalFileBytes:    1,
 					StoreIDs:             []roachpb.StoreID{1},
 					ReplicaCount:         1,
+					TotalStats:           nonEmptyTotalStats,
 				},
 				"span2": {
 					RangeCount:           1,
@@ -305,11 +315,62 @@ func TestCollectSpanStatsResponses(t *testing.T) {
 					ExternalFileBytes:    1,
 					StoreIDs:             []roachpb.StoreID{2},
 					ReplicaCount:         1,
+					TotalStats:           nonEmptyTotalStats,
 				},
 			},
 		},
 	}
 	testCases = append(testCases, tc4)
+
+	// test case 5 - first node skips MVCC stats (empty TotalStats), second node has MVCC stats.
+	// TotalStats should be set from the second node (the one with MVCC stats).
+	totalStats5 := enginepb.MVCCStats{LiveBytes: 100, KeyCount: 10}
+	tc5 := testCase{
+		actualRes: createSpanStatsResponse("span1"),
+		nodeResponses: []nodeResponse{
+			{nodeID: 1, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						RangeCount:           0,
+						ApproximateDiskBytes: 50,
+						RemoteFileBytes:      10,
+						ExternalFileBytes:    5,
+						StoreIDs:             []roachpb.StoreID{1},
+						ReplicaCount:         0,
+					},
+				},
+			}},
+			{nodeID: 2, resp: &roachpb.SpanStatsResponse{
+				SpanToStats: map[string]*roachpb.SpanStats{
+					"span1": {
+						// Non-empty TotalStats - this node fetched MVCC stats
+						TotalStats:           totalStats5,
+						RangeCount:           2,
+						ApproximateDiskBytes: 50,
+						RemoteFileBytes:      10,
+						ExternalFileBytes:    5,
+						StoreIDs:             []roachpb.StoreID{2},
+						ReplicaCount:         3,
+					},
+				},
+			}},
+		},
+		expectedRes: &roachpb.SpanStatsResponse{
+			SpanToStats: map[string]*roachpb.SpanStats{
+				"span1": {
+					TotalStats:            totalStats5,
+					ApproximateTotalStats: totalStats5,
+					RangeCount:            2,
+					ApproximateDiskBytes:  100, // 50 + 50
+					RemoteFileBytes:       20,  // 10 + 10
+					ExternalFileBytes:     10,  // 5 + 5
+					StoreIDs:              []roachpb.StoreID{1, 2},
+					ReplicaCount:          3,
+				},
+			},
+		},
+	}
+	testCases = append(testCases, tc5)
 
 	ctx := context.Background()
 	for _, tc := range testCases {
