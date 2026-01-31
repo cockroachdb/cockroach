@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/redact"
@@ -213,29 +211,4 @@ func (s Stream) SafeFormat(p redact.SafePrinter, _ rune) {
 		tenantSt = "1"
 	}
 	p.Printf("t%s/s%s", redact.SafeString(tenantSt), s.StoreID)
-}
-
-var raftAdmissionMetaKey = ctxutil.RegisterFastValueKey()
-
-// ContextWithMeta returns a Context wrapping the supplied raft admission meta,
-// if any.
-//
-// TODO(irfansharif,aaditya): This causes a heap allocation. Revisit as part of
-// #104154.
-func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
-	if meta != nil {
-		ctx = ctxutil.WithFastValue(ctx, raftAdmissionMetaKey, meta)
-	}
-	return ctx
-}
-
-// MetaFromContext returns the raft admission meta embedded in the Context, if
-// any.
-func MetaFromContext(ctx context.Context) *kvflowcontrolpb.RaftAdmissionMeta {
-	val := ctxutil.FastValue(ctx, raftAdmissionMetaKey)
-	h, ok := val.(*kvflowcontrolpb.RaftAdmissionMeta)
-	if !ok {
-		return nil
-	}
-	return h
 }

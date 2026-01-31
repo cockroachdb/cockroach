@@ -39,7 +39,7 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard, _ kvadmission.AdmissionInfo,
 ) (
 	br *kvpb.BatchResponse,
 	_ *concurrency.Guard,

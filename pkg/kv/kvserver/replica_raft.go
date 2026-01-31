@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
@@ -107,6 +106,7 @@ func (r *Replica) evalAndPropose(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	tok TrackedRequestToken,
+	admissionInfo kvadmission.AdmissionInfo,
 ) (
 	chan proposalResult,
 	abandonToken,
@@ -233,9 +233,7 @@ func (r *Replica) evalAndPropose(
 		// Continue with proposal...
 	}
 
-	if meta := kvflowcontrol.MetaFromContext(ctx); meta != nil {
-		proposal.raftAdmissionMeta = meta
-	}
+	proposal.raftAdmissionMeta = admissionInfo.RaftAdmissionMeta
 
 	// Attach information about the proposer's lease to the command, for
 	// verification below raft. Lease requests are special since they are not
