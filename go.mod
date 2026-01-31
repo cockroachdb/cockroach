@@ -186,6 +186,7 @@ require (
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/jaegertracing/jaeger v1.18.1
+	github.com/jingyugao/rowserrcheck v1.1.2-0.20220704084010-fa9179529ab8
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
 	github.com/kisielk/errcheck v1.8.0
