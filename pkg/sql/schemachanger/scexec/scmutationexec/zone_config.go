@@ -22,11 +22,11 @@ func (i *immediateVisitor) DiscardTableZoneConfig(
 	ctx context.Context, op scop.DiscardTableZoneConfig,
 ) error {
 	zc := op.ZoneConfig
-	if zc.IsSubzonePlaceholder() && len(zc.Subzones) == 0 {
-		i.ImmediateMutationStateUpdater.DeleteZoneConfig(op.TableID)
-	} else {
+	if zc.IsSubzonePlaceholder() && len(zc.Subzones) != 0 {
 		i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.TableID,
 			protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
+	} else {
+		i.ImmediateMutationStateUpdater.DeleteZoneConfig(op.TableID)
 	}
 	return nil
 }

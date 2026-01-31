@@ -28,7 +28,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: multiregion_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #108
   ...
        regionalByRow: {}
@@ -134,12 +134,13 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+upsert zone config for #108
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 16 MutationType ops
+## PreCommitPhase stage 2 of 2 with 17 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -279,6 +280,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+upsert zone config for #108
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "CREATE INDEX rbr_idx ON multiregion_db.public.table_regional_by_row (v) PARTITION BY crdb_region) ()"
   descriptor IDs: [108]
