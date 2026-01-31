@@ -470,7 +470,9 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 func TestReproGCRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	repro.Init()
+
+	repro.Struct(&repro.S)
+	repro.S.Init.Once()
 
 	require.NoError(t, log.SetVModule("dist_sender=2,mvcc_gc_queue=2"))
 	defer func() { _ = log.SetVModule("") }()
@@ -548,24 +550,24 @@ func TestReproGCRace(t *testing.T) {
 	go func() {
 		// Wait for TTL so GC threshold will include all deleted data.
 		time.Sleep(ttlSeconds*time.Second + 100*time.Millisecond)
-		repro.Step(repro.StepGCStart, "run MVCC GC")
+		repro.S.GCStart.Once()
 		require.NoError(t, store.ManualMVCCGC(repl))
-		repro.Step(repro.StepGCSent, "MVCC GC sent")
+		repro.S.GCSent.Once()
 	}()
 
 	// Split the scratch range in the middle.
 	middle := keys[50]
-	repro.Step(repro.StepSplitStart, "split started")
+	repro.S.SplitStart.Once()
 	tc.SplitRangeOrFatal(t, middle)
 	require.NoError(t, tc.WaitForSplitAndInitialization(middle))
-	repro.Step(repro.StepSplitApplied, "split applied")
+	repro.S.SplitApplied.Once()
 
 	// Relocate the RHS range's replica from 1st to 4th node.
 	tc.RebalanceVoterOrFatal(ctx, t, middle, tc.Target(0), tc.Target(3))
-	repro.Step(repro.StepRebalancedRHS, "moved the RHS replica")
+	repro.S.RebalancedRHS.Once()
 
 	// Run a consistency check on the RHS range.
-	repro.Step(repro.StepConsistencyRHS, "consistency check on RHS")
+	repro.S.ConsistencyRHS.Once()
 	rhsDesc := tc.LookupRangeOrFatal(t, middle)
 	checkResp, pErr := kv.SendWrappedWith(ctx, store.DB().NonTransactionalSender(), kvpb.Header{
 		Timestamp: store.Clock().Now(),

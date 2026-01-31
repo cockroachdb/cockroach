@@ -101,7 +101,15 @@ func makeNoOp(seqPtr any) {
 }
 
 var S struct {
-	Init Node
+	Init            Node
+	GCStart         Node
+	GCSnapshotTaken Node
+	SplitStart      Node
+	SplitApplied    Node
+	RebalancedRHS   Node
+	FirstClearRange Node
+	GCSent          Node
+	ConsistencyRHS  Node
 }
 
 func init() {

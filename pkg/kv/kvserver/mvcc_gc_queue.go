@@ -624,8 +624,8 @@ func (r *replicaGCer) GC(
 	if len(keys) == 0 && len(rangeKeys) == 0 && clearRange == nil {
 		return nil
 	}
-	if clearRange != nil && !repro.Done(repro.StepFirstClearRange) {
-		repro.Step(repro.StepFirstClearRange, "sending first ClearRange")
+	if clearRange != nil {
+		repro.S.FirstClearRange.Once()
 	}
 	req := r.template()
 	req.Keys = keys
@@ -677,7 +677,9 @@ func (mgcq *mvccGCQueue) process(
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
 	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
-	log.KvExec.Infof(ctx, "thresholds: %v, %v, %v, %v", canGC, gcTimestamp, oldThreshold, newThreshold)
+	if !repro.S.GCSent.IsDone() {
+		log.KvExec.Infof(ctx, "thresholds: %v, %v, %v, %v", canGC, gcTimestamp, oldThreshold, newThreshold)
+	}
 	if err != nil {
 		return false, err
 	}
@@ -706,7 +708,7 @@ func (mgcq *mvccGCQueue) process(
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	defer snap.Close()
-	repro.Step(repro.StepGCSnapshotTaken, "GC snapshot taken")
+	repro.S.GCSnapshotTaken.Once()
 
 	lockAgeThreshold := gc.LockAgeThreshold.Get(&repl.store.ClusterSettings().SV)
 	maxLocksPerCleanupBatch := gc.MaxLocksPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
