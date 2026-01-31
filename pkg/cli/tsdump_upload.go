@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/yamlutil"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -61,6 +62,7 @@ var (
 		"tpl_var_cluster=%s&tpl_var_upload_id=%s&tpl_var_upload_day=%d&tpl_var_upload_month=%d&tpl_var_upload_year=%d&from_ts=%d&to_ts=%d"
 	zipFileSignature            = []byte{0x50, 0x4B, 0x03, 0x04}
 	gzipFileSignature           = []byte{0x1f, 0x8b}
+	zstdFileSignature           = []byte{0x28, 0xB5, 0x2F, 0xFD}
 	logMessageFormat            = "tsdump upload to datadog is partially failed for metric: %s"
 	partialFailureMessageFormat = "The Tsdump upload to Datadog succeeded but %d metrics partially failed to upload." +
 		" These failures can be due to transient network errors.\nMetrics:\n%s\n" +
@@ -1121,6 +1123,13 @@ func getFileReader(fileName string) (io.Reader, error) {
 			return nil, err
 		}
 		return gzipReader, nil
+
+	case bytes.HasPrefix(buf, zstdFileSignature):
+		zstdReader, err := zstd.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		return zstdReader, nil
 
 	default:
 		return file, nil
