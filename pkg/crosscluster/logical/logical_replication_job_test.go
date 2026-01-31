@@ -1979,11 +1979,14 @@ func TestLogicalReplicationPlanner(t *testing.T) {
 	})
 	t.Run("generatePlan uses the latest replicated time for planning", func(t *testing.T) {
 		replicatedTime := hlc.Timestamp{WallTime: 142}
-		require.NoError(t, sj.Job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			prog := md.Progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication
-			prog.ReplicatedTime = replicatedTime
-			ju.UpdateProgress(md.Progress)
-			return nil
+		require.NoError(t, jobExecCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			prog, err := jobs.LoadLegacyProgress(ctx, txn, sj.Job.ID())
+			if err != nil {
+				return err
+			}
+			ldrProgress := prog.(jobspb.LogicalReplicationProgress)
+			ldrProgress.ReplicatedTime = replicatedTime
+			return jobs.StoreLegacyProgress(ctx, txn, sj.Job.ID(), ldrProgress)
 		}))
 		_, _, _ = planner.generatePlan(ctx, jobExecCtx.DistSQLPlanner())
 		requireAsOf(replicatedTime)

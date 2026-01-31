@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -574,56 +573,40 @@ func alterTenantJobCutover(
 	if !ok {
 		return hlc.Timestamp{}, errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
-	progress := job.Progress()
 
-	replicatedTimeAtCutover := replicationutils.ReplicatedTimeFromProgress(&progress)
-	if replicatedTimeAtCutover.IsEmpty() {
-		replicatedTimeAtCutover = details.ReplicationStartTime
+	// Check that the protected timestamp record exists. The ProtectedTimestampRecordID
+	// is in the payload (details), which is already loaded.
+	if details.ProtectedTimestampRecordID == nil {
+		return hlc.Timestamp{}, errors.Newf("replicated tenant %q (%d) has not yet recorded a retained timestamp",
+			tenantName, tenInfo.ID)
 	}
 
-	if alterTenantStmt.Cutover.Latest {
-		cutoverTime = replicatedTimeAtCutover
-	}
-
-	// TODO(ssd): We could use the replication manager here, but
-	// that embeds a priviledge check which is already completed.
-	//
-	// Check that the timestamp is above our retained timestamp.
-	stats, err := replicationutils.GetStreamIngestionStats(ctx, details, progress)
+	// applyCutoverTime will read the progress inside its Update callback to avoid
+	// a separate progress read that would cause contention with the frontier processor.
+	resultCutoverTime, err := applyCutoverTime(ctx, job, txn, cutoverTime, details, ptp, alterTenantStmt.Cutover.Latest)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
-		return hlc.Timestamp{}, errors.Newf("replicated tenant %q (%d) has not yet recorded a retained timestamp",
-			tenantName, tenInfo.ID)
-	} else {
-		record, err := ptp.GetRecord(ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
-		if err != nil {
-			return hlc.Timestamp{}, err
-		}
-		if cutoverTime.Less(record.Timestamp) {
-			return hlc.Timestamp{}, errors.Newf("cutover time %s is before earliest safe cutover time %s",
-				cutoverTime, record.Timestamp)
-		}
-	}
-	if err := applyCutoverTime(ctx, job, txn, cutoverTime, replicatedTimeAtCutover); err != nil {
-		return hlc.Timestamp{}, err
-	}
 
-	return cutoverTime, nil
+	return resultCutoverTime, nil
 }
 
 // applyCutoverTime modifies the consumer job record with a cutover time and
-// unpauses the job if necessary.
+// unpauses the job if necessary. It reads progress inside the Update callback
+// to avoid a separate progress read that would contend with the frontier processor.
+// If cutoverToLatest is true, the cutover time is set to the current replicated time.
+// Returns the actual cutover time used.
 func applyCutoverTime(
 	ctx context.Context,
 	job *jobs.Job,
 	txn isql.Txn,
 	cutoverTimestamp hlc.Timestamp,
-	replicatedTimeAtCutover hlc.Timestamp,
-) error {
-	log.Dev.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	jobDetails jobspb.StreamIngestionDetails,
+	ptp protectedts.Storage,
+	cutoverToLatest bool,
+) (hlc.Timestamp, error) {
+	var resultCutoverTime hlc.Timestamp
+	err := job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
 		if progress.ReplicationStatus == jobspb.ReplicationFailingOver {
@@ -631,15 +614,43 @@ func applyCutoverTime(
 				job.ID(), progress.CutoverTime)
 		}
 
+		// Compute replicatedTimeAtCutover from the progress loaded inside this callback.
+		replicatedTimeAtCutover := progress.ReplicatedTime
+		if replicatedTimeAtCutover.IsEmpty() {
+			replicatedTimeAtCutover = jobDetails.ReplicationStartTime
+		}
+
+		// If cutover to latest, use the current replicated time.
+		actualCutoverTime := cutoverTimestamp
+		if cutoverToLatest {
+			actualCutoverTime = replicatedTimeAtCutover
+		}
+
+		// Validate cutover time against the protected timestamp record.
+		record, err := ptp.GetRecord(ctx, *details.ProtectedTimestampRecordID)
+		if err != nil {
+			return err
+		}
+		if actualCutoverTime.Less(record.Timestamp) {
+			return errors.Newf("cutover time %s is before earliest safe cutover time %s",
+				actualCutoverTime, record.Timestamp)
+		}
+
 		progress.ReplicationStatus = jobspb.ReplicationPendingFailover
 		// Update the sentinel being polled by the stream ingestion job to
 		// check if a complete has been signaled.
-		progress.CutoverTime = cutoverTimestamp
+		progress.CutoverTime = actualCutoverTime
 		progress.ReplicatedTimeAtCutover = replicatedTimeAtCutover
 		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
 		ju.UpdateProgress(md.Progress)
+
+		resultCutoverTime = actualCutoverTime
 		return ju.Unpaused(ctx, md)
 	})
+	if err == nil {
+		log.Dev.Infof(ctx, "added cutover time %s to job record", resultCutoverTime)
+	}
+	return resultCutoverTime, err
 }
 
 func alterTenantExpirationWindow(
@@ -659,11 +670,11 @@ func alterTenantExpirationWindow(
 				ju.UpdatePayload(md.Payload)
 
 				difference := expirationWindow - previousExpirationWindow
-				currentExpiration := md.Progress.GetStreamReplication().Expiration
+				progress := md.Progress.GetStreamReplication()
+				currentExpiration := progress.Expiration
 				newExpiration := currentExpiration.Add(difference)
-				md.Progress.GetStreamReplication().Expiration = newExpiration
-				ju.UpdateProgress(md.Progress)
-				return nil
+				progress.Expiration = newExpiration
+				return jobs.StoreLegacyProgress(ctx, txn, producerJobID, *progress)
 			}); err != nil {
 			return err
 		}
