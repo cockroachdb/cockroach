@@ -10,13 +10,18 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -180,4 +185,111 @@ func FlushTracingAggregatorStats(
 		}
 		return jobs.WriteExecutionDetailFile(ctx, perNodeFilename, perNode.Bytes(), txn, jobID)
 	})
+}
+
+type TraceBasedDelayLogger interface {
+	Process(ctx context.Context, latestTrace ComponentAggregatorStats)
+}
+
+type TraceDelayReader interface {
+	// Work returns the amount of time spent doing and/or waiting for work to be
+	// done, using the prior and current trace info.
+	Work(prior, now ComponentAggregatorStats) time.Duration
+	// Delay returns the amount of time spent waiting for some cause of delays
+	// while doing work or waiting for work to be done, i.e. a subset of the time
+	// returned by Work.
+	Delay(prior, now ComponentAggregatorStats) (time.Duration, error)
+}
+
+type delayNotifer interface {
+	// Notify is called with the delay fraction over the last `since` duration,
+	// and chooses if and how to nofify the user.
+	Notify(ctx context.Context, since time.Duration, frac float64) error
+}
+
+type traceDelayLogger struct {
+	lastTrace     ComponentAggregatorStats
+	lastTraceTime time.Time
+	infoFreq      log.EveryN
+	reader        TraceDelayReader
+	notifier      delayNotifer
+}
+
+// Process implements the TraceBasedDelayLogger interface.
+func (a *traceDelayLogger) Process(
+	ctx context.Context, latestTrace ComponentAggregatorStats,
+) error {
+	now := timeutil.Now()
+	elapsed := a.reader.Work(a.lastTrace, latestTrace)
+	delay, err := a.reader.Delay(a.lastTrace, latestTrace)
+	if err != nil {
+		return err
+	}
+	a.lastTrace = latestTrace
+	since := now.Sub(a.lastTraceTime)
+	a.lastTraceTime = timeutil.Now()
+
+	if delay == 0 {
+		return nil
+	}
+	if a.infoFreq.ShouldLog() {
+		if delay > elapsed {
+			// TODO(dt): should we just bail out if elapsed == 0, i.e. we don't have a
+			// meaningful denominator to compare against?
+			log.Infof(ctx, "job reported delay in excess of total work time: %s vs %s", delay, elapsed)
+			elapsed = delay
+		}
+		log.Infof(ctx, "job delayed by %s across %s of work", delay, elapsed)
+	}
+	return a.notifier.Notify(ctx, since, float64(delay)/float64(elapsed))
+}
+
+// jobDelayLogger is a delay notifier that logs to the job's message log.
+type jobDelayLogger struct {
+	jobID     jobspb.JobID
+	threshold *settings.FloatSetting
+	execCfg   *sql.ExecutorConfig
+	freq      log.EveryN
+	cause     string
+}
+
+// Notify implements the delayNotifer interface.
+func (l *jobDelayLogger) Notify(ctx context.Context, since time.Duration, f float64) error {
+	if !l.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+		return nil
+	}
+	if threshold := l.threshold.Get(l.execCfg.SV()); threshold > 0 && f > threshold && l.freq.ShouldLog() {
+		msg := fmt.Sprintf("job execution over last %s delayed by %d%% due to %s", humanizeutil.LongDuration(since), int(f*100), l.cause)
+
+		return l.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.MessageStorage(l.jobID).Record(ctx, txn, "overload", msg)
+		})
+	}
+	return nil
+}
+
+// NewJobDelayLogger creates a new job delay logger that will log to the job's
+// message log if the ratio of delay, as computed by the passed reader, to the
+// work time, also computed by said reader, exceeds the value specified by the
+// passed threshold setting, logging a message no more often than the passed
+// frequency. The message will specify the ratio and the passed cause string.
+func NewJobDelayLogger(
+	jobID jobspb.JobID,
+	execCfg *sql.ExecutorConfig,
+	msgFreq time.Duration,
+	threshold *settings.FloatSetting,
+	reader TraceDelayReader,
+	cause string,
+) *traceDelayLogger {
+	return &traceDelayLogger{
+		notifier: &jobDelayLogger{
+			jobID:     jobID,
+			execCfg:   execCfg,
+			threshold: threshold,
+			freq:      log.Every(msgFreq),
+			cause:     cause,
+		},
+		reader:   reader,
+		infoFreq: log.Every(time.Minute),
+	}
 }
