@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -391,6 +392,76 @@ func (rd *restoreDataProcessor) openSSTs(
 	return mSST, res, nil
 }
 
+// openSSTsForFiles opens the specified files and returns a multiplexed SST
+// iterator. If emitDeletes is true, the iterator will emit tombstones instead
+// of skipping them (needed when ingesting over linked layers).
+func (rd *restoreDataProcessor) openSSTsForFiles(
+	ctx context.Context,
+	entry execinfrapb.RestoreSpanEntry,
+	files []execinfrapb.RestoreFileSpec,
+	emitDeletes bool,
+) (mergedSST, error) {
+	var dirs []cloud.ExternalStorage
+
+	// If we bail early and haven't handed off responsibility of the dirs/iters to
+	// the channel, close anything that we had open.
+	defer func() {
+		for _, dir := range dirs {
+			if err := dir.Close(); err != nil {
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}
+	}()
+
+	storeFiles := make([]storageccl.StoreFile, 0, len(files))
+	for _, file := range files {
+		dir, err := rd.FlowCtx.Cfg.ExternalStorage(ctx, file.Dir)
+		if err != nil {
+			return mergedSST{}, err
+		}
+		dirs = append(dirs, dir)
+		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+	}
+
+	iterOpts := storage.IterOptions{
+		RangeKeyMaskingBelow: rd.spec.RestoreTime,
+		KeyTypes:             storage.IterKeyTypePointsAndRanges,
+		LowerBound:           keys.LocalMax,
+		UpperBound:           keys.MaxKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, rd.spec.Encryption, iterOpts)
+	if err != nil {
+		return mergedSST{}, err
+	}
+
+	var readAsOfIter *storage.ReadAsOfIterator
+	if emitDeletes {
+		readAsOfIter = storage.NewReadAsOfIteratorWithEmitDeletes(iter, rd.spec.RestoreTime)
+	} else {
+		readAsOfIter = storage.NewReadAsOfIterator(iter, rd.spec.RestoreTime)
+	}
+
+	dirsToClose := dirs
+	dirs = nil // prevent defer from closing
+
+	cleanup := func() {
+		log.Dev.VInfof(ctx, 1, "finished with and closing %d files in span %d [%s-%s)", len(files), entry.ProgressIdx, entry.Span.Key, entry.Span.EndKey)
+		readAsOfIter.Close()
+		for _, dir := range dirsToClose {
+			if err := dir.Close(); err != nil {
+				log.Dev.Warningf(ctx, "close export storage failed %v", err)
+			}
+		}
+	}
+
+	return mergedSST{
+		entry:        entry,
+		iter:         readAsOfIter,
+		cleanup:      cleanup,
+		completeUpTo: rd.spec.RestoreTime,
+	}, nil
+}
+
 func (rd *restoreDataProcessor) runRestoreWorkers(
 	ctx context.Context, entries chan execinfrapb.RestoreSpanEntry,
 ) error {
@@ -405,7 +476,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return errors.Wrap(err, "creating key rewriter from rekeys")
 		}
 
-		var sstIter mergedSST
 		for {
 			done, err := func() (done bool, _ error) {
 				entry, ok := <-entries
@@ -420,26 +490,63 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				ctx, sp := tracing.ChildSpan(ctx, "restore.processRestoreSpanEntry")
 				defer sp.Finish()
 
-				var res *resumeEntry
-				for {
-					sstIter, res, err = rd.openSSTs(ctx, entry, res)
+				// Partition files into linkable and ingestable based on their UseLink flag.
+				linkable, ingestable := partitionFilesByLinkability(entry.Files)
+
+				if log.V(2) {
+					log.Dev.Infof(ctx, "processing restore span entry %d: %d linkable files, %d ingestable files",
+						entry.ProgressIdx, len(linkable), len(ingestable))
+				}
+
+				var summary kvpb.BulkOpSummary
+
+				// First, link all linkable files.
+				if len(linkable) > 0 {
+					linkEntry := entry
+					linkEntry.Files = linkable
+					linkSummary, err := rd.linkFiles(ctx, kr, linkEntry)
+					if err != nil {
+						return done, errors.Wrap(err, "linking files")
+					}
+					summary.DataSize += linkSummary.DataSize
+					for k, v := range linkSummary.EntryCounts {
+						if summary.EntryCounts == nil {
+							summary.EntryCounts = make(map[uint64]int64)
+						}
+						summary.EntryCounts[k] += v
+					}
+				}
+
+				// Then, ingest files that cannot be linked.
+				if len(ingestable) > 0 {
+					// When there are linked files, we need to emit deletes to shadow
+					// any keys in the linked layers that have been deleted.
+					emitDeletes := len(linkable) > 0
+					ingestEntry := entry
+					ingestEntry.Files = ingestable
+
+					sstIter, err := rd.openSSTsForFiles(ctx, ingestEntry, ingestable, emitDeletes)
 					if err != nil {
 						return done, errors.Wrap(err, "opening SSTs")
 					}
 
-					summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
+					ingestSummary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
 					if err != nil {
 						return done, errors.Wrap(err, "processing restore span entry")
 					}
+					summary.DataSize += ingestSummary.DataSize
+					for k, v := range ingestSummary.EntryCounts {
+						if summary.EntryCounts == nil {
+							summary.EntryCounts = make(map[uint64]int64)
+						}
+						summary.EntryCounts[k] += v
+					}
+				}
 
-					select {
-					case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs, sstIter.completeUpTo):
-					case <-ctx.Done():
-						return done, errors.Wrap(ctx.Err(), "sending progress update")
-					}
-					if res.done {
-						break
-					}
+				select {
+				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs, rd.spec.RestoreTime):
+				case <-ctx.Done():
+					return done, errors.Wrap(ctx.Err(), "sending progress update")
 				}
 				return done, nil
 			}()
@@ -452,6 +559,134 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			}
 		}
 	})
+}
+
+// linkFiles links all files in the entry via LinkExternalSSTable instead of
+// downloading and ingesting them. This is used for online restore when the
+// UseLink flag is set on files.
+func (rd *restoreDataProcessor) linkFiles(
+	ctx context.Context, kr *KeyRewriter, entry execinfrapb.RestoreSpanEntry,
+) (kvpb.BulkOpSummary, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "restore.linkFiles")
+	defer sp.Finish()
+
+	var summary kvpb.BulkOpSummary
+	kvDB := rd.FlowCtx.Cfg.DB.KV()
+
+	if err := assertCommonPrefix(entry.Span, entry.ElidedPrefix); err != nil {
+		return summary, err
+	}
+
+	var currentLayer int32
+	for i := range entry.Files {
+		file := &entry.Files[i]
+		if file.Layer < currentLayer {
+			return summary, errors.AssertionFailedf("files not sorted by layer")
+		}
+		currentLayer = file.Layer
+		if file.HasRangeKeys {
+			return summary, errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
+		}
+		if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
+			return summary, err
+		}
+
+		restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
+		if !restoringSubspan.Valid() {
+			return summary, errors.AssertionFailedf("file %s with span %s has no overlap with restore span %s",
+				file.Path,
+				file.BackupFileEntrySpan,
+				entry.Span,
+			)
+		}
+
+		var rewriteErr error
+		restoringSubspan, rewriteErr = rewriteSpan(kr, restoringSubspan.Clone(), entry.ElidedPrefix)
+		if rewriteErr != nil {
+			return summary, rewriteErr
+		}
+
+		log.VEventf(ctx, 2, "linking file %s (file span: %s) to span %s", file.Path, file.BackupFileEntrySpan, restoringSubspan)
+
+		counts := file.BackupFileEntryCounts
+		fileSize := file.ApproximatePhysicalSize
+		if fileSize == 0 {
+			fileSize = uint64(counts.DataSize)
+		}
+		if fileSize == 0 {
+			fileSize = 16 << 20 // guess
+		}
+
+		// The synthetic prefix is computed from the REWRITTEN span key, not the
+		// original file span key. This matches the old online restore path which
+		// overwrites file.BackupFileEntrySpan before computing the prefix.
+		syntheticPrefix, err := backupsink.ElidedPrefix(restoringSubspan.Key, entry.ElidedPrefix)
+		if err != nil {
+			return summary, err
+		}
+
+		fileStats := &enginepb.MVCCStats{
+			ContainsEstimates: 1,
+			KeyBytes:          counts.DataSize / 2,
+			ValBytes:          counts.DataSize / 2,
+			LiveBytes:         counts.DataSize,
+			KeyCount:          counts.Rows + counts.IndexEntries,
+			LiveCount:         counts.Rows + counts.IndexEntries,
+		}
+
+		var batchTimestamp hlc.Timestamp
+		if writeAtBatchTS(ctx, restoringSubspan, kr.fromSystemTenant) {
+			batchTimestamp = kvDB.Clock().Now()
+		}
+
+		loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
+			Locator:                 file.Dir.URI,
+			Path:                    file.Path,
+			ApproximatePhysicalSize: fileSize,
+			BackingFileSize:         file.BackingFileSize,
+			SyntheticPrefix:         syntheticPrefix,
+			UseSyntheticSuffix:      batchTimestamp.IsSet(),
+			MVCCStats:               fileStats,
+		}
+
+		if err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
+			return summary, errors.Wrap(err, "linking external SSTable")
+		}
+
+		// Call testing knob after each file link, matching the old online restore path.
+		if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+			if restoreKnobs.AfterAddRemoteSST != nil {
+				if err := restoreKnobs.AfterAddRemoteSST(); err != nil {
+					return summary, err
+				}
+			}
+		}
+
+		// Use ApproximatePhysicalSize for DataSize to match the coordinator path.
+		summary.DataSize += int64(fileSize)
+
+		// Populate EntryCounts so that countRows() can compute row counts for
+		// progress tracking. We need to use a key that's in pkIDs for rows to be
+		// counted correctly. Pick any key from pkIDs (the specific key doesn't
+		// matter since we're just summing totals).
+		if counts.Rows > 0 || counts.IndexEntries > 0 {
+			if summary.EntryCounts == nil {
+				summary.EntryCounts = make(map[uint64]int64)
+			}
+			// Use a pkID key for rows so countRows counts them as rows.
+			for pkID := range rd.spec.PKIDs {
+				summary.EntryCounts[pkID] += counts.Rows
+				break // only need one key
+			}
+			// Use key 0 for index entries (won't be in pkIDs, so counted as index entries).
+			if counts.IndexEntries > 0 {
+				summary.EntryCounts[0] += counts.IndexEntries
+			}
+		}
+	}
+
+	rd.progressMade = true
+	return summary, nil
 }
 
 var backupFileReadError = errors.New("error reading backup file")
@@ -632,6 +867,21 @@ func makeProgressUpdate(
 	progDetails.DataSpan = entry.Span
 	progDetails.CompleteUpTo = completeUpTo
 	return progDetails
+}
+
+// partitionFilesByLinkability splits files into those that can be linked
+// (UseLink=true) and those that must be ingested (UseLink=false).
+func partitionFilesByLinkability(
+	files []execinfrapb.RestoreFileSpec,
+) (linkable, ingestable []execinfrapb.RestoreFileSpec) {
+	for i := range files {
+		if files[i].UseLink {
+			linkable = append(linkable, files[i])
+		} else {
+			ingestable = append(ingestable, files[i])
+		}
+	}
+	return linkable, ingestable
 }
 
 // Next is part of the RowSource interface.

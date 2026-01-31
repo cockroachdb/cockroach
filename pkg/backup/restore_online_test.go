@@ -868,3 +868,309 @@ func assertOnlineRestoreWithRekeying(
 	rSQLDB.QueryRow(t, bankTableIDQuery).Scan(&restoreID)
 	require.NotEqual(t, originalID, restoreID)
 }
+
+// TestOnlineRestoreRevisionHistoryLayers tests online restore with backup chains
+// that include revision history layers. When a backup chain contains layers with
+// revision history, those layers must be ingested (not linked) by the distributed
+// restore flow. This test exercises various combinations of:
+//   - Layers without revision history (linkable)
+//   - Layers with revision history (must be ingested)
+//   - Restores to specific timestamps covered by revision history
+//
+// The test creates a table split into multiple ranges and makes mutations across
+// different ranges in different backup layers to exercise the hybrid link/ingest
+// path thoroughly.
+func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	// Use enough accounts to create multiple ranges.
+	const numAccounts = 500
+
+	srcTC, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	dstTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	defer cleanupFnRestored()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup-rev-history", "backup-rev-history", sqlDB, rSQLDB)
+
+	// Split the bank table into multiple ranges so we have mutations affecting
+	// different ranges in different layers.
+	sqlDB.Exec(t, "ALTER TABLE data.bank SPLIT AT VALUES (100), (200), (300), (400)")
+
+	// Layer 0: Full backup (no revision history).
+	// Initial balance is the account id (set by backupRestoreTestSetup).
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	// Layer 1: First incremental without revision history.
+	// Update balance for range 0-100 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 1000 WHERE id < 100")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Layer 2: Second incremental without revision history.
+	// Update balance for range 100-200 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 2000 WHERE id >= 100 AND id < 200")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Now we start revision history layers.
+	// Layer 3: First incremental WITH revision history.
+	// Update balance for range 200-300.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3000 WHERE id >= 200 AND id < 300")
+	var ts3 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts3)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Capture a timestamp in the middle of the revision history for AOST testing.
+	// Make another mutation WITHIN the revision history period.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3500 WHERE id >= 200 AND id < 250")
+	var tsMidRevision string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsMidRevision)
+
+	// Layer 4: Second incremental WITH revision history.
+	// Update balance for range 300-400.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 4000 WHERE id >= 300 AND id < 400")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 5: Third incremental WITH revision history.
+	// Update balance for range 400-500.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 5000 WHERE id >= 400")
+	var ts5 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts5)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 6: Final incremental WITHOUT revision history (after the revision history layers).
+	// Update all balances to a final value.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 6000 WHERE true")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Test cases for different restore scenarios.
+	testCases := []struct {
+		name             string
+		restoreTime      string  // AS OF SYSTEM TIME, empty for latest
+		expectedBalances [][]int // expected [minID, maxID, balance] ranges
+		expectError      string  // expected error, empty if success expected
+		desc             string  // description for debugging
+	}{
+		{
+			name:        "restore-to-latest",
+			restoreTime: "",
+			expectedBalances: [][]int{
+				{0, numAccounts - 1, 6000}, // all accounts should have balance 6000
+			},
+			desc: "restore to latest backup (after all layers)",
+		},
+		{
+			name:        "restore-to-layer-3-end",
+			restoreTime: ts3,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 299, 3000}, // layer 3 update (first rev history layer)
+			},
+			desc: "restore to end of first revision history layer",
+		},
+		{
+			name:        "restore-to-mid-revision",
+			restoreTime: tsMidRevision,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500}, // mid-revision update
+				{250, 299, 3000}, // still at layer 3 value
+			},
+			desc: "restore to a point in time within revision history",
+		},
+		{
+			name:        "restore-to-layer-5-end",
+			restoreTime: ts5,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 399, 4000},
+				{400, numAccounts - 1, 5000},
+			},
+			desc: "restore to end of last revision history layer",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clean up before each test case.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Enable the distributed flow for online restore (required for revision history).
+			rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+
+			restoreStmt := fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage)
+			if tc.restoreTime != "" {
+				restoreStmt = fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH EXPERIMENTAL DEFERRED COPY",
+					externalStorage, tc.restoreTime)
+			}
+
+			if tc.expectError != "" {
+				rSQLDB.ExpectErr(t, tc.expectError, restoreStmt)
+				return
+			}
+
+			rSQLDB.Exec(t, restoreStmt)
+
+			// Verify row count.
+			var restoreRowCount int
+			rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+			require.Equal(t, numAccounts, restoreRowCount, "row count mismatch for %s", tc.desc)
+
+			// Verify expected balances for each range.
+			for _, expected := range tc.expectedBalances {
+				minID, maxID, expectedBalance := expected[0], expected[1], expected[2]
+				var actualBalance int
+				rSQLDB.QueryRow(t,
+					"SELECT balance FROM data.bank WHERE id = $1", minID,
+				).Scan(&actualBalance)
+				require.Equal(t, expectedBalance, actualBalance,
+					"balance mismatch at id=%d for %s", minID, tc.desc)
+
+				// Check a few more points in the range.
+				if maxID > minID {
+					midID := (minID + maxID) / 2
+					rSQLDB.QueryRow(t,
+						"SELECT balance FROM data.bank WHERE id = $1", midID,
+					).Scan(&actualBalance)
+					require.Equal(t, expectedBalance, actualBalance,
+						"balance mismatch at id=%d for %s", midID, tc.desc)
+				}
+			}
+
+			// For latest restore, also verify via fingerprint comparison.
+			if tc.restoreTime == "" {
+				fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, srcTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				fpDst, err := fingerprintutils.FingerprintDatabase(ctx, dstTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+			}
+
+			// Wait for the download job to complete.
+			waitForLatestDownloadJobToSucceed(t, rSQLDB)
+		})
+	}
+}
+
+// TestOnlineRestoreWithDistFlow tests that online restore works correctly when
+// using the distributed restore flow (distRestore with RestoreDataProcessor)
+// instead of the simpler sendAddRemoteSSTs loop. This is enabled via the
+// backup.restore.online_use_dist_flow.enabled cluster setting.
+//
+// The test runs restores both with and without the dist flow enabled and
+// compares the results to ensure they are consistent, including the approx_rows
+// and approx_bytes reported in the restore result.
+func TestOnlineRestoreWithDistFlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	ctx := context.Background()
+
+	const numAccounts = 100
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	defer cleanupFnRestored()
+
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
+		// Create the backup once per incremental setting. Use a subdir to
+		// separate full from incremental test runs.
+		backupSubdir := "full"
+		if incremental {
+			backupSubdir = "incr"
+		}
+		backupURI := fmt.Sprintf("nodelocal://1/backup-dist-flow/%s", backupSubdir)
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+		if incremental {
+			sqlDB.Exec(t, "UPDATE data.bank SET balance = balance + 100 WHERE true")
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", backupURI))
+		}
+
+		// restoreResult holds the results of a restore operation.
+		type restoreResult struct {
+			approxRows  int64
+			approxBytes int64
+		}
+
+		// runRestore performs an online restore with the given dist flow setting
+		// and returns the result.
+		runRestore := func(t *testing.T, useDistFlow bool) restoreResult {
+			// Clean up before restore.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Set the dist flow setting.
+			rSQLDB.Exec(t, fmt.Sprintf(
+				"SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = %t", useDistFlow))
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+			rows := rSQLDB.Query(t, fmt.Sprintf(
+				"RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", backupURI))
+			defer rows.Close()
+
+			// Parse the restore result.
+			require.True(t, rows.Next(), "expected restore to return a row")
+			var jobID, tables, approxRows, approxBytes, downloadJobID int64
+			require.NoError(t, rows.Scan(&jobID, &tables, &approxRows, &approxBytes, &downloadJobID))
+			require.False(t, rows.Next(), "expected only one row from restore")
+
+			// Verify data is accessible.
+			var restoreRowCount int
+			rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+			require.Equal(t, numAccounts, restoreRowCount)
+
+			// Verify data integrity by comparing fingerprints.
+			fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			// Wait for the download job to complete.
+			waitForLatestDownloadJobToSucceed(t, rSQLDB)
+
+			return restoreResult{approxRows: approxRows, approxBytes: approxBytes}
+		}
+
+		// Run restore with dist flow disabled (coordinator path).
+		coordResult := runRestore(t, false /* useDistFlow */)
+
+		// Run restore with dist flow enabled (distributed path).
+		distResult := runRestore(t, true /* useDistFlow */)
+
+		// Compare the results. Both paths should report the same approximate
+		// rows and bytes since they're restoring the same data.
+		require.Equal(t, coordResult.approxRows, distResult.approxRows,
+			"approx_rows mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxRows, distResult.approxRows)
+		require.Equal(t, coordResult.approxBytes, distResult.approxBytes,
+			"approx_bytes mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxBytes, distResult.approxBytes)
+
+		// Sanity check that we actually got non-zero values.
+		require.Greater(t, coordResult.approxRows, int64(0),
+			"expected non-zero approx_rows from coordinator path")
+		require.Greater(t, coordResult.approxBytes, int64(0),
+			"expected non-zero approx_bytes from coordinator path")
+
+		// Clean up for next iteration.
+		rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+	})
+}

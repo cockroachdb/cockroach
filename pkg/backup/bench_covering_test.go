@@ -109,7 +109,9 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 													nil,
 													filter,
 													&inclusiveEndKeyComparator{},
-													spanCh)
+													spanCh,
+													false, /* useLink */
+												)
 											})
 
 											var cov []execinfrapb.RestoreSpanEntry
