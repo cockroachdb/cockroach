@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -1011,6 +1012,57 @@ func runDebugCompact(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var debugClearGossipBootstrapCmd = &cobra.Command{
+	Use:   "clear-gossip-bootstrap <directory>",
+	Short: "clear the persisted gossip bootstrap addresses from a store",
+	Long: `
+Clears the persisted gossip bootstrap addresses from the specified store.
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: clierrorplus.MaybeDecorateError(runDebugClearGossipBootstrap),
+}
+
+func runDebugClearGossipBootstrap(cmd *cobra.Command, args []string) error {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	db, err := OpenEngine(args[0], stopper, fs.ReadWrite, storage.MustExist)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	// Read the persisted bootstrap info so we can log the addresses being cleared.
+	var bi gossip.BootstrapInfo
+	found, err := storage.MVCCGetProto(ctx, db, keys.StoreGossipKey(), hlc.Timestamp{}, &bi,
+		storage.MVCCGetOptions{})
+	if err != nil {
+		return errors.Wrap(err, "failed to read bootstrap info")
+	}
+
+	if !found {
+		return errors.New("no bootstrap info found in store")
+	}
+
+	fmt.Printf("Found bootstrap info with %d addresses:\n", len(bi.Addresses))
+	for _, addr := range bi.Addresses {
+		fmt.Printf("\t%s\n", addr.String())
+	}
+
+	// Clear the addresses by writing an empty BootstrapInfo.
+	emptyBI := gossip.BootstrapInfo{
+		Addresses: []util.UnresolvedAddr{},
+	}
+
+	if err := storage.MVCCPutProto(ctx, db, keys.StoreGossipKey(), hlc.Timestamp{}, &emptyBI,
+		storage.MVCCWriteOptions{}); err != nil {
+		return errors.Wrap(err, "failed to clear bootstrap info")
+	}
+
+	return nil
+}
+
 var debugGossipValuesCmd = &cobra.Command{
 	Use:   "gossip-values",
 	Short: "dump all the values in a node's gossip instance",
@@ -1328,6 +1380,7 @@ func runDebugIntentCount(cmd *cobra.Command, args []string) error {
 // Note: do NOT include commands that just call Pebble code without setting up an engine.
 var DebugCommandsRequiringEncryption = []*cobra.Command{
 	debugCheckStoreCmd,
+	debugClearGossipBootstrapCmd,
 	debugCompactCmd,
 	debugGCCmd,
 	debugIntentCount,
@@ -1342,6 +1395,7 @@ var DebugCommandsRequiringEncryption = []*cobra.Command{
 // Debug commands. All commands in this list to be added to root debug command.
 var debugCmds = []*cobra.Command{
 	debugCheckStoreCmd,
+	debugClearGossipBootstrapCmd,
 	debugCompactCmd,
 	debugGCCmd,
 	debugIntentCount,
