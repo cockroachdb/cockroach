@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -147,18 +148,18 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 	tu := newTombstoneUpdater(s.Codec(), s.DB(), s.LeaseManager().(*lease.Manager), desc.GetID(), sd, s.ClusterSettings())
 	defer tu.ReleaseLeases(ctx)
 
-	columnSchemas := getColumnSchema(desc)
+	columnSchemas := sqlwriter.GetColumnSchema(desc)
 	cols := make([]catalog.Column, len(columnSchemas))
 	for i, cs := range columnSchemas {
-		cols[i] = cs.column
+		cols[i] = cs.Column
 	}
 
 	config := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	session := newInternalSession(t, s)
+	session, err := sqlwriter.NewInternalSession(ctx, s.InternalDB().(isql.DB), s.ClusterSettings())
 	defer session.Close(ctx)
 
-	writer, err := newSQLRowWriter(ctx, desc, session)
+	writer, err := sqlwriter.NewRowWriter(ctx, desc, session)
 	require.NoError(t, err)
 
 	for i := 0; i < 10; i++ {
@@ -183,11 +184,14 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 		// tombstone was written at a later timestamp. It may fail with integer out
 		// of range error if the table has computed columns and the random datums
 		// add to produces something out of range.
-		err = writer.InsertRow(ctx, before, row)
-		require.Error(t, err)
-		if !(strings.Contains(err.Error(), "integer out of range") || isLwwLoser(err)) {
-			t.Fatalf("expected LWW or integer out of range error, got: %v", err)
-		}
+		require.NoError(t, session.Txn(ctx, func(ctx context.Context) error {
+			err = writer.InsertRow(ctx, before, row)
+			require.Error(t, err)
+			if !(strings.Contains(err.Error(), "integer out of range") || isLwwLoser(err)) {
+				t.Fatalf("expected LWW or integer out of range error, got: %v", err)
+			}
+			return nil
+		}))
 	}
 }
 
