@@ -834,7 +834,9 @@ func allocateDescriptorRewrites(
 		}
 	}
 
-	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers {
+	_, hasZones := tablesByID[keys.ZonesTableID]
+
+	if descriptorCoverage == tree.AllDescriptors || descriptorCoverage == tree.SystemUsers || hasZones {
 		// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
 		// in the backup and current max desc ID in the restoring cluster. This generator
 		// keeps produced the next descriptor ID.

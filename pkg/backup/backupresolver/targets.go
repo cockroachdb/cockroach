@@ -359,6 +359,13 @@ func DescriptorsMatchingTargets(
 		return ret, err
 	}
 
+	desc, ok := r.DescByID[descpb.ID(keys.ZonesTableID)]
+	if ok {
+		// If the backup contains the zones table, we include it to restore the
+		// target zone configs.
+		ret.Descs = append(ret.Descs, desc)
+	}
+
 	alreadyRequestedDBs := make(map[descpb.ID]struct{})
 	alreadyExpandedDBs := make(map[descpb.ID]struct{})
 	invalidRestoreTsErr := errors.Errorf("supplied backups do not cover requested time")
