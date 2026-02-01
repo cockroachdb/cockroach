@@ -195,6 +195,7 @@ func (ex *connExecutor) prepare(
 	}
 
 	var flags planFlags
+	var udts []*types.T
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		p := &ex.planner
 		if origin == prep.StatementOriginWire {
@@ -262,7 +263,15 @@ func (ex *connExecutor) prepare(
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
-		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
+		flags, udts, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
+		// Copy the udts slice to ensure prepared statements and memos
+		// maintain independent references. The reason for the separation is
+		// that, when UDT versions change, we update only the prepared
+		// statement's udts while keeping the memo's udts unchanged, so that
+		// the memo is properly invalidated during plan generation.
+		udtsCopy := make([]*types.T, len(udts))
+		copy(udtsCopy, udts)
+		prepared.UDTs = udtsCopy
 		return err
 	}
 
@@ -294,10 +303,10 @@ func (ex *connExecutor) populatePrepared(
 	placeholderHints tree.PlaceholderTypes,
 	p *planner,
 	origin prep.StatementOrigin,
-) (planFlags, error) {
+) (planFlags, []*types.T, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 	stmt := &p.stmt
@@ -311,7 +320,7 @@ func (ex *connExecutor) populatePrepared(
 	// for pgwire- or SQL-level prepared statements.
 	if origin != prep.StatementOriginSessionMigration {
 		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 
@@ -322,14 +331,14 @@ func (ex *connExecutor) populatePrepared(
 	// However, we must be able to handle every type of statement below because
 	// the Postgres extended protocol requires running statements via the prepare
 	// and execute paths.
-	flags, err := p.prepareUsingOptimizer(ctx, origin)
+	flags, udts, err := p.prepareUsingOptimizer(ctx, origin)
 	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
-		return 0, err
+		return 0, nil, err
 	}
 	log.VEvent(ctx, 2, "optimizer prepare succeeded")
 	// stmt.Prepared fields have been populated.
-	return flags, nil
+	return flags, udts, nil
 }
 
 func (ex *connExecutor) execBind(
