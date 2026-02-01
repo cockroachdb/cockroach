@@ -818,7 +818,6 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(81590),
-			DefaultDRPCOption: base.TestDRPCDisabled,
 		},
 	})
 	defer tc.Stopper().Stop(ctx)

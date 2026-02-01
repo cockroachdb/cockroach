@@ -416,7 +416,6 @@ func TestStatusAPIStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -536,8 +535,7 @@ func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
 	sqlStatsKnobs.SynchronousSQLStats = true
 	// Start the cluster.
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-		Insecure:          true,
+		Insecure: true,
 		Knobs: base.TestingKnobs{
 			SQLStatsKnobs: sqlStatsKnobs,
 		},
@@ -699,7 +697,6 @@ func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -868,7 +865,6 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
@@ -1040,7 +1036,6 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	statsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
