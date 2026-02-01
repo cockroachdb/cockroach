@@ -56,6 +56,11 @@ type Metadata struct {
 
 	// ASTWithInjectedHints is the AST rewritten with injected hints.
 	ASTWithInjectedHints tree.Statement
+
+	// UDTs contains all user defined types referenced in the prepared
+	// statement. It is used to detect type version change, so the
+	// statement can be reparsed with updated versions.
+	UDTs []*types.T
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
@@ -82,6 +87,6 @@ func (pm *Metadata) MemoryEstimate() int64 {
 		res += pm.Hints[i].Size()
 	}
 	res += int64(len(pm.HintIDs)) * int64(unsafe.Sizeof(int64(0)))
-
+	res += int64(len(pm.UDTs)) * int64(unsafe.Sizeof((*types.T)(nil)))
 	return res
 }
