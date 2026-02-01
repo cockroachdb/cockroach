@@ -8977,20 +8977,20 @@ def go_deps():
         name = "com_github_zeebo_assert",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/zeebo/assert",
-        sha256 = "1f01421d74ff37cb8247988155be9e6877d336029bcd887a1d035fd32d7ab6ae",
-        strip_prefix = "github.com/zeebo/assert@v1.3.0",
+        sha256 = "d3f44825ac9c9c54a7a9fb091445eabb742b9a692d47e5d841e934bd4a73d08e",
+        strip_prefix = "github.com/zeebo/assert@v1.3.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/zeebo/assert/com_github_zeebo_assert-v1.3.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/zeebo/assert/com_github_zeebo_assert-v1.3.1.zip",
         ],
     )
     go_repository(
         name = "com_github_zeebo_errs",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/zeebo/errs",
-        sha256 = "d2fa293e275c21bfb413e2968d79036931a55f503d8b62381563ed189b523cd2",
-        strip_prefix = "github.com/zeebo/errs@v1.2.2",
+        sha256 = "5b7fb5cbe6bbd36933e8c98572f85121994e9842aefc90986f8d3a192cb69257",
+        strip_prefix = "github.com/zeebo/errs@v1.4.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/zeebo/errs/com_github_zeebo_errs-v1.2.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/zeebo/errs/com_github_zeebo_errs-v1.4.0.zip",
         ],
     )
     go_repository(
@@ -11060,10 +11060,10 @@ def go_deps():
         name = "io_storj_drpc",
         build_file_proto_mode = "disable_global",
         importpath = "storj.io/drpc",
-        sha256 = "8f8774d4216c9996b90f4411d88a95e6b38bf708701f03b41e1867c2ec60dfa9",
-        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20260128133347-b7edd94cca83",
+        sha256 = "961b0b22c3f4232af3168c043b0fa82388439c2d28743622549913d045527c4d",
+        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20260210055719-ba071c6f9395",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20260128133347-b7edd94cca83.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20260210055719-ba071c6f9395.zip",
         ],
     )
     go_repository(

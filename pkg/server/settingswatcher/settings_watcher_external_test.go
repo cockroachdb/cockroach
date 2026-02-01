@@ -49,7 +49,6 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 	ctx := context.Background()
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer srv.Stopper().Stop(ctx)
 	s0 := srv.ApplicationLayer()
@@ -399,7 +398,6 @@ func TestOverflowRestart(t *testing.T) {
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer s.Stopper().Stop(ctx)
 

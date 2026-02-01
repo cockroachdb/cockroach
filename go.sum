@@ -571,8 +571,8 @@ github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:z
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112 h1:T1++5Vt0/4/IWZ1mHmUYl7fhQnz50QhNWIY+ITvLLIM=
 github.com/cockroachdb/datadriven v1.0.3-0.20251123150250-ddff6747b112/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
-github.com/cockroachdb/drpc v0.0.0-20260128133347-b7edd94cca83 h1:Ue2HUO/dWYZRasstnPJxyPqpBRLpW6rryxD7LLfiGSU=
-github.com/cockroachdb/drpc v0.0.0-20260128133347-b7edd94cca83/go.mod h1:Ag2/Yfl22WZ8ywFUasRQ2brdltpX5QvY63jnYTZ3N5U=
+github.com/cockroachdb/drpc v0.0.0-20260210055719-ba071c6f9395 h1:SlzBv3SQjCp/NL8KF3+Nl6qi0W1RaL3dG6vxZaRUicw=
+github.com/cockroachdb/drpc v0.0.0-20260210055719-ba071c6f9395/go.mod h1:jeOpcnHh3/TvQ7K2kYXyLUMOMoMpuxp5vtdmtNPVW+8=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f h1:lUmJxzb2/ukuRIvKTaNkvuj5LwlX4u/KxnI3zmx1SSw=
 github.com/cockroachdb/errors v1.12.1-0.20251010171200-64801262cd6f/go.mod h1:SvzfYNNBshAVbZ8wzNc/UPK3w1vf0dKDUP41ucAIf7g=
 github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 h1:YqzBA7tf8Gv8Oz0BbBsPenqkyjiohS7EUIwi7p1QJCU=
@@ -2349,10 +2349,11 @@ github.com/yvasiyarov/gorelic v0.0.0-20141212073537-a9bba5b9ab50/go.mod h1:NUSPS
 github.com/yvasiyarov/newrelic_platform_go v0.0.0-20140908184405-b21fdbd4370f/go.mod h1:GlGEuHIJweS1mbCqG+7vt2nvWLzLLnRHbXz5JKd/Qbg=
 github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292 h1:vpcCVk+pSR/6zcurmlGFD3jC5I/7RMl+GwGAPLxvX18=
 github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292/go.mod h1:qcqv8IHwbR0JmjY1LZy4PeytlwxDPn1vUkjX7Wq0VaY=
-github.com/zeebo/assert v1.3.0 h1:g7C04CbJuIDKNPFHmsk4hwZDO5O+kntRxzaUoNXj+IQ=
 github.com/zeebo/assert v1.3.0/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
-github.com/zeebo/errs v1.2.2 h1:5NFypMTuSdoySVTqlNs1dEoU21QVamMQJxW/Fii5O7g=
-github.com/zeebo/errs v1.2.2/go.mod h1:sgbWHsvVuTPHcqJJGQ1WhI5KbWlHYz+2+2C/LSEtCw4=
+github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
+github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
+github.com/zeebo/errs v1.4.0 h1:XNdoD/RRMKP7HD0UhJnIzUy74ISdGGxURlYG8HSWSfM=
+github.com/zeebo/errs v1.4.0/go.mod h1:sgbWHsvVuTPHcqJJGQ1WhI5KbWlHYz+2+2C/LSEtCw4=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
 github.com/zeebo/xxh3 v1.0.2/go.mod h1:5NWz9Sef7zIDm2JHfFlcQvNekmcEl9ekUZQQKCYaDcA=
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=

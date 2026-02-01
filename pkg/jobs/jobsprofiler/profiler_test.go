@@ -43,8 +43,6 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
-		// already inconsistently failing, disabling to avoid noise, see #158660
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
