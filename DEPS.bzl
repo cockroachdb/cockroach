@@ -10980,11 +10980,10 @@ def go_deps():
         name = "io_storj_drpc",
         build_file_proto_mode = "disable_global",
         importpath = "storj.io/drpc",
-        sha256 = "caa756d1fb9e56dc0cfbd3e1d550322498008f73a6f2807a9aeeaf0f5726a0c3",
-        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20260108145657-b4a717865716",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20260108145657-b4a717865716.zip",
-        ],
+        replace = "github.com/cthumuluru-crdb/drpc",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:Qz2gQJ2tw1yvB8m6BiKVofYt9Upi7ajR0dG7NDGK2Sw=",
+        version = "v0.0.0-20260131192925-a1ea77c835d6",
     )
     go_repository(
         name = "org_bazil_fuse",

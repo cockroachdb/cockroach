@@ -968,8 +968,7 @@ func TestSQLDecommissioned(t *testing.T) {
 	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // saves time
 		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
-			Insecure:          true, // to set up a simple SQL client
+			Insecure: true, // to set up a simple SQL client
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
