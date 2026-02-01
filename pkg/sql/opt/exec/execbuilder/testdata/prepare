@@ -266,3 +266,104 @@ regions: <hidden>
 
 statement ok
 RESET plan_cache_mode
+
+subtest prepare-enum-update
+
+statement ok
+CREATE TYPE enum132105 AS ENUM ('hi');
+
+statement ok
+PREPARE p132105_hi AS SELECT $1::enum132105 = 'hi';
+
+statement ok
+ALTER TYPE enum132105 ADD VALUE 'hello';
+
+query B
+EXECUTE p132105_hi('hi');
+----
+true
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'hi' to 'aloha';
+
+# Note, here our behavior differs from postgres -- pg would return true.
+statement error invalid input value for enum enum132105: "hi"
+EXECUTE p132105_hi('aloha');
+
+# Test if we change the value back.
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'aloha' to 'hi';
+
+statement error invalid input value for enum enum132105: "aloha"
+EXECUTE p132105_hi('aloha');
+
+query B
+EXECUTE p132105_hi('hi');
+----
+true
+
+statement ok
+PREPARE p132105_hello AS SELECT $1::enum132105 = 'hello';
+
+query B
+EXECUTE p132105_hello('hello');
+----
+true
+
+statement ok
+ALTER TYPE enum132105 DROP VALUE 'hello';
+
+statement error invalid input value for enum enum132105: "hello"
+EXECUTE p132105_hello('hello');
+
+# Test with implicit casting to udt.
+statement ok
+CREATE TABLE t132105 (enumcol enum132105);
+
+statement ok
+PREPARE p132105count AS SELECT count(*) FROM t132105 WHERE enumcol = 'hi';
+
+statement ok
+INSERT INTO t132105 VALUES ('hi'), ('hi')
+
+query I
+EXECUTE p132105count;
+----
+2
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'hi' to 'ciao';
+
+# Note that here our behavior is different from pg -- pg would return 2.
+statement error invalid input value for enum enum132105: "hi"
+EXECUTE p132105count;
+
+statement ok
+CREATE TABLE t132105arr (enumarrcol enum132105[]);
+
+statement ok
+PREPARE p132105arrcount AS SELECT count(*) FROM t132105arr WHERE enumarrcol = ARRAY[('ciao'::enum132105)];
+
+statement ok
+ALTER TYPE enum132105 ADD VALUE 'privet';
+
+statement ok
+EXECUTE p132105arrcount;
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'ciao' TO 'konnichiwa';
+
+# PG returns 0 here.
+statement error invalid input value for enum enum132105: "ciao"
+EXECUTE p132105arrcount;
+
+statement ok
+PREPARE p132105enumrange AS SELECT enum_range(NULL::enum132105), enum_range('konnichiwa'::enum132105);
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'konnichiwa' TO 'bonjour';
+
+statement error invalid input value for enum enum132105: "konnichiwa"
+EXECUTE p132105enumrange;
+
+subtest end
