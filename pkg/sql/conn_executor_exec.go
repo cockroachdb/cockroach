@@ -342,6 +342,44 @@ func (ex *connExecutor) execPortal(
 	}
 }
 
+func (ex *connExecutor) checkUDTStaleness(
+	ctx context.Context, prep *prep.Statement,
+) (stale bool, err error) {
+	if len(prep.UDTs) == 0 {
+		return false, nil
+	}
+	for i, typ := range prep.UDTs {
+		toCheck, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
+		if err != nil {
+			return stale, err
+		}
+		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			stale = true
+			prep.UDTs[i] = toCheck
+		}
+	}
+	return stale, nil
+}
+
+// maybeReparsePrepStmt is to reparse the prepared statement so that the stored
+// udt datum is up-to-date.
+func (ex *connExecutor) maybeReparsePrepStmt(ctx context.Context, prep *prep.Statement) error {
+	stale, err := ex.checkUDTStaleness(ctx, prep)
+	if err != nil {
+		return err
+	}
+	if !stale {
+		return nil
+	}
+	newStmt, err := parser.ParseOne(prep.SQL)
+	if err != nil {
+		return err
+	}
+	prep.Statement = newStmt
+	prep.AST = newStmt.AST
+	return nil
+}
+
 // execStmtInOpenState executes one statement in the context of the session's
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -553,6 +591,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error
@@ -1458,6 +1500,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error

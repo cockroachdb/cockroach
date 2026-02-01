@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -55,7 +56,7 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - BaseMemo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(
 	ctx context.Context, origin prep.StatementOrigin,
-) (planFlags, error) {
+) (planFlags, []*types.T, error) {
 	opc := &p.optPlanningCtx
 
 	// If there are externally-injected hints, first try preparing with the
@@ -64,10 +65,10 @@ func (p *planner) prepareUsingOptimizer(
 		opc.log(ctx, "trying preparing with injected hints")
 		p.usingHintInjection = true
 		opc.reset(ctx)
-		flags, err := p.prepareUsingOptimizerInternal(ctx, origin)
+		flags, udts, err := p.prepareUsingOptimizerInternal(ctx, origin)
 		p.usingHintInjection = false
 		if !errorDueToInjectedHint(err) {
-			return flags, err
+			return flags, udts, err
 		}
 		// Do not return the error. If semantic analysis failed, try preparing again
 		// without injected hints.
@@ -80,7 +81,7 @@ func (p *planner) prepareUsingOptimizer(
 
 func (p *planner) prepareUsingOptimizerInternal(
 	ctx context.Context, origin prep.StatementOrigin,
-) (planFlags, error) {
+) (planFlags, []*types.T, error) {
 	stmt := &p.stmt
 	opc := &p.optPlanningCtx
 
@@ -113,7 +114,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 		// optbuilder so they would error out. Others (like CreateIndex) have planning
 		// code that can introduce unnecessary txn retries (because of looking up
 		// descriptors and such).
-		return opc.flags, nil
+		return opc.flags, nil, nil
 
 	case *tree.Execute:
 		// This statement is going to execute a prepared statement. To prepare it,
@@ -126,24 +127,24 @@ func (p *planner) prepareUsingOptimizerInternal(
 			// Let's just give up at this point.
 			// Postgres doesn't fail here, instead it produces an EXECUTE that returns
 			// no columns. This seems like dubious behavior at best.
-			return opc.flags, pgerror.Newf(pgcode.UndefinedPreparedStatement,
+			return opc.flags, nil, pgerror.Newf(pgcode.UndefinedPreparedStatement,
 				"no such prepared statement %s", name)
 		}
 		stmt.Prepared.Columns = prepared.Columns
-		return opc.flags, nil
+		return opc.flags, prepared.UDTs, nil
 
 	case *tree.ExplainAnalyze:
 		// This statement returns result columns but does not support placeholders,
 		// and we don't want to do anything during prepare.
 		if len(p.semaCtx.Placeholders.Types) != 0 {
-			return 0, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
+			return 0, nil, errors.Errorf("%s does not support placeholders", stmt.AST.StatementTag())
 		}
 		stmt.Prepared.Columns = colinfo.ExplainPlanColumns
-		return opc.flags, nil
+		return opc.flags, nil, nil
 
 	case *tree.ShowCommitTimestamp:
 		stmt.Prepared.Columns = colinfo.ShowCommitTimestampColumns
-		return opc.flags, nil
+		return opc.flags, nil, nil
 
 	case *tree.DeclareCursor:
 		// Build memo for the purposes of typing placeholders.
@@ -153,10 +154,11 @@ func (p *planner) prepareUsingOptimizerInternal(
 		f := opc.optimizer.Factory()
 		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, t.Select)
 		if err := bld.Build(); err != nil {
-			return opc.flags, err
+			return opc.flags, nil, err
 		}
 	}
 
+	var udts []*types.T
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
 		if ok && cachedData.Metadata != nil {
@@ -169,7 +171,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 			} else {
 				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
 				if err != nil {
-					return 0, err
+					return 0, nil, err
 				}
 				if !isStale {
 					opc.log(ctx, "query cache hit (prepare)")
@@ -189,7 +191,11 @@ func (p *planner) prepareUsingOptimizerInternal(
 					} else {
 						stmt.Prepared.BaseMemo = cachedData.Memo
 					}
-					return opc.flags, nil
+
+					if md := cachedData.Memo.Metadata(); md != nil {
+						udts = md.AllUserDefinedTypes()
+					}
+					return opc.flags, udts, nil
 				}
 				opc.log(ctx, "query cache hit but memo is stale (prepare)")
 			}
@@ -204,7 +210,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 	// Build the memo. Do not attempt to build a non-ideal generic plan at PREPARE-time.
 	memo, _, err := opc.buildReusableMemo(ctx, false /* allowNonIdealGeneric */)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	md := memo.Metadata()
@@ -219,7 +225,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 		// assume that it'll be TEXT (which is the default).
 		fmtCode := pgwirebase.FormatText
 		if err = checkResultType(resultCols[i].Typ, fmtCode); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		// If the column came from a table, set up the relevant metadata.
 		if colMeta.Table != opt.TableID(0) {
@@ -246,9 +252,12 @@ func (p *planner) prepareUsingOptimizerInternal(
 
 	// Verify that all placeholder types have been set.
 	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
+	if md := memo.Metadata(); md != nil {
+		udts = md.AllUserDefinedTypes()
+	}
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
@@ -276,7 +285,7 @@ func (p *planner) prepareUsingOptimizerInternal(
 			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		}
 	}
-	return opc.flags, nil
+	return opc.flags, udts, nil
 }
 
 // makeOptimizerPlan generates a plan using the cost-based optimizer.
