@@ -56,6 +56,11 @@ type Metadata struct {
 
 	// ASTWithInjectedHints is the AST rewritten with injected hints.
 	ASTWithInjectedHints tree.Statement
+
+	// UDTs contains all user defined types referenced in the prepared
+	// statement. It is used to detect type version change, so the
+	// statement can be reparsed with updated versions.
+	UDTs []*types.T
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
