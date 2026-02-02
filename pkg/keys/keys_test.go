@@ -551,6 +551,268 @@ func TestBatchRange(t *testing.T) {
 	}
 }
 
+// TestRangeBatchWithGCRequests tests the Range function with GC requests
+// containing different subtypes: point keys, range keys, and clear range.
+func TestRangeBatchWithGCRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name string
+		req  kvpb.GCRequest
+		exp  [2]string
+	}{
+		{
+			name: "point keys fully contained in header span",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("b")},
+					{Key: roachpb.Key("c")},
+					{Key: roachpb.Key("d")},
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "range keys fully contained in header span",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("b"), EndKey: roachpb.Key("d")},
+					{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("h")},
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "clear range fully contained in header span",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("m"),
+					EndKey:   roachpb.Key("n"),
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "all subtypes fully contained in header span",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("b")},
+					{Key: roachpb.Key("c")},
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("d"), EndKey: roachpb.Key("f")},
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("m"),
+					EndKey:   roachpb.Key("n"),
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "point keys at header span boundaries",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("a")},
+					{Key: roachpb.Key("y")},
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "range keys at header span boundaries",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+					{StartKey: roachpb.Key("x"), EndKey: roachpb.Key("z")},
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "clear range at header span boundaries",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("z"),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("z"),
+				},
+			},
+			exp: [2]string{"a", "z"},
+		},
+		// Tests for keys that straddle the request header. Such constructions
+		// were historically possible when the MVCC GC queue constructed GC
+		// requests: see https://github.com/cockroachdb/cockroach/issues/162085.
+		// The result (as of this commit) is the request header span.
+		{
+			name: "clear range straddles header on the left",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("z"),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("m"),
+				},
+			},
+			exp: [2]string{"c", "z"},
+		},
+		{
+			name: "clear range straddles header on the right",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("m"),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("f"),
+					EndKey:   roachpb.Key("z"),
+				},
+			},
+			exp: [2]string{"a", "m"},
+		},
+		{
+			name: "clear range straddles header on both sides",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("z"),
+				},
+			},
+			exp: [2]string{"c", "m"},
+		},
+		{
+			name: "range keys straddle header on the left",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("z"),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("f")},
+				},
+			},
+			exp: [2]string{"c", "z"},
+		},
+		{
+			name: "range keys straddle header on the right",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("m"),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("z")},
+				},
+			},
+			exp: [2]string{"a", "m"},
+		},
+		{
+			name: "range keys straddle header on both sides",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				RangeKeys: []kvpb.GCRequest_GCRangeKey{
+					{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("z")},
+				},
+			},
+			exp: [2]string{"c", "m"},
+		},
+		{
+			name: "clear range straddles with contained point keys",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("d")},
+					{Key: roachpb.Key("e")},
+					{Key: roachpb.Key("f")},
+				},
+				ClearRange: &kvpb.GCRequest_GCClearRange{
+					StartKey: roachpb.Key("a"),
+					EndKey:   roachpb.Key("z"),
+				},
+			},
+			exp: [2]string{"c", "m"},
+		},
+		{
+			name: "point key straddles header on the left",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("a")},
+					{Key: roachpb.Key("d")},
+				},
+			},
+			exp: [2]string{"c", "m"},
+		},
+		{
+			name: "point key straddles header on the right",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("d")},
+					{Key: roachpb.Key("z")},
+				},
+			},
+			exp: [2]string{"c", "m"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var ba kvpb.BatchRequest
+			ba.Add(&tc.req)
+			rs, err := Range(ba.Requests)
+			require.NoError(t, err)
+			actPair := [2]string{string(rs.Key), string(rs.EndKey)}
+			require.Equal(t, tc.exp, actPair)
+		})
+	}
+}
+
 // TestBatchError verifies that Range returns an error if a request has an invalid range.
 func TestBatchError(t *testing.T) {
 	testCases := []struct {
