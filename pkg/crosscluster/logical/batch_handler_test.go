@@ -13,108 +13,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/stretchr/testify/require"
 )
-
-// EventBuilder helps construct StreamEvent_KV events for testing.
-type EventBuilder struct {
-	t         *testing.T
-	tableDesc catalog.TableDescriptor
-	colMap    catalog.TableColMap
-	codec     keys.SQLCodec
-}
-
-// newEventBuilder creates a new EventBuilder for the given table descriptor.
-func newKvEventBuilder(t *testing.T, desc *descpb.TableDescriptor) *EventBuilder {
-	tableDesc := tabledesc.NewBuilder(desc).BuildImmutableTable()
-	var colMap catalog.TableColMap
-	for i, col := range tableDesc.PublicColumns() {
-		colMap.Set(col.GetID(), i)
-	}
-	return &EventBuilder{
-		t:         t,
-		tableDesc: tableDesc,
-		colMap:    colMap,
-		codec:     keys.SystemSQLCodec,
-	}
-}
-
-func (b *EventBuilder) encodeRow(timestamp hlc.Timestamp, row tree.Datums) roachpb.KeyValue {
-	indexEntries, err := rowenc.EncodePrimaryIndex(
-		b.codec,
-		b.tableDesc,
-		b.tableDesc.GetPrimaryIndex(),
-		b.colMap,
-		row,
-		false,
-	)
-	require.NoError(b.t, err)
-	require.Len(b.t, indexEntries, 1)
-	kv := roachpb.KeyValue{
-		Key:   indexEntries[0].Key,
-		Value: indexEntries[0].Value,
-	}
-	kv.Value.Timestamp = timestamp
-	kv.Value.InitChecksum(kv.Key)
-	return kv
-}
-
-// insertEvent creates an insert event for the given row at the specified timestamp.
-func (b *EventBuilder) insertEvent(time hlc.Timestamp, row tree.Datums) streampb.StreamEvent_KV {
-	event := streampb.StreamEvent_KV{
-		KeyValue: b.encodeRow(time, row),
-	}
-	return event
-}
-
-// updateEvent creates an update event for the given row and previous values at the specified timestamp.
-func (b *EventBuilder) updateEvent(
-	time hlc.Timestamp, row tree.Datums, prevValue tree.Datums,
-) streampb.StreamEvent_KV {
-	kv := b.encodeRow(time, row)
-	kvPrev := b.encodeRow(time, prevValue)
-	return streampb.StreamEvent_KV{
-		KeyValue:  kv,
-		PrevValue: kvPrev.Value,
-	}
-}
-
-// deleteEvent creates a delete event for the given row at the specified timestamp.
-func (b *EventBuilder) deleteEvent(
-	time hlc.Timestamp, prevValue tree.Datums,
-) streampb.StreamEvent_KV {
-	kv := b.encodeRow(time, prevValue)
-	return streampb.StreamEvent_KV{
-		KeyValue: roachpb.KeyValue{
-			Key:   kv.Key,
-			Value: roachpb.Value{Timestamp: time},
-		},
-		PrevValue: kv.Value,
-	}
-}
 
 // newKvBatchHandler creates a new batch handler for testing.
 func newKvBatchHandler(
@@ -248,7 +167,7 @@ func testBatchHandlerExhaustive(t *testing.T, factory batchHandlerFactory) {
 	defer handler.ReleaseLeases(ctx)
 
 	// TODO(jeffswenson): test the other handler types.
-	eventBuilder := newKvEventBuilder(t, desc.TableDesc())
+	eventBuilder := ldrdecoder.NewTestEventBuilder(t, desc.TableDesc())
 
 	type previousValue string
 	const (
@@ -327,18 +246,18 @@ func testBatchHandlerExhaustive(t *testing.T, factory batchHandlerFactory) {
 		}
 		switch tc.replicationType {
 		case replicationTypeUpdate:
-			return eventBuilder.updateEvent(
+			return eventBuilder.UpdateEvent(
 				origin,
 				[]tree.Datum{tree.NewDInt(tree.DInt(tc.id)), tree.NewDString(getEventValue(tc))},
 				[]tree.Datum{tree.NewDInt(tree.DInt(tc.id)), tree.NewDString(getPreviousValue(tc))},
 			)
 		case replicationTypeInsert:
-			return eventBuilder.insertEvent(
+			return eventBuilder.InsertEvent(
 				origin,
 				[]tree.Datum{tree.NewDInt(tree.DInt(tc.id)), tree.NewDString(getEventValue(tc))},
 			)
 		case replicationTypeDelete:
-			return eventBuilder.deleteEvent(
+			return eventBuilder.DeleteEvent(
 				origin,
 				[]tree.Datum{tree.NewDInt(tree.DInt(tc.id)), tree.NewDString(getPreviousValue(tc))},
 			)

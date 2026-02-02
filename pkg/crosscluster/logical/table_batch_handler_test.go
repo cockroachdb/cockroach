@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -77,15 +78,15 @@ func TestBatchHandlerFastPath(t *testing.T) {
 	handler, desc := newCrudBatchHandler(t, s, "test_table")
 	defer handler.Close(ctx)
 	defer handler.ReleaseLeases(ctx)
-	eb := newKvEventBuilder(t, desc.TableDesc())
+	eb := ldrdecoder.NewTestEventBuilder(t, desc.TableDesc())
 
 	// Apply a batch with inserts to populate some data
 	_, err := handler.HandleBatch(ctx, []streampb.StreamEvent_KV{
-		eb.insertEvent(s.Clock().Now(), []tree.Datum{
+		eb.InsertEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(1)),
 			tree.NewDString("foo"),
 		}),
-		eb.insertEvent(s.Clock().Now(), []tree.Datum{
+		eb.InsertEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(2)),
 			tree.NewDString("bar"),
 		}),
@@ -100,11 +101,11 @@ func TestBatchHandlerFastPath(t *testing.T) {
 
 	// Apply a batch with updates and deletes for the previously written rows
 	_, err = handler.HandleBatch(ctx, []streampb.StreamEvent_KV{
-		eb.updateEvent(s.Clock().Now(),
+		eb.UpdateEvent(s.Clock().Now(),
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("foo-update")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("foo")},
 		),
-		eb.deleteEvent(s.Clock().Now(), []tree.Datum{
+		eb.DeleteEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(2)),
 			tree.NewDString("bar"),
 		}),
@@ -139,7 +140,7 @@ func TestBatchHandlerSlowPath(t *testing.T) {
 	handler, desc := newCrudBatchHandler(t, s, "test_table")
 	defer handler.Close(ctx)
 	defer handler.ReleaseLeases(ctx)
-	eb := newKvEventBuilder(t, desc.TableDesc())
+	eb := ldrdecoder.NewTestEventBuilder(t, desc.TableDesc())
 
 	runner.Exec(t, `
 		INSERT INTO test_table (id, value) VALUES 
@@ -147,23 +148,23 @@ func TestBatchHandlerSlowPath(t *testing.T) {
 	`)
 
 	_, err := handler.HandleBatch(ctx, []streampb.StreamEvent_KV{
-		eb.insertEvent(s.Clock().Now(), []tree.Datum{
+		eb.InsertEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(1)),
 			tree.NewDString("alpha-update"),
 		}),
-		eb.updateEvent(s.Clock().Now(),
+		eb.UpdateEvent(s.Clock().Now(),
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("beta-update")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("wrong")},
 		),
-		eb.deleteEvent(s.Clock().Now(), []tree.Datum{
+		eb.DeleteEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(3)),
 			tree.NewDString("wrong"),
 		}),
-		eb.deleteEvent(s.Clock().Now(), []tree.Datum{
+		eb.DeleteEvent(s.Clock().Now(), []tree.Datum{
 			tree.NewDInt(tree.DInt(4)),
 			tree.NewDString("never-existed"),
 		}),
-		eb.updateEvent(s.Clock().Now(),
+		eb.UpdateEvent(s.Clock().Now(),
 			[]tree.Datum{tree.NewDInt(tree.DInt(5)), tree.NewDString("omega-insert")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(5)), tree.NewDString("never-existed")},
 		),
@@ -205,7 +206,7 @@ func TestBatchHandlerDuplicateBatchEntries(t *testing.T) {
 	handler, desc := newCrudBatchHandler(t, s, "test_table")
 	defer handler.Close(ctx)
 	defer handler.ReleaseLeases(ctx)
-	eb := newKvEventBuilder(t, desc.TableDesc())
+	eb := ldrdecoder.NewTestEventBuilder(t, desc.TableDesc())
 
 	before := s.Clock().Now()
 	after := s.Clock().Now()
@@ -216,20 +217,20 @@ func TestBatchHandlerDuplicateBatchEntries(t *testing.T) {
 	// hits a refresh?
 	_, err := handler.HandleBatch(ctx, []streampb.StreamEvent_KV{
 		// First row: insert followed by delete
-		eb.updateEvent(before,
+		eb.UpdateEvent(before,
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("insert-followed-by-delete")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("wrong-value")},
 		),
-		eb.deleteEvent(after, []tree.Datum{
+		eb.DeleteEvent(after, []tree.Datum{
 			tree.NewDInt(tree.DInt(1)),
 			tree.NewDString("insert-followed-by-delete"),
 		}),
 		// Second row: pair of updates - newest should win
-		eb.updateEvent(before,
+		eb.UpdateEvent(before,
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("older-update")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("original-value")},
 		),
-		eb.updateEvent(later,
+		eb.UpdateEvent(later,
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("newer-update")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("older-update")},
 		),
