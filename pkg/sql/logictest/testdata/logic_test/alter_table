@@ -2689,7 +2689,7 @@ ALTER TABLE storage_param_table SET (foo=100)
 statement error parameter "fillfactor" requires a float value
 ALTER TABLE storage_param_table SET (fillfactor=true)
 
-statement error pgcode 22023 error decoding "fillfactor": strconv.ParseFloat: parsing "invalid_val": invalid syntax
+statement error pgcode 22023 error decoding "fillfactor": parameter "fillfactor" requires a float value
 ALTER TABLE storage_param_table SET (fillfactor=invalid_val)
 
 statement error unimplemented: storage parameter "toast_tuple_target"

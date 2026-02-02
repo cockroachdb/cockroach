@@ -40,7 +40,13 @@ func DatumAsFloat(
 	}
 	switch v := eval.UnwrapDatum(ctx, evalCtx, val).(type) {
 	case *tree.DString:
-		return strconv.ParseFloat(string(*v), 64)
+		val, err := strconv.ParseFloat(string(*v), 64)
+		if err != nil {
+			return 0, errors.WithDetailf(pgerror.Newf(pgcode.InvalidParameterValue,
+				"parameter %q requires a float value", name),
+				"%s cannot be converted to a float", string(*v))
+		}
+		return val, nil
 	case *tree.DInt:
 		return float64(*v), nil
 	case *tree.DFloat:
