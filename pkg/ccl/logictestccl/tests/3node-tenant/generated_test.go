@@ -1016,6 +1016,13 @@ func TestTenantLogic_group_join(
 	runLogicTest(t, "group_join")
 }
 
+func TestTenantLogic_hash_index_shard_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_index_shard_columns")
+}
+
 func TestTenantLogic_hash_join(
 	t *testing.T,
 ) {

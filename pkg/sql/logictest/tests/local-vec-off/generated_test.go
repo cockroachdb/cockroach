@@ -997,6 +997,13 @@ func TestLogic_guardrails(
 	runLogicTest(t, "guardrails")
 }
 
+func TestLogic_hash_index_shard_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_index_shard_columns")
+}
+
 func TestLogic_hash_join(
 	t *testing.T,
 ) {

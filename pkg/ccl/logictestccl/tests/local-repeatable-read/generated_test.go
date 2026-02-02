@@ -987,6 +987,13 @@ func TestRepeatableReadLogic_group_join(
 	runLogicTest(t, "group_join")
 }
 
+func TestRepeatableReadLogic_hash_index_shard_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_index_shard_columns")
+}
+
 func TestRepeatableReadLogic_hash_join(
 	t *testing.T,
 ) {

@@ -1028,6 +1028,13 @@ func TestReadCommittedLogic_group_join(
 	runLogicTest(t, "group_join")
 }
 
+func TestReadCommittedLogic_hash_index_shard_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_index_shard_columns")
+}
+
 func TestReadCommittedLogic_hash_join(
 	t *testing.T,
 ) {
