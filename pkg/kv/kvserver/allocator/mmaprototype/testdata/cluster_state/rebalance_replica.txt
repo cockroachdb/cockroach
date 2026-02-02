@@ -30,10 +30,14 @@ store-load-msg
   store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
 ----
 
+store-load-msg
+  store-id=2 node-id=2 load=[0,0,0] capacity=[100,100,100] secondary-load=0 load-time=0s
+----
+
 get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
 
 store-leaseholder-msg 
 store-id=1
@@ -52,7 +56,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
 
 make-pending-changes range-id=1
   rebalance-replica: remove-store-id=1 add-store-id=2
@@ -74,7 +78,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=0 seq=2
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=2
 
 # Same store load from s1. Results in no change.
 store-load-msg
@@ -85,7 +89,7 @@ get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=0 seq=4
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=2
 
 # Store leaseholder msg from s1 showing that s2 has a replica but not the lease.
 store-leaseholder-msg
@@ -135,7 +139,7 @@ ranges
 get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=80 node-adjusted-cpu=0 seq=4
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:88ns/s, write-bandwidth:88 B/s, byte-size:88 B] node-reported-cpu=0 node-adjusted-cpu=88 seq=2
 
 # Store load msg from s2 showing updated load.
 store-load-msg
@@ -155,7 +159,7 @@ store-load-msg
 get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:-75ns/s, write-bandwidth:-75 B/s, byte-size:-75 B] node-reported-cpu=5 node-adjusted-cpu=-75 seq=6
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:168ns/s, write-bandwidth:168 B/s, byte-size:168 B] node-reported-cpu=80 node-adjusted-cpu=168 seq=3
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:168ns/s, write-bandwidth:168 B/s, byte-size:168 B] node-reported-cpu=80 node-adjusted-cpu=168 seq=4
 
 # The enacted changes are still adjusting the load.
 get-pending-changes
@@ -188,4 +192,4 @@ pending(0)
 get-load-info
 ----
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] adjusted=[cpu:5ns/s, write-bandwidth:5 B/s, byte-size:5 B] node-reported-cpu=5 node-adjusted-cpu=5 seq=7
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=4
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:80ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=80 node-adjusted-cpu=80 seq=5
