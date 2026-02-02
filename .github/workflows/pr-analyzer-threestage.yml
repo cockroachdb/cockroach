@@ -165,18 +165,20 @@ jobs:
             Use conservative language and minimize superlatives. Assume the reader has
             a heart condition - just articulate facts without emotion.
 
-            **CRITICAL**: You must respond with EXACTLY one of these formats:
-            1. 'BUG_DETECTED: [description, line numbers and suggested fix]'
-            2. 'NO_BUG_DETECTED' if issues are not critical enough
+            **OUTPUT FORMAT**: For each confirmed bug, output a JSON object on its own line with these fields:
+            - "file": the path to the file (e.g., "pkg/sql/parser.go")
+            - "line": the line number in the file where the bug occurs
+            - "comment": a short (1-2 sentence) description of the issue
+            - "details": a longer explanation with suggested fix
 
-            For each issue found, provide:
-            1. The specific line(s) where the issue occurs
-            2. A clear description of what is wrong
-            3. A suggested fix
+            Example:
+            {"file": "pkg/sql/parser.go", "line": 42, "comment": "Nil pointer dereference when input is empty", "details": "The function does not check if the input slice is empty before accessing the first element. Add a length check before line 42."}
+
+            If no critical bugs are confirmed, do not output any JSON objects.
 
             **OUTPUT REQUIREMENT**: End your response with a single line containing only:
-            - `STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED` or
-            - `STAGE3_RESULT - NO_BUG_FOUND`
+            - `STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED` (if you output any JSON findings above)
+            - `STAGE3_RESULT - NO_BUG_FOUND` (if no critical bugs)
 
       - name: Extract Stage 3 Result
         id: stage3_result
@@ -189,6 +191,62 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
           echo "Stage 3 result extracted (${#RESULT} characters)"
+
+      - name: Parse Bug Findings
+        id: parse_findings
+        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED')
+        env:
+          STAGE3_OUTPUT: ${{ steps.stage3_result.outputs.result }}
+        run: |
+          # Extract JSON objects from stage 3 output
+          # Strategy: try to parse each line as JSON, validate required fields
+          echo "$STAGE3_OUTPUT" | while IFS= read -r line; do
+            # Skip empty lines and lines that clearly aren't JSON
+            [ -z "$line" ] && continue
+
+            # First, try parsing the entire line as JSON
+            if echo "$line" | jq -e '.file and .line and .comment' >/dev/null 2>&1; then
+              echo "$line"
+              continue
+            fi
+
+            # If that fails, try to extract JSON starting from {"file"
+            # Use jq validation to find the complete JSON object
+            if echo "$line" | grep -q '{"file"'; then
+              # Extract substring starting from {"file"
+              json_candidate="${line#*\{\"file\"}"
+              json_candidate="{\"file\"${json_candidate}"
+
+              # Try progressively shorter substrings until jq can parse it
+              # This handles cases where there's trailing text after the JSON
+              # Limit iterations to prevent runaway loops on malformed input
+              max_iterations=500
+              iterations=0
+              while [ -n "$json_candidate" ] && [ $iterations -lt $max_iterations ]; do
+                if echo "$json_candidate" | jq -e '.file and .line and .comment' >/dev/null 2>&1; then
+                  echo "$json_candidate"
+                  break
+                fi
+                # Remove last character and try again
+                json_candidate="${json_candidate%?}"
+                iterations=$((iterations + 1))
+              done
+            fi
+          done > findings.json
+
+          # Convert to JSON array
+          if [ -s findings.json ]; then
+            FINDINGS=$(jq -s '.' findings.json 2>/dev/null || echo "[]")
+          else
+            FINDINGS="[]"
+          fi
+
+          echo "findings<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$FINDINGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          FINDING_COUNT=$(echo "$FINDINGS" | jq 'length')
+          echo "Parsed $FINDING_COUNT bug findings"
 
       - name: Final Analysis Report
         if: always()
@@ -226,22 +284,93 @@ jobs:
 
             **If all three stages detected bugs**, this indicates a potential issue that warrants investigation.
 
-      - name: Comment on PR if bugs confirmed
+      - name: Post Inline Comments
+        id: post_inline
         if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINDINGS: ${{ steps.parse_findings.outputs.findings }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "## Potential Bug(s) Detected
+          SKIPPED_FINDINGS=""
+          INLINE_COUNT=0
 
-          The three-stage Claude Code analysis has identified potential bug(s) in this PR that may warrant investigation.
+          # Post inline comment for each finding
+          # Use process substitution to avoid subshell variable scope issues
+          while read -r finding; do
+            FILE=$(echo "$finding" | jq -r '.file')
+            LINE=$(echo "$finding" | jq -r '.line')
+            COMMENT=$(echo "$finding" | jq -r '.comment')
 
-          **Next Steps:**
-          Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+            # Try to post review comment on specific line
+            # If it fails (line not in diff), save for summary comment
+            BODY="⚠️ **Potential Issue**: ${COMMENT}
 
-          **Note:** When viewing the workflow output, scroll to the bottom to find the Final Analysis Summary.
+          [View full analysis](${RUN_URL})"
 
-          After you review the findings, please tag the issue as follows:
-          - If the detected issue is real or was helpful in any way, please tag the issue with \`O-AI-Review-Real-Issue-Found\`
-          - If the detected issue was not helpful in any way, please tag the issue with \`O-AI-Review-Not-Helpful\`"
+            if gh api "repos/${{ github.repository }}/pulls/${PR_NUM}/comments" \
+              -f body="$BODY" \
+              -f path="$FILE" \
+              -F line="$LINE" \
+              -f commit_id="$COMMIT_SHA" 2>/dev/null; then
+              INLINE_COUNT=$((INLINE_COUNT + 1))
+              echo "Posted inline comment on $FILE:$LINE"
+            else
+              echo "Could not post inline comment on $FILE:$LINE (line may not be in diff)"
+              SKIPPED_FINDINGS="${SKIPPED_FINDINGS}- **${FILE}:${LINE}**: ${COMMENT}
+          "
+            fi
+          done < <(echo "$FINDINGS" | jq -c '.[]')
 
-          gh pr edit ${{ github.event.pull_request.number }} --add-label "o-AI-Review-Potential-Issue-Detected"
+          # Save skipped findings for summary comment
+          {
+            echo 'skipped<<EOF'
+            echo "$SKIPPED_FINDINGS"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "inline_count=$INLINE_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Post Summary Comment
+        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINDINGS: ${{ steps.parse_findings.outputs.findings }}
+          SKIPPED: ${{ steps.post_inline.outputs.skipped }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          FINDING_COUNT=$(echo "$FINDINGS" | jq 'length')
+
+          BODY="## AI Review: ${FINDING_COUNT} Potential Issue(s)
+
+          Inline comments have been added to the relevant lines."
+
+          # Add explicit warning and skipped findings if any couldn't be posted inline
+          if [ -n "$SKIPPED" ]; then
+            BODY="${BODY}
+
+          > **Warning**: One or more issues could not be commented upon inline. Please see the summary below for more information.
+
+          ### Additional findings (not in diff):
+          ${SKIPPED}"
+          fi
+
+          BODY="${BODY}
+
+          [View full analysis](${RUN_URL})
+
+          ---
+          If helpful: add \`O-AI-Review-Real-Issue-Found\` label
+          If not helpful: add \`O-AI-Review-Not-Helpful\` label"
+
+          gh pr comment "$PR_NUM" --body "$BODY"
+
+      - name: Add Label
+        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr edit "$PR_NUM" --add-label "o-AI-Review-Potential-Issue-Detected"
