@@ -35,10 +35,10 @@ store-id=1
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
 range r1 span config had errors in normalization: constraint replicas add up to more than configured replicas, normalized result: <nil>
-load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-load summary for dim=WriteBandwidth (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-load summary for dim=ByteSize (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=CPURate (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=WriteBandwidth (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=ByteSize (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
 load summary for dim=CPURate (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 load summary for dim=WriteBandwidth (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
 load summary for dim=ByteSize (s2): loadLow, reason: load is >10% below mean [load=10 meanLoad=55 fractionUsed=5.00% meanUtil=27.50% capacity=200]
@@ -55,10 +55,10 @@ rebalance-stores store-id=1
 ----
 [mmaid=1] rebalanceStores begins
 [mmaid=1] cluster means: (stores-load [cpu:55ns/s, write-bandwidth:55 B/s, byte-size:55 B]) (stores-capacity [cpu:200ns/s, write-bandwidth:200 B/s, byte-size:200 B]) (nodes-cpu-load 55) (nodes-cpu-capacity 200)
-[mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-[mmaid=1] load summary for dim=WriteBandwidth (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-[mmaid=1] load summary for dim=ByteSize (s1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
-[mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: fractionUsed < 75% and >1.75x meanUtil [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=CPURate (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=WriteBandwidth (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=ByteSize (s1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
+[mmaid=1] load summary for dim=CPURate (n1): overloadSlow, reason: load is >10% above mean [load=100 meanLoad=55 fractionUsed=50.00% meanUtil=27.50% capacity=200]
 [mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=overloadSlow bytes=overloadSlow node=overloadSlow frac_pending=0.00,0.00(true))) - within grace period
 [mmaid=1] store s1 was added to shedding store list
