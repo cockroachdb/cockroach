@@ -38,6 +38,24 @@ func newFNV64Op(
 	}
 }
 
+func (f *fnv64Op) processRow(rowIdx int, outInt64 coldata.Int64s, outNulls *coldata.Nulls) {
+	f.hash.Reset()
+	var seenNonNull bool
+	for j := 0; j < len(f.inBytes); j++ {
+		if f.inNulls[j].MaybeHasNulls() && f.inNulls[j].NullAt(rowIdx) {
+			// Skip all NULL keys.
+			continue
+		}
+		seenNonNull = true
+		_, _ = f.hash.Write(f.inBytes[j].Get(rowIdx)) // never returns an error, see https://pkg.go.dev/hash#Hash
+	}
+	if seenNonNull {
+		outInt64.Set(rowIdx, int64(f.hash.Sum64()))
+	} else {
+		outNulls.SetNull(rowIdx)
+	}
+}
+
 func (f *fnv64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	batch, meta := f.Input.Next()
 	if meta != nil {
@@ -69,39 +87,11 @@ func (f *fnv64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// colmem.Allocator.PerformOperation (that would be redundant).
 	if inSel == nil {
 		for i := 0; i < batch.Length(); i++ {
-			f.hash.Reset()
-			var seenNonNull bool
-			for j := 0; j < len(f.inBytes); j++ {
-				if f.inNulls[j].MaybeHasNulls() && f.inNulls[j].NullAt(i) {
-					// Skip all NULL keys.
-					continue
-				}
-				seenNonNull = true
-				_, _ = f.hash.Write(f.inBytes[j].Get(i)) // never returns an error, see https://pkg.go.dev/hash#Hash
-			}
-			if seenNonNull {
-				outInt64.Set(i, int64(f.hash.Sum64()))
-			} else {
-				outNulls.SetNull(i)
-			}
+			f.processRow(i, outInt64, outNulls)
 		}
 	} else {
 		for _, idx := range inSel[:batch.Length()] {
-			f.hash.Reset()
-			var seenNonNull bool
-			for j := 0; j < len(f.inBytes); j++ {
-				if f.inNulls[j].MaybeHasNulls() && f.inNulls[j].NullAt(idx) {
-					// Skip all NULL keys.
-					continue
-				}
-				seenNonNull = true
-				_, _ = f.hash.Write(f.inBytes[j].Get(idx)) // never returns an error, see https://pkg.go.dev/hash#Hash
-			}
-			if seenNonNull {
-				outInt64.Set(idx, int64(f.hash.Sum64()))
-			} else {
-				outNulls.SetNull(idx)
-			}
+			f.processRow(idx, outInt64, outNulls)
 		}
 	}
 	return batch, nil
