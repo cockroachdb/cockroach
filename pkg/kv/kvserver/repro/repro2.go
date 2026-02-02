@@ -108,7 +108,11 @@ var S struct {
 	SplitApplied    Node
 	RebalancedRHS   Node
 	FirstClearRange Node
+	AdmitFirstCR    Node
+	PreWriteToRHS   Node
+	WriteToRHS      Node
 	GCSent          Node
+	ReadRHS         Node
 	ConsistencyRHS  Node
 }
 

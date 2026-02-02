@@ -566,6 +566,25 @@ func TestReproGCRace(t *testing.T) {
 	tc.RebalanceVoterOrFatal(ctx, t, middle, tc.Target(0), tc.Target(3))
 	repro.S.RebalancedRHS.Once()
 
+	// Put the RHS keys back to life.
+	s4 := tc.GetFirstStoreFromServer(t, 3)
+	repro.S.PreWriteToRHS.Once()
+	for _, k := range keys[50:90] {
+		_, pErr := kv.SendWrapped(ctx, s4.TestSender(), putArgs(k, []byte("value")))
+		require.NoError(t, pErr.GoError())
+	}
+	repro.S.WriteToRHS.Once()
+
+	repro.S.ReadRHS.Once()
+	for _, k := range keys[50:90] {
+		getResp, pErr := kv.SendWrapped(ctx, s4.TestSender(), getArgs(k))
+		require.NoError(t, pErr.GoError())
+		gr := getResp.(*kvpb.GetResponse)
+		b, err := gr.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, []byte("value"), b)
+	}
+
 	// Run a consistency check on the RHS range.
 	repro.S.ConsistencyRHS.Once()
 	rhsDesc := tc.LookupRangeOrFatal(t, middle)

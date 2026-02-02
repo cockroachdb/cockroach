@@ -74,6 +74,7 @@ go_library(
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/readsummary",
         "//pkg/kv/kvserver/readsummary/rspb",
+        "//pkg/kv/kvserver/repro",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/kv/kvserver/uncertainty",
