@@ -104,6 +104,10 @@ var (
 		regexp.MustCompile(`^storage_l\d_`),
 		regexp.MustCompile(`^storage_sstable_compression_`),
 	}
+	// datadogMappingsToDrop removes stale Datadog-only mappings for metrics that
+	// CockroachDB no longer emits. This workaround can be dropped once the
+	// upstream Datadog metrics.py file stops listing these keys, or if we switch
+	// the Datadog-only generator to consume CRDB's metrics list instead.
 	datadogMappingsToDrop = map[string]struct{}{
 		"admission_admitted_sql_leaf_start":                             {},
 		"admission_admitted_sql_leaf_start_locking_normal_pri":          {},
