@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -107,8 +108,9 @@ type SQLServerWrapper struct {
 	// Metric registries.
 	// See the explanatory comments in server.go and status/recorder.go
 	// for details.
-	registry    *metric.Registry
-	sysRegistry *metric.Registry
+	registry               *metric.Registry
+	sysRegistry            *metric.Registry
+	clusterMetricsRegistry metric.RegistryReader
 
 	recorder *status.MetricsRecorder
 	runtime  *status.RuntimeStatSampler
@@ -518,14 +520,15 @@ func newTenantServer(
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
-		grpc:         args.grpc,
-		drpc:         args.drpc,
-		kvNodeDialer: args.kvNodeDialer,
-		db:           args.db,
-		registry:     args.registry,
-		sysRegistry:  args.sysRegistry,
-		recorder:     args.recorder,
-		runtime:      args.runtime,
+		grpc:                   args.grpc,
+		drpc:                   args.drpc,
+		kvNodeDialer:           args.kvNodeDialer,
+		db:                     args.db,
+		registry:               args.registry,
+		sysRegistry:            args.sysRegistry,
+		clusterMetricsRegistry: args.clusterMetricsRegistry,
+		recorder:               args.recorder,
+		runtime:                args.runtime,
 
 		http:            sHTTP,
 		adminAuthzCheck: adminAuthzCheck,
@@ -749,7 +752,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	s.recorder.AddNode(
 		metric.NewRegistry(), // node registry -- unused here
 		s.registry,
-		logRegistry, s.sysRegistry,
+		logRegistry, s.sysRegistry, s.clusterMetricsRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
@@ -760,7 +763,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	)
 	// If there's a higher-level recorder, we link our metrics registry to it.
 	if s.sqlCfg.NodeMetricsRecorder != nil {
-		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, s.registry)
+		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, metric.NewTenantRegistries(s.registry, s.clusterMetricsRegistry))
 		s.stopper.AddCloser(stop.CloserFn(func() {
 			s.sqlCfg.NodeMetricsRecorder.RemoveTenantRegistry(s.sqlCfg.TenantID)
 		}))
@@ -1139,6 +1142,7 @@ func makeTenantSQLServerArgs(
 	}
 
 	registry := metric.NewRegistry()
+	clusterMetricRegistry := cmreader.NewRegistryReader()
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 
@@ -1398,6 +1402,7 @@ func makeTenantSQLServerArgs(
 		db:                       db,
 		registry:                 registry,
 		sysRegistry:              sysRegistry,
+		clusterMetricsRegistry:   clusterMetricRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		remoteFlowRunner:         remoteFlowRunner,
