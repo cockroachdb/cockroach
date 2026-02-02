@@ -569,13 +569,18 @@ func loadSummaryForDimension(
 	//
 	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
 	// currently consider how far we are from the mean. But the mean isn't very
-	// useful when there are heterogeneous nodes/stores, so this computation
-	// will need to be revisited.
+	// useful when there are heterogeneous nodes/stores, so for resources with a
+	// known capacity we use utilization instead. This avoids balancing on
+	// absolute usage in heterogeneous clusters (e.g. different CPU core counts
+	// or disk sizes).
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
 		fractionUsed = float64(load) / float64(capacity)
+	}
+	if capacity != UnknownCapacity && meanUtil > 0 {
+		fractionAbove = fractionUsed/meanUtil - 1.0
 	}
 
 	summaryUpperBound := overloadUrgent
@@ -636,33 +641,13 @@ func loadSummaryForDimension(
 			dim, nodeIdStr, storeIdStr, summary, reason, metrics)
 	}()
 
-	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
-		// Further tune the summary based on utilization.
-		//
-		// Currently, we only tune towards overload based on utilization, and not
-		// towards underload. The idea is that the former allows us to identify
-		// overload due to heterogeneity, while we primarily still want to focus
-		// on balancing towards the mean usage.
-		if fractionUsed > 0.9 {
-			reason = "fractionUsed > 90%"
-			return min(summaryUpperBound, overloadUrgent)
-		}
-		// INVARIANT: fractionUsed <= 0.9
-		if fractionUsed > 0.75 {
-			if meanUtil*1.5 < fractionUsed {
-				reason = "fractionUsed > 75% and >1.5x meanUtil"
-				return min(summaryUpperBound, overloadUrgent)
-			}
-			reason = "fractionUsed > 75%"
-			return min(summaryUpperBound, overloadSlow)
-		}
-		// INVARIANT: fractionUsed <= 0.75
-		if meanUtil*1.75 < fractionUsed {
-			reason = "fractionUsed < 75% and >1.75x meanUtil"
-			return min(summaryUpperBound, overloadSlow)
-		}
-		reason = "fractionUsed < 75%"
-		return min(summaryUpperBound, max(summ, loadNoChange))
+	// Treat nearing full capacity as urgent regardless of relative position.
+	// Since fractionAbove is utilization-based (when capacity is known), the
+	// relative distance from the mean is already captured above. But absolute
+	// utilization > 90% is dangerous enough to always warrant urgency.
+	if capacity != UnknownCapacity && fractionUsed > 0.9 {
+		reason = "fractionUsed > 90%"
+		return min(summaryUpperBound, overloadUrgent)
 	}
 	return min(summaryUpperBound, summ)
 }

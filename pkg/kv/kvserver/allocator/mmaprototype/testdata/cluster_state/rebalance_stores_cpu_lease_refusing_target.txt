@@ -71,11 +71,17 @@ rebalance-stores store-id=1
 [mmaid=1] local store s1 is CPU overloaded (overloadUrgent >= overloadSlow), attempting lease transfers first
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [2 3]
 [mmaid=1] skipping s2 for lease transfer: lease disposition refusing (health ok)
-[mmaid=1] load summary for dim=CPURate (s1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
-[mmaid=1] load summary for dim=CPURate (n1): loadNormal, reason: load is within 5% of mean [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
-[mmaid=1] result(failed): skipping r1 since store not overloaded relative to candidates
+[mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
+[mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=1000 fractionUsed=100.00% meanUtil=100.00% capacity=1000]
+[mmaid=1] candidate store 3 was discarded due to (nls=false overloadDim=true pending_thresh=false): sls=(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))
+[mmaid=1] sortTargetCandidateSetAndPick: no candidates due to load
+[mmaid=1] result(failed): no candidates to move lease from n1s1 for r1 after sortTargetCandidateSetAndPick
 [mmaid=1] attempting to shed replicas next
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=1000 meanLoad=700 fractionUsed=100.00% meanUtil=70.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
@@ -86,5 +92,5 @@ rebalance-stores store-id=1
 [mmaid=1] result(failed): no candidates found for r1 after exclusions
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] no top-K[CPURate] ranges found for s3 with lease on local s1
-[mmaid=1] rebalancing pass failures (store,reason:count): (s1,not-overloaded:1)
+[mmaid=1] rebalancing pass failures (store,reason:count): (s1,no-cand-load:1)
 pending(0)
