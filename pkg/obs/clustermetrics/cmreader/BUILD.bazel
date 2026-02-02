@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cmreader",
+    srcs = ["cm_updater_job.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/jobs/jobspb",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+    ],
+)

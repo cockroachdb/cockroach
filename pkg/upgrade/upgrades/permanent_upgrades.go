@@ -89,6 +89,7 @@ func bootstrapCluster(
 		{"create sql activity flush job", createSqlActivityFlushJob, true},
 		{"configure sql activity table TTLs", sqlStatsTTLChange, true},
 		{"create hot range logger job", createHotRangesLoggerJob, true},
+		{"create cluster metrics updater job", createClusterMetricsUpdaterJob, true},
 	} {
 
 		if skipSomeSteps && u.skippableInTest {

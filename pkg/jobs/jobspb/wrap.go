@@ -50,6 +50,7 @@ var (
 	_ Details = HotRangesLoggerDetails{}
 	_ Details = InspectDetails{}
 	_ Details = FingerprintDetails{}
+	_ Details = ClusterMetricsUpdaterDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -84,6 +85,7 @@ var (
 	_ ProgressDetails = HotRangesLoggerProgress{}
 	_ ProgressDetails = InspectProgress{}
 	_ ProgressDetails = FingerprintProgress{}
+	_ ProgressDetails = ClusterMetricsUpdaterProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -253,6 +255,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeInspect, nil
 	case *Payload_FingerprintDetails:
 		return TypeFingerprint, nil
+	case *Payload_ClusterMetricsUpdaterDetails:
+		return TypeClusterMetricsUpdater, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -310,6 +314,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeHotRangesLogger:              HotRangesLoggerDetails{},
 	TypeInspect:                      InspectDetails{},
 	TypeFingerprint:                  FingerprintDetails{},
+	TypeClusterMetricsUpdater:        ClusterMetricsUpdaterDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -385,6 +390,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_Inspect{Inspect: &d}
 	case FingerprintProgress:
 		return &Progress_Fingerprint{Fingerprint: &d}
+	case ClusterMetricsUpdaterProgress:
+		return &Progress_ClusterMetricsUpdater{ClusterMetricsUpdater: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -628,6 +635,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_InspectDetails{InspectDetails: &d}
 	case FingerprintDetails:
 		return &Payload_FingerprintDetails{FingerprintDetails: &d}
+	case ClusterMetricsUpdaterDetails:
+		return &Payload_ClusterMetricsUpdaterDetails{ClusterMetricsUpdaterDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -663,7 +672,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 35
+const NumJobTypes = 36
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

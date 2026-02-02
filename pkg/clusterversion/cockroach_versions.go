@@ -219,6 +219,11 @@ const (
 	// immediate removal.
 	V26_2_AddTableStatisticsDelayDeleteColumn
 
+	// V26_2_AddClusterMetricsUpdaterJob adds a new job that periodically updates
+	// a new cluster metrics registry that exposes cluster metrics via Prometheus
+	// and TSDB.
+	V26_2_AddClusterMetricsUpdaterJob
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -272,6 +277,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_Start: {Major: 26, Minor: 1, Internal: 2},
 
 	V26_2_AddTableStatisticsDelayDeleteColumn: {Major: 26, Minor: 1, Internal: 4},
+
+	V26_2_AddClusterMetricsUpdaterJob: {Major: 26, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

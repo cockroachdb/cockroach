@@ -4383,6 +4383,105 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.currently_idle
+      exported_name: jobs_cluster_metrics_updater_currently_idle
+      labeled_name: 'jobs{type: cluster_metrics_updater, status: currently_idle}'
+      description: Number of cluster_metrics_updater jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.cluster_metrics_updater.currently_paused
+      exported_name: jobs_cluster_metrics_updater_currently_paused
+      labeled_name: 'jobs{name: cluster_metrics_updater, status: currently_paused}'
+      description: Number of cluster_metrics_updater jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.cluster_metrics_updater.currently_running
+      exported_name: jobs_cluster_metrics_updater_currently_running
+      labeled_name: 'jobs{type: cluster_metrics_updater, status: currently_running}'
+      description: Number of cluster_metrics_updater jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.cluster_metrics_updater.expired_pts_records
+      exported_name: jobs_cluster_metrics_updater_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: cluster_metrics_updater}'
+      description: Number of expired protected timestamp records owned by cluster_metrics_updater jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.fail_or_cancel_completed
+      exported_name: jobs_cluster_metrics_updater_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: cluster_metrics_updater, status: completed}'
+      description: Number of cluster_metrics_updater jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.fail_or_cancel_retry_error
+      exported_name: jobs_cluster_metrics_updater_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: cluster_metrics_updater, status: retry_error}'
+      description: Number of cluster_metrics_updater jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.protected_age_sec
+      exported_name: jobs_cluster_metrics_updater_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: cluster_metrics_updater}'
+      description: The age of the oldest PTS record protected by cluster_metrics_updater jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.cluster_metrics_updater.protected_record_count
+      exported_name: jobs_cluster_metrics_updater_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: cluster_metrics_updater}'
+      description: Number of protected timestamp records held by cluster_metrics_updater jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.cluster_metrics_updater.resume_completed
+      exported_name: jobs_cluster_metrics_updater_resume_completed
+      labeled_name: 'jobs.resume{name: cluster_metrics_updater, status: completed}'
+      description: Number of cluster_metrics_updater jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.resume_failed
+      exported_name: jobs_cluster_metrics_updater_resume_failed
+      labeled_name: 'jobs.resume{name: cluster_metrics_updater, status: failed}'
+      description: Number of cluster_metrics_updater jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.cluster_metrics_updater.resume_retry_error
+      exported_name: jobs_cluster_metrics_updater_resume_retry_error
+      labeled_name: 'jobs.resume{name: cluster_metrics_updater, status: retry_error}'
+      description: Number of cluster_metrics_updater jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.create_stats.currently_idle
       exported_name: jobs_create_stats_currently_idle
       labeled_name: 'jobs{type: create_stats, status: currently_idle}'

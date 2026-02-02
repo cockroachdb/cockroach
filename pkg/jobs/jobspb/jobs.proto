@@ -1520,6 +1520,14 @@ message HotRangesLoggerDetails {
 
 }
 
+message ClusterMetricsUpdaterProgress {
+
+}
+
+message ClusterMetricsUpdaterDetails {
+
+}
+
 message InspectDetails {
   // Check represents a single validation task to perform as part of an INSPECT
   // job. Each check targets a specific table or index and is associated with a
@@ -1736,6 +1744,7 @@ message Payload {
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
     InspectDetails inspect_details = 53;
     FingerprintDetails fingerprint_details = 54;
+    ClusterMetricsUpdaterDetails cluster_metrics_updater_details = 55;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1821,6 +1830,7 @@ message Progress {
     HotRangesLoggerProgress hot_ranges_logger = 40;
     InspectProgress inspect = 41;
     FingerprintProgress fingerprint = 42;
+    ClusterMetricsUpdaterProgress cluster_metrics_updater = 43;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -1869,6 +1879,7 @@ enum Type {
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
   INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
   FINGERPRINT = 34 [(gogoproto.enumvalue_customname) = "TypeFingerprint"];
+  CLUSTER_METRICS_UPDATER = 35 [(gogoproto.enumvalue_customname) = "TypeClusterMetricsUpdater"];
 }
 
 message Job {
