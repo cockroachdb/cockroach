@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmreader",
+    srcs = ["metrics.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/util/metric"],
+)
+
+go_test(
+    name = "cmreader_test",
+    srcs = ["metrics_test.go"],
+    embed = [":cmreader"],
+    deps = ["@com_github_stretchr_testify//require"],
+)
