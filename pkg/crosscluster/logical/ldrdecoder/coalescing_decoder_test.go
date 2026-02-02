@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package ldrdecoder
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,18 +29,17 @@ import (
 
 func newTestDecoder(
 	t *testing.T, s serverutils.ApplicationLayerInterface, tableName string,
-) (*eventDecoder, *EventBuilder) {
+) (*CoalescingDecoder, *EventBuilder) {
 	ctx := context.Background()
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(tableName))
 
-	decoder, err := newEventDecoder(ctx, s.InternalDB().(descs.DB), s.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
-		desc.GetID(): {
-			srcDesc: desc,
-		},
-	})
+	decoder, err := NewCoalescingDecoder(ctx, s.InternalDB().(descs.DB), s.ClusterSettings(), []TableMapping{{
+		SourceDescriptor: desc,
+		DestID:           desc.GetID(),
+	}})
 	require.NoError(t, err)
 
-	eb := newKvEventBuilder(t, desc.TableDesc())
+	eb := NewTestEventBuilder(t, desc.TableDesc())
 	return decoder, eb
 }
 
@@ -70,30 +68,30 @@ func TestEventDecoder_Deduplication(t *testing.T) {
 	}
 
 	batch := []streampb.StreamEvent_KV{
-		eb.updateEvent(times[1],
+		eb.UpdateEvent(times[1],
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("v1")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("original")},
 		),
-		eb.updateEvent(times[2],
+		eb.UpdateEvent(times[2],
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("v2")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("v1")},
 		),
-		eb.updateEvent(times[3],
+		eb.UpdateEvent(times[3],
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("v3_final")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("v2")},
 		),
-		eb.updateEvent(times[4],
+		eb.UpdateEvent(times[4],
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("single_value")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("single_prev")},
 		),
-		eb.insertEvent(times[5],
+		eb.InsertEvent(times[5],
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("inserted")},
 		),
-		eb.updateEvent(times[6],
+		eb.UpdateEvent(times[6],
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("updated")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("inserted")},
 		),
-		eb.deleteEvent(times[7],
+		eb.DeleteEvent(times[7],
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("updated")},
 		),
 	}
@@ -102,27 +100,27 @@ func TestEventDecoder_Deduplication(t *testing.T) {
 		batch[i], batch[j] = batch[j], batch[i]
 	})
 
-	events, err := decoder.decodeAndCoalesceEvents(ctx, batch, jobspb.LogicalReplicationDetails_DiscardNothing)
+	events, err := decoder.DecodeAndCoalesceEvents(ctx, batch, jobspb.LogicalReplicationDetails_DiscardNothing)
 	require.NoError(t, err)
 
 	require.Len(t, events, 3)
 
 	// Row 1: Multiple updates coalesced
-	require.False(t, events[0].isDelete)
-	require.Equal(t, times[3], events[0].originTimestamp)
-	require.Equal(t, tree.NewDString("v3_final"), events[0].row[1])
-	require.Equal(t, tree.NewDString("original"), events[0].prevRow[1])
+	require.False(t, events[0].IsDelete)
+	require.Equal(t, times[3], events[0].RowTimestamp)
+	require.Equal(t, tree.NewDString("v3_final"), events[0].Row[1])
+	require.Equal(t, tree.NewDString("original"), events[0].PrevRow[1])
 
 	// Row 2: Single update unchanged
-	require.False(t, events[1].isDelete)
-	require.Equal(t, times[4], events[1].originTimestamp)
-	require.Equal(t, tree.NewDString("single_value"), events[1].row[1])
-	require.Equal(t, tree.NewDString("single_prev"), events[1].prevRow[1])
+	require.False(t, events[1].IsDelete)
+	require.Equal(t, times[4], events[1].RowTimestamp)
+	require.Equal(t, tree.NewDString("single_value"), events[1].Row[1])
+	require.Equal(t, tree.NewDString("single_prev"), events[1].PrevRow[1])
 
 	// Row 3: Insert -> Update -> Delete coalesced
-	require.True(t, events[2].isDelete)
-	require.Equal(t, times[7], events[2].originTimestamp)
-	require.Equal(t, tree.DNull, events[2].prevRow[1])
+	require.True(t, events[2].IsDelete)
+	require.Equal(t, times[7], events[2].RowTimestamp)
+	require.Equal(t, tree.DNull, events[2].PrevRow[1])
 }
 
 func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
@@ -151,29 +149,29 @@ func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
 
 	batch := []streampb.StreamEvent_KV{
 		// Single delete coalesces to nothing
-		eb.deleteEvent(times[1],
+		eb.DeleteEvent(times[1],
 			[]tree.Datum{tree.NewDInt(tree.DInt(1)), tree.NewDString("original")},
 		),
 
 		// Update followed by delete coalesces to the update
-		eb.updateEvent(times[2],
+		eb.UpdateEvent(times[2],
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("v2")},
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("v1")},
 		),
-		eb.deleteEvent(times[3],
+		eb.DeleteEvent(times[3],
 			[]tree.Datum{tree.NewDInt(tree.DInt(2)), tree.NewDString("v2")},
 		),
 
 		// Delete -> Insert -> Delete coalesces to the insert
-		eb.deleteEvent(times[4],
+		eb.DeleteEvent(times[4],
 			// NOTE: this could be used as the prev value, but since we discard rows before
 			// coalescing, the insert's NULL prev value will be used.
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("prev_value")},
 		),
-		eb.insertEvent(times[5],
+		eb.InsertEvent(times[5],
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("inserted")},
 		),
-		eb.deleteEvent(times[6],
+		eb.DeleteEvent(times[6],
 			[]tree.Datum{tree.NewDInt(tree.DInt(3)), tree.NewDString("second_dropped_delete")},
 		),
 	}
@@ -182,23 +180,23 @@ func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
 		batch[i], batch[j] = batch[j], batch[i]
 	})
 
-	events, err := decoder.decodeAndCoalesceEvents(ctx, batch, jobspb.LogicalReplicationDetails_DiscardAllDeletes)
+	events, err := decoder.DecodeAndCoalesceEvents(ctx, batch, jobspb.LogicalReplicationDetails_DiscardAllDeletes)
 	require.NoError(t, err)
 
 	require.Len(t, events, 2)
 	for _, e := range events {
-		require.False(t, e.isDelete, "expected no deletes when discarding deletes")
+		require.False(t, e.IsDelete, "expected no deletes when discarding deletes")
 	}
 
 	// Row 3: Insert -> Update -> Delete coalesced
-	require.Equal(t, times[2], events[0].originTimestamp)
-	require.Equal(t, tree.NewDString("v2"), events[0].row[1])
-	require.Equal(t, tree.NewDString("v1"), events[0].prevRow[1])
+	require.Equal(t, times[2], events[0].RowTimestamp)
+	require.Equal(t, tree.NewDString("v2"), events[0].Row[1])
+	require.Equal(t, tree.NewDString("v1"), events[0].PrevRow[1])
 
 	// Row 2: Coalesces to insert
-	require.Equal(t, times[5], events[1].originTimestamp)
-	require.Equal(t, tree.NewDString("inserted"), events[1].row[1])
-	require.Equal(t, tree.DNull, events[1].prevRow[1])
+	require.Equal(t, times[5], events[1].RowTimestamp)
+	require.Equal(t, tree.NewDString("inserted"), events[1].Row[1])
+	require.Equal(t, tree.DNull, events[1].PrevRow[1])
 }
 
 func TestEventDecoder_UserDefinedTypes(t *testing.T) {
@@ -233,12 +231,13 @@ func TestEventDecoder_UserDefinedTypes(t *testing.T) {
 	srcDesc := cdctest.GetHydratedTableDescriptor(t, server.ExecutorConfig(), "srcdb", "public", "user_types")
 	dstDesc := cdctest.GetHydratedTableDescriptor(t, server.ExecutorConfig(), "dstdb", "public", "user_types")
 
-	decoder, err := newEventDecoder(ctx, server.InternalDB().(descs.DB), server.ClusterSettings(), map[descpb.ID]sqlProcessorTableConfig{
-		dstDesc.GetID(): {srcDesc: srcDesc},
-	})
+	decoder, err := NewCoalescingDecoder(ctx, server.InternalDB().(descs.DB), server.ClusterSettings(), []TableMapping{{
+		SourceDescriptor: srcDesc,
+		DestID:           dstDesc.GetID(),
+	}})
 	require.NoError(t, err)
 
-	eb := newKvEventBuilder(t, srcDesc.TableDesc())
+	eb := NewTestEventBuilder(t, srcDesc.TableDesc())
 
 	// Build test row with user-defined types
 	enumType := catalog.FindColumnByName(srcDesc, "status").GetType()
@@ -255,12 +254,12 @@ func TestEventDecoder_UserDefinedTypes(t *testing.T) {
 		randgen.RandDatum(rng, tupleType, false).(*tree.DTuple),
 	}
 
-	insertEvent := eb.insertEvent(server.Clock().Now(), testRow)
-	events, err := decoder.decodeAndCoalesceEvents(ctx, []streampb.StreamEvent_KV{insertEvent}, jobspb.LogicalReplicationDetails_DiscardNothing)
+	insertEvent := eb.InsertEvent(server.Clock().Now(), testRow)
+	events, err := decoder.DecodeAndCoalesceEvents(ctx, []streampb.StreamEvent_KV{insertEvent}, jobspb.LogicalReplicationDetails_DiscardNothing)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 
-	row := events[0].row
+	row := events[0].Row
 	require.Len(t, row, 4)
 
 	// Verify enum type mapping
