@@ -229,6 +229,10 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	// We always run 2 merge iterations: a local merge (iteration 1) followed by
 	// a final cross-node merge (iteration 2). The local merge reduces network
 	// traffic by having each node merge its local SSTs first.
+	//
+	// WARNING: The phased progress tracking in calculatePhasedProgress assumes
+	// exactly 2 iterations. Changing this value requires updating the progress
+	// calculation in that function.
 	const maxIterations = 2
 	startIteration := int(progress.DistributedMergePhase) + 1
 

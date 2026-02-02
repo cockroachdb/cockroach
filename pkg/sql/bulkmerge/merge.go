@@ -142,21 +142,24 @@ func makeMergeReceiver(
 }
 
 // logMergeInputs logs the input SSTs for the current merge iteration.
-// All logging is opt-in via log.V(2) for detailed iteration tracking.
+// The main iteration message is always logged; detailed per-SST logging
+// is opt-in via log.V(2).
 func logMergeInputs(
 	ctx context.Context, ssts []execinfrapb.BulkMergeSpec_SST, iteration int, maxIterations int,
 ) {
-	// All iteration logging is verbose (opt-in).
-	if !log.V(2) {
-		return
-	}
-
 	iterType := "local"
 	if iteration == maxIterations {
 		iterType = "final"
 	}
-	log.Dev.Infof(ctx, "Distributed merge iteration %d (%s) starting with %d input SSTs",
-		iteration, iterType, len(ssts))
+
+	// Always log the phase transition.
+	log.Dev.Infof(ctx, "distributed merge: starting iteration %d of %d (%s) with %d input SSTs",
+		iteration, maxIterations, iterType, len(ssts))
+
+	// Detailed per-SST logging is verbose (opt-in).
+	if !log.V(2) {
+		return
+	}
 
 	var totalInputKeys uint64
 	for i, sst := range ssts {
@@ -164,7 +167,7 @@ func logMergeInputs(
 		log.Dev.Infof(ctx, "  input SST[%d]: %d keys, span=[%s, %s), uri=%s",
 			i, sst.KeyCount, sst.StartKey, sst.EndKey, sst.URI)
 	}
-	log.Dev.Infof(ctx, "  Total input keys: %d", totalInputKeys)
+	log.Dev.Infof(ctx, "  total input keys: %d", totalInputKeys)
 }
 
 func init() {

@@ -45,9 +45,9 @@ type mergeCoordinator struct {
 	done    bool
 	results execinfrapb.BulkMergeSpec_Output
 
-	// output is the receiver to push progress metadata to. It is captured
-	// from Run() so that handleRow() can send progress updates.
-	output execinfra.RowReceiver
+	// progressReceiver is captured from Run() so that handleRow() can push
+	// progress metadata to report task completion.
+	progressReceiver execinfra.RowReceiver
 }
 
 type mergeCoordinatorInput struct {
@@ -169,7 +169,7 @@ func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 	m.results.SSTs = append(m.results.SSTs, input.outputSSTs...)
 
 	// Push progress metadata to report task completion.
-	if m.output != nil {
+	if m.progressReceiver != nil {
 		progress := &execinfrapb.MergeIterationProgress{
 			CompletedTaskID: int64(input.taskID),
 			TasksTotal:      m.spec.TaskCount,
@@ -178,7 +178,7 @@ func (m *mergeCoordinator) handleRow(row rowenc.EncDatumRow) error {
 		if err != nil {
 			return errors.Wrap(err, "unable to marshal merge iteration progress")
 		}
-		_ = m.output.Push(nil, &execinfrapb.ProducerMetadata{
+		_ = m.progressReceiver.Push(nil, &execinfrapb.ProducerMetadata{
 			BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
 				ProgressDetails: *progressAny,
 			},
@@ -209,7 +209,7 @@ func (m *mergeCoordinator) Start(ctx context.Context) {
 // Run implements execinfra.Processor. It captures the output receiver so that
 // handleRow can push progress metadata, then delegates to the base processor.
 func (m *mergeCoordinator) Run(ctx context.Context, output execinfra.RowReceiver) {
-	m.output = output
+	m.progressReceiver = output
 	m.ProcessorBase.Run(ctx, output)
 }
 
