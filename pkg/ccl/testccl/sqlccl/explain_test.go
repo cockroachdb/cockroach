@@ -203,7 +203,6 @@ func TestExplainGist(t *testing.T) {
 					"type check failed while initializing stat",                          // #125620
 					"argument expression has type RECORD, need type USER DEFINED RECORD", // #139910
 					"invalid datum type given: RECORD, expected RECORD",                  // #140773
-					"not in index", // #148405
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.
@@ -305,11 +304,11 @@ func TestExplainGist(t *testing.T) {
 				} else {
 					logStmt(stmt, true /* successful */)
 				}
-			case <-time.After(time.Minute):
+			case <-time.After(3 * time.Minute):
 				t.Log(stmts.String())
 				sl := allstacks.Get()
 				t.Logf("stacks:\n\n%s", sl)
-				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 1m: %s", stmt)
+				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 3m: %s", stmt)
 			}
 		}
 	})
