@@ -1,16 +1,16 @@
 # This test verifies that the MMA can balance disk utilization between stores
 # on a single node. The test sets up one node with two stores, each with 50GiB
-# capacity. Store s1 starts with 100 ranges of 400MiB each (40GiB total, 80%
-# full), while store s2 starts with 100 ranges of 200MiB each (20GiB total, 40%
-# full). There is no workload.
+# capacity. Store s1 starts with 100 ranges of 400MiB each (98% full), while
+# store s2 starts with 100 ranges of 200MiB each (49% full). There is no
+# workload.
 #
 # The MMA only considers disk utilization a concern when a store exceeds 50%
-# capacity, so s1 starting at 80% should trigger rebalancing. The total cluster
-# utilization is 60% (60GiB / 100GiB), ensuring the balanced state (60% each)
-# remains above the 50% threshold where disk balancing stays active.
+# capacity, so s1 starting at 98% should trigger rebalancing. The total cluster
+# utilization is 73%, ensuring the balanced state remains above the 50%
+# threshold where disk balancing stays active.
 #
 # Expected outcome: The MMA should rebalance replicas between the two stores
-# to equalize disk utilization at ~60% each.
+# to equalize disk utilization.
 gen_cluster nodes=1 stores_per_node=2 store_byte_capacity_gib=50
 ----
 
@@ -31,8 +31,24 @@ assertion stat=disk_fraction_used type=balance ticks=6 upper_bound=1.1
 ----
 asserting: max_{stores}(disk_fraction_used)/mean_{stores}(disk_fraction_used) ≤ 1.10 at each of last 6 ticks
 
-eval duration=30m seed=42 cfgs=(mma-only,mma-count) metrics=(disk_fraction_used,replicas)
+eval duration=30m seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(disk_fraction_used,replicas)
 ----
+disk_fraction_used#1: first: [s1=0.98, s2=0.49] (stddev=0.24, mean=0.73, sum=1)
+disk_fraction_used#1: last:  [s1=0.94, s2=0.53] (stddev=0.21, mean=0.73, sum=1)
+disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
+replicas#1: first: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
+replicas#1: last:  [s1=96, s2=104] (stddev=4.00, mean=100.00, sum=200)
+replicas#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
+artifacts[sma-count]: c0ca8b855acd82cb
+failed assertion sample 1
+  balance stat=disk_fraction_used threshold=(≤1.10) ticks=6
+	max/mean=1.28 tick=0
+	max/mean=1.28 tick=1
+	max/mean=1.28 tick=2
+	max/mean=1.28 tick=3
+	max/mean=1.28 tick=4
+	max/mean=1.28 tick=5
+==========================
 disk_fraction_used#1: first: [s1=0.98, s2=0.49] (stddev=0.24, mean=0.73, sum=1)
 disk_fraction_used#1: last:  [s1=0.80, s2=0.66] (stddev=0.07, mean=0.73, sum=1)
 disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
