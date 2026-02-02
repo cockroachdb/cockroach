@@ -274,23 +274,6 @@ func TestLockTableBasic(t *testing.T) {
 					txn.WriteTimestamp.Forward(ts)
 				}
 				var clockObs roachpb.ObservedTimestamp
-				if d.HasArg("clock-obs") {
-					// Format: "nodeID@ts" e.g., "1@10,1"
-					obsStr := dd.ScanArg[string](t, d, "clock-obs")
-					parts := strings.Split(obsStr, "@")
-					nodeID, err := strconv.Atoi(parts[0])
-					if err != nil {
-						d.Fatalf(t, "invalid node ID in clock-obs: %s", obsStr)
-					}
-					obsTs, err := hlc.ParseTimestamp(parts[1])
-					if err != nil {
-						d.Fatalf(t, "invalid timestamp in clock-obs: %s", obsStr)
-					}
-					clockObs = roachpb.ObservedTimestamp{
-						NodeID:    roachpb.NodeID(nodeID),
-						Timestamp: hlc.ClockTimestamp{WallTime: obsTs.WallTime, Logical: obsTs.Logical},
-					}
-				}
 				lt.PushedTransactionUpdated(txn, clockObs)
 				return ""
 
