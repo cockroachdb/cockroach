@@ -1234,21 +1234,49 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	},
 }
 
-// NB: The following system tables explicitly forbidden:
-//   - system.users: avoid downloading passwords.
-//   - system.web_sessions: avoid downloading active session tokens.
-//   - system.join_tokens: avoid downloading secret join keys.
+// disabledSystemTables contains system tables that we don't include into the
+// debug.zip:
 //   - system.comments: avoid downloading noise from SQL schema.
-//   - system.ui: avoid downloading noise from UI customizations.
+//   - system.join_tokens: avoid downloading secret join keys.
+//   - system.span_count, system.span_stats_buckets, system.span_stats_samples,
+//     system.span_stats_tenant_boundaries, system.span_stats_unique_keys: these
+//     power Key Visualizer and unlikely to be helpful in any investigation.
+//   - system.statement_activity: historical data, usually too much to download.
 //   - system.statement_bundle_chunks: avoid downloading a large table that's
 //     hard to interpret currently.
+//   - system.statement_execution_insights: currently not be used.
+//     TODO(#104714): re-evaluate this.
 //   - system.statement_statistics: historical data, usually too much to
 //     download.
-//   - system.transaction_statistics: ditto
-//   - system.statement_activity: ditto
-//   - system.transaction_activity: ditto
-//
-// A test makes this assertion in pkg/cli/zip_table_registry.go:TestNoForbiddenSystemTablesInDebugZip
+//   - system.transaction_activity: historical data, usually too much to
+//     download.
+//   - system.transaction_execution_insights: currently not be used.
+//     TODO(#104714): re-evaluate this.
+//   - system.transaction_statistics: historical data, usually too much to
+//     download.
+//   - system.ui: avoid downloading noise from UI customizations.
+//   - system.users: avoid downloading passwords.
+//   - system.web_sessions: avoid downloading active session tokens.
+var disabledSystemTables = map[string]struct{}{
+	"system.comments":                       {},
+	"system.join_tokens":                    {},
+	"system.span_count":                     {},
+	"system.span_stats_buckets":             {},
+	"system.span_stats_samples":             {},
+	"system.span_stats_tenant_boundaries":   {},
+	"system.span_stats_unique_keys":         {},
+	"system.statement_activity":             {},
+	"system.statement_bundle_chunks":        {},
+	"system.statement_execution_insights":   {},
+	"system.statement_statistics":           {},
+	"system.transaction_activity":           {},
+	"system.transaction_execution_insights": {},
+	"system.transaction_statistics":         {},
+	"system.ui":                             {},
+	"system.users":                          {},
+	"system.web_sessions":                   {},
+}
+
 var zipSystemTables = DebugZipTableRegistry{
 	"system.database_role_settings": {
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1284,6 +1312,21 @@ var zipSystemTables = DebugZipTableRegistry{
 			"created",
 			"updated",
 			"connection_type",
+		},
+	},
+	"system.inspect_errors": {
+		nonSensitiveCols: NonSensitiveColumns{
+			// 'primary_key' refers to the PK of another table which could
+			// contain PII.
+			"error_id",
+			"job_id",
+			"error_type",
+			"aost",
+			"database_id",
+			"schema_id",
+			"id",
+			"details", // 'details' contain only things added by the INSPECT, so non-sensitive
+			"crdb_internal_expiration",
 		},
 	},
 	"system.jobs": {
@@ -1351,12 +1394,32 @@ var zipSystemTables = DebugZipTableRegistry{
 			"completed_at",
 		},
 	},
+	"system.mvcc_statistics": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"created_at",
+			"database_id",
+			"table_id",
+			"index_id",
+			"statistics",
+		},
+	},
 	"system.namespace": {
 		nonSensitiveCols: NonSensitiveColumns{
 			`"parentID"`,
 			`"parentSchemaID"`,
 			"name",
 			"id",
+		},
+	},
+	"system.prepared_transactions": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"global_id",
+			"transaction_id",
+			"transaction_key",
+			"prepared",
+			"owner",
+			"database",
+			"heuristic",
 		},
 	},
 	"system.privileges": {
@@ -1397,6 +1460,12 @@ var zipSystemTables = DebugZipTableRegistry{
 			`"otherRangeID"`,
 			"info",
 			`"uniqueID"`,
+		},
+	},
+	"system.region_liveness": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"crdb_region",
+			"unavailable_at",
 		},
 	},
 	"system.replication_constraint_stats": {
@@ -1585,6 +1654,14 @@ JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
 			"username",
 		},
 	},
+	"system.statement_hints": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"row_id",
+			"fingerprint",
+			"hint",
+			"created_at",
+		},
+	},
 	// statement_statistics can have over 100k rows in just the last hour.
 	// Select all the statements that are part of a transaction where one of
 	// the statements is in the 100 by cpu usage, and all the transaction
@@ -1658,6 +1735,27 @@ GROUP BY ss.aggregated_ts,
          ss.index_recommendations
 limit 5000;`,
 	},
+	"system.table_metadata": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"db_id",
+			"table_id",
+			"db_name",
+			"schema_name",
+			"table_name",
+			"total_columns",
+			"total_indexes",
+			"store_ids",
+			"replication_size_bytes",
+			"total_ranges",
+			"total_live_data_bytes",
+			"total_data_bytes",
+			"perc_live_data",
+			"last_update_error",
+			"last_updated",
+			"table_type",
+			"details",
+		},
+	},
 	"system.table_statistics": {
 		// `histogram` may contain sensitive information, such as keys and non-key column data.
 		nonSensitiveCols: NonSensitiveColumns{
@@ -1670,6 +1768,8 @@ limit 5000;`,
 			`"distinctCount"`,
 			`"nullCount"`,
 			`"avgSize"`,
+			`"partialPredicate"`,
+			`"fullStatisticID"`,
 		},
 	},
 	"system.task_payloads": {
@@ -1728,6 +1828,34 @@ limit 5000;`,
 			"id",
 			"active",
 			"info",
+		},
+	},
+	"system.transaction_diagnostics": {
+		nonSensitiveCols: NonSensitiveColumns{
+			// `bundle_chunks` column contains diagnostic bundle bytes, which
+			// contain unredacted information such as SQL arguments and
+			// unredacted trace logs.
+			"id",
+			"transaction_fingerprint_id",
+			"statement_fingerprint_ids",
+			"transaction_fingerprint",
+			"collected_at",
+			"error",
+		},
+	},
+	"system.transaction_diagnostics_requests": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"id",
+			"completed",
+			"transaction_fingerprint_id",
+			"statement_fingerprint_ids",
+			"transaction_diagnostics_id",
+			"requested_at",
+			"min_execution_latency",
+			"expires_at",
+			"sampling_probability",
+			"redacted",
+			"username",
 		},
 	},
 	"system.zones": {
