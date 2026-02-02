@@ -565,11 +565,15 @@ func loadSummaryForDimension(
 	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
 	// currently consider how far we are from the mean. But the mean isn't very
 	// useful when there are heterogeneous nodes/stores, so this computation
-	// will need to be revisited.
+	// will need to be revisited. We use utilization for CPU to avoid balancing
+	// on absolute cores in heterogeneous clusters.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
+	}
+	if dim == CPURate && capacity != UnknownCapacity && meanUtil > 0 {
+		fractionAbove = fractionUsed/meanUtil - 1.0
 	}
 
 	summaryUpperBound := overloadUrgent
