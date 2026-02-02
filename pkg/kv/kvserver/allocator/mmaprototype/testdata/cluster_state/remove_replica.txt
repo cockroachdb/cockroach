@@ -29,7 +29,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 status=ok accepting all reported=[cpu:20ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:20ns/s, write-bandwidth:80 B/s, byte-size:80 B] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
-  top-k-ranges (local-store-id=1) dim=CPURate: r1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 ranges
 ----
@@ -59,7 +59,7 @@ get-load-info
 store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
   top-k-ranges (local-store-id=1) dim=CPURate: r1
 store-id=2 node-id=2 status=ok accepting all reported=[cpu:20ns/s, write-bandwidth:80 B/s, byte-size:80 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=20 node-adjusted-cpu=0 seq=2
-  top-k-ranges (local-store-id=1) dim=CPURate: r1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 store-leaseholder-msg
 store-id=1
