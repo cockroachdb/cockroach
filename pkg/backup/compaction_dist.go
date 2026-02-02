@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -45,6 +47,7 @@ func runCompactionPlan(
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	totalSpansCh chan<- uint64,
 ) error {
 	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
@@ -100,7 +103,7 @@ func runCompactionPlan(
 	}
 	dsp := execCtx.DistSQLPlanner()
 	plan, planCtx, err := createCompactionPlan(
-		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact, targetSize, maxFiles,
+		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact, targetSize, maxFiles, totalSpansCh,
 	)
 	if err != nil {
 		return errors.Wrap(err, "creating compaction plan")
@@ -149,6 +152,7 @@ func createCompactionPlan(
 	spansToCompact roachpb.Spans,
 	targetSize int64,
 	maxFiles int64,
+	totalSpansCh chan<- uint64,
 ) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	evalCtx := execCtx.ExtendedEvalContext()
 	oracle := physicalplan.DefaultReplicaChooser
@@ -172,6 +176,7 @@ func createCompactionPlan(
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "setting up node planning")
 	}
+
 	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
 	for i, id := range instanceIDs {
 		desc, err := dsp.GetSQLInstanceInfo(id)
@@ -184,6 +189,29 @@ func createCompactionPlan(
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "building locality sets")
 	}
+
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+		infostorage := jobs.InfoStorageForJob(t, jobID)
+		n, ok, err := infostorage.GetUint64(ctx, "compaction-total-entries")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			n = 0
+			for _, set := range localitySets {
+				n += uint64(set.totalEntries)
+			}
+			if err := infostorage.WriteUint64(ctx, "compaction-total-entries", n); err != nil {
+				return err
+			}
+		}
+
+		totalSpansCh <- n
+		return nil
+	}); err != nil {
+		return nil, nil, errors.Wrap(err, "updating total entries")
+	}
+
 	corePlacements, err := createCompactionCorePlacements(
 		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
 		spansToCompact, instanceIDs, localitySets, targetSize, maxFiles,
