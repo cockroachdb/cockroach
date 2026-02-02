@@ -13,6 +13,8 @@ import (
 	"encoding/asn1"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -121,6 +123,12 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		certPrincipalMap string
 		certDNSName      string
 		allowDebugUser   bool
+		certDNSSANs      []string
+		certURISANs      []string
+		certIPSANs       []string
+		rootSAN          string
+		nodeSAN          string
+		sanRequired      bool
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -219,6 +227,41 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		// Test cases for allow debug user functionality
 		{systemID: stid, ous: nil, commonName: "debug_user", expErr: "debug_user login is not allowed"},
 		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "debug_user", expErr: "debug_user login is not allowed"},
+
+		// SAN-based authentication tests
+		// SAN validation succeeds
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSSANs: []string{"node.example.com"},
+			nodeSAN: "DNS=node.example.com", sanRequired: true},
+		// SAN fails, DN fallback succeeds
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", rootDNString: "CN=foo", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "bar", certDNSSANs: []string{"wrong.example.com"},
+			nodeSAN: "DNS=node.example.com", nodeDNString: "CN=bar", sanRequired: true},
+		// Both SAN and DN fail
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", rootDNString: "CN=bar", sanRequired: true,
+			expErr: "both SAN and DN validation failed"},
+		// SAN fails, DN not configured
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true, subjectRequired: true,
+			expErr: "root and node roles do not have valid DNs set"},
+		{systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true,
+			expErr: "SAN and DN validation failed"},
+		// Multiple SAN attributes
+		{systemID: stid, ous: nil, commonName: "foo",
+			certURISANs: []string{"spiffe://example.com/root"}, certDNSSANs: []string{"node.example.com"},
+			certIPSANs: []string{"192.168.1.1"}, rootSAN: "URI=spiffe://example.com/root", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root,DNS=missing.example.com", sanRequired: true,
+			expErr: "SAN and DN validation failed"},
+		// Both root and node SANs configured
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", nodeSAN: "DNS=node.example.com", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSSANs: []string{"node.example.com"},
+			rootSAN: "URI=spiffe://example.com/root", nodeSAN: "DNS=node.example.com", sanRequired: true},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			// Enable root login blocking for the specific test case
@@ -254,9 +297,19 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 					t.Fatalf("could not set node subject DN, err: %v", err)
 				}
 			}
+			if tc.rootSAN != "" {
+				err = security.SetRootSAN(tc.rootSAN)
+				require.NoError(t, err)
+			}
+			if tc.nodeSAN != "" {
+				err = security.SetNodeSAN(tc.nodeSAN)
+				require.NoError(t, err)
+			}
 			defer func() {
 				security.UnsetRootSubject()
 				security.UnsetNodeSubject()
+				security.UnsetRootSAN()
+				security.UnsetNodeSAN()
 			}()
 
 			cert := &x509.Certificate{
@@ -271,6 +324,26 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 			}
 			if tc.certDNSName != "" {
 				cert.DNSNames = append(cert.DNSNames, tc.certDNSName)
+			}
+			// Add DNS SANs
+			if len(tc.certDNSSANs) > 0 {
+				cert.DNSNames = append(cert.DNSNames, tc.certDNSSANs...)
+			}
+			// Add URI SANs
+			if len(tc.certURISANs) > 0 {
+				for _, uriStr := range tc.certURISANs {
+					uri, err := url.Parse(uriStr)
+					require.NoError(t, err)
+					cert.URIs = append(cert.URIs, uri)
+				}
+			}
+			// Add IP SANs
+			if len(tc.certIPSANs) > 0 {
+				for _, ipStr := range tc.certIPSANs {
+					ip := net.ParseIP(ipStr)
+					require.NotNil(t, ip)
+					cert.IPAddresses = append(cert.IPAddresses, ip)
+				}
 			}
 			if tc.tenantScope > 0 {
 				tenantSANs, err := security.MakeTenantURISANs(
@@ -302,6 +375,9 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 			u := settings.NewUpdater(sv)
 			err = u.Set(ctx, security.ClientCertSubjectRequiredSettingName,
 				settings.EncodedValue{Value: strconv.FormatBool(tc.subjectRequired), Type: "b"})
+			require.NoError(t, err)
+			err = u.Set(ctx, security.ClientCertSANRequiredSettingName,
+				settings.EncodedValue{Value: strconv.FormatBool(tc.sanRequired), Type: "b"})
 			require.NoError(t, err)
 
 			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv, enableDRPC)

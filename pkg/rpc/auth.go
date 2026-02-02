@@ -398,41 +398,90 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 	}
 
 	// We are using TLS, but the peer is not using a client tenant cert.
-	// In that case, we only allow RPCs if the principal is 'node' or
-	// 'root' and the tenant scope in the cert matches this server
-	// (either the cert has scope "global" or its scope tenant ID
-	// matches our own). The client could also present a certificate with subject
-	// DN equalling rootSubject or nodeSubject set using
-	// root-cert-distinguished-name and node-cert-distinguished-name cli flags
-	// respectively. Additionally if subject_required cluster setting is set, both
-	// root and node users must have a valid DN set.
+	// In that case, we only allow RPCs if the client presents a valid root or
+	// node certificate. Validation uses one of the following methods in order:
+	//
+	// 1. SAN validation (if ClientCertSANRequired is enabled): validates against
+	//    root-cert-san or node-cert-san CLI flags
+	// 2. DN validation: validates against root-cert-distinguished-name or
+	//    node-cert-distinguished-name CLI flags
+	// 3. Scope-based validation (legacy): validates that the principal is 'root'
+	//    or 'node' and the tenant scope matches this server
+	//
+	// If ClientCertSubjectRequired is enabled, DN must be configured for both
+	// root and node users.
 	//
 	// TODO(benesch): the vast majority of RPCs should be limited to
 	// just NodeUser. This is not a security concern, as RootUser has
 	// access to read and write all data, merely good hygiene. For
 	// example, there is no reason to permit the root user to send raw
 	// Raft RPCs.
-	rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
-	if rootOrNodeDNSet && !certDNMatchesRootOrNodeDN {
-		return nil, authErrorf(
-			"need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn",
-		)
-	}
-	if !rootOrNodeDNSet {
-		if security.ClientCertSubjectRequired.Get(a.sv) {
-			return nil, authErrorf(
-				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
-			)
-		}
-		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
-			return nil, err
-		}
+	if err := a.validateRootOrNodeClientCert(clientCert); err != nil {
+		return nil, err
 	}
 
 	if tenantIDFromMetadata.IsSet() {
 		return authnSuccessPeerIsTenantServer(tenantIDFromMetadata), nil
 	}
 	return authnSuccessPeerIsPrivileged{}, nil
+}
+
+// validateRootOrNodeClientCert validates that clientCert is authorized for
+// privileged RPC access as a root or node user. When SAN validation is enabled
+// (ClientCertSANRequired), it validates SANs first with DN as fallback. When
+// disabled, it validates DN with certificate scope as fallback. Returns an
+// error if validation fails.
+func (a kvAuth) validateRootOrNodeClientCert(clientCert *x509.Certificate) error {
+	if security.ClientCertSANRequired.Get(a.sv) {
+		// SAN validation is enabled - try SAN first, then fallback to DN.
+		// Do NOT fallback to checkRootOrNodeInScope when SAN is enabled.
+		certSANMatchesRootOrNodeSAN := security.CheckCertSANMatchesRootOrNodeSAN(clientCert)
+		if certSANMatchesRootOrNodeSAN {
+			// SAN validation successful with a privileged peer cert.
+			return nil
+		}
+
+		// SAN didn't match, try DN as fallback
+		rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
+		if rootOrNodeDNSet {
+			if certDNMatchesRootOrNodeDN {
+				return nil
+			}
+			return authErrorf(
+				"need root or node client cert to perform RPCs on this server: both SAN and DN validation failed",
+			)
+		}
+
+		// DN not configured
+		if security.ClientCertSubjectRequired.Get(a.sv) {
+			return authErrorf(
+				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
+			)
+		}
+		// SAN is enabled but failed, and DN is not configured - reject without checking scope
+		return authErrorf(
+			"need root or node client cert to perform RPCs on this server: SAN and DN validation failed.",
+		)
+	}
+
+	// SAN not enabled, use DN-based validation with scope fallback
+	rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
+	if rootOrNodeDNSet && !certDNMatchesRootOrNodeDN {
+		return authErrorf(
+			"need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn",
+		)
+	}
+	if !rootOrNodeDNSet {
+		if security.ClientCertSubjectRequired.Get(a.sv) {
+			return authErrorf(
+				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
+			)
+		}
+		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // requiredAuthzMethod is a sum type that describes which authorization
