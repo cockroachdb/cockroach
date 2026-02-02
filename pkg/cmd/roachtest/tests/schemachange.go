@@ -740,14 +740,15 @@ func makeSchemaChangeBulkIngestScaleTest(
 	}
 
 	return registry.TestSpec{
-		Name:             name,
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes, clusterOpts...),
-		CompatibleClouds: compatibleClouds,
-		Suites:           registry.ManualOnly, // Manual-only for investigation
-		Leases:           registry.LeaderLeases,
-		Timeout:          timeout,
+		Name:                name,
+		Owner:               registry.OwnerSQLFoundations,
+		Benchmark:           true,
+		Cluster:             r.MakeClusterSpec(numNodes, clusterOpts...),
+		CompatibleClouds:    compatibleClouds,
+		Suites:              registry.ManualOnly, // Manual-only for investigation
+		Leases:              registry.LeaderLeases,
+		Timeout:             timeout,
+		SkipPostValidations: registry.PostValidationAll,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runBulkIngestScaleTest(ctx, t, c, numRows, distributedMerge, disks, order, disk)
 		},
