@@ -30,20 +30,20 @@ gen_load rate=5000 rw_ratio=0 min_block=1024 max_block=1024 request_cpu_per_acce
 eval duration=75m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases,disk_fraction_used)
 ----
 mma-count:
-cpu#1: last:  [s1=324739816, s2=309926419, s3=345477558, s4=317918420, s5=347522219, s6=335565414] (stddev=13867943.86, mean=330191641.00, sum=1981149846)
-cpu#1: thrash_pct: [s1=380%, s2=362%, s3=417%, s4=364%, s5=345%, s6=421%]  (sum=2289%)
-cpu_util#1: last:  [s1=0.16, s2=0.15, s3=0.17, s4=0.16, s5=0.17, s6=0.17] (stddev=0.01, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=380%, s2=362%, s3=417%, s4=364%, s5=345%, s6=421%]  (sum=2289%)
+cpu#1: last:  [s1=305081584, s2=314824525, s3=327480632, s4=342551355, s5=360211750, s6=340113449] (stddev=18314757.45, mean=331710549.17, sum=1990263295)
+cpu#1: thrash_pct: [s1=330%, s2=367%, s3=400%, s4=369%, s5=336%, s6=375%]  (sum=2178%)
+cpu_util#1: last:  [s1=0.15, s2=0.16, s3=0.16, s4=0.17, s5=0.18, s6=0.17] (stddev=0.01, mean=0.17, sum=1)
+cpu_util#1: thrash_pct: [s1=330%, s2=367%, s3=400%, s4=369%, s5=336%, s6=375%]  (sum=2178%)
 disk_fraction_used#1: first: [s1=0.55, s2=0.55, s3=0.55, s4=0.01, s5=0.01, s6=0.01] (stddev=0.27, mean=0.28, sum=2)
-disk_fraction_used#1: last:  [s1=0.98, s2=0.95, s3=1.00, s4=0.89, s5=0.92, s6=0.94] (stddev=0.04, mean=0.95, sum=6)
-disk_fraction_used#1: thrash_pct: [s1=124%, s2=95%, s3=149%, s4=82%, s5=67%, s6=91%]  (sum=608%)
+disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.95, s4=0.98, s5=0.95, s6=0.97] (stddev=0.02, mean=0.95, sum=6)
+disk_fraction_used#1: thrash_pct: [s1=110%, s2=102%, s3=127%, s4=77%, s5=70%, s6=70%]  (sum=557%)
 leases#1: first: [s1=100, s2=0, s3=0, s4=100, s5=0, s6=0] (stddev=47.14, mean=33.33, sum=200)
-leases#1: last:  [s1=29, s2=30, s3=39, s4=30, s5=37, s6=35] (stddev=3.86, mean=33.33, sum=200)
-leases#1: thrash_pct: [s1=54%, s2=55%, s3=72%, s4=39%, s5=49%, s6=86%]  (sum=355%)
+leases#1: last:  [s1=30, s2=32, s3=32, s4=33, s5=39, s6=34] (stddev=2.81, mean=33.33, sum=200)
+leases#1: thrash_pct: [s1=47%, s2=55%, s3=65%, s4=52%, s5=54%, s6=72%]  (sum=344%)
 replicas#1: first: [s1=100, s2=100, s3=100, s4=100, s5=100, s6=100] (stddev=0.00, mean=100.00, sum=600)
-replicas#1: last:  [s1=101, s2=96, s3=103, s4=98, s5=102, s6=100] (stddev=2.38, mean=100.00, sum=600)
-replicas#1: thrash_pct: [s1=697%, s2=534%, s3=803%, s4=645%, s5=584%, s6=852%]  (sum=4115%)
-write_bytes_per_second#1: last:  [s1=2584409, s2=2405076, s3=2587819, s4=2485471, s5=2612783, s6=2539669] (stddev=71451.50, mean=2535871.17, sum=15215227)
-write_bytes_per_second#1: thrash_pct: [s1=1392%, s2=1311%, s3=1483%, s4=1418%, s5=1261%, s6=1473%]  (sum=8338%)
-hash: 24ef5e11988d83a0
+replicas#1: last:  [s1=94, s2=95, s3=99, s4=104, s5=106, s6=102] (stddev=4.43, mean=100.00, sum=600)
+replicas#1: thrash_pct: [s1=680%, s2=647%, s3=812%, s4=773%, s5=722%, s6=876%]  (sum=4509%)
+write_bytes_per_second#1: last:  [s1=2381347, s2=2405269, s3=2534120, s4=2662696, s5=2690051, s6=2611736] (stddev=119535.67, mean=2547536.50, sum=15285219)
+write_bytes_per_second#1: thrash_pct: [s1=1373%, s2=1477%, s3=1595%, s4=1475%, s5=1338%, s6=1481%]  (sum=8739%)
+hash: d5d61785ed3087a4
 ==========================
