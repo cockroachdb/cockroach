@@ -34,7 +34,7 @@ import styles from "./insightsTable.module.scss";
 
 const cx = classNames.bind(styles);
 
-export class InsightsSortedTable extends SortedTable<InsightRecommendation> {}
+export const InsightsSortedTable = SortedTable<InsightRecommendation>;
 
 const insightColumnLabels = {
   insights: "Insights",

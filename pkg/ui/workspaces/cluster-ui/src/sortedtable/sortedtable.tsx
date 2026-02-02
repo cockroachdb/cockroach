@@ -10,8 +10,7 @@ import orderBy from "lodash/orderBy";
 import times from "lodash/times";
 import * as Long from "long";
 import { Moment } from "moment-timezone";
-import React from "react";
-import { createSelector } from "reselect";
+import React, { useState, useMemo, useCallback } from "react";
 
 import { EmptyPanel, EmptyPanelProps } from "../empty";
 
@@ -64,15 +63,15 @@ export interface ColumnDescriptor<T> {
  * SortedTableProps describes the properties expected by a SortedTable
  * component.
  */
-interface SortedTableProps<T> {
+export interface SortedTableProps<T> {
   // The data which should be displayed in the table. This data may be sorted
-  // by this component before display.
-  data: T[];
+  // by this component before display. Defaults to an empty array if not provided.
+  data?: T[];
   // Description of columns to display.
   columns: ColumnDescriptor<T>[];
   // sortSetting specifies how data should be sorted in this table, by
   // specifying a column id and a direction.
-  sortSetting: SortSetting;
+  sortSetting?: SortSetting;
   // Callback that should be invoked when the user want to change the sort
   // setting.
   onChangeSortSetting?: { (ss: SortSetting): void };
@@ -104,10 +103,6 @@ interface SortedTableProps<T> {
   empty?: boolean;
   emptyProps?: EmptyPanelProps;
   dataTestId?: string;
-}
-
-interface SortedTableState {
-  expandedRows: Set<string>;
 }
 
 /**
@@ -182,221 +177,207 @@ export interface ExpandableConfig {
  * 'onChangeSortSetting' callback property.
  */
 
-export class SortedTable<T> extends React.Component<
-  SortedTableProps<T>,
-  SortedTableState
-> {
-  static defaultProps: Partial<SortedTableProps<unknown>> = {
-    rowClass: (_obj: unknown) => "",
-    columns: [],
-    sortSetting: {
-      ascending: false,
-      columnTitle: null,
-    },
-    onChangeSortSetting: _ss => {},
-  };
+const defaultRowClass = (_obj: unknown) => "";
+const defaultOnChangeSortSetting = (_ss: SortSetting) => {};
+const defaultSortSetting: SortSetting = {
+  ascending: false,
+  columnTitle: null,
+};
 
-  rollups = createSelector(
-    (props: SortedTableProps<T>) => props.data,
-    (props: SortedTableProps<T>) => props.columns,
-    (data: T[], columns: ColumnDescriptor<T>[]) => {
-      return columns.map((c): React.ReactNode => {
-        if (c.rollup) {
-          return c.rollup(data);
-        }
-        return undefined;
-      });
-    },
-  );
-
-  sortedAndPaginated = createSelector(
-    (props: SortedTableProps<T>) => props.data,
-    (props: SortedTableProps<T>) => props.sortSetting,
-    (props: SortedTableProps<T>) => props.columns,
-    (props: SortedTableProps<T>) => props.pagination,
-    (
-      data: T[],
-      sortSetting: SortSetting,
-      columns: ColumnDescriptor<T>[],
-      _pagination?: ISortedTablePagination,
-    ): T[] => {
-      if (!sortSetting) {
-        return this.paginatedData();
-      }
-
-      if (
-        this.props.disableSortSizeLimit &&
-        data.length > this.props.disableSortSizeLimit
-      ) {
-        return this.paginatedData();
-      }
-
-      const sortColumn = columns.find(c => c.name === sortSetting.columnTitle);
-      if (!sortColumn || !sortColumn.sort) {
-        return this.paginatedData();
-      }
-      return this.paginatedData(
-        orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc"),
-      );
-    },
-  );
-
-  /**
-   * columns is a selector which computes the input columns to the underlying
-   * sortableTable.
-   */
-
-  columns = createSelector(
-    this.sortedAndPaginated,
-    this.rollups,
-    (props: SortedTableProps<T>) => props.columns,
-    (
-      sorted: T[],
-      rollups: React.ReactNode[],
-      columns: ColumnDescriptor<T>[],
-    ) => {
-      const sort =
-        !this.props.disableSortSizeLimit ||
-        this.props.data.length <= this.props.disableSortSizeLimit;
-
-      return columns.map((cd, ii): SortableColumn => {
-        return {
-          name: cd.name,
-          title: cd.title,
-          hideTitleUnderline: cd.hideTitleUnderline,
-          cell: index => cd.cell(sorted[index]),
-          columnTitle: sort && cd.sort ? cd.name : undefined,
-          rollup: rollups[ii],
-          className: cd.className,
-          titleAlign: cd.titleAlign,
-        };
-      });
-    },
-  );
-
-  rowClass = createSelector(
-    this.sortedAndPaginated,
-    (props: SortedTableProps<T>) => props.rowClass,
-    (sorted: T[], rowClass: (obj: T) => string) => {
-      return (index: number) => rowClass(sorted[index]);
-    },
-  );
-
+export function SortedTable<T>({
+  data = [] as T[],
+  columns: columnDescriptors = [],
+  sortSetting = defaultSortSetting,
+  onChangeSortSetting = defaultOnChangeSortSetting,
+  className,
+  tableWrapperClassName,
+  rowClass = defaultRowClass,
+  expandableConfig: expandableConfigProp,
+  firstCellBordered,
+  renderNoResult,
+  pagination,
+  loading,
+  loadingLabel,
+  disableSortSizeLimit,
+  empty,
+  emptyProps,
+  dataTestId,
+}: SortedTableProps<T>): React.ReactElement {
   // TODO(vilterp): use a LocalSetting instead so the expansion state
   // will persist if the user navigates to a different page and back.
-  state: SortedTableState = {
-    expandedRows: new Set<string>(),
-  };
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
 
-  getItemAt(rowIndex: number): T {
-    const sorted = this.sortedAndPaginated(this.props);
-    return sorted[rowIndex];
-  }
+  const paginatedData = useCallback(
+    (sortData?: T[]): T[] => {
+      if (!pagination) {
+        return sortData || data;
+      }
+      const currentDefault = pagination.current - 1;
+      const start = currentDefault * pagination.pageSize;
+      const end = currentDefault * pagination.pageSize + pagination.pageSize;
+      return sortData ? sortData.slice(start, end) : data.slice(start, end);
+    },
+    [data, pagination],
+  );
 
-  getKeyAt(rowIndex: number): string {
-    return this.props.expandableConfig.expansionKey(this.getItemAt(rowIndex));
-  }
-
-  onChangeExpansion = (rowIndex: number, expanded: boolean): void => {
-    const key = this.getKeyAt(rowIndex);
-    const expandedRows = this.state.expandedRows;
-    if (expanded) {
-      expandedRows.add(key);
-    } else {
-      expandedRows.delete(key);
-    }
-    this.setState({
-      expandedRows: expandedRows,
+  const rollups = useMemo((): React.ReactNode[] => {
+    return columnDescriptors.map((c): React.ReactNode => {
+      if (c.rollup) {
+        return c.rollup(data);
+      }
+      return undefined;
     });
-  };
+  }, [data, columnDescriptors]);
 
-  rowIsExpanded = (rowIndex: number): boolean => {
-    const key = this.getKeyAt(rowIndex);
-    return this.state.expandedRows.has(key);
-  };
-
-  expandedContent = (rowIndex: number): React.ReactNode => {
-    const item = this.getItemAt(rowIndex);
-    return this.props.expandableConfig.expandedContent(item);
-  };
-
-  paginatedData = (sortData?: T[]): T[] => {
-    const { pagination, data } = this.props;
-    if (!pagination) {
-      return sortData || data;
-    }
-    const currentDefault = pagination.current - 1;
-    const start = currentDefault * pagination.pageSize;
-    const end = currentDefault * pagination.pageSize + pagination.pageSize;
-    return sortData ? sortData.slice(start, end) : data.slice(start, end);
-  };
-
-  render(): React.ReactElement {
-    const {
-      data,
-      loading,
-      sortSetting,
-      onChangeSortSetting,
-      firstCellBordered,
-      renderNoResult,
-      loadingLabel,
-      empty,
-      emptyProps,
-      className,
-      tableWrapperClassName,
-      dataTestId,
-    } = this.props;
-    let expandableConfig: ExpandableConfig = null;
-    if (this.props.expandableConfig) {
-      expandableConfig = {
-        expandedContent: this.expandedContent,
-        rowIsExpanded: this.rowIsExpanded,
-        onChangeExpansion: this.onChangeExpansion,
-      };
+  const sortedAndPaginatedData = useMemo((): T[] => {
+    if (!sortSetting) {
+      return paginatedData();
     }
 
-    const count = data ? this.paginatedData().length : 0;
-    const columns = this.columns(this.props);
-    const rowClass = this.rowClass(this.props);
-    const tableWrapperClass = cx("cl-table-wrapper", tableWrapperClassName);
-    const tableStyleClass = cx("sort-table", className);
-    const noResultsClass = cx("table__no-results");
-
-    if (empty) {
-      return <EmptyPanel {...emptyProps} />;
+    if (disableSortSizeLimit && data.length > disableSortSizeLimit) {
+      return paginatedData();
     }
 
-    return (
-      <div className={tableWrapperClass}>
-        <table className={tableStyleClass} data-testid={dataTestId}>
-          <TableHead
-            columns={columns}
-            sortSetting={sortSetting}
-            onChangeSortSetting={onChangeSortSetting}
-            expandableConfig={expandableConfig}
-            firstCellBordered={firstCellBordered}
-          />
-          <tbody>
-            {!loading &&
-              times(count, (rowIndex: number) => (
-                <TableRow
-                  key={"row" + rowIndex}
-                  columns={columns}
-                  expandableConfig={expandableConfig}
-                  firstCellBordered={firstCellBordered}
-                  rowIndex={rowIndex}
-                  rowClass={rowClass}
-                />
-              ))}
-          </tbody>
-        </table>
-        {loading && <TableSpinner loadingLabel={loadingLabel} />}
-        {!loading && count === 0 && (
-          <div className={noResultsClass}>{renderNoResult}</div>
-        )}
-      </div>
+    const sortColumn = columnDescriptors.find(
+      c => c.name === sortSetting.columnTitle,
     );
+    if (!sortColumn || !sortColumn.sort) {
+      return paginatedData();
+    }
+    return paginatedData(
+      orderBy(data, sortColumn.sort, sortSetting.ascending ? "asc" : "desc"),
+    );
+  }, [
+    data,
+    sortSetting,
+    columnDescriptors,
+    disableSortSizeLimit,
+    paginatedData,
+  ]);
+
+  const columns = useMemo((): SortableColumn[] => {
+    const sort = !disableSortSizeLimit || data.length <= disableSortSizeLimit;
+
+    return columnDescriptors.map((cd, ii): SortableColumn => {
+      return {
+        name: cd.name,
+        title: cd.title,
+        hideTitleUnderline: cd.hideTitleUnderline,
+        cell: index => cd.cell(sortedAndPaginatedData[index]),
+        columnTitle: sort && cd.sort ? cd.name : undefined,
+        rollup: rollups[ii],
+        className: cd.className,
+        titleAlign: cd.titleAlign,
+      };
+    });
+  }, [
+    sortedAndPaginatedData,
+    rollups,
+    columnDescriptors,
+    disableSortSizeLimit,
+    data.length,
+  ]);
+
+  const rowClassFn = useMemo((): ((index: number) => string) => {
+    return (index: number) => rowClass(sortedAndPaginatedData[index]);
+  }, [sortedAndPaginatedData, rowClass]);
+
+  const getItemAt = useCallback(
+    (rowIndex: number): T => {
+      return sortedAndPaginatedData[rowIndex];
+    },
+    [sortedAndPaginatedData],
+  );
+
+  const getKeyAt = useCallback(
+    (rowIndex: number): string => {
+      return expandableConfigProp.expansionKey(getItemAt(rowIndex));
+    },
+    [expandableConfigProp, getItemAt],
+  );
+
+  const onChangeExpansion = useCallback(
+    (rowIndex: number, expanded: boolean): void => {
+      const key = getKeyAt(rowIndex);
+      setExpandedRows(prev => {
+        const next = new Set(prev);
+        if (expanded) {
+          next.add(key);
+        } else {
+          next.delete(key);
+        }
+        return next;
+      });
+    },
+    [getKeyAt],
+  );
+
+  const rowIsExpanded = useCallback(
+    (rowIndex: number): boolean => {
+      const key = getKeyAt(rowIndex);
+      return expandedRows.has(key);
+    },
+    [getKeyAt, expandedRows],
+  );
+
+  const expandedContent = useCallback(
+    (rowIndex: number): React.ReactNode => {
+      const item = getItemAt(rowIndex);
+      return expandableConfigProp.expandedContent(item);
+    },
+    [getItemAt, expandableConfigProp],
+  );
+
+  let expandableConfig: ExpandableConfig = null;
+  if (expandableConfigProp) {
+    expandableConfig = {
+      expandedContent: expandedContent,
+      rowIsExpanded: rowIsExpanded,
+      onChangeExpansion: onChangeExpansion,
+    };
   }
+
+  const count = data ? paginatedData().length : 0;
+  const tableWrapperClass = cx("cl-table-wrapper", tableWrapperClassName);
+  const tableStyleClass = cx("sort-table", className);
+  const noResultsClass = cx("table__no-results");
+
+  if (empty) {
+    return <EmptyPanel {...emptyProps} />;
+  }
+
+  return (
+    <div className={tableWrapperClass}>
+      <table className={tableStyleClass} data-testid={dataTestId}>
+        <TableHead
+          columns={columns}
+          sortSetting={sortSetting}
+          onChangeSortSetting={onChangeSortSetting}
+          expandableConfig={expandableConfig}
+          firstCellBordered={firstCellBordered}
+        />
+        <tbody>
+          {!loading &&
+            times(count, (rowIndex: number) => (
+              <TableRow
+                key={"row" + rowIndex}
+                columns={columns}
+                expandableConfig={expandableConfig}
+                firstCellBordered={firstCellBordered}
+                rowIndex={rowIndex}
+                rowClass={rowClassFn}
+              />
+            ))}
+        </tbody>
+      </table>
+      {loading && <TableSpinner loadingLabel={loadingLabel} />}
+      {!loading && count === 0 && (
+        <div className={noResultsClass}>{renderNoResult}</div>
+      )}
+    </div>
+  );
 }
 
 /**

@@ -5,7 +5,13 @@
 
 import { Gear } from "@cockroachlabs/icons";
 import classNames from "classnames/bind";
-import React from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import Select, { components, OptionsType, ActionMeta } from "react-select";
 
 import { Button } from "../button";
@@ -30,11 +36,6 @@ export interface ColumnsSelectorProps {
   options: SelectOption[];
   onSubmitColumns: (selectedColumns: string[]) => void;
   size?: "default" | "small";
-}
-
-export interface ColumnsSelectorState {
-  hide: boolean;
-  selectionState: Map<string, boolean>;
 }
 
 /**
@@ -92,6 +93,17 @@ const customStyles = {
   }),
 };
 
+function createInitialSelectionState(
+  options: SelectOption[],
+): Map<string, boolean> {
+  const allSelected = options.every(o => o.isSelected);
+  const selectionState = new Map(
+    options.map(o => [o.value, allSelected || o.isSelected]),
+  );
+  selectionState.set("all", allSelected);
+  return selectionState;
+}
+
 /**
  * Creates the ColumnsSelector from the props
  * @param props:
@@ -100,101 +112,94 @@ const customStyles = {
  * onSubmitColumns (callback function): receives the selected string
  * @constructor
  */
-export default class ColumnsSelector extends React.Component<
-  ColumnsSelectorProps,
-  ColumnsSelectorState
-> {
-  constructor(props: ColumnsSelectorProps) {
-    super(props);
-    const allSelected = props.options.every(o => o.isSelected);
-    // set initial state of selections based on props
-    const selectionState = new Map(
-      props.options.map(o => [o.value, allSelected || o.isSelected]),
-    );
-    selectionState.set("all", allSelected);
-    this.state = {
-      hide: true,
-      selectionState,
+export default function ColumnsSelector({
+  options,
+  onSubmitColumns,
+  size = "default",
+}: ColumnsSelectorProps): React.ReactElement {
+  const [hide, setHide] = useState(true);
+  const [selectionState, setSelectionState] = useState<Map<string, boolean>>(
+    () => createInitialSelectionState(options),
+  );
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const outsideClick = useCallback(() => {
+    setHide(true);
+  }, []);
+
+  // Add and remove window click listener for outside click handling.
+  useEffect(() => {
+    window.addEventListener("click", outsideClick, false);
+    return () => {
+      window.removeEventListener("click", outsideClick, false);
     };
-  }
-  dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
+  }, [outsideClick]);
 
-  componentDidMount(): void {
-    window.addEventListener("click", this.outsideClick, false);
-  }
-  componentWillUnmount(): void {
-    window.removeEventListener("click", this.outsideClick, false);
-  }
+  const toggleOpen = useCallback(() => {
+    setHide(prev => !prev);
+  }, []);
 
-  toggleOpen = () => {
-    this.setState({
-      hide: !this.state.hide,
-    });
-  };
-  outsideClick = () => {
-    this.setState({ hide: true });
-  };
-  insideClick: React.MouseEventHandler<HTMLDivElement> = event => {
-    event.stopPropagation();
-  };
+  const insideClick: React.MouseEventHandler<HTMLDivElement> = useCallback(
+    event => {
+      event.stopPropagation();
+    },
+    [],
+  );
 
-  handleChange = (
-    _selectedOptions: OptionsType<SelectOption>,
-    // get actual selection of specific option and action type from "actionMeta"
-    actionMeta: ActionMeta<SelectOption>,
-  ): void => {
-    const { action } = actionMeta;
-    if (action !== "select-option" && action !== "deselect-option") {
-      return;
-    }
-    const option = actionMeta.option;
-    const selectionState = new Map(this.state.selectionState);
-    // true - if option was selected, false - otherwise
-    const isSelectedOption = action === "select-option";
-
-    // if "all" option was toggled - update all other options
-    if (option.value === "all") {
-      selectionState.forEach((_v, k) =>
-        selectionState.set(k, isSelectedOption),
-      );
-    } else {
-      // check if all other options (except current changed and "all" options) are selected as well to select "all" option
-      const allOtherOptionsSelected = [...selectionState.entries()]
-        .filter(([k, _v]) => ![option.value, "all"].includes(k)) // filter all options except currently changed and "all" option
-        .every(([_k, v]) => v);
-
-      // update "all" option if other options are selected
-      if (allOtherOptionsSelected) {
-        selectionState.set("all", isSelectedOption);
+  const handleChange = useCallback(
+    (
+      _selectedOptions: OptionsType<SelectOption>,
+      // get actual selection of specific option and action type from "actionMeta"
+      actionMeta: ActionMeta<SelectOption>,
+    ): void => {
+      const { action } = actionMeta;
+      if (action !== "select-option" && action !== "deselect-option") {
+        return;
       }
+      const option = actionMeta.option;
+      // true - if option was selected, false - otherwise
+      const isSelectedOption = action === "select-option";
 
-      selectionState.set(option.value, isSelectedOption);
-    }
-    this.setState({
-      selectionState,
-    });
-  };
+      setSelectionState(prev => {
+        const next = new Map(prev);
 
-  handleSubmit = (): void => {
-    const { selectionState } = this.state;
-    const selectedValues = this.props.options
+        // if "all" option was toggled - update all other options
+        if (option.value === "all") {
+          next.forEach((_v, k) => next.set(k, isSelectedOption));
+        } else {
+          // check if all other options (except current changed and "all" options) are selected as well to select "all" option
+          const allOtherOptionsSelected = [...next.entries()]
+            .filter(([k, _v]) => ![option.value, "all"].includes(k)) // filter all options except currently changed and "all" option
+            .every(([_k, v]) => v);
+
+          // update "all" option if other options are selected
+          if (allOtherOptionsSelected) {
+            next.set("all", isSelectedOption);
+          }
+
+          next.set(option.value, isSelectedOption);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSubmit = useCallback((): void => {
+    const selectedValues = options
       .filter(o => selectionState.get(o.value))
       .filter(o => o.value !== "all") // do not include artificial option "all". It should live only inside this component.
       .map(o => o.value);
-    this.props.onSubmitColumns(selectedValues);
-    this.setState({ hide: true });
-  };
+    onSubmitColumns(selectedValues);
+    setHide(true);
+  }, [options, selectionState, onSubmitColumns]);
 
-  isAllSelected = (): boolean => {
-    return this.state.selectionState.get("all");
-  };
+  const isAllSelected = selectionState.get("all");
 
   // getOptions returns list of all options with updated selection states
   // and prepends "all" option as an artificial option
-  getOptions = (): SelectOption[] => {
-    const { options } = this.props;
-    const { selectionState } = this.state;
-    const isAllSelected = this.isAllSelected();
+  const computedOptions = useMemo((): SelectOption[] => {
     const allOption: SelectOption = {
       label: "All",
       value: "all",
@@ -213,52 +218,43 @@ export default class ColumnsSelector extends React.Component<
         isSelected,
       };
     });
-  };
+  }, [options, selectionState, isAllSelected]);
 
-  render(): React.ReactElement {
-    const { hide } = this.state;
-    const { size = "default" } = this.props;
-    const dropdownArea = hide ? hidden : dropdown;
-    const options = this.getOptions();
-    const columnsSelected = options.filter(o => o.isSelected);
+  const dropdownArea = hide ? hidden : dropdown;
+  const columnsSelected = computedOptions.filter(o => o.isSelected);
 
-    return (
-      <div
-        onClick={this.insideClick}
-        ref={this.dropdownRef}
-        className={cx("btn-area")}
-      >
-        <Button type="secondary" size={size} onClick={this.toggleOpen}>
-          <Gear className={cx("icon")} />
-          Columns
-        </Button>
-        <div className={dropdownArea}>
-          <div className={dropdownContentWrapper}>
-            <div className={cx("label")}>Hide/show columns</div>
-            <Select<SelectOption, true>
-              isMulti
-              menuIsOpen={true}
-              options={options}
-              value={columnsSelected}
-              onChange={this.handleChange}
-              hideSelectedOptions={false}
-              closeMenuOnSelect={false}
-              components={{ Option: CheckboxOption }}
-              styles={customStyles}
-              controlShouldRenderValue={false}
-            />
-            <div className={cx("apply-btn__wrapper")}>
-              <Button
-                className={cx("apply-btn__btn")}
-                textAlign="center"
-                onClick={this.handleSubmit}
-              >
-                Apply
-              </Button>
-            </div>
+  return (
+    <div onClick={insideClick} ref={dropdownRef} className={cx("btn-area")}>
+      <Button type="secondary" size={size} onClick={toggleOpen}>
+        <Gear className={cx("icon")} />
+        Columns
+      </Button>
+      <div className={dropdownArea}>
+        <div className={dropdownContentWrapper}>
+          <div className={cx("label")}>Hide/show columns</div>
+          <Select<SelectOption, true>
+            isMulti
+            menuIsOpen={true}
+            options={computedOptions}
+            value={columnsSelected}
+            onChange={handleChange}
+            hideSelectedOptions={false}
+            closeMenuOnSelect={false}
+            components={{ Option: CheckboxOption }}
+            styles={customStyles}
+            controlShouldRenderValue={false}
+          />
+          <div className={cx("apply-btn__wrapper")}>
+            <Button
+              className={cx("apply-btn__btn")}
+              textAlign="center"
+              onClick={handleSubmit}
+            >
+              Apply
+            </Button>
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 }

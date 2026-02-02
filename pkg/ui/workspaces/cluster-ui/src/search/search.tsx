@@ -10,7 +10,7 @@ import {
 import { Button, Input, ConfigProvider } from "antd";
 import classNames from "classnames/bind";
 import noop from "lodash/noop";
-import React from "react";
+import React, { useState, useCallback } from "react";
 
 import { crlTheme } from "../antdTheme";
 
@@ -19,7 +19,7 @@ import styles from "./search.module.scss";
 import type { InputProps } from "antd/lib/input";
 
 interface ISearchProps {
-  onSubmit: (search: string) => void;
+  onSubmit?: (search: string) => void;
   onChange?: (value: string) => void;
   onClear?: () => void;
   defaultValue?: string;
@@ -27,66 +27,60 @@ interface ISearchProps {
   suffix?: boolean;
 }
 
-interface ISearchState {
-  value: string;
-  submitted: boolean;
-  submit?: boolean;
-}
-
 type TSearchProps = ISearchProps &
   Omit<InputProps, "onSubmit" | "defaultValue" | "placeholder" | "onChange">; // Omit shadowed props by ISearchProps type.
 
 const cx = classNames.bind(styles);
 
-export class Search extends React.Component<TSearchProps, ISearchState> {
-  static defaultProps: Partial<ISearchProps> = {
-    placeholder: "Search Statements",
-    onSubmit: noop,
-    onChange: noop,
-    onClear: noop,
-  };
+export function Search({
+  onSubmit = noop,
+  onChange = noop,
+  onClear = noop,
+  defaultValue = "",
+  placeholder = "Search Statements",
+  suffix,
+  ...inputProps
+}: TSearchProps): React.ReactElement {
+  const [value, setValue] = useState(defaultValue || "");
+  const [submitted, setSubmitted] = useState(false);
 
-  state: ISearchState = {
-    value: this.props.defaultValue || "",
-    submitted: false,
-  };
+  const handleSubmit = useCallback(
+    (e: React.SyntheticEvent): void => {
+      e?.preventDefault && e.preventDefault();
+      onSubmit(value);
+      if (value.length > 0) {
+        setSubmitted(true);
+      }
+    },
+    [value, onSubmit],
+  );
 
-  onSubmit = (e: React.SyntheticEvent): void => {
-    e?.preventDefault && e.preventDefault();
-    const { value } = this.state;
-    const { onSubmit } = this.props;
-    onSubmit(value);
-    if (value.length > 0) {
-      this.setState({
-        submitted: true,
-      });
-    }
-  };
+  const handleChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>): void => {
+      const newValue: string = event.target.value;
+      const isSubmitted = newValue.length === 0;
+      onChange(newValue);
+      setValue(newValue);
+      setSubmitted(isSubmitted);
+    },
+    [onChange],
+  );
 
-  onChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    event.persist();
-    const value: string = event.target.value;
-    const submitted = value.length === 0;
-    this.props.onChange(value);
-    this.setState({ value, submitted });
-  };
-
-  onClear = (): void => {
-    const { onClear } = this.props;
-    this.setState({ value: "", submit: false });
+  const handleClear = useCallback((): void => {
+    setValue("");
+    setSubmitted(false);
     onClear();
-  };
+  }, [onClear]);
 
-  renderSuffix = (): React.ReactElement => {
-    if (this.props.suffix === false) {
+  const renderSuffix = (): React.ReactElement => {
+    if (suffix === false) {
       return null;
     }
-    const { value, submitted } = this.state;
     if (value.length > 0) {
       if (submitted) {
         return (
           <Button
-            onClick={this.onClear}
+            onClick={handleClear}
             type="text"
             className={cx("clear-search")}
             size="small"
@@ -98,7 +92,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
       return (
         <Button
           type="text"
-          onClick={this.onSubmit}
+          onClick={handleSubmit}
           className={cx("submit-search")}
           size="small"
         >
@@ -109,26 +103,19 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     return null;
   };
 
-  render(): React.ReactElement {
-    const { value } = this.state;
-    // We pull out onSubmit and onClear so that they will not be passed
-    // to the Input component as part of inputProps.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { onSubmit, onClear, onChange, ...inputProps } = this.props;
-
-    return (
-      <ConfigProvider theme={crlTheme}>
-        <Input
-          className={cx("root")}
-          onChange={this.onChange}
-          onPressEnter={this.onSubmit}
-          prefix={<SearchIcon className={cx("prefix-icon")} />}
-          suffix={this.renderSuffix()}
-          value={value}
-          size={"small"}
-          {...inputProps}
-        />
-      </ConfigProvider>
-    );
-  }
+  return (
+    <ConfigProvider theme={crlTheme}>
+      <Input
+        className={cx("root")}
+        onChange={handleChange}
+        onPressEnter={handleSubmit}
+        prefix={<SearchIcon className={cx("prefix-icon")} />}
+        suffix={renderSuffix()}
+        value={value}
+        placeholder={placeholder}
+        size={"small"}
+        {...inputProps}
+      />
+    </ConfigProvider>
+  );
 }
