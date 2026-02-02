@@ -555,6 +555,10 @@ var stmtBundleIncludeAllFKReferences = settings.RegisterBoolSetting(
 	false,
 )
 
+// stmtBundleStatsFileRE is a regex that matches all "complex" characters that
+// might not be safe when used in file names on some systems.
+var stmtBundleStatsFileRE = regexp.MustCompile(`[^a-zA-Z0-9_.\-]`)
+
 func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	c := makeStmtEnvCollector(ctx, b.p, b.ie, b.requesterUsername)
 
@@ -912,13 +916,29 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		buf.WriteString("-- there were no objects used in this query\n")
 	}
 	b.z.AddFile("schema.sql", buf.String())
+	// statsFileNames is a map from the main part of the stats file name to the
+	// number of times it has been used.
+	var statsFileNames = make(map[string]int)
 	for i := range tables {
 		buf.Reset()
 		hideHistograms := b.flags.RedactValues
 		if err = c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
 			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].FQString(), err), &buf)
 		}
-		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].FQString()), buf.String())
+		// We use fully-qualified string for the table name as the main part of
+		// the file name that guarantees uniqueness within the bundle. Yet, in
+		// order to ensure that the file names interact well with different
+		// systems (e.g. Windows is particularly picky), we also replace many
+		// special characters with underscores - which might lose the uniqueness
+		// property. Thus, we additionally might append a count to guarantee
+		// uniqueness again. We also convert everything to the lower case since
+		// Windows is case-insensitive by default.
+		fileName := strings.ToLower(stmtBundleStatsFileRE.ReplaceAllString(tables[i].FQString(), `_`))
+		statsFileNames[fileName]++
+		if statsFileNames[fileName] > 1 { // don't touch the first occurrency of this file name
+			fileName = fileName + "_" + strconv.Itoa(statsFileNames[fileName])
+		}
+		b.z.AddFile(fmt.Sprintf("stats-%s.sql", fileName), buf.String())
 	}
 }
 
