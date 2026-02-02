@@ -8,8 +8,11 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
@@ -72,6 +75,10 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kmsg"
+	"github.com/twmb/franz-go/pkg/kversion"
 )
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
@@ -999,6 +1006,10 @@ func createChangefeedJobRecord(
 	// need to have this line once.
 	details.Opts = opts.AsMap()
 
+	var knobs TestingKnobs
+	if k, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		knobs = *k
+	}
 	// In the case where a user is executing a CREATE CHANGEFEED and is still
 	// waiting for the statement to return, we take the opportunity to ensure
 	// that the user has not made any obvious errors when specifying the sink in
@@ -1008,7 +1019,7 @@ func createChangefeedJobRecord(
 	// but are inappropriate for the provided sink.
 	// TODO: Ideally those option validations would happen in validateDetails()
 	// earlier, like the others.
-	err = validateSink(ctx, p, jobID, details, opts, targets)
+	err = validateSink(ctx, p, jobID, details, opts, targets, knobs)
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
@@ -1311,6 +1322,7 @@ func validateSink(
 	details jobspb.ChangefeedDetails,
 	opts changefeedbase.StatementOptions,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) error {
 	metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	scope, _ := opts.GetMetricScope()
@@ -1339,7 +1351,7 @@ func validateSink(
 
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
-		nilOracle, p.User(), jobID, sli, targets)
+		nilOracle, p.User(), jobID, sli, targets, knobs)
 	if err != nil {
 		return err
 	}
@@ -1831,9 +1843,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	defer watcherMemMonitor.Stop(ctx)
 
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
-		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
-
-		if flowErr == nil {
+		flowErr := func() error {
 			// startedCh is normally used to signal back to the creator of the job that
 			// the job has started; however, in this case nothing will ever receive
 			// on the channel, causing the changefeed flow to block. Replace it with
@@ -1856,6 +1866,18 @@ func (b *changefeedResumer) resumeWithRetries(
 			targets, err := AllTargets(ctx, details, execCfg, schemaTS)
 			if err != nil {
 				return err
+			}
+
+			if err := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec); err != nil {
+				return err
+			}
+
+			var kafkaKnobs kafkaSinkV2Knobs
+			if knobs != nil {
+				kafkaKnobs = knobs.KafkaSinkV2Knobs
+			}
+			if err := maybeCreateKafkaTopics(ctx, details, targets, &execCfg.Settings.SV, kafkaKnobs); err != nil {
+				return errors.Wrap(err, "failed to create kafka topics")
 			}
 
 			// This watcher is only used for db-level changefeeds with no watched tables.
@@ -1948,20 +1970,20 @@ func (b *changefeedResumer) resumeWithRetries(
 				}
 			})
 
-			flowErr = g.Wait()
+			return g.Wait()
+		}()
 
-			if flowErr == nil {
-				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
-			}
+		if flowErr == nil {
+			return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
+		}
 
-			if errors.Is(flowErr, replanErr) {
-				log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration")
-				continue
-			}
+		if errors.Is(flowErr, replanErr) {
+			log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration")
+			continue
+		}
 
-			if knobs != nil && knobs.HandleDistChangefeedError != nil {
-				flowErr = knobs.HandleDistChangefeedError(flowErr)
-			}
+		if knobs != nil && knobs.HandleDistChangefeedError != nil {
+			flowErr = knobs.HandleDistChangefeedError(flowErr)
 		}
 
 		// Terminate changefeed if needed.
@@ -2550,4 +2572,189 @@ func buildTableToDatabaseAndSchemaLookup(
 		}
 	}
 	return tableToSchema, tableToDatabase
+}
+
+func maybeCreateKafkaTopics(
+	ctx context.Context, details jobspb.ChangefeedDetails, targets changefeedbase.Targets, sv *settings.Values, knobs kafkaSinkV2Knobs,
+) error {
+	ctx, span := tracing.ChildSpan(ctx, "maybeCreateKafkaTopics")
+	defer span.Finish()
+
+	opts := changefeedbase.MakeStatementOptions(details.Opts)
+	createTopics, err := opts.GetCreateKafkaTopics()
+	if err != nil {
+		return err
+	}
+	if createTopics != changefeedbase.CreateKafkaTopicsYes {
+		return nil
+	}
+
+	parsedSinkURL, err := url.Parse(details.SinkURI)
+	if err != nil {
+		return err
+	}
+	if !isKafkaSink(parsedSinkURL) {
+		return nil
+	}
+
+	if !KafkaV2Enabled.Get(sv) {
+		return errors.Newf("Automatic topic creation is only supported for changefeeds using the v2 kafka sink. "+
+			"Consider enabling it with the %q cluster setting.", KafkaV2Enabled.Name())
+	}
+
+	sinkURL := &changefeedbase.SinkURL{URL: parsedSinkURL}
+
+	// Build a TopicNamer and derive the exact set of topic names for this changefeed.
+	topicNamer, err := buildKafkaTopicNamer(targets, sinkURL)
+	if err != nil {
+		return err
+	}
+	topics := topicNamer.DisplayNamesSlice()
+	topicsSet := make(map[string]struct{}, len(topics))
+	for _, topic := range topics {
+		topicsSet[topic] = struct{}{}
+	}
+
+	// Build kafka client & admin using shared helper.
+	bootstrapBrokers := strings.Split(sinkURL.Host, `,`)
+	sinkOpts, err := opts.GetKafkaSinkOptions()
+	if err != nil {
+		return err
+	}
+	clientOpts, err := buildKgoConfig(ctx, sinkURL, sinkOpts.JSONConfig, nil /* netMetrics */)
+	if err != nil {
+		return err
+	}
+	client, kadmClient, err := buildKafkaClients(ctx, bootstrapBrokers, false /* allowAutoTopic */, "", clientOpts, knobs)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// Check for topics existence first, so that clusters under the supported api version can still work if they already have the topics
+	allExist, preExistingTopics, err := topicsAlreadyExist(ctx, kadmClient, topicsSet)
+	if err != nil {
+		return err
+	}
+	if allExist {
+		log.Changefeed.VInfof(ctx, 2, "all topics already exist, skipping topic creation")
+		return nil
+	}
+
+	if err := ensureWeCanCreateKafkaTopics(ctx, kadmClient, knobs); err != nil {
+		return err
+	}
+
+	// Determine which topics are missing.
+	missing := make([]string, 0, len(topics))
+	for _, t := range topics {
+		d, ok := preExistingTopics[t]
+		if d.Err != nil && !errors.Is(d.Err, kerr.UnknownTopicOrPartition) {
+			return errors.Wrapf(d.Err, "failed to get topic details for topic %s", t)
+		}
+		if !ok || (d.Err != nil && errors.Is(d.Err, kerr.UnknownTopicOrPartition)) {
+			missing = append(missing, t)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	// Validate the topics before creating them.
+	vresp, err := kadmClient.ValidateCreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for topic, r := range vresp {
+		if r.Err != nil && !errors.Is(r.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(r.Err, "failed to validate topic creation for topic %s", topic)
+		}
+	}
+
+	log.Changefeed.VInfof(ctx, 2, "creating missing topics: %v", missing)
+
+	// Create the topics.
+	cresp, err := kadmClient.CreateTopics(ctx, -1, -1, nil, missing...)
+	if err != nil {
+		return err
+	}
+	for topic, r := range cresp {
+		if r.Err != nil && !errors.Is(r.Err, kerr.TopicAlreadyExists) {
+			return errors.Wrapf(r.Err, "failed to create topic %s", topic)
+		}
+		log.Changefeed.Infof(ctx, "created topic %s with (numPartitions: %d, replicationFactor: %d, configs: %+v)", topic, r.NumPartitions, r.ReplicationFactor, r.Configs)
+	}
+	return nil
+}
+
+// ensureWeCanCreateKafkaTopics checks if the admin client supports create
+// topics with default values (-1), and returns an error if it doesn't. The
+// actual check is a bit strange but essentially we need to make sure all the
+// brokers support the create topics api at least at v2.4.0 level.
+func ensureWeCanCreateKafkaTopics(ctx context.Context, adminClient KafkaAdminClientV2, knobs kafkaSinkV2Knobs) error {
+	v24 := kversion.V2_4_0()
+	v24kvm, ok := v24.LookupMaxKeyVersion(kmsg.CreateTopics.Int16())
+	if !ok {
+		return errors.AssertionFailedf("v2.4.0 does not support create topics but it should")
+	}
+
+	if knobs.SkipCreateTopicVersionCheck {
+		return nil
+	}
+
+	vr, err := adminClient.ApiVersions(ctx)
+	if err != nil {
+		return err
+	}
+	for bid, ver := range vr {
+		if ver.Err != nil {
+			return errors.Wrapf(ver.Err, "failed to get api versions for broker %d", bid)
+		}
+		mv, ok := ver.KeyMaxVersion(kmsg.CreateTopics.Int16())
+		if !ok {
+			return errors.Errorf("broker %d does not support create topics at all", bid)
+		}
+		if mv < v24kvm {
+			return errors.Errorf("broker %d does not support create topics at >= v2.4.0 level: %d vs %d", bid, mv, v24kvm)
+		}
+	}
+
+	return nil
+}
+
+// topicsAlreadyExist checks if the topics already exist in the cluster.
+// It returns true if all the topics exist, the details of the topics if they exist,
+// and an error if there is an error.
+func topicsAlreadyExist(
+	ctx context.Context, adminClient KafkaAdminClientV2, topicsSet map[string]struct{},
+) (bool, kadm.TopicDetails, error) {
+	tr, err := adminClient.ListTopics(ctx, slices.Collect(maps.Keys(topicsSet))...)
+	if err != nil {
+		return false, nil, err
+	}
+	log.Changefeed.VInfof(ctx, 2, "found existing topics: %+v", tr)
+
+	preExistingTopics := make(map[string]struct{}, len(topicsSet))
+	for topic, r := range tr {
+		if r.Err != nil {
+			if errors.Is(r.Err, kerr.UnknownTopicOrPartition) {
+				continue
+			}
+			return false, nil, errors.Wrapf(r.Err, "failed to list topic %s", topic)
+		}
+		preExistingTopics[topic] = struct{}{}
+	}
+	return setsAreEqual(topicsSet, preExistingTopics), tr, nil
+}
+
+func setsAreEqual(a, b map[string]struct{}) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			return false
+		}
+	}
+	return true
 }

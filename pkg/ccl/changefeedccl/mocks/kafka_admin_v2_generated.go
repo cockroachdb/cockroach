@@ -35,6 +35,41 @@ func (m *MockKafkaAdminClientV2) EXPECT() *MockKafkaAdminClientV2MockRecorder {
 	return m.recorder
 }
 
+// ApiVersions mocks base method.
+func (m *MockKafkaAdminClientV2) ApiVersions(arg0 context.Context) (kadm.BrokersApiVersions, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApiVersions", arg0)
+	ret0, _ := ret[0].(kadm.BrokersApiVersions)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApiVersions indicates an expected call of ApiVersions.
+func (mr *MockKafkaAdminClientV2MockRecorder) ApiVersions(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApiVersions", reflect.TypeOf((*MockKafkaAdminClientV2)(nil).ApiVersions), arg0)
+}
+
+// CreateTopics mocks base method.
+func (m *MockKafkaAdminClientV2) CreateTopics(arg0 context.Context, arg1 int32, arg2 int16, arg3 map[string]*string, arg4 ...string) (kadm.CreateTopicResponses, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateTopics", varargs...)
+	ret0, _ := ret[0].(kadm.CreateTopicResponses)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateTopics indicates an expected call of CreateTopics.
+func (mr *MockKafkaAdminClientV2MockRecorder) CreateTopics(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTopics", reflect.TypeOf((*MockKafkaAdminClientV2)(nil).CreateTopics), varargs...)
+}
+
 // ListTopics mocks base method.
 func (m *MockKafkaAdminClientV2) ListTopics(arg0 context.Context, arg1 ...string) (kadm.TopicDetails, error) {
 	m.ctrl.T.Helper()
@@ -53,4 +88,24 @@ func (mr *MockKafkaAdminClientV2MockRecorder) ListTopics(arg0 interface{}, arg1 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTopics", reflect.TypeOf((*MockKafkaAdminClientV2)(nil).ListTopics), varargs...)
+}
+
+// ValidateCreateTopics mocks base method.
+func (m *MockKafkaAdminClientV2) ValidateCreateTopics(arg0 context.Context, arg1 int32, arg2 int16, arg3 map[string]*string, arg4 ...string) (kadm.CreateTopicResponses, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ValidateCreateTopics", varargs...)
+	ret0, _ := ret[0].(kadm.CreateTopicResponses)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateCreateTopics indicates an expected call of ValidateCreateTopics.
+func (mr *MockKafkaAdminClientV2MockRecorder) ValidateCreateTopics(arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCreateTopics", reflect.TypeOf((*MockKafkaAdminClientV2)(nil).ValidateCreateTopics), varargs...)
 }

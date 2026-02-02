@@ -966,7 +966,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 			if shouldIgnoreErr(err) {
 				return err
 			}
-			t.Errorf("requireNoFeedsFail: unexpected error: %v", err)
+			t.Fatalf("requireNoFeedsFail: unexpected error: %v", err)
 			return err
 		}
 		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
