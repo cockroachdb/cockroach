@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTxnWriter(t *testing.T, s serverutils.ApplicationLayerInterface) *TransactionWriter {
+func newTxnWriter(t *testing.T, s serverutils.ApplicationLayerInterface) TransactionWriter {
 	writer, err := NewTransactionWriter(
 		context.Background(),
 		s.InternalDB().(isql.DB),
