@@ -366,21 +366,18 @@ func sanListIsSubset(sanSubset, sanSuperset []string) bool {
 	return true
 }
 
-// checkCertSANMatchesRootSANorNodeSAN returns `rootOrNodeSANSet` which validates
-// whether rootSAN or nodeSAN is currently set using their respective CLI flags
-// *-cert-san. It also returns `certSANMatchesRootOrNodeSAN` which
-// validates whether SANs contained in cert being presented contain all the
-// configured rootSAN or nodeSAN entries for the specific user type
+// checkCertSANMatchesUserSpecificSAN returns `certSANMatchesRootOrNodeSAN`
+// which validates whether SANs contained in cert being presented contain
+// all the configured rootSAN or nodeSAN entries for the specific user type
 // (i.e., configured SANs are a subset of cert SANs).
-func checkCertSANMatchesRootSANorNodeSAN(
+func checkCertSANMatchesUserSpecificSAN(
 	certSANs []string, user string,
-) (rootOrNodeSANSet bool, certSANMatchesRootOrNodeSAN bool) {
+) (certSANMatchesRootOrNodeSAN bool) {
 	// Check user-specific SANs based on username
 	switch user {
 	case username.RootUser:
 		rootSANs := rootSANMu.getSANs()
 		if len(rootSANs) > 0 {
-			rootOrNodeSANSet = true
 			// For root user, only check root SANs
 			if sanListIsSubset(rootSANs, certSANs) {
 				certSANMatchesRootOrNodeSAN = true
@@ -389,21 +386,20 @@ func checkCertSANMatchesRootSANorNodeSAN(
 	case username.NodeUser:
 		nodeSANs := nodeSANMu.getSANs()
 		if len(nodeSANs) > 0 {
-			rootOrNodeSANSet = true
 			// For node user, only check node SANs
 			if sanListIsSubset(nodeSANs, certSANs) {
 				certSANMatchesRootOrNodeSAN = true
 			}
 		}
 	}
-	return rootOrNodeSANSet, certSANMatchesRootOrNodeSAN
+	return certSANMatchesRootOrNodeSAN
 }
 
 func isRootOrNodeUser(user string) bool {
 	return user == username.RootUser || user == username.NodeUser
 }
 
-// Helper function to validate SAN for specific users
+// validateSANMatchForUser validates SAN for specific users
 // For root and node users, performs actual SAN validation
 // For all other users SAN is only used to map to a
 // SQL user using identity mapping and not validate the
@@ -415,8 +411,24 @@ func validateSANMatchForUser(certSANs []string, user string) bool {
 	}
 
 	// For root/node users, perform actual validation
-	_, match := checkCertSANMatchesRootSANorNodeSAN(certSANs, user)
-	return match
+	return checkCertSANMatchesUserSpecificSAN(certSANs, user)
+}
+
+// CheckCertSANMatchesRootOrNodeSAN returns `certSANMatchesRootOrNodeSAN`
+// which validates whether SAN contained in cert being presented is a
+// superset of rootSAN or nodeSAN (provided they are set via start-up flag).
+func CheckCertSANMatchesRootOrNodeSAN(cert *x509.Certificate) (certSANMatchesRootOrNodeSAN bool) {
+	rootSANs := rootSANMu.getSANs()
+	nodeSANs := nodeSANMu.getSANs()
+
+	if len(rootSANs) != 0 || len(nodeSANs) != 0 {
+		certSANs := ExtractSANsFromCertificate(cert)
+		// certSANMatchesRootOrNodeSAN is true if certSANs contains all configured rootSANs or nodeSANs
+		if (len(rootSANs) != 0 && sanListIsSubset(rootSANs, certSANs)) || (len(nodeSANs) != 0 && sanListIsSubset(nodeSANs, certSANs)) {
+			certSANMatchesRootOrNodeSAN = true
+		}
+	}
+	return certSANMatchesRootOrNodeSAN
 }
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
