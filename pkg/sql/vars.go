@@ -1115,6 +1115,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`read_committed_non_locking_checks_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`read_committed_non_locking_checks_enabled`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("read_committed_non_locking_checks_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetReadCommittedNonLockingChecksEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().ReadCommittedNonLockingChecksEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(readCommittedNonLockingChecksClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`serial_normalization`: {
 		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.SerialNormalizationModeFromString(s)

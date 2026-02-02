@@ -397,6 +397,10 @@ func (m *SessionDataMutator) SetInsertFastPath(val bool) {
 	m.Data.InsertFastPath = val
 }
 
+func (m *SessionDataMutator) SetReadCommittedNonLockingChecksEnabled(val bool) {
+	m.Data.ReadCommittedNonLockingChecksEnabled = val
+}
+
 func (m *SessionDataMutator) SetSerialNormalizationMode(val sessiondatapb.SerialNormalizationMode) {
 	m.Data.SerialNormalizationMode = val
 }
