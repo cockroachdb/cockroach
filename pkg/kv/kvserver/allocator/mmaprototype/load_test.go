@@ -159,13 +159,14 @@ func TestLoadSummaryForDimension(t *testing.T) {
 		},
 		{
 			// Using exactly 5% of CPU capacity → rebalancing allowed.
-			// 50ms/s above mean on a 100ms/s floor → overloadSlow.
+			// Utilization 0.05 vs mean 0.025, clamped denom 0.05 →
+			// fractionAbove = 0.5 → overloadSlow.
 			name:     "CPU at 5pct uncapped",
 			dim:      CPURate,
 			load:     vCPU / 10,
 			capacity: 2 * vCPU,
 			meanLoad: vCPU / 20,
-			meanUtil: 0.05,
+			meanUtil: 0.025,
 			expected: overloadSlow,
 		},
 		{
@@ -196,13 +197,13 @@ func TestLoadSummaryForDimension(t *testing.T) {
 		},
 		{
 			// Disk exactly 50% full → rebalancing allowed.
-			// 10 units above mean on a 40 unit denom → overloadSlow.
+			// Utilization 0.5 vs mean 0.4 → 25% above → overloadSlow.
 			name:     "ByteSize at 50pct uncapped",
 			dim:      ByteSize,
 			load:     50 * byteSizeSignificanceFloor,
 			capacity: 100 * byteSizeSignificanceFloor,
 			meanLoad: 40 * byteSizeSignificanceFloor,
-			meanUtil: 0.5,
+			meanUtil: 0.4,
 			expected: overloadSlow,
 		},
 		{
