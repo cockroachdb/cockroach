@@ -670,7 +670,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 		// Tests for keys that straddle the request header. Such constructions
 		// were historically possible when the MVCC GC queue constructed GC
 		// requests: see https://github.com/cockroachdb/cockroach/issues/162085.
-		// The result (as of this commit) is the request header span.
+		// The result should expand to include the straddling keys.
 		{
 			name: "clear range straddles header on the left",
 			req: kvpb.GCRequest{
@@ -683,7 +683,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					EndKey:   roachpb.Key("m"),
 				},
 			},
-			exp: [2]string{"c", "z"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "clear range straddles header on the right",
@@ -697,7 +697,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					EndKey:   roachpb.Key("z"),
 				},
 			},
-			exp: [2]string{"a", "m"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "clear range straddles header on both sides",
@@ -711,7 +711,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					EndKey:   roachpb.Key("z"),
 				},
 			},
-			exp: [2]string{"c", "m"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "range keys straddle header on the left",
@@ -724,7 +724,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("f")},
 				},
 			},
-			exp: [2]string{"c", "z"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "range keys straddle header on the right",
@@ -737,7 +737,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("z")},
 				},
 			},
-			exp: [2]string{"a", "m"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "range keys straddle header on both sides",
@@ -750,7 +750,7 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("z")},
 				},
 			},
-			exp: [2]string{"c", "m"},
+			exp: [2]string{"a", "z"},
 		},
 		{
 			name: "clear range straddles with contained point keys",
@@ -769,7 +769,35 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 					EndKey:   roachpb.Key("z"),
 				},
 			},
-			exp: [2]string{"c", "m"},
+			exp: [2]string{"a", "z"},
+		},
+		{
+			name: "point key straddles header on the left",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("a")},
+					{Key: roachpb.Key("d")},
+				},
+			},
+			exp: [2]string{"a", "m"},
+		},
+		{
+			name: "point key straddles header on the right",
+			req: kvpb.GCRequest{
+				RequestHeader: kvpb.RequestHeader{
+					Key:    roachpb.Key("c"),
+					EndKey: roachpb.Key("m"),
+				},
+				Keys: []kvpb.GCRequest_GCKey{
+					{Key: roachpb.Key("d")},
+					{Key: roachpb.Key("z")},
+				},
+			},
+			exp: [2]string{"c", "z\x00"},
 		},
 		{
 			name: "point key straddles header on the left",
