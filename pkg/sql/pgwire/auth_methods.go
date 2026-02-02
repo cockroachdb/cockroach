@@ -474,6 +474,9 @@ func authCert(
 	if len(tlsState.PeerCertificates) > 0 && hbaEntry.GetOption("map") != "" {
 		if clientCertSANRequired {
 			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
+			if len(identityList) == 0 {
+				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate")
+			}
 			b.SetSANIdentities(identityList)
 		} else {
 			// The common name in the certificate is set as the system identity in case we have an HBAEntry for db user.
