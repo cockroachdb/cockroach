@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	clustersmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/mocks"
@@ -102,7 +103,7 @@ func TestGetAll(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -191,7 +192,7 @@ func TestGetOne(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -302,7 +303,7 @@ func TestRegister(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -427,7 +428,7 @@ func TestRegisterUpdate(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -493,7 +494,7 @@ func TestRegisterDelete(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)
@@ -544,7 +545,7 @@ func TestSync(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockClustersService)),
 			)

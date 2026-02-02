@@ -21,6 +21,7 @@ This document provides comprehensive documentation for the roachprod-centralized
   - [Cluster Management](#cluster-management)
   - [Task Management](#task-management)
   - [DNS Management](#dns-management)
+  - [Auth Endpoints](#auth-endpoints)
 - [Query Parameters](#query-parameters)
 - [Examples](#examples)
 
@@ -43,26 +44,34 @@ All requests and responses use `application/json` content type unless otherwise 
 
 ## Authentication
 
-### Development Mode
+The API supports three authentication modes, configured via `AUTH_TYPE` environment variable. The authentication mode determines which endpoints are available.
 
-For development environments, authentication can be disabled:
+### Authentication Modes
 
-```bash
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
-```
+| Mode | Config | Header | Use Case |
+|------|--------|--------|----------|
+| **JWT** | `AUTH_TYPE=jwt` | `X-Goog-IAP-JWT-Assertion` | Google IAP |
+| **Disabled** | `AUTH_DISABLED=true` | None required | Development |
 
-### Production Mode
+### JWT Authentication (Google IAP)
 
-In production, the API uses JWT authentication with Google IAP:
+When running behind Google Cloud Identity-Aware Proxy:
 
-- **Header**: `X-Goog-IAP-JWT-Assertion` (configurable)
-- **Type**: JWT Bearer token
-- **Validation**: JWT signature and audience verification
-
-**Authentication Header Example**:
 ```http
 X-Goog-IAP-JWT-Assertion: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
+
+JWT authentication grants wildcard permissions to all authenticated users. No fine-grained authorization is available.
+
+### Disabled Authentication (Development)
+
+For local development, authentication can be bypassed:
+
+```bash
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
+```
+
+All requests are authenticated as a dev user with full permissions.
 
 ## Base URL
 
@@ -469,6 +478,39 @@ Trigger synchronization of public DNS records.
 **Example**:
 ```bash
 curl -X POST http://localhost:8080/v1/public-dns/sync
+```
+
+### Auth Endpoints
+
+The auth controller is split into two parts:
+- **Core endpoints** (always available): `GET /v1/auth/whoami`
+- **Bearer-only endpoints** (requires `AUTH_TYPE=bearer`): Token exchange and self-service token management
+
+#### GET /v1/auth/whoami
+
+Returns information about the current authenticated principal.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "user": {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "email": "alice@example.com",
+      "name": "Alice Smith",
+      "active": true
+    },
+    "permissions": [
+      {"provider": "gcp", "account": "my-project", "permission": "clusters:create"}
+    ],
+    "token": {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "type": "user",
+      "created_at": "2025-01-15T10:00:00Z",
+      "expires_at": "2025-01-22T10:00:00Z"
+    }
+  }
+}
 ```
 
 ## Query Parameters

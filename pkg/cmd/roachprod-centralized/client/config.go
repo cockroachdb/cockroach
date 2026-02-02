@@ -21,6 +21,8 @@ type Config struct {
 	// BaseURL is the base URL of the centralized API (e.g., "https://api.example.com")
 	// Also used as the OAuth2 audience for authentication
 	BaseURL string
+	// AuthMode is the authentication mode: "iap", or "disabled"
+	AuthMode string
 	// ForceFetchCreds forces fetching fresh credentials from the service account
 	ForceFetchCreds bool
 	// Timeout is the request timeout (default: 10s)
@@ -40,6 +42,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:                DefaultEnabled,
 		BaseURL:                DefaultBaseURL,
+		AuthMode:               DefaultAuthMode,
 		Timeout:                DefaultTimeout,
 		RetryAttempts:          DefaultRetryAttempts,
 		RetryDelay:             DefaultRetryDelay,
@@ -97,6 +100,16 @@ func LoadConfigFromEnv() Config {
 	// Silent failures
 	if silentStr := os.Getenv("ROACHPROD_CENTRALIZED_API_SILENT_FAILURES"); silentStr != "" {
 		config.SilentFailures = silentStr == "true" || silentStr == "1"
+	}
+
+	// Auth mode
+	if authMode := os.Getenv("ROACHPROD_CENTRALIZED_API_AUTH_MODE"); authMode != "" {
+		config.AuthMode = authMode
+	}
+
+	// Also check the new API base URL env var
+	if baseURL := os.Getenv("ROACHPROD_CENTRALIZED_API_BASE_URL"); baseURL != "" {
+		config.BaseURL = baseURL
 	}
 
 	return config
@@ -189,5 +202,12 @@ func WithSilentFailures(silent bool) OptionFunc {
 func WithIAPTokenSource(tokenSource roachprodutil.IAPTokenSource) OptionFunc {
 	return func(c *Client) {
 		c.httpClient = tokenSource.GetHTTPClient()
+	}
+}
+
+// WithAuthMode sets the authentication mode.
+func WithAuthMode(mode string) OptionFunc {
+	return func(c *Client) {
+		c.config.AuthMode = mode
 	}
 }

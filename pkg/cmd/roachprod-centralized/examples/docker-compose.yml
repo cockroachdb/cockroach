@@ -14,7 +14,7 @@ services:
       - "8081:8081"  # Metrics port
     environment:
       - ROACHPROD_LOG_LEVEL=debug
-      - ROACHPROD_API_AUTHENTICATION_DISABLED=true
+      - ROACHPROD_API_AUTHENTICATION_METHOD=disabled
       - ROACHPROD_DATABASE_TYPE=cockroachdb
       - ROACHPROD_DATABASE_URL=postgresql://root@cockroachdb:26257/roachprod?sslmode=disable
       - ROACHPROD_DATABASE_MAX_CONNS=10

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	tasksmodel "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	taskssmock "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/mocks"
@@ -159,7 +160,7 @@ func TestGetAll(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockTasksService)),
 			)
@@ -270,7 +271,7 @@ func TestGetOne(t *testing.T) {
 			c, e := gin.CreateTestContext(w)
 
 			app, err := app.NewApp(
-				app.WithApiAuthenticationDisabled(true),
+				app.WithApiAuthenticator(disabled.NewDisabledAuthenticator()),
 				app.WithApiGinEngine(e),
 				app.WithApiController(NewController(mockTasksService)),
 			)

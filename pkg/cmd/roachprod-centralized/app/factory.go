@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/jwt"
 	configtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/config/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/health"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/clusters"
@@ -254,5 +257,38 @@ func (s *Services) ToSlice() []services.IService {
 		s.Health,
 		s.Clusters,
 		s.DNS,
+	}
+}
+
+// NewAuthenticatorFromConfig creates the appropriate authenticator based on configuration.
+// Supports three types: disabled (for dev/testing), jwt (Google IAP), and bearer (opaque tokens with Okta).
+func NewAuthenticatorFromConfig(
+	cfg *configtypes.Config, l *logger.Logger,
+) (auth.IAuthenticator, error) {
+	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
+
+	switch authType {
+	case auth.AuthenticationTypeDisabled:
+		l.Warn("Authentication is DISABLED - all requests will succeed with admin permissions",
+			slog.String("type", string(authType)),
+		)
+		return disabled.NewDisabledAuthenticator(), nil
+
+	case auth.AuthenticationTypeJWT:
+		authConfig := auth.AuthConfig{
+			Header:   cfg.Api.Authentication.Header,
+			Audience: cfg.Api.Authentication.JWT.Audience,
+			Issuer:   cfg.Api.Authentication.JWT.Issuer,
+		}
+		l.Info("Using JWT authentication",
+			slog.String("type", string(authType)),
+			slog.String("header", authConfig.Header),
+			slog.String("audience", authConfig.Audience),
+			slog.String("issuer", authConfig.Issuer),
+		)
+		return jwt.NewJWTAuthenticator(authConfig), nil
+
+	default:
+		return nil, fmt.Errorf("invalid authentication type: %s (must be 'disabled', 'jwt', or 'bearer')", cfg.Api.Authentication.Type)
 	}
 }

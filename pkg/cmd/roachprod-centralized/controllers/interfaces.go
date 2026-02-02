@@ -6,6 +6,7 @@
 package controllers
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,9 +15,10 @@ import (
 type IController interface {
 	// GetControllerHandlers returns a slice of controller handlers that define the routes and their implementations.
 	GetControllerHandlers() []IControllerHandler
-	// Authentication performs authentication and authorization for the given gin context.
-	// Parameters: context, requireAuth flag, user email, user role, and authentication issuer.
-	Authentication(*gin.Context, bool, string, string, string)
+
+	// AuthMiddleware creates authentication middleware.
+	// Used by the API layer to add authentication to routes.
+	AuthMiddleware(authenticator auth.IAuthenticator, headerName string) gin.HandlerFunc
 }
 
 // IControllerHandler defines the interface for individual HTTP route handlers.

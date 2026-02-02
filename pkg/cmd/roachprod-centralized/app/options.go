@@ -6,6 +6,7 @@
 package app
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -91,26 +92,17 @@ func WithServices(values []services.IService) OptionFunc {
 	}
 }
 
-func WithApiAuthenticationDisabled(enabled bool) OptionFunc {
-	return func(a *App) {
-		a.api.authenticationDisabled = enabled
-	}
-}
-
-func WithApiAuthenticationAudience(audience string) OptionFunc {
-	return func(a *App) {
-		a.api.authenticationAudience = audience
-	}
-}
-
-func WithApiAuthenticationIssuer(issuer string) OptionFunc {
-	return func(a *App) {
-		a.api.authenticationIssuer = issuer
-	}
-}
-
+// WithApiAuthenticationHeader sets the HTTP header to extract authentication tokens from.
 func WithApiAuthenticationHeader(header string) OptionFunc {
 	return func(a *App) {
-		a.api.authenticationHeader = header
+		a.api.authHeader = header
+	}
+}
+
+// WithApiAuthenticator sets the authentication implementation.
+// The authenticator type determines behavior (disabled, jwt, bearer).
+func WithApiAuthenticator(authenticator auth.IAuthenticator) OptionFunc {
+	return func(a *App) {
+		a.api.authenticator = authenticator
 	}
 }

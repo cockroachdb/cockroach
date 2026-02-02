@@ -202,7 +202,7 @@ func TestCreateTaskIfNotRecentlyScheduled_RecencyWindowAdjustment(t *testing.T) 
 		// Verify the filter has:
 		// - Type = "periodic_sync"
 		// - State != "failed"
-		// - CreationDatetime > (now - 9min59s)
+		// - creation_datetime > (now - 9min59s)
 		var creationFilter *filtertypes.FieldFilter
 		for i := range filterSet.Filters {
 			if filterSet.Filters[i].Field == "CreationDatetime" {

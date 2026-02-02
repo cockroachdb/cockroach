@@ -29,6 +29,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// Authentication modes.
+const (
+	// AuthModeIAP uses Google Cloud Identity-Aware Proxy authentication.
+	AuthModeIAP = "iap"
+	// AuthModeDisabled disables authentication.
+	AuthModeDisabled = "disabled"
+)
+
 const (
 	// DefaultEnabled controls whether the centralized API client is enabled by default.
 	DefaultEnabled = false
@@ -42,6 +50,8 @@ const (
 	DefaultBaseURL = "https://prod-iap.roachprod.testeng.crdb.io/api"
 	// DefaultServiceAccountEmail is the default service account email used for IAP authentication.
 	DefaultServiceAccountEmail = "prod-iap-rp-roachprod-sa@cockroach-testeng-infra.iam.gserviceaccount.com"
+	// DefaultAuthMode is the default authentication mode.
+	DefaultAuthMode = AuthModeIAP
 
 	CLIENT_VERSION   = "1.0"
 	CLIENT_USERAGENT = "roachprod-client/" + CLIENT_VERSION
@@ -106,20 +116,39 @@ func NewClient(options ...Option) (*Client, error) {
 		return nil, errors.Wrapf(err, "invalid centralized API client configuration")
 	}
 
-	// If no custom IAP Token source is provided, then create one and use
-	// its HTTP client.
+	// Configure HTTP client based on auth mode (if not already set via options)
 	if c.httpClient == nil {
+		if err := c.configureHTTPClient(); err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
+}
+
+// configureHTTPClient sets up the HTTP client based on the configured auth mode.
+func (c *Client) configureHTTPClient() error {
+	switch c.config.AuthMode {
+	case AuthModeIAP:
+		// Use IAP authentication (legacy mode)
 		iapTokenSource, err := roachprodutil.NewIAPTokenSource(roachprodutil.IAPTokenSourceOptions{
 			OAuthClientID:       promhelperclient.OAuthClientID,
 			ServiceAccountEmail: promhelperclient.ServiceAccountEmail,
 		})
 		if err != nil {
-			return nil, err
+			return errors.Wrap(err, "failed to create IAP token source")
 		}
 		c.httpClient = iapTokenSource.GetHTTPClient()
+
+	case AuthModeDisabled:
+		// No authentication
+		c.httpClient = &http.Client{}
+
+	default:
+		return errors.Newf("unknown auth mode: %s", c.config.AuthMode)
 	}
 
-	return c, nil
+	return nil
 }
 
 // NewClientWithConfig creates a new centralized API client using the legacy Config struct.

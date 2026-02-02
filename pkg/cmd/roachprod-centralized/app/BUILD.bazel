@@ -11,6 +11,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/app",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/auth/disabled",
+        "//pkg/cmd/roachprod-centralized/auth/jwt",
         "//pkg/cmd/roachprod-centralized/config/types",
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/controllers/health",

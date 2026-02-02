@@ -42,7 +42,7 @@ The `roachprod-centralized` service provides a unified HTTP API for:
 
 ```bash
 # Set minimum required configuration
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_TYPE=disabled
 export ROACHPROD_DATABASE_TYPE=memory
 ```
 
@@ -171,8 +171,11 @@ export ROACHPROD_API_PORT=8080
 export ROACHPROD_API_METRICS_ENABLED=true
 export ROACHPROD_LOG_LEVEL=info
 
-# Authentication (disable for development)
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+# Authentication disabled (for development)
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
+
+# Authentication via GCP Identity-Aware Proxy
+export ROACHPROD_API_AUTHENTICATION_METHOD=jwt
 export ROACHPROD_API_AUTHENTICATION_JWT_HEADER="X-Goog-IAP-JWT-Assertion"
 export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-audience"
 
@@ -383,7 +386,7 @@ Error: authentication failed
 ```
 **Solution**: For development, disable authentication:
 ```bash
-export ROACHPROD_API_AUTHENTICATION_DISABLED=true
+export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ```
 
 **2. Database Connection Issues**

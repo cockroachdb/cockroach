@@ -20,6 +20,7 @@ go_test(
     embed = [":clusters"],
     deps = [
         "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/auth/disabled",
         "//pkg/cmd/roachprod-centralized/controllers",
         "//pkg/cmd/roachprod-centralized/controllers/clusters/types",
         "//pkg/cmd/roachprod-centralized/services/clusters/mocks",

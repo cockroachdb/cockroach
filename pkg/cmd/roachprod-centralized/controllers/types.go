@@ -115,15 +115,3 @@ func (r *ErrorResult) GetAssociatedStatusCode() int {
 	}
 	return r.StatusCode
 }
-
-// AuthenticationType is the type of authentication required for a controller.
-type AuthenticationType string
-
-const (
-	// AuthenticationTypeNone is the authentication type that does not
-	// check authentication.
-	AuthenticationTypeNone AuthenticationType = "none"
-	// AuthenticationTypeRequired is the type of authentication that requires
-	// authentication.
-	AuthenticationTypeRequired AuthenticationType = "required"
-)

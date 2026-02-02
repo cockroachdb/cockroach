@@ -39,9 +39,9 @@ type Config struct {
 			Port    int    `env:"PORT" default:"8081" description:"Metrics HTTP port"`
 		} `env:"METRICS" description:"Metrics configuration"`
 		Authentication struct {
-			Disabled bool `env:"DISABLED" default:"false" description:"Disable API authentication"`
-			JWT      struct {
-				Header   string `env:"HEADER" default:"X-Goog-IAP-JWT-Assertion" description:"JWT authentication header"`
+			Type   string `env:"TYPE" default:"jwt" description:"Authentication type (disabled, jwt, bearer)"`
+			Header string `env:"HEADER" default:"Authorization" description:"HTTP header for authentication token"`
+			JWT    struct {
 				Audience string `env:"AUDIENCE" default:"" description:"JWT audience for authentication"`
 				Issuer   string `env:"ISSUER" default:"https://cloud.google.com/iap" description:"JWT issuer for authentication"`
 			} `env:"JWT" description:"JWT authentication configuration"`
