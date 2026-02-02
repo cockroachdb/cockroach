@@ -309,6 +309,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			if err := compactSpanEntry(ctx, sstIter, sink, pacer); err != nil {
 				return errors.Wrap(err, "compacting span entry")
 			}
+			sink.CompletedSpan()
 		}
 	}
 }

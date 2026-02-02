@@ -110,6 +110,13 @@ func (s *SSTSinkKeyWriter) WriteKey(ctx context.Context, key storage.MVCCKey, va
 	return nil
 }
 
+// Since the underlying FileSSTSink updates its completed spans via the ExportedSpan passed into
+// Write, we need to manually trigger increments of this value when the caller knows it is done
+// with a span.
+func (s *SSTSinkKeyWriter) CompletedSpan() {
+	s.completedSpans += 1
+}
+
 // AssumeNotMidRow marks the last key written as not mid-row. This exists to
 // ensure that the caller explicitly is aware that SSTSinkKeyWriter is unable
 // to determine if the last key written in a span is mid-row and must enforce

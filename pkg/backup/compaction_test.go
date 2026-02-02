@@ -1223,6 +1223,15 @@ func TestCompactionCheckpointing(t *testing.T) {
 	)
 	defer cleanup()
 
+	getProg := func(jobID jobspb.JobID) float64 {
+		var prog float64
+		db.QueryRow(t, fmt.Sprintf(
+			"SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = %d",
+			jobID,
+		)).Scan(&prog)
+		return prog
+	}
+
 	collectionURI := []string{"nodelocal://1/backup"}
 
 	writeQueries := func() {
@@ -1245,6 +1254,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	).Scan(&backupPath)
 
 	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.write_checkpoint'")
+
 	jobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
 
 	// Ensure that the very first manifest when the job is initially started has
@@ -1256,6 +1266,17 @@ func TestCompactionCheckpointing(t *testing.T) {
 		return nil
 	})
 	require.Equal(t, 0, int(manifestNumFiles.Load()), "expected no files in manifest")
+
+	// Expect at least one progress update before we checkpoint.
+	var initialProg float64
+	testutils.SucceedsSoon(t, func() error {
+		frac := getProg(jobID)
+		if frac == 0 {
+			return fmt.Errorf("waiting for progress update")
+		}
+		initialProg = frac
+		return nil
+	})
 
 	// Wait for the job to hit the pausepoint.
 	jobutils.WaitForJobToPause(t, db, jobID)
@@ -1275,7 +1296,20 @@ func TestCompactionCheckpointing(t *testing.T) {
 	})
 	require.Greater(t, int(manifestNumFiles.Load()), 0, "expected non-zero number of files in manifest")
 
+	// Expect a progress update after resumption.
+	testutils.SucceedsSoon(t, func() error {
+		frac := getProg(jobID)
+		if frac <= initialProg && frac != 1 {
+			return fmt.Errorf("waiting for progress update")
+		}
+		return nil
+	})
+
 	jobutils.WaitForJobToSucceed(t, db, jobID)
+
+	// Validate that fraction_completed is 1 when the job is finished.
+	require.Equal(t, float64(1), getProg(jobID))
+
 	validateCompactedBackupForTables(t, db, collectionURI, []string{"bank"}, start, end, noOpts, noOpts, 2)
 }
 

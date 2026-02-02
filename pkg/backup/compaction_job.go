@@ -837,12 +837,36 @@ func getBackupChain(
 func processProgress(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
 	details jobspb.BackupDetails,
 	manifest *backuppb.BackupManifest,
 	progCh <-chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	totalSpansChan <-chan uint64,
 	kmsEnv cloud.KMSEnv,
 ) error {
+	var totalSpans uint64
+	select {
+	case totalSpans = <-totalSpansChan:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	var completedSpans uint64 = 0
+	if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+		n, ok, err := jobs.InfoStorageForJob(t, jobID).GetUint64(ctx, "compaction-completed-spans")
+		if err != nil {
+			return err
+		}
+		if ok {
+			completedSpans = n
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
 	var lastCheckpointTime time.Time
+	var lastProgressUpdate time.Time
+
 	// When a processor is done exporting a span, it will send a progress update
 	// to progCh.
 	for progress := range progCh {
@@ -855,15 +879,43 @@ func processProgress(
 			manifest.Files = append(manifest.Files, file)
 			manifest.EntryCounts.Add(file.EntryCounts)
 		}
+		completedSpans += uint64(progDetails.CompletedSpans)
 
-		// TODO (kev-cao): Add per node progress updates.
+		execCfg := execCtx.ExecCfg()
+		checkpointInterval := BackupCheckpointInterval.Get(&execCfg.Settings.SV)
+		progressInterval := checkpointInterval / 4
 
-		if wroteCheckpoint, err := maybeWriteBackupCheckpoint(
-			ctx, execCtx, details, manifest, lastCheckpointTime, kmsEnv,
-		); err != nil {
-			log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
-		} else if wroteCheckpoint {
-			lastCheckpointTime = timeutil.Now()
+		wroteCheckpoint := false
+		if timeutil.Since(lastCheckpointTime) >= checkpointInterval {
+			if err := backupinfo.WriteBackupManifestCheckpoint(
+				ctx, details.URI, details.EncryptionOptions, kmsEnv,
+				manifest, execCfg, execCtx.User(),
+			); err != nil {
+				log.Dev.Errorf(ctx, "unable to checkpoint compaction: %+v", err)
+			} else {
+				wroteCheckpoint = true
+				lastCheckpointTime = timeutil.Now()
+			}
+		}
+
+		if timeutil.Since(lastProgressUpdate) >= progressInterval {
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+				frac := float64(completedSpans) / float64(totalSpans)
+				if err := jobs.ProgressStorage(jobID).SetFraction(ctx, t, frac); err != nil {
+					return err
+				}
+				if wroteCheckpoint {
+					return jobs.InfoStorageForJob(t, jobID).WriteUint64(ctx, "compaction-completed-spans", completedSpans)
+				}
+				return nil
+			}); err != nil {
+				log.Dev.Errorf(ctx, "unable to update compaction progress: %+v", err)
+			} else {
+				lastProgressUpdate = timeutil.Now()
+			}
+		}
+
+		if wroteCheckpoint {
 			if err := execCtx.ExecCfg().JobRegistry.CheckPausepoint("backup_compaction.after.write_checkpoint"); err != nil {
 				return err
 			}
@@ -907,14 +959,16 @@ func doCompaction(
 	kmsEnv cloud.KMSEnv,
 ) error {
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
+	totalSpansCh := make(chan uint64, 1)
 	runDistCompaction := func(ctx context.Context) error {
 		defer close(progCh)
+		defer close(totalSpansCh)
 		return runCompactionPlan(
-			ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv, progCh,
+			ctx, execCtx, jobID, details, compactChain, manifest, defaultStore, kmsEnv, progCh, totalSpansCh,
 		)
 	}
 	checkpointLoop := func(ctx context.Context) error {
-		return processProgress(ctx, execCtx, details, manifest, progCh, kmsEnv)
+		return processProgress(ctx, execCtx, jobID, details, manifest, progCh, totalSpansCh, kmsEnv)
 	}
 	// TODO (kev-cao): Add trace aggregator loop.
 
@@ -927,34 +981,6 @@ func doCompaction(
 	return backupinfo.WriteBackupMetadata(
 		ctx, execCtx, defaultStore, details, kmsEnv, manifest, statsTable,
 	)
-}
-
-// maybeWriteBackupCheckpoint writes a checkpoint for the backup if
-// the time since the last checkpoint exceeds the configured interval. If a
-// checkpoint is written, the function returns true.
-func maybeWriteBackupCheckpoint(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	details jobspb.BackupDetails,
-	manifest *backuppb.BackupManifest,
-	lastCheckpointTime time.Time,
-	kmsEnv cloud.KMSEnv,
-) (bool, error) {
-	if details.URI == "" {
-		return false, errors.New("backup details does not contain a default URI")
-	}
-	execCfg := execCtx.ExecCfg()
-	interval := BackupCheckpointInterval.Get(&execCfg.Settings.SV)
-	if timeutil.Since(lastCheckpointTime) < interval {
-		return false, nil
-	}
-	if err := backupinfo.WriteBackupManifestCheckpoint(
-		ctx, details.URI, details.EncryptionOptions, kmsEnv,
-		manifest, execCfg, execCtx.User(),
-	); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // getScheduledExecutionArgsAndCheckCompactionLock retrieves the scheduled
