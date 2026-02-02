@@ -63,10 +63,12 @@ const (
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
 	nodeTimeSeriesPrefix = "cr.node.%s"
-
-	advertiseAddrLabelKey = "advertise-addr"
-	httpAddrLabelKey      = "http-addr"
-	sqlAddrLabelKey       = "sql-addr"
+	// clusterTimeSeriesPrefix is the common prefix for time series keys which
+	// record cluster-wide data.
+	clusterTimeSeriesPrefix = "cr.cluster.%s"
+	advertiseAddrLabelKey   = "advertise-addr"
+	httpAddrLabelKey        = "http-addr"
+	sqlAddrLabelKey         = "sql-addr"
 
 	disableNodeAndTenantLabelsEnvVar = "COCKROACH_DISABLE_NODE_AND_TENANT_METRIC_LABELS"
 )
@@ -174,8 +176,12 @@ type MetricsRecorder struct {
 		// package. NB: The underlying metrics are global, but each server gets
 		// its own separate registry to avoid things such as colliding labels.
 		logRegistry *metric.Registry
-		desc        roachpb.NodeDescriptor
-		startedAt   int64
+		// clusterMetricsRegistry holds metrics that apply to cluster-wide
+		// constructs (eg. backup schedules, jobs) rather than per-node
+		// resources.
+		clusterMetricsRegistry metric.RegistryReader
+		desc                   roachpb.NodeDescriptor
+		startedAt              int64
 
 		// storeRegistries contains a registry for each store on the node. These
 		// are not stored as subregistries, but rather are treated as wholly
@@ -184,7 +190,7 @@ type MetricsRecorder struct {
 		stores          map[roachpb.StoreID]storeMetrics
 
 		// tenantRegistries contains the registries for shared-process tenants.
-		tenantRegistries map[roachpb.TenantID]*metric.Registry
+		tenantRegistries map[roachpb.TenantID]*metric.TenantRegistries
 	}
 
 	// WriteNodeStatus is a potentially long-running method (with a network
@@ -224,12 +230,14 @@ func NewMetricsRecorder(
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.mu.tenantRegistries = make(map[roachpb.TenantID]*metric.Registry)
+	mr.mu.tenantRegistries = make(map[roachpb.TenantID]*metric.TenantRegistries)
 	return mr
 }
 
 // AddTenantRegistry adds shared-process tenant's registry.
-func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *metric.Registry) {
+func (mr *MetricsRecorder) AddTenantRegistry(
+	tenantID roachpb.TenantID, reg *metric.TenantRegistries,
+) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
@@ -242,9 +250,10 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 			mr.mu.appRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 			mr.mu.logRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 			mr.mu.sysRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+			mr.mu.clusterMetricsRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 		})
 	}
-	mr.mu.tenantRegistries[tenantID] = rec
+	mr.mu.tenantRegistries[tenantID] = reg
 }
 
 // RemoveTenantRegistry removes shared-process tenant's registry.
@@ -287,6 +296,7 @@ func (mr *MetricsRecorder) StoreRegistry(id roachpb.StoreID) *metric.Registry {
 // - sys registry - metrics about system-wide properties.
 func (mr *MetricsRecorder) AddNode(
 	nodeReg, appReg, logReg, sysReg *metric.Registry,
+	clusterMetricReg metric.RegistryReader,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
 	advertiseAddr, httpAddr, sqlAddr string,
@@ -297,6 +307,7 @@ func (mr *MetricsRecorder) AddNode(
 	mr.mu.appRegistry = appReg
 	mr.mu.logRegistry = logReg
 	mr.mu.sysRegistry = sysReg
+	mr.mu.clusterMetricsRegistry = clusterMetricReg
 	mr.mu.desc = desc
 	mr.mu.startedAt = startedAt
 
@@ -322,6 +333,7 @@ func (mr *MetricsRecorder) AddNode(
 			sysReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			appReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			logReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+			clusterMetricReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			for _, s := range mr.mu.storeRegistries {
 				s.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			}
@@ -331,6 +343,7 @@ func (mr *MetricsRecorder) AddNode(
 			sysReg.AddLabel("tenant", mr.tenantNameContainer)
 			appReg.AddLabel("tenant", mr.tenantNameContainer)
 			logReg.AddLabel("tenant", mr.tenantNameContainer)
+			clusterMetricReg.AddLabel("tenant", mr.tenantNameContainer)
 		}
 	}
 }
@@ -416,11 +429,13 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 		pm.ScrapeRegistry(mr.mu.appRegistry, scrapeOptions...)
 		pm.ScrapeRegistry(mr.mu.logRegistry, scrapeOptions...)
 		pm.ScrapeRegistry(mr.mu.sysRegistry, scrapeOptions...)
+		pm.ScrapeRegistry(mr.mu.clusterMetricsRegistry, scrapeOptions...)
 		for _, reg := range mr.mu.storeRegistries {
 			pm.ScrapeRegistry(reg, scrapeOptions...)
 		}
 		for _, tenantRegistry := range mr.mu.tenantRegistries {
-			pm.ScrapeRegistry(tenantRegistry, scrapeOptions...)
+			pm.ScrapeRegistry(tenantRegistry.AppRegistry(), scrapeOptions...)
+			pm.ScrapeRegistry(tenantRegistry.ClusterMetricsRegistry(), scrapeOptions...)
 		}
 	}
 }
@@ -488,7 +503,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 		// Record child metrics from app-level registries for secondary tenants
 		for tenantID, r := range mr.mu.tenantRegistries {
 			tenantRecorder := registryRecorder{
-				registry:             r,
+				registry:             r.AppRegistry(),
 				format:               nodeTimeSeriesPrefix,
 				source:               tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 				timestampNanos:       now.UnixNano(),
@@ -518,16 +533,27 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 	// Now record the system metrics.
 	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
+	// Now record the cluster metrics.
+	recorder.registry = mr.mu.clusterMetricsRegistry
+	recorder.record(&data)
 
 	// Record time series from app-level registries for secondary tenants.
 	for tenantID, r := range mr.mu.tenantRegistries {
-		tenantRecorder := registryRecorder{
-			registry:       r,
+		tenantAppRecorder := registryRecorder{
+			registry:       r.AppRegistry(),
 			format:         nodeTimeSeriesPrefix,
 			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 			timestampNanos: now.UnixNano(),
 		}
-		tenantRecorder.record(&data)
+		tenantAppRecorder.record(&data)
+
+		tenantClusterMetricRecorder := registryRecorder{
+			registry:       r.ClusterMetricsRegistry(),
+			format:         clusterTimeSeriesPrefix,
+			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+			timestampNanos: now.UnixNano(),
+		}
+		tenantClusterMetricRecorder.record(&data)
 	}
 
 	// Record time series from store-level registries.
@@ -595,6 +621,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	mr.mu.appRegistry.WriteMetricsMetadata(appMetrics)
 	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
 	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
+	mr.mu.clusterMetricsRegistry.WriteMetricsMetadata(srvMetrics)
 
 	mr.writeStoreMetricsMetadata(nodeMetrics)
 	return nodeMetrics, appMetrics, srvMetrics
@@ -812,7 +839,7 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 // registryRecorder is a helper class for recording time series datapoints
 // from a metrics Registry.
 type registryRecorder struct {
-	registry       *metric.Registry
+	registry       metric.RegistryReader
 	format         string
 	source         string
 	timestampNanos int64
@@ -865,7 +892,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 // function once for each recordable value represented by that metric. This is
 // useful to expand certain metric types (such as histograms) into multiple
 // recordable values.
-func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
+func eachRecordableValue(reg metric.RegistryReader, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
 		if err := extractValue(name, mtr, fn); err != nil {
 			log.Dev.Warningf(context.TODO(), "%v", err)

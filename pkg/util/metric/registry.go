@@ -38,6 +38,15 @@ var DBNameLabelEnabled = settings.RegisterBoolSetting(
 	false, /* default */
 	settings.WithPublic)
 
+// RegistryReader is an interface that exposes read-only methods of a Registry.
+type RegistryReader interface {
+	AddLabel(name string, value interface{})
+	Each(f func(name string, val interface{}))
+	Select(metrics map[string]struct{}, f func(name string, val interface{}))
+	GetLabels() []*prometheusgo.LabelPair
+	WriteMetricsMetadata(dest map[string]Metadata)
+}
+
 // A Registry is a list of metrics. It provides a simple way of iterating over
 // them, can marshal into JSON, and generate a prometheus format.
 //
@@ -274,6 +283,25 @@ func (r *Registry) ReinitialiseChildMetrics(isDBNameEnabled, isAppNameEnabled bo
 		}
 	}
 
+}
+
+type TenantRegistries struct {
+	appRegistry            *Registry
+	clusterMetricsRegistry RegistryReader
+}
+
+func (r *TenantRegistries) AppRegistry() *Registry {
+	return r.appRegistry
+}
+
+func (r *TenantRegistries) ClusterMetricsRegistry() RegistryReader {
+	return r.clusterMetricsRegistry
+}
+
+func NewTenantRegistries(
+	appRegistry *Registry, clusterMetricsRegistry RegistryReader,
+) *TenantRegistries {
+	return &TenantRegistries{appRegistry, clusterMetricsRegistry}
 }
 
 var (
