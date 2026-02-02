@@ -40,10 +40,7 @@ func NewPeriodicProgressFlusherForIndexBackfill(
 
 		},
 		func() time.Duration {
-			// fractionInterval is copied from the logic in existing backfill code.
-			// TODO(ajwerner): Add a cluster setting to control this.
-			const fractionInterval = 10 * time.Second
-			return fractionInterval
+			return backfill.IndexBackfillProgressInterval.Get(&settings.SV)
 		},
 	)
 }

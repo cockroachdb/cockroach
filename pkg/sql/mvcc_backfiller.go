@@ -356,9 +356,7 @@ func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgr
 			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
 		},
 		func() time.Duration {
-			// fractionInterval is copied from the logic in existing backfill code.
-			const fractionInterval = 10 * time.Second
-			return fractionInterval
+			return backfill.IndexBackfillProgressInterval.Get(&settings.SV)
 		},
 	)
 }

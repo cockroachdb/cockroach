@@ -437,6 +437,9 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		default:
 		}
 
+		// Reset task tracking for this iteration.
+		progress.MergeIterationCompletedTasks = nil
+
 		genOutputURIAndRecordPrefix := func(instanceID base.SQLInstanceID) (string, error) {
 			// Use nodelocal for temporary storage of merged SSTs. These SSTs are
 			// only needed during the lifetime of the job. Record the storage prefix
@@ -471,6 +474,26 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			}
 		}
 
+		// Create a progress callback to track task completion during this iteration.
+		onProgress := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+			if meta.BulkProcessorProgress == nil {
+				return nil
+			}
+			var mergeProgress execinfrapb.MergeIterationProgress
+			if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mergeProgress) {
+				if err := gogotypes.UnmarshalAny(
+					&meta.BulkProcessorProgress.ProgressDetails, &mergeProgress,
+				); err != nil {
+					return err
+				}
+				progress.MergeIterationTasksTotal = mergeProgress.TasksTotal
+				progress.MergeIterationCompletedTasks = append(
+					progress.MergeIterationCompletedTasks, mergeProgress.CompletedTaskID)
+				return tracker.SetBackfillProgress(ctx, *progress)
+			}
+			return nil
+		}
+
 		merged, err := invokeBulkMerge(
 			ctx,
 			jobExecCtx,
@@ -481,6 +504,7 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 			maxIterations,
 			writeTS,
 			enforceUniqueness,
+			onProgress,
 		)
 		if err != nil {
 			return err
@@ -488,8 +512,11 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 
 		// Final iteration: data is ingested into KV, we're done.
 		if iteration == maxIterations {
-			// Clear manifests to indicate completion.
+			// Clear manifests and merge iteration tracking to indicate completion.
 			progress.SSTManifests = nil
+			progress.DistributedMergePhase = int32(iteration)
+			progress.MergeIterationTasksTotal = 0
+			progress.MergeIterationCompletedTasks = nil
 			if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
 				return err
 			}
@@ -526,7 +553,11 @@ func (ib *IndexBackfillPlanner) runDistributedMerge(
 		progress.SSTManifests = newManifests
 		// Update the merge phase to track which iteration we completed.
 		// This allows resume logic to know we're in the middle of merge iterations.
+		// Clear task tracking fields so progress calculation doesn't incorrectly
+		// use stale task counts from the just-completed iteration.
 		progress.DistributedMergePhase = int32(iteration)
+		progress.MergeIterationTasksTotal = 0
+		progress.MergeIterationCompletedTasks = nil
 		if err := tracker.SetBackfillProgress(ctx, *progress); err != nil {
 			return err
 		}

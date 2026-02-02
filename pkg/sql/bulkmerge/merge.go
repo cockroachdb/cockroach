@@ -44,6 +44,11 @@ type MergeOptions struct {
 	// Should be true when building unique indexes. Callers are responsible for
 	// wrapping errors into user-friendly messages.
 	EnforceUniqueness bool
+
+	// OnProgress is called when progress metadata is received from the
+	// distributed merge flow. This allows the caller to track task completion
+	// during merge iterations.
+	OnProgress func(context.Context, *execinfrapb.ProducerMetadata) error
 }
 
 // Merge creates and waits on a DistSQL flow that merges the provided SSTs into
@@ -58,8 +63,6 @@ func Merge(
 ) ([]execinfrapb.BulkMergeSpec_SST, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
-	execCfg := execCtx.ExecCfg()
-
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
 		return nil, err
@@ -70,22 +73,15 @@ func Merge(
 		return protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &result)
 	})
 
-	sqlReciever := sql.MakeDistSQLReceiver(
-		ctx,
-		rowWriter,
-		tree.Rows,
-		execCfg.RangeDescriptorCache,
-		nil,
-		nil,
-		execCtx.ExtendedEvalContext().Tracing)
-	defer sqlReciever.Release()
+	sqlReceiver := makeMergeReceiver(ctx, execCtx, rowWriter, opts.OnProgress)
+	defer sqlReceiver.Release()
 
 	execCtx.DistSQLPlanner().Run(
 		ctx,
 		planCtx,
 		nil,
 		plan,
-		sqlReciever,
+		sqlReceiver,
 		&execCtx.ExtendedEvalContext().Context,
 		nil,
 	)
@@ -107,6 +103,42 @@ func Merge(
 	})
 
 	return result.SSTs, nil
+}
+
+// makeMergeReceiver creates a DistSQLReceiver for the merge flow. If an
+// onProgress callback is provided, the receiver is wrapped to invoke the
+// callback on metadata messages (used for tracking task completion).
+//
+// Note: The two MakeDistSQLReceiver calls cannot be unified because the
+// rowResultWriter interface (which both *CallbackResultWriter and
+// *MetadataCallbackWriter implement) is unexported from the sql package.
+// We cannot declare a variable of that interface type here to conditionally
+// assign either writer type.
+func makeMergeReceiver(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	rowWriter *sql.CallbackResultWriter,
+	onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
+) *sql.DistSQLReceiver {
+	execCfg := execCtx.ExecCfg()
+	if onProgress != nil {
+		return sql.MakeDistSQLReceiver(
+			ctx,
+			sql.NewMetadataCallbackWriter(rowWriter, onProgress),
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			nil,
+			nil,
+			execCtx.ExtendedEvalContext().Tracing)
+	}
+	return sql.MakeDistSQLReceiver(
+		ctx,
+		rowWriter,
+		tree.Rows,
+		execCfg.RangeDescriptorCache,
+		nil,
+		nil,
+		execCtx.ExtendedEvalContext().Tracing)
 }
 
 // logMergeInputs logs the input SSTs for the current merge iteration.
@@ -149,12 +181,14 @@ func init() {
 		maxIterations int,
 		writeTimestamp *hlc.Timestamp,
 		enforceUniqueness bool,
+		onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
 	) ([]execinfrapb.BulkMergeSpec_SST, error) {
 		return Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
 			Iteration:         iteration,
 			MaxIterations:     maxIterations,
 			WriteTimestamp:    writeTimestamp,
 			EnforceUniqueness: enforceUniqueness,
+			OnProgress:        onProgress,
 		})
 	})
 }

@@ -31,14 +31,16 @@ func convertToJobBackfillProgress(
 			return nil, err
 		}
 		ret = append(ret, jobspb.BackfillProgress{
-			TableID:               bp.TableID,
-			SourceIndexID:         bp.SourceIndexID,
-			DestIndexIDs:          bp.DestIndexIDs,
-			WriteTimestamp:        bp.MinimumWriteTimestamp,
-			CompletedSpans:        strippedSpans,
-			SSTManifests:          manifests,
-			SSTStoragePrefixes:    bp.SSTStoragePrefixes,
-			DistributedMergePhase: bp.DistributedMergePhase,
+			TableID:                      bp.TableID,
+			SourceIndexID:                bp.SourceIndexID,
+			DestIndexIDs:                 bp.DestIndexIDs,
+			WriteTimestamp:               bp.MinimumWriteTimestamp,
+			CompletedSpans:               strippedSpans,
+			SSTManifests:                 manifests,
+			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
+			DistributedMergePhase:        bp.DistributedMergePhase,
+			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,
+			MergeIterationCompletedTasks: bp.MergeIterationCompletedTasks,
 		})
 	}
 	return ret, nil
@@ -55,11 +57,13 @@ func convertFromJobBackfillProgress(
 				SourceIndexID: bp.SourceIndexID,
 				DestIndexIDs:  bp.DestIndexIDs,
 			},
-			MinimumWriteTimestamp: bp.WriteTimestamp,
-			CompletedSpans:        addTenantPrefixToSpans(codec, bp.CompletedSpans),
-			SSTManifests:          backfill.AddTenantPrefixToSSTManifests(codec, bp.SSTManifests),
-			SSTStoragePrefixes:    bp.SSTStoragePrefixes,
-			DistributedMergePhase: bp.DistributedMergePhase,
+			MinimumWriteTimestamp:        bp.WriteTimestamp,
+			CompletedSpans:               addTenantPrefixToSpans(codec, bp.CompletedSpans),
+			SSTManifests:                 backfill.AddTenantPrefixToSSTManifests(codec, bp.SSTManifests),
+			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
+			DistributedMergePhase:        bp.DistributedMergePhase,
+			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,
+			MergeIterationCompletedTasks: bp.MergeIterationCompletedTasks,
 		})
 	}
 	return ret

@@ -377,6 +377,15 @@ message RemoteProducerMetadata {
   // NEXT ID: 13
 }
 
+// MergeIterationProgress reports task completion progress during distributed
+// merge iterations. This message is passed via BulkProcessorProgress.progress_details.
+message MergeIterationProgress {
+  // Task ID that was completed.
+  optional int64 completed_task_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedTaskID"];
+  // Total number of tasks in the current merge iteration.
+  optional int64 tasks_total = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TasksTotal"];
+}
+
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped
 // for each node. This is used by planners to avoid planning on nodes that are
 // known to be draining.

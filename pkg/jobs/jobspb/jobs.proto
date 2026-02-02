@@ -898,6 +898,14 @@ message BackfillProgress {
   //   0: Map phase complete, no merge iterations completed yet.
   //   N (N >= 1): Merge iteration N completed.
   int32 distributed_merge_phase = 8;
+
+  // MergeIterationTasksTotal is the total number of tasks in the current merge
+  // iteration. Used for progress calculation.
+  int64 merge_iteration_tasks_total = 9;
+
+  // MergeIterationCompletedTasks contains the task IDs that have been
+  // completed in the current merge iteration.
+  repeated int64 merge_iteration_completed_tasks = 10;
 }
 
 // IndexBackfillSSTManifest describes an SST produced by the backfill map stage.
