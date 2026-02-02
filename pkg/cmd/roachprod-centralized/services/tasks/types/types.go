@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -42,7 +43,7 @@ var (
 // worker orchestration, and integration with other services that need to schedule work.
 type IService interface {
 	// GetTasks retrieves multiple tasks based on the provided filters and pagination parameters.
-	GetTasks(context.Context, *logger.Logger, InputGetAllTasksDTO) ([]tasks.ITask, error)
+	GetTasks(context.Context, *logger.Logger, InputGetAllTasksDTO) ([]tasks.ITask, int, error)
 	// GetTask retrieves a single task by its ID.
 	GetTask(context.Context, *logger.Logger, InputGetTaskDTO) (tasks.ITask, error)
 	// CreateTask creates a new task and stores it in the repository for processing.
@@ -65,6 +66,13 @@ type IService interface {
 // InputGetAllTasksDTO is the data transfer object to get all tasks.
 type InputGetAllTasksDTO struct {
 	Filters filtertypes.FilterSet `json:"filters,omitempty"`
+}
+
+// NewInputGetAllTasksDTO creates a new InputGetAllTasksDTO with proper defaults.
+func NewInputGetAllTasksDTO() InputGetAllTasksDTO {
+	return InputGetAllTasksDTO{
+		Filters: *filters.NewFilterSet(),
+	}
 }
 
 // InputGetTaskDTO is the data transfer object to get a task.

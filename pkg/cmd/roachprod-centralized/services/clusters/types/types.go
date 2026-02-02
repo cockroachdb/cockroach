@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
@@ -46,6 +47,13 @@ type IService interface {
 // InputGetAllClustersDTO is the data transfer object to get all clusters.
 type InputGetAllClustersDTO struct {
 	Filters filtertypes.FilterSet `json:"filters,omitempty"`
+}
+
+// NewInputGetAllClustersDTO creates a new InputGetAllClustersDTO with proper defaults.
+func NewInputGetAllClustersDTO() InputGetAllClustersDTO {
+	return InputGetAllClustersDTO{
+		Filters: *filters.NewFilterSet(),
+	}
 }
 
 // InputGetClusterDTO is the data transfer object to get a cluster.

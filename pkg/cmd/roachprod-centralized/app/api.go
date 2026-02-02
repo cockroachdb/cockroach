@@ -101,7 +101,7 @@ func (a *Api) Init(l *logger.Logger) {
 
 	// Add controllers' handlers and routes
 	for _, controller := range a.controllers {
-		for _, handler := range controller.GetHandlers() {
+		for _, handler := range controller.GetControllerHandlers() {
 
 			var handlers []gin.HandlerFunc
 
@@ -121,10 +121,10 @@ func (a *Api) Init(l *logger.Logger) {
 							)
 						},
 					},
-					handler.GetHandlers()...,
+					handler.GetRouteHandlers()...,
 				)
 			default:
-				handlers = handler.GetHandlers()
+				handlers = handler.GetRouteHandlers()
 			}
 
 			ginEngine.Handle(

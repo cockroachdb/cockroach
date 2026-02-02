@@ -32,9 +32,9 @@ func TestGetTasks(t *testing.T) {
 
 	filters := filters.NewFilterSet()
 
-	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(expectedTasks, nil)
+	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(expectedTasks, len(expectedTasks), nil)
 
-	tasks, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
 		Filters: *filters,
 	})
 	assert.Nil(t, err)
@@ -53,13 +53,13 @@ func TestGetTasksFiltered(t *testing.T) {
 		AddFilter("Type", filtertypes.OpEqual, "test").
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStateRunning))
 
-	mockRepo.On("GetTasks", ctx, mock.Anything, *expectedFilters).Return(expectedTasks, nil)
+	mockRepo.On("GetTasks", ctx, mock.Anything, *expectedFilters).Return(expectedTasks, len(expectedTasks), nil)
 
 	filters := filters.NewFilterSet().
 		AddFilter("Type", filtertypes.OpEqual, "test").
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStateRunning))
 
-	tasks, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
 		Filters: *filters,
 	})
 	assert.Nil(t, err)
@@ -74,9 +74,9 @@ func TestGetTasks_Error(t *testing.T) {
 
 	expectedError := errors.New("db error")
 
-	mockRepo.On("GetTasks", ctx, mock.Anything, filtertypes.FilterSet{}).Return(nil, expectedError)
+	mockRepo.On("GetTasks", ctx, mock.Anything, *filters.NewFilterSet()).Return(nil, 0, expectedError)
 
-	tasks, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{})
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.NewInputGetAllTasksDTO())
 	assert.Nil(t, tasks)
 	assert.ErrorIs(t, err, expectedError)
 	mockRepo.AssertExpectations(t)

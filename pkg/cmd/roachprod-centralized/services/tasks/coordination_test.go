@@ -41,7 +41,7 @@ func TestCreateTaskIfNotAlreadyPlanned_ErrorGet(t *testing.T) {
 		AddFilter("Type", filtertypes.OpEqual, taskType).
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStatePending))
 	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(
-		[]tasks.ITask{pendingTask}, expectedError,
+		[]tasks.ITask{pendingTask}, 1, expectedError,
 	)
 
 	newTask := &MockTask{
@@ -65,7 +65,7 @@ func TestCreateTaskIfNotAlreadyPlanned_CreatesNew(t *testing.T) {
 	filters := filters.NewFilterSet().
 		AddFilter("Type", filtertypes.OpEqual, "fake_type").
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStatePending))
-	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return([]tasks.ITask{}, nil)
+	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return([]tasks.ITask{}, 0, nil)
 	fakeTask := &MockTask{
 		Task: tasks.Task{
 			ID:   uuid.MakeV4(),
@@ -106,7 +106,7 @@ func TestCreateTaskIfNotAlreadyPlanned_CreatesNew_FailedExists(t *testing.T) {
 	filters := filters.NewFilterSet().
 		AddFilter("Type", filtertypes.OpEqual, taskType).
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStatePending))
-	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(tasksList, nil)
+	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(tasksList, len(tasksList), nil)
 
 	newTask := &MockTask{
 		Task: tasks.Task{
@@ -139,7 +139,7 @@ func TestCreateTaskIfNotAlreadyPlanned_ReturnsExisting(t *testing.T) {
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStatePending))
 	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return([]tasks.ITask{
 		pendingTask,
-	}, nil).Once()
+	}, 1, nil).Once()
 
 	newTask := &MockTask{
 		Task: tasks.Task{
@@ -224,7 +224,7 @@ func TestCreateTaskIfNotRecentlyScheduled_RecencyWindowAdjustment(t *testing.T) 
 		// Allow 100ms tolerance for test execution time
 		timeDiff := cutoffTime.Sub(expectedCutoffTime).Abs()
 		return timeDiff < 100*time.Millisecond
-	})).Return([]tasks.ITask{existingTask}, nil)
+	})).Return([]tasks.ITask{existingTask}, 1, nil)
 
 	newTask := &MockTask{
 		Task: tasks.Task{
@@ -278,7 +278,7 @@ func TestCreateTaskIfNotRecentlyScheduled_MinimumRecencyWindow(t *testing.T) {
 		// Should be approximately 1 second ago, not 500ms
 		timeSinceCutoff := timeutil.Since(cutoffTime)
 		return timeSinceCutoff >= 900*time.Millisecond && timeSinceCutoff <= 1100*time.Millisecond
-	})).Return([]tasks.ITask{}, nil)
+	})).Return([]tasks.ITask{}, 0, nil)
 
 	newTask := &MockTask{Task: tasks.Task{Type: "test_task"}}
 	mockRepo.On("CreateTask", mock.Anything, mock.Anything, newTask).Return(nil)

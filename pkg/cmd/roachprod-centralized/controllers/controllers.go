@@ -45,8 +45,7 @@ type Controller struct {
 // TokenValidator is a function that validates a token.
 type TokenValidator func(ctx context.Context, token, audience string) (*idtoken.Payload, error)
 
-// NewDefaultController creates a new default controller
-// with the default token validator.
+// NewDefaultController creates a new default controller.
 func NewDefaultController() *Controller {
 	return &Controller{
 		validateToken: idtoken.Validate,
@@ -169,6 +168,11 @@ func (ctrl *Controller) Render(c *gin.Context, dto IResultDTO) {
 		RequestID: c.GetString(XRequestIDKeyHeader),
 	}
 
+	// Check if DTO implements IPaginatedResult for automatic pagination metadata extraction
+	if paginatedDTO, ok := dto.(IPaginatedResult); ok {
+		resp.Pagination = paginatedDTO.GetPaginationMetadata()
+	}
+
 	// Deduce and fill data type if data is provided
 	resp.deduceAndFillDataType()
 
@@ -178,8 +182,9 @@ func (ctrl *Controller) Render(c *gin.Context, dto IResultDTO) {
 
 		switch {
 		case errors.HasType(err, &utils.PublicError{}):
-			// If a public error occurred, return it to the client
+			// If a public error occurred, return it to the client and log as debug
 			resp.PublicError = err.Error()
+			ctrl.GetRequestLogger(c).Debug(err.Error())
 		default:
 			// If an internal error occurred, return Internal Server Error
 			// and log the error
@@ -219,8 +224,8 @@ type ControllerHandler struct {
 	Authentication AuthenticationType
 }
 
-// GetHandlers returns the controller handler's handlers.
-func (c *ControllerHandler) GetHandlers() []gin.HandlerFunc {
+// GetRouteHandlers returns the controller route handlers.
+func (c *ControllerHandler) GetRouteHandlers() []gin.HandlerFunc {
 	return append([]gin.HandlerFunc{c.Func}, c.Extra...)
 }
 
@@ -239,12 +244,27 @@ func (c *ControllerHandler) GetPath() string {
 	return c.Path
 }
 
+// PaginationMetadata contains pagination information for list responses.
+// Embed this struct in result DTOs that return lists to automatically provide pagination metadata.
+type PaginationMetadata struct {
+	TotalCount int `json:"total_count"`
+	Count      int `json:"count"`
+	StartIndex int `json:"start_index"`
+}
+
+// GetPaginationMetadata returns a pointer to itself.
+// This allows any struct embedding PaginationMetadata to automatically implement IPaginatedResult.
+func (p *PaginationMetadata) GetPaginationMetadata() *PaginationMetadata {
+	return p
+}
+
 // ApiResponse is the response object that is sent back to the client.
 type ApiResponse struct {
-	RequestID   string `json:"request_id,omitempty"`
-	Data        any    `json:"data,omitempty"`
-	ResultType  string `json:"result_type,omitempty"`
-	PublicError string `json:"error,omitempty"`
+	RequestID   string              `json:"request_id,omitempty"`
+	Data        any                 `json:"data,omitempty"`
+	Pagination  *PaginationMetadata `json:"pagination,omitempty"`
+	ResultType  string              `json:"result_type,omitempty"`
+	PublicError string              `json:"error,omitempty"`
 }
 
 // deduceAndFillDataType deduces the data type and fills the ResultType field.

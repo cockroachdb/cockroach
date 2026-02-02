@@ -61,10 +61,8 @@ func TestGetAll(t *testing.T) {
 			},
 			serviceResult: serviceResult{},
 			expected: expected{
-				code: http.StatusOK,
-				arguments: clustermodels.InputGetAllClustersDTO{
-					Filters: *filters.NewFilterSet(),
-				},
+				code:      http.StatusOK,
+				arguments: clustermodels.NewInputGetAllClustersDTO(),
 			},
 		},
 		{

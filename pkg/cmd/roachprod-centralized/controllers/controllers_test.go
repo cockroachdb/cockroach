@@ -128,7 +128,7 @@ func TestControllerHandler_GetHandlers(t *testing.T) {
 		Extra: extra,
 	}
 
-	handlers := ch.GetHandlers()
+	handlers := ch.GetRouteHandlers()
 	assert.Equal(t, len(extra)+1, len(handlers))
 }
 

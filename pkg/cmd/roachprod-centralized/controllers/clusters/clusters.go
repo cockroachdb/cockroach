@@ -9,7 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	clustermodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe"
 	"github.com/gin-gonic/gin"
 )
 
@@ -61,16 +61,17 @@ func NewController(service clustermodels.IService) *Controller {
 	return ctrl
 }
 
-// GetHandlers returns the controller's handlers, as required
+// GetControllerHandlers returns the controller's handlers, as required
 // by the controllers.IController interface.
-func (ctrl *Controller) GetHandlers() []controllers.IControllerHandler {
+func (ctrl *Controller) GetControllerHandlers() []controllers.IControllerHandler {
 	return ctrl.handlers
 }
 
 // GetAll returns all clusters from the clusters service.
 func (ctrl *Controller) GetAll(c *gin.Context) {
+
 	var inputDTO types.InputGetAllDTO
-	if err := c.ShouldBindWith(&inputDTO, bindings.StripeQuery); err != nil {
+	if err := c.ShouldBindWith(&inputDTO, stripe.StripeQuery); err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
 		return
 	}
@@ -81,11 +82,12 @@ func (ctrl *Controller) GetAll(c *gin.Context) {
 		inputDTO.ToServiceInputGetAllDTO(),
 	)
 
-	ctrl.Render(c, (&types.ClustersResult{}).FromService(clusters, err))
+	ctrl.Render(c, types.NewClustersResult(&clusters, err))
 }
 
 // GetOne returns a cluster from the clusters service.
 func (ctrl *Controller) GetOne(c *gin.Context) {
+
 	// Validate cluster name from URL parameter
 	clusterName := c.Param("name")
 	if err := controllers.ValidateInputSecurity(clusterName, 64); err != nil {
@@ -101,11 +103,12 @@ func (ctrl *Controller) GetOne(c *gin.Context) {
 		},
 	)
 
-	ctrl.Render(c, (&types.ClusterResult{}).FromService(cluster, err))
+	ctrl.Render(c, types.NewClusterResult(cluster, err))
 }
 
 // Register registers an external cluster creation in the clusters service.
 func (ctrl *Controller) Register(c *gin.Context) {
+
 	var inputDTO types.InputRegisterClusterDTO
 	if err := c.ShouldBindJSON(&inputDTO); err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
@@ -124,11 +127,12 @@ func (ctrl *Controller) Register(c *gin.Context) {
 		inputDTO.ToServiceInputRegisterClusterDTO(),
 	)
 
-	ctrl.Render(c, (&types.ClusterResult{}).FromService(cluster, err))
+	ctrl.Render(c, types.NewClusterResult(cluster, err))
 }
 
 // RegisterUpdate registers an external update to a cluster in the clusters service.
 func (ctrl *Controller) RegisterUpdate(c *gin.Context) {
+
 	var inputDTO types.InputRegisterClusterUpdateDTO
 	if err := c.ShouldBindJSON(&inputDTO); err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
@@ -160,11 +164,12 @@ func (ctrl *Controller) RegisterUpdate(c *gin.Context) {
 		inputDTO.ToServiceInputRegisterClusterUpdateDTO(),
 	)
 
-	ctrl.Render(c, (&types.ClusterResult{}).FromService(cluster, err))
+	ctrl.Render(c, types.NewClusterResult(cluster, err))
 }
 
 // RegisterDelete registers an external deletion of a cluster in the clusters service.
 func (ctrl *Controller) RegisterDelete(c *gin.Context) {
+
 	// Validate cluster name from URL parameter
 	clusterName := c.Param("name")
 	if err := controllers.ValidateInputSecurity(clusterName, 64); err != nil {
@@ -180,15 +185,16 @@ func (ctrl *Controller) RegisterDelete(c *gin.Context) {
 		},
 	)
 
-	ctrl.Render(c, (&types.ClusterResult{}).FromService(nil, err))
+	ctrl.Render(c, types.NewClusterResult(nil, err))
 }
 
 // Sync triggers a clusters sync to the store.
 func (ctrl *Controller) Sync(c *gin.Context) {
+
 	task, err := ctrl.service.SyncClouds(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
 	)
 
-	ctrl.Render(c, (&types.TaskResult{}).FromService(task, err))
+	ctrl.Render(c, types.NewTaskResult(task, err))
 }

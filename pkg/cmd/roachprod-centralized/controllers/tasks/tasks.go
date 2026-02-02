@@ -9,7 +9,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks/types"
 	stypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks/types"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/stripe"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/query"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gin-gonic/gin"
 )
@@ -42,33 +43,47 @@ func NewController(service stypes.IService) *Controller {
 	return ctrl
 }
 
-// GetHandlers returns the controller's handlers, as required
+// GetControllerHandlers returns the controller's handlers, as required
 // by the controllers.IController interface.
-func (ctrl *Controller) GetHandlers() []controllers.IControllerHandler {
+func (ctrl *Controller) GetControllerHandlers() []controllers.IControllerHandler {
 	return ctrl.handlers
 }
 
 // GetAll returns all tasks from the tasks service.
 func (ctrl *Controller) GetAll(c *gin.Context) {
-	var inputDTO types.InputGetAllDTO
 
+	var inputDTO types.InputGetAllDTO
 	// Bind Stripe-style query parameters using our custom binding
-	if err := c.ShouldBindWith(&inputDTO, bindings.StripeQuery); err != nil {
+	if err := c.ShouldBindWith(&inputDTO, stripe.StripeQuery); err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
 		return
 	}
 
-	tasks, err := ctrl.service.GetTasks(
+	// Convert to FilterSet and add pagination/sorting
+	filterSet := inputDTO.ToFilterSet()
+	pagination, sort := query.ParseQueryParams(c, -1) // default: unlimited
+	filterSet.Pagination = pagination
+	filterSet.Sort = sort
+
+	// Validate FilterSet
+	if err := filterSet.Validate(); err != nil {
+		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
+		return
+	}
+
+	// Call service layer
+	tasks, totalCount, err := ctrl.service.GetTasks(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
-		inputDTO.ToServiceInputGetAllDTO(),
+		stypes.InputGetAllTasksDTO{Filters: filterSet},
 	)
 
-	ctrl.Render(c, (&types.TasksResult{}).FromService(tasks, err))
+	ctrl.Render(c, types.NewTasksListResult(tasks, totalCount, filterSet.Pagination, err))
 }
 
 // GetOne returns a task from the tasks service.
 func (ctrl *Controller) GetOne(c *gin.Context) {
+
 	id, err := uuid.FromString(c.Param("id"))
 	if err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
@@ -83,5 +98,5 @@ func (ctrl *Controller) GetOne(c *gin.Context) {
 		},
 	)
 
-	ctrl.Render(c, (&types.TaskResult{}).FromService(task, err))
+	ctrl.Render(c, types.NewTaskResult(task, err))
 }

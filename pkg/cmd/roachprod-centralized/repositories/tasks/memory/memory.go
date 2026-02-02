@@ -8,7 +8,7 @@ package memory
 import (
 	"context"
 	"log/slog"
-	"slices"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	rtasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/tasks"
 	filters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
+	memoryfilters "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/memory"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"golang.org/x/exp/maps"
 )
 
 // MemTasksRepo is an in-memory implementation of the tasks repository.
@@ -43,23 +43,26 @@ func NewTasksRepository() *MemTasksRepo {
 	}
 }
 
-// GetTasks returns all tasks from the in-memory tasks map, filtered by the provided filters.
+// GetTasks returns all tasks from the in-memory tasks map, filtered and paginated, with total count.
 func (s *MemTasksRepo) GetTasks(
 	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
-) ([]tasks.ITask, error) {
+) ([]tasks.ITask, int, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// If no filters are specified, return all tasks
-	if filterSet.IsEmpty() {
-		return maps.Values(s.tasks), nil
-	}
-
-	// Use the memory filter evaluator to filter tasks
-	evaluator := filters.NewMemoryFilterEvaluator()
+	//  1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(tasks.Task{}),
+	)
 	var filteredTasks []tasks.ITask
 
 	for _, task := range s.tasks {
+		// If no filters, include all tasks
+		if filterSet.IsEmpty() {
+			filteredTasks = append(filteredTasks, task)
+			continue
+		}
+
 		matches, err := evaluator.Evaluate(task, &filterSet)
 		if err != nil {
 			l.Error(
@@ -74,12 +77,15 @@ func (s *MemTasksRepo) GetTasks(
 		}
 	}
 
-	// Sort tasks by creation time ascending
-	slices.SortFunc(filteredTasks, func(i, j tasks.ITask) int {
-		return i.GetCreationDatetime().Compare(j.GetCreationDatetime())
-	})
+	totalCount := len(filteredTasks)
 
-	return filteredTasks, nil
+	// 2. Apply sorting (with creation_datetime as default)
+	_ = memoryfilters.SortByField(filteredTasks, filterSet.Sort, "creation_datetime")
+
+	// 3. Apply pagination
+	filteredTasks = memoryfilters.ApplyPagination(filteredTasks, filterSet.Pagination)
+
+	return filteredTasks, totalCount, nil
 }
 
 // GetTask returns a task from the in-memory tasks map.

@@ -20,23 +20,23 @@ import (
 // api.go contains the public CRUD API methods for managing tasks.
 // These methods are exposed via the types.IService interface and used by controllers.
 
-// GetTasks returns all tasks from the repository.
+// GetTasks returns all tasks from the repository with total count for pagination.
 func (s *Service) GetTasks(
 	ctx context.Context, l *logger.Logger, input types.InputGetAllTasksDTO,
-) ([]tasks.ITask, error) {
+) ([]tasks.ITask, int, error) {
 	// Validate filters if present
 	if !input.Filters.IsEmpty() {
 		if err := input.Filters.Validate(); err != nil {
-			return nil, errors.Wrap(err, "invalid filters")
+			return nil, 0, errors.Wrap(err, "invalid filters")
 		}
 	}
 
-	tasks, err := s.store.GetTasks(ctx, l, input.Filters)
+	tasks, totalCount, err := s.store.GetTasks(ctx, l, input.Filters)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return tasks, nil
+	return tasks, totalCount, nil
 }
 
 // GetTask returns a task from the repository.

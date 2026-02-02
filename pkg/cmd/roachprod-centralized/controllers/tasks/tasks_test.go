@@ -37,8 +37,9 @@ type request struct {
 	body   string
 }
 type serviceResult struct {
-	val interface{}
-	err error
+	val        interface{}
+	totalCount int
+	err        error
 }
 type expected struct {
 	code          int
@@ -60,10 +61,8 @@ func TestGetAll(t *testing.T) {
 			},
 			serviceResult: serviceResult{},
 			expected: expected{
-				code: http.StatusOK,
-				arguments: stypes.InputGetAllTasksDTO{
-					Filters: *filters.NewFilterSet(), // Empty filters
-				},
+				code:      http.StatusOK,
+				arguments: stypes.NewInputGetAllTasksDTO(),
 			},
 		},
 		{
@@ -175,7 +174,7 @@ func TestGetAll(t *testing.T) {
 					c,
 					mock.Anything,
 					tc.expected.arguments,
-				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
+				).Return(tc.serviceResult.val, tc.serviceResult.totalCount, tc.serviceResult.err).Once()
 			}
 
 			app.GetApi().GetGinEngine().ServeHTTP(w, req)
