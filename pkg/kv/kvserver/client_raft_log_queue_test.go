@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -576,13 +577,18 @@ func TestReproGCRace(t *testing.T) {
 	repro.S.WriteToRHS.Once()
 
 	repro.S.ReadRHS.Once()
+	// Transfer the RHS lease to s3 and read the back-to-life keys.
+	tc.TransferRangeLeaseOrFatal(t, tc.LookupRangeOrFatal(t, keys[50]), tc.Target(2))
+	s3 := tc.GetFirstStoreFromServer(t, 2)
 	for _, k := range keys[50:90] {
-		getResp, pErr := kv.SendWrapped(ctx, s4.TestSender(), getArgs(k))
+		getResp, pErr := kv.SendWrapped(ctx, s3.TestSender(), getArgs(k))
 		require.NoError(t, pErr.GoError())
 		gr := getResp.(*kvpb.GetResponse)
-		b, err := gr.Value.GetBytes()
-		require.NoError(t, err)
-		require.Equal(t, []byte("value"), b)
+		if assert.NotNil(t, gr.Value, "could not read key %v back", k) {
+			b, err := gr.Value.GetBytes()
+			require.NoError(t, err)
+			require.Equal(t, []byte("value"), b)
+		}
 	}
 
 	// Run a consistency check on the RHS range.
