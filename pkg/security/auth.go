@@ -419,6 +419,28 @@ func validateSANMatchForUser(certSANs []string, user string) bool {
 	return match
 }
 
+// CheckCertSANMatchesRootOrNodeSAN returns `rootOrNodeSANSet` which validates
+// whether rootSAN or nodeSAN is currently set using their respective CLI flags
+// *-cert-san. It also returns `certSANMatchesRootOrNodeSAN` which
+// validates whether SAN contained in cert being presented is a superset of
+// rootSAN or nodeSAN (provided they are set via start-up flag).
+func CheckCertSANMatchesRootOrNodeSAN(
+	cert *x509.Certificate,
+) (rootOrNodeSANSet bool, certSANMatchesRootOrNodeSAN bool) {
+	rootSANs := rootSANMu.getSANs()
+	nodeSANs := nodeSANMu.getSANs()
+
+	if len(rootSANs) != 0 || len(nodeSANs) != 0 {
+		rootOrNodeSANSet = true
+		certSANs := extractSANsFromCertificate(cert)
+		// certSANMatchesRootOrNodeSAN is true if certSANs contains all configured rootSANs or nodeSANs
+		if (len(rootSANs) != 0 && sanListIsSubset(rootSANs, certSANs)) || (len(nodeSANs) != 0 && sanListIsSubset(nodeSANs, certSANs)) {
+			certSANMatchesRootOrNodeSAN = true
+		}
+	}
+	return rootOrNodeSANSet, certSANMatchesRootOrNodeSAN
+}
+
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
 // list must either be empty or have the format <source>:<dest>. The principal
 // map is used to transform principal names found in the Subject.CommonName or

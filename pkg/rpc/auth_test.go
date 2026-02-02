@@ -13,6 +13,8 @@ import (
 	"encoding/asn1"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -1299,6 +1301,374 @@ func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.Tenant
 }
 
 type contextKey struct{}
+
+// TestValidateRootOrNodeClientCert tests the validateRootOrNodeClientCert function
+// which validates root and node client certificates using SAN and DN validation.
+func TestValidateRootOrNodeClientCert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Helper to create a certificate with specific attributes
+	createCert := func(t *testing.T, commonName string, dnsSANs []string, uriSANs []string, ipSANs []string, tenantScope uint64) *x509.Certificate {
+		cert := &x509.Certificate{
+			Subject: pkix.Name{
+				CommonName: commonName,
+			},
+		}
+		var err error
+		cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+		require.NoError(t, err)
+
+		// Add DNS SANs
+		if len(dnsSANs) > 0 {
+			cert.DNSNames = dnsSANs
+		}
+
+		// Add URI SANs
+		if len(uriSANs) > 0 {
+			for _, uriStr := range uriSANs {
+				uri, err := url.Parse(uriStr)
+				require.NoError(t, err)
+				cert.URIs = append(cert.URIs, uri)
+			}
+		}
+
+		// Add IP SANs
+		if len(ipSANs) > 0 {
+			for _, ipStr := range ipSANs {
+				ip := net.ParseIP(ipStr)
+				require.NotNil(t, ip)
+				cert.IPAddresses = append(cert.IPAddresses, ip)
+			}
+		}
+
+		if tenantScope > 0 {
+			tenantSANs, err := security.MakeTenantURISANs(
+				username.MakeSQLUsernameFromPreNormalizedString(commonName),
+				[]roachpb.TenantID{roachpb.MustMakeTenantID(tenantScope)})
+			require.NoError(t, err)
+			cert.URIs = append(cert.URIs, tenantSANs...)
+		}
+
+		return cert
+	}
+
+	const noError = ""
+
+	for _, tc := range []struct {
+		name string
+		// cert specific fields to construct the certificate for the test case
+		certCommonName string
+		certDNSSANs    []string
+		certURISANs    []string
+		certIPSANs     []string
+		// config fields for the auth config used in validation
+		rootDN            string
+		nodeDN            string
+		rootSAN           string
+		nodeSAN           string
+		sanRequired       bool
+		subjectRequired   bool
+		disallowRootLogin bool
+		allowDebugUser    bool
+		tenantScope       uint64
+		certPrincipalMap  string
+		expErr            string
+	}{
+		// Group A: SAN Enabled (ClientCertSANRequired = true)
+		// A1: SAN Validation Succeeds
+		{
+			name:           "Root SAN matches",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/root"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+		{
+			name:           "Node SAN matches",
+			certCommonName: "foo",
+			certDNSSANs:    []string{"node.example.com"},
+			nodeSAN:        "DNS=node.example.com",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+
+		// A2: SAN Fails, DN Fallback Succeeds
+		{
+			name:           "Root SAN fails, root DN succeeds",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/wrong"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			rootDN:         "CN=foo",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+		{
+			name:           "Node SAN fails, node DN succeeds",
+			certCommonName: "bar",
+			certDNSSANs:    []string{"wrong.example.com"},
+			nodeSAN:        "DNS=node.example.com",
+			nodeDN:         "CN=bar",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+
+		// A3: Both SAN and DN Fail
+		{
+			name:           "Both root SAN and DN fail",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/wrong"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			rootDN:         "CN=bar",
+			sanRequired:    true,
+			expErr:         "both SAN and DN validation failed",
+		},
+
+		// A4: SAN Fails, DN Not Configured
+		{
+			name:            "SAN fails, no DN, subject required",
+			certCommonName:  "foo",
+			certURISANs:     []string{"spiffe://example.com/wrong"},
+			rootSAN:         "URI=spiffe://example.com/root",
+			sanRequired:     true,
+			subjectRequired: true,
+			expErr:          "root and node roles do not have valid DNs set",
+		},
+		{
+			name:           "SAN fails, no DN, subject not required - no scope fallback",
+			certCommonName: "root",
+			certURISANs:    []string{"spiffe://example.com/wrong"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			sanRequired:    true,
+			expErr:         "SAN and DN validation failed",
+		},
+
+		// Group B: SAN Disabled (ClientCertSANRequired = false)
+		// B1: DN Validation Succeeds
+		{
+			name:           "Root DN matches",
+			certCommonName: "foo",
+			rootDN:         "CN=foo",
+			expErr:         noError,
+		},
+		{
+			name:           "Node DN matches",
+			certCommonName: "bar",
+			nodeDN:         "CN=bar",
+			expErr:         noError,
+		},
+
+		// B2: DN Validation Fails
+		{
+			name:           "Root DN doesn't match",
+			certCommonName: "foo",
+			rootDN:         "CN=bar",
+			expErr:         "cert dn did not match set root or node dn",
+		},
+		{
+			name:           "Node DN doesn't match",
+			certCommonName: "foo",
+			nodeDN:         "CN=bar",
+			expErr:         "cert dn did not match set root or node dn",
+		},
+
+		// B3: DN Not Configured, Falls Back to Scope Check
+		{
+			name:            "No DN, subject required",
+			certCommonName:  "foo",
+			subjectRequired: true,
+			expErr:          "root and node roles do not have valid DNs set",
+		},
+		{
+			name:           "No DN, scope check passes (root)",
+			certCommonName: "root",
+			expErr:         noError,
+		},
+		{
+			name:           "No DN, scope check passes (node)",
+			certCommonName: "node",
+			expErr:         noError,
+		},
+		{
+			name:           "No DN, scope check fails",
+			certCommonName: "invaliduser",
+			expErr:         "need root or node client cert to perform RPCs on this server",
+		},
+
+		// Group C: Edge Cases
+		// C1: Multiple SAN Attributes
+		{
+			name:           "Cert with URI, DNS, IP SANs",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/root"},
+			certDNSSANs:    []string{"node.example.com"},
+			certIPSANs:     []string{"192.168.1.1"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+		{
+			name:           "Partial SAN match (subset fails)",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/root"},
+			rootSAN:        "URI=spiffe://example.com/root,DNS=missing.example.com",
+			sanRequired:    true,
+			expErr:         "SAN and DN validation failed",
+		},
+
+		// C2: Tenant Scope Scenarios
+		{
+			name:           "System tenant with scoped cert",
+			certCommonName: "root",
+			tenantScope:    10,
+			expErr:         "need root or node client cert to perform RPCs on this server",
+		},
+		{
+			name:           "Non-system tenant with global cert (root)",
+			certCommonName: "root",
+			expErr:         noError,
+		},
+
+		// C3: Special Users
+		{
+			name:           "Debug user with SAN disabled",
+			certCommonName: "debug_user",
+			allowDebugUser: true,
+			expErr:         noError,
+		},
+		{
+			name:              "Root login disabled",
+			certCommonName:    "root",
+			disallowRootLogin: true,
+			expErr:            "root login has been disallowed",
+		},
+
+		// C4: Both Root and Node Configured
+		{
+			name:           "Root cert, both root and node DN set",
+			certCommonName: "foo",
+			rootDN:         "CN=foo",
+			nodeDN:         "CN=bar",
+			expErr:         noError,
+		},
+		{
+			name:           "Node cert, both root and node DN set",
+			certCommonName: "bar",
+			rootDN:         "CN=foo",
+			nodeDN:         "CN=bar",
+			expErr:         noError,
+		},
+		{
+			name:           "Both SANs configured, cert matches root",
+			certCommonName: "foo",
+			certURISANs:    []string{"spiffe://example.com/root"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			nodeSAN:        "DNS=node.example.com",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+		{
+			name:           "Both SANs configured, cert matches node",
+			certCommonName: "foo",
+			certDNSSANs:    []string{"node.example.com"},
+			rootSAN:        "URI=spiffe://example.com/root",
+			nodeSAN:        "DNS=node.example.com",
+			sanRequired:    true,
+			expErr:         noError,
+		},
+
+		// C5: Certificate Principal Mapping
+		{
+			name:             "SAN disabled with cert principal mapping",
+			certCommonName:   "foo",
+			certPrincipalMap: "foo:root",
+			expErr:           noError,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			// Set up disallow root login if needed
+			if tc.disallowRootLogin {
+				security.SetDisallowRootLogin(true)
+				defer security.SetDisallowRootLogin(false)
+			}
+
+			// Set up allow debug user if needed
+			if tc.allowDebugUser {
+				security.SetAllowDebugUser(true)
+				defer security.SetAllowDebugUser(false)
+			}
+
+			// Set up certificate principal mapping if needed
+			if tc.certPrincipalMap != "" {
+				err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
+				require.NoError(t, err)
+				defer func() {
+					_ = security.SetCertPrincipalMap(nil)
+				}()
+			}
+
+			// Set up root DN if configured
+			if tc.rootDN != "" {
+				err := security.SetRootSubject(tc.rootDN)
+				require.NoError(t, err)
+			}
+			defer security.UnsetRootSubject()
+
+			// Set up node DN if configured
+			if tc.nodeDN != "" {
+				err := security.SetNodeSubject(tc.nodeDN)
+				require.NoError(t, err)
+			}
+			defer security.UnsetNodeSubject()
+
+			// Set up root SAN if configured
+			if tc.rootSAN != "" {
+				err := security.SetRootSAN(tc.rootSAN)
+				require.NoError(t, err)
+			}
+			defer security.UnsetRootSAN()
+
+			// Set up node SAN if configured
+			if tc.nodeSAN != "" {
+				err := security.SetNodeSAN(tc.nodeSAN)
+				require.NoError(t, err)
+			}
+			defer security.UnsetNodeSAN()
+
+			// Create the certificate
+			cert := createCert(t, tc.certCommonName, tc.certDNSSANs, tc.certURISANs, tc.certIPSANs, tc.tenantScope)
+
+			// Set up settings
+			sv := &settings.Values{}
+			sv.Init(ctx, settings.TestOpaque)
+			u := settings.NewUpdater(sv)
+
+			// Configure ClientCertSANRequired
+			err := u.Set(ctx, security.ClientCertSANRequiredSettingName,
+				settings.EncodedValue{Value: strconv.FormatBool(tc.sanRequired), Type: "b"})
+			require.NoError(t, err)
+
+			// Configure ClientCertSubjectRequired
+			err = u.Set(ctx, security.ClientCertSubjectRequiredSettingName,
+				settings.EncodedValue{Value: strconv.FormatBool(tc.subjectRequired), Type: "b"})
+			require.NoError(t, err)
+
+			// Call the function under test
+			err = rpc.TestingValidateRootOrNodeClientCert(ctx, sv, cert)
+
+			// Verify the result
+			if tc.expErr == noError {
+				require.NoError(t, err, "expected success but got error")
+			} else {
+				require.Error(t, err, "expected error but got success")
+				require.Equal(t, codes.Unauthenticated, status.Code(err))
+				require.Regexp(t, tc.expErr, err.Error())
+			}
+		})
+	}
+}
 
 // TestServerpbEndpointAccess ensures root user access to serverpb admin and status endpoints
 // works correctly with authentication (considering disallow-root-login flag) and authorization.
