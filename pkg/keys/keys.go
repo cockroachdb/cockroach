@@ -1048,10 +1048,51 @@ func EnsureSafeSplitKey(key roachpb.Key) (roachpb.Key, error) {
 	return key[:idx], nil
 }
 
+// extend expands the given RSpan to include the key range [key, endKey) (or
+// [key, key.Next()) if an empty endKey is supplied).
+func extend(rs roachpb.RSpan, key, endKey roachpb.Key) (roachpb.RSpan, error) {
+	rKey, err := Addr(key)
+	if err != nil {
+		return roachpb.RSpan{}, err
+	}
+	if rKey.Less(rs.Key) {
+		// rKey is smaller than the current start key.
+		rs.Key = rKey
+	}
+	if !rKey.Less(rs.EndKey) {
+		// rKey.Next() is larger than the current end key.
+		if bytes.Compare(rKey, roachpb.RKeyMax) > 0 {
+			return roachpb.RSpan{}, errors.Errorf("%s must be less than KeyMax", rKey)
+		}
+		rs.EndKey = rKey.Next()
+	}
+
+	// Check if endKey exists; if it does, consider it for the upper bound.
+	// Otherwise, return the extended span.
+	if len(endKey) == 0 {
+		return rs, nil
+	}
+
+	// NB: AddrUpperBound is suitable for use as the EndKey of a span with a
+	// range-local key EndKey. See the comment on AddrUpperBound for more
+	// details.
+	rEndKey, err := AddrUpperBound(endKey)
+	if err != nil {
+		return roachpb.RSpan{}, err
+	}
+	if bytes.Compare(roachpb.RKeyMax, rEndKey) < 0 {
+		return roachpb.RSpan{}, errors.Errorf("%s must be less than or equal to KeyMax", rEndKey)
+	}
+	if rs.EndKey.Less(rEndKey) {
+		// rEndKey is larger than the current end key.
+		rs.EndKey = rEndKey
+	}
+	return rs, nil
+}
+
 // Range returns a key range encompassing the key ranges of all requests.
 func Range(reqs []kvpb.RequestUnion) (roachpb.RSpan, error) {
-	from := roachpb.RKeyMax
-	to := roachpb.RKeyMin
+	rs := roachpb.RSpan{Key: roachpb.RKeyMax, EndKey: roachpb.RKeyMin}
 	for _, arg := range reqs {
 		req := arg.GetInner()
 		h := req.Header()
@@ -1059,38 +1100,52 @@ func Range(reqs []kvpb.RequestUnion) (roachpb.RSpan, error) {
 			return roachpb.RSpan{}, errors.Errorf("end key specified for non-range operation: %s", req)
 		}
 
-		key, err := Addr(h.Key)
+		var err error
+		rs, err = extend(rs, h.Key, h.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err
-		}
-		if key.Less(from) {
-			// Key is smaller than `from`.
-			from = key
-		}
-		if !key.Less(to) {
-			// Key.Next() is larger than `to`.
-			if bytes.Compare(key, roachpb.RKeyMax) > 0 {
-				return roachpb.RSpan{}, errors.Errorf("%s must be less than KeyMax", key)
-			}
-			to = key.Next()
 		}
 
-		if len(h.EndKey) == 0 {
-			continue
+		// For GCRequests, also consider the individual keys, range keys, and
+		// clear range spans which may extend beyond the request header.
+		if req.Method() == kvpb.GC {
+			rs, err = extendRangeForGCRequest(req.(*kvpb.GCRequest), rs)
+			if err != nil {
+				return roachpb.RSpan{}, err
+			}
 		}
-		endKey, err := AddrUpperBound(h.EndKey)
+	}
+	return rs, nil
+}
+
+// extendRangeForGCRequest examines the individual keys, range keys, and clear
+// range within a GCRequest and extends the bounds if any of them fall outside
+// the current range. This handles cases where the GC request erroneously
+// targets keys outside its header span (see #162085).
+func extendRangeForGCRequest(gcReq *kvpb.GCRequest, rs roachpb.RSpan) (roachpb.RSpan, error) {
+	var err error
+	// Check point keys.
+	for _, gcKey := range gcReq.Keys {
+		rs, err = extend(rs, gcKey.Key, nil)
 		if err != nil {
 			return roachpb.RSpan{}, err
 		}
-		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
-			return roachpb.RSpan{}, errors.Errorf("%s must be less than or equal to KeyMax", endKey)
-		}
-		if to.Less(endKey) {
-			// EndKey is larger than `to`.
-			to = endKey
+	}
+	// Check range keys.
+	for _, rk := range gcReq.RangeKeys {
+		rs, err = extend(rs, rk.StartKey, rk.EndKey)
+		if err != nil {
+			return roachpb.RSpan{}, err
 		}
 	}
-	return roachpb.RSpan{Key: from, EndKey: to}, nil
+	// Check clear range.
+	if gcReq.ClearRange != nil {
+		rs, err = extend(rs, gcReq.ClearRange.StartKey, gcReq.ClearRange.EndKey)
+		if err != nil {
+			return roachpb.RSpan{}, err
+		}
+	}
+	return rs, nil
 }
 
 // RangeIDPrefixBuf provides methods for generating range ID local keys while
