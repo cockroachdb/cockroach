@@ -21,25 +21,28 @@ CREATE TABLE voyage (
 )
 
 statement ok
+GRANT ALL ON TABLE voyage TO testuser;
+
+statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
 # Test non-conflicting INSERT.
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
-INSERT INTO voyage VALUES ('caspian', 'hercules', 'argonauts', 'golden fleece')
+INSERT INTO voyage VALUES ('caspian', 'hercules', 'argonauts', 'golden_fleece')
 
 # Test the (quest, crew) uniqueness constraint.
 
-# The Argonauts searching for the golden fleece should fail the (quest, crew)
+# The Argonauts searching for the golden_fleece should fail the (quest, crew)
 # uniqueness check, even with a different sea.
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 INSERT INTO voyage
-VALUES (DEFAULT, 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden fleece')
+VALUES (DEFAULT, 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden_fleece')
 
 # Only Odysseus should be inserted.
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 INSERT INTO voyage
-VALUES ('mediterranean', 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden fleece')
+VALUES ('mediterranean', 'odysseus', 'nobody', 'penelope'), ('black', 'jason', 'argonauts', 'golden_fleece')
 ON CONFLICT (quest, crew) DO NOTHING
 
 query TTTT
@@ -64,7 +67,7 @@ SELECT * FROM voyage ORDER BY hero, crew, quest
 # Test conflicting UPSERT.
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
-UPSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden fleece')
+UPSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden_fleece')
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 UPSERT INTO voyage (hero, quest) VALUES ('hercules', 'geryon')
@@ -72,7 +75,7 @@ UPSERT INTO voyage (hero, quest) VALUES ('hercules', 'geryon')
 # Test conflicting UPDATE.
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
-UPDATE voyage SET crew = 'argonauts', quest = 'golden fleece' WHERE hero = 'perseus'
+UPDATE voyage SET crew = 'argonauts', quest = 'golden_fleece' WHERE hero = 'perseus'
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 UPDATE voyage SET hero = 'hercules' WHERE hero = 'odysseus'
@@ -80,7 +83,7 @@ UPDATE voyage SET hero = 'hercules' WHERE hero = 'odysseus'
 # Test conflicting INSERT ON CONFLICT DO UPDATE.
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
-INSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden fleece')
+INSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden_fleece')
 ON CONFLICT (quest, crew) DO UPDATE SET quest = 'penelope', crew = 'nobody'
 
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
@@ -100,5 +103,194 @@ CREATE TABLE titan (
   FAMILY (name, domain, children)
 )
 
+statement ok
+GRANT ALL ON TABLE titan TO testuser;
+
 statement error pgcode 0A000 pq: unimplemented: unique without index constraint under non-serializable isolation levels
 INSERT INTO titan VALUES ('cronus', 'time', ARRAY['zeus', 'hera', 'hades', 'poseidon', 'demeter', 'hestia'])
+
+#
+# Test UNIQUE WITHOUT INDEX with Read Committed when non-locking checks are enabled
+#
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+# Now unique without index should work under read committed.
+statement ok
+INSERT INTO voyage VALUES ('caspian', 'hercules', 'argonauts', 'golden_fleece')
+
+query TTTT
+SELECT * FROM voyage ORDER BY hero, crew, quest
+----
+caspian  hercules  argonauts  golden_fleece
+
+# Test successful INSERT without conflicts.
+statement ok
+INSERT INTO voyage VALUES ('mediterranean', 'odysseus', 'nobody', 'penelope')
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+caspian        hercules  argonauts  golden_fleece
+mediterranean  odysseus  nobody     penelope
+
+# Test the (quest, crew) uniqueness constraint with conflicts.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_quest_crew"
+INSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden_fleece')
+
+# Test the (hero) uniqueness constraint with conflicts.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_hero"
+INSERT INTO voyage VALUES ('black', 'hercules', 'mares', 'diomedes')
+
+# Test INSERT ON CONFLICT DO NOTHING with the (quest, crew) constraint.
+statement ok
+INSERT INTO voyage
+VALUES ('black', 'jason', 'argonauts', 'golden_fleece'), ('adriatic', 'perseus', NULL, 'medusa')
+ON CONFLICT (quest, crew) DO NOTHING
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+adriatic       perseus   NULL       medusa
+caspian        hercules  argonauts  golden_fleece
+mediterranean  odysseus  nobody     penelope
+
+# Test INSERT ON CONFLICT DO NOTHING with the (hero) constraint.
+statement ok
+INSERT INTO voyage VALUES ('red', 'perseus', NULL, 'gorgon'), ('persian', 'theseus', NULL, 'minotaur')
+ON CONFLICT (hero) DO NOTHING
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+adriatic       perseus   NULL       medusa
+caspian        hercules  argonauts  golden_fleece
+mediterranean  odysseus  nobody     penelope
+persian        theseus   NULL       minotaur
+
+# Test UPSERT with conflicts.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_hero"
+UPSERT INTO voyage VALUES ('black', 'hercules', 'mares', 'diomedes')
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_quest_crew"
+UPSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden_fleece')
+
+# Test UPDATE with conflicts.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_hero"
+UPDATE voyage SET hero = 'hercules' WHERE hero = 'theseus'
+
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_quest_crew"
+UPDATE voyage SET quest = 'golden_fleece', crew = 'argonauts' WHERE hero = 'theseus'
+
+# Test successful UPDATE without conflicts.
+statement ok
+UPDATE voyage SET quest = 'labyrinth' WHERE hero = 'theseus'
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+adriatic       perseus   NULL       medusa
+caspian        hercules  argonauts  golden_fleece
+mediterranean  odysseus  nobody     penelope
+persian        theseus   NULL       labyrinth
+
+# Test INSERT ON CONFLICT DO UPDATE with uniqueness constraints.
+statement ok
+INSERT INTO voyage VALUES ('black', 'jason', 'argonauts', 'golden_fleece')
+ON CONFLICT (quest, crew) DO UPDATE SET quest = 'telemachus', crew = 'nobody'
+
+statement ok
+INSERT INTO voyage VALUES ('aegean', 'theseus', NULL, 'labyrinth')
+ON CONFLICT (hero) DO UPDATE SET hero = 'ariadne'
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+adriatic       perseus   NULL    medusa
+caspian        hercules  nobody  telemachus
+mediterranean  odysseus  nobody  penelope
+persian        ariadne   NULL    labyrinth
+
+# Test concurrent inserts that violate unique without index constraint.
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "unique_hero"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO voyage VALUES ('black', 'achilles', NULL, 'troy')
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+statement ok
+INSERT INTO voyage VALUES ('red', 'achilles', NULL, 'hector')
+
+user root
+
+awaitstatement conflict
+
+statement ok
+COMMIT
+
+query TTTT rowsort
+SELECT * FROM voyage
+----
+adriatic       perseus   NULL    medusa
+caspian        hercules  nobody  telemachus
+mediterranean  odysseus  nobody  penelope
+persian        ariadne   NULL    labyrinth
+red            achilles  NULL    hector
+
+# Test with the titan table (non-enum PK).
+statement ok
+INSERT INTO titan VALUES ('cronus', 'time', ARRAY['zeus', 'hera', 'hades', 'poseidon', 'demeter', 'hestia'])
+
+query TTT
+SELECT * FROM titan
+----
+cronus  time  {zeus,hera,hades,poseidon,demeter,hestia}
+
+# Test unique constraint on titan table.
+statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_domain"
+INSERT INTO titan VALUES ('chronos', 'time', ARRAY[])
+
+# Test successful insert with different domain.
+statement ok
+INSERT INTO titan VALUES ('oceanus', 'water', ARRAY['metis', 'eurynome', 'doris'])
+
+query TTT rowsort
+SELECT * FROM titan
+----
+cronus   time   {zeus,hera,hades,poseidon,demeter,hestia}
+oceanus  water  {metis,eurynome,doris}
+
+# Test concurrent insert with titan table.
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23505 pq: duplicate key value violates unique constraint "unique_domain"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO titan VALUES ('hyperion', 'light', ARRAY['helios', 'selene', 'eos'])
+
+user testuser
+
+statement ok
+INSERT INTO titan VALUES ('theia', 'light', ARRAY[])
+
+user root
+
+awaitstatement conflict
+
+statement ok
+COMMIT
+
+query TTT rowsort
+SELECT * FROM titan
+----
+cronus   time   {zeus,hera,hades,poseidon,demeter,hestia}
+oceanus  water  {metis,eurynome,doris}
+theia    light  {}

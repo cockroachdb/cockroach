@@ -203,7 +203,7 @@ SELECT * FROM child_150282;
 ----
 4 4
 
-# Test the fk delete fast path
+# Test the fk delete fast path.
 statement count 1
 DELETE FROM parent_150282;
 
@@ -445,5 +445,677 @@ statement ok
 RESET enable_implicit_fk_locking_for_serializable;
 RESET enable_shared_locking_for_serializable;
 RESET enable_durable_locking_for_serializable
+
+subtest end
+
+# This subtest systematically tests FK constraint enforcement with the
+# read_committed_non_locking_checks_enabled setting. The tests cover all
+# combinations of isolation levels:
+#   - RC txn (with non-locking checks) + RC txn (with non-locking checks)
+#   - RC txn (with non-locking checks) + Serializable txn
+#   - Serializable txn + RC txn (with non-locking checks)
+#
+# For each combination, we test an insert into the child table concurrent with
+# DELETE and UPDATE CHECKS and CASCADES.
+subtest non_locking_checks_enabled
+
+statement ok
+CREATE TABLE parent_cascade (
+  p INT PRIMARY KEY,
+  v INT,
+  FAMILY (p, v)
+)
+
+statement ok
+CREATE TABLE child_cascade (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_cascade(p) ON DELETE CASCADE ON UPDATE CASCADE,
+  FAMILY (c, p)
+)
+
+statement ok
+CREATE TABLE parent_check (
+  p INT PRIMARY KEY,
+  v INT,
+  FAMILY (p, v)
+)
+
+statement ok
+CREATE TABLE child_check (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_check(p),
+  FAMILY (c, p)
+)
+
+statement ok
+GRANT ALL ON TABLE parent_cascade TO testuser;
+GRANT ALL ON TABLE child_cascade TO testuser;
+GRANT ALL ON TABLE parent_check TO testuser;
+GRANT ALL ON TABLE child_check TO testuser
+
+# ==============================================================================
+# RC + RC: Both transactions use Read Committed with non-locking checks.
+# ==============================================================================
+
+subtest rc_rc
+
+# Configure both users for Read Committed with non-locking checks.
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+user root
+
+# RC DELETE with FK CASCADE + concurrent RC INSERT into child.
+subtest rc_rc/cascade_delete
+
+statement ok
+INSERT INTO parent_cascade VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO child_cascade VALUES (100, 1), (200, 2)
+
+statement ok
+BEGIN
+
+statement async fk_delete
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_cascade WHERE p = 1
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (300, 1)
+
+user root
+
+awaitstatement fk_delete
+
+# DELETE statement should be retried at a higher timestamp and succeed.
+statement ok
+COMMIT
+
+# Verify that parent 1 was deleted and both children were cascaded.
+query II rowsort
+SELECT * FROM parent_cascade
+----
+2  20
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+200  2
+
+# RC UPDATE with FK CASCADE + concurrent RC INSERT into child.
+subtest rc_rc/cascade_update
+
+statement ok
+INSERT INTO parent_cascade VALUES (3, 30)
+
+statement ok
+INSERT INTO child_cascade VALUES (300, 3)
+
+statement ok
+BEGIN
+
+statement async fk_update
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE parent_cascade SET p = 4 WHERE p = 3
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (400, 3)
+
+user root
+
+awaitstatement fk_update
+
+# UPDATE statement should be retried at a higher timestamp and succeed.
+statement ok
+COMMIT
+
+# Verify that parent 3 was updated to 4 and both children were cascaded.
+query II rowsort
+SELECT * FROM parent_cascade
+----
+2  20
+4  30
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+200  2
+300  4
+400  4
+
+# RC INSERT into child + concurrent RC DELETE of parent.
+subtest rc_rc/check_insert_delete
+
+statement ok
+INSERT INTO parent_check VALUES (1, 10), (2, 20)
+
+statement ok
+INSERT INTO child_check VALUES (100, 1)
+
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 insert on table "child_check" violates foreign key constraint "child_check_p_fkey"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO child_check VALUES (200, 2)
+
+user testuser
+
+statement count 1
+DELETE FROM parent_check WHERE p = 2
+
+user root
+
+awaitstatement conflict
+
+# RC statement
+statement ok
+ABORT
+
+# Verify that parent 2 was deleted and child 200 was not inserted (FK violation).
+query II rowsort
+SELECT * FROM parent_check
+----
+1  10
+
+query II rowsort
+SELECT * FROM child_check
+----
+100  1
+
+# RC DELETE of parent + concurrent RC INSERT into child.
+subtest rc_rc/check_delete_insert
+
+statement ok
+INSERT INTO parent_check VALUES (3, 30), (4, 40)
+
+statement ok
+INSERT INTO child_check VALUES (300, 3)
+
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 delete on table "parent_check" violates foreign key constraint "child_check_p_fkey" on table "child_check"
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_check WHERE p = 3
+
+user testuser
+
+statement ok
+INSERT INTO child_check VALUES (400, 3)
+
+user root
+
+awaitstatement conflict
+
+# DELETE statement should fail due to FK violation.
+statement ok
+ABORT
+
+# Verify that parent 3 still exists and both children were inserted.
+query II rowsort
+SELECT * FROM parent_check
+----
+1  10
+3  30
+4  40
+
+query II rowsort
+SELECT * FROM child_check
+----
+100  1
+300  3
+400  3
+
+subtest rc_rc/end
+
+# ==============================================================================
+# RC + Serializable: RC with non-locking checks + Serializable transaction.
+# ==============================================================================
+
+subtest rc_ssi
+
+# Configure root for Read Committed with non-locking checks, testuser for
+# Serializable.
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+user root
+
+# RC DELETE with FK CASCADE + concurrent SSI INSERT into child.
+subtest rc_ssi/cascade_delete
+
+statement count 3
+DELETE FROM child_cascade WHERE true
+
+statement count 2
+DELETE FROM parent_cascade WHERE true
+
+statement ok
+INSERT INTO parent_cascade VALUES (5, 50), (6, 60)
+
+statement ok
+INSERT INTO child_cascade VALUES (500, 5), (600, 6)
+
+statement ok
+BEGIN
+
+statement async fk_delete_ssi
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_cascade WHERE p = 5
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (700, 5)
+
+user root
+
+awaitstatement fk_delete_ssi
+
+# RC statement should be retried at a higher timestamp and succeed.
+statement ok
+COMMIT
+
+# Verify that parent 5 was deleted and child 700 was cascaded (retry sees SSI
+# insert).
+query II rowsort
+SELECT * FROM parent_cascade
+----
+6  60
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+600  6
+
+subtest rc_ssi/cascade_update
+
+# RC UPDATE with FK CASCADE + concurrent SSI INSERT into child.
+statement ok
+INSERT INTO parent_cascade VALUES (7, 70)
+
+statement ok
+INSERT INTO child_cascade VALUES (800, 7)
+
+statement ok
+BEGIN
+
+statement async fk_update_ssi
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE parent_cascade SET p = 8 WHERE p = 7
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (900, 7)
+
+user root
+
+awaitstatement fk_update_ssi
+
+# RC statement should be retried at a higher timestamp and succeed.
+statement ok
+COMMIT
+
+# Verify that parent 7 was updated to 8 and both children were cascaded.
+query II rowsort
+SELECT * FROM parent_cascade
+----
+6  60
+8  70
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+600  6
+800  8
+900  8
+
+subtest rc_ssi/check_insert_delete
+
+# RC INSERT into child + concurrent SSI DELETE of parent.
+statement count 3
+DELETE FROM child_check WHERE true
+
+statement count 3
+DELETE FROM parent_check WHERE true
+
+statement ok
+INSERT INTO parent_check VALUES (3, 30), (4, 40)
+
+statement ok
+INSERT INTO child_check VALUES (300, 3)
+
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 insert on table "child_check" violates foreign key constraint "child_check_p_fkey"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO child_check VALUES (400, 4)
+
+user testuser
+
+statement count 1
+DELETE FROM parent_check WHERE p = 4
+
+user root
+
+awaitstatement conflict
+
+statement ok
+ABORT
+
+# Verify that parent 4 was deleted and child 400 was not inserted (FK violation).
+query II rowsort
+SELECT * FROM parent_check
+----
+3  30
+
+query II rowsort
+SELECT * FROM child_check
+----
+300  3
+
+# RC DELETE of parent + concurrent SSI INSERT into child.
+subtest rc_ssi/check_delete_insert
+
+statement ok
+INSERT INTO parent_check VALUES (5, 50), (6, 60)
+
+statement ok
+INSERT INTO child_check VALUES (500, 5)
+
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 delete on table "parent_check" violates foreign key constraint "child_check_p_fkey" on table "child_check"
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_check WHERE p = 5
+
+user testuser
+
+statement ok
+INSERT INTO child_check VALUES (600, 5)
+
+user root
+
+awaitstatement conflict
+
+# DELETE statement should fail due to FK violation.
+statement ok
+ABORT
+
+# Verify that parent 5 still exists and both children were inserted.
+query II rowsort
+SELECT * FROM parent_check
+----
+3  30
+5  50
+6  60
+
+query II rowsort
+SELECT * FROM child_check
+----
+300  3
+500  5
+600  5
+
+subtest rc_ssi/end
+
+# ==============================================================================
+# Serializable + RC: Serializable transaction + RC with non-locking checks.
+# ==============================================================================
+
+subtest ssi_rc
+
+# Configure root for Serializable, testuser for Read Committed with non-locking
+# checks.
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+user testuser
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET read_committed_non_locking_checks_enabled = true
+
+user root
+
+# SSI DELETE with FK CASCADE + concurrent RC INSERT into child.
+subtest ssi_rc/cascade_delete
+
+statement count 3
+DELETE FROM child_cascade WHERE true
+
+statement count 2
+DELETE FROM parent_cascade WHERE true
+
+statement ok
+INSERT INTO parent_cascade VALUES (9, 90), (10, 100)
+
+statement ok
+INSERT INTO child_cascade VALUES (1000, 9), (1100, 10)
+
+statement ok
+BEGIN
+
+# NB: commit in a batch with the async statement to get the same behavior when
+# the write buffer is metamorphically enabled or disabled. There are two cases:
+#
+# 1) With the write buffer disabled, the DELETE intent is written first, and
+#    encounters the parent table read performed by the RC INSERT's check. This
+#    bumps the SSI transaction's timestamp, and it can trivially refresh since
+#    it hasn't performed reads yet. Then, the SSI statement's cascade to the
+#    child table happens at the new timestamp, and correctly deletes the new
+#    child row.
+#
+# 2) With the write buffer enabled, the DELETE intent is buffered and a locking
+#    read performed instead. The SSI transaction's timestamp is not bumped, and
+#    its cascade reads below the timestamp of the RC INSERT intent. At commit
+#    when the buffer is flushed, the SSI DELETE intent has its timestamp bumped
+#    by the RC's parent table check, and the SSI transaction fails to refresh
+#    because the read it did for the FK cascade is now stale. With COMMIT
+#    submitted as part of the pgwire batch, the SSI transaction can be
+#    transparently retried at a higher timestamp.
+statement async fk_delete_rc ok
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_cascade WHERE p = 9;
+COMMIT;
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (1200, 9)
+
+user root
+
+awaitstatement fk_delete_rc
+
+# The SSI DELETE will push its timestamp beyond the RC INSERT and succeed.
+query II rowsort
+SELECT * FROM parent_cascade
+----
+10  100
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+1100  10
+
+# SSI UPDATE with FK CASCADE + concurrent RC INSERT into child.
+subtest ssi_rc/cascade_update
+
+statement ok
+INSERT INTO parent_cascade VALUES (11, 110)
+
+statement ok
+INSERT INTO child_cascade VALUES (1300, 11)
+
+statement ok
+BEGIN
+
+statement async fk_update_rc
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE parent_cascade SET p = 12 WHERE p = 11
+
+user testuser
+
+statement ok
+INSERT INTO child_cascade VALUES (1400, 11)
+
+user root
+
+awaitstatement fk_update_rc
+
+statement error pgcode 40001 TransactionRetryWithProtoRefreshError
+COMMIT
+
+# Verify that SSI UPDATE failed due to conflict and RC INSERT succeeded.
+query II rowsort
+SELECT * FROM parent_cascade
+----
+10  100
+11  110
+
+query II rowsort
+SELECT * FROM child_cascade
+----
+1100  10
+1300  11
+1400  11
+
+# SSI INSERT into child + concurrent RC DELETE of parent.
+subtest ssi_rc/check_insert_delete
+
+statement count 3
+DELETE FROM child_check WHERE true
+
+statement count 3
+DELETE FROM parent_check WHERE true
+
+statement ok
+INSERT INTO parent_check VALUES (5, 50), (6, 60)
+
+statement ok
+INSERT INTO child_check VALUES (500, 5)
+
+statement ok
+BEGIN
+
+# NB: commit in a batch with the async statement to get the same behavior when
+# the write buffer is metamorphically enabled or disabled. There are two cases:
+#
+# 1) With the write buffer disabled, the INSERT intent is written first, and
+#    encounters the child table read performed by the RC DELETE's check. This
+#    bumps the SSI transaction's timestamp, and it can trivially refresh since
+#    it hasn't performed reads yet. Then, the SSI statement's check of the
+#    parent table happens at the new timestamp, and sees that there is no longer
+#    a row.
+#
+# 2) With the write buffer enabled, the INSERT intent is buffered and a locking
+#    read performed instead. The SSI transaction's timestamp is not bumped, and
+#    its check is performed below the timestamp of the RC DELETE intent. At
+#    commit when the buffer is flushed, the SSI INSERT intent has its timestamp
+#    bumped by the RC's child table check, and the SSI transaction fails to
+#    refresh because the read it did for the FK check is now stale. With COMMIT
+#    submitted as part of the pgwire batch, the SSI transaction can be
+#    transparently retried at a higher timestamp.
+statement async conflict error pgcode 23503 insert on table "child_check" violates foreign key constraint "child_check_p_fkey"
+WITH sleep AS (SELECT pg_sleep(2)) INSERT INTO child_check VALUES (600, 6);
+COMMIT;
+
+user testuser
+
+statement count 1
+DELETE FROM parent_check WHERE p = 6
+
+query II rowsort
+SELECT * FROM parent_check
+----
+5  50
+
+query II rowsort
+SELECT * FROM child_check
+----
+500  5
+
+user root
+
+awaitstatement conflict
+
+statement ok
+COMMIT;
+
+# Verify that RC DELETE succeeded and SSI INSERT failed with FK violation.
+query II rowsort
+SELECT * FROM parent_check
+----
+5  50
+
+query II rowsort
+SELECT * FROM child_check
+----
+500  5
+
+# SSI DELETE of parent + concurrent RC INSERT into child.
+subtest ssi_rc/check_delete_insert
+
+statement ok
+INSERT INTO parent_check VALUES (7, 70), (8, 80)
+
+statement ok
+INSERT INTO child_check VALUES (700, 7)
+
+statement ok
+BEGIN
+
+statement async conflict error pgcode 23503 delete on table "parent_check" violates foreign key constraint "child_check_p_fkey" on table "child_check"
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_check WHERE p = 7
+
+user testuser
+
+statement ok
+INSERT INTO child_check VALUES (800, 7)
+
+user root
+
+awaitstatement conflict
+
+statement ok
+ABORT
+
+# Verify that SSI DELETE failed due to conflict and RC INSERT succeeded.
+query II rowsort
+SELECT * FROM parent_check
+----
+5  50
+7  70
+8  80
+
+query II rowsort
+SELECT * FROM child_check
+----
+500  5
+700  7
+800  7
+
+subtest ssi_rc/end
 
 subtest end
