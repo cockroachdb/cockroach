@@ -950,6 +950,128 @@ func TestPendingTxnCacheUpdatesTxn(t *testing.T) {
 	require.Equal(t, txnPushed.WriteTimestamp, entryInCache.Txn.WriteTimestamp)
 }
 
+func TestPendingTxnCacheClockWhilePending(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeObs := func(nodeID roachpb.NodeID, wallTime int64) roachpb.ObservedTimestamp {
+		return roachpb.ObservedTimestamp{
+			NodeID:    nodeID,
+			Timestamp: hlc.ClockTimestamp{WallTime: wallTime},
+		}
+	}
+
+	t.Run("new txn stores clock observation", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs := makeObs(1, 100)
+
+		c.add(txn.Clone(), obs)
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs, entry.ClockWhilePending)
+	})
+
+	t.Run("new txn without observation stores zero value", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+
+		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
+	})
+
+	t.Run("higher write timestamp replaces clock observation", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(1, 100)
+		obs2 := makeObs(2, 200)
+
+		// Add txn with first observation.
+		c.add(txn.Clone(), obs1)
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs1, entry.ClockWhilePending)
+
+		// Add same txn with higher write timestamp and new observation.
+		txnPushed := txn.Clone()
+		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
+		c.add(txnPushed, obs2)
+
+		entry, ok = c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
+		require.Equal(t, obs2, entry.ClockWhilePending)
+	})
+
+	t.Run("lower write timestamp keeps existing observation", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(1, 100)
+		obs2 := makeObs(2, 200)
+
+		// Add txn with higher timestamp first.
+		txnPushed := txn.Clone()
+		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
+		c.add(txnPushed, obs1)
+
+		// Add same txn with lower write timestamp and new observation.
+		// The existing observation should be kept.
+		c.add(txn.Clone(), obs2)
+
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
+		require.Equal(t, obs1, entry.ClockWhilePending)
+	})
+
+	t.Run("lower write timestamp adopts observation if existing is empty", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs := makeObs(1, 100)
+
+		// Add txn with higher timestamp but no observation.
+		txnPushed := txn.Clone()
+		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
+		c.add(txnPushed, roachpb.ObservedTimestamp{})
+
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
+
+		// Add same txn with lower write timestamp and new observation.
+		// The new observation should be adopted since existing is empty.
+		c.add(txn.Clone(), obs)
+
+		entry, ok = c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
+		require.Equal(t, obs, entry.ClockWhilePending)
+	})
+
+	t.Run("equal write timestamp replaces clock observation", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(1, 100)
+		obs2 := makeObs(2, 200)
+
+		c.add(txn.Clone(), obs1)
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs1, entry.ClockWhilePending)
+
+		// Add same txn with equal write timestamp and new observation.
+		// The condition is `txn.WriteTimestamp.Less(curEntry.Txn.WriteTimestamp)`,
+		// so equal timestamps go to the else branch and replace.
+		c.add(txn.Clone(), obs2)
+
+		entry, ok = c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs2, entry.ClockWhilePending)
+	})
+}
+
 func BenchmarkPendingTxnCache(b *testing.B) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	var c pendingTxnCache
