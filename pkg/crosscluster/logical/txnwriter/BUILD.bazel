@@ -12,6 +12,7 @@ go_library(
         "//pkg/crosscluster/logical/ldrdecoder",
         "//pkg/crosscluster/logical/sqlwriter",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",

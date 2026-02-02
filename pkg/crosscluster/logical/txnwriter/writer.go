@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -39,7 +40,8 @@ type TransactionWriter interface {
 func NewTransactionWriter(
 	ctx context.Context, db isql.DB, leaseMgr *lease.Manager, settings *cluster.Settings,
 ) (TransactionWriter, error) {
-	session, err := sqlwriter.NewInternalSession(ctx, db, settings)
+	sd := sql.NewInternalSessionData(ctx, settings, "txn-writer")
+	session, err := sqlwriter.NewInternalSession(ctx, db, sd, settings)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new isql session for transaction writer")
 	}
