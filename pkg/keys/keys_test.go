@@ -618,54 +618,54 @@ func TestRangeBatchWithGCRequests(t *testing.T) {
 		// Tests for keys that straddle the request header. Such constructions
 		// were historically possible when the MVCC GC queue constructed GC
 		// requests: see https://github.com/cockroachdb/cockroach/issues/162085.
-		// The result (as of this commit) is the request header span.
+		// The result should expand to include the straddling keys.
 		{
 			name:       "clear range straddles header on the left",
 			header:     span("c", "z"),
 			clearRange: span("a", "m"),
-			want:       span("c", "z"),
+			want:       span("a", "z"),
 		},
 		{
 			name:       "clear range straddles header on the right",
 			header:     span("a", "m"),
 			clearRange: span("f", "z"),
-			want:       span("a", "m"),
+			want:       span("a", "z"),
 		},
 		{
 			name:       "clear range straddles header on both sides",
 			header:     span("c", "m"),
 			clearRange: span("a", "z"),
-			want:       span("c", "m"),
+			want:       span("a", "z"),
 		},
 		{
 			name:      "range keys straddle header on the left",
 			header:    span("c", "z"),
 			rangeKeys: span("a", "f"),
-			want:      span("c", "z"),
+			want:      span("a", "z"),
 		},
 		{
 			name:      "range keys straddle header on the right",
 			header:    span("a", "m"),
 			rangeKeys: span("f", "z"),
-			want:      span("a", "m"),
+			want:      span("a", "z"),
 		},
 		{
 			name:      "range keys straddle header on both sides",
 			header:    span("c", "m"),
 			rangeKeys: span("a", "z"),
-			want:      span("c", "m"),
+			want:      span("a", "z"),
 		},
 		{
 			name:   "point key straddles header on the left",
 			header: span("c", "m"),
 			keys:   keys("a", "d"),
-			want:   span("c", "m"),
+			want:   span("a", "m"),
 		},
 		{
 			name:   "point key straddles header on the right",
 			header: span("c", "m"),
 			keys:   keys("d", "z"),
-			want:   span("c", "m"),
+			want:   span("c", "z\x00"),
 		},
 	}
 
