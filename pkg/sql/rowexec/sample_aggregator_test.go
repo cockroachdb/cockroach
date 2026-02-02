@@ -473,7 +473,9 @@ func TestSampleAggregator(t *testing.T) {
 // which drains the channel and unblocks stuck producers.
 func TestPanicDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderStress(t, "test has a 10-second timeout to detect deadlock")
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "test has a 10-second timeout to detect deadlock")
 
 	ctx, cancel := context.WithCancel(execversion.TestingWithLatestCtx)
 	defer cancel()
