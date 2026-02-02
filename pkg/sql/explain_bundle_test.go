@@ -928,20 +928,20 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("multiple databases and special characters", func(t *testing.T) {
-		r.Exec(t, `CREATE DATABASE "db.name";`)
-		r.Exec(t, `CREATE DATABASE "db'name";`)
-		r.Exec(t, `CREATE SCHEMA "db.name"."sc.name"`)
-		r.Exec(t, `CREATE SCHEMA "db'name"."sc'name"`)
-		r.Exec(t, `CREATE TABLE "db.name"."sc.name".t (pk INT PRIMARY KEY);`)
-		r.Exec(t, `CREATE TABLE "db'name"."sc'name".t (pk INT PRIMARY KEY);`)
-		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db.name"."sc.name".t, "db'name"."sc'name".t;`)
+		r.Exec(t, `CREATE DATABASE "db""name";`)
+		r.Exec(t, `CREATE DATABASE "db''name";`)
+		r.Exec(t, `CREATE SCHEMA "db""name"."sc""name"`)
+		r.Exec(t, `CREATE SCHEMA "db''name"."sc''name"`)
+		r.Exec(t, `CREATE TABLE "db""name"."sc""name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db''name"."sc''name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db""name"."sc""name".t, "db''name"."sc''name".t;`)
 		checkBundle(
-			t, fmt.Sprint(rows), `"sc.name".t`, nil, false, /* expectErrors */
-			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+			t, fmt.Sprint(rows), `"sc""name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
 		)
 		checkBundle(
-			t, fmt.Sprint(rows), `"sc'name".t`, nil, false, /* expectErrors */
-			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+			t, fmt.Sprint(rows), `"sc''name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
 		)
 	})
 
