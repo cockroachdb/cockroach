@@ -1116,6 +1116,9 @@ func Range(reqs []kvpb.RequestUnion) (roachpb.RSpan, error) {
 		if len(h.EndKey) == 0 {
 			continue
 		}
+		// NB: AddrUpperBound is suitable for use as the EndKey of a span with a
+		// range-local key EndKey. See the comment on AddrUpperBound for more
+		// details.
 		endKey, err := AddrUpperBound(h.EndKey)
 		if err != nil {
 			return roachpb.RSpan{}, err
@@ -1127,8 +1130,87 @@ func Range(reqs []kvpb.RequestUnion) (roachpb.RSpan, error) {
 			// EndKey is larger than `to`.
 			to = endKey
 		}
+
+		// For GCRequests, also consider the individual keys, range keys, and
+		// clear range spans which may extend beyond the request header.
+		if req.Method() == kvpb.GC {
+			gcReq := req.(*kvpb.GCRequest)
+			from, to, err = extendRangeForGCRequest(gcReq, from, to)
+			if err != nil {
+				return roachpb.RSpan{}, err
+			}
+		}
 	}
 	return roachpb.RSpan{Key: from, EndKey: to}, nil
+}
+
+// extendRangeForGCRequest examines the individual keys, range keys, and clear
+// range within a GCRequest and extends the from/to bounds if any of them fall
+// outside the current range. This handles cases where the GC request
+// erroneously targets keys outside its header span (see #162085).
+func extendRangeForGCRequest(
+	gcReq *kvpb.GCRequest, from, to roachpb.RKey,
+) (roachpb.RKey, roachpb.RKey, error) {
+	// Check point keys.
+	for _, gcKey := range gcReq.Keys {
+		key, err := Addr(gcKey.Key)
+		if err != nil {
+			return nil, nil, err
+		}
+		if key.Less(from) {
+			from = key
+		}
+		if !key.Less(to) {
+			if bytes.Compare(key, roachpb.RKeyMax) > 0 {
+				return nil, nil, errors.Errorf("%s must be less than KeyMax", key)
+			}
+			to = key.Next() // EndKey is exclusive
+		}
+	}
+
+	// Check range keys.
+	for _, rk := range gcReq.RangeKeys {
+		startKey, err := Addr(rk.StartKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		if startKey.Less(from) {
+			from = startKey
+		}
+		endKey, err := AddrUpperBound(rk.EndKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
+			return nil, nil, errors.Errorf("%s must be less than or equal to KeyMax", endKey)
+		}
+		if to.Less(endKey) {
+			to = endKey
+		}
+	}
+
+	// Check clear range.
+	if gcReq.ClearRange != nil {
+		startKey, err := Addr(gcReq.ClearRange.StartKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		if startKey.Less(from) {
+			from = startKey
+		}
+		endKey, err := AddrUpperBound(gcReq.ClearRange.EndKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		if bytes.Compare(roachpb.RKeyMax, endKey) < 0 {
+			return nil, nil, errors.Errorf("%s must be less than or equal to KeyMax", endKey)
+		}
+		if to.Less(endKey) {
+			to = endKey
+		}
+	}
+
+	return from, to, nil
 }
 
 // RangeIDPrefixBuf provides methods for generating range ID local keys while
