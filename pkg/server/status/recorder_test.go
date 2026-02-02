@@ -120,7 +120,8 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	appReg := metric.NewRegistry()
 	logReg := metric.NewRegistry()
 	sysReg := metric.NewRegistry()
-	recorder.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	clusterReg := metric.NewRegistry()
+	recorder.AddNode(reg1, appReg, logReg, sysReg, clusterReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	nodeDescTenant := roachpb.NodeDescriptor{
 		NodeID: roachpb.NodeID(7),
@@ -139,9 +140,10 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		manual,
 		stTenant,
 	)
+	clusterRegTenant := metric.NewRegistry()
 	recorderTenant.AddNode(
 		regTenant,
-		appReg, logReg, sysReg, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
+		appReg, logReg, sysReg, clusterRegTenant, nodeDescTenant, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// ========================================
 	// Verify that the recorder exports metrics for tenants as text.
@@ -159,7 +161,12 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	logReg.AddMetric(c1)
 	c1.Inc(2)
 
-	recorder.AddTenantRegistry(tenantID, regTenant)
+	// Add a cluster metric to the tenant's cluster registry (which was set up in recorderTenant.AddNode).
+	clusterMetric := metric.NewGauge(metric.Metadata{Name: "cluster_metric"})
+	clusterRegTenant.AddMetric(clusterMetric)
+	clusterMetric.Update(789)
+
+	recorder.AddTenantRegistry(tenantID, metric.NewTenantRegistries(regTenant, clusterRegTenant))
 
 	buf := bytes.NewBuffer([]byte{})
 	err = recorder.PrintAsText(buf, expfmt.FmtText, false)
@@ -167,6 +174,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application"} 456`)
+	require.Contains(t, buf.String(), `cluster_metric{node_id="7",tenant="application"} 789`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false)
@@ -185,6 +193,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application2"} 456`)
+	require.Contains(t, buf.String(), `cluster_metric{node_id="7",tenant="application2"} 789`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
 	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false)
@@ -247,6 +256,16 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				{
 					TimestampNanos: manual.Now().UnixNano(),
 					Value:          float64(456),
+				},
+			},
+		},
+		{
+			Name:   "cr.cluster.cluster_metric",
+			Source: "7-123",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          float64(789),
 				},
 			},
 		},
@@ -709,7 +728,8 @@ func TestMetricsRecorder(t *testing.T) {
 	appReg := metric.NewRegistry()
 	logReg := metric.NewRegistry()
 	sysReg := metric.NewRegistry()
-	recorder.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	clusterReg := metric.NewRegistry()
+	recorder.AddNode(reg1, appReg, logReg, sysReg, clusterReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	// Ensure the metric system's view of time does not advance during this test
 	// as the test expects time to not advance too far which would age the actual

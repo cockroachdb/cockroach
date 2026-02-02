@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmreader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -167,9 +168,10 @@ type topLevelServer struct {
 	node         *Node
 
 	// Metric registries. See their definition in NewServer for details.
-	nodeRegistry *metric.Registry
-	appRegistry  *metric.Registry
-	sysRegistry  *metric.Registry
+	nodeRegistry           *metric.Registry
+	appRegistry            *metric.Registry
+	sysRegistry            *metric.Registry
+	clusterMetricsRegistry metric.RegistryReader
 
 	recorder             *status.MetricsRecorder
 	runtime              *status.RuntimeStatSampler
@@ -279,6 +281,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// that are collected once per process and are not specific to
 	// any particular tenant.
 	sysRegistry := metric.NewRegistry()
+
+	clusterMetricsRegistry := cmreader.NewRegistryReader()
 
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
@@ -1251,6 +1255,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		db:                       db,
 		registry:                 appRegistry,
 		sysRegistry:              sysRegistry,
+		clusterMetricsRegistry:   clusterMetricsRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
@@ -1399,6 +1404,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeRegistry:              nodeRegistry,
 		appRegistry:               appRegistry,
 		sysRegistry:               sysRegistry,
+		clusterMetricsRegistry:    clusterMetricsRegistry,
 		recorder:                  recorder,
 		ruleRegistry:              ruleRegistry,
 		promRuleExporter:          promRuleExporter,
@@ -2004,7 +2010,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// We can now connect the metric registries to the recorder.
 	s.recorder.AddNode(
 		s.nodeRegistry, s.appRegistry,
-		logRegistry, s.sysRegistry,
+		logRegistry, s.sysRegistry, s.clusterMetricsRegistry,
 		s.node.Descriptor,
 		s.node.startedAt,
 		s.cfg.AdvertiseAddr,

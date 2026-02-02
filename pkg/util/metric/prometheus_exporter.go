@@ -130,7 +130,7 @@ func applyScrapeOptions(options ...ScrapeOption) *scrapeOptions {
 // family map, holding on only to the scraped data (which is no longer
 // connected to the registry and metrics within) when returning from the
 // call. It creates new families as needed.
-func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...ScrapeOption) {
+func (pm *PrometheusExporter) ScrapeRegistry(registry RegistryReader, options ...ScrapeOption) {
 	o := applyScrapeOptions(options...)
 	labels := registry.GetLabels()
 
