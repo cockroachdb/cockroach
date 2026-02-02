@@ -965,23 +965,29 @@ func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
 	return nil, false
 }
 
-func (c *pendingTxnCache) add(txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp) {
+func (c *pendingTxnCache) add(
+	txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp,
+) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
-		curEntry := c.txns[idx]
-		var entry *pendingTxnCacheEntry
-		if txn.WriteTimestamp.Less(curEntry.Txn.WriteTimestamp) {
-			// If we didn't have a clock observation before somehow, add it here.
-			if (curEntry.ClockWhilePending == roachpb.ObservedTimestamp{}) {
-				entry = &pendingTxnCacheEntry{Txn: curEntry.Txn, ClockWhilePending: clockObservation}
-			} else {
-				entry = curEntry
-			}
-		} else {
-			entry = &pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation}
+		currentEntry := c.txns[idx]
+		newEntry := *currentEntry
+
+		// Only update the cached transaction if the inbound copy has a newer
+		// WriteTimestamp.
+		if currentEntry.Txn.WriteTimestamp.Less(txn.WriteTimestamp) {
+			newEntry.Txn = txn
 		}
-		c.moveFrontLocked(entry, idx)
+
+		// Always keep the earliest ClockWhilePending available.
+		if (currentEntry.ClockWhilePending == roachpb.ObservedTimestamp{}) ||
+			((clockObservation != roachpb.ObservedTimestamp{}) &&
+				clockObservation.Timestamp.Less(currentEntry.ClockWhilePending.Timestamp)) {
+			newEntry.ClockWhilePending = clockObservation
+		}
+
+		c.moveFrontLocked(&newEntry, idx)
 	} else {
 		c.insertFrontLocked(&pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
 	}

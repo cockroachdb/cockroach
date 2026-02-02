@@ -982,93 +982,77 @@ func TestPendingTxnCacheClockWhilePending(t *testing.T) {
 		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
 	})
 
-	t.Run("higher write timestamp replaces clock observation", func(t *testing.T) {
+	t.Run("oldest ClockWhilePending observation is preserved when WriteTimestamp advances", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 		obs1 := makeObs(1, 100)
-		obs2 := makeObs(2, 200)
+		obs2 := makeObs(1, 200)
 
-		// Add txn with first observation.
+		// Add txn with older observation.
 		c.add(txn.Clone(), obs1)
-		entry, ok := c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, obs1, entry.ClockWhilePending)
 
-		// Add same txn with higher write timestamp and new observation.
+		// Add same txn with higher write timestamp but newer observation.
+		// WriteTimestamp updates, but older observation is kept.
 		txnPushed := txn.Clone()
 		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
 		c.add(txnPushed, obs2)
 
-		entry, ok = c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
-		require.Equal(t, obs2, entry.ClockWhilePending)
-	})
-
-	t.Run("lower write timestamp keeps existing observation", func(t *testing.T) {
-		var c pendingTxnCache
-		txn := makeTxnProto("txn")
-		obs1 := makeObs(1, 100)
-		obs2 := makeObs(2, 200)
-
-		// Add txn with higher timestamp first.
-		txnPushed := txn.Clone()
-		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
-		c.add(txnPushed, obs1)
-
-		// Add same txn with lower write timestamp and new observation.
-		// The existing observation should be kept.
-		c.add(txn.Clone(), obs2)
-
 		entry, ok := c.get(txn.ID)
 		require.True(t, ok)
 		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
 		require.Equal(t, obs1, entry.ClockWhilePending)
 	})
 
-	t.Run("lower write timestamp adopts observation if existing is empty", func(t *testing.T) {
+	t.Run("oldest ClockWhilePending wins when transaction doesn't change", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs1 := makeObs(1, 200)
+		obs2 := makeObs(1, 100)
+
+		// Add txn with newer observation.
+		c.add(txn.Clone(), obs1)
+
+		// Add same txn with older observation. Older observation replaces.
+		c.add(txn.Clone(), obs2)
+
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs2, entry.ClockWhilePending)
+	})
+
+	t.Run("empty observation does not replace existing", func(t *testing.T) {
 		var c pendingTxnCache
 		txn := makeTxnProto("txn")
 		obs := makeObs(1, 100)
 
-		// Add txn with higher timestamp but no observation.
-		txnPushed := txn.Clone()
-		txnPushed.WriteTimestamp = txnPushed.WriteTimestamp.Add(1, 0)
-		c.add(txnPushed, roachpb.ObservedTimestamp{})
+		c.add(txn.Clone(), obs)
+
+		// Add same txn with empty observation. Existing observation is kept.
+		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
+
+		entry, ok := c.get(txn.ID)
+		require.True(t, ok)
+		require.Equal(t, obs, entry.ClockWhilePending)
+	})
+
+	t.Run("non-empty observation replaces empty", func(t *testing.T) {
+		var c pendingTxnCache
+		txn := makeTxnProto("txn")
+		obs := makeObs(1, 100)
+
+		// Add txn with empty observation.
+		c.add(txn.Clone(), roachpb.ObservedTimestamp{})
 
 		entry, ok := c.get(txn.ID)
 		require.True(t, ok)
 		require.Equal(t, roachpb.ObservedTimestamp{}, entry.ClockWhilePending)
 
-		// Add same txn with lower write timestamp and new observation.
-		// The new observation should be adopted since existing is empty.
+		// Add same txn with non-empty observation. New observation replaces.
 		c.add(txn.Clone(), obs)
 
 		entry, ok = c.get(txn.ID)
 		require.True(t, ok)
-		require.Equal(t, txnPushed.WriteTimestamp, entry.Txn.WriteTimestamp)
 		require.Equal(t, obs, entry.ClockWhilePending)
-	})
-
-	t.Run("equal write timestamp replaces clock observation", func(t *testing.T) {
-		var c pendingTxnCache
-		txn := makeTxnProto("txn")
-		obs1 := makeObs(1, 100)
-		obs2 := makeObs(2, 200)
-
-		c.add(txn.Clone(), obs1)
-		entry, ok := c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, obs1, entry.ClockWhilePending)
-
-		// Add same txn with equal write timestamp and new observation.
-		// The condition is `txn.WriteTimestamp.Less(curEntry.Txn.WriteTimestamp)`,
-		// so equal timestamps go to the else branch and replace.
-		c.add(txn.Clone(), obs2)
-
-		entry, ok = c.get(txn.ID)
-		require.True(t, ok)
-		require.Equal(t, obs2, entry.ClockWhilePending)
 	})
 }
 
