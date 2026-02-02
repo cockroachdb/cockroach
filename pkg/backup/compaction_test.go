@@ -870,7 +870,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "too slow")
+	skip.UnderDuress(t, "too slow")
 
 	var hookFn func(processorLocality roachpb.Locality, fileLocality string) error
 	knobs := base.TestingKnobs{
@@ -913,7 +913,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, db, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, numAccounts, InitManualReplication, args)
+	_, db, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, numAccounts, NoInitManipulation, args)
 	defer cleanupFn()
 
 	getLatestFullDir := func(collectionURI []string) string {
