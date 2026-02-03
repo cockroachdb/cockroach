@@ -548,7 +548,7 @@ func TestReplicaRangefeed(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = rangeID
 	ba.Add(gcReq)
-	if _, pErr := firstStore.Send(ctx, ba); pErr != nil {
+	if _, pErr := kvserver.ToSenderForTesting(firstStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	}
 

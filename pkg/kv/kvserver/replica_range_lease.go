@@ -676,7 +676,8 @@ func (p *pendingLeaseRequest) requestLease(
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
-	_, pErr := p.repl.Send(ctx, ba)
+	_, writeBytes, pErr := p.repl.SendWithWriteBytes(ctx, ba)
+	writeBytes.Release()
 	return pErr.GoError()
 }
 

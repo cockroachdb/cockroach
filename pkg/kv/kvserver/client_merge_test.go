@@ -393,7 +393,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	verify(rhsDesc.StartKey.Next().AsRawKey(), rhsRepl.RangeID, newContent)
 
 	gArgs := getArgs(lhsDesc.StartKey.Next().AsRawKey())
-	if _, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, gArgs); !testutils.IsPError(
 		pErr, `was not found on s`,
@@ -561,7 +561,7 @@ func mergeCheckingTimestampCaches(
 
 	// Write a key to the RHS.
 	rhsKey := scratchKey("c")
-	if _, pErr := kv.SendWrappedWith(ctx, rhsStore, kvpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(rhsStore), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, incrementArgs(rhsKey, 1)); pErr != nil {
 		t.Fatal(pErr)
@@ -577,7 +577,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(getArgs(rhsKey))
-	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(rhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if v, err := br.Responses[0].GetGet().Value.GetInt(); err != nil {
 		t.Fatal(err)
@@ -596,7 +596,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, kvpb.PUSH_ABORT))
-	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(rhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if txn := br.Responses[0].GetPushTxn().PusheeTxn; txn.Status != roachpb.ABORTED {
 		t.Fatalf("expected aborted pushee, but got %v", txn)
@@ -719,7 +719,7 @@ func mergeCheckingTimestampCaches(
 			// be the only replica that does not apply the proposal.
 			go func() {
 				incArgs := incrementArgs(lhsKey, 4)
-				_, pErr := kv.SendWrappedWith(ctx, lhsStore, kvpb.Header{RangeID: lhsDesc.RangeID}, incArgs)
+				_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(lhsStore), kvpb.Header{RangeID: lhsDesc.RangeID}, incArgs)
 				incChan <- pErr
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
@@ -749,7 +749,7 @@ func mergeCheckingTimestampCaches(
 			go func() {
 				truncArgs := truncateLogArgs(truncIndex, lhsDesc.RangeID)
 				truncArgs.Key = lhsKey
-				_, pErr := kv.SendWrappedWith(ctx, lhsStore, kvpb.Header{RangeID: lhsDesc.RangeID}, truncArgs)
+				_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(lhsStore), kvpb.Header{RangeID: lhsDesc.RangeID}, truncArgs)
 				truncChan <- pErr
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
@@ -858,7 +858,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(incrementArgs(rhsKey, 1))
-	if br, pErr := lhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(lhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if br.Timestamp.LessEq(readTS) {
 		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
@@ -883,7 +883,7 @@ func mergeCheckingTimestampCaches(
 	} else {
 		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}
-	if _, pErr := lhsStore.Send(ctx, ba); pErr == nil {
+	if _, pErr := kvserver.ToSenderForTesting(lhsStore).Send(ctx, ba); pErr == nil {
 		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
 	} else if abortErr, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
@@ -945,7 +945,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 				gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
 				gba.Add(getArgs(rhsKey))
 				store := tc.GetFirstStoreFromServer(t, int(ba.Header.Replica.NodeID-1))
-				gbr, pErr := store.Send(ctx, gba)
+				gbr, pErr := kvserver.ToSenderForTesting(store).Send(ctx, gba)
 				if pErr != nil {
 					t.Error(pErr) // different goroutine, so can't use t.Fatal
 					return pErr
@@ -1011,7 +1011,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		// Merge [a, b) and [b, Max). Our request filter above will intercept the
 		// merge and execute a read with a large timestamp immediately before the
 		// Subsume request executes.
-		if _, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 2), kvpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 2)), kvpb.Header{
 			RangeID: lhsRangeDesc.RangeID,
 		}, adminMergeArgs(scratchKey("a"))); pErr != nil {
 			t.Fatal(pErr)
@@ -1044,7 +1044,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		ba.Timestamp = readTS
 		ba.RangeID = lhsRangeDesc.RangeID
 		ba.Add(incrementArgs(rhsKey, 1))
-		if br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba); pErr != nil {
+		if br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 1)).Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		} else if br.Timestamp.LessEq(readTS) {
 			t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)

@@ -344,6 +344,8 @@ func (mu *ReplicaMutex) RLocker() sync.Locker {
 	return (*syncutil.RWMutex)(mu).RLocker()
 }
 
+var _ SenderWithWriteBytes = &Replica{}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are

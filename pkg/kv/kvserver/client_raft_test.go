@@ -2623,7 +2623,7 @@ func TestQuotaPool(t *testing.T) {
 		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 			t.Fatal(err)
 		}
-		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
+		if _, pErr := kvserver.ToSenderForTesting(leaderRepl).Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -2645,7 +2645,7 @@ func TestQuotaPool(t *testing.T) {
 				ch <- kvpb.NewError(err)
 				return
 			}
-			_, pErr := leaderRepl.Send(ctx, ba)
+			_, pErr := kvserver.ToSenderForTesting(leaderRepl).Send(ctx, ba)
 			ch <- pErr
 		}()
 	}()
@@ -2780,7 +2780,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		if err := ba.SetActiveTimestamp(leaderClock); err != nil {
 			t.Fatal(err)
 		}
-		if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
+		if _, pErr := kvserver.ToSenderForTesting(leaderRepl).Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 
@@ -2803,7 +2803,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 
 			// Send another request to the leader replica. followerRepl is locked
 			// so it will not respond.
-			if _, pErr := leaderRepl.Send(ctx, ba); pErr != nil {
+			if _, pErr := kvserver.ToSenderForTesting(leaderRepl).Send(ctx, ba); pErr != nil {
 				t.Fatal(pErr)
 			}
 
@@ -3105,7 +3105,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			replica2 := store0.LookupReplica(roachpb.RKey(key2))
 
 			rg2 := func(s *kvserver.Store) kv.Sender {
-				return kv.Wrap(s, func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
+				return kv.Wrap(kvserver.ToSenderForTesting(s), func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
 					if ba.RangeID == 0 {
 						ba.RangeID = replica2.RangeID
 					}
@@ -4227,7 +4227,7 @@ func TestRemovedReplicaError(t *testing.T) {
 	// start seeing the RangeNotFoundError after a little bit of time has passed.
 	getArgs := getArgs(key)
 	testutils.SucceedsSoon(t, func() error {
-		_, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{}, getArgs)
+		_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{}, getArgs)
 		switch pErr.GetDetail().(type) {
 		case *kvpb.AmbiguousResultError:
 			return pErr.GoError()
@@ -4283,7 +4283,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, roachpb.VOTER_FULL, rd1.Type)
 
-			_, pErr := kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, getArgs(key))
+			_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store0), kvpb.Header{RangeID: repl0.RangeID}, getArgs(key))
 			require.NoError(t, pErr.GoError())
 
 			status := repl0.RaftStatus()
@@ -4294,7 +4294,7 @@ func TestTransferRaftLeadership(t *testing.T) {
 			// Transfer the lease. We'll then check that the leadership follows
 			// automatically.
 			transferLeaseArgs := adminTransferLeaseArgs(key, store1.StoreID())
-			_, pErr = kv.SendWrappedWith(ctx, store0, kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
+			_, pErr = kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store0), kvpb.Header{RangeID: repl0.RangeID}, transferLeaseArgs)
 			require.NoError(t, pErr.GoError())
 
 			// Verify leadership is transferred.
@@ -6398,7 +6398,7 @@ func TestInvalidConfChangeRejection(t *testing.T) {
 		},
 	})
 
-	_, pErr := repl.Send(ctx, &ba)
+	_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, &ba)
 	// Verify that we see the configuration change below raft, where we rejected it
 	// (since it would've otherwise blow up the Replica: after all, we intentionally
 	// proposed an invalid configuration change.

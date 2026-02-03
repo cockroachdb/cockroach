@@ -1681,7 +1681,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 			// replicas cannot serve follower reads` branch that we're trying to test.
 			sendCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "manual read request")
 			defer getRecAndFinish()
-			_, pErr := repl.Send(sendCtx, req)
+			_, pErr := kvserver.ToSenderForTesting(repl).Send(sendCtx, req)
 			err := pErr.GoError()
 			if !testutils.IsError(err, `not lease holder`) {
 				// NB: errors.Wrapf(nil, ...) returns nil.

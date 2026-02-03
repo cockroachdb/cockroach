@@ -124,7 +124,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	for _, k := range splitKeys {
 		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
-		if _, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{
 			RangeID: repl.RangeID,
 		}, args); pErr != nil {
 			t.Fatal(pErr)

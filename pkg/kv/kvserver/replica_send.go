@@ -46,9 +46,9 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 	true,
 )
 
-// Send executes a command on this range, dispatching it to the
-// read-only, read-write, or admin execution path as appropriate.
-// ctx should contain the log tags from the store (and up).
+// SendWithWriteBytes executes a command on this range, dispatching it to the
+// read-only, read-write, or admin execution path as appropriate. ctx should
+// contain the log tags from the store (and up).
 //
 // A rough schematic for the path requests take through a Replica
 // is presented below, with a focus on where requests may spend
@@ -65,7 +65,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	               Admission control
 //	                       │
 //	                       ▼
-//	                  Replica.Send
+//	              Replica.SendWithWriteBytes
 //	                       │
 //	                 Circuit breaker
 //	                       │
@@ -111,16 +111,6 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //
 //	to commit the command, then signaling proposer and
 //	applying the command)
-func (r *Replica) Send(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, *kvpb.Error) {
-	br, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba)
-	writeBytes.Release()
-	return br, pErr
-}
-
-// SendWithWriteBytes is the implementation of Send with an additional
-// *StoreWriteBytes return value.
 func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
