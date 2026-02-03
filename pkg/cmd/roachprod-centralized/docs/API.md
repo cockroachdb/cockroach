@@ -97,6 +97,7 @@ Some endpoints are only available with bearer authentication:
 | `GET /v1/auth/whoami` | ✓ | ✓ |
 | `POST /v1/auth/okta/exchange` | ✓ | ✗ |
 | `GET/DELETE /v1/auth/tokens` | ✓ | ✗ |
+| `/scim/v2/*` | ✓ | ✗ |
 
 ## Base URL
 

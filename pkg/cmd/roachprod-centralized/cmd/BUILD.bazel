@@ -16,6 +16,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/controllers/clusters",
         "//pkg/cmd/roachprod-centralized/controllers/health",
         "//pkg/cmd/roachprod-centralized/controllers/public-dns",
+        "//pkg/cmd/roachprod-centralized/controllers/scim",
         "//pkg/cmd/roachprod-centralized/controllers/tasks",
         "//pkg/cmd/roachprod-centralized/models/health",
         "//pkg/cmd/roachprod-centralized/utils/logger",

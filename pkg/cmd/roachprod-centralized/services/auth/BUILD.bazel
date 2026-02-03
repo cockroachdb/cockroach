@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "audit.go",
         "authenticate.go",
+        "groups.go",
         "helpers.go",
         "okta.go",
         "registry.go",
@@ -12,6 +13,7 @@ go_library(
         "tasks.go",
         "tokens.go",
         "users.go",
+        "validation.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth",
     visibility = ["//visibility:public"],
@@ -43,6 +45,7 @@ go_test(
         "helpers_test.go",
         "okta_test.go",
         "tokens_test.go",
+        "validation_test.go",
     ],
     embed = [":auth"],
     deps = [

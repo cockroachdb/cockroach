@@ -24,6 +24,19 @@ const (
 	AuditTokenRevoked          = "token.revoked"
 	AuditTokenValidationFailed = "token.validation.failed"
 	AuditTokenCleanedUp        = "token.cleaned_up"
+
+	// SCIM user events
+	AuditSCIMUserCreated     = "scim.user.created"
+	AuditSCIMUserUpdated     = "scim.user.updated"
+	AuditSCIMUserDeactivated = "scim.user.deactivated"
+	AuditSCIMUserReactivated = "scim.user.reactivated"
+	AuditSCIMUserDeleted     = "scim.user.deleted"
+
+	// SCIM group events
+	AuditSCIMGroupCreated        = "scim.group.created"
+	AuditSCIMGroupUpdated        = "scim.group.updated"
+	AuditSCIMGroupDeleted        = "scim.group.deleted"
+	AuditSCIMGroupMembersUpdated = "scim.group.members.updated"
 )
 
 // auditEvent logs an audit event with structured fields.

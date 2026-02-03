@@ -16,16 +16,25 @@ var (
 	ErrNotAuthenticated = utils.NewPublicError(errors.New("not authenticated"))
 )
 
+// Input validation errors (PUBLIC - shown to users)
+var (
+	ErrInvalidEmail  = utils.NewPublicError(errors.New("invalid email format"))
+	ErrRequiredField = utils.NewPublicError(errors.New("required field missing"))
+	ErrInvalidUUID   = utils.NewPublicError(errors.New("invalid UUID format"))
+)
+
 // Resource not found errors (PUBLIC - shown to users)
 var (
 	ErrUserNotFound           = utils.NewPublicError(errors.New("user not found"))
 	ErrServiceAccountNotFound = utils.NewPublicError(errors.New("service account not found"))
 	ErrTokenNotFound          = utils.NewPublicError(errors.New("token not found"))
+	ErrGroupNotFound          = utils.NewPublicError(errors.New("group not found"))
 )
 
 // Authorization errors (PUBLIC - shown to users)
 var (
-	ErrForbidden = utils.NewPublicError(errors.New("forbidden"))
+	ErrUnauthorized = utils.NewPublicError(errors.New("unauthorized"))
+	ErrForbidden    = utils.NewPublicError(errors.New("forbidden"))
 )
 
 // State/permission errors (PUBLIC - shown to users)
@@ -36,6 +45,13 @@ var (
 	ErrInvalidToken           = utils.NewPublicError(errors.New("invalid token"))
 	ErrTokenExpired           = utils.NewPublicError(errors.New("token expired"))
 	ErrIPNotAllowed           = utils.NewPublicError(errors.New("client IP not allowed for this service account"))
+)
+
+// Business rule violations (PUBLIC - shown to users)
+var (
+	ErrDuplicateUser   = utils.NewPublicError(errors.New("user with this email already exists"))
+	ErrDuplicateOktaID = utils.NewPublicError(errors.New("user with this Okta ID already exists"))
+	ErrDuplicateGroup  = utils.NewPublicError(errors.New("group with this external ID already exists"))
 )
 
 var (

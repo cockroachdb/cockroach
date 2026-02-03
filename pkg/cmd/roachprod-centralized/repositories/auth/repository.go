@@ -20,7 +20,7 @@ import (
 var ErrNotFound = errors.New("not found")
 
 // GroupMemberOperation represents an add or remove operation for group membership.
-// Used by PatchGroupMembers for atomic SCIM PATCH operations.
+// Used by UpdateGroupWithMembers for atomic SCIM PATCH operations.
 type GroupMemberOperation struct {
 	Op     string    // "add" or "remove"
 	UserID uuid.UUID // The user to add or remove
@@ -39,8 +39,21 @@ type Statistics struct {
 // IAuthRepository defines the interface for authentication and authorization data persistence.
 type IAuthRepository interface {
 	// Users
+	CreateUser(context.Context, *logger.Logger, *auth.User) error
 	GetUser(context.Context, *logger.Logger, uuid.UUID) (*auth.User, error)
 	GetUserByOktaID(context.Context, *logger.Logger, string) (*auth.User, error)
+	// GetUserByEmail retrieves a user by email address.
+	// Returns ErrNotFound if no user with this email exists.
+	GetUserByEmail(context.Context, *logger.Logger, string) (*auth.User, error)
+	UpdateUser(context.Context, *logger.Logger, *auth.User) error
+	ListUsers(context.Context, *logger.Logger, filtertypes.FilterSet) ([]*auth.User, int, error)
+	// DeleteUser performs a hard delete (permanent removal) of a user.
+	// This is used for SCIM DELETE /scim/v2/Users/:id requests.
+	// For soft deletes (deactivation), use the service's DeactivateUser method instead.
+	DeleteUser(context.Context, *logger.Logger, uuid.UUID) error
+	// DeactivateUser atomically sets user.active=false and revokes all their tokens.
+	// This is used for SCIM PATCH /scim/v2/Users/:id with {"active": false}.
+	DeactivateUser(context.Context, *logger.Logger, uuid.UUID) error
 
 	// Service Accounts
 	GetServiceAccount(context.Context, *logger.Logger, uuid.UUID) (*auth.ServiceAccount, error)
@@ -60,6 +73,22 @@ type IAuthRepository interface {
 	// For TokenStatusRevoked: deletes where UpdatedAt < now - retention
 	// Returns the number of tokens deleted.
 	CleanupTokens(context.Context, *logger.Logger, auth.TokenStatus, time.Duration) (int, error)
+
+	// Groups (SCIM-managed)
+	GetGroup(context.Context, *logger.Logger, uuid.UUID) (*auth.Group, error)
+	GetGroupByExternalID(context.Context, *logger.Logger, string) (*auth.Group, error)
+	UpdateGroup(context.Context, *logger.Logger, *auth.Group) error
+	DeleteGroup(context.Context, *logger.Logger, uuid.UUID) error
+	ListGroups(context.Context, *logger.Logger, filtertypes.FilterSet) ([]*auth.Group, int, error)
+
+	// Group Members
+	// GetGroupMembers returns all members of a group.
+	GetGroupMembers(context.Context, *logger.Logger, uuid.UUID, filtertypes.FilterSet) ([]*auth.GroupMember, int, error)
+	// CreateGroupWithMembers atomically creates a group and adds initial members in a single transaction.
+	CreateGroupWithMembers(context.Context, *logger.Logger, *auth.Group, []uuid.UUID) error
+	// UpdateGroupWithMembers atomically updates a group and applies member operations in a single transaction.
+	// If group is non-nil, it will be updated. Member operations are applied regardless.
+	UpdateGroupWithMembers(context.Context, *logger.Logger, *auth.Group, []GroupMemberOperation) error
 
 	// GetUserPermissionsFromGroups returns permissions for a user by joining
 	// group_members → groups → group_permissions in a single query.

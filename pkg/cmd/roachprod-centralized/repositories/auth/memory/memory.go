@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // MemAuthRepo is an in-memory implementation of the auth repository.
@@ -60,6 +61,21 @@ var _ rauth.IAuthRepository = &MemAuthRepo{}
 
 // Users
 
+func (r *MemAuthRepo) CreateUser(ctx context.Context, l *logger.Logger, user *auth.User) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Check for duplicate Okta ID
+	for _, u := range r.users {
+		if u.OktaUserID == user.OktaUserID {
+			return errors.New("user with this Okta ID already exists")
+		}
+	}
+
+	r.users[user.ID] = user
+	return nil
+}
+
 func (r *MemAuthRepo) GetUser(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.User, error) {
@@ -84,6 +100,145 @@ func (r *MemAuthRepo) GetUserByOktaID(
 		}
 	}
 	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) GetUserByEmail(
+	ctx context.Context, l *logger.Logger, email string,
+) (*auth.User, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for _, u := range r.users {
+		if u.Email == email {
+			return u, nil
+		}
+	}
+	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) UpdateUser(ctx context.Context, l *logger.Logger, user *auth.User) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if _, ok := r.users[user.ID]; !ok {
+		return errors.New("user not found")
+	}
+	r.users[user.ID] = user
+	return nil
+}
+
+func (r *MemAuthRepo) ListUsers(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.User, int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// 1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(auth.User{}),
+	)
+	var filteredUsers []*auth.User
+
+	for _, user := range r.users {
+		// If no filters, include all users
+		if filterSet.IsEmpty() {
+			filteredUsers = append(filteredUsers, user)
+			continue
+		}
+
+		matches, err := evaluator.Evaluate(user, &filterSet)
+		if err != nil {
+			l.Error(
+				"Error filtering user, continuing with other users",
+				slog.String("user_id", user.ID.String()),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if matches {
+			filteredUsers = append(filteredUsers, user)
+		}
+	}
+
+	totalCount := len(filteredUsers)
+
+	// 2. Apply sorting (with email as default)
+	_ = memoryfilters.SortByField(filteredUsers, filterSet.Sort, "email")
+
+	// 3. Apply pagination
+	filteredUsers = memoryfilters.ApplyPagination(filteredUsers, filterSet.Pagination)
+
+	return filteredUsers, totalCount, nil
+}
+
+func (r *MemAuthRepo) DeleteUser(ctx context.Context, l *logger.Logger, id uuid.UUID) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Cascade delete: remove group memberships (ON DELETE CASCADE on group_members.user_id)
+	for groupID, members := range r.groupMembers {
+		var remaining []*auth.GroupMember
+		for _, m := range members {
+			if m.UserID != id {
+				remaining = append(remaining, m)
+			}
+		}
+		r.groupMembers[groupID] = remaining
+	}
+
+	// Cascade delete: remove user's tokens (ON DELETE CASCADE on api_tokens.user_id)
+	for tokenID, token := range r.tokens {
+		if token.UserID != nil && *token.UserID == id {
+			delete(r.tokensByHash, token.TokenHash)
+			delete(r.tokens, tokenID)
+		}
+	}
+
+	// Cascade delete: remove service accounts delegated from this user
+	// (ON DELETE CASCADE on service_accounts.delegated_from)
+	for saID, sa := range r.serviceAccounts {
+		if sa.DelegatedFrom != nil && *sa.DelegatedFrom == id {
+			// Also delete SA's tokens, origins, and permissions
+			for tokenID, token := range r.tokens {
+				if token.ServiceAccountID != nil && *token.ServiceAccountID == saID {
+					delete(r.tokensByHash, token.TokenHash)
+					delete(r.tokens, tokenID)
+				}
+			}
+			delete(r.saOrigins, saID)
+			delete(r.serviceAccountPermissions, saID)
+			delete(r.serviceAccounts, saID)
+		}
+	}
+
+	delete(r.users, id)
+	return nil
+}
+
+func (r *MemAuthRepo) DeactivateUser(ctx context.Context, l *logger.Logger, id uuid.UUID) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// 1. Get the user
+	user, ok := r.users[id]
+	if !ok {
+		return rauth.ErrNotFound
+	}
+
+	// 2. Set user to inactive
+	user.Active = false
+	user.UpdatedAt = timeutil.Now()
+
+	// 3. Revoke all user's tokens
+	now := timeutil.Now()
+	for _, t := range r.tokens {
+		if t.UserID != nil && *t.UserID == id && t.Status == auth.TokenStatusValid {
+			t.Status = auth.TokenStatusRevoked
+			t.UpdatedAt = now
+		}
+	}
+
+	return nil
 }
 
 // Service Accounts
@@ -290,8 +445,6 @@ func (r *MemAuthRepo) CleanupTokens(
 	return len(toDelete), nil
 }
 
-// Permissions
-
 func (r *MemAuthRepo) GetUserPermissionsFromGroups(
 	ctx context.Context, l *logger.Logger, userID uuid.UUID,
 ) ([]*auth.GroupPermission, error) {
@@ -359,6 +512,8 @@ func (r *MemAuthRepo) GetUserPermissionsFromGroups(
 	return result, nil
 }
 
+// Permissions
+
 func (r *MemAuthRepo) ListServiceAccountPermissions(
 	ctx context.Context, l *logger.Logger, saID uuid.UUID, filterSet filtertypes.FilterSet,
 ) ([]*auth.ServiceAccountPermission, int, error) {
@@ -423,6 +578,225 @@ func (r *MemAuthRepo) GetServiceAccountPermission(
 		}
 	}
 	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) GetGroup(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (*auth.Group, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if g, ok := r.groups[id]; ok {
+		return g, nil
+	}
+	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) GetGroupByExternalID(
+	ctx context.Context, l *logger.Logger, externalID string,
+) (*auth.Group, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for _, g := range r.groups {
+		if g.ExternalID == externalID {
+			return g, nil
+		}
+	}
+	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) UpdateGroup(ctx context.Context, l *logger.Logger, group *auth.Group) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if _, ok := r.groups[group.ID]; !ok {
+		return rauth.ErrNotFound
+	}
+	r.groups[group.ID] = group
+	return nil
+}
+
+func (r *MemAuthRepo) DeleteGroup(ctx context.Context, l *logger.Logger, id uuid.UUID) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if _, ok := r.groups[id]; !ok {
+		return rauth.ErrNotFound
+	}
+	delete(r.groups, id)
+	delete(r.groupMembers, id)
+	return nil
+}
+
+func (r *MemAuthRepo) ListGroups(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.Group, int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// 1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(auth.Group{}),
+	)
+	var filteredGroups []*auth.Group
+
+	for _, group := range r.groups {
+		// If no filters, include all groups
+		if filterSet.IsEmpty() {
+			filteredGroups = append(filteredGroups, group)
+			continue
+		}
+
+		matches, err := evaluator.Evaluate(group, &filterSet)
+		if err != nil {
+			l.Error(
+				"Error filtering group, continuing with other groups",
+				slog.String("group_id", group.ID.String()),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if matches {
+			filteredGroups = append(filteredGroups, group)
+		}
+	}
+
+	totalCount := len(filteredGroups)
+
+	// 2. Apply sorting (with display_name as default)
+	_ = memoryfilters.SortByField(filteredGroups, filterSet.Sort, "display_name")
+
+	// 3. Apply pagination
+	filteredGroups = memoryfilters.ApplyPagination(filteredGroups, filterSet.Pagination)
+
+	return filteredGroups, totalCount, nil
+}
+
+// Group Members
+
+func (r *MemAuthRepo) GetGroupMembers(
+	ctx context.Context, l *logger.Logger, groupID uuid.UUID, filterSet filtertypes.FilterSet,
+) ([]*auth.GroupMember, int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Get members for this group
+	members := r.groupMembers[groupID]
+
+	// 1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(auth.GroupMember{}),
+	)
+	var filteredMembers []*auth.GroupMember
+
+	for _, member := range members {
+		// If no filters, include all groups
+		if filterSet.IsEmpty() {
+			filteredMembers = append(filteredMembers, member)
+			continue
+		}
+
+		matches, err := evaluator.Evaluate(member, &filterSet)
+		if err != nil {
+			l.Error(
+				"Error filtering group members, continuing with other members",
+				slog.String("group_id", groupID.String()),
+				slog.String("group_member_id", member.ID.String()),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if matches {
+			filteredMembers = append(filteredMembers, member)
+		}
+	}
+
+	totalCount := len(filteredMembers)
+
+	// 2. Apply sorting (with display_name as default)
+	_ = memoryfilters.SortByField(filteredMembers, filterSet.Sort, "created_at")
+
+	// 3. Apply pagination
+	filteredMembers = memoryfilters.ApplyPagination(filteredMembers, filterSet.Pagination)
+
+	return filteredMembers, totalCount, nil
+}
+
+// CreateGroupWithMembers atomically creates a group and adds initial members.
+func (r *MemAuthRepo) CreateGroupWithMembers(
+	ctx context.Context, l *logger.Logger, group *auth.Group, memberIDs []uuid.UUID,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Create the group
+	r.groups[group.ID] = group
+
+	// Add members
+	for _, userID := range memberIDs {
+		member := &auth.GroupMember{
+			ID:        uuid.MakeV4(),
+			GroupID:   group.ID,
+			UserID:    userID,
+			CreatedAt: timeutil.Now(),
+		}
+		r.groupMembers[group.ID] = append(r.groupMembers[group.ID], member)
+	}
+
+	return nil
+}
+
+// UpdateGroupWithMembers atomically updates a group and applies member operations.
+func (r *MemAuthRepo) UpdateGroupWithMembers(
+	ctx context.Context, l *logger.Logger, group *auth.Group, operations []rauth.GroupMemberOperation,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Verify group exists
+	if _, ok := r.groups[group.ID]; !ok {
+		return rauth.ErrNotFound
+	}
+
+	// Update the group if provided
+	if group != nil {
+		r.groups[group.ID] = group
+	}
+
+	// Apply member operations
+	for _, op := range operations {
+		switch op.Op {
+		case "add":
+			alreadyMember := false
+			for _, m := range r.groupMembers[group.ID] {
+				if m.UserID == op.UserID {
+					alreadyMember = true
+					break
+				}
+			}
+			if !alreadyMember {
+				member := &auth.GroupMember{
+					ID:        uuid.MakeV4(),
+					GroupID:   group.ID,
+					UserID:    op.UserID,
+					CreatedAt: timeutil.Now(),
+				}
+				r.groupMembers[group.ID] = append(r.groupMembers[group.ID], member)
+			}
+		case "remove":
+			for i, m := range r.groupMembers[group.ID] {
+				if m.UserID == op.UserID {
+					r.groupMembers[group.ID] = append(r.groupMembers[group.ID][:i], r.groupMembers[group.ID][i+1:]...)
+					break
+				}
+			}
+		default:
+			return errors.Newf("unsupported operation: %s", op.Op)
+		}
+	}
+
+	return nil
 }
 
 // GetStatistics returns current counts for metrics gauges.

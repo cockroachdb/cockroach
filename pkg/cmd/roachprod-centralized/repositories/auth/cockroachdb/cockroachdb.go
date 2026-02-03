@@ -40,6 +40,28 @@ var _ rauth.IAuthRepository = &CRDBAuthRepo{}
 
 // Users
 
+func (r *CRDBAuthRepo) CreateUser(ctx context.Context, l *logger.Logger, user *auth.User) error {
+	query := `
+		INSERT INTO users (id, okta_user_id, email, slack_handle, full_name, active, created_at, updated_at, last_login_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		user.ID.String(),
+		user.OktaUserID,
+		user.Email,
+		user.SlackHandle,
+		user.FullName,
+		user.Active,
+		user.CreatedAt,
+		user.UpdatedAt,
+		user.LastLoginAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create user")
+	}
+	return nil
+}
+
 func (r *CRDBAuthRepo) GetUser(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.User, error) {
@@ -60,6 +82,159 @@ func (r *CRDBAuthRepo) GetUserByOktaID(
 	`
 	row := r.db.QueryRowContext(ctx, query, oktaID)
 	return r.scanUser(row)
+}
+
+func (r *CRDBAuthRepo) GetUserByEmail(
+	ctx context.Context, l *logger.Logger, email string,
+) (*auth.User, error) {
+	query := `
+		SELECT id, okta_user_id, email, slack_handle, full_name, active, created_at, updated_at, last_login_at
+		FROM users WHERE email = $1
+	`
+	row := r.db.QueryRowContext(ctx, query, email)
+	return r.scanUser(row)
+}
+
+func (r *CRDBAuthRepo) UpdateUser(ctx context.Context, l *logger.Logger, user *auth.User) error {
+	query := `
+		UPDATE users
+		SET okta_user_id = $1, email = $2, slack_handle = $3, full_name = $4, active = $5, updated_at = $6, last_login_at = $7
+		WHERE id = $8
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		user.OktaUserID,
+		user.Email,
+		user.SlackHandle,
+		user.FullName,
+		user.Active,
+		user.UpdatedAt,
+		user.LastLoginAt,
+		user.ID.String(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to update user")
+	}
+	return nil
+}
+
+func (r *CRDBAuthRepo) ListUsers(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.User, int, error) {
+
+	// Set the FilteredType to auth.User for proper type and columns handling
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(auth.User{}),
+	)
+	baseSelectQuery := `
+		SELECT id, okta_user_id, email, slack_handle, full_name, active, created_at, updated_at, last_login_at
+		FROM users
+	`
+	baseCountQuery := "SELECT count(*) FROM users"
+
+	// Default sort by email
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "Email",
+		SortOrder: filtertypes.SortAscending,
+	}
+
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count users")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to list users")
+	}
+	defer rows.Close()
+
+	var usersList []*auth.User
+	for rows.Next() {
+		user, err := r.scanUser(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		usersList = append(usersList, user)
+	}
+	return usersList, totalCount, nil
+}
+
+func (r *CRDBAuthRepo) DeleteUser(ctx context.Context, l *logger.Logger, id uuid.UUID) error {
+	query := "DELETE FROM users WHERE id = $1"
+	_, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete user")
+	}
+	return nil
+}
+
+func (r *CRDBAuthRepo) DeactivateUser(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (retErr error) {
+	// Begin transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if retErr != nil {
+					retErr = errors.CombineErrors(retErr, errors.Wrap(rollbackErr, "rollback error"))
+				} else {
+					retErr = errors.Wrap(rollbackErr, "rollback error")
+				}
+			}
+		}
+	}()
+
+	// 1. Set user to inactive
+	updateQuery := `
+		UPDATE users
+		SET active = false, updated_at = $1
+		WHERE id = $2
+	`
+	now := timeutil.Now()
+	result, err := tx.ExecContext(ctx, updateQuery, now, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to deactivate user")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	// 2. Revoke all user's tokens
+	revokeQuery := `
+		UPDATE api_tokens
+		SET status = $1, updated_at = $2
+		WHERE user_id = $3 AND status = $4
+	`
+	_, err = tx.ExecContext(ctx, revokeQuery, auth.TokenStatusRevoked, now, id.String(), auth.TokenStatusValid)
+	if err != nil {
+		return errors.Wrap(err, "failed to revoke user tokens")
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	committed = true
+	return nil
 }
 
 func (r *CRDBAuthRepo) scanUser(
@@ -621,6 +796,359 @@ func (r *CRDBAuthRepo) GetServiceAccountPermission(
 		Account:          account.String,
 		CreatedAt:        createdAt,
 	}, nil
+}
+
+// Groups (SCIM-managed)
+
+func (r *CRDBAuthRepo) GetGroup(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (*auth.Group, error) {
+	query := `
+		SELECT id, external_id, display_name, created_at, updated_at
+		FROM groups WHERE id = $1
+	`
+	row := r.db.QueryRowContext(ctx, query, id.String())
+	return r.scanGroup(row)
+}
+
+func (r *CRDBAuthRepo) GetGroupByExternalID(
+	ctx context.Context, l *logger.Logger, externalID string,
+) (*auth.Group, error) {
+	query := `
+		SELECT id, external_id, display_name, created_at, updated_at
+		FROM groups WHERE external_id = $1
+	`
+	row := r.db.QueryRowContext(ctx, query, externalID)
+	return r.scanGroup(row)
+}
+
+func (r *CRDBAuthRepo) UpdateGroup(ctx context.Context, l *logger.Logger, group *auth.Group) error {
+	query := `
+		UPDATE groups
+		SET external_id = $1, display_name = $2, updated_at = $3
+		WHERE id = $4
+	`
+	result, err := r.db.ExecContext(ctx, query,
+		group.ExternalID,
+		group.DisplayName,
+		group.UpdatedAt,
+		group.ID.String(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to update group")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to check rows affected")
+	}
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *CRDBAuthRepo) DeleteGroup(ctx context.Context, l *logger.Logger, id uuid.UUID) error {
+	query := "DELETE FROM groups WHERE id = $1"
+	result, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete group")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to check rows affected")
+	}
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *CRDBAuthRepo) ListGroups(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.Group, int, error) {
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(auth.Group{}),
+	)
+	baseSelectQuery := `
+		SELECT id, external_id, display_name, created_at, updated_at
+		FROM groups
+	`
+	baseCountQuery := "SELECT count(*) FROM groups"
+
+	// Default sort by display_name
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "DisplayName",
+		SortOrder: filtertypes.SortAscending,
+	}
+
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count groups")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to list groups")
+	}
+	defer rows.Close()
+
+	var groupsList []*auth.Group
+	for rows.Next() {
+		group, err := r.scanGroup(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		groupsList = append(groupsList, group)
+	}
+	return groupsList, totalCount, nil
+}
+
+func (r *CRDBAuthRepo) scanGroup(
+	scanner interface {
+		Scan(dest ...interface{}) error
+	},
+) (*auth.Group, error) {
+	var id string
+	var externalID gosql.NullString
+	var displayName string
+	var createdAt, updatedAt time.Time
+
+	err := scanner.Scan(&id, &externalID, &displayName, &createdAt, &updatedAt)
+	if err != nil {
+		if errors.Is(err, gosql.ErrNoRows) {
+			return nil, rauth.ErrNotFound
+		}
+		return nil, errors.Wrap(err, "failed to scan group")
+	}
+
+	groupID, err := uuid.FromString(id)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid group id in db")
+	}
+
+	group := &auth.Group{
+		ID:          groupID,
+		DisplayName: displayName,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+	}
+
+	if externalID.Valid {
+		group.ExternalID = externalID.String
+	}
+
+	return group, nil
+}
+
+// Group Members
+
+func (r *CRDBAuthRepo) GetGroupMembers(
+	ctx context.Context, l *logger.Logger, groupID uuid.UUID, filterSet filtertypes.FilterSet,
+) ([]*auth.GroupMember, int, error) {
+
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(auth.GroupMember{}),
+	)
+	baseSelectQuery := `
+		SELECT id, group_id, user_id, created_at
+		FROM group_members
+	`
+	baseCountQuery := "SELECT count(*) FROM group_members"
+
+	filterSet.AddFilter("GroupID", filtertypes.OpEqual, groupID)
+	filterSet.Logic = filtertypes.LogicAnd
+
+	// Default sort by display_name
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "CreatedAt",
+		SortOrder: filtertypes.SortAscending,
+	}
+
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count group members")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to list group members")
+	}
+	defer rows.Close()
+
+	var members []*auth.GroupMember
+	for rows.Next() {
+		var id, gIDStr, uIDStr string
+		var createdAt time.Time
+
+		if err := rows.Scan(&id, &gIDStr, &uIDStr, &createdAt); err != nil {
+			return nil, 0, errors.Wrap(err, "failed to scan group member")
+		}
+
+		memberID, _ := uuid.FromString(id)
+		gID, _ := uuid.FromString(gIDStr)
+		uID, _ := uuid.FromString(uIDStr)
+
+		members = append(members, &auth.GroupMember{
+			ID:        memberID,
+			GroupID:   gID,
+			UserID:    uID,
+			CreatedAt: createdAt,
+		})
+	}
+
+	return members, totalCount, nil
+}
+
+// CreateGroupWithMembers atomically creates a group and adds initial members.
+func (r *CRDBAuthRepo) CreateGroupWithMembers(
+	ctx context.Context, l *logger.Logger, group *auth.Group, memberIDs []uuid.UUID,
+) (retErr error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if retErr != nil {
+					retErr = errors.CombineErrors(retErr, errors.Wrap(rollbackErr, "rollback error"))
+				} else {
+					retErr = errors.Wrap(rollbackErr, "rollback error")
+				}
+			}
+		}
+	}()
+
+	// Create the group
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO groups (id, external_id, display_name, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		group.ID.String(),
+		group.ExternalID,
+		group.DisplayName,
+		group.CreatedAt,
+		group.UpdatedAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create group")
+	}
+
+	// Add members
+	for _, userID := range memberIDs {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO group_members (id, group_id, user_id, created_at)
+			 VALUES ($1, $2, $3, now())
+			 ON CONFLICT (group_id, user_id) DO NOTHING`,
+			uuid.MakeV4().String(),
+			group.ID.String(),
+			userID.String(),
+		)
+		if err != nil {
+			return errors.Wrapf(err, "failed to add member %s", userID)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	committed = true
+	return nil
+}
+
+// UpdateGroupWithMembers atomically updates a group and applies member operations.
+func (r *CRDBAuthRepo) UpdateGroupWithMembers(
+	ctx context.Context, l *logger.Logger, group *auth.Group, operations []rauth.GroupMemberOperation,
+) (retErr error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if retErr != nil {
+					retErr = errors.CombineErrors(retErr, errors.Wrap(rollbackErr, "rollback error"))
+				} else {
+					retErr = errors.Wrap(rollbackErr, "rollback error")
+				}
+			}
+		}
+	}()
+
+	// Update the group if provided
+	if group != nil {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE groups SET external_id = $2, display_name = $3, updated_at = $4 WHERE id = $1`,
+			group.ID.String(),
+			group.ExternalID,
+			group.DisplayName,
+			group.UpdatedAt,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to update group")
+		}
+	}
+
+	// Apply member operations
+	for _, op := range operations {
+		groupIDStr := group.ID.String()
+		switch op.Op {
+		case "add":
+			_, err := tx.ExecContext(ctx,
+				`INSERT INTO group_members (id, group_id, user_id, created_at)
+				 VALUES ($1, $2, $3, now())
+				 ON CONFLICT (group_id, user_id) DO NOTHING`,
+				uuid.MakeV4().String(),
+				groupIDStr,
+				op.UserID.String(),
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to add member %s", op.UserID)
+			}
+		case "remove":
+			_, err := tx.ExecContext(ctx,
+				`DELETE FROM group_members
+				 WHERE group_id = $1 AND user_id = $2`,
+				groupIDStr,
+				op.UserID.String(),
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to remove member %s", op.UserID)
+			}
+		default:
+			return errors.Newf("unsupported operation: %s", op.Op)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	committed = true
+	return nil
 }
 
 func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPermission, error) {

@@ -58,6 +58,24 @@ func (_m *IAuthRepository) CleanupTokens(_a0 context.Context, _a1 *logger.Logger
 	return r0, r1
 }
 
+// CreateGroupWithMembers provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IAuthRepository) CreateGroupWithMembers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Group, _a3 []uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateGroupWithMembers")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group, []uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateToken provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) CreateToken(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.ApiToken) error {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -74,6 +92,175 @@ func (_m *IAuthRepository) CreateToken(_a0 context.Context, _a1 *logger.Logger, 
 	}
 
 	return r0
+}
+
+// CreateUser provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) CreateUser(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.User) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.User) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeactivateUser provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) DeactivateUser(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeactivateUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeleteGroup provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) DeleteGroup(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteGroup")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeleteUser provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) DeleteUser(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// GetGroup provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) GetGroup(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) (*auth.Group, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroup")
+	}
+
+	var r0 *auth.Group
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) (*auth.Group, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) *auth.Group); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.Group)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetGroupByExternalID provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) GetGroupByExternalID(_a0 context.Context, _a1 *logger.Logger, _a2 string) (*auth.Group, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupByExternalID")
+	}
+
+	var r0 *auth.Group
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string) (*auth.Group, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string) *auth.Group); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.Group)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, string) error); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetGroupMembers provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IAuthRepository) GetGroupMembers(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 types.FilterSet) ([]*auth.GroupMember, int, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupMembers")
+	}
+
+	var r0 []*auth.GroupMember
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, types.FilterSet) ([]*auth.GroupMember, int, error)); ok {
+		return rf(_a0, _a1, _a2, _a3)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, types.FilterSet) []*auth.GroupMember); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.GroupMember)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID, types.FilterSet) int); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, uuid.UUID, types.FilterSet) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
 }
 
 // GetServiceAccount provides a mock function with given fields: _a0, _a1, _a2
@@ -256,6 +443,36 @@ func (_m *IAuthRepository) GetUser(_a0 context.Context, _a1 *logger.Logger, _a2 
 	return r0, r1
 }
 
+// GetUserByEmail provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) GetUserByEmail(_a0 context.Context, _a1 *logger.Logger, _a2 string) (*auth.User, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetUserByEmail")
+	}
+
+	var r0 *auth.User
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string) (*auth.User, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string) *auth.User); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*auth.User)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, string) error); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetUserByOktaID provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) GetUserByOktaID(_a0 context.Context, _a1 *logger.Logger, _a2 string) (*auth.User, error) {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -353,6 +570,43 @@ func (_m *IAuthRepository) ListAllTokens(_a0 context.Context, _a1 *logger.Logger
 	return r0, r1, r2
 }
 
+// ListGroups provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) ListGroups(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.Group, int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListGroups")
+	}
+
+	var r0 []*auth.Group
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) ([]*auth.Group, int, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) []*auth.Group); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.Group)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, types.FilterSet) int); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, types.FilterSet) error); ok {
+		r2 = rf(_a0, _a1, _a2)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // ListServiceAccountOrigins provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IAuthRepository) ListServiceAccountOrigins(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 types.FilterSet) ([]*auth.ServiceAccountOrigin, int, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -427,6 +681,43 @@ func (_m *IAuthRepository) ListServiceAccountPermissions(_a0 context.Context, _a
 	return r0, r1, r2
 }
 
+// ListUsers provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) ListUsers(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.User, int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListUsers")
+	}
+
+	var r0 []*auth.User
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) ([]*auth.User, int, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) []*auth.User); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.User)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, types.FilterSet) int); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, types.FilterSet) error); ok {
+		r2 = rf(_a0, _a1, _a2)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // RevokeToken provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) RevokeToken(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -445,6 +736,42 @@ func (_m *IAuthRepository) RevokeToken(_a0 context.Context, _a1 *logger.Logger, 
 	return r0
 }
 
+// UpdateGroup provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) UpdateGroup(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Group) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateGroup")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateGroupWithMembers provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IAuthRepository) UpdateGroupWithMembers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Group, _a3 []repositoriesauth.GroupMemberOperation) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateGroupWithMembers")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group, []repositoriesauth.GroupMemberOperation) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // UpdateTokenLastUsed provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) UpdateTokenLastUsed(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -455,6 +782,24 @@ func (_m *IAuthRepository) UpdateTokenLastUsed(_a0 context.Context, _a1 *logger.
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateUser provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) UpdateUser(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.User) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateUser")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.User) error); ok {
 		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)

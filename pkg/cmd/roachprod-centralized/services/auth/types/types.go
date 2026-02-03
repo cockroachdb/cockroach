@@ -59,6 +59,23 @@ type IService interface {
 	// Okta exchange
 	ExchangeOktaToken(context.Context, *logger.Logger, string) (*auth.ApiToken, string, error)
 
+	// User Management (SCIM + admin)
+	ListUsers(context.Context, *logger.Logger, *pkgauth.Principal, InputListUsersDTO) ([]*auth.User, int, error)
+	GetUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.User, error)
+	CreateUser(context.Context, *logger.Logger, *pkgauth.Principal, *auth.User) error
+	ReplaceUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, ReplaceUserInput) (*auth.User, error)
+	PatchUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, PatchUserInput) (*auth.User, error)
+	DeleteUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
+
+	// Groups
+	ListGroups(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupsDTO) ([]*auth.Group, int, error)
+	GetGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, error)
+	GetGroupWithMembers(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, []*auth.GroupMember, error)
+	CreateGroupWithMembers(context.Context, *logger.Logger, *pkgauth.Principal, CreateGroupInput) (*auth.Group, []*auth.GroupMember, error)
+	ReplaceGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, ReplaceGroupInput) (*auth.Group, []*auth.GroupMember, error)
+	PatchGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, PatchGroupInput) (*PatchGroupOutput, error)
+	DeleteGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
+
 	// Lifecycle methods (implicitly required by app factory via interface matching)
 	RegisterTasks(ctx context.Context) error
 	StartService(ctx context.Context, l *logger.Logger) error
