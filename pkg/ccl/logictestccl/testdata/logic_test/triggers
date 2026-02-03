@@ -803,6 +803,89 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 statement ok
 DROP FUNCTION g;
 
+subtest pg_trigger_depth
+
+# Test pg_trigger_depth() - based on PostgreSQL regress test.
+
+statement ok
+CREATE TABLE depth_a (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE depth_b (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE depth_c (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION depth_a_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  INSERT INTO depth_b VALUES ((NEW).id);
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_a_tr BEFORE INSERT ON depth_a
+  FOR EACH ROW EXECUTE FUNCTION depth_a_tf();
+
+statement ok
+CREATE FUNCTION depth_b_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  INSERT INTO depth_c VALUES ((NEW).id);
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_b_tr BEFORE INSERT ON depth_b
+  FOR EACH ROW EXECUTE FUNCTION depth_b_tf();
+
+statement ok
+CREATE FUNCTION depth_c_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_c_tr BEFORE INSERT ON depth_c
+  FOR EACH ROW EXECUTE FUNCTION depth_c_tf();
+
+# pg_trigger_depth() returns 0 outside of triggers.
+query I
+SELECT pg_trigger_depth();
+----
+0
+
+# Insert into depth_a triggers a cascade: depth_a -> depth_b -> depth_c.
+# depth_a_tr fires at depth 1, depth_b_tr at depth 2, depth_c_tr at depth 3.
+query T noticetrace
+INSERT INTO depth_a VALUES (1);
+----
+NOTICE: depth_a_tr: depth = 1
+NOTICE: depth_b_tr: depth = 2
+NOTICE: depth_c_tr: depth = 3
+NOTICE: depth_b_tr: depth = 2
+NOTICE: depth_a_tr: depth = 1
+
+query I
+SELECT pg_trigger_depth();
+----
+0
+
+statement ok
+DROP TABLE depth_a, depth_b, depth_c CASCADE;
+
+statement ok
+DROP FUNCTION depth_a_tf, depth_b_tf, depth_c_tf;
+
+subtest end
+
 subtest regression_134630
 
 statement ok
