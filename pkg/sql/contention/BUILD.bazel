@@ -21,6 +21,8 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/keydecoder",
         "//pkg/sql/contention/contentionutils",
         "//pkg/sql/contentionpb",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
