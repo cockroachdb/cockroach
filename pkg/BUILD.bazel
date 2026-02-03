@@ -2087,6 +2087,7 @@ GO_TARGETS = [
     "//pkg/sql/catalog/internal/catkv:catkv_test",
     "//pkg/sql/catalog/internal/validate:validate",
     "//pkg/sql/catalog/internal/validate:validate_test",
+    "//pkg/sql/catalog/keydecoder:keydecoder",
     "//pkg/sql/catalog/lease:lease",
     "//pkg/sql/catalog/lease:lease_test",
     "//pkg/sql/catalog/multiregion:multiregion",
