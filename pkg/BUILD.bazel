@@ -1339,6 +1339,8 @@ GO_TARGETS = [
     "//pkg/cmd/roachprod-centralized/controllers/scim/types:types",
     "//pkg/cmd/roachprod-centralized/controllers/scim:scim",
     "//pkg/cmd/roachprod-centralized/controllers/scim:scim_test",
+    "//pkg/cmd/roachprod-centralized/controllers/service-accounts/types:types",
+    "//pkg/cmd/roachprod-centralized/controllers/service-accounts:service-accounts",
     "//pkg/cmd/roachprod-centralized/controllers/tasks/types:types",
     "//pkg/cmd/roachprod-centralized/controllers/tasks:tasks",
     "//pkg/cmd/roachprod-centralized/controllers/tasks:tasks_test",

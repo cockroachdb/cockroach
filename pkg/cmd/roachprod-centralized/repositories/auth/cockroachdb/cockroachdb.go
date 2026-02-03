@@ -289,6 +289,40 @@ func (r *CRDBAuthRepo) scanUser(
 
 // Service Accounts
 
+func (r *CRDBAuthRepo) CreateServiceAccount(
+	ctx context.Context, l *logger.Logger, sa *auth.ServiceAccount,
+) error {
+	query := `
+		INSERT INTO service_accounts (id, name, description, created_by, created_at, updated_at, enabled, delegated_from)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	// Handle created_by as nullable UUID
+	var createdBy interface{}
+	if sa.CreatedBy != nil {
+		createdBy = sa.CreatedBy.String()
+	}
+	// Handle delegated_from as nullable UUID
+	var delegatedFrom interface{}
+	if sa.DelegatedFrom != nil {
+		delegatedFrom = sa.DelegatedFrom.String()
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		sa.ID.String(),
+		sa.Name,
+		sa.Description,
+		createdBy,
+		sa.CreatedAt,
+		sa.UpdatedAt,
+		sa.Enabled,
+		delegatedFrom,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create service account")
+	}
+	return nil
+}
+
 func (r *CRDBAuthRepo) GetServiceAccount(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.ServiceAccount, error) {
@@ -298,6 +332,85 @@ func (r *CRDBAuthRepo) GetServiceAccount(
 	`
 	row := r.db.QueryRowContext(ctx, query, id.String())
 	return r.scanServiceAccount(row)
+}
+
+func (r *CRDBAuthRepo) UpdateServiceAccount(
+	ctx context.Context, l *logger.Logger, sa *auth.ServiceAccount,
+) error {
+	query := `
+		UPDATE service_accounts
+		SET name = $1, description = $2, enabled = $3, updated_at = $4
+		WHERE id = $5
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		sa.Name,
+		sa.Description,
+		sa.Enabled,
+		sa.UpdatedAt,
+		sa.ID.String(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to update service account")
+	}
+	return nil
+}
+
+func (r *CRDBAuthRepo) ListServiceAccounts(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.ServiceAccount, int, error) {
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(auth.ServiceAccount{}),
+	)
+	baseSelectQuery := `
+		SELECT id, name, description, created_by, created_at, updated_at, enabled, delegated_from
+		FROM service_accounts
+	`
+	baseCountQuery := "SELECT count(*) FROM service_accounts"
+
+	// Default sort by name
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "Name",
+		SortOrder: filtertypes.SortAscending,
+	}
+
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count service accounts")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to list service accounts")
+	}
+	defer rows.Close()
+
+	var saList []*auth.ServiceAccount
+	for rows.Next() {
+		sa, err := r.scanServiceAccount(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		saList = append(saList, sa)
+	}
+	return saList, totalCount, nil
+}
+
+func (r *CRDBAuthRepo) DeleteServiceAccount(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	query := "DELETE FROM service_accounts WHERE id = $1"
+	_, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete service account")
+	}
+	return nil
 }
 
 func (r *CRDBAuthRepo) scanServiceAccount(
@@ -355,6 +468,44 @@ func (r *CRDBAuthRepo) scanServiceAccount(
 }
 
 // Service Account Origins
+
+func (r *CRDBAuthRepo) AddServiceAccountOrigin(
+	ctx context.Context, l *logger.Logger, origin *auth.ServiceAccountOrigin,
+) error {
+	query := `
+		INSERT INTO service_account_origins (id, service_account_id, cidr, description, created_by, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	var createdBy interface{}
+	if origin.CreatedBy != nil {
+		createdBy = origin.CreatedBy.String()
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		origin.ID.String(),
+		origin.ServiceAccountID.String(),
+		origin.CIDR,
+		origin.Description,
+		createdBy,
+		origin.CreatedAt,
+		origin.UpdatedAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to add service account origin")
+	}
+	return nil
+}
+
+func (r *CRDBAuthRepo) RemoveServiceAccountOrigin(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	query := "DELETE FROM service_account_origins WHERE id = $1"
+	_, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to remove service account origin")
+	}
+	return nil
+}
 
 func (r *CRDBAuthRepo) ListServiceAccountOrigins(
 	ctx context.Context, l *logger.Logger, saID uuid.UUID, filterSet filtertypes.FilterSet,
@@ -764,6 +915,99 @@ func (r *CRDBAuthRepo) ListServiceAccountPermissions(
 	return perms, totalCount, nil
 }
 
+func (r *CRDBAuthRepo) UpdateServiceAccountPermissions(
+	ctx context.Context,
+	l *logger.Logger,
+	saID uuid.UUID,
+	permissions []*auth.ServiceAccountPermission,
+) (retErr error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				if retErr != nil {
+					retErr = errors.CombineErrors(retErr, errors.Wrap(rollbackErr, "rollback error"))
+				} else {
+					retErr = errors.Wrap(rollbackErr, "rollback error")
+				}
+			}
+		}
+	}()
+
+	// 1. Delete existing permissions
+	_, err = tx.ExecContext(ctx, "DELETE FROM service_account_permissions WHERE service_account_id = $1", saID.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete existing permissions")
+	}
+
+	// 2. Insert new permissions
+	insertQuery := `
+		INSERT INTO service_account_permissions (id, service_account_id, provider, permission, account, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+	now := timeutil.Now()
+
+	for _, perm := range permissions {
+		var account interface{}
+		if perm.Account != "" {
+			account = perm.Account
+		}
+
+		_, err := tx.ExecContext(ctx, insertQuery,
+			perm.ID.String(),
+			perm.ServiceAccountID.String(),
+			perm.Provider,
+			perm.Permission,
+			account,
+			now,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to insert service account permission")
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	committed = true
+	return nil
+}
+
+// AddServiceAccountPermission adds a single permission to a service account.
+func (r *CRDBAuthRepo) AddServiceAccountPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.ServiceAccountPermission,
+) error {
+	query := `
+		INSERT INTO service_account_permissions (id, service_account_id, provider, permission, account, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	var account interface{}
+	if perm.Account != "" {
+		account = perm.Account
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		perm.ID.String(),
+		perm.ServiceAccountID.String(),
+		perm.Provider,
+		perm.Permission,
+		account,
+		perm.CreatedAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to insert service account permission")
+	}
+
+	return nil
+}
+
 // GetServiceAccountPermission retrieves a single permission by ID.
 func (r *CRDBAuthRepo) GetServiceAccountPermission(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
@@ -796,6 +1040,29 @@ func (r *CRDBAuthRepo) GetServiceAccountPermission(
 		Account:          account.String,
 		CreatedAt:        createdAt,
 	}, nil
+}
+
+// RemoveServiceAccountPermission removes a single permission by ID.
+func (r *CRDBAuthRepo) RemoveServiceAccountPermission(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	query := `DELETE FROM service_account_permissions WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete service account permission")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to get rows affected")
+	}
+
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	return nil
 }
 
 // Groups (SCIM-managed)
@@ -1150,6 +1417,8 @@ func (r *CRDBAuthRepo) UpdateGroupWithMembers(
 	committed = true
 	return nil
 }
+
+// Group Permissions (new table name after migration)
 
 func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPermission, error) {
 	var perms []*auth.GroupPermission

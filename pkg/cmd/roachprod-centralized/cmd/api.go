@@ -17,6 +17,7 @@ import (
 	healthcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/health"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns"
 	scimcontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/scim"
+	serviceaccountscontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/service-accounts"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/health"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
@@ -106,6 +107,7 @@ func runAPI(cmd *cobra.Command, args []string) error {
 	if cfg.Api.Authentication.Type == "bearer" {
 		options = append(options,
 			app.WithApiController(authcontroller.NewControllerBearerAuth(services.Auth)),
+			app.WithApiController(serviceaccountscontroller.NewController(services.Auth)),
 			app.WithApiController(scimcontroller.NewController(services.Auth)),
 		)
 	}

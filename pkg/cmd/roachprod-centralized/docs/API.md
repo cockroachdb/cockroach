@@ -22,6 +22,7 @@ This document provides comprehensive documentation for the roachprod-centralized
   - [Task Management](#task-management)
   - [DNS Management](#dns-management)
   - [Auth Endpoints](#auth-endpoints)
+  - [Service Account Management](#service-account-management)
 - [Query Parameters](#query-parameters)
 - [Examples](#examples)
 
@@ -97,6 +98,7 @@ Some endpoints are only available with bearer authentication:
 | `GET /v1/auth/whoami` | ✓ | ✓ |
 | `POST /v1/auth/okta/exchange` | ✓ | ✗ |
 | `GET/DELETE /v1/auth/tokens` | ✓ | ✗ |
+| `/v1/service-accounts/*` | ✓ | ✗ |
 | `/scim/v2/*` | ✓ | ✗ |
 
 ## Base URL
@@ -598,6 +600,187 @@ Revoke a token owned by the current principal.
   }
 }
 ```
+
+### Service Account Management
+
+Service accounts are machine identities for CI/CD, automation, and system integrations. See [AUTH.md](services/AUTH.md#service-account-types) for details on orphan vs delegated service accounts.
+
+#### POST /v1/service-accounts
+
+Create a new service account.
+
+**Request Body**:
+```json
+{
+  "name": "my-automation",
+  "description": "Automation service account",
+  "enabled": true,
+  "orphan": false
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `name` | string | Yes | - | Unique name for the service account |
+| `description` | string | No | `""` | Human-readable description |
+| `enabled` | boolean | No | `true` | Whether the SA can authenticate |
+| `orphan` | boolean | No | `false` | If `true`, SA has its own permissions; if `false`, inherits from creator |
+
+**Response**: `201 Created`
+```json
+{
+  "request_id": "req_...",
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "my-automation",
+    "description": "Automation service account",
+    "enabled": true,
+    "delegated_from": "11111111-1111-1111-1111-111111111111",
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+**Notes**:
+- `delegated_from` is only present for delegated SAs (when `orphan=false`)
+- Orphan SAs require explicit permission grants via `/service-accounts/:id/permissions`
+
+#### GET /v1/service-accounts
+
+List service accounts with optional filtering.
+
+**Query Parameters**:
+- `name[eq]`, `name[contains]`, etc. - Filter by name
+
+**Response**: `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "...",
+      "name": "my-automation",
+      "enabled": true,
+      "delegated_from": "11111111-...",
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "count": 1,
+  "total_count": 1
+}
+```
+
+#### GET /v1/service-accounts/:id
+
+Get a specific service account by ID.
+
+#### PATCH /v1/service-accounts/:id
+
+Update a service account.
+
+**Request Body**:
+```json
+{
+  "name": "new-name",
+  "description": "Updated description",
+  "enabled": false
+}
+```
+
+#### DELETE /v1/service-accounts/:id
+
+Delete a service account. Also revokes all associated tokens.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "message": "service account deleted successfully"
+  }
+}
+```
+
+#### POST /v1/service-accounts/:id/tokens
+
+Mint a new token for a service account.
+
+**Request Body**:
+```json
+{
+  "ttl_days": 30
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `ttl_days` | integer | Yes | Token validity period (1-365 days) |
+
+**Response**: `201 Created`
+```json
+{
+  "data": {
+    "token": "rp$sa$1$...",
+    "token_id": "660e8400-...",
+    "expires_at": "2025-02-15T10:30:00Z"
+  }
+}
+```
+
+**Important**: The `token` value is only returned once. Store it securely.
+
+#### POST /v1/service-accounts/:id/permissions
+
+Add a permission to an orphan service account.
+
+**Request Body**:
+```json
+{
+  "provider": "gcp",
+  "account": "my-project",
+  "permission": "clusters:create"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `provider` | string | Yes | Cloud provider (`gcp`, `aws`, `azure`, or `*` for all) |
+| `account` | string | Yes | Provider account/project (or `*` for all) |
+| `permission` | string | Yes | Permission string (e.g., `clusters:create`) |
+
+**Response**: `201 Created`
+
+**Error**: `403 Forbidden` if the SA is delegated (has `delegated_from` set)
+
+#### GET /v1/service-accounts/:id/permissions
+
+List permissions for a service account.
+
+#### DELETE /v1/service-accounts/:id/permissions/:permission_id
+
+Remove a permission from an orphan service account.
+
+**Error**: `403 Forbidden` if the SA is delegated
+
+#### POST /v1/service-accounts/:id/origins
+
+Add an IP origin restriction to a service account.
+
+**Request Body**:
+```json
+{
+  "cidr": "10.0.0.0/8",
+  "description": "Internal network"
+}
+```
+
+#### GET /v1/service-accounts/:id/origins
+
+List IP origin restrictions for a service account.
+
+#### DELETE /v1/service-accounts/:id/origins/:origin_id
+
+Remove an IP origin restriction.
 
 ## Query Parameters
 

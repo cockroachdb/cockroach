@@ -18,6 +18,7 @@ const (
 	TokenEntropyLength = 43
 
 	// Token TTL constraints
-	MaxTokenTTL         = 365 * 24 * time.Hour // Nothing over 1 year
-	TokenDefaultTTLUser = 30 * 24 * time.Hour  // 30 days (users have to re-authenticate periodically)
+	MaxTokenTTL                   = 365 * 24 * time.Hour // Nothing over 1 year
+	TokenDefaultTTLUser           = 30 * 24 * time.Hour  // 30 days (users have to re-authenticate periodically)
+	TokenDefaultTTLServiceAccount = 365 * 24 * time.Hour // 1 year (service accounts are long-lived)
 )

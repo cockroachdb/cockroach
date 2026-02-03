@@ -56,10 +56,23 @@ type IAuthRepository interface {
 	DeactivateUser(context.Context, *logger.Logger, uuid.UUID) error
 
 	// Service Accounts
+	CreateServiceAccount(context.Context, *logger.Logger, *auth.ServiceAccount) error
 	GetServiceAccount(context.Context, *logger.Logger, uuid.UUID) (*auth.ServiceAccount, error)
+	UpdateServiceAccount(context.Context, *logger.Logger, *auth.ServiceAccount) error
+	ListServiceAccounts(context.Context, *logger.Logger, filtertypes.FilterSet) ([]*auth.ServiceAccount, int, error)
+	DeleteServiceAccount(context.Context, *logger.Logger, uuid.UUID) error
 
 	// Service Account Origins
+	AddServiceAccountOrigin(context.Context, *logger.Logger, *auth.ServiceAccountOrigin) error
+	RemoveServiceAccountOrigin(context.Context, *logger.Logger, uuid.UUID) error
 	ListServiceAccountOrigins(context.Context, *logger.Logger, uuid.UUID, filtertypes.FilterSet) ([]*auth.ServiceAccountOrigin, int, error)
+
+	// Service Account Permissions
+	ListServiceAccountPermissions(context.Context, *logger.Logger, uuid.UUID, filtertypes.FilterSet) ([]*auth.ServiceAccountPermission, int, error)
+	UpdateServiceAccountPermissions(context.Context, *logger.Logger, uuid.UUID, []*auth.ServiceAccountPermission) error
+	AddServiceAccountPermission(context.Context, *logger.Logger, *auth.ServiceAccountPermission) error
+	GetServiceAccountPermission(context.Context, *logger.Logger, uuid.UUID) (*auth.ServiceAccountPermission, error)
+	RemoveServiceAccountPermission(context.Context, *logger.Logger, uuid.UUID) error
 
 	// Tokens
 	ListAllTokens(context.Context, *logger.Logger, filtertypes.FilterSet) ([]*auth.ApiToken, int, error)
@@ -68,6 +81,7 @@ type IAuthRepository interface {
 	GetTokenByHash(context.Context, *logger.Logger, string) (*auth.ApiToken, error)
 	UpdateTokenLastUsed(context.Context, *logger.Logger, uuid.UUID) error
 	RevokeToken(context.Context, *logger.Logger, uuid.UUID) error
+
 	// CleanupTokens deletes tokens that have been in the specified status beyond retention.
 	// For TokenStatusValid (expired): deletes where ExpiresAt < now - retention
 	// For TokenStatusRevoked: deletes where UpdatedAt < now - retention
@@ -93,12 +107,6 @@ type IAuthRepository interface {
 	// GetUserPermissionsFromGroups returns permissions for a user by joining
 	// group_members → groups → group_permissions in a single query.
 	GetUserPermissionsFromGroups(context.Context, *logger.Logger, uuid.UUID) ([]*auth.GroupPermission, error)
-
-	// Permissions
-	// ListServiceAccountPermissions lists permissions for a service account with filtering/sorting/pagination.
-	ListServiceAccountPermissions(context.Context, *logger.Logger, uuid.UUID, filtertypes.FilterSet) ([]*auth.ServiceAccountPermission, int, error)
-	// GetServiceAccountPermission retrieves a single permission by ID.
-	GetServiceAccountPermission(context.Context, *logger.Logger, uuid.UUID) (*auth.ServiceAccountPermission, error)
 
 	// GetStatistics returns current counts for metrics gauges.
 	GetStatistics(context.Context, *logger.Logger) (*Statistics, error)

@@ -18,9 +18,11 @@ var (
 
 // Input validation errors (PUBLIC - shown to users)
 var (
-	ErrInvalidEmail  = utils.NewPublicError(errors.New("invalid email format"))
-	ErrRequiredField = utils.NewPublicError(errors.New("required field missing"))
-	ErrInvalidUUID   = utils.NewPublicError(errors.New("invalid UUID format"))
+	ErrInvalidEmail      = utils.NewPublicError(errors.New("invalid email format"))
+	ErrRequiredField     = utils.NewPublicError(errors.New("required field missing"))
+	ErrInvalidUUID       = utils.NewPublicError(errors.New("invalid UUID format"))
+	ErrInvalidTTL        = utils.NewPublicError(errors.New("invalid TTL"))
+	ErrInvalidOriginCIDR = utils.NewPublicError(errors.New("invalid CIDR format for service account origin"))
 )
 
 // Resource not found errors (PUBLIC - shown to users)
@@ -29,6 +31,8 @@ var (
 	ErrServiceAccountNotFound = utils.NewPublicError(errors.New("service account not found"))
 	ErrTokenNotFound          = utils.NewPublicError(errors.New("token not found"))
 	ErrGroupNotFound          = utils.NewPublicError(errors.New("group not found"))
+	ErrOriginNotFound         = utils.NewPublicError(errors.New("service account origin not found"))
+	ErrPermissionNotFound     = utils.NewPublicError(errors.New("permission not found"))
 )
 
 // Authorization errors (PUBLIC - shown to users)
@@ -49,9 +53,14 @@ var (
 
 // Business rule violations (PUBLIC - shown to users)
 var (
-	ErrDuplicateUser   = utils.NewPublicError(errors.New("user with this email already exists"))
-	ErrDuplicateOktaID = utils.NewPublicError(errors.New("user with this Okta ID already exists"))
-	ErrDuplicateGroup  = utils.NewPublicError(errors.New("group with this external ID already exists"))
+	ErrDuplicateUser                     = utils.NewPublicError(errors.New("user with this email already exists"))
+	ErrDuplicateOktaID                   = utils.NewPublicError(errors.New("user with this Okta ID already exists"))
+	ErrDuplicateGroup                    = utils.NewPublicError(errors.New("group with this external ID already exists"))
+	ErrTokenLimitExceeded                = utils.NewPublicError(errors.New("token limit exceeded for this principal"))
+	ErrPermissionAlreadyExists           = utils.NewPublicError(errors.New("permission already exists"))
+	ErrPermissionEscalation              = utils.NewPublicError(errors.New("cannot grant permission you do not have"))
+	ErrSACreationNotAllowedFromOrphanSA  = utils.NewPublicError(errors.New("creation only allowed from user principals or non-orphan service accounts"))
+	ErrNonOrphanSAPermissionModification = utils.NewPublicError(errors.New("cannot modify permissions for service accounts that inherit permissions from a user principal"))
 )
 
 var (

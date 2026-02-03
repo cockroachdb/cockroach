@@ -30,6 +30,42 @@ type IAuthRepository struct {
 	mock.Mock
 }
 
+// AddServiceAccountOrigin provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) AddServiceAccountOrigin(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.ServiceAccountOrigin) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddServiceAccountOrigin")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.ServiceAccountOrigin) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// AddServiceAccountPermission provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) AddServiceAccountPermission(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.ServiceAccountPermission) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddServiceAccountPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.ServiceAccountPermission) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CleanupTokens provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IAuthRepository) CleanupTokens(_a0 context.Context, _a1 *logger.Logger, _a2 auth.TokenStatus, _a3 time.Duration) (int, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -69,6 +105,24 @@ func (_m *IAuthRepository) CreateGroupWithMembers(_a0 context.Context, _a1 *logg
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group, []uuid.UUID) error); ok {
 		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// CreateServiceAccount provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) CreateServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.ServiceAccount) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateServiceAccount")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.ServiceAccount) error); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -136,6 +190,24 @@ func (_m *IAuthRepository) DeleteGroup(_a0 context.Context, _a1 *logger.Logger, 
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteGroup")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeleteServiceAccount provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) DeleteServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteServiceAccount")
 	}
 
 	var r0 error
@@ -681,6 +753,43 @@ func (_m *IAuthRepository) ListServiceAccountPermissions(_a0 context.Context, _a
 	return r0, r1, r2
 }
 
+// ListServiceAccounts provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) ListServiceAccounts(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.ServiceAccount, int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceAccounts")
+	}
+
+	var r0 []*auth.ServiceAccount
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) ([]*auth.ServiceAccount, int, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) []*auth.ServiceAccount); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.ServiceAccount)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, types.FilterSet) int); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, types.FilterSet) error); ok {
+		r2 = rf(_a0, _a1, _a2)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // ListUsers provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) ListUsers(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.User, int, error) {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -716,6 +825,42 @@ func (_m *IAuthRepository) ListUsers(_a0 context.Context, _a1 *logger.Logger, _a
 	}
 
 	return r0, r1, r2
+}
+
+// RemoveServiceAccountOrigin provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) RemoveServiceAccountOrigin(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveServiceAccountOrigin")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RemoveServiceAccountPermission provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) RemoveServiceAccountPermission(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveServiceAccountPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // RevokeToken provides a mock function with given fields: _a0, _a1, _a2
@@ -764,6 +909,42 @@ func (_m *IAuthRepository) UpdateGroupWithMembers(_a0 context.Context, _a1 *logg
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group, []repositoriesauth.GroupMemberOperation) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateServiceAccount provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) UpdateServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.ServiceAccount) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateServiceAccount")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.ServiceAccount) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateServiceAccountPermissions provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IAuthRepository) UpdateServiceAccountPermissions(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID, _a3 []*auth.ServiceAccountPermission) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateServiceAccountPermissions")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, []*auth.ServiceAccountPermission) error); ok {
 		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r0 = ret.Error(0)

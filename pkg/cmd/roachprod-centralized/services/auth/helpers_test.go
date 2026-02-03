@@ -76,6 +76,203 @@ func TestGetPrincipalIdentifier(t *testing.T) {
 	}
 }
 
+// TestIsOwnedByPrincipal tests the isOwnedByPrincipal function
+func TestIsOwnedByPrincipal(t *testing.T) {
+	userID := uuid.MakeV4()
+	otherUserID := uuid.MakeV4()
+	saID := uuid.MakeV4()
+	otherSAID := uuid.MakeV4()
+
+	tests := []struct {
+		name      string
+		sa        *auth.ServiceAccount
+		principal *pkgauth.Principal
+		expected  bool
+	}{
+		{
+			name: "user owns SA they created",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "my-sa",
+				CreatedBy: &userID,
+			},
+			principal: &pkgauth.Principal{
+				UserID: &userID,
+			},
+			expected: true,
+		},
+		{
+			name: "user does not own SA created by another",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "their-sa",
+				CreatedBy: &otherUserID,
+			},
+			principal: &pkgauth.Principal{
+				UserID: &userID,
+			},
+			expected: false,
+		},
+		{
+			name: "SA owns SA it created",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "child-sa",
+				CreatedBy: &saID,
+			},
+			principal: &pkgauth.Principal{
+				ServiceAccountID: &saID,
+			},
+			expected: true,
+		},
+		{
+			name: "SA does not own SA created by another SA",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "other-child-sa",
+				CreatedBy: &otherSAID,
+			},
+			principal: &pkgauth.Principal{
+				ServiceAccountID: &saID,
+			},
+			expected: false,
+		},
+		{
+			name: "SA with nil CreatedBy is not owned",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "orphan-sa",
+				CreatedBy: nil,
+			},
+			principal: &pkgauth.Principal{
+				UserID: &userID,
+			},
+			expected: false,
+		},
+		{
+			name: "principal with no IDs does not own any SA",
+			sa: &auth.ServiceAccount{
+				ID:        uuid.MakeV4(),
+				Name:      "any-sa",
+				CreatedBy: &userID,
+			},
+			principal: &pkgauth.Principal{},
+			expected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isOwnedByPrincipal(tt.sa, tt.principal)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestComputeChangedFieldsSA tests the computeChangedFieldsSA function
+func TestComputeChangedFieldsSA(t *testing.T) {
+	tests := []struct {
+		name     string
+		old      *auth.ServiceAccount
+		new      *auth.ServiceAccount
+		expected []string
+	}{
+		{
+			name: "no changes",
+			old: &auth.ServiceAccount{
+				ID:          uuid.MakeV4(),
+				Name:        "ci-bot",
+				Description: "CI automation",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				ID:          uuid.MakeV4(),
+				Name:        "ci-bot",
+				Description: "CI automation",
+				Enabled:     true,
+			},
+			expected: nil,
+		},
+		{
+			name: "name changed",
+			old: &auth.ServiceAccount{
+				Name:        "old-name",
+				Description: "Description",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				Name:        "new-name",
+				Description: "Description",
+				Enabled:     true,
+			},
+			expected: []string{"name"},
+		},
+		{
+			name: "description changed",
+			old: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "Old description",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "New description",
+				Enabled:     true,
+			},
+			expected: []string{"description"},
+		},
+		{
+			name: "enabled changed",
+			old: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "Description",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "Description",
+				Enabled:     false,
+			},
+			expected: []string{"enabled"},
+		},
+		{
+			name: "all fields changed",
+			old: &auth.ServiceAccount{
+				Name:        "old-name",
+				Description: "Old description",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				Name:        "new-name",
+				Description: "New description",
+				Enabled:     false,
+			},
+			expected: []string{"name", "description", "enabled"},
+		},
+		{
+			name: "description added (empty to non-empty)",
+			old: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "",
+				Enabled:     true,
+			},
+			new: &auth.ServiceAccount{
+				Name:        "ci-bot",
+				Description: "Now has a description",
+				Enabled:     true,
+			},
+			expected: []string{"description"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := computeChangedFieldsSA(tt.old, tt.new)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestComputeTokenSuffix tests the computeTokenSuffix function
 func TestComputeTokenSuffix(t *testing.T) {
 	tests := []struct {

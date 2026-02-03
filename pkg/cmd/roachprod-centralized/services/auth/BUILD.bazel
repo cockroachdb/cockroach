@@ -10,6 +10,7 @@ go_library(
         "okta.go",
         "registry.go",
         "service.go",
+        "service_accounts.go",
         "tasks.go",
         "tokens.go",
         "users.go",

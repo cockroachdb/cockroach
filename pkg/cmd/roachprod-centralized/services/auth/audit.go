@@ -37,6 +37,20 @@ const (
 	AuditSCIMGroupUpdated        = "scim.group.updated"
 	AuditSCIMGroupDeleted        = "scim.group.deleted"
 	AuditSCIMGroupMembersUpdated = "scim.group.members.updated"
+
+	// Service account events
+	AuditSACreated = "sa.created"
+	AuditSAUpdated = "sa.updated"
+	AuditSADeleted = "sa.deleted"
+
+	// Service account origin events
+	AuditSAOriginAdded   = "sa.origin.added"
+	AuditSAOriginRemoved = "sa.origin.removed"
+
+	// Service account permission events
+	AuditSAPermissionAdded     = "sa.permission.added"
+	AuditSAPermissionRemoved   = "sa.permission.removed"
+	AuditSAPermissionsReplaced = "sa.permissions.replaced"
 )
 
 // auditEvent logs an audit event with structured fields.

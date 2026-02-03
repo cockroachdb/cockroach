@@ -67,9 +67,26 @@ type IService interface {
 	PatchUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, PatchUserInput) (*auth.User, error)
 	DeleteUser(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
 
+	// Service Account Management
+	ListServiceAccounts(context.Context, *logger.Logger, *pkgauth.Principal, InputListServiceAccountsDTO) ([]*auth.ServiceAccount, int, error)
+	GetServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.ServiceAccount, error)
+	CreateServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, *auth.ServiceAccount, bool) error
+	UpdateServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, UpdateServiceAccountDTO) (*auth.ServiceAccount, error)
+	DeleteServiceAccount(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
+	ListServiceAccountPermissions(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, InputListServiceAccountPermissionsDTO) ([]*auth.ServiceAccountPermission, int, error)
+	UpdateServiceAccountPermissions(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, []*auth.ServiceAccountPermission) error
+	AddServiceAccountPermission(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, *auth.ServiceAccountPermission) error
+	RemoveServiceAccountPermission(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+	AddServiceAccountOrigin(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, *auth.ServiceAccountOrigin) error
+	ListServiceAccountOrigins(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, InputListServiceAccountOriginsDTO) ([]*auth.ServiceAccountOrigin, int, error)
+	RemoveServiceAccountOrigin(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+	MintServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, time.Duration) (*auth.ApiToken, string, error)
+	RevokeServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+
 	// Groups
 	ListGroups(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupsDTO) ([]*auth.Group, int, error)
 	GetGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, error)
+	GetGroupByExternalID(context.Context, *logger.Logger, *pkgauth.Principal, string) (*auth.Group, error)
 	GetGroupWithMembers(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, []*auth.GroupMember, error)
 	CreateGroupWithMembers(context.Context, *logger.Logger, *pkgauth.Principal, CreateGroupInput) (*auth.Group, []*auth.GroupMember, error)
 	ReplaceGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, ReplaceGroupInput) (*auth.Group, []*auth.GroupMember, error)

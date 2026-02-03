@@ -30,6 +30,42 @@ type IService struct {
 	mock.Mock
 }
 
+// AddServiceAccountOrigin provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) AddServiceAccountOrigin(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 *modelsauth.ServiceAccountOrigin) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddServiceAccountOrigin")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, *modelsauth.ServiceAccountOrigin) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// AddServiceAccountPermission provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) AddServiceAccountPermission(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 *modelsauth.ServiceAccountPermission) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddServiceAccountPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, *modelsauth.ServiceAccountPermission) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // AuthenticateToken provides a mock function with given fields: ctx, l, tokenString, clientIP
 func (_m *IService) AuthenticateToken(ctx context.Context, l *logger.Logger, tokenString string, clientIP string) (*auth.Principal, error) {
 	ret := _m.Called(ctx, l, tokenString, clientIP)
@@ -127,6 +163,24 @@ func (_m *IService) CreateGroupWithMembers(_a0 context.Context, _a1 *logger.Logg
 	return r0, r1, r2
 }
 
+// CreateServiceAccount provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) CreateServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 *modelsauth.ServiceAccount, _a4 bool) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateServiceAccount")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, *modelsauth.ServiceAccount, bool) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateUser provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IService) CreateUser(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 *modelsauth.User) error {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -151,6 +205,24 @@ func (_m *IService) DeleteGroup(_a0 context.Context, _a1 *logger.Logger, _a2 *au
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteGroup")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeleteServiceAccount provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IService) DeleteServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteServiceAccount")
 	}
 
 	var r0 error
@@ -248,6 +320,36 @@ func (_m *IService) GetGroup(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.
 	return r0, r1
 }
 
+// GetGroupByExternalID provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IService) GetGroupByExternalID(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 string) (*modelsauth.Group, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupByExternalID")
+	}
+
+	var r0 *modelsauth.Group
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, string) (*modelsauth.Group, error)); ok {
+		return rf(_a0, _a1, _a2, _a3)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, string) *modelsauth.Group); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*modelsauth.Group)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, string) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetGroupWithMembers provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IService) GetGroupWithMembers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID) (*modelsauth.Group, []*modelsauth.GroupMember, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -285,6 +387,36 @@ func (_m *IService) GetGroupWithMembers(_a0 context.Context, _a1 *logger.Logger,
 	}
 
 	return r0, r1, r2
+}
+
+// GetServiceAccount provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IService) GetServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID) (*modelsauth.ServiceAccount, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetServiceAccount")
+	}
+
+	var r0 *modelsauth.ServiceAccount
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID) (*modelsauth.ServiceAccount, error)); ok {
+		return rf(_a0, _a1, _a2, _a3)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID) *modelsauth.ServiceAccount); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*modelsauth.ServiceAccount)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetUser provides a mock function with given fields: _a0, _a1, _a2, _a3
@@ -391,6 +523,117 @@ func (_m *IService) ListSelfTokens(_a0 context.Context, _a1 *logger.Logger, _a2 
 	return r0, r1, r2
 }
 
+// ListServiceAccountOrigins provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) ListServiceAccountOrigins(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 types.InputListServiceAccountOriginsDTO) ([]*modelsauth.ServiceAccountOrigin, int, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceAccountOrigins")
+	}
+
+	var r0 []*modelsauth.ServiceAccountOrigin
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountOriginsDTO) ([]*modelsauth.ServiceAccountOrigin, int, error)); ok {
+		return rf(_a0, _a1, _a2, _a3, _a4)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountOriginsDTO) []*modelsauth.ServiceAccountOrigin); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*modelsauth.ServiceAccountOrigin)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountOriginsDTO) int); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountOriginsDTO) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// ListServiceAccountPermissions provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) ListServiceAccountPermissions(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 types.InputListServiceAccountPermissionsDTO) ([]*modelsauth.ServiceAccountPermission, int, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceAccountPermissions")
+	}
+
+	var r0 []*modelsauth.ServiceAccountPermission
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountPermissionsDTO) ([]*modelsauth.ServiceAccountPermission, int, error)); ok {
+		return rf(_a0, _a1, _a2, _a3, _a4)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountPermissionsDTO) []*modelsauth.ServiceAccountPermission); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*modelsauth.ServiceAccountPermission)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountPermissionsDTO) int); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.InputListServiceAccountPermissionsDTO) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// ListServiceAccounts provides a mock function with given fields: _a0, _a1, _a2, _a3
+func (_m *IService) ListServiceAccounts(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 types.InputListServiceAccountsDTO) ([]*modelsauth.ServiceAccount, int, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListServiceAccounts")
+	}
+
+	var r0 []*modelsauth.ServiceAccount
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, types.InputListServiceAccountsDTO) ([]*modelsauth.ServiceAccount, int, error)); ok {
+		return rf(_a0, _a1, _a2, _a3)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, types.InputListServiceAccountsDTO) []*modelsauth.ServiceAccount); ok {
+		r0 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*modelsauth.ServiceAccount)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, types.InputListServiceAccountsDTO) int); ok {
+		r1 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, *auth.Principal, types.InputListServiceAccountsDTO) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // ListUsers provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IService) ListUsers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 types.InputListUsersDTO) ([]*modelsauth.User, int, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -421,6 +664,43 @@ func (_m *IService) ListUsers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth
 
 	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, *auth.Principal, types.InputListUsersDTO) error); ok {
 		r2 = rf(_a0, _a1, _a2, _a3)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MintServiceAccountToken provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) MintServiceAccountToken(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 time.Duration) (*modelsauth.ApiToken, string, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MintServiceAccountToken")
+	}
+
+	var r0 *modelsauth.ApiToken
+	var r1 string
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, time.Duration) (*modelsauth.ApiToken, string, error)); ok {
+		return rf(_a0, _a1, _a2, _a3, _a4)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, time.Duration) *modelsauth.ApiToken); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*modelsauth.ApiToken)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, time.Duration) string); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r1 = ret.Get(1).(string)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, time.Duration) error); ok {
+		r2 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -521,6 +801,42 @@ func (_m *IService) RegisterTasks(ctx context.Context) error {
 	return r0
 }
 
+// RemoveServiceAccountOrigin provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) RemoveServiceAccountOrigin(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveServiceAccountOrigin")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// RemoveServiceAccountPermission provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) RemoveServiceAccountPermission(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveServiceAccountPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // ReplaceGroup provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
 func (_m *IService) ReplaceGroup(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 types.ReplaceGroupInput) (*modelsauth.Group, []*modelsauth.GroupMember, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
@@ -608,6 +924,24 @@ func (_m *IService) RevokeSelfToken(_a0 context.Context, _a1 *logger.Logger, _a2
 	return r0
 }
 
+// RevokeServiceAccountToken provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) RevokeServiceAccountToken(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RevokeServiceAccountToken")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Shutdown provides a mock function with given fields: ctx
 func (_m *IService) Shutdown(ctx context.Context) error {
 	ret := _m.Called(ctx)
@@ -655,6 +989,54 @@ func (_m *IService) StartService(ctx context.Context, l *logger.Logger) error {
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger) error); ok {
 		r0 = rf(ctx, l)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateServiceAccount provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) UpdateServiceAccount(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 types.UpdateServiceAccountDTO) (*modelsauth.ServiceAccount, error) {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateServiceAccount")
+	}
+
+	var r0 *modelsauth.ServiceAccount
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.UpdateServiceAccountDTO) (*modelsauth.ServiceAccount, error)); ok {
+		return rf(_a0, _a1, _a2, _a3, _a4)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.UpdateServiceAccountDTO) *modelsauth.ServiceAccount); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*modelsauth.ServiceAccount)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, types.UpdateServiceAccountDTO) error); ok {
+		r1 = rf(_a0, _a1, _a2, _a3, _a4)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// UpdateServiceAccountPermissions provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
+func (_m *IService) UpdateServiceAccountPermissions(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Principal, _a3 uuid.UUID, _a4 []*modelsauth.ServiceAccountPermission) error {
+	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateServiceAccountPermissions")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Principal, uuid.UUID, []*modelsauth.ServiceAccountPermission) error); ok {
+		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r0 = ret.Error(0)
 	}

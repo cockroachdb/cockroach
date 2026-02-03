@@ -243,6 +243,16 @@ func (r *MemAuthRepo) DeactivateUser(ctx context.Context, l *logger.Logger, id u
 
 // Service Accounts
 
+func (r *MemAuthRepo) CreateServiceAccount(
+	ctx context.Context, l *logger.Logger, sa *auth.ServiceAccount,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.serviceAccounts[sa.ID] = sa
+	return nil
+}
+
 func (r *MemAuthRepo) GetServiceAccount(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.ServiceAccount, error) {
@@ -253,6 +263,123 @@ func (r *MemAuthRepo) GetServiceAccount(
 		return sa, nil
 	}
 	return nil, rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) UpdateServiceAccount(
+	ctx context.Context, l *logger.Logger, sa *auth.ServiceAccount,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if _, ok := r.serviceAccounts[sa.ID]; !ok {
+		return rauth.ErrNotFound
+	}
+	r.serviceAccounts[sa.ID] = sa
+	return nil
+}
+
+func (r *MemAuthRepo) ListServiceAccounts(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.ServiceAccount, int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// 1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(auth.ServiceAccount{}),
+	)
+	var filteredSAs []*auth.ServiceAccount
+
+	for _, sa := range r.serviceAccounts {
+		// If no filters, include all service accounts
+		if filterSet.IsEmpty() {
+			filteredSAs = append(filteredSAs, sa)
+			continue
+		}
+
+		matches, err := evaluator.Evaluate(sa, &filterSet)
+		if err != nil {
+			l.Error(
+				"Error filtering service account, continuing with other service accounts",
+				slog.String("service_account_id", sa.ID.String()),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if matches {
+			filteredSAs = append(filteredSAs, sa)
+		}
+	}
+
+	totalCount := len(filteredSAs)
+
+	// 2. Apply sorting (with name as default)
+	_ = memoryfilters.SortByField(filteredSAs, filterSet.Sort, "name")
+
+	// 3. Apply pagination
+	filteredSAs = memoryfilters.ApplyPagination(filteredSAs, filterSet.Pagination)
+
+	return filteredSAs, totalCount, nil
+}
+
+func (r *MemAuthRepo) DeleteServiceAccount(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Cascade delete: remove SA's tokens (ON DELETE CASCADE on api_tokens.service_account_id)
+	for tokenID, token := range r.tokens {
+		if token.ServiceAccountID != nil && *token.ServiceAccountID == id {
+			delete(r.tokensByHash, token.TokenHash)
+			delete(r.tokens, tokenID)
+		}
+	}
+
+	// Cascade delete: remove SA's origins (ON DELETE CASCADE on service_account_origins.service_account_id)
+	delete(r.saOrigins, id)
+
+	// Cascade delete: remove SA's permissions (ON DELETE CASCADE on service_account_permissions.service_account_id)
+	delete(r.serviceAccountPermissions, id)
+
+	delete(r.serviceAccounts, id)
+	return nil
+}
+
+// Service Account Origins
+
+func (r *MemAuthRepo) AddServiceAccountOrigin(
+	ctx context.Context, l *logger.Logger, origin *auth.ServiceAccountOrigin,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Check for duplicate CIDR (matches database UNIQUE constraint)
+	for _, existing := range r.saOrigins[origin.ServiceAccountID] {
+		if existing.CIDR == origin.CIDR {
+			return errors.New("origin with this CIDR already exists for this service account")
+		}
+	}
+
+	r.saOrigins[origin.ServiceAccountID] = append(r.saOrigins[origin.ServiceAccountID], origin)
+	return nil
+}
+
+func (r *MemAuthRepo) RemoveServiceAccountOrigin(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for saID, origins := range r.saOrigins {
+		for i, origin := range origins {
+			if origin.ID == id {
+				r.saOrigins[saID] = append(origins[:i], origins[i+1:]...)
+				return nil
+			}
+		}
+	}
+	return nil
 }
 
 func (r *MemAuthRepo) ListServiceAccountOrigins(
@@ -564,6 +691,29 @@ func (r *MemAuthRepo) ListServiceAccountPermissions(
 	return filteredPerms, totalCount, nil
 }
 
+func (r *MemAuthRepo) UpdateServiceAccountPermissions(
+	ctx context.Context,
+	l *logger.Logger,
+	saID uuid.UUID,
+	permissions []*auth.ServiceAccountPermission,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.serviceAccountPermissions[saID] = permissions
+	return nil
+}
+
+func (r *MemAuthRepo) AddServiceAccountPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.ServiceAccountPermission,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.serviceAccountPermissions[perm.ServiceAccountID] = append(r.serviceAccountPermissions[perm.ServiceAccountID], perm)
+	return nil
+}
+
 func (r *MemAuthRepo) GetServiceAccountPermission(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
 ) (*auth.ServiceAccountPermission, error) {
@@ -579,6 +729,25 @@ func (r *MemAuthRepo) GetServiceAccountPermission(
 	}
 	return nil, rauth.ErrNotFound
 }
+
+func (r *MemAuthRepo) RemoveServiceAccountPermission(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for saID, perms := range r.serviceAccountPermissions {
+		for i, p := range perms {
+			if p.ID == id {
+				r.serviceAccountPermissions[saID] = append(perms[:i], perms[i+1:]...)
+				return nil
+			}
+		}
+	}
+	return rauth.ErrNotFound
+}
+
+// Groups (SCIM-managed)
 
 func (r *MemAuthRepo) GetGroup(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
