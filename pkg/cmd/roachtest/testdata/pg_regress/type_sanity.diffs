@@ -750,7 +750,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- **************** pg_attribute ****************
  -- Look for illegal values in pg_attribute fields
  SELECT a1.attrelid, a1.attname
-@@ -555,22 +872,46 @@
+@@ -555,22 +872,47 @@
  (0 rows)
  
  -- Cross-check attnum against parent relation
@@ -791,6 +791,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +  282476337 | kv_flow_control_handles_v2_range_id_idx
 + 3232366624 | kv_flow_token_deductions_range_id_idx
 + 2972630359 | kv_flow_token_deductions_v2_range_id_idx
++ 1460608405 | table_indexes_descriptor_id_idx
 +  115531396 | table_spans_descriptor_id_idx
 + 4150762427 | tables_parent_id_idx
 + 4150762426 | tables_database_name_idx
@@ -803,11 +804,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 + 3956059533 | pg_proc_oid_idx
 + 1384570493 | pg_timezone_names_name_idx
 + 3508856309 | pg_type_oid_idx
-+(28 rows)
++(29 rows)
  
  -- Cross-check against pg_type entry
  -- NOTE: we allow attstorage to be 'plain' even when typstorage is not;
-@@ -613,10 +954,7 @@
+@@ -613,10 +955,7 @@
        EXISTS(select 1 from pg_catalog.pg_type where
               oid = r.rngsubtype and typelem != 0 and
               typsubscript = 'array_subscript_handler'::regproc)));
@@ -819,7 +820,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- canonical function, if any, had better match the range type
  SELECT r.rngtypid, r.rngsubtype, p.proname
  FROM pg_range r JOIN pg_proc p ON p.oid = r.rngcanonical
-@@ -639,10 +977,7 @@
+@@ -639,10 +978,7 @@
  SELECT r.rngtypid, r.rngsubtype, r.rngmultitypid
  FROM pg_range r
  WHERE r.rngmultitypid IS NULL OR r.rngmultitypid = 0;
@@ -831,7 +832,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Create a table that holds all the known in-core data types and leave it
  -- around so as pg_upgrade is able to test their binary compatibility.
  CREATE TABLE tab_core_types AS SELECT
-@@ -709,6 +1044,13 @@
+@@ -709,6 +1045,13 @@
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tsmultirange,
    '(2020-01-02 03:04:05, 2021-02-03 06:07:08)'::tstzrange,
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tstzmultirange;
@@ -845,7 +846,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Sanity check on the previous table, checking that all core types are
  -- included in this table.
  SELECT oid, typname, typtype, typelem, typarray
-@@ -736,7 +1078,4 @@
+@@ -736,7 +1079,4 @@
                      WHERE a.atttypid=t.oid AND
                            a.attnum > 0 AND
                            a.attrelid='tab_core_types'::regclass);
