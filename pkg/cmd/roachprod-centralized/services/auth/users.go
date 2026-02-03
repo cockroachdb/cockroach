@@ -8,6 +8,7 @@ package auth
 import (
 	"context"
 
+	authpkg "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
 	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
@@ -34,11 +35,13 @@ func (s *Service) ExchangeOktaToken(
 			if oktaUserID != "" {
 				finishDetails["okta_user_id"] = oktaUserID
 			}
+			s.auditEvent(ctx, l, nil, AuditOktaExchangeFinish, "error", finishDetails)
 		} else if token != nil {
 			// Success case
 			finishDetails["user_id"] = token.UserID.String()
 			finishDetails["token_id"] = token.ID.String()
 			finishDetails["token_suffix"] = token.TokenSuffix
+			s.auditEvent(ctx, l, nil, AuditOktaExchangeFinish, "success", finishDetails)
 		}
 	}()
 
@@ -55,6 +58,12 @@ func (s *Service) ExchangeOktaToken(
 		returnErr = errors.Wrap(err, "invalid okta token")
 		return nil, "", returnErr
 	}
+
+	// Audit start event (after we have oktaUserID)
+	startDetails := map[string]interface{}{
+		"okta_user_id": oktaUserID,
+	}
+	s.auditEvent(ctx, l, nil, AuditOktaExchangeStart, "success", startDetails)
 
 	// 2. Find user in DB
 	user, err := s.repo.GetUserByOktaID(ctx, l, oktaUserID)
@@ -96,6 +105,8 @@ func (s *Service) ExchangeOktaToken(
 		returnErr = errors.Wrap(err, "failed to persist token")
 		return nil, "", returnErr
 	}
+
+	s.auditEvent(ctx, l, &authpkg.Principal{UserID: &user.ID}, AuditTokenIssued, "success", startDetails)
 
 	return token, tokenStr, nil
 }

@@ -39,6 +39,9 @@ func (s *Service) validateToken(
 	if err != nil {
 		if errors.Is(err, rauth.ErrNotFound) {
 			// Audit the failed validation (no token found)
+			s.auditEvent(ctx, l, nil, AuditTokenValidationFailed, "deny", map[string]interface{}{
+				"reason": "token_not_found",
+			})
 			return nil, types.ErrInvalidToken
 		}
 		return nil, errors.Wrap(err, "failed to lookup token")
@@ -46,11 +49,22 @@ func (s *Service) validateToken(
 
 	// 3. Check status
 	if token.Status != auth.TokenStatusValid {
+		s.auditEvent(ctx, l, nil, AuditTokenValidationFailed, "deny", map[string]interface{}{
+			"reason":       "invalid_status",
+			"token_id":     token.ID.String(),
+			"token_suffix": token.TokenSuffix,
+			"status":       string(token.Status),
+		})
 		return nil, types.ErrInvalidToken
 	}
 
 	// 4. Check expiry
 	if timeutil.Now().After(token.ExpiresAt) {
+		s.auditEvent(ctx, l, nil, AuditTokenValidationFailed, "deny", map[string]interface{}{
+			"reason":       "expired",
+			"token_id":     token.ID.String(),
+			"token_suffix": token.TokenSuffix,
+		})
 		return nil, types.ErrTokenExpired
 	}
 
@@ -72,6 +86,12 @@ func (s *Service) validateToken(
 			allowed := false
 			clientIPParsed := net.ParseIP(clientIP)
 			if clientIPParsed == nil {
+				s.auditEvent(ctx, l, nil, AuditTokenValidationFailed, "deny", map[string]interface{}{
+					"reason":       "invalid_client_ip",
+					"token_id":     token.ID.String(),
+					"token_suffix": token.TokenSuffix,
+					"sa_id":        token.ServiceAccountID.String(),
+				})
 				return nil, types.ErrIPNotAllowed
 			}
 
@@ -94,6 +114,12 @@ func (s *Service) validateToken(
 			}
 
 			if !allowed {
+				s.auditEvent(ctx, l, nil, AuditTokenValidationFailed, "deny", map[string]interface{}{
+					"reason":       "ip_not_allowed",
+					"token_id":     token.ID.String(),
+					"token_suffix": token.TokenSuffix,
+					"sa_id":        token.ServiceAccountID.String(),
+				})
 				return nil, types.ErrIPNotAllowed
 			}
 		}
@@ -108,6 +134,13 @@ func (s *Service) validateToken(
 			"error", err,
 		)
 	}
+
+	// Audit successful token validation
+	s.auditEvent(ctx, l, nil, AuditAuthnValidated, "success", map[string]interface{}{
+		"token_id":     token.ID.String(),
+		"token_suffix": token.TokenSuffix,
+		"token_type":   string(token.TokenType),
+	})
 
 	return token, nil
 }
@@ -207,7 +240,22 @@ func (s *Service) RevokeSelfToken(
 	}
 
 	// Revoke the token
-	return s.repo.RevokeToken(ctx, l, tokenID)
+	if err := s.repo.RevokeToken(ctx, l, tokenID); err != nil {
+		s.auditEvent(ctx, l, principal, AuditTokenRevoked, "error", map[string]interface{}{
+			"token_id":     tokenID.String(),
+			"token_suffix": token.TokenSuffix,
+			"error":        err.Error(),
+		})
+		return err
+	}
+
+	s.auditEvent(ctx, l, principal, AuditTokenRevoked, "success", map[string]interface{}{
+		"token_id":     tokenID.String(),
+		"token_suffix": token.TokenSuffix,
+		"scope":        "self",
+	})
+
+	return nil
 }
 
 // Token generation helpers
