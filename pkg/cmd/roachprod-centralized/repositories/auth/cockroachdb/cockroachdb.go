@@ -456,6 +456,37 @@ func (r *CRDBAuthRepo) scanToken(
 	return token, nil
 }
 
+// CleanupTokens deletes tokens based on status and retention period.
+func (r *CRDBAuthRepo) CleanupTokens(
+	ctx context.Context, l *logger.Logger, status auth.TokenStatus, retention time.Duration,
+) (int, error) {
+	cutoff := timeutil.Now().Add(-retention)
+
+	var query string
+	switch status {
+	case auth.TokenStatusValid:
+		// For valid/expired tokens: check ExpiresAt
+		query = `DELETE FROM api_tokens WHERE status = $1 AND expires_at < $2`
+	case auth.TokenStatusRevoked:
+		// For revoked tokens: check UpdatedAt (when it was revoked)
+		query = `DELETE FROM api_tokens WHERE status = $1 AND updated_at < $2`
+	default:
+		return 0, errors.Newf("unsupported token status for cleanup: %s", status)
+	}
+
+	result, err := r.db.ExecContext(ctx, query, status, cutoff)
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to cleanup tokens")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to get rows affected")
+	}
+
+	return int(rowsAffected), nil
+}
+
 func (r *CRDBAuthRepo) GetUserPermissionsFromGroups(
 	ctx context.Context, l *logger.Logger, userID uuid.UUID,
 ) ([]*auth.GroupPermission, error) {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
@@ -251,6 +252,42 @@ func (r *MemAuthRepo) ListAllTokens(
 	filteredTokens = memoryfilters.ApplyPagination(filteredTokens, filterSet.Pagination)
 
 	return filteredTokens, totalCount, nil
+}
+
+// CleanupTokens removes tokens based on status and retention period.
+func (r *MemAuthRepo) CleanupTokens(
+	ctx context.Context, l *logger.Logger, status auth.TokenStatus, retention time.Duration,
+) (int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	cutoff := timeutil.Now().Add(-retention)
+	var toDelete []uuid.UUID
+
+	for id, token := range r.tokens {
+		if token.Status != status {
+			continue
+		}
+
+		switch status {
+		case auth.TokenStatusValid:
+			if token.ExpiresAt.Before(cutoff) {
+				toDelete = append(toDelete, id)
+			}
+		case auth.TokenStatusRevoked:
+			if token.UpdatedAt.Before(cutoff) {
+				toDelete = append(toDelete, id)
+			}
+		}
+	}
+
+	for _, id := range toDelete {
+		tokenHash := r.tokens[id].TokenHash
+		delete(r.tokens, id)
+		delete(r.tokensByHash, tokenHash)
+	}
+
+	return len(toDelete), nil
 }
 
 // Permissions

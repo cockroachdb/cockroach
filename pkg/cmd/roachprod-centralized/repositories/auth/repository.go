@@ -7,6 +7,7 @@ package auth
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
@@ -54,6 +55,11 @@ type IAuthRepository interface {
 	GetTokenByHash(context.Context, *logger.Logger, string) (*auth.ApiToken, error)
 	UpdateTokenLastUsed(context.Context, *logger.Logger, uuid.UUID) error
 	RevokeToken(context.Context, *logger.Logger, uuid.UUID) error
+	// CleanupTokens deletes tokens that have been in the specified status beyond retention.
+	// For TokenStatusValid (expired): deletes where ExpiresAt < now - retention
+	// For TokenStatusRevoked: deletes where UpdatedAt < now - retention
+	// Returns the number of tokens deleted.
+	CleanupTokens(context.Context, *logger.Logger, auth.TokenStatus, time.Duration) (int, error)
 
 	// GetUserPermissionsFromGroups returns permissions for a user by joining
 	// group_members → groups → group_permissions in a single query.

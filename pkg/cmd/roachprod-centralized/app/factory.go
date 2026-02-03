@@ -264,6 +264,8 @@ func NewServicesFromConfig(
 
 	// Create the auth service.
 	authService := sauth.NewService(authRepository, taskService, instanceID, sauthtypes.Options{
+		CleanupInterval:          time.Hour * 24,
+		ExpiredTokensRetention:   time.Hour * 24,
 		CollectMetrics:           cfg.Api.Metrics.Enabled,
 		StatisticsUpdateInterval: 30 * time.Second,
 	})

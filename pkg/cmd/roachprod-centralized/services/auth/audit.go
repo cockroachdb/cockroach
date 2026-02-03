@@ -23,6 +23,7 @@ const (
 	AuditTokenIssued           = "token.issued"
 	AuditTokenRevoked          = "token.revoked"
 	AuditTokenValidationFailed = "token.validation.failed"
+	AuditTokenCleanedUp        = "token.cleaned_up"
 )
 
 // auditEvent logs an audit event with structured fields.

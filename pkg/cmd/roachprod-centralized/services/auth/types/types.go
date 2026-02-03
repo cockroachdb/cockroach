@@ -65,6 +65,9 @@ type IService interface {
 	StartBackgroundWork(ctx context.Context, l *logger.Logger, errChan chan<- error) error
 	Shutdown(ctx context.Context) error
 
+	// Task service interface
+	CleanupRevokedAndExpiredTokens(ctx context.Context, l *logger.Logger, retention time.Duration) (int, error)
+
 	// Metrics recording (for authenticator layer)
 	RecordAuthentication(result, authMethod string, latency time.Duration)
 	RecordAuthzDecision(result, reason, endpoint, provider string)
@@ -73,6 +76,8 @@ type IService interface {
 
 // Options configures the auth service.
 type Options struct {
+	CleanupInterval          time.Duration // Default: 24h
+	ExpiredTokensRetention   time.Duration // Default: 24h
 	CollectMetrics           bool          // Enable Prometheus metrics collection
 	StatisticsUpdateInterval time.Duration // How often to update gauge metrics (default: 30s)
 }

@@ -60,6 +60,34 @@ func (_m *IService) AuthenticateToken(ctx context.Context, l *logger.Logger, tok
 	return r0, r1
 }
 
+// CleanupRevokedAndExpiredTokens provides a mock function with given fields: ctx, l, retention
+func (_m *IService) CleanupRevokedAndExpiredTokens(ctx context.Context, l *logger.Logger, retention time.Duration) (int, error) {
+	ret := _m.Called(ctx, l, retention)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CleanupRevokedAndExpiredTokens")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration) (int, error)); ok {
+		return rf(ctx, l, retention)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, time.Duration) int); ok {
+		r0 = rf(ctx, l, retention)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, time.Duration) error); ok {
+		r1 = rf(ctx, l, retention)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ExchangeOktaToken provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IService) ExchangeOktaToken(_a0 context.Context, _a1 *logger.Logger, _a2 string) (*modelsauth.ApiToken, string, error) {
 	ret := _m.Called(_a0, _a1, _a2)

@@ -7,14 +7,17 @@ package auth
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
 	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
 	authmetrics "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/internal/metrics"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -39,6 +42,12 @@ func NewService(
 ) *Service {
 
 	// Set defaults
+	if opts.CleanupInterval == 0 {
+		opts.CleanupInterval = 24 * time.Hour
+	}
+	if opts.ExpiredTokensRetention == 0 {
+		opts.ExpiredTokensRetention = 24 * time.Hour
+	}
 	if opts.StatisticsUpdateInterval == 0 {
 		opts.StatisticsUpdateInterval = 30 * time.Second
 	}
@@ -105,6 +114,9 @@ func (s *Service) StartBackgroundWork(
 
 	s.backgroundJobsCtx, s.backgroundJobsCancelFunc = context.WithCancel(ctx)
 
+	// Start the cleanup scheduler
+	s.startCleanupScheduler(l)
+
 	// Start metrics collection if enabled
 	if s.options.CollectMetrics {
 		// Perform initial collection
@@ -155,6 +167,69 @@ func (s *Service) Shutdown(ctx context.Context) error {
 		// If all workers finish successfully, return nil
 		return nil
 	}
+}
+
+func (s *Service) startCleanupScheduler(l *logger.Logger) {
+	cleanupLogger := l.With(
+		slog.String("service", "auth"),
+		slog.String("routine", "cleanup_scheduler"),
+	)
+	cleanupLogger.Info(
+		"starting cleanup scheduler",
+		slog.String("interval", s.options.CleanupInterval.String()),
+	)
+
+	// Create an initial cleanup task immediately if needed
+	if err := s.scheduleCleanupTaskIfNeeded(s.backgroundJobsCtx, cleanupLogger); err != nil {
+		cleanupLogger.Error(
+			"failed to schedule cleanup task",
+			slog.Any("error", err),
+		)
+	}
+
+	s.backgroundJobsWg.Add(1)
+	go func() {
+		defer s.backgroundJobsWg.Done()
+
+		ticker := time.NewTicker(s.options.CleanupInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.backgroundJobsCtx.Done():
+				cleanupLogger.Info("stopping cleanup scheduler")
+				return
+
+			case <-ticker.C:
+				if err := s.scheduleCleanupTaskIfNeeded(s.backgroundJobsCtx, cleanupLogger); err != nil {
+					cleanupLogger.Error(
+						"failed to schedule cleanup task",
+						slog.Any("error", err),
+					)
+				}
+			}
+		}
+	}()
+}
+
+func (s *Service) scheduleCleanupTaskIfNeeded(ctx context.Context, l *logger.Logger) error {
+	if s.taskService == nil {
+		return nil
+	}
+
+	task, err := tasks.NewTaskExpiredTokensCleanup(s.options.ExpiredTokensRetention)
+	if err != nil {
+		return errors.Wrap(err, "failed to create expired tokens cleanup task")
+	}
+
+	// Create cleanup task if not recently scheduled
+	_, err = s.taskService.CreateTaskIfNotRecentlyScheduled(
+		ctx, l,
+		task,
+		s.options.CleanupInterval,
+	)
+
+	return err
 }
 
 // UpdateMetrics implements metrics.ICollector for periodic gauge updates.

@@ -1366,6 +1366,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachprod-centralized/services/auth/internal/metrics:metrics",
     "//pkg/cmd/roachprod-centralized/services/auth/internal/metrics:metrics_test",
     "//pkg/cmd/roachprod-centralized/services/auth/mocks:mocks",
+    "//pkg/cmd/roachprod-centralized/services/auth/tasks:tasks",
     "//pkg/cmd/roachprod-centralized/services/auth/types:types",
     "//pkg/cmd/roachprod-centralized/services/auth:auth",
     "//pkg/cmd/roachprod-centralized/services/auth:auth_test",
