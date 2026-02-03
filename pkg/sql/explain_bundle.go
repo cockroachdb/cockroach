@@ -931,8 +931,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		// systems (e.g. Windows is particularly picky), we also replace many
 		// special characters with underscores - which might lose the uniqueness
 		// property. Thus, we additionally might append a count to guarantee
-		// uniqueness again.
-		fileName := stmtBundleStatsFileRE.ReplaceAllString(tables[i].FQString(), `_`)
+		// uniqueness again. We also convert everything to the lower case since
+		// Windows is case-insensitive by default.
+		fileName := strings.ToLower(stmtBundleStatsFileRE.ReplaceAllString(tables[i].FQString(), `_`))
 		statsFileNames[fileName]++
 		if statsFileNames[fileName] > 1 { // don't touch the first occurrency of this file name
 			fileName = fileName + "_" + strconv.Itoa(statsFileNames[fileName])

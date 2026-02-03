@@ -3575,6 +3575,14 @@ func (dsp *DistSQLPlanner) planJoiners(
 	return p
 }
 
+type noopMetadataForwarder struct{}
+
+var _ metadataForwarder = &noopMetadataForwarder{}
+
+func (n noopMetadataForwarder) forwardMetadata(*execinfrapb.ProducerMetadata) {}
+
+var singletonNoopMetadataForwarder = &noopMetadataForwarder{}
+
 // createPhysPlan creates a PhysicalPlan as well as returns a non-nil cleanup
 // function that must be called after the flow has been cleaned up.
 func (dsp *DistSQLPlanner) createPhysPlan(
@@ -3585,6 +3593,15 @@ func (dsp *DistSQLPlanner) createPhysPlan(
 		// plan.physPlan.onClose, so here we return a noop cleanup function.
 		return plan.physPlan.PhysicalPlan, func() {}, nil
 	}
+	// If we happen to evaluate an expression with a routine during the physical
+	// planning, we haven't yet set the metadata forwarder (we do that later,
+	// during the flow setup). So to prevent expected nil pointer internal
+	// errors we set a noop forwarder and then unset it once the physical
+	// planning is done.
+	planCtx.planner.routineMetadataForwarder = singletonNoopMetadataForwarder
+	defer func() {
+		planCtx.planner.routineMetadataForwarder = nil
+	}()
 	physPlan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
 	return physPlan, planCtx.getCleanupFunc(), err
 }
