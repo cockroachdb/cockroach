@@ -234,6 +234,7 @@ func (mb *mutationBuilder) buildTriggerFunctionArgs(
 	tgTableSchema := tree.NewDString(schema.Name().Schema())
 	tgNumArgs := tree.NewDInt(tree.DInt(len(trigger.FuncArgs())))
 	tgArgV := tree.NewDArray(types.String)
+	tgArgV.SetZeroIndexed()
 	for _, arg := range trigger.FuncArgs() {
 		err = tgArgV.Append(arg)
 		if err != nil {
@@ -700,6 +701,7 @@ func (tb *rowLevelAfterTriggerBuilder) Build(
 				tgName := tree.NewDName(string(trigger.Name()))
 				tgNumArgs := tree.NewDInt(tree.DInt(len(trigger.FuncArgs())))
 				tgArgV := tree.NewDArray(types.String)
+				tgArgV.SetZeroIndexed()
 				for _, arg := range trigger.FuncArgs() {
 					err = tgArgV.Append(arg)
 					if err != nil {

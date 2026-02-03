@@ -4213,8 +4213,7 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
     RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
     RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
     RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
-    -- TODO(#135311): uncomment this when we support TG_ARGV.
-    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+    RAISE NOTICE 'TG_ARGV: %', TG_ARGV;
     RETURN NEW;
   END
 $$;
@@ -4239,6 +4238,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 NOTICE: NEW: (1,2)
 NOTICE: OLD: <NULL>
 NOTICE: TG_NAME: bar
@@ -4250,6 +4250,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 
 query T noticetrace
 UPDATE xy SET y = 3 WHERE x = 1;
@@ -4265,6 +4266,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 NOTICE: NEW: (1,3)
 NOTICE: OLD: (1,2)
 NOTICE: TG_NAME: bar
@@ -4276,6 +4278,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -4795,8 +4798,7 @@ DROP FUNCTION f4();
 
 subtest end
 
-# Until #135311 can be fixed, disallow TG_ARGV references by default. There is
-# a setting to allow them if necessary.
+# Regression test for #135311: TG_ARGV should be 0-indexed like PostgreSQL.
 subtest regression_135311
 
 statement ok
@@ -4806,42 +4808,94 @@ statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
     RAISE NOTICE 'g()';
+    RAISE NOTICE 'TG_ARGV[0]: %', TG_ARGV[0];
     RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
     RETURN NEW;
   END
 $$;
 
-statement error pgcode 0A000 pq: unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
-
 statement ok
-SET allow_create_trigger_function_with_argv_references = true;
-
-statement ok
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('first', 'second');
 
 query T noticetrace
 INSERT INTO xy VALUES (1, 2);
 ----
 NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
-
-statement ok
-RESET allow_create_trigger_function_with_argv_references;
-
-# The setting only disallows creating the trigger - not executing it if it was
-# already created.
-query T noticetrace
-INSERT INTO xy VALUES (3, 4);
-----
-NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
+NOTICE: TG_ARGV[0]: first
+NOTICE: TG_ARGV[1]: second
 
 statement ok
 DROP TRIGGER foo ON xy;
 
 statement ok
 DROP FUNCTION g;
+
+# Test assigning TG_ARGV to a TEXT[] variable, then doing a zero-indexed read.
+# Note: This matches Postgres behavior, and keeps the array as zero-indexed.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    args TEXT[];
+  BEGIN
+    args := TG_ARGV;
+    RAISE NOTICE 'args[0]: %', args[0];
+    RAISE NOTICE 'args[1]: %', args[1];
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('arg_one', 'arg_two');
+
+query T noticetrace
+INSERT INTO xy VALUES (100, 200);
+----
+NOTICE: args[0]: arg_one
+NOTICE: args[1]: arg_two
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Test a helper function that takes a TEXT[] argument and does a zero-indexed
+# read on it.
+# Note: In PostgreSQL, when TG_ARGV is passed to a function, it retains its
+# zero-indexed behavior.
+statement ok
+CREATE FUNCTION read_args(arr TEXT[]) RETURNS TEXT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN 'arr[0]=' || COALESCE(arr[0], 'NULL') || ', arr[1]=' || COALESCE(arr[1], 'NULL');
+  END
+$$;
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'direct TG_ARGV[0]: %', TG_ARGV[0];
+    RAISE NOTICE 'via helper: %', read_args(TG_ARGV);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('helper_one', 'helper_two');
+
+query T noticetrace
+INSERT INTO xy VALUES (102, 202);
+----
+NOTICE: direct TG_ARGV[0]: helper_one
+NOTICE: via helper: arr[0]=helper_one, arr[1]=helper_two
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP FUNCTION read_args;
 
 subtest end
 

@@ -2222,12 +2222,6 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 		// continuation UDFs.
 		paramOrd := len(params)
 		col.setParamOrd(paramOrd)
-		if b.ob.insideFuncDef && b.options.isTriggerFn && paramOrd == triggerArgvColIdx {
-			// Due to #135311, we disallow references to the TG_ARGV param for now.
-			if !b.ob.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
-				col.resolveErr = unimplementedArgvErr
-			}
-		}
 		params = append(params, col.id)
 	}
 	// Invariant: the variables of a child block always follow those of a parent
@@ -2377,9 +2371,7 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 		block := &b.blocks[i]
 		for _, name := range block.vars {
 			_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
-			if err != nil && !errors.Is(err, unimplementedArgvErr) {
-				// Swallow unimplementedArgvErr, since it's ok to reference the TG_ARGV
-				// parameter when calling a continuation.
+			if err != nil {
 				panic(err)
 			}
 			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
