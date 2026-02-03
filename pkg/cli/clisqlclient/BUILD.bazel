@@ -48,6 +48,7 @@ go_test(
     ],
     embed = [":clisqlclient"],
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/cli",
         "//pkg/security/username",
