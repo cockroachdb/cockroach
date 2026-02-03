@@ -134,16 +134,6 @@ func alterChangefeedPlanHook(
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 
-		newChangefeedStmt := &tree.CreateChangefeed{}
-		if isDBLevelChangefeed(prevDetails) {
-			newChangefeedStmt.Level = tree.ChangefeedLevelDatabase
-			if len(prevDetails.TargetSpecifications) != 1 {
-				return errors.AssertionFailedf("database level changefeed must have exactly one target specification")
-			}
-		} else {
-			newChangefeedStmt.Level = tree.ChangefeedLevelTable
-		}
-
 		prevOpts, err := getPrevOpts(job.Payload().Description, prevDetails.Opts)
 		if err != nil {
 			return err
@@ -164,191 +154,276 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
-			ctx, exprEval, p,
-			newChangefeedStmt.Level,
-			alterChangefeedStmt.Cmds,
-			newOptions,
-			prevDetails, job.Progress(),
-			newSinkURI,
+		if isDBLevelChangefeed(prevDetails) {
+			return alterDatabaseChangefeed(
+				ctx, p, alterChangefeedStmt, newOptions, newSinkURI,
+				prevDetails, job, jobID, resultsCh,
+			)
+		}
+		return alterTableChangefeed(
+			ctx, p, exprEval, alterChangefeedStmt, newOptions, newSinkURI,
+			prevDetails, job, jobID, resultsCh,
 		)
-		if err != nil {
-			return err
-		}
-
-		if err := setChangefeedTargets(ctx, p, newChangefeedStmt, prevDetails, newTargets); err != nil {
-			return err
-		}
-
-		if err := processFiltersForChangefeed(newChangefeedStmt, alterChangefeedStmt.Cmds, prevDetails); err != nil {
-			return err
-		}
-
-		if prevDetails.Select != "" {
-			query, err := cdceval.ParseChangefeedExpression(prevDetails.Select)
-			if err != nil {
-				return err
-			}
-			newChangefeedStmt.Select = query
-		}
-
-		for key, value := range newOptions.AsMap() {
-			opt := tree.KVOption{Key: tree.Name(key)}
-			if len(value) > 0 {
-				opt.Value = tree.NewDString(value)
-			}
-			newChangefeedStmt.Options = append(newChangefeedStmt.Options, opt)
-		}
-		newChangefeedStmt.SinkURI = tree.NewDString(newSinkURI)
-
-		// We validate that all the tables are resolvable at the
-		// resolveTime below in validateNewTargets. resolveTime is also
-		// the time from which changefeed will resume. Therefore we
-		// will override with this time in createChangefeedJobRecord
-		// when we get table descriptors.
-		var resolveTime hlc.Timestamp
-		highWater := newProgress.GetHighWater()
-		if highWater != nil && !highWater.IsEmpty() {
-			resolveTime = *highWater
-		} else {
-			resolveTime = newStatementTime
-		}
-
-		annotatedStmt := &annotatedChangefeedStatement{
-			CreateChangefeed:    newChangefeedStmt,
-			originalSpecs:       originalSpecs,
-			alterChangefeedAsOf: resolveTime,
-		}
-
-		newDescription, err := makeChangefeedDescription(ctx, annotatedStmt.CreateChangefeed, newSinkURI, newOptions)
-		if err != nil {
-			return err
-		}
-
-		jobRecord, targets, err := createChangefeedJobRecord(
-			ctx,
-			p,
-			annotatedStmt,
-			newDescription,
-			newSinkURI,
-			newOptions,
-			jobID,
-			``,
-		)
-		if err != nil {
-			return errors.Wrap(err, `failed to alter changefeed`)
-		}
-
-		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
-		// newStatementTime will either be the StatementTime of the job prior to the
-		// alteration, or it will be the high watermark of the job.
-		newDetails.StatementTime = newStatementTime
-
-		if newChangefeedStmt.Level == tree.ChangefeedLevelDatabase {
-			// NB: We do not need to remove spans for tables that are no longer
-			// watched from job progress, only to add spans for new tables.
-			// When the changefeed is resumed, we will make the frontier so that
-			// it will only watch the new set of watched tables. This means
-			// that if altering a filter results in us watching fewer tables,
-			// we will not emit ANY more events for that table, even if it was
-			// lagging, i.e. even if they corresponded to updates made before
-			// the ALTER CHANGEFEED statement.
-			if err := storeAlterChangefeedFrontier(
-				ctx, p, jobID, newDetails, prevDetails,
-			); err != nil {
-				return err
-			}
-		} else {
-			// If the changefeed is a table-level changefeed, we set the initial
-			// scan option to its default value of "yes" so that we can do an
-			// initial scan for new targets.
-			newDetails.Opts[changefeedbase.OptInitialScan] = ``
-		}
-
-		newPayload := job.Payload()
-		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
-		newPayload.Description = jobRecord.Description
-		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
-
-		// The maximum PTS age on jobRecord will be set correctly (based on either
-		// the option or cluster setting) by createChangefeedJobRecord.
-		newPayload.MaximumPTSAge = jobRecord.MaximumPTSAge
-
-		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
-		if err != nil {
-			return err
-		}
-		if err := j.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-		) error {
-			ju.UpdatePayload(&newPayload)
-			if newProgress != nil {
-				ju.UpdateProgress(newProgress)
-			}
-
-			return nil
-		}); err != nil {
-			return err
-		}
-
-		telemetry.Count(telemetryPath)
-		shouldMigrate := log.ShouldMigrateEvent(p.ExecCfg().SV())
-		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description, targets.Size, shouldMigrate)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(jobID)),
-			tree.NewDString(jobRecord.Description),
-		}:
-			return nil
-		}
 	}
 
 	return fn, alterChangefeedHeader, false, nil
 }
 
-// setChangefeedTargets sets the appropriate target fields on the changefeed
-// statement based on the feed level. Database-level feeds get a DatabaseTarget,
-// while table-level feeds get TableTargets.
-func setChangefeedTargets(
+// alterDatabaseChangefeed handles ALTER CHANGEFEED for database-level feeds.
+// Database-level feeds do not support ADD/DROP target commands. They support
+// filter changes (SET/UNSET INCLUDE/EXCLUDE TABLES) and option changes.
+func alterDatabaseChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
-	stmt *tree.CreateChangefeed,
+	alterChangefeedStmt *tree.AlterChangefeed,
+	newOptions changefeedbase.StatementOptions,
+	newSinkURI string,
 	prevDetails jobspb.ChangefeedDetails,
-	newTargets tree.ChangefeedTableTargets,
+	job *jobs.Job,
+	jobID jobspb.JobID,
+	resultsCh chan<- tree.Datums,
 ) error {
-	if stmt.Level == tree.ChangefeedLevelDatabase {
-		targetSpec := prevDetails.TargetSpecifications[0]
-		txn := p.InternalSQLTxn()
-		databaseDescriptor, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Database(ctx, targetSpec.DescID)
+	if len(prevDetails.TargetSpecifications) != 1 {
+		return errors.AssertionFailedf(
+			"database level changefeed must have exactly one target specification",
+		)
+	}
+
+	// Database-level feeds do not support ADD/DROP target commands.
+	isAlteringTargets := slices.ContainsFunc(
+		alterChangefeedStmt.Cmds,
+		func(cmd tree.AlterChangefeedCmd) bool {
+			_, isAdd := cmd.(*tree.AlterChangefeedAddTarget)
+			_, isDrop := cmd.(*tree.AlterChangefeedDropTarget)
+			return isAdd || isDrop
+		})
+	if isAlteringTargets {
+		return errors.Errorf("cannot alter targets for a database level changefeed")
+	}
+
+	// Look up database descriptor to set DatabaseTarget.
+	targetSpec := prevDetails.TargetSpecifications[0]
+	txn := p.InternalSQLTxn()
+	databaseDescriptor, err := txn.Descriptors().
+		ByIDWithLeased(txn.KV()).Get().
+		Database(ctx, targetSpec.DescID)
+	if err != nil {
+		return err
+	}
+
+	newChangefeedStmt := &tree.CreateChangefeed{
+		Level:          tree.ChangefeedLevelDatabase,
+		DatabaseTarget: tree.ChangefeedDatabaseTarget(databaseDescriptor.GetName()),
+		SinkURI:        tree.NewDString(newSinkURI),
+	}
+
+	// Process filter changes (SET/UNSET INCLUDE/EXCLUDE TABLES).
+	if err := processFiltersForDatabaseChangefeed(
+		newChangefeedStmt, alterChangefeedStmt.Cmds, prevDetails,
+	); err != nil {
+		return err
+	}
+
+	newProgress := job.Progress()
+	newStatementTime := prevDetails.StatementTime
+
+	var resolveTime hlc.Timestamp
+	highWater := newProgress.GetHighWater()
+	if highWater != nil && !highWater.IsEmpty() {
+		resolveTime = *highWater
+	} else {
+		resolveTime = newStatementTime
+	}
+
+	annotatedStmt := &annotatedChangefeedStatement{
+		CreateChangefeed:    newChangefeedStmt,
+		alterChangefeedAsOf: resolveTime,
+	}
+
+	newDescription, err := makeChangefeedDescription(
+		ctx, annotatedStmt.CreateChangefeed, newSinkURI, newOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	jobRecord, targets, err := createChangefeedJobRecord(
+		ctx, p, annotatedStmt, newDescription, newSinkURI, newOptions, jobID, ``,
+	)
+	if err != nil {
+		return errors.Wrap(err, `failed to alter changefeed`)
+	}
+
+	newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
+	newDetails.StatementTime = newStatementTime
+
+	// NB: We do not need to remove spans for tables that are no longer
+	// watched from job progress, only to add spans for new tables.
+	// When the changefeed is resumed, we will make the frontier so that
+	// it will only watch the new set of watched tables. This means
+	// that if altering a filter results in us watching fewer tables,
+	// we will not emit ANY more events for that table, even if it was
+	// lagging, i.e. even if they corresponded to updates made before
+	// the ALTER CHANGEFEED statement.
+	if err := storeFilterChangeFrontierForDatabaseChangefeed(
+		ctx, p, jobID, newDetails, prevDetails,
+	); err != nil {
+		return err
+	}
+
+	return finalizeAlterChangefeed(
+		ctx, p, job, jobID, jobRecord, newDetails, &newProgress, targets, resultsCh,
+	)
+}
+
+// alterTableChangefeed handles ALTER CHANGEFEED for table-level feeds.
+// Table-level feeds support ADD/DROP target commands and option changes,
+// but do not support filter changes (SET/UNSET INCLUDE/EXCLUDE TABLES).
+func alterTableChangefeed(
+	ctx context.Context,
+	p sql.PlanHookState,
+	exprEval exprutil.Evaluator,
+	alterChangefeedStmt *tree.AlterChangefeed,
+	newOptions changefeedbase.StatementOptions,
+	newSinkURI string,
+	prevDetails jobspb.ChangefeedDetails,
+	job *jobs.Job,
+	jobID jobspb.JobID,
+	resultsCh chan<- tree.Datums,
+) error {
+	// Table-level feeds do not support filter commands.
+	filterCommands := generateNewFilters(alterChangefeedStmt.Cmds)
+	if len(filterCommands) > 0 {
+		return errors.Errorf("cannot set filters for table level changefeeds")
+	}
+
+	newTargets, newProgress, newStatementTime, originalSpecs, err :=
+		generateAndValidateNewTargetsForTableLevelFeed(
+			ctx, exprEval, p, alterChangefeedStmt.Cmds, newOptions,
+			prevDetails, job.Progress(), newSinkURI,
+		)
+	if err != nil {
+		return err
+	}
+
+	newChangefeedStmt := &tree.CreateChangefeed{
+		Level:        tree.ChangefeedLevelTable,
+		TableTargets: newTargets,
+		SinkURI:      tree.NewDString(newSinkURI),
+	}
+
+	if prevDetails.Select != "" {
+		query, err := cdceval.ParseChangefeedExpression(prevDetails.Select)
 		if err != nil {
 			return err
 		}
-		stmt.DatabaseTarget = tree.ChangefeedDatabaseTarget(databaseDescriptor.GetName())
-	} else {
-		stmt.TableTargets = newTargets
+		newChangefeedStmt.Select = query
 	}
-	return nil
+
+	var resolveTime hlc.Timestamp
+	highWater := newProgress.GetHighWater()
+	if highWater != nil && !highWater.IsEmpty() {
+		resolveTime = *highWater
+	} else {
+		resolveTime = newStatementTime
+	}
+
+	annotatedStmt := &annotatedChangefeedStatement{
+		CreateChangefeed:    newChangefeedStmt,
+		originalSpecs:       originalSpecs,
+		alterChangefeedAsOf: resolveTime,
+	}
+
+	newDescription, err := makeChangefeedDescription(
+		ctx, annotatedStmt.CreateChangefeed, newSinkURI, newOptions,
+	)
+	if err != nil {
+		return err
+	}
+
+	jobRecord, targets, err := createChangefeedJobRecord(
+		ctx, p, annotatedStmt, newDescription, newSinkURI, newOptions, jobID, ``,
+	)
+	if err != nil {
+		return errors.Wrap(err, `failed to alter changefeed`)
+	}
+
+	newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
+	newDetails.StatementTime = newStatementTime
+
+	// For table-level feeds, set the initial scan option to its default
+	// value of "yes" so that we can do an initial scan for new targets.
+	newDetails.Opts[changefeedbase.OptInitialScan] = ``
+
+	return finalizeAlterChangefeed(
+		ctx, p, job, jobID, jobRecord, newDetails, newProgress, targets, resultsCh,
+	)
 }
 
-// processFiltersForChangefeed validates and applies filter changes to the
-// changefeed statement. Filters are only supported for database-level feeds.
-func processFiltersForChangefeed(
+// finalizeAlterChangefeed persists the new job payload and progress,
+// emits telemetry, and sends the result to resultsCh.
+func finalizeAlterChangefeed(
+	ctx context.Context,
+	p sql.PlanHookState,
+	job *jobs.Job,
+	jobID jobspb.JobID,
+	jobRecord *jobs.Record,
+	newDetails jobspb.ChangefeedDetails,
+	newProgress *jobspb.Progress,
+	targets changefeedbase.Targets,
+	resultsCh chan<- tree.Datums,
+) error {
+	prevDescription := job.Payload().Description
+
+	newPayload := job.Payload()
+	newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
+	newPayload.Description = jobRecord.Description
+	newPayload.DescriptorIDs = jobRecord.DescriptorIDs
+
+	// The maximum PTS age on jobRecord will be set correctly (based on either
+	// the option or cluster setting) by createChangefeedJobRecord.
+	newPayload.MaximumPTSAge = jobRecord.MaximumPTSAge
+
+	j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
+	if err != nil {
+		return err
+	}
+	if err := j.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		ju.UpdatePayload(&newPayload)
+		if newProgress != nil {
+			ju.UpdateProgress(newProgress)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	telemetry.Count(telemetryPath)
+	shouldMigrate := log.ShouldMigrateEvent(p.ExecCfg().SV())
+	logAlterChangefeedTelemetry(ctx, j, prevDescription, targets.Size, shouldMigrate)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(jobID)),
+		tree.NewDString(jobRecord.Description),
+	}:
+		return nil
+	}
+}
+
+// processFiltersForDatabaseChangefeed validates and applies filter changes to a
+// database-level changefeed statement. It should only be called for
+// database-level feeds.
+func processFiltersForDatabaseChangefeed(
 	stmt *tree.CreateChangefeed,
 	alterCmds tree.AlterChangefeedCmds,
 	prevDetails jobspb.ChangefeedDetails,
 ) error {
 	filterCommands := generateNewFilters(alterCmds)
-
-	// Only DB-level feeds should have filters.
-	if stmt.Level != tree.ChangefeedLevelDatabase {
-		if len(filterCommands) > 0 {
-			return errors.Errorf("cannot set filters for table level changefeeds")
-		}
-		return nil
-	}
 
 	// We add the existing filter state to the changefeed statement for
 	// DB-level feeds. This ensures that existing filters are preserved when
@@ -480,42 +555,6 @@ func generateNewOpts(
 	}
 
 	return changefeedbase.MakeStatementOptions(newOptions), sinkURI, nil
-}
-
-func generateAndValidateNewTargets(
-	ctx context.Context,
-	exprEval exprutil.Evaluator,
-	p sql.PlanHookState,
-	level tree.ChangefeedLevel,
-	alterCmds tree.AlterChangefeedCmds,
-	opts changefeedbase.StatementOptions,
-	prevDetails jobspb.ChangefeedDetails,
-	prevProgress jobspb.Progress,
-	sinkURI string,
-) (
-	tree.ChangefeedTableTargets,
-	*jobspb.Progress,
-	hlc.Timestamp,
-	map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
-	error,
-) {
-	if level == tree.ChangefeedLevelTable {
-		return generateAndValidateNewTargetsForTableLevelFeed(
-			ctx, exprEval, p, alterCmds, opts, prevDetails, prevProgress, sinkURI,
-		)
-	}
-	// Database-level feeds do not support ADD/DROP target commands, so we validate
-	// that we haven't set any, otherwise, this is a no-op.
-	isAlteringTargets := slices.ContainsFunc(alterCmds, func(cmd tree.AlterChangefeedCmd) bool {
-		_, isAdd := cmd.(*tree.AlterChangefeedAddTarget)
-		_, isDrop := cmd.(*tree.AlterChangefeedDropTarget)
-		return isAdd || isDrop
-	})
-	if isAlteringTargets {
-		return nil, nil, hlc.Timestamp{}, nil, errors.Errorf("cannot alter targets for a database level changefeed")
-	}
-
-	return tree.ChangefeedTableTargets{}, &prevProgress, prevDetails.StatementTime, nil, nil
 }
 
 func generateAndValidateNewTargetsForTableLevelFeed(
@@ -1016,11 +1055,11 @@ func generateNewProgress(
 	return newProgress, prevStatementTime, nil
 }
 
-// storeAlterChangefeedFrontier uses the persistent job frontier to ensure that
+// storeFilterChangeFrontierForDatabaseChangefeed uses the persistent job frontier to ensure that
 // when we resume the changefeed, new tables being watched by the database level
 // feed (due to ALTER CHANGEFEED changing the filter options) are watched only
 // from the time of the ALTER CHANGEFEED statement.
-func storeAlterChangefeedFrontier(
+func storeFilterChangeFrontierForDatabaseChangefeed(
 	ctx context.Context,
 	p sql.PlanHookState,
 	jobID jobspb.JobID,
@@ -1095,6 +1134,7 @@ func storeAlterChangefeedFrontier(
 
 	return jobfrontier.Store(ctx, p.InternalSQLTxn(), jobID, `alter_changefeed`, frontier)
 }
+
 func removeSpansFromProgress(progress jobspb.Progress, spansToRemove []roachpb.Span) error {
 	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(progress)
 	if err != nil {
