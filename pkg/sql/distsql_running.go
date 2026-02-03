@@ -6,11 +6,13 @@
 package sql
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1632,6 +1634,29 @@ func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
 		// Safety measure in production builds in case the forwarder is nil for
 		// some reason.
 		return
+	} else if f == nil {
+		// This is a test-only build. There is one case where it's expected that
+		// the forwarder is nil in which case we'll also short-circuit.
+		//
+		// In particular, if we happen to evaluate an expression with a routine
+		// during the physical planning, we haven't yet set the forwarder (we do
+		// that later, during the flow setup). So we take a look at the stack
+		// trace to see whether we're still in the physical planning or in the
+		// running phase already.
+		stackTrace := string(debug.Stack())
+		scanner := bufio.NewScanner(strings.NewReader(stackTrace))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "createPhysPlan(") {
+				// Still in the physical planning - we're exempting this
+				// expression evaluation with a routine from hitting a nil
+				// pointer.
+				return
+			} else if strings.Contains(line, "Run(") {
+				// Already in the running phase - we should panic
+				break
+			}
+		}
 	}
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
