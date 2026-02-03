@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "keydecoder",
+    srcs = ["decoder.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/keydecoder",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/privilege",
+        "//pkg/sql/rowenc/keyside",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/encoding",
+    ],
+)
