@@ -1613,6 +1613,7 @@ func init() {
 	cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
 	_ = f.MarkHidden(cliflags.UseNewRPC.Name)
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw, openmetrics)")
+	f.StringVar(&debugTimeSeriesDumpOpts.encoding, "encoding", "", "encoding for raw format (supported: zstd)")
 	f.StringVarP(&debugTimeSeriesDumpOpts.output, "output", "o", "", "output file path; writes output to file instead of stdout")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
