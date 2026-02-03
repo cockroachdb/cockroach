@@ -1212,6 +1212,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.internalDB = *internalDB
 	execCfg.InternalDB = internalDB
 
+	// Set up the key decoder dependencies for contention logging. This allows
+	// contention events to include human-readable table and index information
+	// instead of raw encoded keys.
+	contentionRegistry.SetKeyDecoderDeps(internalDB, codec)
+
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
 		cfg.Settings,
