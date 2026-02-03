@@ -161,6 +161,16 @@ var MaxLockFlushSize = settings.RegisterByteSizeSetting(
 	0,
 )
 
+// VirtualIntentResolution controls whether the intents encountered by a
+// non-locking read request can be "virtually resolved".
+var VirtualIntentResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.virtual_intent_resolution.enabled",
+	"whether read-only, non-locking requests should virtually resolve intents",
+	false,
+	settings.WithUnsafe,
+)
+
 // MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
 // flush during merge and transfer operations.
 func GetMaxLockFlushSize(sv *settings.Values) int64 {

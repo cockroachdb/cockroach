@@ -404,6 +404,9 @@ type lockTableGuardImpl struct {
 	spans              *lockspanset.LockSpanSet
 	waitPolicy         lock.WaitPolicy
 	maxWaitQueueLength int
+	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
+	// the outset of this request.
+	virtuallyResolveIntents bool
 
 	// Snapshot of the tree for which this request has some spans. Note that
 	// the lockStates in this snapshot may have been removed from
@@ -4269,6 +4272,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1
+	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV)
 	return g
 }
 
