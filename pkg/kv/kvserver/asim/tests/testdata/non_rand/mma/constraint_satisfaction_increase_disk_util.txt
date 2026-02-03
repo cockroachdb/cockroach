@@ -1,0 +1,66 @@
+# This test verifies that the allocator can satisfy zone constraints when they
+# are being violated even when fixing constraints would make disk utilization
+# even more imbalanced. The test sets up a 7-node cluster across 3 regions
+# (a, b, c) with 2, 2, and 3 nodes respectively. The span config requires 2
+# replicas in region a, with lease preferences for region a. The test creates 12
+# ranges with 3 replicas each with a replica on s1, s2 (region a), and equally
+# balanced between s3 & s4 (region b). 3 additional ranges are created with 3
+# replicas on s5, s6, and s7 (region c). Each store has 10 GiB capacity and each
+# range is 500 MiB, making stores s1 and s2 around 73% full, while s3 and s4 are
+# around 36% full, and s5, s6, and s7 are only 18% full.
+#
+# Expected outcome: The allocator should move replicas for the 3 ranges on
+# region c to s1 and s2 to satisfy the zone constraints, making the stores
+# about 91% full. The other replicas might be balanced between the stores in
+# region b and c.
+gen_cluster nodes=7 region=(a,b,c) nodes_per_region=(2,2,3) store_byte_capacity_gib=10
+----
+
+gen_ranges ranges=60 repl_factor=3 placement_type=replica_placement bytes_mib=100 min_key=0 max_key=20000
+{s1,s2,s3}:1 {s1,s2,s4}:1
+----
+{s1:*,s2,s3}:1
+{s1:*,s2,s4}:1
+
+# Note that the number of ranges and their sizes is specifically chosen such
+# that the final disk usage doesn't exceed 95% as that would trigger shedding of
+# replicas even if that violates constraints (#161958)
+gen_ranges ranges=15 repl_factor=3 placement_type=replica_placement bytes_mib=100 min_key=20000 max_key=30000
+{s5,s6,s7}:1
+----
+{s5:*,s6,s7}:1
+
+set_span_config
+[0,9999999999): num_replicas=3 num_voters=3 constraints={'+region=a':2} lease_preferences=[['+region=a']]
+----
+
+setting split_queue_enabled=false
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=10m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
+----
+disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
+disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+leases#1: first: [s1=60, s2=0, s3=0, s4=0, s5=15, s6=0, s7=0] (stddev=20.78, mean=10.71, sum=75)
+leases#1: last:  [s1=42, s2=33, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.11, mean=10.71, sum=75)
+leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=20%)
+replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
+replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+artifacts[sma-count]: 9e69db6ac95253c2
+==========================
+disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
+disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
+disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+leases#1: first: [s1=60, s2=0, s3=0, s4=0, s5=15, s6=0, s7=0] (stddev=20.78, mean=10.71, sum=75)
+leases#1: last:  [s1=42, s2=33, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=17.11, mean=10.71, sum=75)
+leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=20%)
+replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
+replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
+artifacts[mma-count]: 9e69db6ac95253c2
+==========================

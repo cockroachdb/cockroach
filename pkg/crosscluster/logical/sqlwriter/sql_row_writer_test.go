@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package logical
+package sqlwriter
 
 import (
 	"context"
@@ -33,8 +33,9 @@ func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string)
 }
 
 func newInternalSession(t *testing.T, s serverutils.ApplicationLayerInterface) isql.Session {
-	sd := tableHandlerSessionSettings(sql.NewInternalSessionData(context.Background(), s.ClusterSettings(), ""), s.ClusterSettings())
-	session, err := s.InternalDB().(isql.DB).Session(context.Background(), "test_session", isql.WithSessionData(sd))
+	ctx := context.Background()
+	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "" /* opName */)
+	session, err := NewInternalSession(ctx, s.InternalDB().(isql.DB), sd, s.ClusterSettings())
 	require.NoError(t, err)
 	return session
 }
@@ -67,7 +68,7 @@ func TestSQLRowWriter(t *testing.T) {
 
 	// Create a row writer
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ApplicationLayer().ExecutorConfig(), "test_table")
-	writer, err := newSQLRowWriter(ctx, desc, session)
+	writer, err := NewRowWriter(ctx, desc, session)
 	require.NoError(t, err)
 
 	// Test InsertRow
@@ -89,7 +90,7 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test UpdateRow with stale previous value
 	staleRow := makeTestRow(t, desc, 1, "test") // Using old value
 	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
-	require.ErrorIs(t, err, errStalePreviousValue)
+	require.ErrorIs(t, err, ErrStalePreviousValue)
 
 	// Test DeleteRow - first insert a test row to verify origin data before delete
 	insertRow2 := makeTestRow(t, desc, 2, "to_delete")
@@ -115,5 +116,5 @@ func TestSQLRowWriter(t *testing.T) {
 
 	// Test DeleteRow with stale value
 	err = writer.DeleteRow(ctx, s.Clock().Now(), staleRow)
-	require.ErrorIs(t, err, errStalePreviousValue)
+	require.ErrorIs(t, err, ErrStalePreviousValue)
 }
