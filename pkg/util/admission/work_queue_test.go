@@ -65,13 +65,31 @@ type testGranter struct {
 	// Configurable knobs for tests.
 	returnValueFromTryGet bool
 	additionalTokens      int64
+	printBurstQual        bool
+
+	// Captures the burstQualification passed to tryGet.
+	mu            syncutil.Mutex
+	lastBurstQual burstQualification
 }
 
 var _ granterWithStoreReplicatedWorkAdmitted = &testGranter{}
 
-func (tg *testGranter) tryGet(_ burstQualification, count int64) bool {
-	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
+func (tg *testGranter) tryGet(burstQual burstQualification, count int64) bool {
+	tg.mu.Lock()
+	tg.lastBurstQual = burstQual
+	tg.mu.Unlock()
+	if tg.printBurstQual {
+		tg.buf.printf("tryGet%s: input %s, returning %t", tg.name, burstQual.String(), tg.returnValueFromTryGet)
+	} else {
+		tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
+	}
 	return tg.returnValueFromTryGet
+}
+
+func (tg *testGranter) getLastBurstQual() burstQualification {
+	tg.mu.Lock()
+	defer tg.mu.Unlock()
+	return tg.lastBurstQual
 }
 
 func (tg *testGranter) returnGrant(count int64) {
@@ -378,16 +396,15 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 	}
 }
 
-// TestCPUTimeTokenWorkQueue is a very minimal test of WorkQueue, when
-// WorkQueue.mode = usesCPUTimeTokens. In this case, the WorkQueue is
-// like the slot-based WorkQueue tested extensively in TestWorkQueueBasic.
-// The only difference is different logic in AdmittedWorkDone.
-// TestCPUTimeTokenWorkQueue therefore does a very simple series of calls
-// to Admit and AdmittedWorkDone, in order to assert that AdmittedWorkDone
-// makes the right granter calls and the right changes to used. For
-// extensive testing of the WorkQueue, e.g. of fair-sharing, of queuing,
-// we rely on TestWorkQueueBasic. Also, see TestCPUTimeTokenEstimation
-// for testing of CPU time token estimation.
+// TestCPUTimeTokenWorkQueue is a datadriven test of WorkQueue with
+// mode set to usesCPUTimeTokens. Note there are two other more
+// narrowly scoped tests -- TestCPUTimeTokenEstimation and
+// TestCPUTimeTokenBurst -- that test very specific
+// functionality in CPU time token AC. See the comments at
+// testdata/cpu_time_token_work_queue for details on what is tested
+// here. At a high level, this test is of the whole WorkQueue, as
+// opposed to any one small isolated piece of it, such as CPU time
+// token estimation in Admit (tested in TestCPUTimeTokenEstimation).
 func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -413,22 +430,17 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{buf: &buf}
-				// We want all calls to tryGet to return true. Thus all calls
-				// to Admit allow admission immediately. This is all that is
-				// needed to test AdmittedWorkDone, and that is all that is
-				// desired here, as per the comment above
-				// TestCPUTimeTokenWorkQueue.
-				tg.returnValueFromTryGet = true
-				opts := makeWorkQueueOptions(KVWork)
-				opts.mode = usesCPUTimeTokens
+				tg = &testGranter{buf: &buf, printBurstQual: true}
+				st = cluster.MakeTestingClusterSettings()
+				workKind := KVWork
+				opts := makeWorkQueueOptions(workKind)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
 				opts.disableGCTenantsAndResetUsed = true
-				st = cluster.MakeTestingClusterSettings()
+				opts.mode = usesCPUTimeTokens
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					KVWork, tg, st, metrics, opts).(*WorkQueue)
+					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
 				tg.r = q
 				wrkMap.resetMap()
@@ -441,26 +453,65 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 					panic(fmt.Sprintf("id %d is already used", id))
 				}
 				tenant := scanTenantID(t, d)
+				var bypass bool
+				d.ScanArgs(t, "bypass", &bypass)
+				ctx, cancel := context.WithCancel(context.Background())
 				var requestedCount int64
 				d.ScanArgs(t, "requested-count", &requestedCount)
-				ctx, cancel := context.WithCancel(context.Background())
 				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := WorkInfo{
-					RequestedCount: requestedCount,
-					TenantID:       tenant,
-					Priority:       admissionpb.WorkPriority(0),
-					CreateTime:     int64(time.Millisecond),
+					TenantID:        tenant,
+					Priority:        admissionpb.WorkPriority(0),
+					CreateTime:      int64(1) * int64(time.Millisecond),
+					BypassAdmission: bypass,
+					RequestedCount:  requestedCount,
 				}
-				// Won't block, since returnValueFromTryGet is true.
-				resp, err := q.Admit(ctx, workInfo)
-				require.True(t, resp.Enabled)
-				if err != nil {
-					buf.printf("id %d: admit failed", id)
-					wrkMap.delete(id)
-				} else {
-					buf.printf("id %d: admit succeeded", id)
-					wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+				go func(ctx context.Context, info WorkInfo, id int) {
+					resp, err := q.Admit(ctx, info)
+					if err != nil {
+						buf.printf("id %d: admit failed", id)
+						wrkMap.delete(id)
+					} else {
+						require.True(t, resp.Enabled)
+						buf.printf("id %d: admit succeeded", id)
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+					}
+				}(ctx, workInfo, id)
+				// Need deterministic output, and this is racing with the goroutine
+				// which is trying to get admitted. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				return buf.stringAndReset()
+
+			case "set-try-get-return-value":
+				var v bool
+				d.ScanArgs(t, "v", &v)
+				tg.returnValueFromTryGet = v
+				return ""
+
+			case "granted":
+				rv := tg.r.granted(grantChainID(1 /* chain ID not used */))
+				if rv > 0 {
+					// Need deterministic output, and this is racing with the goroutine that was
+					// admitted. Retry a few times.
+					maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
 				}
+				tg.buf.printf("granted%s: returned %d", tg.name, rv)
+				return buf.stringAndReset()
+
+			case "cancel-work":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d", id)
+				}
+				if work.admitted {
+					return fmt.Sprintf("work already admitted id: %d", id)
+				}
+				work.cancel()
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
 				return buf.stringAndReset()
 
 			case "work-done":
@@ -482,6 +533,20 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 				return buf.stringAndReset()
 
 			case "print":
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, q.String)
+				return q.String()
+
+			case "refill-burst-buckets":
+				var toAdd, capacity int64
+				d.ScanArgs(t, "to-add", &toAdd)
+				d.ScanArgs(t, "capacity", &capacity)
+				q.refillBurstBuckets(toAdd, capacity)
+				return ""
+
+			case "gc-tenants-and-reset-used":
+				q.gcTenantsResetUsedAndUpdateEstimators()
 				return q.String()
 
 			default:
@@ -637,6 +702,189 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	resp3, err = q.Admit(ctx, info3)
 	require.NoError(t, err)
 	checkEstimation(resp3, 250*time.Millisecond)
+}
+
+// TestCPUTimeTokenBurst tests the burst qualification logic in WorkQueue
+// when mode == usesCPUTimeTokens. This test focuses *solely* on verifying
+// that the correct burstQualification is passed to the granter's tryGet
+// method based on the tenant's burst bucket state.
+func TestCPUTimeTokenBurst(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var buf builderWithMu
+	tg := &testGranter{buf: &buf}
+	tg.returnValueFromTryGet = true
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	opts.timeSource = timeutil.NewManualTime(
+		timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond)))
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCTenantsAndResetUsed = true
+	st := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	q := &WorkQueue{}
+	var queueKind QueueKind = "kv-cpu-time-token-queue"
+	initWorkQueue(q, log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, queueKind, tg, st, metrics, opts, &TestingKnobs{DisableCPUTimeTokenEstimation: true})
+	defer q.close()
+	ctx := context.Background()
+
+	checkBurstQual := func(want burstQualification) {
+		got := tg.getLastBurstQual()
+		require.Equalf(t, want, got, "got %v, want %v\n%s", got, want, q.String())
+	}
+
+	// Init two tenants. Tenant 1 is init before cpuTimeTokenAllocator makes
+	// its first call to refillBurstBuckets. In this case, the bucket does
+	// not have a capacity set yet. It is important to test that a zero-valued
+	// capacity does not cause bad behavior, such as a panic. refillBurstBuckets
+	// is called every 1ms, so AC does not stay in this state for long.
+	//
+	// Tenant 2 is inited after the first call to refillBurstBuckets. Burst
+	// buckets start full, so on the first call to Admit, it can burst.
+	info1 := WorkInfo{
+		TenantID:       roachpb.MustMakeTenantID(1),
+		RequestedCount: 1,
+	}
+	_, err := q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// Fill tenant 1's burst bucket to the top with 100 tokens.
+	q.refillBurstBuckets(100, 100)
+
+	info2 := WorkInfo{
+		TenantID:       roachpb.MustMakeTenantID(2),
+		RequestedCount: 1,
+	}
+	_, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// Call refillBurstBuckets again. Since both buckets are already full,
+	// the cap on tokens is tested here. That is, at the end of this call,
+	// the buckets should each have 100 tokens, not more than 100 tokens.
+	q.refillBurstBuckets(100, 100)
+
+	// Since both burst buckets are full, both tenants can burst.
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	info2.RequestedCount = 1
+	_, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// Bucket started at 100 tokens. First call to Admit removed 1 token.
+	// This call to Admit removes 7 tokens. 100-1-7 = 92 tokens in bucket.
+	// So tenant 1 can burst still, since bucket is more than 90% full.
+	info1.RequestedCount = 7
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// Bucket started at 100 tokens. First call to Admit removed 1 token.
+	// This call to Admit removes 11 tokens. 100-1-11 = 88 tokens in bucket.
+	// So tenant 2 cannot burst anymore -- the bucket is less than 90% full.
+	info2.RequestedCount = 11
+	_, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// 100-1-7-1 = 91 tokens in the bucket. So tenant 1 can burst still.
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// 100-1-11-1 = 87. Tenant 2 obviously still cannot burst.
+	info2.RequestedCount = 1
+	_, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// 100-1-7-1-1 = 90. So now tenant 1 cannot burst either.
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// Fill to full again. Both tenants thus can burst.
+	q.refillBurstBuckets(100, 100)
+
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// Deduct huge number of tokens from tenant 1's bucket. No burst.
+	info1.RequestedCount = 100000000
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// First refill will cap tenant 1 bucket at the min, which is
+	// -bucketCapacity/4 = -100/4 = -25. Second refill adds 117, so
+	// bucket is just barely 90% full after second refill. So can
+	// burst.
+	q.refillBurstBuckets(10, 100)
+	q.refillBurstBuckets(117, 100)
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	// Since bucket was only barely 90% full, after one more call to
+	// Admit, it is below 90% full. No burst.
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// In production, requestedCount is a prediction of the CPU time
+	// used by a request. Actual usage is measured by grunning and passed
+	// to AdmittedWorkDone. In this test case, actual usage is way way
+	// lower than the predicted usage. AdmittedWorkDone will thus add
+	// tokens to the bucket. So many tokens are added in this case that
+	// capacity should be hit. Thus, the first call to Admit should allow
+	// bursting, and the second call should not (it is sized so as to put
+	// the bucket below 90% full).
+	resp := AdmitResponse{
+		tenantID:       roachpb.MustMakeTenantID(1),
+		requestedCount: 1000000,
+	}
+	q.AdmittedWorkDone(resp, 1 /* cpuTime */)
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	info1.RequestedCount = 11
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
+
+	// Test a bucket capacity change. On first call to Admit, bucket is
+	// full. On second call, bucket is less than 90% full.
+	q.refillBurstBuckets(20, 20)
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(canBurst)
+
+	info1.RequestedCount = 1
+	_, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkBurstQual(noBurst)
 }
 
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used

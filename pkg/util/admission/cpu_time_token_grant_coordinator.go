@@ -130,6 +130,11 @@ func makeCPUTimeTokenGrantCoordinator(
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]
+		// This type assertion is always valid, since makeWorkQueue always
+		// returns a *WorkQueue.
+		// TODO(josh): Consider having makeWorkQueue return *WorkQueue, instead
+		// of requester.
+		allocator.queues[tier] = requesters[tier].(*WorkQueue)
 	}
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
