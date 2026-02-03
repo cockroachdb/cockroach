@@ -1794,7 +1794,21 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				continue
 			}
 			whereClausesChecked[where] = struct{}{}
-			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
+			// Disable the optimizer and use the row query execution engine. This
+			// helps ensure we avoid cases where the oracle query has different
+			// behavior than the internal query. For example, the vectorized engine
+			// and optimizer may prevent a `false and crash()` expression from
+			// returning an error even though it will fail when the cdc query
+			// attempts to execute it.
+			//
+			// NOTE: DB is a connection pool. We set the options in the statement to
+			// ensure they are set on the connection that is actually executing the
+			// query. We can't easily use a single connection because when queries
+			// timeout, the context cancellation closes the connection.
+			query = `
+				SET testing_optimizer_disable_rule_probability = 1.0;
+				SET vectorize = off;
+				SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE ` + where
 			t.Log(query)
 			timeoutCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 			rows := s.DB.QueryRowContext(timeoutCtx, query)
@@ -1826,54 +1840,11 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 			}
 			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false, nil, changefeedbase.OptEnvelopeWrapped)
 			closeFeedIgnoreError(t, seedFeed)
-			if err != nil {
-				// Skip errors that may come up during SQL execution. If the SQL query
-				// didn't fail with these errors, it's likely because the query was built in
-				// a way that did not have to execute on the row that caused the error, but
-				// the CDC query did.
-				// Since we get the error that caused the changefeed job to
-				// fail from scraping the job status and creating a new
-				// error, we unfortunately don't have the pgcode and have to
-				// rely on known strings.
-				validPgErrs := []string{
-					"argument is not an object",
-					"cannot subtract infinite dates",
-					"dwithin distance cannot be less than zero",
-					"error parsing EWKB",
-					"error parsing EWKT",
-					"error parsing GeoJSON",
-					"expected LineString",
-					"geometry type is unsupported",
-					"invalid escape string",
-					"invalid input syntax for type",
-					"invalid regular expression",
-					"no locations to init GEOS",
-					"parameter has to be of type Point",
-					"regexp compilation failed",
-					"result out of range",
-					"should be of length",
-					"unknown DateStyle parameter",
-				}
-				containsKnownPgErr := func(e error) (interface{}, bool) {
-					for _, v := range validPgErrs {
-						if strings.Contains(e.Error(), v) {
-							return nil, true
-						}
-					}
-					return nil, false
-				}
-				if _, contains := errors.If(err, containsKnownPgErr); contains {
-					t.Logf("Skipping statement %s because it encountered pgerror %s", createStmt, err)
-					continue
-				}
-
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			numNonTrivialTestRuns++
 		}
 		require.Greater(t, numNonTrivialTestRuns, 0, "Expected >0 predicates to be nontrivial out of %d attempts", n)
 		t.Logf("%d predicates checked: all had the same result in SELECT and CHANGEFEED", numNonTrivialTestRuns)
-
 	}
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`), withAllowChangefeedErr("changefeed may have parsing failure on some queries"))
