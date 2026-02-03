@@ -244,8 +244,9 @@ func collectBackupInfo(
 	collectionURIs []string,
 	backupToken string,
 ) (info backupInfo, memReserved int64, err error) {
+	_, _, err = backupinfo.DecodeBackupID(backupToken)
 	useIDs := p.SessionData().UseBackupsWithIDs
-	if !useIDs {
+	if err != nil && !(useIDs && strings.EqualFold(backupToken, backupbase.LatestFileName)) {
 		return legacyCollectBackupInfo(ctx, p, mem, kmsEnv, stmt, collectionURIs, backupToken)
 	}
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI

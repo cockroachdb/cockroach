@@ -1043,3 +1043,22 @@ type StreamIngestManager interface {
 		revertTo hlc.Timestamp,
 	) error
 }
+
+// triggerDepthKey is the context key for storing the current trigger nesting
+// depth. This is used by pg_trigger_depth() and for enforcing recursion limits.
+type triggerDepthKey struct{}
+
+// GetTriggerDepth returns the current trigger nesting depth from the context.
+// Returns 0 if not currently executing within a trigger.
+func GetTriggerDepth(ctx context.Context) int {
+	if v := ctx.Value(triggerDepthKey{}); v != nil {
+		return v.(int)
+	}
+	return 0
+}
+
+// ContextWithIncrementedTriggerDepth returns a new context with the trigger
+// depth incremented by 1.
+func ContextWithIncrementedTriggerDepth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, triggerDepthKey{}, GetTriggerDepth(ctx)+1)
+}
