@@ -775,6 +775,20 @@ func (md *Metadata) AddBuiltin(name *tree.UnresolvedObjectName) {
 	md.builtinRefsByName[*name.ToUnresolvedName()] = struct{}{}
 }
 
+func findUDTRecur(t *types.T) *types.T {
+	if !t.UserDefined() {
+		return nil
+	}
+	switch t.Family() {
+	case types.EnumFamily, types.TupleFamily:
+		return t
+	case types.ArrayFamily:
+		return findUDTRecur(t.InternalType.ArrayContents)
+	default:
+		return nil
+	}
+}
+
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table ids (e.g.  in a
 // self-join query). All columns are added to the metadata. If mutation columns
@@ -798,6 +812,18 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
 		colID := md.AddColumn(string(col.ColName()), col.DatumType())
+		if typ := col.DatumType(); typ.UserDefined() {
+			if md.userDefinedTypes == nil {
+				md.userDefinedTypes = make(map[oid.Oid]struct{})
+			}
+			if md.userDefinedTypesSlice == nil {
+				md.userDefinedTypesSlice = make([]*types.T, 0)
+			}
+			if udt := findUDTRecur(typ); udt != nil {
+				md.userDefinedTypes[udt.Oid()] = struct{}{}
+				md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, udt)
+			}
+		}
 		md.ColumnMeta(colID).Table = tabID
 	}
 

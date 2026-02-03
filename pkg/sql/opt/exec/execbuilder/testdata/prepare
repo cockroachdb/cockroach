@@ -338,4 +338,23 @@ ALTER TYPE enum132105 RENAME VALUE 'hi' to 'ciao';
 statement error invalid input value for enum enum132105: "hi"
 EXECUTE p132105count;
 
+statement ok
+CREATE TABLE t132105arr (enumarrcol enum132105[]);
+
+statement ok
+PREPARE p132105arrcount AS SELECT count(*) FROM t132105arr WHERE enumarrcol = ARRAY[('ciao'::enum132105)];
+
+statement ok
+ALTER TYPE enum132105 ADD VALUE 'privet';
+
+statement ok
+EXECUTE p132105arrcount;
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'ciao' TO 'konnichiwa';
+
+# PG returns 0 here.
+statement error invalid input value for enum enum132105: "ciao"
+EXECUTE p132105arrcount;
+
 subtest end
