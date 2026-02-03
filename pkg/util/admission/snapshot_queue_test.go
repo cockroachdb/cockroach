@@ -88,7 +88,9 @@ func TestSnapshotQueue(t *testing.T) {
 			case "set-try-get-return-value":
 				var v bool
 				d.ScanArgs(t, "v", &v)
-				tg.returnValueFromTryGet = v
+				tg.mu.Lock()
+				tg.mu.returnValueFromTryGet = v
+				tg.mu.Unlock()
 				return ""
 
 			case "granted":

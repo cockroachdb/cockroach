@@ -63,15 +63,26 @@ type testGranter struct {
 	r    requester
 
 	// Configurable knobs for tests.
-	returnValueFromTryGet bool
-	additionalTokens      int64
+	additionalTokens int64
+	printBurstQual   bool
+
+	mu struct {
+		syncutil.Mutex
+		returnValueFromTryGet bool
+	}
 }
 
 var _ granterWithStoreReplicatedWorkAdmitted = &testGranter{}
 
-func (tg *testGranter) tryGet(_ burstQualification, count int64) bool {
-	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
-	return tg.returnValueFromTryGet
+func (tg *testGranter) tryGet(burstQual burstQualification, count int64) bool {
+	tg.mu.Lock()
+	defer tg.mu.Unlock()
+	if tg.printBurstQual {
+		tg.buf.printf("tryGet%s: input %s, returning %t", tg.name, burstQual.String(), tg.mu.returnValueFromTryGet)
+	} else {
+		tg.buf.printf("tryGet%s: returning %t", tg.name, tg.mu.returnValueFromTryGet)
+	}
+	return tg.mu.returnValueFromTryGet
 }
 
 func (tg *testGranter) returnGrant(count int64) {
@@ -257,7 +268,9 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "set-try-get-return-value":
 				var v bool
 				d.ScanArgs(t, "v", &v)
-				tg.returnValueFromTryGet = v
+				tg.mu.Lock()
+				tg.mu.returnValueFromTryGet = v
+				tg.mu.Unlock()
 				return ""
 
 			case "granted":
@@ -378,16 +391,11 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 	}
 }
 
-// TestCPUTimeTokenWorkQueue is a very minimal test of WorkQueue, when
-// WorkQueue.mode = usesCPUTimeTokens. In this case, the WorkQueue is
-// like the slot-based WorkQueue tested extensively in TestWorkQueueBasic.
-// The only difference is different logic in AdmittedWorkDone.
-// TestCPUTimeTokenWorkQueue therefore does a very simple series of calls
-// to Admit and AdmittedWorkDone, in order to assert that AdmittedWorkDone
-// makes the right granter calls and the right changes to used. For
-// extensive testing of the WorkQueue, e.g. of fair-sharing, of queuing,
-// we rely on TestWorkQueueBasic. Also, see TestCPUTimeTokenEstimation
-// for testing of CPU time token estimation.
+// TestCPUTimeTokenWorkQueue is a datadriven test of WorkQueue with
+// mode set to usesCPUTimeTokens. See the comments at
+// testdata/cpu_time_token_work_queue for details on what is tested
+// here. See TestCPUTimeTokenEstimation for testing of CPU time token
+// estimation.
 func TestCPUTimeTokenWorkQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -413,22 +421,17 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{buf: &buf}
-				// We want all calls to tryGet to return true. Thus all calls
-				// to Admit allow admission immediately. This is all that is
-				// needed to test AdmittedWorkDone, and that is all that is
-				// desired here, as per the comment above
-				// TestCPUTimeTokenWorkQueue.
-				tg.returnValueFromTryGet = true
-				opts := makeWorkQueueOptions(KVWork)
-				opts.mode = usesCPUTimeTokens
+				tg = &testGranter{buf: &buf, printBurstQual: true}
+				st = cluster.MakeTestingClusterSettings()
+				workKind := KVWork
+				opts := makeWorkQueueOptions(workKind)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
 				opts.disableGCTenantsAndResetUsed = true
-				st = cluster.MakeTestingClusterSettings()
+				opts.mode = usesCPUTimeTokens
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					KVWork, tg, st, metrics, opts).(*WorkQueue)
+					workKind, tg, st, metrics, opts).(*WorkQueue)
 				q.knobs.DisableCPUTimeTokenEstimation = true
 				tg.r = q
 				wrkMap.resetMap()
@@ -441,26 +444,69 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 					panic(fmt.Sprintf("id %d is already used", id))
 				}
 				tenant := scanTenantID(t, d)
+				var bypass bool
+				if d.HasArg("bypass") {
+					bypass = true
+				}
+				ctx, cancel := context.WithCancel(context.Background())
 				var requestedCount int64
 				d.ScanArgs(t, "requested-count", &requestedCount)
-				ctx, cancel := context.WithCancel(context.Background())
 				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := WorkInfo{
-					RequestedCount: requestedCount,
-					TenantID:       tenant,
-					Priority:       admissionpb.WorkPriority(0),
-					CreateTime:     int64(time.Millisecond),
+					TenantID:        tenant,
+					Priority:        admissionpb.WorkPriority(0),
+					CreateTime:      int64(1) * int64(time.Millisecond),
+					BypassAdmission: bypass,
+					RequestedCount:  requestedCount,
 				}
-				// Won't block, since returnValueFromTryGet is true.
-				resp, err := q.Admit(ctx, workInfo)
-				require.True(t, resp.Enabled)
-				if err != nil {
-					buf.printf("id %d: admit failed", id)
-					wrkMap.delete(id)
-				} else {
-					buf.printf("id %d: admit succeeded", id)
-					wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+				go func(ctx context.Context, info WorkInfo, id int) {
+					resp, err := q.Admit(ctx, info)
+					if err != nil {
+						buf.printf("id %d: admit failed", id)
+						wrkMap.delete(id)
+					} else {
+						require.True(t, resp.Enabled)
+						buf.printf("id %d: admit succeeded", id)
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+					}
+				}(ctx, workInfo, id)
+				// Need deterministic output, and this is racing with the goroutine
+				// which is trying to get admitted. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				return buf.stringAndReset()
+
+			case "set-try-get-return-value":
+				var v bool
+				d.ScanArgs(t, "v", &v)
+				tg.mu.Lock()
+				tg.mu.returnValueFromTryGet = v
+				tg.mu.Unlock()
+				return ""
+
+			case "granted":
+				rv := tg.r.granted(grantChainID(1 /* chain ID not used */))
+				if rv > 0 {
+					// Need deterministic output, and this is racing with the goroutine that was
+					// admitted. Retry a few times.
+					maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
 				}
+				tg.buf.printf("granted%s: returned %d", tg.name, rv)
+				return buf.stringAndReset()
+
+			case "cancel-work":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d", id)
+				}
+				if work.admitted {
+					return fmt.Sprintf("work already admitted id: %d", id)
+				}
+				work.cancel()
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
 				return buf.stringAndReset()
 
 			case "work-done":
@@ -482,7 +528,21 @@ func TestCPUTimeTokenWorkQueue(t *testing.T) {
 				return buf.stringAndReset()
 
 			case "print":
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, q.String)
 				return q.String()
+
+			case "refill-burst-buckets":
+				var toAdd, capacity int64
+				d.ScanArgs(t, "to-add", &toAdd)
+				d.ScanArgs(t, "capacity", &capacity)
+				q.refillBurstBuckets(toAdd, capacity)
+				return ""
+
+			case "gc-tenants-and-reset-used":
+				q.gcTenantsResetUsedAndUpdateEstimators()
+				return ""
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
@@ -518,7 +578,7 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	tg = &testGranter{buf: &buf}
 	// We want all calls to tryGet to return true. Thus all calls
 	// to Admit allow admission immediately.
-	tg.returnValueFromTryGet = true
+	tg.mu.returnValueFromTryGet = true
 	opts := makeWorkQueueOptions(KVWork)
 	opts.mode = usesCPUTimeTokens
 	timeSource = timeutil.NewManualTime(initialTime)
@@ -902,7 +962,10 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				var v bool
 				d.ScanArgs(t, "v", &v)
 				wc := tryScanWorkClass(t, d)
-				tg[wc].returnValueFromTryGet = v
+
+				tg[wc].mu.Lock()
+				tg[wc].mu.returnValueFromTryGet = v
+				tg[wc].mu.Unlock()
 				return ""
 
 			case "set-store-request-estimates":
