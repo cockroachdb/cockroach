@@ -914,7 +914,7 @@ func (n *Node) onStoreDiskSlow(
 		// logStructuredEvent does an async write to system.eventlog, however it could
 		// do a synchronous log write to the node logger, so we call it within this async
 		// task as opposed to outside it.
-		n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+		n.logStructuredEventWithSeverity(ctx, logpb.EventPayload(ev), severity.WARNING)
 
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -962,7 +962,7 @@ func (n *Node) onLowDiskSpace(
 		TotalBytes:       info.TotalBytes,
 	}
 	ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-	n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+	n.logStructuredEventWithSeverity(ctx, logpb.EventPayload(ev), severity.WARNING)
 }
 
 // validateStores iterates over all stores, verifying they agree on node ID.
@@ -1566,9 +1566,15 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 }
 
 func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload) {
+	n.logStructuredEventWithSeverity(ctx, event, severity.INFO)
+}
+
+func (n *Node) logStructuredEventWithSeverity(
+	ctx context.Context, event logpb.EventPayload, sev logpb.Severity,
+) {
 	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
-	log.StructuredEvent(ctx, severity.INFO, event)
+	log.StructuredEvent(ctx, sev, event)
 
 	if !n.storeCfg.LogRangeAndNodeEvents {
 		return
