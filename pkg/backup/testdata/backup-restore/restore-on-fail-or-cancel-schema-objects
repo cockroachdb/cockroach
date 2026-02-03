@@ -174,7 +174,7 @@ job cancel=d
 
 # Make sure the temp system db is not present.
 query-sql
-SELECT * FROM [SHOW DATABASES] WHERE database_name = 'crdb_temp_system';
+SELECT * FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_temp_system%';
 ----
 
 # Make sure defaultdb and postgres are recreated with new IDs.
