@@ -234,10 +234,10 @@ func TestHintCacheMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skip external mode when running under race to avoid flakes.
+	// Skip secondary tenants when running under race to avoid flakes.
 	var serverArgs base.TestServerArgs
 	if util.RaceEnabled {
-		serverArgs.DefaultTestTenant = base.TestSkippedForExternalModeDueToPerformance(161857)
+		serverArgs.DefaultTestTenant = base.TestSkipSecondaryTenantsUnderDuress
 	}
 
 	ctx := context.Background()
