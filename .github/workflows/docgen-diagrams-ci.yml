@@ -588,17 +588,27 @@ jobs:
     steps:
       - name: Create PR comment
         uses: actions/github-script@v7
+        env:
+          VALIDATION_STATUS: ${{ needs.generate-diagrams.outputs.validation_status }}
+          DIAGRAMS_CHANGED: ${{ needs.generate-diagrams.outputs.diagrams_changed }}
+          CHANGED_FILES: ${{ needs.generate-diagrams.outputs.changed_files }}
+          SKIP_DOC_WARNINGS: ${{ needs.generate-diagrams.outputs.skip_doc_warnings }}
+          CHANGED_DIAGRAM_LIST: ${{ needs.generate-diagrams.outputs.changed_diagram_list }}
+          GENERATED_DIAGRAMS_PR: ${{ needs.sync-to-generated-diagrams.outputs.pr_url }}
+          PREVIEW_BRANCH: ${{ needs.sync-to-generated-diagrams.outputs.preview_branch }}
+          PNG_FILES: ${{ needs.sync-to-generated-diagrams.outputs.png_files }}
+          TARGET_REPO: ${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}
         with:
           script: |
-            const validationStatus = '${{ needs.generate-diagrams.outputs.validation_status }}';
-            const diagramsChanged = '${{ needs.generate-diagrams.outputs.diagrams_changed }}';
-            const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
-            const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
-            const changedDiagramList = '${{ needs.generate-diagrams.outputs.changed_diagram_list }}';
-            const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
-            const previewBranch = '${{ needs.sync-to-generated-diagrams.outputs.preview_branch }}';
-            const pngFiles = '${{ needs.sync-to-generated-diagrams.outputs.png_files }}';
-            const targetRepo = '${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}';
+            const validationStatus = process.env.VALIDATION_STATUS || '';
+            const diagramsChanged = process.env.DIAGRAMS_CHANGED || '';
+            const changedFiles = process.env.CHANGED_FILES || '';
+            const skipDocWarnings = process.env.SKIP_DOC_WARNINGS || '';
+            const changedDiagramList = process.env.CHANGED_DIAGRAM_LIST || '';
+            const generatedDiagramsPR = process.env.GENERATED_DIAGRAMS_PR || '';
+            const previewBranch = process.env.PREVIEW_BRANCH || '';
+            const pngFiles = process.env.PNG_FILES || '';
+            const targetRepo = process.env.TARGET_REPO || 'cockroachdb/generated-diagrams';
 
             let body = '## SQL Diagram Generation Report\n\n';
 
