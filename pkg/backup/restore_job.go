@@ -1552,8 +1552,9 @@ func createImportingDescriptors(
 		}
 	}
 	tempSystemDBID := tempSystemDatabaseID(details, tables, r.job.Payload().CreationClusterVersion)
+	tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
 	if tempSystemDBID != descpb.InvalidID {
-		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDBPrefix,
+		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, tempSystemDBName,
 			username.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
 	}
@@ -1713,7 +1714,7 @@ func createImportingDescriptors(
 		typesByID,
 		dbsByID,
 		details.RemoveRegions,
-		restoreTempSystemDBPrefix,
+		tempSystemDBName,
 	); err != nil {
 		return err
 	}
@@ -1734,7 +1735,7 @@ func createImportingDescriptors(
 		includePublicSchemaCreatePriv := sqlclustersettings.PublicSchemaCreatePrivilegeEnabled.Get(&p.ExecCfg().Settings.SV)
 		if err := ingesting.WriteDescriptors(
 			ctx, txn.KV(), p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes, writtenFunctions,
-			details.DescriptorCoverage, nil /* extra */, restoreTempSystemDBPrefix, includePublicSchemaCreatePriv,
+			details.DescriptorCoverage, nil /* extra */, tempSystemDBName, includePublicSchemaCreatePriv,
 			true, /* deprecatedAllowCrossDatabaseRefs */
 		); err != nil {
 			return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -3600,8 +3601,10 @@ func (r *restoreResumer) restoreSystemUsers(
 	ctx context.Context, db isql.DB, systemTables []catalog.TableDescriptor,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		selectNonExistentUsers := "SELECT * FROM crdb_temp_system.users temp " +
-			"WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)"
+		tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
+		selectNonExistentUsers := fmt.Sprintf("SELECT * FROM %s.users temp "+
+			"WHERE NOT EXISTS (SELECT * FROM system.users u WHERE temp.username = u.username)",
+			tempSystemDBName)
 		users, err := txn.QueryBuffered(ctx, "get-users",
 			txn.KV(), selectNonExistentUsers)
 		if err != nil {
@@ -3629,8 +3632,9 @@ func (r *restoreResumer) restoreSystemUsers(
 
 		// We skip granting roles if the backup does not contain system.role_members.
 		if hasSystemRoleMembersTable(systemTables) {
-			selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
-				"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
+			selectNonExistentRoleMembers := fmt.Sprintf("SELECT * FROM %s.role_members temp_rm WHERE "+
+				"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)",
+				tempSystemDBName)
 			roleMembers, err := txn.QueryBuffered(ctx, "get-role-members",
 				txn.KV(), selectNonExistentRoleMembers)
 			if err != nil {
@@ -3657,8 +3661,9 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 		}
 
 		if hasSystemRoleOptionsTable(systemTables) {
-			selectNonExistentRoleOptions := "SELECT * FROM crdb_temp_system.role_options temp_ro WHERE " +
-				"NOT EXISTS (SELECT * FROM system.role_options ro WHERE temp_ro.username = ro.username AND temp_ro.option = ro.option)"
+			selectNonExistentRoleOptions := fmt.Sprintf("SELECT * FROM %s.role_options temp_ro WHERE "+
+				"NOT EXISTS (SELECT * FROM system.role_options ro WHERE temp_ro.username = ro.username AND temp_ro.option = ro.option)",
+				tempSystemDBName)
 			roleOptions, err := txn.QueryBuffered(ctx, "get-role-options", txn.KV(), selectNonExistentRoleOptions)
 			if err != nil {
 				return err
@@ -3710,9 +3715,10 @@ func (r *restoreResumer) restoreSystemTables(
 	// to the temporary system DB then populate the metadata required to restore
 	// to the real system table.
 	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
+	tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID()) 
 	for _, table := range tables {
 		systemTableName := table.GetName()
-		stagingTableName := restoreTempSystemDBPrefix + "." + systemTableName
+		stagingTableName := tempSystemDBName + "." + systemTableName
 
 		config, ok := systemTableBackupConfiguration[systemTableName]
 		if !ok {
@@ -3790,26 +3796,37 @@ func (r *restoreResumer) restoreSystemTables(
 
 func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	executor := r.execCfg.InternalDB.Executor()
+
+	// Clean up the temp system database. The database name is determined by the
+	// job's creation cluster version.
+	dbName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
+	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
+
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
-	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
-	if row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, restoreTempSystemDBPrefix); err != nil {
-		return errors.Wrap(err, "checking for temporary system db")
-	} else if row == nil {
-		// Temporary system DB might already have been dropped by the restore job.
+	row, err := executor.QueryRow(ctx, "checking-for-temp-system-db" /* opName */, nil /* txn */, checkIfDatabaseExists, dbName)
+	if err != nil {
+		return errors.Wrapf(err, "checking for temporary system db %q", dbName)
+	}
+	if row == nil {
+		// Temporary system DB doesn't exist, nothing to clean up.
 		return nil
 	}
 
 	// After restoring the system tables, drop the temporary database holding the
 	// system tables.
-	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", restoreTempSystemDBPrefix)
+	gcTTLQuery := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING gc.ttlseconds=1", dbName)
 	if _, err := executor.Exec(ctx, "altering-gc-ttl-temp-system" /* opName */, nil /* txn */, gcTTLQuery); err != nil {
-		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", restoreTempSystemDBPrefix, err)
+		log.Dev.Errorf(ctx, "failed to update the GC TTL of %q: %+v", dbName, err)
 	}
-	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", restoreTempSystemDBPrefix)
+
+	dropTableQuery := fmt.Sprintf("DROP DATABASE %s CASCADE", dbName)
 	if _, err := executor.Exec(ctx, "drop-temp-system-db" /* opName */, nil /* txn */, dropTableQuery); err != nil {
-		return errors.Wrap(err, "dropping temporary system db")
+		return errors.Wrapf(err, "dropping temporary system db %q", dbName)
 	}
+
+	log.Dev.Infof(ctx, "cleaned up temporary system database %q", dbName)
+
 	return nil
 }
 

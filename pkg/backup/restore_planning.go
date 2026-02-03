@@ -82,8 +82,16 @@ const (
 	restoreTempSystemDBPrefix = "crdb_temp_system"
 )
 
-func restoreTempSystemName(restoreJobID int64) string {
-	return fmt.Sprintf("%s_%d", restoreTempSystemDBPrefix, restoreJobID)
+func restoreTempSystemName(
+	jobCreationClusterVersion roachpb.Version, restoreJobID jobspb.JobID,
+) string {
+	// For cluster version >= 26.2, suffix the job ID to ensure unique temp
+	// databases for concurrent restore jobs.
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
+		return fmt.Sprintf("%s_%d", restoreTempSystemDBPrefix, restoreJobID)
+	}
+	// Legacy behavior: use simple hardcoded name for older versions.
+	return restoreTempSystemDBPrefix
 }
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
