@@ -32,7 +32,11 @@ func (f *flakyTestFormatter) Body(r *issues.Renderer, data issues.TemplateData) 
 		data.PackageNameShort, data.TestName, data.Branch, maxAlerts, *lookbackDays))
 
 	r.Escaped("This test has failed across the following builds. Please check the links to see each failure.\n\n")
-	r.Escaped("<sub>This analysis uses historical data. If you have already addressed this flake, please disregard this.</sub>\n\n")
+	r.HTML("sub", func() {
+		r.Escaped("\n\n") // need blank line after <sub> tag for proper rendering
+		r.Escaped("This analysis uses historical data. If you have already addressed this flake, please disregard this.")
+		r.Escaped("\n\n") // need blank line before </sub> tag
+	})
 
 	for _, failure := range f.failures {
 		r.Escaped(fmt.Sprintf("- **%s** (%.1f%% failure rate, %d total runs): ",
