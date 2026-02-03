@@ -38,11 +38,23 @@ func (i *immediateVisitor) SetTriggerName(ctx context.Context, op scop.SetTrigge
 }
 
 func (i *immediateVisitor) SetTriggerEnabled(ctx context.Context, op scop.SetTriggerEnabled) error {
-	trigger, err := i.checkOutTrigger(ctx, op.Enabled.TableID, op.Enabled.TriggerID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	trigger.Enabled = op.Enabled.Enabled
+	trigger := catalog.FindTriggerByID(tbl, op.TriggerID)
+	if trigger == nil {
+		if op.Enabled {
+			// The trigger must exist already if it's being enabled.
+			panic(errors.AssertionFailedf("failed to find trigger with ID %d in table %q (%d)",
+				op.TriggerID, tbl.GetName(), tbl.GetID()))
+		}
+		// If the trigger is being disabled, it may have already been removed if
+		// the table is being dropped.
+		return nil
+
+	}
+	trigger.Enabled = op.Enabled
 	return nil
 }
 

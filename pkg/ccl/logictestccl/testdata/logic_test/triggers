@@ -4614,6 +4614,407 @@ DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
 subtest end
 
 # ==============================================================================
+# Test ALTER TABLE ENABLE/DISABLE TRIGGER syntax.
+# ==============================================================================
+
+subtest enable_disable_trigger
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE enable_disable_t (a INT PRIMARY KEY, b INT);
+
+# Create an audit table to track trigger executions.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE trigger_audit (
+  id SERIAL PRIMARY KEY,
+  trigger_name TEXT,
+  op TEXT,
+  old_a INT,
+  new_a INT
+);
+
+# Create a trigger function that records its execution in the audit table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO trigger_audit (trigger_name, op, new_a) VALUES (TG_NAME, TG_OP, (NEW).a);
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO trigger_audit (trigger_name, op, old_a, new_a) VALUES (TG_NAME, TG_OP, (OLD).a, (NEW).a);
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO trigger_audit (trigger_name, op, old_a) VALUES (TG_NAME, TG_OP, (OLD).a);
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER insert_trigger
+  AFTER INSERT ON enable_disable_t
+  FOR EACH ROW
+  EXECUTE FUNCTION audit_trigger_func();
+
+# Verify trigger is enabled by default (tgenabled = 'A' for always).
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# SHOW TRIGGERS should also report enabled = true.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  true
+
+# Insert a row - trigger should fire and record in audit table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (1, 100);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+
+# Disable the trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+D
+
+# SHOW TRIGGERS should report enabled = false.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  false
+
+# Insert another row - trigger should NOT fire since it's disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (2, 200);
+
+# Audit table should still have only the first entry.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+
+# Re-enable the trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# Insert another row - trigger should fire again.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (3, 300);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+insert_trigger  INSERT  3
+
+# Test that disabling an already disabled trigger is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+D
+
+# Test that enabling an already enabled trigger is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# Test error when trigger doesn't exist.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error trigger "nonexistent" for table "enable_disable_t" does not exist
+ALTER TABLE enable_disable_t DISABLE TRIGGER nonexistent;
+
+# Create a second trigger to test ALL/USER keywords.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER update_trigger
+  AFTER UPDATE ON enable_disable_t
+  FOR EACH ROW
+  EXECUTE FUNCTION audit_trigger_func();
+
+# Clear the audit table to start fresh for ALL/USER tests.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+# Both triggers should be enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Insert and update - both triggers should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (10, 1000);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1001 WHERE a = 10;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI rowsort
+SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  10
+update_trigger  UPDATE  10
+
+# Clear audit and test DISABLE TRIGGER ALL.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+# SHOW TRIGGERS should report both as disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB rowsort
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  false
+update_trigger  false
+
+# Neither trigger should fire when disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (11, 1100);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1101 WHERE a = 11;
+
+# Audit table should be empty.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM trigger_audit;
+----
+0
+
+# Test ENABLE TRIGGER ALL.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Both triggers should fire again.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (12, 1200);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1201 WHERE a = 12;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI rowsort
+SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  12
+update_trigger  UPDATE  12
+
+# Clear audit and test selective disable.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+# Disable only one trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  A
+
+# Insert and update - only update trigger should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (13, 1300);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1301 WHERE a = 13;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT trigger_name, op FROM trigger_audit ORDER BY id;
+----
+update_trigger  UPDATE
+
+# Clear audit and test DISABLE TRIGGER USER (same as ALL in CockroachDB).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 1
+DELETE FROM trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+# Neither trigger should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (14, 1400);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM trigger_audit;
+----
+0
+
+# Test ENABLE TRIGGER USER (same as ALL in CockroachDB).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Test that ALL/USER on a table with no triggers is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE enable_disable_t_empty (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t_empty DISABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t_empty ENABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE enable_disable_t_empty;
+
+# Test combining with other ALTER TABLE commands.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger, DISABLE TRIGGER update_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger, ENABLE TRIGGER update_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Test with IF EXISTS on table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE IF EXISTS nonexistent_table DISABLE TRIGGER some_trigger;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE enable_disable_t;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION audit_trigger_func;
+
+subtest end
+
+# ==============================================================================
 # Regression tests.
 # ==============================================================================
 

@@ -78,7 +78,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
+ │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
@@ -235,7 +235,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
  │              ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
+ │              ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
  │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}

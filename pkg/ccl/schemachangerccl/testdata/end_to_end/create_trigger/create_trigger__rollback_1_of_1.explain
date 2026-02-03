@@ -25,7 +25,7 @@ Schema change plan for rolling back CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR
       │    └── 11 Mutation operations
       │         ├── RemoveTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerName","TriggerID":1}
-      │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEnab...","TriggerID":1}
+      │         ├── SetTriggerEnabled {"TableID":104,"TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
