@@ -618,7 +618,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 	//				i.   t0 (0 rows)
 	//				ii.  t1 (1 row)
 	//				iii. t2 (2 rows)
-	//	b. Incremental backup @ t4
+	//		b. Incremental backup @ t4
 	//				i.   t3 (3 row)
 	//				ii.  t4 (4 rows)
 	{
@@ -824,12 +824,24 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			expectedErr: "not a revision history backup and cannot be used for AS OF SYSTEM TIME restores",
 		},
 		{
+			name:         "legacy/restore works on subdir",
+			collection:   classicColl,
+			token:        backupSubdirsByColl[classicColl][0],
+			expectedRows: 3,
+		},
+		{
+			name:         "legacy/LATEST resolves to legacy path",
+			collection:   classicColl,
+			token:        "LATEST",
+			expectedRows: 2,
+			disableIDs:   true,
+		},
+		{
 			name:         "legacy/AOST restore works on subdir",
 			collection:   classicColl,
 			token:        backupSubdirsByColl[classicColl][0],
 			aost:         classicTimes[2],
 			expectedRows: 2,
-			disableIDs:   true,
 		},
 		{
 			name:         "legacy/AOST restore works on LATEST",
@@ -838,12 +850,6 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 			aost:         classicTimes[2],
 			expectedRows: 2,
 			disableIDs:   true,
-		},
-		{
-			name:        "subdir is not a valid backup ID",
-			collection:  classicColl,
-			token:       backupSubdirsByColl[classicColl][0],
-			expectedErr: "failed decoding backup ID",
 		},
 	}
 

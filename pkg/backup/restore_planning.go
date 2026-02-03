@@ -2407,7 +2407,8 @@ func resolveRestoreSubdirAndEndTime(
 	aost hlc.Timestamp,
 ) (string, hlc.Timestamp, error) {
 	useIDs := p.SessionData().UseBackupsWithIDs
-	if !useIDs {
+	_, _, err := backupinfo.DecodeBackupID(backupToken)
+	if err != nil && !(useIDs && strings.EqualFold(backupToken, backupbase.LatestFileName)) {
 		// Revert to legacy behavior, backupToken is either a subdir or using the
 		// legacy interpretation of LATEST (latest full backup).
 		subdir := backupToken
@@ -2420,6 +2421,7 @@ func resolveRestoreSubdirAndEndTime(
 			}
 			subdir = latest
 		}
+		//nolint:returnerrcheck
 		return subdir, aost, nil
 	}
 

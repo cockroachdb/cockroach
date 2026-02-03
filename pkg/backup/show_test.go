@@ -1275,13 +1275,29 @@ func TestShowBackupWithIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("passing subdir fails", func(t *testing.T) {
-		// Ensure that if use_backups_with_ids is set, passing a subdirectory fails.
-		sqlDB.ExpectErr(
-			t,
-			"failed decoding backup ID",
-			`SHOW BACKUP FROM $1 IN $2`,
-			fullSubdir, localFoo,
-		)
+	t.Run("legacy behavior", func(t *testing.T) {
+		t.Run("passing subdir", func(t *testing.T) {
+			var uniqueTimes int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM $1 IN $2]`,
+				fullSubdir, localFoo,
+			).Scan(&uniqueTimes)
+			require.Equal(t, 12, uniqueTimes, "expected to see all 12 backups in the chain")
+		})
+
+		t.Run("passing latest", func(t *testing.T) {
+			sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+			defer sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+			var uniqueTimes int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM LATEST IN $1]`,
+				localFoo,
+			).Scan(&uniqueTimes)
+			require.Equal(t, 12, uniqueTimes, "expected to see all 12 backups in the chain")
+
+		})
 	})
 }
