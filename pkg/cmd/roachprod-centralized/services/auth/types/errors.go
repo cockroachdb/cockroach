@@ -27,12 +27,13 @@ var (
 
 // Resource not found errors (PUBLIC - shown to users)
 var (
-	ErrUserNotFound           = utils.NewPublicError(errors.New("user not found"))
-	ErrServiceAccountNotFound = utils.NewPublicError(errors.New("service account not found"))
-	ErrTokenNotFound          = utils.NewPublicError(errors.New("token not found"))
-	ErrGroupNotFound          = utils.NewPublicError(errors.New("group not found"))
-	ErrOriginNotFound         = utils.NewPublicError(errors.New("service account origin not found"))
-	ErrPermissionNotFound     = utils.NewPublicError(errors.New("permission not found"))
+	ErrUserNotFound            = utils.NewPublicError(errors.New("user not found"))
+	ErrServiceAccountNotFound  = utils.NewPublicError(errors.New("service account not found"))
+	ErrTokenNotFound           = utils.NewPublicError(errors.New("token not found"))
+	ErrGroupPermissionNotFound = utils.NewPublicError(errors.New("group permission not found"))
+	ErrGroupNotFound           = utils.NewPublicError(errors.New("group not found"))
+	ErrOriginNotFound          = utils.NewPublicError(errors.New("service account origin not found"))
+	ErrPermissionNotFound      = utils.NewPublicError(errors.New("permission not found"))
 )
 
 // Authorization errors (PUBLIC - shown to users)

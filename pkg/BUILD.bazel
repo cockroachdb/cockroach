@@ -1326,6 +1326,8 @@ GO_TARGETS = [
     "//pkg/cmd/roachprod-centralized/config/types:types",
     "//pkg/cmd/roachprod-centralized/config:config",
     "//pkg/cmd/roachprod-centralized/config:config_test",
+    "//pkg/cmd/roachprod-centralized/controllers/admin/types:types",
+    "//pkg/cmd/roachprod-centralized/controllers/admin:admin",
     "//pkg/cmd/roachprod-centralized/controllers/auth/types:types",
     "//pkg/cmd/roachprod-centralized/controllers/auth:auth",
     "//pkg/cmd/roachprod-centralized/controllers/auth:auth_test",

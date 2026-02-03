@@ -51,6 +51,12 @@ const (
 	AuditSAPermissionAdded     = "sa.permission.added"
 	AuditSAPermissionRemoved   = "sa.permission.removed"
 	AuditSAPermissionsReplaced = "sa.permissions.replaced"
+
+	// Group permission events (admin)
+	AuditGroupPermissionCreated   = "admin.group_permission.created"
+	AuditGroupPermissionUpdated   = "admin.group_permission.updated"
+	AuditGroupPermissionDeleted   = "admin.group_permission.deleted"
+	AuditGroupPermissionsReplaced = "admin.group_permissions.replaced"
 )
 
 // auditEvent logs an audit event with structured fields.

@@ -99,7 +99,10 @@ Some endpoints are only available with bearer authentication:
 | `POST /v1/auth/okta/exchange` | ✓ | ✗ |
 | `GET/DELETE /v1/auth/tokens` | ✓ | ✗ |
 | `/v1/service-accounts/*` | ✓ | ✗ |
+| `/v1/admin/*` | ✓ | ✗ |
 | `/scim/v2/*` | ✓ | ✗ |
+
+See [AUTH.md](services/AUTH.md#authentication-implementations) for detailed documentation.
 
 ## Base URL
 

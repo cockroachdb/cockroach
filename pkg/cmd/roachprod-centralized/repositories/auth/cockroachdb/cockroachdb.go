@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"net"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1420,6 +1421,80 @@ func (r *CRDBAuthRepo) UpdateGroupWithMembers(
 
 // Group Permissions (new table name after migration)
 
+func (r *CRDBAuthRepo) ListGroupPermissions(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.GroupPermission, int, error) {
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(auth.GroupPermission{}),
+	)
+	baseSelectQuery := `
+		SELECT id, group_name, provider, account, permission, created_at, updated_at
+		FROM group_permissions
+	`
+	baseCountQuery := "SELECT count(*) FROM group_permissions"
+
+	// Default sort by group_name
+	defaultSort := &filtertypes.SortParams{
+		SortBy:    "GroupName",
+		SortOrder: filtertypes.SortAscending,
+	}
+
+	selectQuery, countQuery, args, err := qb.BuildWithCount(baseSelectQuery, baseCountQuery, &filterSet, defaultSort)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to build queries")
+	}
+
+	// Execute COUNT query
+	var totalCount int
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount); err != nil {
+		return nil, 0, errors.Wrap(err, "failed to count group permissions")
+	}
+
+	// Execute SELECT query
+	rows, err := r.db.QueryContext(ctx, selectQuery, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "failed to list group permissions")
+	}
+	defer rows.Close()
+
+	perms, err := r.scanGroupPermissions(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return perms, totalCount, nil
+}
+
+func (r *CRDBAuthRepo) GetPermissionsForGroups(
+	ctx context.Context, l *logger.Logger, groups []string,
+) ([]*auth.GroupPermission, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+
+	// Build placeholders for IN clause: $1, $2, $3, ...
+	placeholders := make([]string, len(groups))
+	args := make([]interface{}, len(groups))
+	for i, g := range groups {
+		placeholders[i] = "$" + strconv.Itoa(i+1)
+		args[i] = g
+	}
+
+	query := `
+		SELECT id, group_name, provider, account, permission, created_at, updated_at
+		FROM group_permissions
+		WHERE group_name IN (` + strings.Join(placeholders, ", ") + `)
+		ORDER BY group_name, provider, account, permission
+	`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get permissions for groups")
+	}
+	defer rows.Close()
+
+	return r.scanGroupPermissions(rows)
+}
+
 func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPermission, error) {
 	var perms []*auth.GroupPermission
 	for rows.Next() {
@@ -1447,6 +1522,125 @@ func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPerm
 	}
 
 	return perms, nil
+}
+
+func (r *CRDBAuthRepo) CreateGroupPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.GroupPermission,
+) error {
+	query := `
+		INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		perm.ID.String(),
+		perm.GroupName,
+		perm.Provider,
+		perm.Account,
+		perm.Permission,
+		perm.CreatedAt,
+		perm.UpdatedAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to create group permission")
+	}
+	return nil
+}
+
+func (r *CRDBAuthRepo) UpdateGroupPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.GroupPermission,
+) error {
+	query := `
+		UPDATE group_permissions
+		SET group_name = $2, provider = $3, account = $4, permission = $5, updated_at = $6
+		WHERE id = $1
+	`
+	result, err := r.db.ExecContext(ctx, query,
+		perm.ID.String(),
+		perm.GroupName,
+		perm.Provider,
+		perm.Account,
+		perm.Permission,
+		perm.UpdatedAt,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to update group permission")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to check rows affected")
+	}
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *CRDBAuthRepo) DeleteGroupPermission(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	query := `DELETE FROM group_permissions WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id.String())
+	if err != nil {
+		return errors.Wrap(err, "failed to delete group permission")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "failed to check rows affected")
+	}
+	if rowsAffected == 0 {
+		return rauth.ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *CRDBAuthRepo) ReplaceGroupPermissions(
+	ctx context.Context, l *logger.Logger, perms []*auth.GroupPermission,
+) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to begin transaction")
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Delete all existing permissions
+	_, err = tx.ExecContext(ctx, `DELETE FROM group_permissions`)
+	if err != nil {
+		return errors.Wrap(err, "failed to delete existing group permissions")
+	}
+
+	// Insert new permissions
+	insertQuery := `
+		INSERT INTO group_permissions (id, group_name, provider, account, permission, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	for _, perm := range perms {
+		_, err = tx.ExecContext(ctx, insertQuery,
+			perm.ID.String(),
+			perm.GroupName,
+			perm.Provider,
+			perm.Account,
+			perm.Permission,
+			perm.CreatedAt,
+			perm.UpdatedAt,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to insert group permission")
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return errors.Wrap(err, "failed to commit transaction")
+	}
+
+	return nil
 }
 
 // GetStatistics returns current counts for metrics gauges.

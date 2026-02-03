@@ -94,6 +94,24 @@ func (_m *IAuthRepository) CleanupTokens(_a0 context.Context, _a1 *logger.Logger
 	return r0, r1
 }
 
+// CreateGroupPermission provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) CreateGroupPermission(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.GroupPermission) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateGroupPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.GroupPermission) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CreateGroupWithMembers provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *IAuthRepository) CreateGroupWithMembers(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.Group, _a3 []uuid.UUID) error {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
@@ -190,6 +208,24 @@ func (_m *IAuthRepository) DeleteGroup(_a0 context.Context, _a1 *logger.Logger, 
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteGroup")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// DeleteGroupPermission provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) DeleteGroupPermission(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteGroupPermission")
 	}
 
 	var r0 error
@@ -333,6 +369,36 @@ func (_m *IAuthRepository) GetGroupMembers(_a0 context.Context, _a1 *logger.Logg
 	}
 
 	return r0, r1, r2
+}
+
+// GetPermissionsForGroups provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) GetPermissionsForGroups(_a0 context.Context, _a1 *logger.Logger, _a2 []string) ([]*auth.GroupPermission, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPermissionsForGroups")
+	}
+
+	var r0 []*auth.GroupPermission
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, []string) ([]*auth.GroupPermission, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, []string) []*auth.GroupPermission); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.GroupPermission)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, []string) error); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // GetServiceAccount provides a mock function with given fields: _a0, _a1, _a2
@@ -642,6 +708,43 @@ func (_m *IAuthRepository) ListAllTokens(_a0 context.Context, _a1 *logger.Logger
 	return r0, r1, r2
 }
 
+// ListGroupPermissions provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) ListGroupPermissions(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.GroupPermission, int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListGroupPermissions")
+	}
+
+	var r0 []*auth.GroupPermission
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) ([]*auth.GroupPermission, int, error)); ok {
+		return rf(_a0, _a1, _a2)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) []*auth.GroupPermission); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*auth.GroupPermission)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, types.FilterSet) int); ok {
+		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, types.FilterSet) error); ok {
+		r2 = rf(_a0, _a1, _a2)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // ListGroups provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) ListGroups(_a0 context.Context, _a1 *logger.Logger, _a2 types.FilterSet) ([]*auth.Group, int, error) {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -863,6 +966,24 @@ func (_m *IAuthRepository) RemoveServiceAccountPermission(_a0 context.Context, _
 	return r0
 }
 
+// ReplaceGroupPermissions provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) ReplaceGroupPermissions(_a0 context.Context, _a1 *logger.Logger, _a2 []*auth.GroupPermission) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplaceGroupPermissions")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, []*auth.GroupPermission) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RevokeToken provides a mock function with given fields: _a0, _a1, _a2
 func (_m *IAuthRepository) RevokeToken(_a0 context.Context, _a1 *logger.Logger, _a2 uuid.UUID) error {
 	ret := _m.Called(_a0, _a1, _a2)
@@ -891,6 +1012,24 @@ func (_m *IAuthRepository) UpdateGroup(_a0 context.Context, _a1 *logger.Logger, 
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.Group) error); ok {
+		r0 = rf(_a0, _a1, _a2)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateGroupPermission provides a mock function with given fields: _a0, _a1, _a2
+func (_m *IAuthRepository) UpdateGroupPermission(_a0 context.Context, _a1 *logger.Logger, _a2 *auth.GroupPermission) error {
+	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateGroupPermission")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, *auth.GroupPermission) error); ok {
 		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)

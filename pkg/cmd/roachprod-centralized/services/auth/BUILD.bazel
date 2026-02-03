@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "audit.go",
         "authenticate.go",
+        "group_permissions.go",
         "groups.go",
         "helpers.go",
         "okta.go",

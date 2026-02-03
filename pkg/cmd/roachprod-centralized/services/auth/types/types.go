@@ -83,6 +83,17 @@ type IService interface {
 	MintServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, time.Duration) (*auth.ApiToken, string, error)
 	RevokeServiceAccountToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
 
+	// Token Management - Admin Operations
+	ListAllTokens(context.Context, *logger.Logger, *pkgauth.Principal, InputListTokensDTO) ([]*auth.ApiToken, int, error)
+	RevokeUserToken(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID, uuid.UUID) error
+
+	// Group Permissions (Admin)
+	ListGroupPermissions(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupPermissionsDTO) ([]*auth.GroupPermission, int, error)
+	CreateGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, *auth.GroupPermission) error
+	UpdateGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, *auth.GroupPermission) error
+	DeleteGroupPermission(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) error
+	ReplaceGroupPermissions(context.Context, *logger.Logger, *pkgauth.Principal, []*auth.GroupPermission) error
+
 	// Groups
 	ListGroups(context.Context, *logger.Logger, *pkgauth.Principal, InputListGroupsDTO) ([]*auth.Group, int, error)
 	GetGroup(context.Context, *logger.Logger, *pkgauth.Principal, uuid.UUID) (*auth.Group, error)

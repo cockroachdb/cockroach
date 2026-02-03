@@ -108,6 +108,14 @@ type IAuthRepository interface {
 	// group_members → groups → group_permissions in a single query.
 	GetUserPermissionsFromGroups(context.Context, *logger.Logger, uuid.UUID) ([]*auth.GroupPermission, error)
 
+	// Group Permissions (maps group names to permissions)
+	ListGroupPermissions(context.Context, *logger.Logger, filtertypes.FilterSet) ([]*auth.GroupPermission, int, error)
+	GetPermissionsForGroups(context.Context, *logger.Logger, []string) ([]*auth.GroupPermission, error)
+	CreateGroupPermission(context.Context, *logger.Logger, *auth.GroupPermission) error
+	UpdateGroupPermission(context.Context, *logger.Logger, *auth.GroupPermission) error
+	DeleteGroupPermission(context.Context, *logger.Logger, uuid.UUID) error
+	ReplaceGroupPermissions(context.Context, *logger.Logger, []*auth.GroupPermission) error
+
 	// GetStatistics returns current counts for metrics gauges.
 	GetStatistics(context.Context, *logger.Logger) (*Statistics, error)
 }

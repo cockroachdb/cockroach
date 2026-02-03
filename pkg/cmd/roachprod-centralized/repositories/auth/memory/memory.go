@@ -968,6 +968,168 @@ func (r *MemAuthRepo) UpdateGroupWithMembers(
 	return nil
 }
 
+// Group Permissions
+
+func (r *MemAuthRepo) ListGroupPermissions(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]*auth.GroupPermission, int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// 1. Apply filters
+	evaluator := filters.NewMemoryFilterEvaluatorWithTypeHint(
+		reflect.TypeOf(auth.GroupPermission{}),
+	)
+	var filteredPerms []*auth.GroupPermission
+
+	for _, perm := range r.groupPermissions {
+		// If no filters, include all permissions
+		if filterSet.IsEmpty() {
+			filteredPerms = append(filteredPerms, perm)
+			continue
+		}
+
+		matches, err := evaluator.Evaluate(perm, &filterSet)
+		if err != nil {
+			l.Error(
+				"Error filtering group permission, continuing with other permissions",
+				slog.String("permission_id", perm.ID.String()),
+				slog.Any("error", err),
+			)
+			continue
+		}
+		if matches {
+			filteredPerms = append(filteredPerms, perm)
+		}
+	}
+
+	totalCount := len(filteredPerms)
+
+	// 2. Apply sorting (with group_name as default)
+	_ = memoryfilters.SortByField(filteredPerms, filterSet.Sort, "group_name")
+
+	// 3. Apply pagination
+	filteredPerms = memoryfilters.ApplyPagination(filteredPerms, filterSet.Pagination)
+
+	return filteredPerms, totalCount, nil
+}
+
+func (r *MemAuthRepo) GetPermissionsForGroups(
+	ctx context.Context, l *logger.Logger, groups []string,
+) ([]*auth.GroupPermission, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if len(groups) == 0 {
+		return nil, nil
+	}
+
+	// Build a set for O(1) lookups
+	groupSet := make(map[string]struct{}, len(groups))
+	for _, g := range groups {
+		groupSet[g] = struct{}{}
+	}
+
+	var result []*auth.GroupPermission
+	for _, m := range r.groupPermissions {
+		if _, ok := groupSet[m.GroupName]; ok {
+			result = append(result, m)
+		}
+	}
+
+	// Sort by group_name, provider, account, permission
+	slices.SortFunc(result, func(a, b *auth.GroupPermission) int {
+		if a.GroupName != b.GroupName {
+			if a.GroupName < b.GroupName {
+				return -1
+			}
+			return 1
+		}
+		if a.Provider != b.Provider {
+			if a.Provider < b.Provider {
+				return -1
+			}
+			return 1
+		}
+		if a.Account != b.Account {
+			if a.Account < b.Account {
+				return -1
+			}
+			return 1
+		}
+		if a.Permission < b.Permission {
+			return -1
+		}
+		if a.Permission > b.Permission {
+			return 1
+		}
+		return 0
+	})
+
+	return result, nil
+}
+
+func (r *MemAuthRepo) CreateGroupPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.GroupPermission,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Check for duplicates
+	for _, m := range r.groupPermissions {
+		if m.ID == perm.ID {
+			return errors.New("group permission with this ID already exists")
+		}
+	}
+
+	r.groupPermissions = append(r.groupPermissions, perm)
+	return nil
+}
+
+func (r *MemAuthRepo) UpdateGroupPermission(
+	ctx context.Context, l *logger.Logger, perm *auth.GroupPermission,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for i, m := range r.groupPermissions {
+		if m.ID == perm.ID {
+			r.groupPermissions[i] = perm
+			return nil
+		}
+	}
+
+	return rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) DeleteGroupPermission(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	for i, m := range r.groupPermissions {
+		if m.ID == id {
+			r.groupPermissions = append(r.groupPermissions[:i], r.groupPermissions[i+1:]...)
+			return nil
+		}
+	}
+
+	return rauth.ErrNotFound
+}
+
+func (r *MemAuthRepo) ReplaceGroupPermissions(
+	ctx context.Context, l *logger.Logger, perms []*auth.GroupPermission,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	// Replace all permissions atomically
+	r.groupPermissions = make([]*auth.GroupPermission, len(perms))
+	copy(r.groupPermissions, perms)
+	return nil
+}
+
 // GetStatistics returns current counts for metrics gauges.
 func (r *MemAuthRepo) GetStatistics(
 	ctx context.Context, l *logger.Logger,

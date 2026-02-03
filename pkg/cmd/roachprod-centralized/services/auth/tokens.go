@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ValidateToken validates an opaque token.
+// validateToken validates an opaque token.
 // For service account tokens, enforces IP allowlist if configured.
 func (s *Service) validateToken(
 	ctx context.Context, l *logger.Logger, tokenString string, clientIP string,
@@ -145,6 +145,16 @@ func (s *Service) validateToken(
 	return token, nil
 }
 
+// ListAllTokens lists all tokens (admin operation).
+func (s *Service) ListAllTokens(
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	inputDTO types.InputListTokensDTO,
+) ([]*auth.ApiToken, int, error) {
+	return s.repo.ListAllTokens(ctx, l, inputDTO.Filters)
+}
+
 // ListSelfTokens lists all tokens belonging to the authenticated principal.
 func (s *Service) ListSelfTokens(
 	ctx context.Context,
@@ -257,6 +267,64 @@ func (s *Service) RevokeSelfToken(
 
 	// Record metrics for successful revocation
 	s.metrics.RecordTokenRevoked("self")
+
+	return nil
+}
+
+// RevokeUserToken revokes a token belonging to a specific user.
+// This is an admin operation that requires PermissionScimManageUser.
+// Returns ErrTokenNotFound if token doesn't exist or doesn't belong to the user.
+func (s *Service) RevokeUserToken(
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	userID uuid.UUID,
+	tokenID uuid.UUID,
+) error {
+
+	// Get the user to verify it exists
+	user, err := s.repo.GetUser(ctx, l, userID)
+	if err != nil {
+		if errors.Is(err, rauth.ErrNotFound) {
+			return types.ErrUserNotFound
+		}
+		return errors.Wrap(err, "failed to get user")
+	}
+
+	// Get the token
+	token, err := s.repo.GetToken(ctx, l, tokenID)
+	if err != nil {
+		if errors.Is(err, rauth.ErrNotFound) {
+			return types.ErrTokenNotFound
+		}
+		return errors.Wrap(err, "failed to get token")
+	}
+
+	// Verify token belongs to this user
+	if token.TokenType != auth.TokenTypeUser || token.UserID == nil || *token.UserID != userID {
+		return types.ErrTokenNotFound
+	}
+
+	// Revoke the token
+	if err := s.repo.RevokeToken(ctx, l, tokenID); err != nil {
+		s.auditEvent(ctx, l, principal, AuditTokenRevoked, "error", map[string]interface{}{
+			"token_id":     tokenID.String(),
+			"token_suffix": token.TokenSuffix,
+			"user_id":      userID.String(),
+			"error":        err.Error(),
+		})
+		return err
+	}
+
+	s.auditEvent(ctx, l, principal, AuditTokenRevoked, "success", map[string]interface{}{
+		"token_id":     tokenID.String(),
+		"token_suffix": token.TokenSuffix,
+		"user_id":      user.ID.String(),
+		"user_email":   user.Email,
+	})
+
+	// Record metrics for successful revocation
+	s.metrics.RecordTokenRevoked("admin")
 
 	return nil
 }
