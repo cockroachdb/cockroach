@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -169,25 +170,39 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	files := details.URIs
 	format := details.Format
 
+	updateDetails := func(txn isql.Txn, details jobspb.ImportDetails) error {
+		if err := r.job.WithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
+			pl := md.Payload
+			*pl.GetImport() = details
+
+			// Update the set of descriptors for later observability.
+			// TODO(ajwerner): Do we need this idempotence test?
+			prev := md.Payload.DescriptorIDs
+			if prev == nil {
+				pl.DescriptorIDs = []descpb.ID{details.Table.Desc.ID}
+			}
+			ju.UpdatePayload(pl)
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Telemetry for multi-region.
+	table, err := getTable(details)
+	if err != nil {
+		return err
+	}
+
 	// Skip prepare stage on job resumption, if it has already been completed.
 	if !details.PrepareComplete {
 		if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 		) error {
-			// Telemetry for multi-region.
-			table, err := getTable(details)
-			if err != nil {
-				return err
-			}
-
-			// Run the count before making the table unreadable in the IMPORTING
-			// state.
-			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, p, txn, table, details)
-			if err != nil {
-				return err
-			}
-
-			preparedDetails, err := r.prepareTableForIngestion(ctx, p, rowCountDetails, txn.KV(), descsCol)
+			preparedDetails, err := r.prepareTableForIngestion(ctx, p, details, txn.KV(), descsCol)
 			if err != nil {
 				return err
 			}
@@ -202,21 +217,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Update the job details now that the schemas and table descs have
 			// been "prepared".
-			return r.job.WithTxn(txn).Update(ctx, func(
-				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-			) error {
-				pl := md.Payload
-				*pl.GetImport() = preparedDetails
-
-				// Update the set of descriptors for later observability.
-				// TODO(ajwerner): Do we need this idempotence test?
-				prev := md.Payload.DescriptorIDs
-				if prev == nil {
-					pl.DescriptorIDs = []descpb.ID{table.Desc.GetID()}
-				}
-				ju.UpdatePayload(pl)
-				return nil
-			})
+			return updateDetails(txn, preparedDetails)
 		}); err != nil {
 			return err
 		}
@@ -228,10 +229,36 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		})
 	}
 
+	if details.Table.InitialRowCount == 0 {
+		// Check if the table being imported into is starting empty, in which case
+		// we can cheaply clear-range instead of DeleteRange to cleanup.
+		//
+		// Run the count after the table has been taken offline.
+		//
+		// The count is low-cost for empty tables and otherwise the expensive
+		// full scan is only run the one time.
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, txn, details)
+			if err != nil {
+				return err
+			}
+
+			return updateDetails(txn, rowCountDetails)
+		}); err != nil {
+			return err
+		}
+
+		// Re-initialize details after the row count update.
+		details = r.job.Details().(jobspb.ImportDetails)
+		besteffort.Warning(ctx, "import-event", func(ctx context.Context) error {
+			return emitImportJobEvent(ctx, p, jobs.StateRunning, r.job)
+		})
+	}
+
 	// Note that this getTable call has to be separate from the one we did for
 	// multi-region telemetry above since we've just updated the details after
 	// the prepare step.
-	table, err := getTable(details)
+	table, err = getTable(details)
 	if err != nil {
 		return err
 	}
@@ -403,29 +430,48 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // detailsWithInitialRowCount checks if the table being imported into is empty
 // and return an updated details with the initial row count.
 func (r *importResumer) detailsWithInitialRowCount(
-	ctx context.Context,
-	p sql.JobExecContext,
-	txn isql.Txn,
-	table jobspb.ImportDetails_Table,
-	details jobspb.ImportDetails,
+	ctx context.Context, txn descs.Txn, details jobspb.ImportDetails,
 ) (jobspb.ImportDetails, error) {
 	rowCountDetails := details
 
-	// Check if the table being imported into is starting empty, in which case
-	// we can cheaply clear-range instead of DeleteRange to cleanup.
-	log.Eventf(ctx, "querying for row count for table %s", table.Name)
-	row, err := txn.QueryRowEx(
-		ctx,
-		"import-initial-row-count",
-		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf("SELECT count(*) FROM [%d AS t]", table.Desc.ID),
-	)
+	mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, details.Table.Desc.ID)
 	if err != nil {
-		return jobspb.ImportDetails{}, errors.Wrap(err, "querying initial row count")
+		return jobspb.ImportDetails{}, err
+	}
+	mut.SetPublic()
+
+	query := fmt.Sprintf(`
+SELECT
+  count(*) AS row_count
+FROM [%d AS t]@{FORCE_INDEX=[%d]}`,
+		mut.GetID(),
+		mut.GetPrimaryIndex().GetID(),
+	)
+
+	rowCount := uint64(0)
+	if err := txn.WithSyntheticDescriptors([]catalog.Descriptor{mut.ImmutableCopy()}, func() error {
+		row, err := txn.QueryRowEx(
+			ctx,
+			"import-initial-row-count",
+			txn.KV(),
+			sessiondata.InternalExecutorOverride{
+				User: username.NodeUserName(),
+			},
+			query,
+		)
+		if err != nil {
+			return errors.Wrap(err, "counting rows via synthetic descriptor")
+		}
+		if len(row) != 1 {
+			return errors.AssertionFailedf("row count query returned unexpected column count: %d", len(row))
+		}
+		rowCount = uint64(tree.MustBeDInt(row[0]))
+
+		return nil
+	}); err != nil {
+		return jobspb.ImportDetails{}, err
 	}
 
-	rowCount := uint64(tree.MustBeDInt(row[0]))
 	rowCountDetails.Table.WasEmpty = rowCount == 0
 	rowCountDetails.Tables[0].WasEmpty = rowCount == 0
 	rowCountDetails.Table.InitialRowCount = rowCount
