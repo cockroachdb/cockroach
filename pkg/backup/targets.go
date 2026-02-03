@@ -249,6 +249,42 @@ func getAllDescChanges(
 	return res, nil
 }
 
+// filterTempSystemDBDescriptors filters out temporary system databases (those
+// starting with restoreTempSystemDBPrefix) and all their child descriptors
+// from the provided descriptor lists.
+func filterTempSystemDBDescriptors(
+	fullClusterDescs []catalog.Descriptor, fullClusterDBs []catalog.DatabaseDescriptor,
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor) {
+
+	tempDBIDs := make(map[descpb.ID]struct{})
+	for _, dbDesc := range fullClusterDBs {
+		if strings.HasPrefix(dbDesc.GetName(), restoreTempSystemDBPrefix) {
+			tempDBIDs[dbDesc.GetID()] = struct{}{}
+		}
+	}
+
+	if len(tempDBIDs) == 0 {
+		return fullClusterDescs, fullClusterDBs
+	}
+
+	filteredDescs := make([]catalog.Descriptor, 0, len(fullClusterDescs))
+	for _, desc := range fullClusterDescs {
+		if _, isTempDB := tempDBIDs[desc.GetParentID()]; isTempDB {
+			continue
+		}
+		filteredDescs = append(filteredDescs, desc)
+	}
+
+	filteredDBs := make([]catalog.DatabaseDescriptor, 0, len(fullClusterDBs))
+	for _, dbDesc := range fullClusterDBs {
+		if _, isTempDB := tempDBIDs[dbDesc.GetID()]; !isTempDB {
+			filteredDBs = append(filteredDBs, dbDesc)
+		}
+	}
+
+	return filteredDescs, filteredDBs
+}
+
 // fullClusterTargets returns all of the descriptors to be included in a full
 // cluster backup, along with all the "complete databases" that we are backing
 // up.
@@ -292,6 +328,8 @@ func fullClusterTargets(
 			fullClusterDescs = append(fullClusterDescs, desc)
 		}
 	}
+	// Filter out temporary system databases and their child descriptors.
+	fullClusterDescs, fullClusterDBs = filterTempSystemDBDescriptors(fullClusterDescs, fullClusterDBs)
 	return fullClusterDescs, fullClusterDBs, nil
 }
 

@@ -11433,17 +11433,18 @@ func TestDatabaseRestoreDownloadsZoneConfig(t *testing.T) {
 	sqlDB.QueryRow(t, `RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/test' WITH new_db_name = 'data2', detached`).Scan(&jobID)
 
 	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+	tmpDBName := "crdb_temp_system_" + strconv.Itoa(int(jobID))
 
-	checkTempDBExists := "SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'crdb_temp_system'"
+	checkTempDBExists := fmt.Sprintf("SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = '%s'", tmpDBName)
 
 	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"1"}})
 
 	sqlDB.CheckQueryResults(t,
-		`SELECT table_name FROM [SHOW TABLES FROM crdb_temp_system]`,
+		fmt.Sprintf(`SELECT table_name FROM [SHOW TABLES FROM %s]`, tmpDBName),
 		[][]string{{"zones"}})
 
 	var zoneCount int
-	sqlDB.QueryRow(t, `SELECT count(*) FROM crdb_temp_system.zones`).Scan(&zoneCount)
+	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.zones`, tmpDBName)).Scan(&zoneCount)
 	require.Greater(t, zoneCount, 0, "zones table should contain data")
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
