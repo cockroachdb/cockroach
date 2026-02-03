@@ -3182,7 +3182,7 @@ vectorized: true
 │           │ equality: (crdb_region, id) = (crdb_region, user_id)
 │           │
 │           └── • distinct
-│               │ estimated row count: 100
+│               │ estimated row count: 40
 │               │ distinct on: id, crdb_region
 │               │
 │               └── • scan buffer
