@@ -120,7 +120,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 
 			var found bool
 			for _, repl := range repls {
-				resp, pErr := repl.Send(ctx, baWrite)
+				resp, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, baWrite)
 				if errors.HasType(pErr.GoError(), (*kvpb.NotLeaseHolderError)(nil)) {
 					continue
 				} else if pErr != nil {
@@ -236,7 +236,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	ensureCanReadFromReplicaUntilDeadline := func(r *kvserver.Replica) {
 		g.Go(func() error {
 			for timeutil.Now().Before(deadline) {
-				resp, pErr := r.Send(gCtx, baRead)
+				resp, pErr := kvserver.ToSenderForTesting(r).Send(gCtx, baRead)
 				if pErr != nil {
 					return errors.Wrapf(pErr.GoError(), "on %s", r)
 				}
@@ -307,11 +307,11 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 				if retryUntilSuccessful {
 					err = testutils.SucceedsSoonError(func() error {
 						// Expect 0 rows, because the intents are never committed.
-						_, err := expectRows(0)(repl.Send(ctx, baRead))
+						_, err := expectRows(0)(kvserver.ToSenderForTesting(repl).Send(ctx, baRead))
 						return err
 					})
 				} else {
-					_, pErr := repl.Send(ctx, baRead)
+					_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, baRead)
 					err = pErr.GoError()
 				}
 				respCh <- err
@@ -821,7 +821,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 				NodeID:  r.NodeID(),
 				StoreID: r.StoreID(),
 			})[0]
-			_, pErr := follower.Send(ctx, scanReq)
+			_, pErr := kvserver.ToSenderForTesting(follower).Send(ctx, scanReq)
 			require.NotNil(t, pErr)
 			require.Regexp(t, "NotLeaseHolderError", pErr.String())
 
@@ -848,7 +848,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 				put := &kvpb.PutRequest{}
 				put.Key = rightDesc.StartKey.AsRawKey()
 				baWrite.Add(put)
-				resp, pErr := mergedLeaseholder.Send(ctx, baWrite)
+				resp, pErr := kvserver.ToSenderForTesting(mergedLeaseholder).Send(ctx, baWrite)
 				require.Nil(t, pErr)
 				require.Equal(t, writeTime, resp.Timestamp,
 					"response time %s different from request time %s", resp.Timestamp, writeTime)
@@ -1112,7 +1112,7 @@ func countNotLeaseHolderErrors(ba *kvpb.BatchRequest, repls []*kvserver.Replica)
 	for i := range repls {
 		repl := repls[i]
 		g.Go(func() (err error) {
-			if _, pErr := repl.Send(ctx, ba); pErr != nil {
+			if _, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba); pErr != nil {
 				if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
 					atomic.AddInt64(&notLeaseholderErrs, 1)
 					return nil
@@ -1362,7 +1362,7 @@ func verifyCanReadFromAllRepls(
 		g.Go(func() (err error) {
 			var shouldRetry bool
 			for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
-				if shouldRetry, err = f(repl.Send(ctx, baRead)); !shouldRetry {
+				if shouldRetry, err = f(kvserver.ToSenderForTesting(repl).Send(ctx, baRead)); !shouldRetry {
 					return err
 				}
 			}

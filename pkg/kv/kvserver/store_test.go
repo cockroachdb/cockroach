@@ -82,7 +82,7 @@ var testIdent = roachpb.StoreIdent{
 }
 
 func (s *Store) TestSender() kv.Sender {
-	return kv.Wrap(s, func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
+	return kv.Wrap(ToSenderForTesting(s), func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
 		if ba.RangeID != 0 {
 			return ba
 		}
@@ -292,7 +292,7 @@ func createTestStoreWithoutStart(
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
-	storeSender.Sender = store
+	storeSender.Sender = ToSenderForTesting(store)
 
 	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
 	cv := clusterversion.TestingClusterVersion

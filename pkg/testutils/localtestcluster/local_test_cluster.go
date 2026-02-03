@@ -177,7 +177,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		CPUUsageMovingAverageAge:   20,
 	})
 
-	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency,
+		kvserver.ToSenderForTesting(ltc.Stores), ltc.stopper, ltc.Gossip)
 
 	var nodeIDContainer base.NodeIDContainer
 	nodeIDContainer.Set(context.Background(), nodeID)

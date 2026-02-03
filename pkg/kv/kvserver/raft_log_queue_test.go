@@ -842,7 +842,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 		ba.Add(put)
 		ba.RangeID = repl.RangeID
 
-		if _, pErr := tc.store.Send(ctx, ba); pErr != nil {
+		if _, pErr := ToSenderForTesting(tc.store).Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		}
 	}

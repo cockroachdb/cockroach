@@ -1150,7 +1150,7 @@ type Store struct {
 	diskMonitor *disk.Monitor
 }
 
-var _ kv.Sender = &Store{}
+var _ SenderWithWriteBytes = &Store{}
 var _ IncomingRaftMessageHandler = &Store{}
 var _ OutgoingRaftMessageHandler = &Store{}
 

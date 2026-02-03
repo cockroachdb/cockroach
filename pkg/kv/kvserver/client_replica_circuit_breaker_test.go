@@ -1315,7 +1315,7 @@ func (cbt *circuitBreakerTest) SendCtxTS(
 	// going to leak memory.
 	ctx = context.WithValue(ctx, req, struct{}{})
 
-	_, pErr := repl.Send(ctx, ba)
+	_, pErr := kvserver.ToSenderForTesting(repl.Replica).Send(ctx, ba)
 	// If our context got canceled, return an opaque error regardless of presence or
 	// absence of actual error. This makes sure we don't accidentally pass tests as
 	// a result of our context cancellation.

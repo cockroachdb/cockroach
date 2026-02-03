@@ -774,7 +774,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 				RangeID:         rangeID,
 				ReadConsistency: kvpb.INCONSISTENT,
 			}
-			resp, pErr := kv.SendWrappedWith(ctx, store, queryResTSHeader, &queryResTS)
+			resp, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), queryResTSHeader, &queryResTS)
 			if pErr != nil {
 				return pErr.GoError()
 			}
@@ -805,7 +805,7 @@ func TestNonBlockingReadsAtResolvedTimestamp(t *testing.T) {
 				Txn:             &txn,
 				WaitPolicy:      lock.WaitPolicy_Error,
 			}
-			_, pErr = kv.SendWrappedWith(ctx, store, scanHeader, &scan)
+			_, pErr = kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), scanHeader, &scan)
 			return pErr.GoError()
 		}
 	})
@@ -847,7 +847,7 @@ func TestNonBlockingReadsWithServerSideBoundedStalenessNegotiation(t *testing.T)
 			ba.Add(&kvpb.ScanRequest{
 				RequestHeader: kvpb.RequestHeaderFromSpan(keySpan),
 			})
-			br, pErr := store.Send(ctx, ba)
+			br, pErr := kvserver.ToSenderForTesting(store).Send(ctx, ba)
 			if pErr != nil {
 				return pErr.GoError()
 			}

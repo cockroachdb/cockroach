@@ -171,7 +171,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Add(probeReq)
 		ba.Timestamp = srv.Clock().Now()
-		_, pErr := repl.Send(ctx, ba)
+		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba)
 		require.NoError(t, pErr.GoError())
 	}
 
@@ -189,7 +189,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.Timestamp = srv.Clock().Now()
 		ba.Add(probeReq)
-		_, pErr := repl.Send(ctx, ba)
+		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba)
 		require.True(t, errors.Is(pErr.GoError(), injErr.GoError()), "%+v", pErr.GoError())
 	}
 }

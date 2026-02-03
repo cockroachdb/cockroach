@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
@@ -48,7 +47,7 @@ type Stores struct {
 	sendQueueLogger *rac2.SendQueueLogger
 }
 
-var _ kv.Sender = &Stores{}      // Stores implements the client.Sender interface
+var _ SenderWithWriteBytes = &Stores{}
 var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses
@@ -176,18 +175,8 @@ func (ls *Stores) GetReplicaForRangeID(
 	return replica, store, nil
 }
 
-// Send implements the client.Sender interface. The store is looked up from the
+// SendWithWriteBytes sends a batch request. The store is looked up from the
 // store map using the ID specified in the request.
-func (ls *Stores) Send(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, *kvpb.Error) {
-	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
-	writeBytes.Release()
-	return br, pErr
-}
-
-// SendWithWriteBytes is the implementation of Send with an additional
-// *StoreWriteBytes return value.
 func (ls *Stores) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {

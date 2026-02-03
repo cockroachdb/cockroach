@@ -1012,7 +1012,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				}
 				ba.Add(test.reqs...)
 
-				br, pErr := tc.store.Send(ctx, ba)
+				br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 				if test.expErr == "" {
 					require.Nil(t, pErr)
 					require.NotNil(t, br)
@@ -1176,7 +1176,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			expRespTS := earliestIntentTS.Prev()
 
 			// Issue the request.
-			br, pErr := tc.store.Send(ctx, ba)
+			br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 			require.Nil(t, pErr)
 			require.NotNil(t, br)
 			require.Equal(t, expRespTS, br.Timestamp)

@@ -1251,7 +1251,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		ba.Add(getArgs(key))
-		br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba)
+		br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 1)).Send(ctx, ba)
 		nonTxnRespC <- resp{br, pErr}
 	})
 
@@ -1290,7 +1290,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
 	ba.Add(putArgs(key, []byte("val")))
-	br, pErr := tc.GetFirstStoreFromServer(t, 0).Send(ctx, ba)
+	br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 0)).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
 	require.True(t, nonTxnOrigTs.Less(writeTs), "nonTxnOrigTs: %v, writeTs: %v", nonTxnOrigTs, writeTs)
@@ -2589,7 +2589,7 @@ func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
 		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
 		h := kvpb.Header{RangeID: rngID}
 		args := adminSplitArgs(key)
-		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -2600,7 +2600,7 @@ func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
 		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
 		h := kvpb.Header{RangeID: rngID}
 		args := adminMergeArgs(key)
-		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -2744,7 +2744,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		},
 	}
 	reply, pErr := kv.SendWrappedWith(
-		context.Background(), s, kvpb.Header{
+		context.Background(), kvserver.ToSenderForTesting(s), kvpb.Header{
 			RangeID:         rangeDesc.RangeID,
 			ReadConsistency: kvpb.INCONSISTENT,
 		}, leaseInfoReq)
@@ -2870,7 +2870,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 				},
 			}
 			ba.Add(gArgs)
-			br, pErr := store.Send(ctx, ba)
+			br, pErr := kvserver.ToSenderForTesting(store).Send(ctx, ba)
 			require.NoError(t, pErr.GoError())
 			descs := make([]roachpb.RangeDescriptor, len(br.RangeInfos))
 			for i, ri := range br.RangeInfos {
@@ -3051,7 +3051,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 		ba.RangeID = desc.RangeID
 		ba.Timestamp = repl.Clock().Now()
 		ba.Add(putArgs(key, []byte("foo")))
-		_, pErr := repl.Send(ctx, ba)
+		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba)
 		return pErr, ctx.Err()
 	}
 

@@ -570,14 +570,14 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
 	h := kvpb.Header{RangeID: rngID}
 	args := adminSplitArgs(key)
-	if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	replCount := store.ReplicaCount()
 
 	// An AdminSplit request sent to the end of the old range should be re-routed
 	// to the start of the new range, succeeding but without creating any new ranges.
-	if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -591,7 +591,7 @@ func TestStoreRangeSplitAtRangeBounds(t *testing.T) {
 	// should succeed but no new ranges should be created.
 	newRng := store.LookupReplica(roachpb.RKey(key))
 	h.RangeID = newRng.RangeID
-	if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 		t.Fatal(pErr)
 	}
 
@@ -1401,7 +1401,7 @@ func fillRange(
 		}
 		val := randutil.RandBytes(src, 200000)
 		pArgs := putArgs(key, val)
-		_, pErr := kv.SendWrappedWith(context.Background(), store, kvpb.Header{
+		_, pErr := kv.SendWrappedWith(context.Background(), kvserver.ToSenderForTesting(store), kvpb.Header{
 			RangeID: rangeID,
 		}, pArgs)
 		// When the split occurs in the background, our writes may start failing.
@@ -2891,7 +2891,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 	// Split at "b".
 	rhsKey := roachpb.Key("b")
 	args = adminSplitArgs(rhsKey)
-	if _, pErr := kv.SendWrappedWith(context.Background(), store, kvpb.Header{
+	if _, pErr := kv.SendWrappedWith(context.Background(), kvserver.ToSenderForTesting(store), kvpb.Header{
 		RangeID: lhs.RangeID,
 	}, args); pErr != nil {
 		t.Fatalf("split at %q: %s", rhsKey, pErr)
@@ -2932,7 +2932,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 						PushType:  kvpb.PUSH_ABORT,
 						Force:     true,
 					})
-					_, pErr := store.Send(ctx, ba)
+					_, pErr := kvserver.ToSenderForTesting(store).Send(ctx, ba)
 					if pErr != nil {
 						t.Fatalf("failed to abort the txn: %s", pErr)
 					}
@@ -3186,7 +3186,7 @@ func TestTxnWaitQueueDependencyCycleWithRangeSplit(t *testing.T) {
 
 		// Split at "b".
 		args = adminSplitArgs(rhsKey)
-		if _, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{
 			RangeID: lhs.RangeID,
 		}, args); pErr != nil {
 			t.Fatalf("split at %q: %s", rhsKey, pErr)
@@ -3533,7 +3533,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 
 		// Don't use s.DistSenderI().(kv.Sender) so that we don't disturb the RangeDescriptorCache.
 		rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
-		_, pErr := kv.SendWrappedWith(context.Background(), store, kvpb.Header{
+		_, pErr := kv.SendWrappedWith(context.Background(), kvserver.ToSenderForTesting(store), kvpb.Header{
 			RangeID: rangeID,
 		}, args)
 		if pErr != nil {
@@ -3978,7 +3978,7 @@ func TestSplitBlocksReadsToRHS(t *testing.T) {
 			g.GoCtx(func(ctx context.Context) error {
 				// Send directly to repl to avoid racing with the
 				// split and routing requests to the post-split RHS.
-				_, pErr := kv.SendWrappedWith(ctx, repl, h, args)
+				_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(repl), h, args)
 				errCh <- pErr.GoError()
 				return nil
 			})
