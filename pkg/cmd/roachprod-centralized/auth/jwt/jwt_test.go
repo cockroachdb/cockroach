@@ -12,11 +12,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	authmocks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/mocks"
 	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/idtoken"
 )
@@ -27,7 +29,9 @@ func TestJWTAuthenticator_Authenticate_InvalidToken(t *testing.T) {
 		Issuer:   "test-issuer",
 	}
 
-	authenticator := NewJWTAuthenticator(config)
+	mockAuthService := authmocks.NewIService(t)
+	mockAuthService.On("RecordAuthentication", "error", "jwt", mock.Anything).Return()
+	authenticator := NewJWTAuthenticator(config, mockAuthService)
 
 	principal, err := authenticator.Authenticate(context.Background(), "invalid-token", "127.0.0.1")
 	require.Error(t, err)
@@ -43,7 +47,9 @@ func TestJWTAuthenticator_Authenticate_EmptyToken(t *testing.T) {
 		Issuer:   "test-issuer",
 	}
 
-	authenticator := NewJWTAuthenticator(config)
+	mockAuthService := authmocks.NewIService(t)
+	mockAuthService.On("RecordAuthentication", "error", "none", mock.Anything).Return()
+	authenticator := NewJWTAuthenticator(config, mockAuthService)
 
 	principal, err := authenticator.Authenticate(context.Background(), "", "127.0.0.1")
 	require.Error(t, err)
@@ -59,7 +65,8 @@ func TestJWTAuthenticator_ValidateToken_InvalidToken(t *testing.T) {
 		Issuer:   "test-issuer",
 	}
 
-	authenticator := NewJWTAuthenticator(config)
+	mockAuthService := authmocks.NewIService(t)
+	authenticator := NewJWTAuthenticator(config, mockAuthService)
 
 	// Use a clearly invalid token format
 	_, err := authenticator.validateToken(context.Background(), "invalid-token")
@@ -73,7 +80,8 @@ func TestJWTAuthenticator_ValidateToken_MalformedToken(t *testing.T) {
 		Issuer:   "test-issuer",
 	}
 
-	authenticator := NewJWTAuthenticator(config)
+	mockAuthService := authmocks.NewIService(t)
+	authenticator := NewJWTAuthenticator(config, mockAuthService)
 
 	// Test with various malformed tokens
 	testCases := []string{

@@ -29,6 +29,8 @@ func TestBearerAuthenticator_Authenticate_EmptyToken(t *testing.T) {
 	l := logger.NewLogger("error")
 	authenticator := NewBearerAuthenticator(config, mockService, l)
 
+	mockService.On("RecordAuthentication", "error", "none", mock.Anything).Return()
+
 	principal, err := authenticator.Authenticate(context.Background(), "", "127.0.0.1")
 	require.Error(t, err)
 	assert.Nil(t, principal)
@@ -45,6 +47,7 @@ func TestBearerAuthenticator_Authenticate_InvalidToken(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "invalid-token", "127.0.0.1").
 		Return(nil, authtypes.ErrInvalidToken)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "invalid-token", "127.0.0.1")
 	require.Error(t, err)
@@ -62,6 +65,7 @@ func TestBearerAuthenticator_Authenticate_ExpiredToken(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "expired-token", "127.0.0.1").
 		Return(nil, authtypes.ErrTokenExpired)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "expired-token", "127.0.0.1")
 	require.Error(t, err)
@@ -79,6 +83,7 @@ func TestBearerAuthenticator_Authenticate_IPNotAllowed(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "valid-token", "1.2.3.4").
 		Return(nil, authtypes.ErrIPNotAllowed)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "valid-token", "1.2.3.4")
 	require.Error(t, err)
@@ -124,6 +129,7 @@ func TestBearerAuthenticator_Authenticate_ValidUserToken(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "valid-user-token", "127.0.0.1").
 		Return(expectedPrincipal, nil)
+	mockService.On("RecordAuthentication", "success", "user", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "valid-user-token", "127.0.0.1")
 	require.NoError(t, err)
@@ -180,6 +186,7 @@ func TestBearerAuthenticator_Authenticate_ValidServiceAccountToken(t *testing.T)
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "valid-sa-token", "127.0.0.1").
 		Return(expectedPrincipal, nil)
+	mockService.On("RecordAuthentication", "success", "service-account", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "valid-sa-token", "127.0.0.1")
 	require.NoError(t, err)
@@ -207,6 +214,7 @@ func TestBearerAuthenticator_Authenticate_UserNotProvisioned(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "valid-token", "127.0.0.1").
 		Return(nil, authtypes.ErrUserNotProvisioned)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "valid-token", "127.0.0.1")
 	require.Error(t, err)
@@ -224,6 +232,7 @@ func TestBearerAuthenticator_Authenticate_UserDeactivated(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "user-token", "127.0.0.1").
 		Return(nil, authtypes.ErrUserDeactivated)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "user-token", "127.0.0.1")
 	require.Error(t, err)
@@ -241,6 +250,7 @@ func TestBearerAuthenticator_Authenticate_ServiceAccountDisabled(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "sa-token", "127.0.0.1").
 		Return(nil, authtypes.ErrServiceAccountDisabled)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "sa-token", "127.0.0.1")
 	require.Error(t, err)
@@ -258,6 +268,7 @@ func TestBearerAuthenticator_Authenticate_ServiceAccountNotFound(t *testing.T) {
 
 	mockService.On("AuthenticateToken", mock.Anything, mock.Anything, "sa-token", "127.0.0.1").
 		Return(nil, authtypes.ErrServiceAccountNotFound)
+	mockService.On("RecordAuthentication", "error", "bearer", mock.Anything).Return()
 
 	principal, err := authenticator.Authenticate(context.Background(), "sa-token", "127.0.0.1")
 	require.Error(t, err)

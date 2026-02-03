@@ -7,6 +7,7 @@ package types
 
 import (
 	"context"
+	"time"
 
 	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
@@ -63,10 +64,18 @@ type IService interface {
 	StartService(ctx context.Context, l *logger.Logger) error
 	StartBackgroundWork(ctx context.Context, l *logger.Logger, errChan chan<- error) error
 	Shutdown(ctx context.Context) error
+
+	// Metrics recording (for authenticator layer)
+	RecordAuthentication(result, authMethod string, latency time.Duration)
+	RecordAuthzDecision(result, reason, endpoint, provider string)
+	RecordAuthzLatency(endpoint string, latency time.Duration)
 }
 
 // Options configures the auth service.
-type Options struct{}
+type Options struct {
+	CollectMetrics           bool          // Enable Prometheus metrics collection
+	StatisticsUpdateInterval time.Duration // How often to update gauge metrics (default: 30s)
+}
 
 // InputListServiceAccountsDTO is the data transfer object to get all service accounts.
 type InputListServiceAccountsDTO struct {

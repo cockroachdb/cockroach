@@ -22,6 +22,7 @@ import (
 func (s *Service) ExchangeOktaToken(
 	ctx context.Context, l *logger.Logger, oktaToken string,
 ) (*auth.ApiToken, string, error) {
+	start := timeutil.Now()
 	var oktaUserID string
 	var token *auth.ApiToken
 	var returnErr error
@@ -36,12 +37,15 @@ func (s *Service) ExchangeOktaToken(
 				finishDetails["okta_user_id"] = oktaUserID
 			}
 			s.auditEvent(ctx, l, nil, AuditOktaExchangeFinish, "error", finishDetails)
+			s.metrics.RecordOktaExchange("error", timeutil.Since(start))
 		} else if token != nil {
 			// Success case
 			finishDetails["user_id"] = token.UserID.String()
 			finishDetails["token_id"] = token.ID.String()
 			finishDetails["token_suffix"] = token.TokenSuffix
 			s.auditEvent(ctx, l, nil, AuditOktaExchangeFinish, "success", finishDetails)
+			s.metrics.RecordOktaExchange("success", timeutil.Since(start))
+			s.metrics.RecordTokenIssued("user")
 		}
 	}()
 
@@ -69,6 +73,7 @@ func (s *Service) ExchangeOktaToken(
 	user, err := s.repo.GetUserByOktaID(ctx, l, oktaUserID)
 	if err != nil {
 		if errors.Is(err, rauth.ErrNotFound) {
+			s.metrics.RecordUserNotProvisioned()
 			returnErr = authtypes.ErrUserNotProvisioned
 			return nil, "", returnErr
 		}

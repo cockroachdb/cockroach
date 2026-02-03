@@ -60,7 +60,11 @@ type IAuthRepository interface {
 	GetUserPermissionsFromGroups(context.Context, *logger.Logger, uuid.UUID) ([]*auth.GroupPermission, error)
 
 	// Permissions
+	// ListServiceAccountPermissions lists permissions for a service account with filtering/sorting/pagination.
 	ListServiceAccountPermissions(context.Context, *logger.Logger, uuid.UUID, filtertypes.FilterSet) ([]*auth.ServiceAccountPermission, int, error)
 	// GetServiceAccountPermission retrieves a single permission by ID.
 	GetServiceAccountPermission(context.Context, *logger.Logger, uuid.UUID) (*auth.ServiceAccountPermission, error)
+
+	// GetStatistics returns current counts for metrics gauges.
+	GetStatistics(context.Context, *logger.Logger) (*Statistics, error)
 }

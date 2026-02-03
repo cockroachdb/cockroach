@@ -16,6 +16,8 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
+	repositoriesauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
+
 	types "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
 
 	uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -97,6 +99,36 @@ func (_m *IAuthRepository) GetServiceAccountPermission(_a0 context.Context, _a1 
 
 	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
 		r1 = rf(_a0, _a1, _a2)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetStatistics provides a mock function with given fields: _a0, _a1
+func (_m *IAuthRepository) GetStatistics(_a0 context.Context, _a1 *logger.Logger) (*repositoriesauth.Statistics, error) {
+	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetStatistics")
+	}
+
+	var r0 *repositoriesauth.Statistics
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger) (*repositoriesauth.Statistics, error)); ok {
+		return rf(_a0, _a1)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger) *repositoriesauth.Statistics); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repositoriesauth.Statistics)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger) error); ok {
+		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
 	}

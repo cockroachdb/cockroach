@@ -263,7 +263,10 @@ func NewServicesFromConfig(
 	}
 
 	// Create the auth service.
-	authService := sauth.NewService(authRepository, taskService, instanceID, sauthtypes.Options{})
+	authService := sauth.NewService(authRepository, taskService, instanceID, sauthtypes.Options{
+		CollectMetrics:           cfg.Api.Metrics.Enabled,
+		StatisticsUpdateInterval: 30 * time.Second,
+	})
 
 	// Configure Okta token validator if bearer authentication is configured
 	authType := auth.AuthenticationType(strings.ToLower(cfg.Api.Authentication.Type))
@@ -332,7 +335,7 @@ func NewAuthenticatorFromConfig(
 			slog.String("audience", authConfig.Audience),
 			slog.String("issuer", authConfig.Issuer),
 		)
-		return jwt.NewJWTAuthenticator(authConfig), nil
+		return jwt.NewJWTAuthenticator(authConfig, authService), nil
 
 	case auth.AuthenticationTypeBearer:
 		authConfig := auth.AuthConfig{

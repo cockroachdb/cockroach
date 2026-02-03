@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// validateToken validates an opaque token.
+// ValidateToken validates an opaque token.
 // For service account tokens, enforces IP allowlist if configured.
 func (s *Service) validateToken(
 	ctx context.Context, l *logger.Logger, tokenString string, clientIP string,
@@ -254,6 +254,9 @@ func (s *Service) RevokeSelfToken(
 		"token_suffix": token.TokenSuffix,
 		"scope":        "self",
 	})
+
+	// Record metrics for successful revocation
+	s.metrics.RecordTokenRevoked("self")
 
 	return nil
 }

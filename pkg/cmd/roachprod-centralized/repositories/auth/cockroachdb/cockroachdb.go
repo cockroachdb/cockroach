@@ -621,6 +621,81 @@ func (r *CRDBAuthRepo) scanGroupPermissions(rows *gosql.Rows) ([]*auth.GroupPerm
 	return perms, nil
 }
 
+// GetStatistics returns current counts for metrics gauges.
+func (r *CRDBAuthRepo) GetStatistics(
+	ctx context.Context, l *logger.Logger,
+) (*rauth.Statistics, error) {
+	stats := &rauth.Statistics{
+		TokensByTypeAndStatus: make(map[string]map[string]int),
+	}
+
+	// Users by status
+	userQuery := `SELECT active, count(*) FROM users GROUP BY active`
+	rows, err := r.db.QueryContext(ctx, userQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get user statistics")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var active bool
+		var count int
+		if err := rows.Scan(&active, &count); err != nil {
+			return nil, errors.Wrap(err, "failed to scan user statistics")
+		}
+		if active {
+			stats.UsersActive = count
+		} else {
+			stats.UsersInactive = count
+		}
+	}
+
+	// Groups count
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM groups`).Scan(&stats.Groups); err != nil {
+		return nil, errors.Wrap(err, "failed to get group count")
+	}
+
+	// Service accounts by enabled
+	saQuery := `SELECT enabled, count(*) FROM service_accounts GROUP BY enabled`
+	rows, err = r.db.QueryContext(ctx, saQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get service account statistics")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var enabled bool
+		var count int
+		if err := rows.Scan(&enabled, &count); err != nil {
+			return nil, errors.Wrap(err, "failed to scan service account statistics")
+		}
+		if enabled {
+			stats.ServiceAccountsEnabled = count
+		} else {
+			stats.ServiceAccountsDisabled = count
+		}
+	}
+
+	// Tokens by type and status
+	tokenQuery := `SELECT token_type, status, count(*) FROM api_tokens GROUP BY token_type, status`
+	rows, err = r.db.QueryContext(ctx, tokenQuery)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get token statistics")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tokenType, status string
+		var count int
+		if err := rows.Scan(&tokenType, &status, &count); err != nil {
+			return nil, errors.Wrap(err, "failed to scan token statistics")
+		}
+		if stats.TokensByTypeAndStatus[tokenType] == nil {
+			stats.TokensByTypeAndStatus[tokenType] = make(map[string]int)
+		}
+		stats.TokensByTypeAndStatus[tokenType][status] = count
+	}
+
+	return stats, nil
+}
+
 // normalizeCIDR ensures a CIDR string has a mask suffix.
 // CockroachDB's INET type normalizes single-host CIDRs by stripping the mask
 // (e.g., "127.0.0.1/32" becomes "127.0.0.1"). This function adds the appropriate

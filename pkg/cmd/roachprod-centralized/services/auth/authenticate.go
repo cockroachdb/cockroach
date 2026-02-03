@@ -14,6 +14,7 @@ import (
 	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -24,10 +25,21 @@ import (
 func (s *Service) AuthenticateToken(
 	ctx context.Context, l *logger.Logger, tokenString string, clientIP string,
 ) (*pkgauth.Principal, error) {
+	start := timeutil.Now()
 
 	// 1. Validate token (includes IP check for SAs)
 	token, err := s.validateToken(ctx, l, tokenString, clientIP)
 	if err != nil {
+		// Record metrics based on error type
+		if errors.Is(err, authtypes.ErrTokenExpired) {
+			s.metrics.RecordTokenValidation("expired", timeutil.Since(start))
+		} else if errors.Is(err, authtypes.ErrInvalidToken) {
+			s.metrics.RecordTokenValidation("revoked", timeutil.Since(start))
+		} else if errors.Is(err, authtypes.ErrIPNotAllowed) {
+			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
+		} else {
+			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
+		}
 		return nil, err
 	}
 
@@ -45,20 +57,36 @@ func (s *Service) AuthenticateToken(
 	switch token.TokenType {
 	case authmodels.TokenTypeUser:
 		if token.UserID == nil {
+			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
 			return nil, errors.New("user token missing user ID")
 		}
 		if err := s.loadUserPrincipal(ctx, l, principal, *token.UserID); err != nil {
+			// Record user_inactive metric if user is deactivated
+			if errors.Is(err, authtypes.ErrUserDeactivated) {
+				s.metrics.RecordTokenValidation("user_inactive", timeutil.Since(start))
+			} else {
+				s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
+			}
 			return nil, err
 		}
 	case authmodels.TokenTypeServiceAccount:
 		if token.ServiceAccountID == nil {
+			s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
 			return nil, errors.New("service account token missing service account ID")
 		}
 		if err := s.loadServiceAccountPrincipal(ctx, l, principal, *token.ServiceAccountID); err != nil {
+			// Service account disabled counts as inactive
+			if errors.Is(err, authtypes.ErrServiceAccountDisabled) || errors.Is(err, authtypes.ErrUserDeactivated) {
+				s.metrics.RecordTokenValidation("user_inactive", timeutil.Since(start))
+			} else {
+				s.metrics.RecordTokenValidation("invalid", timeutil.Since(start))
+			}
 			return nil, err
 		}
 	}
 
+	// Record successful token validation
+	s.metrics.RecordTokenValidation("success", timeutil.Since(start))
 	return principal, nil
 }
 

@@ -18,6 +18,8 @@ import (
 
 	modelsauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 
+	time "time"
+
 	types "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 
 	uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -130,6 +132,21 @@ func (_m *IService) ListSelfTokens(_a0 context.Context, _a1 *logger.Logger, _a2 
 	}
 
 	return r0, r1, r2
+}
+
+// RecordAuthentication provides a mock function with given fields: result, authMethod, latency
+func (_m *IService) RecordAuthentication(result string, authMethod string, latency time.Duration) {
+	_m.Called(result, authMethod, latency)
+}
+
+// RecordAuthzDecision provides a mock function with given fields: result, reason, endpoint, provider
+func (_m *IService) RecordAuthzDecision(result string, reason string, endpoint string, provider string) {
+	_m.Called(result, reason, endpoint, provider)
+}
+
+// RecordAuthzLatency provides a mock function with given fields: endpoint, latency
+func (_m *IService) RecordAuthzLatency(endpoint string, latency time.Duration) {
+	_m.Called(endpoint, latency)
 }
 
 // RegisterTasks provides a mock function with given fields: ctx

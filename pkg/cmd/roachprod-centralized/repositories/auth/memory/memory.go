@@ -387,3 +387,49 @@ func (r *MemAuthRepo) GetServiceAccountPermission(
 	}
 	return nil, rauth.ErrNotFound
 }
+
+// GetStatistics returns current counts for metrics gauges.
+func (r *MemAuthRepo) GetStatistics(
+	ctx context.Context, l *logger.Logger,
+) (*rauth.Statistics, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	stats := &rauth.Statistics{
+		TokensByTypeAndStatus: make(map[string]map[string]int),
+	}
+
+	// Count users by active status
+	for _, user := range r.users {
+		if user.Active {
+			stats.UsersActive++
+		} else {
+			stats.UsersInactive++
+		}
+	}
+
+	// Count groups
+	stats.Groups = len(r.groups)
+
+	// Count service accounts by enabled status
+	for _, sa := range r.serviceAccounts {
+		if sa.Enabled {
+			stats.ServiceAccountsEnabled++
+		} else {
+			stats.ServiceAccountsDisabled++
+		}
+	}
+
+	// Count tokens by type and status
+	for _, token := range r.tokens {
+		tokenType := string(token.TokenType)
+		status := string(token.Status)
+
+		if stats.TokensByTypeAndStatus[tokenType] == nil {
+			stats.TokensByTypeAndStatus[tokenType] = make(map[string]int)
+		}
+		stats.TokensByTypeAndStatus[tokenType][status]++
+	}
+
+	return stats, nil
+}

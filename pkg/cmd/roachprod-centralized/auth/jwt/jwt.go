@@ -21,13 +21,15 @@ import (
 // JWTAuthenticator implements IAuthenticator using Google ID tokens (JWT).
 // This is the existing authentication method used for Google-based authentication.
 type JWTAuthenticator struct {
-	config auth.AuthConfig
+	config      auth.AuthConfig
+	authService authtypes.IService
 }
 
 // NewJWTAuthenticator creates a new JWT-based authenticator.
-func NewJWTAuthenticator(config auth.AuthConfig) *JWTAuthenticator {
+func NewJWTAuthenticator(config auth.AuthConfig, authService authtypes.IService) *JWTAuthenticator {
 	return &JWTAuthenticator{
-		config: config,
+		config:      config,
+		authService: authService,
 	}
 }
 
@@ -37,14 +39,17 @@ func NewJWTAuthenticator(config auth.AuthConfig) *JWTAuthenticator {
 func (a *JWTAuthenticator) Authenticate(
 	ctx context.Context, token string, _ string,
 ) (*auth.Principal, error) {
+	start := timeutil.Now()
 
 	if token == "" {
+		a.authService.RecordAuthentication("error", "none", timeutil.Since(start))
 		return nil, authtypes.ErrNotAuthenticated
 	}
 
 	// Validate the JWT token
 	payload, err := a.validateToken(ctx, token)
 	if err != nil {
+		a.authService.RecordAuthentication("error", "jwt", timeutil.Since(start))
 		return nil, errors.CombineErrors(authtypes.ErrInvalidToken, err)
 	}
 
@@ -97,6 +102,7 @@ func (a *JWTAuthenticator) Authenticate(
 		},
 	}
 
+	a.authService.RecordAuthentication("success", "jwt", timeutil.Since(start))
 	return principal, nil
 }
 
@@ -130,16 +136,24 @@ func (a *JWTAuthenticator) Authorize(
 	requirement *auth.AuthorizationRequirement,
 	endpoint string,
 ) error {
+	start := timeutil.Now()
+	authMethod := principal.GetAuthMethod()
 
 	// Check AnyOf permissions (OR logic)
 	if len(requirement.AnyOf) > 0 && !principal.HasAnyPermission(requirement.AnyOf) {
+		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
 	// Check required permissions (AND logic)
 	if len(requirement.RequiredPermissions) > 0 && !principal.HasAllPermissions(requirement.RequiredPermissions) {
+		a.authService.RecordAuthzDecision("deny", "missing_permission", endpoint, authMethod)
+		a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
 		return authtypes.ErrForbidden
 	}
 
+	a.authService.RecordAuthzDecision("allow", "", endpoint, authMethod)
+	a.authService.RecordAuthzLatency(endpoint, timeutil.Since(start))
 	return nil
 }
