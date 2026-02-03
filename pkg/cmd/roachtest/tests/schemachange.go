@@ -555,11 +555,12 @@ func makeSchemaChangeBulkIngestTest(
 	operation bulkIngestSchemaChangeOp,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:             fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d/%s", numNodes, numRows, operation),
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.Disks(4)),
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:      fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d/%s", numNodes, numRows, operation),
+		Owner:     registry.OwnerSQLFoundations,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.Disks(4)),
+		// Skip s390x, see https://github.com/cockroachdb/cockroach/issues/161453.
+		CompatibleClouds: registry.AllExceptAWS.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.LeaderLeases,
 		Timeout:          length * 2,
