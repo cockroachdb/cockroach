@@ -2191,6 +2191,16 @@ func (c *clusterImpl) StartE(
 		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
 	}
 
+	// Inject CLI-specified environment variables and cluster settings. These are
+	// applied before test-specific settings in the options array, so tests can
+	// override them if needed.
+	if len(roachtestflags.StartEnv) > 0 {
+		settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+	}
+	for name, value := range roachtestflags.StartSettings {
+		settings.ClusterSettings[name] = value
+	}
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
 	startOpts.RoachprodOpts.PreStartHooks = append(startOpts.RoachprodOpts.PreStartHooks, c.preStartHooks...)

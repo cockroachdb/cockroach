@@ -512,6 +512,25 @@ var (
 						On Darwin, prevent the system from sleeping while roachtest is running
 						by invoking caffeinate -i -w <pid>. Default is true.`,
 	})
+
+	StartEnv []string
+	_        = registerRunFlag(&StartEnv, FlagInfo{
+		Name: "start-env",
+		Usage: `
+			Environment variable to inject at cluster Start() time. Can be specified
+			multiple times. These are applied before test-specific settings, so tests
+			may override them. Example: --start-env=GODEBUG=gctrace=1`,
+	})
+
+	StartSettings map[string]string
+	_             = registerRunFlag(&StartSettings, FlagInfo{
+		Name: "start-setting",
+		Usage: `
+			Cluster setting to apply at cluster Start() time (key=value format). Can
+			be specified multiple times. These are applied via SQL after cluster
+			startup but before the test body runs, so tests may override them.
+			Example: --start-setting=kv.range_split.by_load_enabled=false`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
