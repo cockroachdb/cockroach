@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -676,7 +677,8 @@ func (p *pendingLeaseRequest) requestLease(
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
-	_, writeBytes, pErr := p.repl.SendWithWriteBytes(ctx, ba)
+	// Pass empty AdmissionInfo since lease acquisition bypasses admission control.
+	_, writeBytes, pErr := p.repl.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
 	writeBytes.Release()
 	return pErr.GoError()
 }
