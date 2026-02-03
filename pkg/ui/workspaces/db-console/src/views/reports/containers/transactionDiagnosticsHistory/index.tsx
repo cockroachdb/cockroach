@@ -75,7 +75,8 @@ interface TransactionDiagnosticsHistoryViewProps {
   ) => Promise<void>;
 }
 
-class TransactionDiagnosticsHistoryTable extends SortedTable<clusterUiApi.TransactionDiagnosticsReport> {}
+const TransactionDiagnosticsHistoryTable =
+  SortedTable<clusterUiApi.TransactionDiagnosticsReport>;
 
 const TransactionColumn: React.FC<{ fingerprint: string }> = ({
   fingerprint,

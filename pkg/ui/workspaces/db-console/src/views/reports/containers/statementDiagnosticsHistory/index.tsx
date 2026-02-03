@@ -84,7 +84,8 @@ interface StatementDiagnosticsHistoryViewProps {
   ) => Promise<void>;
 }
 
-class StatementDiagnosticsHistoryTable extends SortedTable<clusterUiApi.StatementDiagnosticsReport> {}
+const StatementDiagnosticsHistoryTable =
+  SortedTable<clusterUiApi.StatementDiagnosticsReport>;
 
 const StatementColumn: React.FC<{ fingerprint: string }> = ({
   fingerprint,

@@ -70,4 +70,6 @@ storiesOf("StatementsSortedTable", module)
       }}
     />
   ))
-  .add("empty table", () => <StatementsSortedTable empty />);
+  .add("empty table", () => (
+    <StatementsSortedTable empty data={[]} columns={[]} />
+  ));
