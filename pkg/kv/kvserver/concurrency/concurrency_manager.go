@@ -799,6 +799,19 @@ func (r *Request) isSingle(m kvpb.Method) bool {
 	return r.Requests[0].GetInner().Method() == m
 }
 
+// canVirtuallyResolve returns true if all requests in the batch are read-only
+// and non-locking.
+func (r *Request) canVirtuallyResolve() bool {
+	for _, ru := range r.Requests {
+		req := ru.GetInner()
+		canVirtuallyResolve := kvpb.IsReadOnly(req) && !kvpb.IsLocking(req)
+		if !canVirtuallyResolve {
+			return false
+		}
+	}
+	return true
+}
+
 // Used to avoid allocations.
 var guardPool = sync.Pool{
 	New: func() interface{} { return new(Guard) },

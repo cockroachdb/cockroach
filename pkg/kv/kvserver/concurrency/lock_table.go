@@ -4272,7 +4272,7 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1
-	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV)
+	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
 	return g
 }
 
