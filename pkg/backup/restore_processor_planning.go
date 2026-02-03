@@ -40,6 +40,9 @@ type restoreJobMetadata struct {
 	execLocality         roachpb.Locality
 	exclusiveEndKeys     bool
 	resumeClusterVersion roachpb.Version
+	// useLink indicates that the restore should link files via LinkExternalSSTable
+	// rather than downloading and ingesting them via AddSSTable.
+	useLink bool
 }
 
 // distRestore plans a 2 stage distSQL flow for a distributed restore. It
@@ -155,6 +158,7 @@ func distRestore(
 			JobID:                       int64(md.jobID),
 			SQLInstanceIDs:              instanceIDs,
 			ExclusiveFileSpanComparison: md.exclusiveEndKeys,
+			UseLink:                     md.useLink,
 		}
 		spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
 

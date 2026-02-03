@@ -96,6 +96,7 @@ func runCompactionPlan(
 			filter,
 			fsc,
 			spanCh,
+			false, /* useLink */
 		), "generateAndSendImportSpans")
 	}
 	dsp := execCtx.DistSQLPlanner()

@@ -363,7 +363,10 @@ message RestoreFileSpec {
   optional uint64 approximate_physical_size = 8 [(gogoproto.nullable) = false];
   optional int32 layer = 9 [(gogoproto.nullable) = false];
   optional bool has_range_keys = 10 [(gogoproto.nullable) = false];
-  // NEXT ID: 11.
+  // UseLink indicates this file should be linked via LinkExternalSSTable
+  // rather than downloaded and ingested via AddSSTable.
+  optional bool use_link = 11 [(gogoproto.nullable) = false];
+  // NEXT ID: 12.
 }
 
 message TableRekey {
@@ -468,6 +471,10 @@ message GenerativeSplitAndScatterSpec {
   // SQLInstanceIDs is a slice of SQL instance IDs available for dist restore.
   repeated int32 sql_instance_ids = 24[(gogoproto.customname) = "SQLInstanceIDs"];
   reserved 19;
+  // UseLink indicates this is an online restore and files should be linked
+  // via LinkExternalSSTable rather than downloaded and ingested.
+  optional bool use_link = 25 [(gogoproto.nullable) = false];
+  // NEXT ID: 26.
 }
 
 
