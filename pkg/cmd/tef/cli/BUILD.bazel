@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cli",
+    srcs = [
+        "commands.go",
+        "initialiser.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef/cli",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/tef/planners",
+        "//pkg/cmd/tef/plans",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

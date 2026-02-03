@@ -1,0 +1,75 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "gomock")
+
+gomock(
+    name = "mock_planner",
+    testonly = True,
+    out = "mock_planner_generated.go",
+    interfaces = ["Planner"],
+    library = "//pkg/cmd/tef/planners",
+    package = "mockplanners",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+gomock(
+    name = "mock_registry",
+    testonly = True,
+    out = "mock_registry_generated.go",
+    interfaces = ["Registry"],
+    library = "//pkg/cmd/tef/planners",
+    package = "mockplanners",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+gomock(
+    name = "mock_planner_manager",
+    testonly = True,
+    out = "mock_planner_manager_generated.go",
+    interfaces = ["PlannerManager"],
+    library = "//pkg/cmd/tef/planners",
+    package = "mockplanners",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+gomock(
+    name = "mock_plan_executor",
+    testonly = True,
+    out = "mock_plan_executor_generated.go",
+    interfaces = ["PlanExecutor"],
+    library = "//pkg/cmd/tef/planners",
+    package = "mockplanners",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+gomock(
+    name = "mock_shared_plan_service",
+    testonly = True,
+    out = "mock_shared_plan_service_generated.go",
+    interfaces = ["SharedPlanService"],
+    library = "//pkg/cmd/tef/planners",
+    package = "mockplanners",
+    self_package = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
+go_library(
+    name = "mockplanners",
+    testonly = True,
+    srcs = [
+        "mock_plan_executor_generated.go",
+        "mock_planner_generated.go",
+        "mock_planner_manager_generated.go",
+        "mock_registry_generated.go",
+        "mock_shared_plan_service_generated.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/tef/planners/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/tef/planners",
+        "@com_github_golang_mock//gomock",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
