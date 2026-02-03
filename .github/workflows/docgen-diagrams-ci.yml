@@ -57,6 +57,8 @@ jobs:
       changed_files: ${{ steps.check-changes.outputs.changed_files }}
       validation_status: ${{ steps.validate.outputs.status }}
       skip_doc_warnings: ${{ steps.validate.outputs.skip_doc_warnings }}
+      changed_diagram_list: ${{ steps.changed-diagrams.outputs.changed_diagram_list }}
+      png_list: ${{ steps.generate-pngs.outputs.png_list }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -262,22 +264,80 @@ jobs:
             echo "No diagram changes detected"
           fi
 
-      - name: Setup Node.js for PNG generation
+      - name: Checkout generated-diagrams for comparison
         if: steps.check-changes.outputs.changed == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DIAGRAM_TARGET_REPO }}
+          token: ${{ secrets.GENERATED_DIAGRAMS_TOKEN || github.token }}
+          ref: ${{ github.base_ref || 'master' }}
+          path: generated-diagrams-compare
+
+      - name: Identify changed diagrams
+        id: changed-diagrams
+        if: steps.check-changes.outputs.changed == 'true'
+        run: |
+          echo "::group::Comparing HTML files to find actual changes"
+
+          CHANGED_DIAGRAMS=""
+
+          # Compare each generated HTML file against the existing one
+          for html_file in _bazel/bin/docs/generated/sql/bnf/*.html; do
+            if [[ -f "$html_file" ]]; then
+              filename=$(basename "$html_file")
+              existing_file="generated-diagrams-compare/grammar_svg/$filename"
+
+              if [[ ! -f "$existing_file" ]]; then
+                # New file - definitely changed
+                echo "NEW: $filename"
+                CHANGED_DIAGRAMS="$CHANGED_DIAGRAMS $filename"
+              else
+                # Compare content (ignoring whitespace differences)
+                if ! diff -q "$html_file" "$existing_file" > /dev/null 2>&1; then
+                  echo "CHANGED: $filename"
+                  CHANGED_DIAGRAMS="$CHANGED_DIAGRAMS $filename"
+                fi
+              fi
+            fi
+          done
+
+          # Trim leading space and output
+          CHANGED_DIAGRAMS=$(echo "$CHANGED_DIAGRAMS" | xargs)
+          echo "Changed diagrams: $CHANGED_DIAGRAMS"
+
+          if [[ -z "$CHANGED_DIAGRAMS" ]]; then
+            echo "No diagram content changes detected"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "changed_diagram_list=" >> $GITHUB_OUTPUT
+          else
+            CHANGED_COUNT=$(echo "$CHANGED_DIAGRAMS" | wc -w | tr -d ' ')
+            echo "Found $CHANGED_COUNT changed diagram(s)"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "changed_diagram_list=$CHANGED_DIAGRAMS" >> $GITHUB_OUTPUT
+          fi
+
+          echo "::endgroup::"
+
+      - name: Setup Node.js for PNG generation
+        if: steps.changed-diagrams.outputs.has_changes == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Generate PNG previews
-        if: steps.check-changes.outputs.changed == 'true'
+      - name: Generate PNG previews for changed diagrams only
+        id: generate-pngs
+        if: steps.changed-diagrams.outputs.has_changes == 'true'
         run: |
-          echo "::group::Generating PNG previews for changed diagrams"
+          echo "::group::Generating PNG previews for changed diagrams only"
 
           # Install sharp for SVG to PNG conversion
           npm install sharp --no-save
 
-          # Create PNG generation script using node -e with script passed as argument
           mkdir -p artifacts/diagrams/png
+
+          # Get the list of changed diagrams
+          CHANGED_LIST="${{ steps.changed-diagrams.outputs.changed_diagram_list }}"
+          echo "Generating PNGs for: $CHANGED_LIST"
 
           node -e '
           const sharp = require("sharp");
@@ -301,21 +361,30 @@ jobs:
           async function main() {
             const inputDir = process.argv[1];
             const outputDir = process.argv[2];
-            const maxCount = parseInt(process.argv[3]) || 5;
+            const changedFiles = process.argv[3].split(" ").filter(f => f.length > 0);
+
             if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-            const files = fs.readdirSync(inputDir).filter(f => f.endsWith(".html")).slice(0, maxCount);
-            console.log("Processing " + files.length + " diagrams...");
-            for (const file of files) {
+
+            console.log("Processing " + changedFiles.length + " changed diagram(s)...");
+            for (const file of changedFiles) {
               const input = path.join(inputDir, file);
               const output = path.join(outputDir, file.replace(".html", ".png"));
+              if (!fs.existsSync(input)) {
+                console.log("Skipping (not found): " + file);
+                continue;
+              }
               try {
                 const size = await convertToPng(input, output);
                 if (size) console.log("Generated: " + output + " (" + size + " bytes)");
-              } catch (e) { console.error("Error: " + e.message); }
+              } catch (e) { console.error("Error processing " + file + ": " + e.message); }
             }
           }
           main().catch(e => { console.error(e); process.exit(1); });
-          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png 99999
+          ' _bazel/bin/docs/generated/sql/bnf artifacts/diagrams/png "$CHANGED_LIST"
+
+          # Output list of generated PNGs for the comment job
+          PNG_LIST=$(ls -1 artifacts/diagrams/png/*.png 2>/dev/null | xargs -I {} basename {} | tr '\n' ' ' || echo "")
+          echo "png_list=$PNG_LIST" >> $GITHUB_OUTPUT
 
           echo "::endgroup::"
 
@@ -483,7 +552,7 @@ jobs:
           # Create preview branch from current state
           git checkout -b "$PREVIEW_BRANCH"
 
-          # Create directory and copy PNGs
+          # Create directory and copy PNGs (from artifacts/png which is where they're stored in artifacts)
           mkdir -p grammar_png
           cp ../artifacts/png/*.png grammar_png/ 2>/dev/null || echo "No PNG files to copy"
 
@@ -494,8 +563,13 @@ jobs:
             git push origin "$PREVIEW_BRANCH"
             echo "preview_branch=$PREVIEW_BRANCH" >> $GITHUB_OUTPUT
             echo "::notice::Pushed PNG previews to $PREVIEW_BRANCH"
+
+            # Output list of PNG files for the comment job
+            PNG_FILES=$(ls -1 grammar_png/*.png | xargs -I {} basename {} | tr '\n' ' ')
+            echo "png_files=$PNG_FILES" >> $GITHUB_OUTPUT
           else
             echo "preview_branch=" >> $GITHUB_OUTPUT
+            echo "png_files=" >> $GITHUB_OUTPUT
             echo "No PNGs to push for preview"
           fi
 
@@ -520,9 +594,10 @@ jobs:
             const diagramsChanged = '${{ needs.generate-diagrams.outputs.diagrams_changed }}';
             const changedFiles = `${{ needs.generate-diagrams.outputs.changed_files }}`;
             const skipDocWarnings = `${{ needs.generate-diagrams.outputs.skip_doc_warnings }}`;
+            const changedDiagramList = '${{ needs.generate-diagrams.outputs.changed_diagram_list }}';
             const generatedDiagramsPR = '${{ needs.sync-to-generated-diagrams.outputs.pr_url }}';
             const previewBranch = '${{ needs.sync-to-generated-diagrams.outputs.preview_branch }}';
-            const pngFiles = `${{ needs.sync-to-generated-diagrams.outputs.png_files }}`;
+            const pngFiles = '${{ needs.sync-to-generated-diagrams.outputs.png_files }}';
             const targetRepo = '${{ vars.DIAGRAM_TARGET_REPO || 'cockroachdb/generated-diagrams' }}';
 
             let body = '## SQL Diagram Generation Report\n\n';
@@ -544,10 +619,11 @@ jobs:
 
               // Add PNG diagram previews if available
               // PNGs are on a separate preview branch (not part of the sync PR)
+              // pngFiles is space-separated (e.g., "drop_database.png create_table.png")
               if (pngFiles && pngFiles.trim() !== '' && previewBranch) {
-                body += '### Diagram Previews\n\n';
+                body += '### Changed Diagram Previews\n\n';
 
-                const files = pngFiles.trim().split('\n').filter(f => f.length > 0);
+                const files = pngFiles.trim().split(/\s+/).filter(f => f.length > 0);
                 for (const file of files) {
                   const diagramName = file.replace('.png', '');
                   const imageUrl = `https://raw.githubusercontent.com/${targetRepo}/${previewBranch}/grammar_png/${file}`;
@@ -556,14 +632,17 @@ jobs:
                 }
 
                 if (files.length > 0) {
-                  body += `*Showing ${files.length} diagram preview(s). (Preview images are temporary.)*\n\n`;
+                  body += `*Showing ${files.length} changed diagram(s). Only diagrams that differ from master are shown.*\n\n`;
                 }
-              } else {
-                // Fallback to listing changed files
-                if (changedFiles && changedFiles.trim() !== '') {
-                  body += '### Changed Diagrams\n\n';
-                  body += '```\n' + changedFiles + '\n```\n\n';
-                }
+              } else if (changedDiagramList && changedDiagramList.trim() !== '') {
+                // Fallback to listing changed diagram names (HTML files)
+                body += '### Changed Diagrams\n\n';
+                const diagrams = changedDiagramList.trim().split(/\s+/).filter(f => f.length > 0);
+                body += '```\n' + diagrams.join('\n') + '\n```\n\n';
+              } else if (changedFiles && changedFiles.trim() !== '') {
+                // Fallback to listing changed BNF files
+                body += '### Changed Files\n\n';
+                body += '```\n' + changedFiles + '\n```\n\n';
               }
             } else {
               body += ':heavy_check_mark: **No diagram changes detected**\n\n';
