@@ -456,6 +456,11 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
+	// Initialize the resolved timestamp metric for our aggregator with the initial
+	// high water. This allows max_behind_nanos to have a reasonable value during
+	// initial scans, which don't emit resolved timestamps.
+	ca.sliMetrics.setResolved(ca.sliMetricsID, kvFeedHighWater)
+
 	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
 	// for all changefeeds to control memory allocated to all changefeeds.
 	pool := ca.FlowCtx.Cfg.BackfillerMonitor
