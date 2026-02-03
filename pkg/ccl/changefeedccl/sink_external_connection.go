@@ -31,6 +31,7 @@ func makeExternalConnectionSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 	targets changefeedbase.Targets,
+	knobs TestingKnobs,
 ) (Sink, error) {
 	if u.Host == "" {
 		return nil, errors.Newf("host component of an external URI must refer to an "+
@@ -46,7 +47,7 @@ func makeExternalConnectionSink(
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
 	feedCfg.SinkURI = uri
-	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, knobs)
 }
 
 func validateExternalConnectionSinkURI(
@@ -73,12 +74,16 @@ func validateExternalConnectionSinkURI(
 		serverCfg = &newCfg
 	}
 
+	var knobs TestingKnobs
+	if k, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		knobs = *k
+	}
 	// Validate the URI by creating a canary sink.
 	//
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
 	s, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
-		jobspb.JobID(0), (*sliMetrics)(nil), changefeedbase.Targets{})
+		jobspb.JobID(0), (*sliMetrics)(nil), changefeedbase.Targets{}, knobs)
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}
