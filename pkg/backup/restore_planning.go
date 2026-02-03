@@ -76,10 +76,6 @@ const (
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptAsTenant                  = "virtual_cluster_name"
 	restoreOptForceTenantID             = "virtual_cluster"
-
-	// The temporary database system tables will be restored into for full
-	// cluster backups.
-	restoreTempSystemDB = "crdb_temp_system"
 )
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
@@ -254,6 +250,7 @@ func remapSystemDBDescsToTempDB(
 	schemasByID map[descpb.ID]*schemadesc.Mutable,
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.Mutable,
+	funcsByID map[descpb.ID]*funcdesc.Mutable,
 	tempSysDBID catid.DescID,
 	descriptorRewrites jobspb.DescRewriteMap,
 ) {
@@ -275,6 +272,13 @@ func remapSystemDBDescsToTempDB(
 			descriptorRewrites[typ.GetID()] = &jobspb.DescriptorRewrite{
 				ParentID:       tempSysDBID,
 				ParentSchemaID: keys.PublicSchemaIDForBackup,
+			}
+		}
+	}
+	for _, fn := range funcsByID {
+		if fn.GetParentID() == systemschema.SystemDB.GetID() {
+			descriptorRewrites[fn.GetID()] = &jobspb.DescriptorRewrite{
+				ParentID: tempSysDBID,
 			}
 		}
 	}
@@ -842,7 +846,7 @@ func allocateDescriptorRewrites(
 		if err != nil {
 			return nil, err
 		}
-		remapSystemDBDescsToTempDB(schemasByID, tablesByID, typesByID, tempSysDBID, descriptorRewrites)
+		remapSystemDBDescsToTempDB(schemasByID, tablesByID, typesByID, functionsByID, tempSysDBID, descriptorRewrites)
 	}
 
 	var shouldBufferDeprecatedPrivilegeNotice bool
@@ -958,9 +962,7 @@ func resolveTargetDB(
 	if descriptorCoverage == tree.AllDescriptors && catalog.IsSystemDescriptor(descriptor) {
 		var targetDB string
 		if descriptor.GetParentID() == systemschema.SystemDB.GetID() {
-			// For full cluster backups, put the system tables in the temporary
-			// system table.
-			targetDB = restoreTempSystemDB
+			return "", errors.AssertionFailedf("system descriptors should have been processed")
 		}
 		return targetDB, nil
 	}

@@ -973,6 +973,44 @@ func TestClusterRevisionHistory(t *testing.T) {
 
 }
 
+func TestTempDBCleanupAfterSuccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET DATABASE=system")
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test'`)
+
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_pre_data'`)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/test' with detached`).Scan(&jobID)
+
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+	tmpDBName := "crdb_temp_system_" + strconv.Itoa(int(jobID))
+
+	checkTempDBExists := fmt.Sprintf("SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = '%s'", tmpDBName)
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"1"}})
+
+	var tableCount int
+	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM [SHOW TABLES FROM %s]`, tmpDBName)).Scan(&tableCount)
+	require.Greater(t, tableCount, 0, "temp db should contain tables")
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+
+	sqlDB.CheckQueryResults(t, checkTempDBExists, [][]string{{"0"}})
+}
+
 // TestReintroduceOfflineSpans is a regression test for #62564, which tracks a
 // bug where AddSSTable requests to OFFLINE tables may be missed by cluster
 // incremental backups since they can write at a timestamp older than the last
