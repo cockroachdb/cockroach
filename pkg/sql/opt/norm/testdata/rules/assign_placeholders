@@ -170,3 +170,67 @@ project
       │              ├── unnest(e'{1\\x2c 2}'::INT8[]) [stable]
       │              └── unnest(e'{3\\x2c 4}'::INT8[]) [stable]
       └── filters (true)
+
+# ----------------------------------------------------------------------
+# UDF tests with placeholder assignment
+# These tests verify that poisoned UDF body expressions are properly
+# copied before use.
+# ----------------------------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION test_add(a INT, b INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a + b
+$$
+----
+
+# Inlinable UDF with placeholder - tests ConvertUDFToSubquery path.
+# The InlineUDF rule fires during normalization after placeholder assignment.
+# This tests that c.f.CopyAndReplaceDefault properly copies the poisoned body.
+assign-placeholders-opt query-args=(42)
+SELECT test_add($1, 10)
+----
+values
+ ├── columns: test_add:4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── (52,)
+
+exec-ddl
+CREATE FUNCTION test_volatile(a INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a + 1
+$$
+----
+
+# Non-inlinable UDF with placeholder - tests buildRoutinePlanGenerator path.
+# Volatile UDFs cannot be inlined, so the body is copied at execution time
+# via CopyAndReplace in buildRoutinePlanGenerator.
+assign-placeholders-opt query-args=(7)
+SELECT test_volatile($1)
+----
+values
+ ├── columns: test_volatile:3
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── (test_volatile(7),)
+
+exec-ddl
+CREATE FUNCTION test_multi_stmt(a INT) RETURNS INT STABLE LANGUAGE SQL AS $$
+  SELECT 1;
+  SELECT a + 1
+$$
+----
+
+# Multi-statement UDF cannot be inlined - tests buildRoutinePlanGenerator.
+assign-placeholders-opt query-args=(5)
+SELECT test_multi_stmt($1)
+----
+values
+ ├── columns: test_multi_stmt:4
+ ├── cardinality: [1 - 1]
+ ├── stable
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── (test_multi_stmt(5),)
