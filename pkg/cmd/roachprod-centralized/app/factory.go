@@ -268,6 +268,7 @@ func NewServicesFromConfig(
 		ExpiredTokensRetention:   time.Hour * 24,
 		CollectMetrics:           cfg.Api.Metrics.Enabled,
 		StatisticsUpdateInterval: 30 * time.Second,
+		BootstrapSCIMToken:       cfg.Bootstrap.SCIMToken,
 	})
 
 	// Configure Okta token validator if bearer authentication is configured

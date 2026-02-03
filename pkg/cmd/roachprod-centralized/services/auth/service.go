@@ -7,16 +7,22 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
 	authmetrics "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/internal/metrics"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	stasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/tasks"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -99,6 +105,124 @@ func (s *Service) GetTaskServiceName() string {
 
 // StartService initializes the service and prepares it for operation.
 func (s *Service) StartService(ctx context.Context, l *logger.Logger) error {
+	// Bootstrap SCIM service account if configured and no service accounts exist
+	if s.options.BootstrapSCIMToken != "" {
+		if err := s.bootstrapSCIMServiceAccount(ctx, l); err != nil {
+			return errors.Wrap(err, "failed to bootstrap SCIM service account")
+		}
+	}
+	return nil
+}
+
+// bootstrapSCIMServiceAccount creates a bootstrap SCIM service account if none exist.
+// This is a one-time operation that runs on first startup when configured.
+func (s *Service) bootstrapSCIMServiceAccount(ctx context.Context, l *logger.Logger) error {
+	bootstrapLogger := l.With(
+		slog.String("service", "auth"),
+		slog.String("operation", "bootstrap"),
+	)
+
+	// Check if any service accounts already exist
+	existingSAs, _, err := s.repo.ListServiceAccounts(ctx, l, *filters.NewFilterSet())
+	if err != nil {
+		return errors.Wrap(err, "failed to check for existing service accounts")
+	}
+
+	if len(existingSAs) > 0 {
+		bootstrapLogger.Debug("service accounts already exist, skipping bootstrap")
+		return nil
+	}
+
+	bootstrapLogger.Info("no service accounts found, creating bootstrap SCIM service account")
+
+	// Ensure the bootstrap token meets the format and entropy requirements
+	expectedTokenPrefix := fmt.Sprintf(
+		"%s$%s$%s$",
+		types.TokenPrefix,
+		types.TokenTypeSA,
+		types.TokenVersion,
+	)
+	if !strings.HasPrefix(s.options.BootstrapSCIMToken, expectedTokenPrefix) {
+		return errors.Newf("bootstrap SCIM token must start with prefix %q", expectedTokenPrefix)
+	}
+	if len(s.options.BootstrapSCIMToken) < len(expectedTokenPrefix)+types.TokenEntropyLength {
+		return errors.Newf(
+			"bootstrap SCIM token must have at least %d characters of entropy after the prefix",
+			types.TokenEntropyLength)
+	}
+
+	// Create the service account
+	now := timeutil.Now()
+	sa := &auth.ServiceAccount{
+		ID:          uuid.MakeV4(),
+		Name:        "bootstrap-scim",
+		Description: "Bootstrap service account for SCIM provisioning (created automatically on first startup)",
+		Enabled:     true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.repo.CreateServiceAccount(ctx, l, sa); err != nil {
+		return errors.Wrap(err, "failed to create bootstrap service account")
+	}
+
+	// Add set of admin permissions to the service account
+	for _, perm := range []string{
+		types.PermissionScimManageUser,          // Can manage users (via SCIM or API)
+		types.PermissionServiceAccountCreate,    // Can create service accounts
+		types.PermissionServiceAccountViewAll,   // Can view any service account
+		types.PermissionServiceAccountUpdateAll, // Can update any service account
+		types.PermissionServiceAccountDeleteAll, // Can delete any service account
+		types.PermissionServiceAccountMintAll,   // Can mint tokens for any service account
+		types.PermissionTokensViewAll,           // Can view all tokens
+		types.PermissionTokensRevokeOwn,         // Can revoke own tokens
+	} {
+		permission := &auth.ServiceAccountPermission{
+			ID:               uuid.MakeV4(),
+			ServiceAccountID: sa.ID,
+			Permission:       perm,
+			CreatedAt:        now,
+		}
+
+		if err := s.repo.AddServiceAccountPermission(ctx, l, permission); err != nil {
+			return errors.Wrapf(err, "failed to add permission %s to bootstrap service account", perm)
+		}
+	}
+
+	// Create the token using the provided bootstrap token
+	tokenHash := hashToken(s.options.BootstrapSCIMToken)
+	tokenSuffix := computeTokenSuffix(s.options.BootstrapSCIMToken, types.TokenTypeSA)
+
+	token := &auth.ApiToken{
+		ID:               uuid.MakeV4(),
+		TokenHash:        tokenHash,
+		TokenSuffix:      tokenSuffix,
+		TokenType:        auth.TokenTypeServiceAccount,
+		ServiceAccountID: &sa.ID,
+		Status:           auth.TokenStatusValid,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		ExpiresAt:        now.Add(types.TokenDefaultTTLBootstrapServiceAccount),
+	}
+
+	if err := s.repo.CreateToken(ctx, l, token); err != nil {
+		return errors.Wrap(err, "failed to create bootstrap token")
+	}
+
+	bootstrapLogger.Info(
+		"bootstrap SCIM service account created successfully",
+		slog.String("service_account_id", sa.ID.String()),
+		slog.String("token_suffix", tokenSuffix),
+		slog.String("expires_at", token.ExpiresAt.Format(time.RFC3339)),
+	)
+
+	// Audit the bootstrap operation
+	s.auditEvent(ctx, l, nil, AuditSACreated, "success", map[string]interface{}{
+		"service_account_id":   sa.ID.String(),
+		"service_account_name": sa.Name,
+		"bootstrap":            true,
+	})
+
 	return nil
 }
 

@@ -332,15 +332,23 @@ roachprod-centralized workers
    export ROACHPROD_DATABASE_URL="postgresql://user:password@prod-cluster:26257/roachprod?sslmode=require"
    ```
 
-3. **Configure Cloud Providers**: Set up cloud provider credentials as detailed in [docs/CLOUD_PROVIDER_CONFIG.md](docs/CLOUD_PROVIDER_CONFIG.md)
+3. **Bootstrap SCIM Provisioning**:
+   ```bash
+   # Generate a bootstrap token for initial SCIM setup (first startup only)
+   export ROACHPROD_BOOTSTRAP_SCIM_TOKEN="rp\$sa\$1\$$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 43)"
+   ```
+   On first startup, this creates a short-lived (6 hour) service account for configuring Okta SCIM.
+   See [docs/services/AUTH.md](docs/services/AUTH.md#bootstrap-configuration) for details.
 
-4. **Resource Limits**:
+4. **Configure Cloud Providers**: Set up cloud provider credentials as detailed in [docs/CLOUD_PROVIDER_CONFIG.md](docs/CLOUD_PROVIDER_CONFIG.md)
+
+5. **Resource Limits**:
    ```bash
    export ROACHPROD_DATABASE_MAX_CONNS=20
    export ROACHPROD_TASKS_WORKERS=5  # Per worker instance
    ```
 
-5. **Monitoring**:
+6. **Monitoring**:
    - Collect Prometheus metrics from `:8081/metrics` (API instances)
    - Collect Prometheus metrics from workers' metrics ports
    - Monitor health endpoints: `/health` and `/health/detailed`

@@ -66,6 +66,9 @@ type Config struct {
 	} `env:"DATABASE" description:"Database configuration"`
 	CloudProviders []CloudProvider `env:"CLOUDPROVIDERS" description:"List of cloud providers"`
 	DNSProviders   []DNSProvider   `env:"DNSPROVIDERS" description:"List of DNS providers"`
+	Bootstrap      struct {
+		SCIMToken string `env:"SCIM_TOKEN" default:"" description:"Bootstrap SCIM service account token (used on first startup when no service accounts exist)"`
+	} `env:"BOOTSTRAP" description:"Bootstrap configuration for initial setup"`
 }
 
 // CloudProvider represents a cloud provider configuration.

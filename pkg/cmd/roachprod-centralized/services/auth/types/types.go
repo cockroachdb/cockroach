@@ -125,6 +125,7 @@ type Options struct {
 	ExpiredTokensRetention   time.Duration // Default: 24h
 	CollectMetrics           bool          // Enable Prometheus metrics collection
 	StatisticsUpdateInterval time.Duration // How often to update gauge metrics (default: 30s)
+	BootstrapSCIMToken       string        // If set and no service accounts exist, creates a bootstrap SCIM service account with this token
 }
 
 // InputListServiceAccountsDTO is the data transfer object to get all service accounts.
