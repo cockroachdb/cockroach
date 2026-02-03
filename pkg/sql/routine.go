@@ -146,17 +146,14 @@ func (p *planner) EvalRoutineExpr(
 		// can be arbitrarily large. To avoid OOM, we enforce a limit on the depth
 		// of nested triggers. This is also a safeguard in case we have a bug that
 		// results in an infinite trigger loop.
-		var triggerDepth int
-		if triggerDepthValue := ctx.Value(triggerDepthKey{}); triggerDepthValue != nil {
-			triggerDepth = triggerDepthValue.(int)
-		}
+		triggerDepth := eval.GetTriggerDepth(ctx)
 		if limit := int(p.SessionData().RecursionDepthLimit); triggerDepth > limit {
 			telemetry.Inc(sqltelemetry.RecursionDepthLimitReached)
 			err = pgerror.Newf(pgcode.TriggeredActionException,
 				"trigger reached recursion depth limit: %d", limit)
 			return nil, err
 		}
-		ctx = context.WithValue(ctx, triggerDepthKey{}, triggerDepth+1)
+		ctx = eval.ContextWithIncrementedTriggerDepth(ctx)
 	}
 	if buildutil.CrdbTestBuild && !tailCallOptimizationEnabled {
 		// In test builds when we disable tail-call optimization, we might hit
@@ -207,8 +204,6 @@ func (p *planner) EvalRoutineExpr(
 	}
 	return res, nil
 }
-
-type triggerDepthKey struct{}
 
 type routineDepthKey struct{}
 
