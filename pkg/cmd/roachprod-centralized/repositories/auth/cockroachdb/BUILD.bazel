@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "cockroachdb",
@@ -18,5 +18,26 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cockroachdb_test",
+    srcs = ["cockroachdb_test.go"],
+    embed = [":cockroachdb"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/repositories/auth",
+        "//pkg/cmd/roachprod-centralized/utils/database",
+        "//pkg/cmd/roachprod-centralized/utils/database/cockroachdb",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/roachprod/config",
+        "//pkg/testutils/skip",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_lib_pq//:pq",
+        "@com_github_stretchr_testify//require",
     ],
 )

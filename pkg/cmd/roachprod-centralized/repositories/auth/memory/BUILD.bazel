@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "memory",
@@ -16,5 +16,22 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "memory_test",
+    srcs = ["memory_test.go"],
+    embed = [":memory"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/repositories/auth",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
     ],
 )
