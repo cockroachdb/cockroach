@@ -6,6 +6,7 @@
 package clusters
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	clustermodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/clusters/types"
@@ -31,31 +32,65 @@ func NewController(service clustermodels.IService) *Controller {
 			Method: "GET",
 			Path:   types.ControllerPath,
 			Func:   ctrl.GetAll,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionViewAll,
+					clustermodels.PermissionViewOwn,
+				},
+			},
 		},
 		&controllers.ControllerHandler{
 			Method: "GET",
 			Path:   types.ControllerPath + "/:name",
 			Func:   ctrl.GetOne,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionViewAll,
+					clustermodels.PermissionViewOwn,
+				},
+			},
 		},
 		&controllers.ControllerHandler{
 			Method: "POST",
 			Path:   types.ControllerPath + "/register",
 			Func:   ctrl.Register,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionCreate,
+				},
+			},
 		},
 		&controllers.ControllerHandler{
 			Method: "PUT",
 			Path:   types.ControllerPath + "/register/:name",
 			Func:   ctrl.RegisterUpdate,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionUpdateAll,
+					clustermodels.PermissionUpdateOwn,
+				},
+			},
 		},
 		&controllers.ControllerHandler{
 			Method: "DELETE",
 			Path:   types.ControllerPath + "/register/:name",
 			Func:   ctrl.RegisterDelete,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionDeleteAll,
+					clustermodels.PermissionDeleteOwn,
+				},
+			},
 		},
 		&controllers.ControllerHandler{
 			Method: "POST",
 			Path:   types.ControllerPath + "/sync",
 			Func:   ctrl.Sync,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					clustermodels.PermissionSync,
+				},
+			},
 		},
 	}
 	return ctrl
@@ -70,6 +105,8 @@ func (ctrl *Controller) GetControllerHandlers() []controllers.IControllerHandler
 // GetAll returns all clusters from the clusters service.
 func (ctrl *Controller) GetAll(c *gin.Context) {
 
+	principal, _ := controllers.GetPrincipal(c)
+
 	var inputDTO types.InputGetAllDTO
 	if err := c.ShouldBindWith(&inputDTO, stripe.StripeQuery); err != nil {
 		ctrl.Render(c, &controllers.BadRequestResult{Error: err})
@@ -79,6 +116,7 @@ func (ctrl *Controller) GetAll(c *gin.Context) {
 	clusters, err := ctrl.service.GetAllClusters(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 		inputDTO.ToServiceInputGetAllDTO(),
 	)
 
@@ -87,6 +125,8 @@ func (ctrl *Controller) GetAll(c *gin.Context) {
 
 // GetOne returns a cluster from the clusters service.
 func (ctrl *Controller) GetOne(c *gin.Context) {
+
+	principal, _ := controllers.GetPrincipal(c)
 
 	// Validate cluster name from URL parameter
 	clusterName := c.Param("name")
@@ -98,6 +138,7 @@ func (ctrl *Controller) GetOne(c *gin.Context) {
 	cluster, err := ctrl.service.GetCluster(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 		clustermodels.InputGetClusterDTO{
 			Name: clusterName,
 		},
@@ -108,6 +149,8 @@ func (ctrl *Controller) GetOne(c *gin.Context) {
 
 // Register registers an external cluster creation in the clusters service.
 func (ctrl *Controller) Register(c *gin.Context) {
+
+	principal, _ := controllers.GetPrincipal(c)
 
 	var inputDTO types.InputRegisterClusterDTO
 	if err := c.ShouldBindJSON(&inputDTO); err != nil {
@@ -124,6 +167,7 @@ func (ctrl *Controller) Register(c *gin.Context) {
 	cluster, err := ctrl.service.RegisterCluster(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 		inputDTO.ToServiceInputRegisterClusterDTO(),
 	)
 
@@ -132,6 +176,8 @@ func (ctrl *Controller) Register(c *gin.Context) {
 
 // RegisterUpdate registers an external update to a cluster in the clusters service.
 func (ctrl *Controller) RegisterUpdate(c *gin.Context) {
+
+	principal, _ := controllers.GetPrincipal(c)
 
 	var inputDTO types.InputRegisterClusterUpdateDTO
 	if err := c.ShouldBindJSON(&inputDTO); err != nil {
@@ -161,6 +207,7 @@ func (ctrl *Controller) RegisterUpdate(c *gin.Context) {
 	cluster, err := ctrl.service.RegisterClusterUpdate(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 		inputDTO.ToServiceInputRegisterClusterUpdateDTO(),
 	)
 
@@ -169,6 +216,8 @@ func (ctrl *Controller) RegisterUpdate(c *gin.Context) {
 
 // RegisterDelete registers an external deletion of a cluster in the clusters service.
 func (ctrl *Controller) RegisterDelete(c *gin.Context) {
+
+	principal, _ := controllers.GetPrincipal(c)
 
 	// Validate cluster name from URL parameter
 	clusterName := c.Param("name")
@@ -180,6 +229,7 @@ func (ctrl *Controller) RegisterDelete(c *gin.Context) {
 	err := ctrl.service.RegisterClusterDelete(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 		clustermodels.InputRegisterClusterDeleteDTO{
 			Name: clusterName,
 		},
@@ -191,9 +241,12 @@ func (ctrl *Controller) RegisterDelete(c *gin.Context) {
 // Sync triggers a clusters sync to the store.
 func (ctrl *Controller) Sync(c *gin.Context) {
 
+	principal, _ := controllers.GetPrincipal(c)
+
 	task, err := ctrl.service.SyncClouds(
 		c.Request.Context(),
 		ctrl.GetRequestLogger(c),
+		principal,
 	)
 
 	ctrl.Render(c, types.NewTaskResult(task, err))

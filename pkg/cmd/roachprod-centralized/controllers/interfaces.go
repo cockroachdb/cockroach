@@ -19,6 +19,10 @@ type IController interface {
 	// AuthMiddleware creates authentication middleware.
 	// Used by the API layer to add authentication to routes.
 	AuthMiddleware(authenticator auth.IAuthenticator, headerName string) gin.HandlerFunc
+
+	// AuthzMiddleware creates authorization middleware.
+	// Used by the API layer to add authorization checks to routes.
+	AuthzMiddleware(authenticator auth.IAuthenticator, requirement *auth.AuthorizationRequirement) gin.HandlerFunc
 }
 
 // IControllerHandler defines the interface for individual HTTP route handlers.
@@ -28,6 +32,9 @@ type IControllerHandler interface {
 	GetRouteHandlers() []gin.HandlerFunc
 	// GetAuthenticationType returns the type of authentication required for this endpoint.
 	GetAuthenticationType() AuthenticationType
+	// GetAuthorizationRequirement returns the authorization requirements for this endpoint.
+	// Returns nil if no authorization is required beyond authentication.
+	GetAuthorizationRequirement() *auth.AuthorizationRequirement
 	// GetMethod returns the HTTP method (GET, POST, PUT, DELETE, etc.) for this route.
 	GetMethod() string
 	// GetPath returns the URL path pattern for this route (e.g., "/api/clusters").

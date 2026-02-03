@@ -50,8 +50,22 @@ The API supports three authentication modes, configured via `AUTH_TYPE` environm
 
 | Mode | Config | Header | Use Case |
 |------|--------|--------|----------|
+| **Bearer** | `AUTH_TYPE=bearer` | `Authorization: Bearer rp$...` | Production with Okta |
 | **JWT** | `AUTH_TYPE=jwt` | `X-Goog-IAP-JWT-Assertion` | Google IAP |
 | **Disabled** | `AUTH_DISABLED=true` | None required | Development |
+
+### Bearer Authentication (Production)
+
+Bearer authentication uses opaque tokens validated against the database. This is the recommended mode for production deployments with Okta integration.
+
+```http
+Authorization: Bearer rp$user$1$abc123...
+```
+
+**Token acquisition:**
+1. Authenticate with Okta using Device Authorization Grant
+2. Exchange the Okta ID token for an opaque bearer token via `POST /v1/auth/okta/exchange`
+3. Use the returned token for subsequent API requests
 
 ### JWT Authentication (Google IAP)
 
@@ -72,6 +86,17 @@ export ROACHPROD_API_AUTHENTICATION_METHOD=disabled
 ```
 
 All requests are authenticated as a dev user with full permissions.
+
+### Endpoint Availability by Auth Mode
+
+Some endpoints are only available with bearer authentication:
+
+| Endpoint Category | Bearer | JWT / Disabled |
+|-------------------|--------|----------------|
+| Health, Clusters, Tasks, DNS | ✓ | ✓ |
+| `GET /v1/auth/whoami` | ✓ | ✓ |
+| `POST /v1/auth/okta/exchange` | ✓ | ✗ |
+| `GET/DELETE /v1/auth/tokens` | ✓ | ✗ |
 
 ## Base URL
 
@@ -509,6 +534,66 @@ Returns information about the current authenticated principal.
       "created_at": "2025-01-15T10:00:00Z",
       "expires_at": "2025-01-22T10:00:00Z"
     }
+  }
+}
+```
+
+#### POST /v1/auth/okta/exchange *(Bearer auth only)*
+
+Exchange an Okta ID token for an opaque bearer token.
+
+**Request Body**:
+```json
+{
+  "okta_access_token": "eyJraWQiOiI..."
+}
+```
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "token": "rp$user$1$abc123...",
+    "expires_at": "2025-01-22T10:00:00Z"
+  }
+}
+```
+
+**Important**: Store the token securely. It is only returned once.
+
+#### GET /v1/auth/tokens *(Bearer auth only)*
+
+List tokens owned by the current principal.
+
+**Query Parameters**: Supports Stripe-style filtering on `type`, `status`, `created_at`, `expires_at`.
+
+**Response**: `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "type": "user",
+      "token": "****901234",
+      "status": "valid",
+      "created_at": "2025-01-15T10:00:00Z",
+      "expires_at": "2025-01-22T10:00:00Z"
+    }
+  ],
+  "count": 1,
+  "total_count": 1
+}
+```
+
+#### DELETE /v1/auth/tokens/:id *(Bearer auth only)*
+
+Revoke a token owned by the current principal.
+
+**Response**: `200 OK`
+```json
+{
+  "data": {
+    "message": "token revoked successfully"
   }
 }
 ```

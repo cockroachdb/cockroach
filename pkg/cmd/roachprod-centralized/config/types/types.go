@@ -45,6 +45,13 @@ type Config struct {
 				Audience string `env:"AUDIENCE" default:"" description:"JWT audience for authentication"`
 				Issuer   string `env:"ISSUER" default:"https://cloud.google.com/iap" description:"JWT issuer for authentication"`
 			} `env:"JWT" description:"JWT authentication configuration"`
+			Bearer struct {
+				OktaDomain       string `env:"OKTA_DOMAIN" default:"" description:"Okta domain (e.g., dev-123456.okta.com)"`
+				OktaClientID     string `env:"OKTA_CLIENT_ID" default:"" description:"Okta OAuth2 client ID"`
+				OktaClientSecret string `env:"OKTA_CLIENT_SECRET" default:"" description:"Okta OAuth2 client secret"`
+				OktaIssuer       string `env:"OKTA_ISSUER" default:"" description:"Okta issuer URL (e.g., https://dev-123456.okta.com/oauth2/default)"`
+				OktaAudience     string `env:"OKTA_AUDIENCE" default:"" description:"Okta audience for token validation"`
+			} `env:"BEARER" description:"Bearer token authentication configuration"`
 		} `env:"AUTHENTICATION" description:"API authentication configuration"`
 	} `env:"API" description:"API configuration"`
 	InstanceHealthTimeoutSeconds int `env:"INSTANCE_HEALTH_TIMEOUT_SECONDS" default:"3" description:"Timeout in seconds to consider an instance healthy"`

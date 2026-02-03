@@ -6,6 +6,7 @@
 package publicdns
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns/types"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
@@ -30,6 +31,11 @@ func NewController(service publicdns.IService) *Controller {
 			Method: "POST",
 			Path:   types.ControllerPath + "/sync",
 			Func:   ctrl.Sync,
+			Authorization: &auth.AuthorizationRequirement{
+				AnyOf: []string{
+					publicdns.PermissionSync,
+				},
+			},
 		},
 	}
 	return ctrl

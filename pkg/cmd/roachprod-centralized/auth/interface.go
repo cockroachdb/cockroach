@@ -7,18 +7,10 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-)
-
-// Authentication errors (PUBLIC - shown to users)
-var (
-	ErrNotAuthenticated = utils.NewPublicError(errors.New("not authenticated"))
-	ErrForbidden        = utils.NewPublicError(errors.New("forbidden"))
-	ErrInvalidToken     = utils.NewPublicError(errors.New("invalid token"))
 )
 
 // AuthenticationType represents the type of authenticator to use.
@@ -45,6 +37,33 @@ type IAuthenticator interface {
 	// Returns the principal and nil error on success.
 	// Returns nil principal and an AuthError on failure.
 	Authenticate(ctx context.Context, token string, clientIP string) (*Principal, error)
+
+	// Authorize checks if the principal has the required permissions for an endpoint.
+	// Returns nil on success, or an error if authorization fails.
+	// This method also records authorization metrics.
+	Authorize(ctx context.Context, principal *Principal, requirement *AuthorizationRequirement, endpoint string) error
+}
+
+// AuthorizationRequirement defines what authorization is needed for an endpoint.
+type AuthorizationRequirement struct {
+	// RequiredPermissions specifies permissions that the principal must have.
+	// These are just permission names (NOT including provider/account scope).
+	// If multiple permissions are specified, the principal must have ALL of them (AND logic).
+	//
+	// Format: Simple permission strings like "clusters:create", "scim:manage-user", "tokens:mine:view"
+	// Examples:
+	//   - "clusters:create" - Permission to create clusters (scope checked by service layer)
+	//   - "scim:manage-user" - Permission to manage users via SCIM
+	//   - "tokens:mine:view" - Permission to view own tokens
+	//   - "admin" - Admin permissions
+	//
+	// Note: Middleware only checks if the permission exists. Services are responsible
+	// for validating provider/account scope using principal.HasPermissionScoped().
+	RequiredPermissions []string
+
+	// AnyOf allows OR logic for permissions. If specified, the principal must have
+	// at least ONE of the permissions in the list.
+	AnyOf []string
 }
 
 // TokenInfo contains metadata about the authentication token.
@@ -53,6 +72,9 @@ type IAuthenticator interface {
 type TokenInfo struct {
 	// ID is the unique identifier for the token (zero UUID for JWT)
 	ID uuid.UUID
+
+	// Type indicates whether this is a user or service account token
+	Type authmodels.TokenType
 
 	// CreatedAt is when the token was created (nil for JWT auth)
 	CreatedAt *time.Time
@@ -67,6 +89,26 @@ type Principal struct {
 	// Token contains metadata about the authentication token
 	Token TokenInfo
 
+	// UserID is set for user tokens
+	UserID *uuid.UUID
+
+	// ServiceAccountID is set for service account tokens
+	ServiceAccountID *uuid.UUID
+
+	// DelegatedFrom is set for service accounts that inherit permissions from a user principal.
+	// This is the UserID of the user principal from which permissions are inherited.
+	DelegatedFrom      *uuid.UUID
+	DelegatedFromEmail string
+
+	// User contains full user information (for bearer auth)
+	User *authmodels.User
+
+	// ServiceAccount contains full service account information (for bearer auth)
+	ServiceAccount *authmodels.ServiceAccount
+
+	// Permissions contains all permissions for this principal (unified for both users and service accounts)
+	Permissions []authmodels.Permission
+
 	// Claims contains arbitrary authentication claims from the auth provider.
 	// This is implementation-agnostic and can be populated by any authenticator.
 	// For JWT: contains token claims (sub, email, groups, etc.)
@@ -75,9 +117,80 @@ type Principal struct {
 	Claims map[string]interface{}
 }
 
+// HasPermission checks if the principal has a specific permission (any scope).
+// This is used by middleware to verify the user can attempt this action.
+// Supports wildcard: if the principal has a permission with value "*", it matches any permission.
+// Example: HasPermission("clusters:create") returns true if the user has this permission
+// with any provider/account scope, or if the user has the "*" wildcard permission.
+func (p *Principal) HasPermission(permission string) bool {
+	for _, perm := range p.Permissions {
+		permValue := perm.GetPermission()
+		// Wildcard permission grants access to everything (used by disabled authenticator)
+		if permValue == "*" {
+			return true
+		}
+		if permValue == permission {
+			return true
+		}
+	}
+	return false
+}
+
+// HasPermissionScoped checks if the principal has a permission for a specific provider/account.
+// This is used by services to enforce scope-based access control.
+// Supports wildcard matching: "*" in either principal's permission or required scope matches any value.
+// Example: HasPermissionScoped("clusters:create", "gcp", "project1")
+func (p *Principal) HasPermissionScoped(permission, provider, account string) bool {
+	for _, perm := range p.Permissions {
+		// Check permission match
+		if perm.GetPermission() != "*" && perm.GetPermission() != permission {
+			continue
+		}
+
+		// Check provider match (supports wildcard on either side)
+		permProvider := perm.GetProvider()
+		if permProvider != "*" && provider != "*" && permProvider != provider {
+			continue
+		}
+
+		// Check account match (supports wildcard on either side)
+		permAccount := perm.GetAccount()
+		if permAccount != "*" && account != "*" && permAccount != account {
+			continue
+		}
+
+		return true // All conditions met
+	}
+
+	return false
+}
+
+// HasAnyPermission checks if the principal has any of the specified permissions (OR logic).
+func (p *Principal) HasAnyPermission(permissions []string) bool {
+	for _, perm := range permissions {
+		if p.HasPermission(perm) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAllPermissions checks if the principal has all of the specified permissions (AND logic).
+func (p *Principal) HasAllPermissions(permissions []string) bool {
+	for _, perm := range permissions {
+		if !p.HasPermission(perm) {
+			return false
+		}
+	}
+	return true
+}
+
 // GetAuthMethod returns a string describing the authentication method used by the principal.
 // This is used for metrics and logging to distinguish between different auth types.
 func (p *Principal) GetAuthMethod() string {
+	if p.Token.Type != "" {
+		return string(p.Token.Type) // "user" or "service-account"
+	}
 	if p.Claims != nil {
 		return "jwt"
 	}

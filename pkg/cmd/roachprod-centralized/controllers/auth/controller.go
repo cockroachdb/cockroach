@@ -6,22 +6,24 @@
 package auth
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/auth/types"
+	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/gin-gonic/gin"
 )
 
 // Controller handles authentication-related HTTP requests.
 type Controller struct {
 	*controllers.Controller
-	handlers []controllers.IControllerHandler
+	authService authtypes.IService
+	handlers    []controllers.IControllerHandler
 }
 
 // NewController creates a new authentication controller.
-func NewController() *Controller {
+func NewController(authService authtypes.IService) *Controller {
 	ctrl := &Controller{
-		Controller: controllers.NewDefaultController(),
+		Controller:  controllers.NewDefaultController(),
+		authService: authService,
 	}
 	ctrl.handlers = []controllers.IControllerHandler{
 		&controllers.ControllerHandler{
@@ -44,7 +46,7 @@ func (ctrl *Controller) WhoAmI(c *gin.Context) {
 	// Extract principal from context (set by bearer authenticator)
 	principal, exists := controllers.GetPrincipal(c)
 	if !exists {
-		ctrl.Render(c, types.NewAuthResult(nil, auth.ErrNotAuthenticated))
+		ctrl.Render(c, types.NewAuthResult(nil, authtypes.ErrNotAuthenticated))
 		return
 	}
 

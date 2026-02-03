@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -32,7 +34,7 @@ func TestJWTAuthenticator_Authenticate_InvalidToken(t *testing.T) {
 	assert.Nil(t, principal)
 
 	// Verify error is ErrInvalidToken (wrapped with underlying error details)
-	assert.True(t, errors.Is(err, auth.ErrInvalidToken), "expected ErrInvalidToken, got: %v", err)
+	assert.True(t, errors.Is(err, authtypes.ErrInvalidToken), "expected ErrInvalidToken, got: %v", err)
 }
 
 func TestJWTAuthenticator_Authenticate_EmptyToken(t *testing.T) {
@@ -48,7 +50,7 @@ func TestJWTAuthenticator_Authenticate_EmptyToken(t *testing.T) {
 	assert.Nil(t, principal)
 
 	// Verify error is ErrNotAuthenticated for empty token
-	assert.True(t, errors.Is(err, auth.ErrNotAuthenticated), "expected ErrNotAuthenticated, got: %v", err)
+	assert.True(t, errors.Is(err, authtypes.ErrNotAuthenticated), "expected ErrNotAuthenticated, got: %v", err)
 }
 
 func TestJWTAuthenticator_ValidateToken_InvalidToken(t *testing.T) {
@@ -111,6 +113,16 @@ func TestJWTAuthenticator_PrincipalConstruction(t *testing.T) {
 		},
 	}
 
+	// Test the logic that would run after validateToken succeeds
+	// Extract email and name from claims
+	var email, fullName string
+	if emailClaim, ok := payload.Claims["email"].(string); ok {
+		email = emailClaim
+	}
+	if nameClaim, ok := payload.Claims["name"].(string); ok {
+		fullName = nameClaim
+	}
+
 	// Extract token timestamps from JWT claims
 	var createdAt, expiresAtPtr *time.Time
 	if iat, ok := payload.Claims["iat"].(float64); ok {
@@ -126,20 +138,45 @@ func TestJWTAuthenticator_PrincipalConstruction(t *testing.T) {
 	principal := &auth.Principal{
 		Token: auth.TokenInfo{
 			ID:        uuid.UUID{}, // Zero UUID for JWT tokens
+			Type:      authmodels.TokenTypeUser,
 			CreatedAt: createdAt,
 			ExpiresAt: expiresAtPtr,
 		},
 		Claims: payload.Claims,
+		User: &authmodels.User{
+			Email:    email,
+			FullName: fullName,
+			Active:   true,
+		},
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{
+				ID:         uuid.MakeV4(),
+				UserID:     uuid.MakeV4(),
+				Provider:   "*",
+				Account:    "*",
+				Permission: "*",
+			},
+		},
 	}
 
 	// Verify TokenInfo is correctly populated
 	assert.Equal(t, uuid.UUID{}, principal.Token.ID, "JWT should have zero UUID")
+	assert.Equal(t, authmodels.TokenTypeUser, principal.Token.Type)
 	require.NotNil(t, principal.Token.CreatedAt, "CreatedAt should be populated from iat claim")
 	require.NotNil(t, principal.Token.ExpiresAt, "ExpiresAt should be populated from exp claim")
 	assert.Equal(t, issuedAt.Unix(), principal.Token.CreatedAt.Unix())
 	assert.Equal(t, expiresAt.Unix(), principal.Token.ExpiresAt.Unix())
 
+	// Verify user info
+	assert.Equal(t, "test@example.com", principal.User.Email)
+	assert.Equal(t, "Test User", principal.User.FullName)
+	assert.True(t, principal.User.Active)
+
 	// Verify claims
 	assert.NotNil(t, principal.Claims)
 	assert.Equal(t, "test-user-123", principal.Claims["sub"])
+
+	// Verify wildcard permissions
+	assert.Len(t, principal.Permissions, 1)
+	assert.Equal(t, "*", principal.Permissions[0].GetPermission())
 }

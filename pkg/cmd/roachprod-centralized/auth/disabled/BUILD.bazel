@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
         "//pkg/util/uuid",
     ],
 )
@@ -16,6 +17,7 @@ go_test(
     srcs = ["disabled_test.go"],
     embed = [":disabled"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
         "//pkg/util/uuid",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

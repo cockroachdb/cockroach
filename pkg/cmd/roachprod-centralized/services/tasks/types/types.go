@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
@@ -38,14 +39,20 @@ var (
 	ErrMetricsCollectionDisabled = fmt.Errorf("metrics collection is disabled")
 )
 
+const (
+	PermissionViewAll = TaskServiceName + ":view:all"
+	PermissionViewOwn = TaskServiceName + ":view:own"
+)
+
 // IService defines the interface for the tasks service, which manages background task processing
 // and provides CRUD operations for tasks. This service handles task lifecycle management,
 // worker orchestration, and integration with other services that need to schedule work.
 type IService interface {
 	// GetTasks retrieves multiple tasks based on the provided filters and pagination parameters.
-	GetTasks(context.Context, *logger.Logger, InputGetAllTasksDTO) ([]tasks.ITask, int, error)
+	// Returns tasks, total count (for pagination), and error.
+	GetTasks(context.Context, *logger.Logger, *pkgauth.Principal, InputGetAllTasksDTO) ([]tasks.ITask, int, error)
 	// GetTask retrieves a single task by its ID.
-	GetTask(context.Context, *logger.Logger, InputGetTaskDTO) (tasks.ITask, error)
+	GetTask(context.Context, *logger.Logger, *pkgauth.Principal, InputGetTaskDTO) (tasks.ITask, error)
 	// CreateTask creates a new task and stores it in the repository for processing.
 	CreateTask(context.Context, *logger.Logger, tasks.ITask) (tasks.ITask, error)
 	// CreateTaskIfNotAlreadyPlanned creates a new task only if a similar task isn't already pending.

@@ -81,7 +81,7 @@ func runAPI(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create the authenticator based on configuration
-	authenticator, err := app.NewAuthenticatorFromConfig(cfg, l)
+	authenticator, err := app.NewAuthenticatorFromConfig(cfg, l, services.Auth)
 	if err != nil {
 		return errors.Wrap(err, "error creating authenticator")
 	}
@@ -99,7 +99,13 @@ func runAPI(cmd *cobra.Command, args []string) error {
 		app.WithApiController(clusterscontroller.NewController(services.Clusters)),
 		app.WithApiController(publicdns.NewController(services.DNS)),
 		app.WithApiController(tasks.NewController(services.Task)),
-		app.WithApiController(authcontroller.NewController()),
+		app.WithApiController(authcontroller.NewController(services.Auth)),
+	}
+
+	if cfg.Api.Authentication.Type == "bearer" {
+		options = append(options,
+			app.WithApiController(authcontroller.NewControllerBearerAuth(services.Auth)),
+		)
 	}
 
 	// Create the application instance with the configured services and controllers.

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -37,13 +39,22 @@ func (a *JWTAuthenticator) Authenticate(
 ) (*auth.Principal, error) {
 
 	if token == "" {
-		return nil, auth.ErrNotAuthenticated
+		return nil, authtypes.ErrNotAuthenticated
 	}
 
 	// Validate the JWT token
 	payload, err := a.validateToken(ctx, token)
 	if err != nil {
-		return nil, errors.CombineErrors(auth.ErrInvalidToken, err)
+		return nil, errors.CombineErrors(authtypes.ErrInvalidToken, err)
+	}
+
+	// Extract email and name from claims
+	var email, fullName string
+	if emailClaim, ok := payload.Claims["email"].(string); ok {
+		email = emailClaim
+	}
+	if nameClaim, ok := payload.Claims["name"].(string); ok {
+		fullName = nameClaim
 	}
 
 	// Extract token timestamps from JWT claims
@@ -62,10 +73,28 @@ func (a *JWTAuthenticator) Authenticate(
 	principal := &auth.Principal{
 		Token: auth.TokenInfo{
 			ID:        uuid.UUID{}, // Zero UUID for JWT tokens
+			Type:      authmodels.TokenTypeUser,
 			CreatedAt: createdAt,
 			ExpiresAt: expiresAt,
 		},
 		Claims: payload.Claims, // Store claims for additional context
+		UserID: &uuid.UUID{},   // Zero UUID for JWT tokens
+		User: &authmodels.User{
+			ID:       uuid.UUID{}, // Zero UUID for JWT tokens
+			Email:    email,
+			FullName: fullName,
+			Active:   true, // JWT validation implies active user
+		},
+		// Grant wildcard permission - matches any permission check
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{
+				ID:         uuid.UUID{},
+				UserID:     uuid.UUID{},
+				Provider:   "*",
+				Account:    "*",
+				Permission: "*", // Wildcard permission grants access to everything
+			},
+		},
 	}
 
 	return principal, nil
@@ -90,4 +119,27 @@ func (a *JWTAuthenticator) validateToken(
 	}
 
 	return payload, nil
+}
+
+// Authorize checks if the principal has the required permissions for an endpoint.
+// Returns nil on success, or authtypes.ErrForbidden if authorization fails.
+// This method also records authorization metrics.
+func (a *JWTAuthenticator) Authorize(
+	ctx context.Context,
+	principal *auth.Principal,
+	requirement *auth.AuthorizationRequirement,
+	endpoint string,
+) error {
+
+	// Check AnyOf permissions (OR logic)
+	if len(requirement.AnyOf) > 0 && !principal.HasAnyPermission(requirement.AnyOf) {
+		return authtypes.ErrForbidden
+	}
+
+	// Check required permissions (AND logic)
+	if len(requirement.RequiredPermissions) > 0 && !principal.HasAllPermissions(requirement.RequiredPermissions) {
+		return authtypes.ErrForbidden
+	}
+
+	return nil
 }

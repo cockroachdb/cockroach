@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -24,8 +26,15 @@ func TestAuthenticationResult_GetAssociatedStatusCode(t *testing.T) {
 		err          error
 		expectedCode int
 	}{
-		{"ErrNotAuthenticated", auth.ErrNotAuthenticated, http.StatusUnauthorized},
-		{"ErrInvalidToken", auth.ErrInvalidToken, http.StatusUnauthorized},
+		{"ErrNotAuthenticated", authtypes.ErrNotAuthenticated, http.StatusUnauthorized},
+		{"ErrInvalidToken", authtypes.ErrInvalidToken, http.StatusUnauthorized},
+		{"ErrTokenExpired", authtypes.ErrTokenExpired, http.StatusUnauthorized},
+		{"ErrUserNotProvisioned", authtypes.ErrUserNotProvisioned, http.StatusUnauthorized},
+		{"ErrUserDeactivated", authtypes.ErrUserDeactivated, http.StatusUnauthorized},
+		{"ErrServiceAccountDisabled", authtypes.ErrServiceAccountDisabled, http.StatusUnauthorized},
+		{"ErrServiceAccountNotFound", authtypes.ErrServiceAccountNotFound, http.StatusUnauthorized},
+		{"ErrUserNotFound", authtypes.ErrUserNotFound, http.StatusUnauthorized},
+		{"ErrIPNotAllowed", authtypes.ErrIPNotAllowed, http.StatusForbidden},
 		{"unknown error defaults to 401", errors.New("some unknown error"), http.StatusUnauthorized},
 	}
 
@@ -46,8 +55,18 @@ func TestAuthenticationResult_GetError(t *testing.T) {
 	}{
 		{
 			name:        "PublicError is returned as-is",
-			err:         auth.ErrNotAuthenticated, // Already a PublicError
+			err:         authtypes.ErrNotAuthenticated, // Already a PublicError
 			expectedMsg: "not authenticated",
+		},
+		{
+			name:        "ErrTokenExpired returns its public message",
+			err:         authtypes.ErrTokenExpired,
+			expectedMsg: "token expired",
+		},
+		{
+			name:        "ErrIPNotAllowed returns its public message",
+			err:         authtypes.ErrIPNotAllowed,
+			expectedMsg: "client IP not allowed for this service account",
 		},
 	}
 
@@ -81,12 +100,37 @@ func TestAuthenticationResult_GetError_PrivateErrorNotDisclosed(t *testing.T) {
 // mockAuthenticator is a test helper that implements auth.IAuthenticator
 type mockAuthenticator struct {
 	authenticateFn func(ctx context.Context, token, ip string) (*auth.Principal, error)
+	authorizeFn    func(ctx context.Context, principal *auth.Principal, requirement *auth.AuthorizationRequirement, endpoint string) error
 }
 
 func (m *mockAuthenticator) Authenticate(
 	ctx context.Context, token, ip string,
 ) (*auth.Principal, error) {
 	return m.authenticateFn(ctx, token, ip)
+}
+
+func (m *mockAuthenticator) Authorize(
+	ctx context.Context,
+	principal *auth.Principal,
+	requirement *auth.AuthorizationRequirement,
+	endpoint string,
+) error {
+	if m.authorizeFn != nil {
+		return m.authorizeFn(ctx, principal, requirement, endpoint)
+	}
+
+	// Default: perform actual permission checks
+	// Check AnyOf permissions (OR logic)
+	if len(requirement.AnyOf) > 0 && !principal.HasAnyPermission(requirement.AnyOf) {
+		return authtypes.ErrForbidden
+	}
+
+	// Check required permissions (AND logic)
+	if len(requirement.RequiredPermissions) > 0 && !principal.HasAllPermissions(requirement.RequiredPermissions) {
+		return authtypes.ErrForbidden
+	}
+
+	return nil
 }
 
 // TestAuthMiddleware_EmptyToken tests that empty token returns 401
@@ -97,7 +141,7 @@ func TestAuthMiddleware_EmptyToken(t *testing.T) {
 	mockAuth := &mockAuthenticator{
 		authenticateFn: func(ctx context.Context, token, ip string) (*auth.Principal, error) {
 			if token == "" {
-				return nil, auth.ErrNotAuthenticated
+				return nil, authtypes.ErrNotAuthenticated
 			}
 			return nil, nil
 		},
@@ -121,7 +165,9 @@ func TestAuthMiddleware_EmptyToken(t *testing.T) {
 func TestAuthMiddleware_ValidToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	expectedPrincipal := &auth.Principal{}
+	expectedPrincipal := &auth.Principal{
+		User: &authmodels.User{Email: "test@example.com"},
+	}
 
 	mockAuth := &mockAuthenticator{
 		authenticateFn: func(ctx context.Context, token, ip string) (*auth.Principal, error) {
@@ -142,8 +188,9 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	assert.False(t, c.IsAborted())
 
 	// Verify principal is stored in context
-	_, exists := GetPrincipal(c)
+	principal, exists := GetPrincipal(c)
 	assert.True(t, exists)
+	assert.Equal(t, "test@example.com", principal.User.Email)
 }
 
 // TestAuthMiddleware_BearerPrefixStripping tests that "Bearer " prefix is stripped
@@ -170,4 +217,203 @@ func TestAuthMiddleware_BearerPrefixStripping(t *testing.T) {
 
 	// Token should have "Bearer " prefix stripped
 	assert.Equal(t, "my-token-value", capturedToken)
+}
+
+// TestAuthzMiddleware_NoRequirement tests that nil requirement allows access
+func TestAuthzMiddleware_NoRequirement(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, nil)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+
+	middleware(c)
+
+	assert.False(t, c.IsAborted())
+}
+
+// TestAuthzMiddleware_NoPrincipal tests that missing principal returns 401
+func TestAuthzMiddleware_NoPrincipal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		RequiredPermissions: []string{"clusters:create"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	// No principal set in context
+
+	middleware(c)
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+// TestAuthzMiddleware_HasRequiredPermission tests that principal with permission is allowed
+func TestAuthzMiddleware_HasRequiredPermission(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:create"},
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		RequiredPermissions: []string{"clusters:create"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.False(t, c.IsAborted())
+}
+
+// TestAuthzMiddleware_MissingRequiredPermission tests that principal without permission is denied
+func TestAuthzMiddleware_MissingRequiredPermission(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:read"},
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		RequiredPermissions: []string{"clusters:create"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestAuthzMiddleware_AnyOfPermissions tests OR logic for permissions
+func TestAuthzMiddleware_AnyOfPermissions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:read"},
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		AnyOf: []string{"clusters:create", "clusters:read", "clusters:delete"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.False(t, c.IsAborted()) // Has "clusters:read"
+}
+
+// TestAuthzMiddleware_AnyOfPermissions_Denied tests OR logic when no match
+func TestAuthzMiddleware_AnyOfPermissions_Denied(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:list"},
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		AnyOf: []string{"clusters:create", "clusters:read", "clusters:delete"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestAuthzMiddleware_AllPermissionsRequired tests AND logic
+func TestAuthzMiddleware_AllPermissionsRequired(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:create"},
+			&authmodels.UserPermission{Permission: "clusters:read"},
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		RequiredPermissions: []string{"clusters:create", "clusters:read"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.False(t, c.IsAborted())
+}
+
+// TestAuthzMiddleware_AllPermissionsRequired_MissingOne tests AND logic when missing one
+func TestAuthzMiddleware_AllPermissionsRequired_MissingOne(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	principal := &auth.Principal{
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{Permission: "clusters:create"},
+			// Missing clusters:read
+		},
+	}
+
+	mockAuth := &mockAuthenticator{}
+	ctrl := &Controller{}
+	middleware := ctrl.AuthzMiddleware(mockAuth, &auth.AuthorizationRequirement{
+		RequiredPermissions: []string{"clusters:create", "clusters:read"},
+	})
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("GET", "/api/test", nil)
+	SetPrincipal(c, principal)
+
+	middleware(c)
+
+	assert.True(t, c.IsAborted())
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }

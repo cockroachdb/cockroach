@@ -1,0 +1,263 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"math/big"
+	"net"
+
+	pkgauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	rauth "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/auth"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters"
+	filtertypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+)
+
+// validateToken validates an opaque token.
+// For service account tokens, enforces IP allowlist if configured.
+func (s *Service) validateToken(
+	ctx context.Context, l *logger.Logger, tokenString string, clientIP string,
+) (*auth.ApiToken, error) {
+	// 1. Hash the token
+	tokenHash := hashToken(tokenString)
+
+	// 2. Lookup in DB
+	token, err := s.repo.GetTokenByHash(ctx, l, tokenHash)
+	if err != nil {
+		if errors.Is(err, rauth.ErrNotFound) {
+			// Audit the failed validation (no token found)
+			return nil, types.ErrInvalidToken
+		}
+		return nil, errors.Wrap(err, "failed to lookup token")
+	}
+
+	// 3. Check status
+	if token.Status != auth.TokenStatusValid {
+		return nil, types.ErrInvalidToken
+	}
+
+	// 4. Check expiry
+	if timeutil.Now().After(token.ExpiresAt) {
+		return nil, types.ErrTokenExpired
+	}
+
+	// 5. IP allowlist enforcement for service account tokens
+	if token.TokenType == auth.TokenTypeServiceAccount && token.ServiceAccountID != nil {
+		// Get allowed origins for this service account
+		origins, _, err := s.repo.ListServiceAccountOrigins(ctx, l, *token.ServiceAccountID, *filters.NewFilterSet())
+		if err != nil {
+			l.Warn(
+				"failed to get service account origins",
+				"sa_id", token.ServiceAccountID.String(),
+				"error", err,
+			)
+			return nil, errors.Wrap(err, "failed to get service account origins")
+		}
+
+		// If origins are configured, enforce allowlist
+		if len(origins) > 0 {
+			allowed := false
+			clientIPParsed := net.ParseIP(clientIP)
+			if clientIPParsed == nil {
+				return nil, types.ErrIPNotAllowed
+			}
+
+			for _, origin := range origins {
+				_, ipNet, err := net.ParseCIDR(origin.CIDR)
+				if err != nil {
+					// Log but continue checking other origins
+					l.Warn(
+						"invalid CIDR in service account origin",
+						"origin_id", origin.ID.String(),
+						"cidr", origin.CIDR,
+						"error", err,
+					)
+					continue
+				}
+				if ipNet.Contains(clientIPParsed) {
+					allowed = true
+					break
+				}
+			}
+
+			if !allowed {
+				return nil, types.ErrIPNotAllowed
+			}
+		}
+	}
+
+	// 6. Update last_used_at
+	if err := s.repo.UpdateTokenLastUsed(ctx, l, token.ID); err != nil {
+		// Log error but don't fail the validation
+		l.Warn(
+			"failed to update token last_used_at",
+			"token_id", token.ID.String(),
+			"error", err,
+		)
+	}
+
+	return token, nil
+}
+
+// ListSelfTokens lists all tokens belonging to the authenticated principal.
+func (s *Service) ListSelfTokens(
+	ctx context.Context,
+	l *logger.Logger,
+	principal *pkgauth.Principal,
+	inputDTO types.InputListTokensDTO,
+) ([]*auth.ApiToken, int, error) {
+	// Start with the filters from the input DTO
+	filterSet := inputDTO.Filters
+
+	// Security: Remove any user-provided filters on user_id or service_account_id.
+	// While the controller DTO should not include these fields, this ensures
+	// that even if a bug is introduced or a new controller is added, we enforce
+	// the security boundary at the service layer.
+	// These fields are implicitly set based on the authenticated principal
+	// and should never be controllable by users, as they could be used
+	// to access other users' tokens (especially when combined with LogicOr).
+	var sanitizedFilters []filtertypes.FieldFilter
+	for _, filter := range filterSet.Filters {
+		if filter.Field != "user_id" && filter.Field != "service_account_id" {
+			sanitizedFilters = append(sanitizedFilters, filter)
+		}
+	}
+	filterSet.Filters = sanitizedFilters
+
+	// Security: Force AND logic to prevent privilege escalation via OR queries.
+	// This ensures the principal filter is always enforced as a conjunction with other filters.
+	// Without this, a malicious SCIM query like "userName eq 'admin' or userName eq 'victim'"
+	// could bypass authorization checks.
+	filterSet.Logic = filtertypes.LogicAnd
+
+	// Add mandatory filter to restrict tokens to the authenticated principal
+	switch principal.Token.Type {
+	case auth.TokenTypeUser:
+
+		filterSet.AddFilter("UserID", filtertypes.OpEqual, principal.UserID)
+
+	case auth.TokenTypeServiceAccount:
+
+		// Service accounts that are DelegatedFrom a user principal should maybe
+		// be able to see tokens created by that user as well?
+		// We currently have a limitation that prevents us from grouping filters
+		// with OR logic, so we only allow seeing tokens created by the service account
+		// itself as a precaution.
+		filterSet.AddFilter("ServiceAccountID", filtertypes.OpEqual, principal.ServiceAccountID)
+
+	default:
+		return nil, 0, errors.New("invalid principal token type")
+	}
+
+	// Get all tokens filtered by principal's user ID or service account ID (plus any additional filters)
+	tokens, totalCount, err := s.repo.ListAllTokens(ctx, l, filterSet)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tokens, totalCount, nil
+}
+
+// RevokeSelfToken revokes a token belonging to the authenticated principal.
+// Returns ErrTokenNotFound if token doesn't exist or doesn't belong to principal.
+func (s *Service) RevokeSelfToken(
+	ctx context.Context, l *logger.Logger, principal *pkgauth.Principal, tokenID uuid.UUID,
+) error {
+	// Get the token
+	token, err := s.repo.GetToken(ctx, l, tokenID)
+	if err != nil {
+		if errors.Is(err, rauth.ErrNotFound) {
+			return types.ErrTokenNotFound
+		}
+		return errors.Wrap(err, "failed to get token")
+	}
+
+	// Check ownership - don't leak existence if not owned
+	switch token.TokenType {
+	case auth.TokenTypeUser:
+		if token.UserID == nil || principal.UserID == nil || *token.UserID != *principal.UserID {
+			return types.ErrTokenNotFound
+		}
+	case auth.TokenTypeServiceAccount:
+
+		// Service accounts that are DelegatedFrom a user principal should maybe
+		// be able to see tokens created by that user as well?
+		// We currently have a limitation that prevents us from grouping filters
+		// with OR logic, so we only allow seeing tokens created by the service account
+		// itself as a precaution.
+		if token.ServiceAccountID == nil || principal.ServiceAccountID == nil || *token.ServiceAccountID != *principal.ServiceAccountID {
+			return types.ErrTokenNotFound
+		}
+
+	default:
+		return types.ErrTokenNotFound
+	}
+
+	// Revoke the token
+	return s.repo.RevokeToken(ctx, l, tokenID)
+}
+
+// Token generation helpers
+
+// generateToken generates a new opaque token, its hash, and a displayable suffix.
+// Format: rp$<type>$1$<random>
+// The random portion uses base62 encoding (alphanumeric) for URL safety.
+// Returns: (tokenString, tokenHash, tokenSuffix, error)
+func (s *Service) generateToken(principalType auth.TokenType) (string, string, string, error) {
+	// Generate random bytes using crypto/rand and encode as base62 (alphanumeric only)
+	b := make([]byte, types.TokenEntropyLength)
+	const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	for i := range b {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(base62Chars))))
+		if err != nil {
+			return "", "", "", errors.Wrap(err, "failed to generate random token")
+		}
+		b[i] = base62Chars[num.Int64()]
+	}
+
+	typeStr := types.TokenTypeUser
+	if principalType == auth.TokenTypeServiceAccount {
+		typeStr = types.TokenTypeSA
+	}
+
+	tokenString := fmt.Sprintf("%s$%s$%s$%s", types.TokenPrefix, typeStr, types.TokenVersion, string(b))
+	tokenHash := hashToken(tokenString)
+
+	// Compute suffix for audit logging: "rp$<type>$1$****<last8chars>"
+	// This allows displaying a recognizable token suffix without exposing the full token.
+	// With 43 chars of base62 and revealing 8, we still have 35 unknown chars ≈ 208 bits of entropy.
+	suffix := computeTokenSuffix(tokenString, typeStr)
+
+	return tokenString, tokenHash, suffix, nil
+}
+
+// hashToken computes the SHA-256 hash of the token string.
+func hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+// computeTokenSuffix creates a displayable suffix for audit logs.
+// Format: "rp$<type>$1$****<last8chars>" where last8chars are from the random portion.
+func computeTokenSuffix(token string, tokenType string) string {
+	// Token format: rp$<type>$1$<random>
+	// We want: rp$<type>$1$****<last8>
+	if len(token) < 8 {
+		return token
+	}
+	last8 := token[len(token)-8:]
+	return fmt.Sprintf("%s$%s$1$****%s", types.TokenPrefix, tokenType, last8)
+}

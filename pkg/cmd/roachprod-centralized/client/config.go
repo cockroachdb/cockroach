@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client/auth"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/errors"
 )
@@ -21,7 +22,7 @@ type Config struct {
 	// BaseURL is the base URL of the centralized API (e.g., "https://api.example.com")
 	// Also used as the OAuth2 audience for authentication
 	BaseURL string
-	// AuthMode is the authentication mode: "iap", or "disabled"
+	// AuthMode is the authentication mode: "bearer", "iap", or "disabled"
 	AuthMode string
 	// ForceFetchCreds forces fetching fresh credentials from the service account
 	ForceFetchCreds bool
@@ -42,7 +43,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:                DefaultEnabled,
 		BaseURL:                DefaultBaseURL,
-		AuthMode:               DefaultAuthMode,
+		AuthMode:               auth.DefaultAuthMode,
 		Timeout:                DefaultTimeout,
 		RetryAttempts:          DefaultRetryAttempts,
 		RetryDelay:             DefaultRetryDelay,
@@ -103,12 +104,12 @@ func LoadConfigFromEnv() Config {
 	}
 
 	// Auth mode
-	if authMode := os.Getenv("ROACHPROD_CENTRALIZED_API_AUTH_MODE"); authMode != "" {
+	if authMode := os.Getenv(auth.EnvAuthMode); authMode != "" {
 		config.AuthMode = authMode
 	}
 
 	// Also check the new API base URL env var
-	if baseURL := os.Getenv("ROACHPROD_CENTRALIZED_API_BASE_URL"); baseURL != "" {
+	if baseURL := os.Getenv(auth.EnvAPIBaseURL); baseURL != "" {
 		config.BaseURL = baseURL
 	}
 

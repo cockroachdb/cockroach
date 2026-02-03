@@ -117,6 +117,7 @@ func TestGetAll(t *testing.T) {
 					"GetAllClusters",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -206,6 +207,7 @@ func TestGetOne(t *testing.T) {
 					"GetCluster",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -317,6 +319,7 @@ func TestRegister(t *testing.T) {
 					"RegisterCluster",
 					mock.Anything,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -442,6 +445,7 @@ func TestRegisterUpdate(t *testing.T) {
 					"RegisterClusterUpdate",
 					mock.Anything,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
@@ -508,6 +512,7 @@ func TestRegisterDelete(t *testing.T) {
 					"RegisterClusterDelete",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.err).Once()
 			}
@@ -559,6 +564,7 @@ func TestSync(t *testing.T) {
 					"SyncClouds",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}
 

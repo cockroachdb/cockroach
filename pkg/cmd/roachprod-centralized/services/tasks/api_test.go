@@ -34,7 +34,7 @@ func TestGetTasks(t *testing.T) {
 
 	mockRepo.On("GetTasks", ctx, mock.Anything, *filters).Return(expectedTasks, len(expectedTasks), nil)
 
-	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, nil, types.InputGetAllTasksDTO{
 		Filters: *filters,
 	})
 	assert.Nil(t, err)
@@ -59,7 +59,7 @@ func TestGetTasksFiltered(t *testing.T) {
 		AddFilter("Type", filtertypes.OpEqual, "test").
 		AddFilter("State", filtertypes.OpEqual, string(tasks.TaskStateRunning))
 
-	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.InputGetAllTasksDTO{
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, nil, types.InputGetAllTasksDTO{
 		Filters: *filters,
 	})
 	assert.Nil(t, err)
@@ -76,7 +76,7 @@ func TestGetTasks_Error(t *testing.T) {
 
 	mockRepo.On("GetTasks", ctx, mock.Anything, *filters.NewFilterSet()).Return(nil, 0, expectedError)
 
-	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, types.NewInputGetAllTasksDTO())
+	tasks, _, err := taskService.GetTasks(ctx, logger.DefaultLogger, nil, types.NewInputGetAllTasksDTO())
 	assert.Nil(t, tasks)
 	assert.ErrorIs(t, err, expectedError)
 	mockRepo.AssertExpectations(t)
@@ -95,7 +95,7 @@ func TestGetTask(t *testing.T) {
 
 	mockRepo.On("GetTask", mock.Anything, mock.Anything, fakeID).Return(fakeTask, nil)
 
-	task, err := taskService.GetTask(ctx, logger.DefaultLogger, types.InputGetTaskDTO{ID: fakeID})
+	task, err := taskService.GetTask(ctx, logger.DefaultLogger, nil, types.InputGetTaskDTO{ID: fakeID})
 	assert.Equal(t, fakeTask, task)
 	assert.Nil(t, err)
 	mockRepo.AssertExpectations(t)
@@ -109,7 +109,7 @@ func TestGetTask_NotFound(t *testing.T) {
 
 	mockRepo.On("GetTask", mock.Anything, mock.Anything, fakeID).Return(nil, tasksrepo.ErrTaskNotFound)
 
-	task, err := taskService.GetTask(ctx, logger.DefaultLogger, types.InputGetTaskDTO{ID: fakeID})
+	task, err := taskService.GetTask(ctx, logger.DefaultLogger, nil, types.InputGetTaskDTO{ID: fakeID})
 	assert.Nil(t, task)
 	assert.ErrorAs(t, err, &types.ErrTaskNotFound)
 	assert.IsType(t, &utils.PublicError{}, err)
@@ -126,7 +126,7 @@ func TestGetTask_PrivateError(t *testing.T) {
 
 	mockRepo.On("GetTask", mock.Anything, mock.Anything, fakeID).Return(nil, expectedError)
 
-	task, err := taskService.GetTask(ctx, logger.DefaultLogger, types.InputGetTaskDTO{ID: fakeID})
+	task, err := taskService.GetTask(ctx, logger.DefaultLogger, nil, types.InputGetTaskDTO{ID: fakeID})
 	assert.Nil(t, task)
 	assert.ErrorIs(t, err, expectedError)
 	mockRepo.AssertExpectations(t)

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/client/auth"
 	clustercontroller "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/clusters/types"
 	publicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns/types"
 	tasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/tasks/types"
@@ -27,14 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
-)
-
-// Authentication modes.
-const (
-	// AuthModeIAP uses Google Cloud Identity-Aware Proxy authentication.
-	AuthModeIAP = "iap"
-	// AuthModeDisabled disables authentication.
-	AuthModeDisabled = "disabled"
 )
 
 const (
@@ -50,8 +43,6 @@ const (
 	DefaultBaseURL = "https://prod-iap.roachprod.testeng.crdb.io/api"
 	// DefaultServiceAccountEmail is the default service account email used for IAP authentication.
 	DefaultServiceAccountEmail = "prod-iap-rp-roachprod-sa@cockroach-testeng-infra.iam.gserviceaccount.com"
-	// DefaultAuthMode is the default authentication mode.
-	DefaultAuthMode = AuthModeIAP
 
 	CLIENT_VERSION   = "1.0"
 	CLIENT_USERAGENT = "roachprod-client/" + CLIENT_VERSION
@@ -129,7 +120,19 @@ func NewClient(options ...Option) (*Client, error) {
 // configureHTTPClient sets up the HTTP client based on the configured auth mode.
 func (c *Client) configureHTTPClient() error {
 	switch c.config.AuthMode {
-	case AuthModeIAP:
+	case auth.AuthModeBearer:
+		// Use bearer token from env var or keyring
+		tokenSource, err := auth.NewBearerTokenSource()
+		if err != nil {
+			return errors.Wrap(err, "failed to create bearer token source")
+		}
+		httpClient, err := tokenSource.GetHTTPClient()
+		if err != nil {
+			return errors.Wrap(err, "failed to get HTTP client with bearer auth")
+		}
+		c.httpClient = httpClient
+
+	case auth.AuthModeIAP:
 		// Use IAP authentication (legacy mode)
 		iapTokenSource, err := roachprodutil.NewIAPTokenSource(roachprodutil.IAPTokenSourceOptions{
 			OAuthClientID:       promhelperclient.OAuthClientID,
@@ -140,7 +143,7 @@ func (c *Client) configureHTTPClient() error {
 		}
 		c.httpClient = iapTokenSource.GetHTTPClient()
 
-	case AuthModeDisabled:
+	case auth.AuthModeDisabled:
 		// No authentication
 		c.httpClient = &http.Client{}
 

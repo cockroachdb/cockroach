@@ -12,6 +12,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
         "//pkg/cmd/roachprod-centralized/utils",
         "//pkg/cmd/roachprod-centralized/utils/logger",
         "@com_github_cockroachdb_errors//:errors",
@@ -28,6 +30,8 @@ go_test(
     embed = [":controllers"],
     deps = [
         "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gin_gonic_gin//:gin",
         "@com_github_stretchr_testify//assert",

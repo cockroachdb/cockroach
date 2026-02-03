@@ -113,6 +113,11 @@ func (a *Api) Init(l *logger.Logger) {
 				// Start with authentication middleware using the controller's method
 				middlewares := []gin.HandlerFunc{controller.AuthMiddleware(a.authenticator, a.authHeader)}
 
+				// Add authorization middleware if requirements are specified
+				if authzReq := handler.GetAuthorizationRequirement(); authzReq != nil {
+					middlewares = append(middlewares, controller.AuthzMiddleware(a.authenticator, authzReq))
+				}
+
 				// Append the actual handler functions
 				handlers = append(middlewares, handler.GetRouteHandlers()...)
 			} else {

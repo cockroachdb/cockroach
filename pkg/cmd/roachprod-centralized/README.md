@@ -257,8 +257,11 @@ For small production deployments or development:
 
 ```bash
 # Enable authentication
-export ROACHPROD_API_AUTHENTICATION_DISABLED=false
-export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-production-audience"
+export ROACHPROD_API_AUTHENTICATION_TYPE=bearer
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_ISSUER="https://your-org.okta.com"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_AUDIENCE="your-audience"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_ID="your-client-id"
+export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_SECRET="your-client-secret"
 
 # Use CockroachDB backend
 export ROACHPROD_DATABASE_TYPE=cockroachdb
@@ -314,10 +317,13 @@ roachprod-centralized workers
 
 ### Production Configuration Checklist
 
-1. **Enable Authentication**:
+1. **Enable Bearer Authentication**:
    ```bash
-   export ROACHPROD_API_AUTHENTICATION_DISABLED=false
-   export ROACHPROD_API_AUTHENTICATION_JWT_AUDIENCE="your-production-audience"
+   export ROACHPROD_API_AUTHENTICATION_TYPE=bearer
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_ISSUER="https://your-org.okta.com"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_AUDIENCE="your-audience"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_ID="your-client-id"
+   export ROACHPROD_API_AUTHENTICATION_BEARER_OKTA_CLIENT_SECRET="your-client-secret"
    ```
 
 2. **Use CockroachDB Backend** (required for scaled deployments):

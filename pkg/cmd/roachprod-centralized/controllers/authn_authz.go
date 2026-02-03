@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
+	authtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/auth/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/errors"
 	"github.com/gin-gonic/gin"
@@ -18,6 +20,7 @@ import (
 // Context keys for storing authentication/authorization data
 const (
 	PrincipalContextKey = "principal" // Stores *auth.Principal
+	TokenContextKey     = "token"     // Stores *authmodels.ApiToken (bearer auth only)
 )
 
 // AuthenticationErrorResult is a result DTO for authentication middleware errors.
@@ -50,9 +53,19 @@ func (r *AuthenticationErrorResult) GetAssociatedStatusCode() int {
 
 	// Authentication errors -> 401 Unauthorized
 	switch {
-	case errors.Is(r.err, auth.ErrNotAuthenticated),
-		errors.Is(r.err, auth.ErrInvalidToken):
+	case errors.Is(r.err, authtypes.ErrNotAuthenticated),
+		errors.Is(r.err, authtypes.ErrInvalidToken),
+		errors.Is(r.err, authtypes.ErrTokenExpired),
+		errors.Is(r.err, authtypes.ErrUserNotProvisioned),
+		errors.Is(r.err, authtypes.ErrUserDeactivated),
+		errors.Is(r.err, authtypes.ErrServiceAccountDisabled),
+		errors.Is(r.err, authtypes.ErrServiceAccountNotFound),
+		errors.Is(r.err, authtypes.ErrUserNotFound):
 		return http.StatusUnauthorized
+
+	// Authorization errors -> 403 Forbidden
+	case errors.Is(r.err, authtypes.ErrIPNotAllowed):
+		return http.StatusForbidden
 	}
 
 	return http.StatusUnauthorized // Default for unknown auth errors
@@ -139,6 +152,42 @@ func (ctrl *Controller) AuthMiddleware(
 	}
 }
 
+// AuthzMiddleware creates authorization middleware based on requirements.
+// This middleware must run AFTER AuthMiddleware so that the Principal is available.
+func (ctrl *Controller) AuthzMiddleware(
+	authenticator auth.IAuthenticator, requirement *auth.AuthorizationRequirement,
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// If no authorization requirement, allow access
+		if requirement == nil {
+			c.Next()
+			return
+		}
+
+		// Get the authenticated principal from context
+		principal, exists := GetPrincipal(c)
+		if !exists {
+			// If we get here, authentication middleware didn't run or failed
+			ctrl.GetRequestLogger(c).Error("authorization check failed: no principal in context")
+			ctrl.Render(c, &AuthenticationErrorResult{err: ErrUnauthorized})
+			c.Abort()
+			return
+		}
+
+		// Use the authenticator to check authorization (it will handle metrics recording)
+		if err := authenticator.Authorize(c.Request.Context(), principal, requirement, c.FullPath()); err != nil {
+			ctrl.GetRequestLogger(c).Warn("authorization denied",
+				"principal_type", principal.GetAuthMethod(),
+				"endpoint", c.FullPath())
+			ctrl.Render(c, &AuthorizationErrorResult{err: err})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // SetPrincipal stores the authenticated principal in the Gin context.
 func SetPrincipal(c *gin.Context, principal *auth.Principal) {
 	c.Set(PrincipalContextKey, principal)
@@ -154,10 +203,44 @@ func GetPrincipal(c *gin.Context) (*auth.Principal, bool) {
 	return principal, ok
 }
 
+// GetToken retrieves the validated token from the Gin context.
+// Note: This is only populated for bearer token authentication.
+func GetToken(c *gin.Context) (*authmodels.ApiToken, bool) {
+	value, exists := c.Get(TokenContextKey)
+	if !exists {
+		return nil, false
+	}
+	token, ok := value.(*authmodels.ApiToken)
+	return token, ok
+}
+
 // setLegacySessionKeys sets legacy session keys for backward compatibility.
 func setLegacySessionKeys(c *gin.Context, principal *auth.Principal) {
+	// For bearer auth with user tokens
+	if principal.User != nil {
+		c.Set(SessionUserEmail, principal.User.Email)
+		c.Set(SessionUserID, principal.User.OktaUserID)
+		return
+	}
+
+	// For bearer auth with service account tokens
+	if principal.ServiceAccount != nil {
+		c.Set(SessionUserEmail, principal.ServiceAccount.Name)
+		c.Set(SessionUserID, principal.ServiceAccount.ID.String())
+		return
+	}
+
 	// For JWT auth or any auth type with Claims
-	if principal.Claims != nil {
+	// Prefer User.Email if available, otherwise fall back to Claims
+	if principal.User != nil && principal.User.Email != "" {
+		c.Set(SessionUserEmail, principal.User.Email)
+		// For JWT auth, use sub claim as user ID if available
+		if principal.Claims != nil {
+			if sub, ok := principal.Claims["sub"].(string); ok {
+				c.Set(SessionUserID, sub)
+			}
+		}
+	} else if principal.Claims != nil {
 		// Fallback to Claims if User is not populated
 		if email, ok := principal.Claims["email"].(string); ok {
 			c.Set(SessionUserEmail, email)

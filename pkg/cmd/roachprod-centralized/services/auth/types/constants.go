@@ -1,0 +1,23 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package types
+
+import "time"
+
+const (
+	// Token limits - enforced in service layer
+	MaxTokensPerServiceAccount = 10
+
+	TokenPrefix        = "rp"
+	TokenTypeUser      = "user"
+	TokenTypeSA        = "sa"
+	TokenVersion       = "1"
+	TokenEntropyLength = 43
+
+	// Token TTL constraints
+	MaxTokenTTL         = 365 * 24 * time.Hour // Nothing over 1 year
+	TokenDefaultTTLUser = 30 * 24 * time.Hour  // 30 days (users have to re-authenticate periodically)
+)

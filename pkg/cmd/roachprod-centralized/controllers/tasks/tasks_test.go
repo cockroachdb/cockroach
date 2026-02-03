@@ -174,6 +174,7 @@ func TestGetAll(t *testing.T) {
 					"GetTasks",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.totalCount, tc.serviceResult.err).Once()
 			}
@@ -285,6 +286,7 @@ func TestGetOne(t *testing.T) {
 					"GetTask",
 					c,
 					mock.Anything,
+					mock.AnythingOfType("*auth.Principal"),
 					tc.expected.arguments,
 				).Return(tc.serviceResult.val, tc.serviceResult.err).Once()
 			}

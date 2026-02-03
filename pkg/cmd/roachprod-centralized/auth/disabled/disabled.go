@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
+	authmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/auth"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -33,7 +34,27 @@ func (a *DisabledAuthenticator) Authenticate(
 	// This bypasses all authorization checks during development and testing
 	principal := &auth.Principal{
 		Token: auth.TokenInfo{
-			ID: uuid.MakeV4(),
+			ID:   uuid.MakeV4(),
+			Type: authmodels.TokenTypeUser,
+		},
+		UserID: &uuid.UUID{},
+		User: &authmodels.User{
+			ID:          uuid.UUID{},
+			OktaUserID:  "dev-user",
+			Email:       "dev@localhost",
+			FullName:    "Development User",
+			SlackHandle: "dev",
+			Active:      true,
+		},
+		// Grant wildcard permission - matches any permission check
+		Permissions: []authmodels.Permission{
+			&authmodels.UserPermission{
+				ID:         uuid.UUID{},
+				UserID:     uuid.UUID{},
+				Provider:   "*",
+				Account:    "*",
+				Permission: "*", // Wildcard permission grants access to everything
+			},
 		},
 		Claims: map[string]interface{}{
 			"sub":   "dev-user",
@@ -42,4 +63,15 @@ func (a *DisabledAuthenticator) Authenticate(
 	}
 
 	return principal, nil
+}
+
+// Authorize is a no-op for disabled authentication - always allows access.
+// No metrics are recorded in development mode.
+func (a *DisabledAuthenticator) Authorize(
+	ctx context.Context,
+	principal *auth.Principal,
+	requirement *auth.AuthorizationRequirement,
+	endpoint string,
+) error {
+	return nil // Always allow in disabled mode
 }

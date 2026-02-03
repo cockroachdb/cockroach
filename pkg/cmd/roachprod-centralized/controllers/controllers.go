@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	"github.com/cockroachdb/errors"
@@ -124,6 +125,7 @@ type ControllerHandler struct {
 	Func           gin.HandlerFunc
 	Extra          []gin.HandlerFunc
 	Authentication AuthenticationType
+	Authorization  *auth.AuthorizationRequirement
 }
 
 // GetRouteHandlers returns the controller route handlers.
@@ -134,6 +136,11 @@ func (c *ControllerHandler) GetRouteHandlers() []gin.HandlerFunc {
 // GetAuthentication returns whether the controller handler requires authentication.
 func (c *ControllerHandler) GetAuthenticationType() AuthenticationType {
 	return c.Authentication
+}
+
+// GetAuthorizationRequirement returns the authorization requirements for this endpoint.
+func (c *ControllerHandler) GetAuthorizationRequirement() *auth.AuthorizationRequirement {
+	return c.Authorization
 }
 
 // GetMethod returns the controller handler's method.
