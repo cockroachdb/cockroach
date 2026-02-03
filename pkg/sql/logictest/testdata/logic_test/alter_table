@@ -214,9 +214,13 @@ ALTER TABLE t DROP CONSTRAINT bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
+# Legacy schema changer does not support dropping unique constraints via
+# ALTER TABLE DROP CONSTRAINT.
+onlyif config local-legacy-schema-changer
 statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
 ALTER TABLE t DROP CONSTRAINT foo
 
+onlyif config local-legacy-schema-changer
 statement ok
 DROP INDEX foo CASCADE
 
@@ -231,6 +235,11 @@ LIMIT 2
 SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    0  ·
 SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
 
+# Declarative schema changer supports dropping unique constraints via
+# ALTER TABLE DROP CONSTRAINT.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t DROP CONSTRAINT foo
 
 skipif config local-legacy-schema-changer
 query TTTTRT retry
@@ -240,9 +249,8 @@ WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@foo CASCADE  node  running    0  ·
-NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
-
+SCHEMA CHANGE GC   GC for ALTER TABLE test.public.t DROP CONSTRAINT foo  node  running    0  ·
+NEW SCHEMA CHANGE  ALTER TABLE test.public.t DROP CONSTRAINT foo         root  succeeded  1  ·
 
 
 query TTBITTTBBBF colnames,rowsort
@@ -1882,8 +1890,20 @@ unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
+# Drop an index-backed unique constraint using ALTER TABLE DROP CONSTRAINT.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
+
+# Dropping the constraint only works with the declarative schema changer.
+# For the legacy config, drop the index itself.
+onlyif config local-legacy-schema-changer
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX unique_without_index_c_key CASCADE
 
 statement error pgcode 42704 constraint \"unique_b\" of relation \"unique_without_index\" does not exist
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_b
@@ -1907,7 +1927,6 @@ unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
 unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 # Dropping a column in a unique constraint drops the constraint.
@@ -1923,7 +1942,6 @@ unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
 unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB nosort
@@ -1949,7 +1967,6 @@ unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
 unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
