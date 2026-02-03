@@ -96,6 +96,22 @@ type RelExpr interface {
 	setNext(e RelExpr)
 }
 
+// Poisonable is implemented by relational expressions that can be poisoned.
+// Poisoning an expression marks it as unusable until it is copied to a new
+// memo. This is used for UDF body expressions to catch accidental direct use.
+type Poisonable interface {
+	Poison()
+}
+
+// PoisonRelExpr poisons a relational expression so that any attempt to access
+// its group properties will panic. This is used for UDF body expressions which
+// must be copied to a new memo before use.
+func PoisonRelExpr(e RelExpr) {
+	if p, ok := e.(Poisonable); ok {
+		p.Poison()
+	}
+}
+
 // ScalarPropsExpr is implemented by scalar expressions which cache scalar
 // properties, like FiltersExpr and ProjectionsExpr. These expressions are also
 // tagged with the ScalarProps tag.
@@ -777,6 +793,32 @@ type UDFDefinition struct {
 	// results to the same buffer. This is used to implement the PL/pgsql
 	// RETURN NEXT and RETURN QUERY statements.
 	ResultBufferID RoutineResultBufferID
+
+	// BodyCanMutate is true if any body statement can perform mutations. This
+	// is computed during optbuilding before the body is poisoned, allowing
+	// execbuilder to check this property without accessing the body expressions
+	// directly.
+	BodyCanMutate bool
+}
+
+// PoisonBody poisons all body expressions in this UDFDefinition. After
+// poisoning, any attempt to access the relational properties of these
+// expressions will panic. This is used to catch accidental direct use of UDF
+// body expressions without first copying them to a new memo.
+func (u *UDFDefinition) PoisonBody() {
+	for _, stmt := range u.Body {
+		PoisonRelExpr(stmt)
+	}
+}
+
+// IsBodyPoisoned returns true if any body expression has been poisoned.
+func (u *UDFDefinition) IsBodyPoisoned() bool {
+	for _, stmt := range u.Body {
+		if IsPoisoned(stmt.group()) {
+			return true
+		}
+	}
+	return false
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in

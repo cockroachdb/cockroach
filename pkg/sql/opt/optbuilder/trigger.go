@@ -856,6 +856,7 @@ func (b *Builder) buildTriggerFunction(
 	udfDef.BodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 	// Placeholder that ensure the length of BodyTags is the same as Body.
 	udfDef.BodyTags = make([]string, 1)
+	udfDef.BodyCanMutate = stmtScope.expr.Relational().CanMutate
 
 	return f.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: udfDef}), resolvedDef
 }

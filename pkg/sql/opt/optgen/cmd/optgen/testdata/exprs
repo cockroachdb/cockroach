@@ -158,6 +158,10 @@ func (e *ProjectExpr) setGroup(member RelExpr) {
 	LastGroupMember(member).setNext(e)
 }
 
+func (e *ProjectExpr) Poison() {
+	e.grp = PoisonedGroup
+}
+
 type projectGroup struct {
 	rel   props.Relational
 	first ProjectExpr

@@ -690,6 +690,44 @@ func (m *Memo) Detach() {
 	clearColStats(m.RootExpr())
 }
 
+// PoisonUDFBodies poisons all UDF body expressions in the memo. After
+// poisoning, any attempt to access the relational properties of these
+// expressions will panic. This is used to catch accidental direct use of
+// UDF body expressions without first copying them via AssignPlaceholders.
+//
+// This should be called when storing a memo for later reuse (e.g., in the
+// prepared statement cache), not when the memo will be executed immediately.
+func (m *Memo) PoisonUDFBodies() {
+	var poisonUDFs func(parent opt.Expr)
+	poisonUDFs = func(parent opt.Expr) {
+		for i, n := 0, parent.ChildCount(); i < n; i++ {
+			child := parent.Child(i)
+			poisonUDFs(child)
+		}
+
+		switch t := parent.(type) {
+		case *UDFCallExpr:
+			poisonUDFDef(t.Def)
+		case *TxnControlExpr:
+			if t.Def != nil {
+				poisonUDFDef(t.Def)
+			}
+		}
+	}
+	poisonUDFs(m.RootExpr())
+}
+
+// poisonUDFDef poisons all body expressions in the given UDF definition and
+// any nested exception handlers.
+func poisonUDFDef(def *UDFDefinition) {
+	def.PoisonBody()
+	if def.ExceptionBlock != nil {
+		for _, action := range def.ExceptionBlock.Actions {
+			poisonUDFDef(action)
+		}
+	}
+}
+
 // DisableCheckExpr disables expression validation performed by CheckExpr,
 // if the crdb_test build tag is set. If the crdb_test build tag is not set,
 // CheckExpr is always a no-op, so DisableCheckExpr has no effect.

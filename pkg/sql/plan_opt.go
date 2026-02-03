@@ -254,10 +254,16 @@ func (p *planner) prepareUsingOptimizerInternal(
 	if opc.allowMemoReuse {
 		if memo.IsOptimized() {
 			// A memo fully optimized at prepare time is an "ideal generic
-			// memo".
+			// memo". These memos are used directly without AssignPlaceholders,
+			// so we don't poison UDF bodies.
 			stmt.Prepared.GenericMemo = memo
 			stmt.Prepared.IdealGenericPlan = true
 		} else {
+			// Poison UDF body expressions to catch accidental direct use without
+			// copying via AssignPlaceholders. This must be done before storing
+			// the memo for reuse. We only poison memos that will go through
+			// AssignPlaceholders (i.e., non-optimized memos).
+			memo.PoisonUDFBodies()
 			stmt.Prepared.BaseMemo = memo
 		}
 		if opc.useCache {
@@ -854,9 +860,13 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 		case memoTypeIdealGeneric:
 			// An "ideal" generic memo will always be used regardless of
 			// plan_cache_mode, so there is no need to set GenericCost.
+			// These memos are used directly without AssignPlaceholders,
+			// so we don't poison UDF bodies.
 			prep.GenericMemo = newMemo
 			prep.IdealGenericPlan = true
 		case memoTypeGeneric:
+			// Generic memos are fully optimized and used directly without
+			// AssignPlaceholders, so we don't poison UDF bodies.
 			prep.GenericMemo = newMemo
 			prep.Costs.SetGeneric(newMemo.RootExpr().Cost())
 			// Now that the cost of the generic plan is known, we need to
@@ -869,6 +879,10 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 				return opc.fetchPreparedMemo(ctx)
 			}
 		case memoTypeCustom:
+			// Poison UDF body expressions to catch accidental direct use without
+			// copying via AssignPlaceholders. Custom memos go through
+			// AssignPlaceholders when used, which properly copies UDF bodies.
+			newMemo.PoisonUDFBodies()
 			prep.BaseMemo = newMemo
 		default:
 			return nil, errors.AssertionFailedf("unexpected memo type %v", typ)

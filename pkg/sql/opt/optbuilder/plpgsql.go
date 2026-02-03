@@ -2288,9 +2288,13 @@ func (b *plpgsqlBuilder) appendBodyStmtFromScope(
 	// Set the volatility of the continuation routine to the least restrictive
 	// volatility level in the Relational properties of the body statements.
 	bodyExpr := bodyScope.expr
-	vol := bodyExpr.Relational().VolatilitySet.ToVolatility()
+	relational := bodyExpr.Relational()
+	vol := relational.VolatilitySet.ToVolatility()
 	if con.def.Volatility < vol {
 		con.def.Volatility = vol
+	}
+	if relational.CanMutate {
+		con.def.BodyCanMutate = true
 	}
 	con.def.Body = append(con.def.Body, bodyExpr)
 	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())

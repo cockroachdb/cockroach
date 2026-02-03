@@ -8,6 +8,7 @@ package memo
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/errors"
 )
 
 // exprGroup represents a group of relational query plans that are logically
@@ -48,4 +49,43 @@ type bestProps struct {
 
 	// Cost of the best expression.
 	cost Cost
+}
+
+// poisonedGroup wraps an original exprGroup and allows firstExpr() to work
+// (so that copy operations can proceed) but panics on relational() and
+// bestProps() calls. This is used to mark UDF body expressions that should
+// not have their properties accessed directly without first being copied to
+// a new memo.
+type poisonedGroup struct {
+	original exprGroup
+}
+
+// MakePoisonedGroup creates a new poisonedGroup that wraps the given group.
+func MakePoisonedGroup(original exprGroup) *poisonedGroup {
+	return &poisonedGroup{original: original}
+}
+
+var _ exprGroup = (*poisonedGroup)(nil)
+
+// firstExpr delegates to the original group so that copy operations can work.
+func (p *poisonedGroup) firstExpr() RelExpr {
+	return p.original.firstExpr()
+}
+
+func (*poisonedGroup) relational() *props.Relational {
+	panic(errors.AssertionFailedf(
+		"poisoned expression accessed without copying to new memo; " +
+			"UDF body expressions must be copied before use"))
+}
+
+func (*poisonedGroup) bestProps() *bestProps {
+	panic(errors.AssertionFailedf(
+		"poisoned expression accessed without copying to new memo; " +
+			"UDF body expressions must be copied before use"))
+}
+
+// IsPoisoned returns true if the group is a poisonedGroup.
+func IsPoisoned(g exprGroup) bool {
+	_, ok := g.(*poisonedGroup)
+	return ok
 }

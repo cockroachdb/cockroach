@@ -1073,30 +1073,37 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			if len(def.Params) > 0 {
 				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
-			n := tp.Child("body")
-			for i := range def.Body {
-				stmtNode := n
-				if i == 0 {
-					if def.FirstStmtOutput.CursorDeclaration != nil {
-						// The first statement is opening a cursor.
-						stmtNode = n.Child("open-cursor")
-					} else if def.FirstStmtOutput.TargetBufferID != 0 {
-						// The first statement is writing to a target buffer.
-						stmtNode = n.Child("add-to-srf-result")
+			// Check if the body has been poisoned. This happens after memo detach
+			// to catch accidental direct use of UDF body expressions without
+			// copying. In this case, we can't format the body expressions.
+			if def.IsBodyPoisoned() {
+				tp.Child("body: <poisoned>")
+			} else {
+				n := tp.Child("body")
+				for i := range def.Body {
+					stmtNode := n
+					if i == 0 {
+						if def.FirstStmtOutput.CursorDeclaration != nil {
+							// The first statement is opening a cursor.
+							stmtNode = n.Child("open-cursor")
+						} else if def.FirstStmtOutput.TargetBufferID != 0 {
+							// The first statement is writing to a target buffer.
+							stmtNode = n.Child("add-to-srf-result")
+						}
 					}
-				}
-				prevTailCalls := f.tailCalls
+					prevTailCalls := f.tailCalls
 
-				// Routine calls in the last body statement may be tail calls if
-				// ResultBufferID is unset. If it is set, the result of the last body
-				// statement is not directly used as the result of the UDF call, so it
-				// cannot contain tail calls.
-				if i == len(def.Body)-1 && def.ResultBufferID == 0 {
-					f.tailCalls = make(map[opt.ScalarExpr]struct{})
-					ExtractTailCalls(def.Body[i], f.tailCalls)
+					// Routine calls in the last body statement may be tail calls if
+					// ResultBufferID is unset. If it is set, the result of the last body
+					// statement is not directly used as the result of the UDF call, so it
+					// cannot contain tail calls.
+					if i == len(def.Body)-1 && def.ResultBufferID == 0 {
+						f.tailCalls = make(map[opt.ScalarExpr]struct{})
+						ExtractTailCalls(def.Body[i], f.tailCalls)
+					}
+					f.formatExpr(def.Body[i], stmtNode)
+					f.tailCalls = prevTailCalls
 				}
-				f.formatExpr(def.Body[i], stmtNode)
-				f.tailCalls = prevTailCalls
 			}
 			delete(f.seenUDFs, def)
 		} else {
@@ -1106,15 +1113,19 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			n := tp.Child("exception-handler")
 			for i := range def.ExceptionBlock.Codes {
 				code := def.ExceptionBlock.Codes[i]
-				body := def.ExceptionBlock.Actions[i].Body
+				action := def.ExceptionBlock.Actions[i]
 				var branch treeprinter.Node
 				if code.String() == "OTHERS" {
 					branch = n.Child("OTHERS")
 				} else {
 					branch = n.Childf("SQLSTATE '%s'", code)
 				}
-				for j := range body {
-					f.formatExpr(body[j], branch)
+				if action.IsBodyPoisoned() {
+					branch.Child("<poisoned>")
+				} else {
+					for j := range action.Body {
+						f.formatExpr(action.Body[j], branch)
+					}
 				}
 			}
 		}

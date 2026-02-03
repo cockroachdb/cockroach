@@ -382,6 +382,13 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fmt.Fprintf(g.w, "  e.grp = member.group()\n")
 		fmt.Fprintf(g.w, "  LastGroupMember(member).setNext(e)\n")
 		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the Poison method.
+		fmt.Fprintf(g.w, "func (e *%s) Poison() {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  if e.grp != nil {\n")
+		fmt.Fprintf(g.w, "    e.grp = MakePoisonedGroup(e.grp)\n")
+		fmt.Fprintf(g.w, "  }\n")
+		fmt.Fprintf(g.w, "}\n\n")
 	}
 }
 

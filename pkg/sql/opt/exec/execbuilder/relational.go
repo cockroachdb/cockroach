@@ -3705,8 +3705,8 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		}
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
+	if udf.Def.BodyCanMutate {
+		for _, s := range udf.Def.Body {
 			b.setMutationFlags(s)
 		}
 	}

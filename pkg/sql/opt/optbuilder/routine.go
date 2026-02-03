@@ -526,6 +526,15 @@ func (b *Builder) buildRoutine(
 		panic(errors.AssertionFailedf("unexpected language: %v", o.Language))
 	}
 
+	// Compute BodyCanMutate before the body is poisoned.
+	var bodyCanMutate bool
+	for _, stmt := range body {
+		if stmt.Relational().CanMutate {
+			bodyCanMutate = true
+			break
+		}
+	}
+
 	multiColDataSource := len(f.ResolvedType().TupleContents()) > 0 && oldInsideDataSource
 	routine := b.factory.ConstructUDFCall(
 		args,
@@ -546,6 +555,7 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
+				BodyCanMutate:      bodyCanMutate,
 			},
 		},
 	)
@@ -899,15 +909,16 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 		memo.ScalarListExpr{},
 		&memo.UDFCallPrivate{
 			Def: &memo.UDFDefinition{
-				Name:        doBlockRoutineName,
-				Typ:         types.Void,
-				Volatility:  volatility.Volatile,
-				RoutineType: tree.ProcedureRoutine,
-				RoutineLang: tree.RoutineLangPLpgSQL,
-				Body:        []memo.RelExpr{bodyScope.expr},
-				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
-				BodyStmts:   bodyStmts,
-				BodyASTs:    []tree.Statement{nil},
+				Name:          doBlockRoutineName,
+				Typ:           types.Void,
+				Volatility:    volatility.Volatile,
+				RoutineType:   tree.ProcedureRoutine,
+				RoutineLang:   tree.RoutineLangPLpgSQL,
+				Body:          []memo.RelExpr{bodyScope.expr},
+				BodyProps:     []*physical.Required{bodyScope.makePhysicalProps()},
+				BodyStmts:     bodyStmts,
+				BodyASTs:      []tree.Statement{nil},
+				BodyCanMutate: bodyScope.expr.Relational().CanMutate,
 			},
 		},
 	)
