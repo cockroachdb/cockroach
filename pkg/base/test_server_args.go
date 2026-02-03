@@ -424,6 +424,11 @@ var (
 	// worth the cost of never running that test with the virtualization
 	// layer active.
 	TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs = TestIsSpecificToStorageLayerAndNeedsASystemTenant
+
+	// TestSkipSecondaryTenantsUnderDuress should be used whenever we want to
+	// disable test tenant randomization under heavy configs (e.g. under race)
+	// due to overload.
+	TestSkipSecondaryTenantsUnderDuress = TestIsSpecificToStorageLayerAndNeedsASystemTenant
 )
 
 func (do DefaultTestTenantOptions) AllowAdditionalTenants() bool {
