@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "cli",
     srcs = [
+        "auth.go",
         "bash_completion.go",
         "chaos.go",
         "chaos_disk.go",
@@ -19,6 +20,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachprod-centralized/client",
+        "//pkg/cmd/roachprod-centralized/client/auth",
         "//pkg/cmd/roachprod/grafana",
         "//pkg/roachprod",
         "//pkg/roachprod/agents/fluentbit",
