@@ -2001,12 +2001,13 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 	}
 
 	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
-	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is unsupported.
+	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is not
+	// supported by the legacy schema changer.
 	constraintIsUnique, err := og.constraintIsUnique(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
-	if constraintIsUnique {
+	if constraintIsUnique && !og.useDeclarativeSchemaChanger {
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 

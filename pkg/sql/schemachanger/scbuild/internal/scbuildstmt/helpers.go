@@ -2209,6 +2209,8 @@ func failIfSafeUpdates(b BuildCtx, n tree.NodeFormatter) {
 				"for certain type conversions or when applying a USING clause")
 		case *tree.DropIndex:
 			errorWithMessage = errors.New("DROP INDEX")
+		case *tree.AlterTableDropConstraint:
+			errorWithMessage = errors.New("ALTER TABLE DROP CONSTRAINT")
 		default:
 			panic(errors.AssertionFailedf("programming error: unexpected node type %T", n))
 		}
