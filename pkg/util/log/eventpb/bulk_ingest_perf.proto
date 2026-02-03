@@ -8,7 +8,6 @@ package cockroach.util.log.eventpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
 
 import "gogoproto/gogo.proto";
-import "util/log/eventpb/events.proto";
 import "util/log/logpb/event.proto";
 
 // Category: TELEMETRY
