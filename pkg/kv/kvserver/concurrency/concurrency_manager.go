@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -159,6 +160,21 @@ var MaxLockFlushSize = settings.RegisterByteSizeSetting(
 	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
 	"maximum size of locks that will be flushed during merge and transfer operations (if 0, defaults to half of the MaxCommandSizeDefault)",
 	0,
+)
+
+// VirtualIntentResolution controls whether the intents encountered by a
+// non-locking read request can be "virtually resolved".
+var VirtualIntentResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.virtual_intent_resolution.enabled",
+	"whether read-only, non-locking requests should virtually resolve intents",
+	false,
+	settings.WithValidateBool(func(_ *settings.Values, b bool) error {
+		if b && !buildutil.CrdbTestBuild {
+			return errors.New("kv.concurrency.virtual_intent_resolution.enabled is not supported in production builds")
+		}
+		return nil
+	}),
 )
 
 // MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
