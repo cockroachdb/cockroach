@@ -829,6 +829,40 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 		})
 	})
 
+	// Verify that max_behind_nanos has a reasonable value during initial scan
+	// which don't emit resolved timestamps.
+	t.Run("max_behind_nanos during initial scan", func(t *testing.T) {
+		cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO foo SELECT generate_series(1, 1000)`)
+
+			registry := s.Server.JobRegistry().(*jobs.Registry)
+			metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+
+			// Start changefeed with initial_scan='only' to ensure streaming does not
+			// emit any resolved timestamps.
+			feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH metrics_label='label_a', initial_scan='only'`)
+			defer closeFeed(t, feed)
+
+			sli, err := metrics.getSLIMetrics("label_a")
+			require.NoError(t, err)
+
+			// Verify max_behind_nanos returns a reasonable value during initial scan,
+			// i.e. is initialized to the statement time.
+			testutils.SucceedsSoon(t, func() error {
+				maxBehind := sli.MaxBehindNanos.Value()
+				if maxBehind > 0 {
+					return nil
+				}
+				return errors.Newf("expected max_behind_nanos > 0 during initial scan, got %d", maxBehind)
+			})
+
+			require.Less(t, sli.MaxBehindNanos.Value(), time.Minute)
+		})
+	})
+
 	// Verify that a changefeed updates the timestamps as it progresses
 	t.Run("running changefeed", func(t *testing.T) {
 		cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
