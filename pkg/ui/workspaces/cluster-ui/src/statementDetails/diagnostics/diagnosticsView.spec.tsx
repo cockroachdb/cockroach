@@ -3,14 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Button } from "@cockroachlabs/ui-components";
-import { assert } from "chai";
-import { mount, ReactWrapper } from "enzyme";
+import "@testing-library/jest-dom";
+import { render, screen, fireEvent } from "@testing-library/react";
 import moment from "moment-timezone";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
-import { SortedTable } from "src/sortedtable";
 import { TestStoreProvider } from "src/test-utils";
 import { TimeScale } from "src/timeScaleDropdown";
 
@@ -45,12 +43,15 @@ function generateDiagnosticsRequest(
 }
 
 describe("DiagnosticsView", () => {
-  let wrapper: ReactWrapper;
   const statementFingerprint = "some-id";
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe("With Empty state", () => {
-    beforeEach(() => {
-      wrapper = mount(
+    it("opens the statement diagnostics modal when Activate button is clicked", () => {
+      render(
         <MemoryRouter>
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
@@ -64,12 +65,11 @@ describe("DiagnosticsView", () => {
           />
         </MemoryRouter>,
       );
-    });
 
-    it("opens the statement diagnostics modal when Activate button is clicked", () => {
-      const activateButtonComponent = wrapper.find(Button).first();
-      activateButtonComponent.simulate("click");
-      expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
+      const activateButton = screen.getByRole("button", { name: /activate/i });
+      fireEvent.click(activateButton);
+
+      expect(activateDiagnosticsRef.current.showModalFor).toHaveBeenCalledWith(
         statementFingerprint,
         ["gist"],
       );
@@ -77,13 +77,13 @@ describe("DiagnosticsView", () => {
   });
 
   describe("With tracing data", () => {
-    beforeEach(() => {
-      const diagnosticsRequests: StatementDiagnosticsReport[] = [
-        generateDiagnosticsRequest(),
-        generateDiagnosticsRequest(),
-      ];
+    const diagnosticsRequests: StatementDiagnosticsReport[] = [
+      generateDiagnosticsRequest(),
+      generateDiagnosticsRequest(),
+    ];
 
-      wrapper = mount(
+    it("renders Table component when diagnostics data is provided", () => {
+      render(
         <TestStoreProvider>
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
@@ -97,34 +97,49 @@ describe("DiagnosticsView", () => {
           />
         </TestStoreProvider>,
       );
-    });
 
-    it("renders Table component when diagnostics data is provided", () => {
-      assert.isTrue(wrapper.find(SortedTable).exists());
+      expect(screen.getByRole("table")).toBeInTheDocument();
     });
 
     it("opens the statement diagnostics modal when Activate button is clicked", () => {
-      const activateButtonComponent = wrapper
-        .findWhere(n => n.prop("children") === "Activate diagnostics")
-        .first();
-      activateButtonComponent.simulate("click");
-      expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
+      render(
+        <TestStoreProvider>
+          <DiagnosticsView
+            activateDiagnosticsRef={activateDiagnosticsRef}
+            statementFingerprint={statementFingerprint}
+            requestTime={undefined}
+            diagnosticsReports={diagnosticsRequests}
+            dismissAlertMessage={() => {}}
+            currentScale={ts}
+            onChangeTimeScale={mockSetTimeScale}
+            planGists={["gist"]}
+          />
+        </TestStoreProvider>,
+      );
+
+      const activateButton = screen.getByRole("button", {
+        name: /activate diagnostics/i,
+      });
+      fireEvent.click(activateButton);
+
+      expect(activateDiagnosticsRef.current.showModalFor).toHaveBeenCalledWith(
         statementFingerprint,
         ["gist"],
       );
     });
 
     it("Activate button is hidden if diagnostics is requested and waiting query", () => {
-      const diagnosticsRequests: StatementDiagnosticsReport[] = [
+      const pendingDiagnosticsRequests: StatementDiagnosticsReport[] = [
         generateDiagnosticsRequest({ completed: false }),
         generateDiagnosticsRequest(),
       ];
-      wrapper = mount(
+
+      render(
         <TestStoreProvider>
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            diagnosticsReports={diagnosticsRequests}
+            diagnosticsReports={pendingDiagnosticsRequests}
             dismissAlertMessage={() => {}}
             currentScale={ts}
             requestTime={requestTime}
@@ -133,23 +148,24 @@ describe("DiagnosticsView", () => {
           />
         </TestStoreProvider>,
       );
-      const activateButtonComponent = wrapper
-        .findWhere(n => n.prop("children") === "Activate diagnostics")
-        .first();
-      assert.isFalse(activateButtonComponent.exists());
+
+      expect(
+        screen.queryByRole("button", { name: /activate diagnostics/i }),
+      ).not.toBeInTheDocument();
     });
 
     it("Cancel request button shows if diagnostics is requested and waiting query", () => {
-      const diagnosticsRequests: StatementDiagnosticsReport[] = [
+      const pendingDiagnosticsRequests: StatementDiagnosticsReport[] = [
         generateDiagnosticsRequest({ completed: false }),
         generateDiagnosticsRequest(),
       ];
-      wrapper = mount(
+
+      render(
         <TestStoreProvider>
           <DiagnosticsView
             activateDiagnosticsRef={activateDiagnosticsRef}
             statementFingerprint={statementFingerprint}
-            diagnosticsReports={diagnosticsRequests}
+            diagnosticsReports={pendingDiagnosticsRequests}
             dismissAlertMessage={() => {}}
             currentScale={ts}
             requestTime={requestTime}
@@ -158,10 +174,10 @@ describe("DiagnosticsView", () => {
           />
         </TestStoreProvider>,
       );
-      const cancelButtonComponent = wrapper
-        .findWhere(n => n.prop("children") === "Cancel request")
-        .first();
-      assert.isTrue(cancelButtonComponent.exists());
+
+      expect(
+        screen.getByRole("button", { name: /cancel request/i }),
+      ).toBeInTheDocument();
     });
   });
 });

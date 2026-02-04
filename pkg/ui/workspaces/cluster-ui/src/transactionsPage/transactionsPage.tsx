@@ -7,9 +7,8 @@ import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
 import isString from "lodash/isString";
-import merge from "lodash/merge";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RouteComponentProps } from "react-router-dom";
 
 import {
@@ -89,14 +88,6 @@ import {
 const cx = classNames.bind(styles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
-interface TState {
-  filters?: Filters;
-  pagination: ISortedTablePagination;
-  timeScale: TimeScale;
-  limit: number;
-  reqSortSetting: SqlStatsSortType;
-}
-
 export interface TransactionsPageStateProps {
   columns: string[];
   txnsResp: RequestState<SqlStatsResponse>;
@@ -137,7 +128,11 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
-type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting">;
+interface RequestParams {
+  timeScale: TimeScale;
+  limit: number;
+  reqSortSetting: SqlStatsSortType;
+}
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
   const [start, end] = toRoundedDateRange(params.timeScale);
@@ -148,227 +143,227 @@ function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
     sort: params.reqSortSetting,
   });
 }
-export class TransactionsPage extends React.Component<
-  TransactionsPageProps,
-  TState
-> {
-  constructor(props: TransactionsPageProps) {
-    super(props);
 
-    this.state = {
-      limit: this.props.limit,
-      timeScale: this.props.timeScale,
-      reqSortSetting: this.props.reqSortSetting,
-      pagination: {
-        pageSize: 50,
-        current: 1,
-      },
-    };
-    const stateFromHistory = this.getStateFromHistory();
-    this.state = merge(this.state, stateFromHistory);
-  }
+export function TransactionsPage(
+  props: TransactionsPageProps,
+): React.ReactElement {
+  const {
+    columns: userSelectedColumnsToShow,
+    txnsResp,
+    timeScale: propsTimeScale,
+    limit: propsLimit,
+    reqSortSetting: propsReqSortSetting,
+    filters: propsFilters,
+    isTenant,
+    nodeRegions,
+    search,
+    sortSetting,
+    hasAdminRole,
+    requestTime,
+    oldestDataAvailable,
+    refreshData,
+    refreshNodes,
+    refreshUserSQLRoles,
+    resetSQLStats,
+    onTimeScaleChange,
+    onChangeLimit: propsOnChangeLimit,
+    onChangeReqSort: propsOnChangeReqSort,
+    onColumnsChange,
+    onFilterChange,
+    onSearchComplete,
+    onSortingChange,
+    onApplySearchCriteria,
+    onRequestTimeChange,
+    history,
+  } = props;
 
-  getStateFromHistory = (): Partial<TState> => {
-    const {
+  // Local state for search criteria (can differ from props until applied)
+  const [localTimeScale, setLocalTimeScale] =
+    useState<TimeScale>(propsTimeScale);
+  const [localLimit, setLocalLimit] = useState<number>(propsLimit);
+  const [localReqSortSetting, setLocalReqSortSetting] =
+    useState<SqlStatsSortType>(propsReqSortSetting);
+
+  const [filters, setFilters] = useState<Filters | undefined>(() => {
+    // Initialize filters from query string
+    const latestFilter = handleFiltersFromQueryString(
       history,
-      search,
-      sortSetting,
-      filters,
-      onSearchComplete,
-      onSortingChange,
+      propsFilters,
       onFilterChange,
-    } = this.props;
-    const searchParams = new URLSearchParams(history.location.search);
+    );
+    return latestFilter;
+  });
 
-    // Search query.
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    pageSize: 50,
+    current: 1,
+  });
+
+  // Initialize search from query string
+  useEffect(() => {
+    const searchParams = new URLSearchParams(history.location.search);
     const searchQuery = searchParams.get("q") || undefined;
     if (onSearchComplete && searchQuery && search !== searchQuery) {
       onSearchComplete(searchQuery);
     }
 
-    // Sort Settings.
+    // Sort Settings from query string
     handleSortSettingFromQueryString(
       "Transactions",
       history.location.search,
       sortSetting,
       onSortingChange,
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // Filters.
-    const latestFilter = handleFiltersFromQueryString(
-      history,
-      filters,
-      onFilterChange,
-    );
+  const refreshDataFromState = useCallback((): void => {
+    const req = stmtsRequestFromParams({
+      timeScale: localTimeScale,
+      limit: localLimit,
+      reqSortSetting: localReqSortSetting,
+    });
+    refreshData(req);
+  }, [localTimeScale, localLimit, localReqSortSetting, refreshData]);
 
-    return {
-      filters: latestFilter,
-    };
-  };
+  const doResetSQLStats = useCallback((): void => {
+    resetSQLStats();
+  }, [resetSQLStats]);
 
-  refreshData = (): void => {
-    const req = stmtsRequestFromParams(this.state);
-    this.props.refreshData(req);
-  };
-
-  resetSQLStats = (): void => {
-    this.props.resetSQLStats();
-  };
-
-  componentDidMount(): void {
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    } else if (
-      !this.props.txnsResp.valid ||
-      !this.props.txnsResp.data ||
-      !this.props.txnsResp.lastUpdated
-    ) {
-      this.refreshData();
+  // componentDidMount equivalent
+  useEffect(() => {
+    // In case the user selected an option not available on this page,
+    // force a selection of a valid option.
+    const ts = getValidOption(propsTimeScale, timeScale1hMinOptions);
+    if (ts !== propsTimeScale) {
+      setLocalTimeScale(ts);
+      if (onTimeScaleChange) {
+        onTimeScaleChange(ts);
+      }
+      onRequestTimeChange(moment());
+    } else if (!txnsResp.valid || !txnsResp.data || !txnsResp.lastUpdated) {
+      refreshDataFromState();
     }
 
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
+    if (!isTenant) {
+      refreshNodes();
     }
 
-    this.props.refreshUserSQLRoles();
-  }
+    refreshUserSQLRoles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  updateQueryParams(): void {
-    const { history, search, sortSetting } = this.props;
+  // Update query params when relevant state changes
+  const updateQueryParams = useCallback((): void => {
     const tab = "Transactions";
 
-    // Search.
+    // Search
     const searchParams = new URLSearchParams(history.location.search);
     const currentTab = searchParams.get("tab") || "";
     const searchQueryString = searchParams.get("q") || "";
     if (currentTab === tab && search && search !== searchQueryString) {
-      syncHistory(
-        {
-          q: search,
-        },
-        history,
-      );
+      syncHistory({ q: search }, history);
     }
 
-    // Filters.
-    updateFiltersQueryParamsOnTab(tab, this.state.filters, history);
+    // Filters
+    updateFiltersQueryParamsOnTab(tab, filters, history);
 
-    // Sort Setting.
+    // Sort Setting
     updateSortSettingQueryParamsOnTab(
       tab,
       sortSetting,
-      {
-        ascending: false,
-        columnTitle: "executionCount",
-      },
+      { ascending: false, columnTitle: "executionCount" },
       history,
     );
-  }
+  }, [history, search, filters, sortSetting]);
 
-  componentDidUpdate(): void {
-    this.updateQueryParams();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
+  // componentDidUpdate equivalent
+  useEffect(() => {
+    updateQueryParams();
+    if (!isTenant) {
+      refreshNodes();
     }
-  }
+  }, [updateQueryParams, isTenant, refreshNodes]);
 
-  onChangeSortSetting = (ss: SortSetting): void => {
-    syncHistory(
-      {
-        ascending: ss.ascending.toString(),
-        columnTitle: ss.columnTitle,
-      },
-      this.props.history,
-    );
-    if (this.props.onSortingChange) {
-      this.props.onSortingChange("Transactions", ss.columnTitle, ss.ascending);
-    }
-  };
-
-  isSortSettingSameAsReqSort = (): boolean => {
-    return (
-      getSortColumn(this.props.reqSortSetting) ===
-      this.props.sortSetting.columnTitle
-    );
-  };
-
-  onChangePage = (current: number, pageSize: number): void => {
-    const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current, pageSize } });
-  };
-
-  resetPagination = (): void => {
-    this.setState((prevState: TState) => {
-      return {
-        pagination: {
-          current: 1,
-          pageSize: prevState.pagination.pageSize,
+  const onChangeSortSetting = useCallback(
+    (ss: SortSetting): void => {
+      syncHistory(
+        {
+          ascending: ss.ascending.toString(),
+          columnTitle: ss.columnTitle,
         },
-      };
-    });
-  };
+        history,
+      );
+      if (onSortingChange) {
+        onSortingChange("Transactions", ss.columnTitle, ss.ascending);
+      }
+    },
+    [history, onSortingChange],
+  );
 
-  onClearSearchField = (): void => {
-    if (this.props.onSearchComplete) {
-      this.props.onSearchComplete("");
+  const isSortSettingSameAsReqSort = useCallback((): boolean => {
+    return getSortColumn(propsReqSortSetting) === sortSetting.columnTitle;
+  }, [propsReqSortSetting, sortSetting.columnTitle]);
+
+  const onChangePage = useCallback(
+    (current: number, pageSize: number): void => {
+      setPagination(prev => ({ ...prev, current, pageSize }));
+    },
+    [],
+  );
+
+  const resetPagination = useCallback((): void => {
+    setPagination(prev => ({
+      current: 1,
+      pageSize: prev.pageSize,
+    }));
+  }, []);
+
+  const onClearSearchField = useCallback((): void => {
+    if (onSearchComplete) {
+      onSearchComplete("");
     }
-    syncHistory(
-      {
-        q: undefined,
-      },
-      this.props.history,
-    );
-  };
+    syncHistory({ q: undefined }, history);
+  }, [onSearchComplete, history]);
 
-  onSubmitSearchField = (search: string): void => {
-    if (this.props.onSearchComplete) {
-      this.props.onSearchComplete(search);
+  const onSubmitSearchField = useCallback(
+    (searchValue: string): void => {
+      if (onSearchComplete) {
+        onSearchComplete(searchValue);
+      }
+      resetPagination();
+      syncHistory({ q: searchValue }, history);
+    },
+    [onSearchComplete, resetPagination, history],
+  );
+
+  const onSubmitFilters = useCallback(
+    (newFilters: Filters): void => {
+      if (onFilterChange) {
+        onFilterChange(newFilters);
+      }
+      setFilters(newFilters);
+      resetPagination();
+      syncHistory(
+        {
+          app: newFilters.app,
+          timeNumber: newFilters.timeNumber,
+          timeUnit: newFilters.timeUnit,
+          regions: newFilters.regions,
+          nodes: newFilters.nodes,
+        },
+        history,
+      );
+    },
+    [onFilterChange, resetPagination, history],
+  );
+
+  const onClearFilters = useCallback((): void => {
+    if (onFilterChange) {
+      onFilterChange(defaultFilters);
     }
-    this.resetPagination();
-    syncHistory(
-      {
-        q: search,
-      },
-      this.props.history,
-    );
-  };
-
-  onSubmitFilters = (filters: Filters): void => {
-    if (this.props.onFilterChange) {
-      this.props.onFilterChange(filters);
-    }
-
-    this.setState({
-      filters: filters,
-    });
-    this.resetPagination();
-    syncHistory(
-      {
-        app: filters.app,
-        timeNumber: filters.timeNumber,
-        timeUnit: filters.timeUnit,
-        regions: filters.regions,
-        nodes: filters.nodes,
-      },
-      this.props.history,
-    );
-  };
-
-  onClearFilters = (): void => {
-    if (this.props.onFilterChange) {
-      this.props.onFilterChange(defaultFilters);
-    }
-
-    this.setState({
-      filters: {
-        ...defaultFilters,
-      },
-    });
-    this.resetPagination();
+    setFilters({ ...defaultFilters });
+    resetPagination();
     syncHistory(
       {
         app: undefined,
@@ -377,99 +372,112 @@ export class TransactionsPage extends React.Component<
         regions: undefined,
         nodes: undefined,
       },
-      this.props.history,
+      history,
     );
-  };
+  }, [onFilterChange, resetPagination, history]);
 
-  lastReset = (): Date => {
-    return new Date(
-      Number(this.props.txnsResp?.data?.last_reset.seconds) * 1000,
-    );
-  };
+  const changeTimeScale = useCallback((ts: TimeScale): void => {
+    setLocalTimeScale(ts);
+  }, []);
 
-  changeTimeScale = (ts: TimeScale): void => {
-    this.setState(prevState => ({ ...prevState, timeScale: ts }));
-  };
+  const onChangeLimit = useCallback((newLimit: number): void => {
+    setLocalLimit(newLimit);
+  }, []);
 
-  onChangeLimit = (newLimit: number): void => {
-    this.setState(prevState => ({ ...prevState, limit: newLimit }));
-  };
+  const onChangeReqSort = useCallback((newSort: SqlStatsSortType): void => {
+    setLocalReqSortSetting(newSort);
+  }, []);
 
-  onChangeReqSort = (newSort: SqlStatsSortType): void => {
-    this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
-  };
-
-  updateRequestParams = (): void => {
-    if (this.props.limit !== this.state.limit) {
-      this.props.onChangeLimit(this.state.limit);
+  const updateRequestParams = useCallback((): void => {
+    if (propsLimit !== localLimit) {
+      propsOnChangeLimit(localLimit);
     }
 
-    if (this.props.reqSortSetting !== this.state.reqSortSetting) {
-      this.props.onChangeReqSort(this.state.reqSortSetting);
+    if (propsReqSortSetting !== localReqSortSetting) {
+      propsOnChangeReqSort(localReqSortSetting);
     }
 
-    if (this.props.timeScale !== this.state.timeScale) {
-      this.props.onTimeScaleChange(this.state.timeScale);
+    if (propsTimeScale !== localTimeScale) {
+      if (onTimeScaleChange) {
+        onTimeScaleChange(localTimeScale);
+      }
     }
 
-    if (this.props.onApplySearchCriteria) {
-      this.props.onApplySearchCriteria(
-        this.state.timeScale,
-        this.state.limit,
-        getSortLabel(this.state.reqSortSetting, "Transaction"),
+    if (onApplySearchCriteria) {
+      onApplySearchCriteria(
+        localTimeScale,
+        localLimit,
+        getSortLabel(localReqSortSetting, "Transaction"),
       );
     }
-    this.props.onRequestTimeChange(moment());
-    this.refreshData();
+    onRequestTimeChange(moment());
+
+    const req = stmtsRequestFromParams({
+      timeScale: localTimeScale,
+      limit: localLimit,
+      reqSortSetting: localReqSortSetting,
+    });
+    refreshData(req);
+
     const ss: SortSetting = {
       ascending: false,
-      columnTitle: getSortColumn(this.state.reqSortSetting),
+      columnTitle: getSortColumn(localReqSortSetting),
     };
-    this.onChangeSortSetting(ss);
-  };
+    onChangeSortSetting(ss);
+  }, [
+    propsLimit,
+    localLimit,
+    propsReqSortSetting,
+    localReqSortSetting,
+    propsTimeScale,
+    localTimeScale,
+    propsOnChangeLimit,
+    propsOnChangeReqSort,
+    onTimeScaleChange,
+    onApplySearchCriteria,
+    onRequestTimeChange,
+    refreshData,
+    onChangeSortSetting,
+  ]);
 
-  onUpdateSortSettingAndApply = (): void => {
-    this.setState(
-      {
-        reqSortSetting: getReqSortColumn(this.props.sortSetting.columnTitle),
-      },
-      () => {
-        this.updateRequestParams();
-      },
-    );
-  };
+  // Track when we need to call updateRequestParams after sort setting change
+  const pendingUpdateRef = useRef(false);
+  const prevLocalReqSortSettingRef = useRef(localReqSortSetting);
 
-  hasReqSortOption = (): boolean => {
+  useEffect(() => {
+    if (
+      pendingUpdateRef.current &&
+      prevLocalReqSortSettingRef.current !== localReqSortSetting
+    ) {
+      pendingUpdateRef.current = false;
+      updateRequestParams();
+    }
+    prevLocalReqSortSettingRef.current = localReqSortSetting;
+  }, [localReqSortSetting, updateRequestParams]);
+
+  const onUpdateSortSettingAndApplyWithPending = useCallback((): void => {
+    const newReqSort = getReqSortColumn(sortSetting.columnTitle);
+    pendingUpdateRef.current = true;
+    setLocalReqSortSetting(newReqSort);
+  }, [sortSetting.columnTitle]);
+
+  const hasReqSortOption = useCallback((): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach(option => {
       const optionString = isString(option) ? option : getSortColumn(option);
-      if (optionString === this.props.sortSetting.columnTitle) {
+      if (optionString === sortSetting.columnTitle) {
         found = true;
       }
     });
     return found;
-  };
+  }, [sortSetting.columnTitle]);
 
-  renderTransactions(): React.ReactElement {
-    const {
-      nodeRegions,
-      isTenant,
-      onColumnsChange,
-      columns: userSelectedColumnsToShow,
-      sortSetting,
-      search,
-      hasAdminRole,
-    } = this.props;
-    const data = this.props.txnsResp.data;
-    const { pagination, filters } = this.state;
+  const renderTransactions = (): React.ReactElement => {
+    const data = txnsResp.data;
     const internalAppNamePrefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
 
     // We apply the search filters and app name filters prior to aggregating across Node IDs
-    // in order to match what's done on the Statements Page.
-    //
-    // TODO(davidh): Once the redux layer for TransactionsPage is added to this repo,
-    // extract this work into the selector
     const { transactions: filteredTransactions, activeFilters } =
       filterTransactions(
         searchTransactionsData(search, data?.transactions || [], statements),
@@ -506,9 +514,7 @@ export class TransactionsPage extends React.Component<
         : nodes.map(node => nodeRegions[node.toString()]),
     ).sort();
 
-    // Creates a list of all possible columns,
-    // hiding nodeRegions if is not multi-region and
-    // hiding columns that won't be displayed for virtual clusters.
+    // Creates a list of all possible columns
     const columns = makeTransactionsColumns(
       transactionsToDisplay,
       statements,
@@ -519,9 +525,7 @@ export class TransactionsPage extends React.Component<
       .filter(c => !(c.name === "regionNodes" && regions.length < 2))
       .filter(c => !(isTenant && c.hideIfTenant));
 
-    // Iterate over all available columns and create list of SelectOptions with initial selection
-    // values based on stored user selections in local storage and default column configs.
-    // Columns that are set to alwaysShow are filtered from the list.
+    // Create list of SelectOptions
     const tableColumns = columns
       .filter(c => !c.alwaysShow)
       .map(
@@ -537,32 +541,29 @@ export class TransactionsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const sortSettingLabel = getSortLabel(
-      this.props.reqSortSetting,
-      "Transaction",
-    );
+    const sortSettingLabel = getSortLabel(propsReqSortSetting, "Transaction");
     const showSortWarning =
-      !this.isSortSettingSameAsReqSort() &&
-      this.hasReqSortOption() &&
-      transactionsToDisplay.length === this.props.limit;
+      !isSortSettingSameAsReqSort() &&
+      hasReqSortOption() &&
+      transactionsToDisplay.length === propsLimit;
 
     return (
       <>
         <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
-          {`Results - Top ${this.props.limit} Transaction Fingerprints by ${sortSettingLabel}`}
+          {`Results - Top ${propsLimit} Transaction Fingerprints by ${sortSettingLabel}`}
         </h5>
         <section className={cx("filter-area")}>
           <PageConfig className={cx("float-left")}>
             <PageConfigItem>
               <Search
-                onSubmit={this.onSubmitSearchField}
-                onClear={this.onClearSearchField}
+                onSubmit={onSubmitSearchField}
+                onClear={onClearSearchField}
                 defaultValue={search}
               />
             </PageConfigItem>
             <PageConfigItem>
               <Filter
-                onSubmitFilters={this.onSubmitFilters}
+                onSubmitFilters={onSubmitFilters}
                 appNames={appNames}
                 regions={regions}
                 timeLabel={"Transaction fingerprint"}
@@ -584,11 +585,11 @@ export class TransactionsPage extends React.Component<
             <PageConfigItem>
               <p className={timeScaleStylesCx("time-label")}>
                 <TimeScaleLabel
-                  timeScale={this.props.timeScale}
-                  requestTime={moment(this.props.requestTime)}
+                  timeScale={propsTimeScale}
+                  requestTime={moment(requestTime)}
                   oldestDataTime={
-                    this.props.oldestDataAvailable &&
-                    TimestampToMoment(this.props.oldestDataAvailable)
+                    oldestDataAvailable &&
+                    TimestampToMoment(oldestDataAvailable)
                   }
                 />
                 {", "}
@@ -609,7 +610,7 @@ export class TransactionsPage extends React.Component<
                 )} `}
               >
                 <ClearStats
-                  resetSQLStats={this.resetSQLStats}
+                  resetSQLStats={doResetSQLStats}
                   tooltipType="transaction"
                 />
               </PageConfigItem>
@@ -619,18 +620,18 @@ export class TransactionsPage extends React.Component<
         <section className={statisticsClasses.tableContainerClass}>
           <SelectedFilters
             filters={filters}
-            onRemoveFilter={this.onSubmitFilters}
-            onClearFilters={this.onClearFilters}
+            onRemoveFilter={onSubmitFilters}
+            onClearFilters={onClearFilters}
           />
           {showSortWarning && (
             <InlineAlert
               intent="warning"
               title={getSubsetWarning(
                 "transaction",
-                this.props.limit,
+                propsLimit,
                 sortSettingLabel,
-                this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
-                this.onUpdateSortSettingAndApply,
+                sortSetting.columnTitle as StatisticTableColumnKeys,
+                onUpdateSortSettingAndApplyWithPending,
               )}
               className={cx("margin-bottom")}
             />
@@ -639,7 +640,7 @@ export class TransactionsPage extends React.Component<
             columns={displayColumns}
             transactions={transactionsToDisplay}
             sortSetting={sortSetting}
-            onChangeSortSetting={this.onChangeSortSetting}
+            onChangeSortSetting={onChangeSortSetting}
             pagination={pagination}
             renderNoResult={
               <EmptyTransactionsPlaceholder
@@ -653,55 +654,53 @@ export class TransactionsPage extends React.Component<
           pageSize={pageSize}
           current={current}
           total={transactionsToDisplay.length}
-          onChange={this.onChangePage}
-          onShowSizeChange={this.onChangePage}
+          onChange={onChangePage}
+          onShowSizeChange={onChangePage}
         />
       </>
     );
-  }
+  };
 
-  render(): React.ReactElement {
-    const longLoadingMessage = (
-      <Delayed delay={STATS_LONG_LOADING_DURATION}>
-        <InlineAlert
-          intent="info"
-          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
-        />
-      </Delayed>
-    );
+  const longLoadingMessage = (
+    <Delayed delay={STATS_LONG_LOADING_DURATION}>
+      <InlineAlert
+        intent="info"
+        title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+      />
+    </Delayed>
+  );
 
-    return (
-      <>
-        <SearchCriteria
-          searchType="Transaction"
-          topValue={this.state.limit}
-          byValue={this.state.reqSortSetting}
-          currentScale={this.state.timeScale}
-          onChangeTop={this.onChangeLimit}
-          onChangeBy={this.onChangeReqSort}
-          onChangeTimeScale={this.changeTimeScale}
-          onApply={this.updateRequestParams}
+  return (
+    <>
+      <SearchCriteria
+        searchType="Transaction"
+        topValue={localLimit}
+        byValue={localReqSortSetting}
+        currentScale={localTimeScale}
+        onChangeTop={onChangeLimit}
+        onChangeBy={onChangeReqSort}
+        onChangeTimeScale={changeTimeScale}
+        onApply={updateRequestParams}
+      />
+      <div className={cx("table-area")}>
+        <Loading
+          loading={txnsResp.inFlight}
+          page={"transactions"}
+          error={txnsResp?.error}
+          render={() => renderTransactions()}
+          renderError={() =>
+            LoadingError({
+              statsType: "transactions",
+              error: txnsResp.error,
+              sourceTables: txnsResp?.data?.txns_source_table && [
+                txnsResp?.data?.txns_source_table,
+                txnsResp?.data?.stmts_source_table,
+              ],
+            })
+          }
         />
-        <div className={cx("table-area")}>
-          <Loading
-            loading={this.props.txnsResp.inFlight}
-            page={"transactions"}
-            error={this.props.txnsResp?.error}
-            render={() => this.renderTransactions()}
-            renderError={() =>
-              LoadingError({
-                statsType: "transactions",
-                error: this.props.txnsResp.error,
-                sourceTables: this.props.txnsResp?.data?.txns_source_table && [
-                  this.props.txnsResp?.data?.txns_source_table,
-                  this.props.txnsResp?.data?.stmts_source_table,
-                ],
-              })
-            }
-          />
-          {this.props.txnsResp.inFlight && longLoadingMessage}
-        </div>
-      </>
-    );
-  }
+        {txnsResp.inFlight && longLoadingMessage}
+      </div>
+    </>
+  );
 }
