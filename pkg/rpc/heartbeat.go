@@ -7,7 +7,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -20,15 +19,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func (r RemoteOffset) measuredAt() time.Time {
 	return timeutil.Unix(0, r.MeasuredAt)
 }
 
+var _ redact.SafeFormatter = RemoteOffset{}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r RemoteOffset) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("off=%s, err=%s, at=%s",
+		time.Duration(r.Offset), time.Duration(r.Uncertainty), r.measuredAt())
+}
+
 // String formats the RemoteOffset for human readability.
 func (r RemoteOffset) String() string {
-	return fmt.Sprintf("off=%s, err=%s, at=%s", time.Duration(r.Offset), time.Duration(r.Uncertainty), r.measuredAt())
+	return redact.StringWithoutMarkers(r)
 }
 
 // A HeartbeatService exposes a method to echo its request params. It doubles
