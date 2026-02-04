@@ -57,3 +57,58 @@ SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
 ----
 1 20004
 2 20004
+
+# database-level guardrails backup tests
+
+exec-sql
+SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;
+----
+
+exec-sql
+SET use_declarative_schema_changer='off';
+----
+
+exec-sql
+CREATE DATABASE d3 WITH (max_row_size_err = '2KiB');
+----
+
+exec-sql
+USE d3;
+----
+
+exec-sql
+CREATE TABLE maxrow_guardrails (i INT PRIMARY KEY, s STRING);
+----
+
+exec-sql 
+INSERT INTO maxrow_guardrails VALUES (1, repeat('x', 1500));
+----
+
+exec-sql expect-error-regex=(row larger than max row size: table .* family 0 primary key .*/Table/.*/1/2/0 size .*)
+INSERT INTO maxrow_guardrails VALUES (2, repeat('x', 2500));
+----
+regex matches error
+
+exec-sql
+BACKUP maxrow_guardrails INTO 'nodelocal://1/maxrow_guardrails';
+----
+
+exec-sql
+CREATE DATABASE d4 WITH (max_row_size_err = '1KiB');
+----
+
+
+exec-sql
+RESTORE maxrow_guardrails FROM LATEST IN 'nodelocal://1/maxrow_guardrails' WITH into_db='d4';
+----
+
+
+exec-sql
+USE d4;
+----
+
+exec-sql expect-error-regex=(row larger than max row size: table .* family 0 primary key .*/Table/.*/1/2/0 size .*) 
+INSERT INTO maxrow_guardrails VALUES (2, repeat('x', 2500));
+----
+regex matches error
+

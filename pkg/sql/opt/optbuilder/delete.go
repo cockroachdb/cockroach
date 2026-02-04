@@ -7,6 +7,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -58,6 +59,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
+	database := b.resolveDatabaseForMutation(cat.StableID(tab.GetDatabaseID()))
 
 	if tab.IsVirtualTable() {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -77,7 +79,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	b.checkMultipleMutations(tab, generalMutation)
 
 	var mb mutationBuilder
-	mb.init(b, "delete", tab, alias)
+	mb.init(b, "delete", tab, alias, database)
 
 	// Build the input expression that selects the rows that will be deleted:
 	//

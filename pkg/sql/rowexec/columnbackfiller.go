@@ -35,7 +35,8 @@ import (
 type columnBackfiller struct {
 	backfill.ColumnBackfiller
 
-	desc catalog.TableDescriptor
+	desc         catalog.TableDescriptor
+	databaseDesc catalog.DatabaseDescriptor
 
 	// mutationFilter returns true if the mutation should be processed by the
 	// chunkBackfiller.
@@ -64,11 +65,12 @@ func newColumnBackfiller(
 		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("column-backfill-mon"),
 	)
 	cb := &columnBackfiller{
-		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
-		filter:      backfill.ColumnMutationFilter,
-		flowCtx:     flowCtx,
-		processorID: processorID,
-		spec:        spec,
+		desc:         flowCtx.TableDescriptor(ctx, &spec.Table),
+		databaseDesc: flowCtx.DatabaseDescriptor(ctx, &spec.Database),
+		filter:       backfill.ColumnMutationFilter,
+		flowCtx:      flowCtx,
+		processorID:  processorID,
+		spec:         spec,
 	}
 	if err := cb.ColumnBackfiller.InitForDistributedUse(
 		ctx, flowCtx, cb.desc, columnBackfillerMon,
@@ -314,6 +316,7 @@ func (cb *columnBackfiller) runChunk(
 				ctx,
 				txn.KV(),
 				cb.desc,
+				cb.databaseDesc,
 				sp,
 				chunkSize,
 				updateChunkSizeThresholdBytes,

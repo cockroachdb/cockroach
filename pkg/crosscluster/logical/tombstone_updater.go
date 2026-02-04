@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+//TODO (KB): write some tests for tombstone updater and max row size guardrails
+
 // tombstoneUpdater is a helper for updating the mvcc origin timestamp assigned
 // to a tombstone. It internally manages leasing a descriptor for a single
 // table. The lease should be released by calling ReleaseLeases.
@@ -36,7 +38,8 @@ type tombstoneUpdater struct {
 	leased struct {
 		// descriptor is a leased descriptor. Callers should use getDeleter to
 		// ensure the lease is valid for the current transaction.
-		descriptor lease.LeasedDescriptor
+		tableDescriptor    lease.LeasedDescriptor
+		databaseDescriptor lease.LeasedDescriptor
 		// deleter is a row.Deleter that uses the leased descriptor. Callers should
 		// use getDeleter to ensure the lease is valid for the current transaction.
 		deleter row.Deleter
@@ -48,10 +51,16 @@ type tombstoneUpdater struct {
 func (c *tombstoneUpdater) ReleaseLeases(ctx context.Context) {
 	// NOTE: ReleaseLeases may be called multiple times since its called if the lease
 	// expires and a new lease is acquired.
-	if c.leased.descriptor != nil {
-		c.leased.descriptor.Release(ctx)
-		c.leased.descriptor = nil
+	if c.leased.tableDescriptor != nil {
+		c.leased.tableDescriptor.Release(ctx)
+		c.leased.tableDescriptor = nil
 		c.leased.deleter = row.Deleter{}
+	}
+	if c.leased.databaseDescriptor != nil {
+		c.leased.databaseDescriptor.Release(ctx)
+		c.leased.databaseDescriptor = nil
+		c.leased.deleter = row.Deleter{}
+
 	}
 }
 
@@ -155,23 +164,38 @@ func (tu *tombstoneUpdater) addToBatch(
 
 func (tu *tombstoneUpdater) getDeleter(ctx context.Context, txn *kv.Txn) (row.Deleter, error) {
 	timestamp := txn.ProvisionalCommitTimestamp()
-	if tu.leased.descriptor == nil || !timestamp.After(tu.leased.descriptor.Expiration(ctx)) {
+	if tu.leased.tableDescriptor == nil || !timestamp.After(tu.leased.tableDescriptor.Expiration(ctx)) {
 		tu.ReleaseLeases(ctx)
 
 		var err error
-		tu.leased.descriptor, err = tu.leaseMgr.Acquire(ctx, timestamp, tu.descID)
+		tu.leased.tableDescriptor, err = tu.leaseMgr.Acquire(ctx, timestamp, tu.descID)
 		if err != nil {
 			return row.Deleter{}, err
 		}
 
-		cols, err := writeableColunms(ctx, tu.leased.descriptor.Underlying().(catalog.TableDescriptor))
+		databaseID := tu.leased.tableDescriptor.GetParentID()
+		tu.leased.databaseDescriptor, err = tu.leaseMgr.Acquire(ctx, timestamp, databaseID)
 		if err != nil {
 			return row.Deleter{}, err
 		}
 
-		tu.leased.deleter = row.MakeDeleter(tu.codec, tu.leased.descriptor.Underlying().(catalog.TableDescriptor), nil /* lockedIndexes */, cols, tu.sd, &tu.settings.SV, nil /* metrics */)
+		cols, err := writeableColunms(ctx, tu.leased.tableDescriptor.Underlying().(catalog.TableDescriptor))
+		if err != nil {
+			return row.Deleter{}, err
+		}
+
+		tu.leased.deleter = row.MakeDeleter(
+			tu.codec,
+			tu.leased.tableDescriptor.Underlying().(catalog.TableDescriptor),
+			tu.leased.databaseDescriptor.Underlying().(catalog.DatabaseDescriptor),
+			nil, /* lockedIndexes */
+			cols,
+			tu.sd,
+			&tu.settings.SV,
+			nil, /* metrics */
+		)
 	}
-	if err := txn.UpdateDeadline(ctx, tu.leased.descriptor.Expiration(ctx)); err != nil {
+	if err := txn.UpdateDeadline(ctx, tu.leased.tableDescriptor.Expiration(ctx)); err != nil {
 		return row.Deleter{}, err
 	}
 	return tu.leased.deleter, nil

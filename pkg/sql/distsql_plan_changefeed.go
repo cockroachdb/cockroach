@@ -468,6 +468,18 @@ func (c *cdcOptCatalog) ResolveFunction(
 	return c.optCatalog.ResolveFunction(ctx, fnName, path)
 }
 
+// ResolveDatabaseByID implements cat.Catalog interface.
+// We provide custom implementation to resolve CDC specific databases.
+func (c *cdcOptCatalog) ResolveDatabaseByID(
+	ctx context.Context, flags cat.Flags, id cat.StableID,
+) (cat.Database, error) {
+	desc, err := c.planner.LookupDatabaseByID(ctx, descpb.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return newOptDatabase(desc), nil
+}
+
 // newCDCDataSource builds an optTable for the target cdc table and family.
 func (c *cdcOptCatalog) newCDCDataSource(
 	ctx context.Context, original catalog.TableDescriptor, familyID catid.FamilyID,

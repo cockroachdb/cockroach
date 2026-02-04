@@ -31,8 +31,15 @@ import (
 // See the comment for Metadata for more details on identifiers.
 type TableID uint64
 
+// DatabaseID uniquely identifies the usage of a database within the scope of a
+// query. DatabaseID 0 is reserved to mean "unknown database".
+//
+// Internally, the DatabaseID consists of an index into the Metadata.databases slice.
+type DatabaseID uint64
+
 const (
-	tableIDMask = 0xffffffff
+	tableIDMask    = 0xffffffff
+	databaseIDMask = 0xffffffff
 )
 
 // ColumnID returns the metadata id of the column at the given ordinal position
@@ -79,6 +86,18 @@ func (t TableID) firstColID() ColumnID {
 // that TableID 0 can be be reserved to mean "unknown table".
 func (t TableID) index() int {
 	return int((t>>32)&tableIDMask) - 1
+}
+
+// databaseID returns the index of the database in Metadata.databases. It's biased by 1,
+// so that DatabaseID 0 can be be reserved to mean "unknown database".
+func (d DatabaseID) index() int {
+	return int((d>>32)&databaseIDMask) - 1
+}
+
+// makeDatabaseID constructs a new DatabaseID from its component parts.
+func makeDatabaseID(index int) DatabaseID {
+	// Bias the database index by 1.
+	return DatabaseID((uint64(index+1) << 32) | uint64(0))
 }
 
 // TableAnnID uniquely identifies an annotation on an instance of table

@@ -2399,6 +2399,7 @@ GO_TARGETS = [
     "//pkg/sql/stats:stats_test",
     "//pkg/sql/stmtdiagnostics:stmtdiagnostics",
     "//pkg/sql/stmtdiagnostics:stmtdiagnostics_test",
+    "//pkg/sql/storageparam/databasestorageparam:databasestorageparam",
     "//pkg/sql/storageparam/indexstorageparam:indexstorageparam",
     "//pkg/sql/storageparam/tablestorageparam:tablestorageparam",
     "//pkg/sql/storageparam:storageparam",

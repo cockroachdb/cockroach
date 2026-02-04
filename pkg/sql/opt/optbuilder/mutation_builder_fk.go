@@ -149,15 +149,15 @@ func (mb *mutationBuilder) buildFKChecksAndCascadesForDelete() {
 			case tree.Cascade:
 				// Try the fast builder first; if it cannot be used, use the regular builder.
 				var ok bool
-				builder, ok = mb.tryNewOnDeleteFastCascadeBuilder(h.fk, i, h.otherTab)
+				builder, ok = mb.tryNewOnDeleteFastCascadeBuilder(h.fk, i, h.otherTab, h.otherTabDatabase)
 				if !ok {
 					mb.ensureWithID()
-					builder = mb.newOnDeleteCascadeBuilder(i, h.otherTab, cols)
+					builder = mb.newOnDeleteCascadeBuilder(i, h.otherTab, h.otherTabDatabase, cols)
 				}
 				triggerEventType = tree.TriggerEventDelete
 			case tree.SetNull, tree.SetDefault:
 				mb.ensureWithID()
-				builder = mb.newOnDeleteSetBuilder(i, h.otherTab, a, cols)
+				builder = mb.newOnDeleteSetBuilder(i, h.otherTab, h.otherTabDatabase, a, cols)
 				triggerEventType = tree.TriggerEventUpdate
 			default:
 				panic(errors.AssertionFailedf("unhandled action type %s", a))
@@ -311,7 +311,7 @@ func (mb *mutationBuilder) buildFKChecksForUpdate() {
 			hasBeforeTriggers := cat.HasRowLevelTriggers(
 				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
 			)
-			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, a, oldCols, newCols)
+			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, h.otherTabDatabase, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint:      h.fk,
 				HasBeforeTriggers: hasBeforeTriggers,
@@ -433,7 +433,7 @@ func (mb *mutationBuilder) buildFKChecksForUpsert() {
 			hasBeforeTriggers := cat.HasRowLevelTriggers(
 				h.otherTab, tree.TriggerActionTimeBefore, tree.TriggerEventUpdate,
 			)
-			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, a, oldCols, newCols)
+			builder := mb.newOnUpdateCascadeBuilder(i, h.otherTab, h.otherTabDatabase, a, oldCols, newCols)
 			mb.cascades = append(mb.cascades, memo.FKCascade{
 				FKConstraint:      h.fk,
 				HasBeforeTriggers: hasBeforeTriggers,
@@ -520,7 +520,8 @@ type fkCheckHelper struct {
 	fkOrdinal  int
 	fkOutbound bool
 
-	otherTab cat.Table
+	otherTab         cat.Table
+	otherTabDatabase cat.Database
 
 	// tabOrdinals are the table ordinals of the FK columns in the table that is
 	// being mutated. They correspond 1-to-1 to the columns in the
@@ -602,6 +603,12 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 	if h.otherTab == nil {
 		return false
 	}
+	otherTabDatabase, err := mb.b.catalog.ResolveDatabaseByID(mb.b.ctx, cat.Flags{}, cat.StableID(h.otherTab.GetDatabaseID()))
+	if err != nil {
+		panic(err)
+	}
+	h.otherTabDatabase = otherTabDatabase
+
 	// We need SELECT privileges on the origin table.
 	mb.b.checkPrivilege(opt.DepByID(originID), h.otherTab, privilege.SELECT)
 

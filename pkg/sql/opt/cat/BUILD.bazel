@@ -6,6 +6,7 @@ go_library(
         "catalog.go",
         "column.go",
         "data_source.go",
+        "database.go",
         "family.go",
         "index.go",
         "object.go",

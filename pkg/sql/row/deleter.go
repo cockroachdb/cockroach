@@ -77,6 +77,7 @@ type Deleter struct {
 func MakeDeleter(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	lockedIndexes []catalog.Index,
 	requestedCols []catalog.Column,
 	sd *sessiondata.SessionData,
@@ -142,7 +143,7 @@ func MakeDeleter(
 		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
 	}
 	rd := Deleter{
-		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics),
+		Helper:               NewRowHelper(codec, tableDesc, databaseDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
 		primaryLocked:        primaryLocked,

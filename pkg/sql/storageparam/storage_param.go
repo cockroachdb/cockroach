@@ -25,18 +25,23 @@ import (
 
 // Setter applies a storage parameter to an underlying item.
 type Setter interface {
-	// Set is called during CREATE [TABLE | INDEX] ... WITH (...) or
+	// Set is called during
+	// CREATE [TABLE | INDEX] ... WITH (...) and
 	// ALTER [TABLE | INDEX] ... SET (...).
+	// CREATE DATABASE ... WITH (...) and
+	// ALTER DATABASE ... SET (...).
 	Set(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error
-	// Reset is called during ALTER [TABLE | INDEX] ... RESET (...)
+	// Reset is called during
+	// ALTER [TABLE | INDEX] ... RESET (...) and
+	// ALTER DATABASE ... RESET (...).
 	Reset(ctx context.Context, evalCtx *eval.Context, key string) error
 	// RunPostChecks is called after all storage parameters have been set.
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
 	RunPostChecks() error
-	// IsNewTableObject returns true if the storage parameter is being set on a new
-	// table.
-	IsNewTableObject() bool
+	// IsNewObject returns true if the storage parameter is being set on a new
+	// table/database.
+	IsNewObject() bool
 }
 
 // Set sets the given storage parameters using the
@@ -56,7 +61,6 @@ func Set(
 		if sp.Value == nil {
 			return pgerror.Newf(pgcode.InvalidParameterValue, "storage parameter %q requires a value", key)
 		}
-		telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
 
 		// Expressions may be an unresolved name.
 		// Cast these as strings.
@@ -66,7 +70,7 @@ func Set(
 			// Storage params handle their own scalar arguments, with no help from the
 			// optimizer. As such, they cannot contain subqueries.
 			defer semaCtx.Properties.Restore(semaCtx.Properties)
-			semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+			semaCtx.Properties.Require("storage parameters", tree.RejectSubqueries)
 
 			// Convert the expressions to a datum.
 			typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
@@ -163,7 +167,7 @@ func storageParamPreChecks(
 			// since later operations cannot unset schema_locked (i.e. only implicit single
 			// statement transactions are allowed to manipulate schema_locked, see
 			// checkSchemaChangeIsAllowed).
-			if !setter.IsNewTableObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
+			if !setter.IsNewObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}

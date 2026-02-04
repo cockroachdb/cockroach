@@ -4180,6 +4180,12 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	createDatabase := &tree.CreateDatabase{}
+	databaseDesc, err := MakeTestingSimpleDatabaseDescriptor(ctx, &semaCtx, st, createDatabase, descpb.ID(100))
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
 	go func() {
@@ -4195,7 +4201,7 @@ func BenchmarkDelimitedConvertRecord(b *testing.B) {
 		RowSeparator:   '\n',
 		FieldSeparator: '\t',
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), databaseDesc, nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{
@@ -4284,6 +4290,12 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 
+	createDatabase := stmt.AST.(*tree.CreateDatabase)
+	databaseDesc, err := MakeTestingSimpleDatabaseDescriptor(ctx, &semaCtx, st, createDatabase, descpb.ID(100))
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
 	go func() {
@@ -4300,7 +4312,7 @@ func BenchmarkPgCopyConvertRecord(b *testing.B) {
 		Null:       `\N`,
 		MaxRowSize: 4096,
 	}, kvCh, 0, 1,
-		tableDesc.ImmutableCopy().(catalog.TableDescriptor), nil /* targetCols */, &evalCtx, db)
+		tableDesc.ImmutableCopy().(catalog.TableDescriptor), databaseDesc, nil /* targetCols */, &evalCtx, db)
 	require.NoError(b, err)
 
 	producer := &csvBenchmarkStream{

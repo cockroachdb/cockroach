@@ -44,6 +44,29 @@ func BenchmarkConvertToKVs(b *testing.B) {
 	})
 }
 
+func toDatabaseDescriptor(
+	t workload.Table, tableID descpb.ID, ts time.Time,
+) (catalog.DatabaseDescriptor, error) {
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	stmt, err := parser.ParseOne(fmt.Sprintf(`CREATE DATABASE "%s"`, t.Name))
+	if err != nil {
+		return nil, err
+	}
+	createDatabase, ok := stmt.AST.(*tree.CreateDatabase)
+	if !ok {
+		return nil, errors.Errorf("expected *tree.CreateDatabase got %T", stmt)
+	}
+	testSettings := cluster.MakeTestingClusterSettings()
+
+	databaseDesc, err := importer.MakeTestingSimpleDatabaseDescriptor(
+		ctx, &semaCtx, testSettings, createDatabase, tableID)
+	if err != nil {
+		return nil, err
+	}
+	return databaseDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil
+}
+
 func toTableDescriptor(
 	t workload.Table, tableID descpb.ID, ts time.Time,
 ) (catalog.TableDescriptor, error) {
@@ -84,6 +107,10 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 		if err != nil {
 			b.Fatal(err)
 		}
+		databaseDesc, err := toDatabaseDescriptor(t, tableDesc.GetParentID(), ts)
+		if err != nil {
+			b.Fatal(err)
+		}
 
 		kvCh := make(chan row.KVBatch)
 		g := ctxgroup.WithContext(ctx)
@@ -91,7 +118,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 		g.GoCtx(func(ctx context.Context) error {
 			defer close(kvCh)
 			wc := importer.NewWorkloadKVConverter(
-				0, tableDesc, table.InitialRows, 0, table.InitialRows.NumBatches, kvCh, db)
+				0, tableDesc, databaseDesc, table.InitialRows, 0, table.InitialRows.NumBatches, kvCh, db)
 			evalCtx := &eval.Context{
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				Codec:            keys.SystemSQLCodec,

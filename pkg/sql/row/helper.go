@@ -109,9 +109,43 @@ type RowHelper struct {
 	migrateLargeRowLog           bool
 }
 
+// calculates max and min row sizes for a table
+//
+// prioritizes in following order:
+// cluster settings >
+// database storage parameters >
+// table storage parameters
+func getMaxRowSizes(
+	sv *settings.Values,
+	databaseDesc *descpb.DatabaseDescriptor,
+	tableDesc *descpb.TableDescriptor,
+) (uint32, uint32) {
+	maxRowSizeLog := uint32(maxRowSizeLog.Get(sv))
+	maxRowSizeErr := uint32(maxRowSizeErr.Get(sv))
+
+	if databaseDesc.MaxRowSizeLog != nil {
+		maxRowSizeLog = *databaseDesc.MaxRowSizeLog
+	}
+
+	if databaseDesc.MaxRowSizeErr != nil {
+		maxRowSizeErr = *databaseDesc.MaxRowSizeErr
+	}
+
+	if tableDesc.MaxRowSizeLog != nil {
+		maxRowSizeLog = *tableDesc.MaxRowSizeLog
+	}
+
+	if tableDesc.MaxRowSizeErr != nil {
+		maxRowSizeErr = *tableDesc.MaxRowSizeErr
+	}
+
+	return maxRowSizeLog, maxRowSizeErr
+}
+
 func NewRowHelper(
 	codec keys.SQLCodec,
-	desc catalog.TableDescriptor,
+	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	indexes []catalog.Index,
 	uniqueWithTombstoneIndexes []catalog.Index,
 	sd *sessiondata.SessionData,
@@ -122,20 +156,14 @@ func NewRowHelper(
 	for _, index := range uniqueWithTombstoneIndexes {
 		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
 	}
-	maxRowSizeLog := uint32(maxRowSizeLog.Get(sv))
-	maxRowSizeErr := uint32(maxRowSizeErr.Get(sv))
 
-	if desc.TableDesc().MaxRowSizeLog != nil {
-		maxRowSizeLog = *desc.TableDesc().MaxRowSizeLog
-	}
+	// TODO (KB) investigate what should happen with system database and it's tables
 
-	if desc.TableDesc().MaxRowSizeErr != nil {
-		maxRowSizeErr = *desc.TableDesc().MaxRowSizeErr
-	}
+	maxRowSizeLog, maxRowSizeErr := getMaxRowSizes(sv, databaseDesc.DatabaseDesc(), tableDesc.TableDesc())
 
 	return RowHelper{
 		Codec:                      codec,
-		TableDesc:                  desc,
+		TableDesc:                  tableDesc,
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
 		sd:                         sd,

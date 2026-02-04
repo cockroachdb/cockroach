@@ -17,7 +17,7 @@
 # The Insert operator is capable of inserting values into computed columns and
 # mutation columns, which are not writable (or even visible in the case of
 # mutation columns) by SQL users.
-[Relational, Mutation, WithBinding]
+[Relational, Mutation, WithBinding,RowAdding]
 define Insert {
     Input RelExpr
     UniqueChecks UniqueChecksExpr
@@ -28,9 +28,14 @@ define Insert {
 
 [Private]
 define MutationPrivate {
-    # Table identifies the table which is being mutated. It is an id that can be
+    # Table identifies the table which is being mutated. It is an id that can TableID
     # passed to the Metadata.Table method in order to fetch cat.Table metadata.
     Table TableID
+
+    # Database identifies the database which is being mutated. It is an id that
+    # can be passed to the Metadata.Database method in order to fetch cat.Database
+    # metadata.
+    Database DatabaseID
 
     # InsertCols are columns from the Input expression that will be inserted into
     # the target table. They must be a subset of the Input expression's output
@@ -222,7 +227,7 @@ define MutationPrivate {
 #
 # The Update operator will also update any computed columns, including mutation
 # columns that are computed.
-[Relational, Mutation, WithBinding]
+[Relational, Mutation, WithBinding,RowAdding]
 define Update {
     Input RelExpr
     UniqueChecks UniqueChecksExpr
@@ -246,7 +251,7 @@ define Update {
 #
 # The Update operator will also insert/update any computed columns, including
 # mutation columns that are computed.
-[Relational, Mutation, WithBinding]
+[Relational, Mutation, WithBinding,RowAdding]
 define Upsert {
     Input RelExpr
     UniqueChecks UniqueChecksExpr

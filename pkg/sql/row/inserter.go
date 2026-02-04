@@ -39,6 +39,7 @@ type Inserter struct {
 func MakeInserter(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	uniqueWithTombstoneIndexes []catalog.Index,
 	insertCols []catalog.Column,
 	sd *sessiondata.SessionData,
@@ -47,7 +48,7 @@ func MakeInserter(
 ) (Inserter, error) {
 	ri := Inserter{
 		Helper: NewRowHelper(
-			codec, tableDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sd, sv, metrics,
+			codec, tableDesc, databaseDesc, tableDesc.WritableNonPrimaryIndexes(), uniqueWithTombstoneIndexes, sd, sv, metrics,
 		),
 
 		InsertCols:            insertCols,

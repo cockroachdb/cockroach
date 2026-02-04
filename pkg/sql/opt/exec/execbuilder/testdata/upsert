@@ -1055,7 +1055,7 @@ SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tr
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation NOT LIKE '%sending batch 1 Get to (n1,s1):1'
 ----
 Put (locking) /Table/117/1/1/0 -> /TUPLE/
 Del (locking) /Table/117/1/1/1/1

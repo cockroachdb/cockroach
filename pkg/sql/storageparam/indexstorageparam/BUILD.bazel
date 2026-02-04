@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geopb",
+        "//pkg/server/telemetry",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/paramparse",
         "//pkg/sql/pgwire/pgcode",
@@ -14,6 +15,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
         "//pkg/sql/storageparam",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",

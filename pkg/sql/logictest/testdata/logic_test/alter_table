@@ -4107,7 +4107,7 @@ subtest 110629
 statement ok
 CREATE TABLE t_110629 (a INT PRIMARY KEY);
 
-statement error subqueries are not allowed in table storage parameters
+statement error subqueries are not allowed in storage parameters
 ALTER TABLE t SET ( 'string' = EXISTS ( TABLE error ) );
 
 subtest end

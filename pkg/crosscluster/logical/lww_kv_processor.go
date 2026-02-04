@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+//TODO (KB): write some tests for logical kv processor and max row size guardrails
+
 // A kvRowProcessor is a RowProcessor that bypasses SQL execution and directly
 // writes KV pairs for replicated events.
 type kvRowProcessor struct {
@@ -197,8 +199,8 @@ func (p *kvRowProcessor) processRow(
 
 func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
 	for _, w := range p.writers {
-		if w.unreportedMutations > 0 && w.leased != nil {
-			if desc := w.leased.Underlying(); desc != nil {
+		if w.unreportedMutations > 0 && w.leasedTable != nil {
+			if desc := w.leasedTable.Underlying(); desc != nil {
 				refresher.NotifyMutation(desc.(catalog.TableDescriptor), w.unreportedMutations)
 				w.unreportedMutations = 0
 			}
@@ -209,9 +211,13 @@ func (p *kvRowProcessor) ReportMutations(refresher *stats.Refresher) {
 // ReleaseLeases releases all held leases.
 func (p *kvRowProcessor) ReleaseLeases(ctx context.Context) {
 	for _, w := range p.writers {
-		if w.leased != nil {
-			w.leased.Release(ctx)
-			w.leased = nil
+		if w.leasedTable != nil {
+			w.leasedTable.Release(ctx)
+			w.leasedTable = nil
+		}
+		if w.leasedDatabase != nil {
+			w.leasedDatabase.Release(ctx)
+			w.leasedDatabase = nil
 		}
 	}
 }
@@ -320,7 +326,10 @@ func (p *kvRowProcessor) addToBatch(
 	}
 	// This batch should only commit if it can do so prior to the expiration of
 	// the lease of the descriptor used to encode it.
-	if err := txn.UpdateDeadline(ctx, w.leased.Expiration(ctx)); err != nil {
+	if err := txn.UpdateDeadline(ctx, w.leasedTable.Expiration(ctx)); err != nil {
+		return err
+	}
+	if err := txn.UpdateDeadline(ctx, w.leasedDatabase.Expiration(ctx)); err != nil {
 		return err
 	}
 
@@ -371,33 +380,45 @@ func (p *kvRowProcessor) Close(ctx context.Context) {
 func (p *kvRowProcessor) getWriter(
 	ctx context.Context, id descpb.ID, ts hlc.Timestamp,
 ) (*kvTableWriter, error) {
-	w, ok := p.writers[id]
-	if ok {
-		if w.leased != nil {
+	w, writeFound := p.writers[id]
+	if writeFound {
+		if w.leasedTable != nil {
 			// If the lease is still valid, just use the writer.
-			if w.leased.Expiration(ctx).After(ts) {
+			if w.leasedTable.Expiration(ctx).After(ts) || w.leasedDatabase.Expiration(ctx).After(ts) {
 				return w, nil
 			}
 			// The lease is invalid; we'll be getting a new one so release this one.
-			w.leased.Release(ctx)
-			w.leased = nil
+			w.leasedTable.Release(ctx)
+			w.leasedDatabase.Release(ctx)
+			w.leasedTable = nil
+			w.leasedDatabase = nil
 		}
 	}
 
-	l, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, ts, id)
+	leasedTableD, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, ts, id)
+	if err != nil {
+		return nil, err
+	}
+
+	databaseID := leasedTableD.GetParentID()
+
+	leasedDatabaseD, err := p.cfg.LeaseManager.(*lease.Manager).Acquire(ctx, ts, databaseID)
 	if err != nil {
 		return nil, err
 	}
 
 	// If the new lease just so happened to be the same version, we can just swap
 	// the lease in the existing writer.
-	if ok && l.Underlying().GetVersion() == w.v {
-		w.leased = l
+	if writeFound &&
+		leasedTableD.Underlying().GetVersion() == w.tableVersion &&
+		leasedDatabaseD.Underlying().GetVersion() == w.databaseVersion {
+		w.leasedTable = leasedTableD
+		w.leasedDatabase = leasedDatabaseD
 		return w, nil
 	}
 
 	// New lease and desc version; make a new writer.
-	w, err = newKVTableWriter(ctx, l, p.evalCtx)
+	w, err = newKVTableWriter(ctx, leasedTableD, leasedDatabaseD, p.evalCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -411,8 +432,10 @@ func (p *kvRowProcessor) getWriter(
 // used past the expiration of the lease used to construct it, and batches that
 // it populates should commit no later than the expiration of said lease.
 type kvTableWriter struct {
-	leased           lease.LeasedDescriptor
-	v                descpb.DescriptorVersion
+	leasedTable      lease.LeasedDescriptor
+	tableVersion     descpb.DescriptorVersion
+	leasedDatabase   lease.LeasedDescriptor
+	databaseVersion  descpb.DescriptorVersion
 	newVals, oldVals []tree.Datum
 	ru               row.Updater
 	ri               row.Inserter
@@ -424,10 +447,11 @@ type kvTableWriter struct {
 }
 
 func newKVTableWriter(
-	ctx context.Context, leased lease.LeasedDescriptor, evalCtx *eval.Context,
+	ctx context.Context, leasedTableDesc lease.LeasedDescriptor, leasedDatabaseDesc lease.LeasedDescriptor, evalCtx *eval.Context,
 ) (*kvTableWriter, error) {
 
-	tableDesc := leased.Underlying().(catalog.TableDescriptor)
+	tableDesc := leasedTableDesc.Underlying().(catalog.TableDescriptor)
+	databaseDesc := leasedDatabaseDesc.Underlying().(catalog.DatabaseDescriptor)
 
 	// TODO(dt): figure out the right sets of columns here and in fillNew/fillOld.
 	writeCols, err := writeableColunms(ctx, tableDesc)
@@ -438,26 +462,28 @@ func newKVTableWriter(
 
 	// TODO(dt): pass these some sort fo flag to have them use versions of CPut
 	// or a new LWW KV API. For now they're not detecting/handling conflicts.
-	ri, err := row.MakeInserter(evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, writeCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
+	ri, err := row.MakeInserter(evalCtx.Codec, tableDesc, databaseDesc, nil /* uniqueWithTombstoneIndexes */, writeCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
 	if err != nil {
 		return nil, err
 	}
-	rd := row.MakeDeleter(evalCtx.Codec, tableDesc, nil /* lockedIndexes */, readCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
+	rd := row.MakeDeleter(evalCtx.Codec, tableDesc, databaseDesc, nil /* lockedIndexes */, readCols, evalCtx.SessionData(), &evalCtx.Settings.SV, nil /* metrics */)
 	ru, err := row.MakeUpdater(
-		evalCtx.Codec, tableDesc, nil /* uniqueWithTombstoneIndexes */, nil /* lockedIndexes */, readCols, writeCols, row.UpdaterDefault, evalCtx.SessionData(), &evalCtx.Settings.SV, nil, /* metrics */
+		evalCtx.Codec, tableDesc, databaseDesc, nil /* uniqueWithTombstoneIndexes */, nil /* lockedIndexes */, readCols, writeCols, row.UpdaterDefault, evalCtx.SessionData(), &evalCtx.Settings.SV, nil, /* metrics */
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &kvTableWriter{
-		leased:  leased,
-		v:       leased.Underlying().GetVersion(),
-		oldVals: make([]tree.Datum, len(readCols)),
-		newVals: make([]tree.Datum, len(writeCols)),
-		ri:      ri,
-		rd:      rd,
-		ru:      ru,
+		leasedTable:     leasedTableDesc,
+		tableVersion:    leasedTableDesc.Underlying().GetVersion(),
+		leasedDatabase:  leasedDatabaseDesc,
+		databaseVersion: leasedDatabaseDesc.Underlying().GetVersion(),
+		oldVals:         make([]tree.Datum, len(readCols)),
+		newVals:         make([]tree.Datum, len(writeCols)),
+		ri:              ri,
+		rd:              rd,
+		ru:              ru,
 	}, nil
 }
 

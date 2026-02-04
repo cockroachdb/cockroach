@@ -558,6 +558,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			ri, err := row.MakeInserter(
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
+				n.dbDesc,
 				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
 				params.p.SessionData(),

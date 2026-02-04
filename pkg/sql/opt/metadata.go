@@ -95,6 +95,9 @@ type Metadata struct {
 	// TableID.index().
 	tables []TableMeta
 
+	// databases stores information about each metadata database, indexed by DatabaseID.
+	databases []cat.Database
+
 	// sequences stores information about each metadata sequence, indexed by SequenceID.
 	sequences []cat.Sequence
 
@@ -762,6 +765,16 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	return tabID
 }
 
+// AddDatabase adds a new database to the metadata.
+func (md *Metadata) AddDatabase(database cat.Database) DatabaseID {
+	dbID := makeDatabaseID(len(md.databases))
+	if md.databases == nil {
+		md.databases = make([]cat.Database, 0, 4)
+	}
+	md.databases = append(md.databases, database)
+	return dbID
+}
+
 // DuplicateTable creates a new reference to the table with the given ID. All
 // columns are added to the metadata with new column IDs. If mutation columns
 // are present, they are added after active columns. The ID of the new table
@@ -892,6 +905,19 @@ func (md *Metadata) TableMeta(tabID TableID) *TableMeta {
 // same table can be associated with multiple metadata ids.
 func (md *Metadata) Table(tabID TableID) cat.Table {
 	return md.TableMeta(tabID).Table
+}
+
+// DatabaseMeta looks up the metadata for the database associated with the given
+// database id. The same database can be added multiple times to the query metadata
+// and associated with multiple database ids.
+func (md *Metadata) DatabaseMeta(dbID DatabaseID) cat.Database {
+	return md.databases[dbID.index()]
+}
+
+// Database looks up the catalog database associated with the given metadata id.
+// The same database can be associated with multiple metadata ids.
+func (md *Metadata) Database(dbID DatabaseID) cat.Database {
+	return md.DatabaseMeta(dbID)
 }
 
 // AllTables returns the metadata for all tables. The result must not be

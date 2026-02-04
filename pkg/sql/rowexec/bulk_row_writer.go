@@ -36,6 +36,7 @@ type bulkRowWriter struct {
 	processorID    int32
 	batchIdxAtomic int64
 	tableDesc      catalog.TableDescriptor
+	databaseDesc   catalog.DatabaseDescriptor
 	spec           execinfrapb.BulkRowWriterSpec
 	input          execinfra.RowSource
 	summary        kvpb.BulkOpSummary
@@ -55,6 +56,7 @@ func newBulkRowWriterProcessor(
 		processorID:    processorID,
 		batchIdxAtomic: 0,
 		tableDesc:      flowCtx.TableDescriptor(ctx, &spec.Table),
+		databaseDesc:   flowCtx.DatabaseDescriptor(ctx, &spec.Database),
 		spec:           spec,
 		input:          input,
 	}
@@ -99,7 +101,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	conv, err := row.NewDatumRowConverter(
-		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.FlowCtx.EvalCtx,
+		ctx, &semaCtx, sp.tableDesc, sp.databaseDesc, nil /* targetColNames */, sp.FlowCtx.EvalCtx,
 		kvCh, nil /* seqChunkProvider */, sp.FlowCtx.GetRowMetrics(), sp.FlowCtx.Cfg.DB.KV(),
 	)
 	if err != nil {

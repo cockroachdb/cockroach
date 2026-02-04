@@ -495,6 +495,7 @@ func newAvroInputReader(
 	semaCtx *tree.SemaContext,
 	kvCh chan row.KVBatch,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	avroOpts roachpb.AvroOptions,
 	walltime int64,
 	parallelism int,
@@ -504,13 +505,14 @@ func newAvroInputReader(
 
 	return &avroInputReader{
 		importContext: &parallelImportContext{
-			semaCtx:    semaCtx,
-			walltime:   walltime,
-			numWorkers: parallelism,
-			evalCtx:    evalCtx,
-			tableDesc:  tableDesc,
-			kvCh:       kvCh,
-			db:         db,
+			semaCtx:      semaCtx,
+			walltime:     walltime,
+			numWorkers:   parallelism,
+			evalCtx:      evalCtx,
+			tableDesc:    tableDesc,
+			databaseDesc: databaseDesc,
+			kvCh:         kvCh,
+			db:           db,
 		},
 		opts: avroOpts,
 	}, nil

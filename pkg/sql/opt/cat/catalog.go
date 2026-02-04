@@ -58,6 +58,10 @@ const InvalidVersion = uint64(0)
 // catalog + schema name.
 type SchemaName = tree.ObjectNamePrefix
 
+// DatabaseName is an alias for tree.ObjectNamePrefix, since it consists of the
+// catalog + database name.
+type DatabaseName = tree.CreateDatabase
+
 // Flags allows controlling aspects of some Catalog operations.
 type Flags struct {
 	// AvoidDescriptorCaches avoids using any cached descriptors (for tables,
@@ -137,6 +141,9 @@ type Catalog interface {
 	// TODO(yang): This function can be extended if needed in the future
 	// to return a new cat.Database type similar to ResolveSchema.
 	LookupDatabaseName(ctx context.Context, flags Flags, name string) (tree.Name, error)
+
+	// ResolveDatabaseByID locates a database with the given StableID.
+	ResolveDatabaseByID(ctx context.Context, flags Flags, id StableID) (Database, error)
 
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).

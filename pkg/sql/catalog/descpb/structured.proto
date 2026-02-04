@@ -1511,7 +1511,19 @@ message DatabaseDescriptor {
   optional uint32 replicated_pcr_version = 14 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "ReplicatedPCRVersion", (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Next field is 15.
+  // max_row_size_log is a guardrail for the maximum size of a row that can be written to the tables of this database..
+  // This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+  // above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use null to disable
+  optional uint32 max_row_size_log = 15 [(gogoproto.nullable) = true,
+  (gogoproto.customname) = "MaxRowSizeLog"];
+
+  // max_row_size_err is a guardrail for the maximum size of a row that can be written to the tables of this database.
+  // This is the maximum size of row (or column family if multiple column families are in use) that SQL can write to the database,
+  // above which an error is returned; use null to disable
+  optional uint32 max_row_size_err = 16 [(gogoproto.nullable) = true,
+  (gogoproto.customname) = "MaxRowSizeErr"];
+
+  // Next field is 17.
 }
 
 // SuperRegion stores a super region configuration.

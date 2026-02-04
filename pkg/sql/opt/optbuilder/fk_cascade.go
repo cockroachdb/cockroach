@@ -56,6 +56,7 @@ type onDeleteCascadeBuilder struct {
 	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
 	fkInboundOrdinal int
 	childTable       cat.Table
+	database         cat.Database
 
 	// oldValues is the list of columns from the mutation input that correspond to
 	// old values of the modified rows. The list maps 1-to-1 to FK columns.
@@ -71,12 +72,13 @@ type onDeleteCascadeBuilder struct {
 var _ memo.PostQueryBuilder = &onDeleteCascadeBuilder{}
 
 func (mb *mutationBuilder) newOnDeleteCascadeBuilder(
-	fkInboundOrdinal int, childTable cat.Table, oldValues opt.ColList,
+	fkInboundOrdinal int, childTable cat.Table, database cat.Database, oldValues opt.ColList,
 ) *onDeleteCascadeBuilder {
 	return &onDeleteCascadeBuilder{
 		mutatedTable:     mb.tab,
 		fkInboundOrdinal: fkInboundOrdinal,
 		childTable:       childTable,
+		database:         database,
 		oldValues:        oldValues,
 		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
@@ -104,7 +106,7 @@ func (cb *onDeleteCascadeBuilder) Build(
 			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
 			var mb mutationBuilder
-			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()), cb.database)
 
 			// Build a semi join of the table with the mutation input.
 			//
@@ -160,8 +162,9 @@ type onDeleteFastCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
 	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
-	fkInboundOrdinal int
-	childTable       cat.Table
+	fkInboundOrdinal   int
+	childTable         cat.Table
+	childTabledatabase cat.Database
 
 	origFilters memo.FiltersExpr
 	origFKCols  opt.ColList
@@ -177,7 +180,7 @@ var _ memo.PostQueryBuilder = &onDeleteFastCascadeBuilder{}
 // applicable to the given mutation, and if yes it returns an instance of
 // onDeleteFastCascadeBuilder.
 func (mb *mutationBuilder) tryNewOnDeleteFastCascadeBuilder(
-	fk cat.ForeignKeyConstraint, fkInboundOrdinal int, childTab cat.Table,
+	fk cat.ForeignKeyConstraint, fkInboundOrdinal int, childTab cat.Table, childTabDatabase cat.Database,
 ) (_ *onDeleteFastCascadeBuilder, ok bool) {
 	parentTab := mb.tab
 	mutationInputScope := mb.outScope
@@ -340,7 +343,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
 			var mb mutationBuilder
-			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			mb.init(b, "delete", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()), cb.childTabledatabase)
 
 			var indexFlags *tree.IndexFlags
 			if mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
@@ -475,8 +478,9 @@ type onDeleteSetBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
 	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
-	fkInboundOrdinal int
-	childTable       cat.Table
+	fkInboundOrdinal   int
+	childTable         cat.Table
+	childTabledatabase cat.Database
 
 	// action is either SetNull or SetDefault.
 	action tree.ReferenceAction
@@ -495,15 +499,16 @@ type onDeleteSetBuilder struct {
 var _ memo.PostQueryBuilder = &onDeleteSetBuilder{}
 
 func (mb *mutationBuilder) newOnDeleteSetBuilder(
-	fkInboundOrdinal int, childTable cat.Table, action tree.ReferenceAction, oldValues opt.ColList,
+	fkInboundOrdinal int, childTable cat.Table, childTabledatabase cat.Database, action tree.ReferenceAction, oldValues opt.ColList,
 ) *onDeleteSetBuilder {
 	return &onDeleteSetBuilder{
-		mutatedTable:     mb.tab,
-		fkInboundOrdinal: fkInboundOrdinal,
-		childTable:       childTable,
-		action:           action,
-		oldValues:        oldValues,
-		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
+		mutatedTable:       mb.tab,
+		fkInboundOrdinal:   fkInboundOrdinal,
+		childTable:         childTable,
+		childTabledatabase: childTabledatabase,
+		action:             action,
+		oldValues:          oldValues,
+		stmtTreeInitFn:     mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
 }
 
@@ -529,7 +534,7 @@ func (cb *onDeleteSetBuilder) Build(
 			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
 			var mb mutationBuilder
-			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()), cb.childTabledatabase)
 
 			// Build a semi join of the table with the mutation input.
 			//
@@ -731,8 +736,9 @@ type onUpdateCascadeBuilder struct {
 	mutatedTable cat.Table
 	// fkInboundOrdinal is the ordinal of the inbound foreign key constraint on
 	// the mutated table (can be passed to mutatedTable.InboundForeignKey).
-	fkInboundOrdinal int
-	childTable       cat.Table
+	fkInboundOrdinal   int
+	childTable         cat.Table
+	childTabledatabase cat.Database
 
 	action tree.ReferenceAction
 
@@ -758,17 +764,19 @@ var _ memo.PostQueryBuilder = &onUpdateCascadeBuilder{}
 func (mb *mutationBuilder) newOnUpdateCascadeBuilder(
 	fkInboundOrdinal int,
 	childTable cat.Table,
+	childTabledatabase cat.Database,
 	action tree.ReferenceAction,
 	oldValues, newValues opt.ColList,
 ) *onUpdateCascadeBuilder {
 	return &onUpdateCascadeBuilder{
-		mutatedTable:     mb.tab,
-		fkInboundOrdinal: fkInboundOrdinal,
-		childTable:       childTable,
-		action:           action,
-		oldValues:        oldValues,
-		newValues:        newValues,
-		stmtTreeInitFn:   mb.b.stmtTree.GetInitFnForPostQuery(),
+		mutatedTable:       mb.tab,
+		fkInboundOrdinal:   fkInboundOrdinal,
+		childTable:         childTable,
+		childTabledatabase: childTabledatabase,
+		action:             action,
+		oldValues:          oldValues,
+		newValues:          newValues,
+		stmtTreeInitFn:     mb.b.stmtTree.GetInitFnForPostQuery(),
 	}
 }
 
@@ -794,7 +802,7 @@ func (cb *onUpdateCascadeBuilder) Build(
 			b.checkPrivilege(dep, cb.childTable, privilege.SELECT)
 
 			var mb mutationBuilder
-			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()))
+			mb.init(b, "update", cb.childTable, tree.MakeUnqualifiedTableName(cb.childTable.Name()), cb.childTabledatabase)
 
 			// Build a join of the table with the mutation input.
 			oldValues := cb.oldValues.RemapColumns(colMap)

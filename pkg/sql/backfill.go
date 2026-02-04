@@ -1324,6 +1324,10 @@ func (sc *SchemaChanger) distColumnBackfill(
 			if err != nil {
 				return err
 			}
+			databaseDesc, err := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tableDesc.GetParentID())
+			if err != nil {
+				return err
+			}
 			metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 				if meta.BulkProcessorProgress != nil {
 					updatedTodoSpans = roachpb.SubtractSpans(updatedTodoSpans,
@@ -1348,7 +1352,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(
 				ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 			)
-			spec := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
+			spec := initColumnBackfillerSpec(tableDesc, databaseDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
 			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 			if err != nil {
 				return err
@@ -2463,6 +2467,10 @@ func runSchemaChangesInTxn(
 		}
 
 		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
+		databaseDesc, err := planner.descCollection.ByIDWithLeased(planner.txn).Get().Database(ctx, tableDesc.GetParentID())
+		if err != nil {
+			return err
+		}
 
 		if m.Adding() {
 			if m.AsPrimaryKeySwap() != nil || m.AsModifyRowLevelTTL() != nil {
@@ -2474,7 +2482,7 @@ func runSchemaChangesInTxn(
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
 						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
-						immutDesc, traceKV,
+						immutDesc, databaseDesc, traceKV,
 					); err != nil {
 						return err
 					}
@@ -2497,7 +2505,7 @@ func runSchemaChangesInTxn(
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
 						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
-						immutDesc, traceKV,
+						immutDesc, databaseDesc, traceKV,
 					); err != nil {
 						return err
 					}
@@ -2861,6 +2869,7 @@ func columnBackfillInTxn(
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	traceKV bool,
 ) error {
 	// A column backfill in the ADD state is a noop.
@@ -2888,7 +2897,7 @@ func columnBackfillInTxn(
 		updateChunkSizeThresholdBytes := rowinfra.BytesLimit(columnBackfillUpdateChunkSizeThresholdBytes.Get(&evalCtx.Settings.SV))
 		const alsoCommit = false
 		sp.Key, err = backfiller.RunColumnBackfillChunk(
-			ctx, txn, tableDesc, sp, scanBatchSize, updateChunkSizeThresholdBytes, alsoCommit, traceKV,
+			ctx, txn, tableDesc, databaseDesc, sp, scanBatchSize, updateChunkSizeThresholdBytes, alsoCommit, traceKV,
 		)
 		if err != nil {
 			return err
@@ -2954,10 +2963,16 @@ func indexTruncateInTxn(
 	idx catalog.Index,
 	traceKV bool,
 ) error {
+	desc := descs.FromTxn(txn)
+	databaseDesc, err := desc.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tableDesc.GetParentID())
+	if err != nil {
+		return err
+	}
+
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
 		rd := row.MakeDeleter(
-			execCfg.Codec, tableDesc, nil /* lockedIndexes */, nil, /* requestedCols */
+			execCfg.Codec, tableDesc, databaseDesc, nil /* lockedIndexes */, nil, /* requestedCols */
 			evalCtx.SessionData(), &execCfg.Settings.SV, execCfg.GetRowMetrics(evalCtx.SessionData().Internal),
 		)
 		td := tableDeleter{rd: rd}

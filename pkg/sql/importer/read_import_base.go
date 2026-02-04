@@ -425,15 +425,16 @@ func newImportRowError(err error, row string, num int64) error {
 
 // parallelImportContext describes state associated with the import.
 type parallelImportContext struct {
-	walltime         int64                   // Import time stamp.
-	numWorkers       int                     // Parallelism.
-	batchSize        int                     // Number of records to batch.
-	semaCtx          *tree.SemaContext       // Semantic analysis context.
-	evalCtx          *eval.Context           // Evaluation context.
-	tableDesc        catalog.TableDescriptor // Table descriptor we're importing into.
-	targetCols       tree.NameList           // List of columns to import.  nil if importing all columns.
-	kvCh             chan row.KVBatch        // Channel for sending KV batches.
-	seqChunkProvider *row.SeqChunkProvider   // Used to reserve chunks of sequence values.
+	walltime         int64                      // Import time stamp.
+	numWorkers       int                        // Parallelism.
+	batchSize        int                        // Number of records to batch.
+	semaCtx          *tree.SemaContext          // Semantic analysis context.
+	evalCtx          *eval.Context              // Evaluation context.
+	tableDesc        catalog.TableDescriptor    // Table descriptor we're importing into.
+	databaseDesc     catalog.DatabaseDescriptor // Database descriptor we're importing into.
+	targetCols       tree.NameList              // List of columns to import.  nil if importing all columns.
+	kvCh             chan row.KVBatch           // Channel for sending KV batches.
+	seqChunkProvider *row.SeqChunkProvider      // Used to reserve chunks of sequence values.
 	db               *kv.DB
 }
 
@@ -461,8 +462,9 @@ func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error
 func makeDatumConverter(
 	ctx context.Context, importCtx *parallelImportContext, fileCtx *importFileContext, db *kv.DB,
 ) (*row.DatumRowConverter, error) {
+
 	conv, err := row.NewDatumRowConverter(
-		ctx, importCtx.semaCtx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx,
+		ctx, importCtx.semaCtx, importCtx.tableDesc, importCtx.databaseDesc, importCtx.targetCols, importCtx.evalCtx,
 		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */, db,
 	)
 	if err == nil {

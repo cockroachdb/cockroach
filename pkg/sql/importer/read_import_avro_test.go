@@ -142,12 +142,13 @@ func (g *intArrGen) Gen() interface{} {
 
 // A testHelper to generate avro data.
 type testHelper struct {
-	schemaJSON  string
-	schemaTable catalog.TableDescriptor
-	codec       *goavro.Codec
-	gens        []avroGen
-	settings    *cluster.Settings
-	evalCtx     eval.Context
+	schemaJSON   string
+	schemaTable  catalog.TableDescriptor
+	databaseDesc catalog.DatabaseDescriptor
+	codec        *goavro.Codec
+	gens         []avroGen
+	settings     *cluster.Settings
+	evalCtx      eval.Context
 }
 
 var defaultGens = []avroGen{
@@ -197,15 +198,22 @@ func newTestHelper(ctx context.Context, t *testing.T, gens ...avroGen) *testHelp
 	require.NoError(t, err)
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
+	semaCtx := tree.MakeSemaContext(nil /* resolver */)
+	createDatabase := &tree.CreateDatabase{}
+	databaseDesc, err := MakeTestingSimpleDatabaseDescriptor(ctx, &semaCtx, st, createDatabase, descpb.ID(100))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	return &testHelper{
 		schemaJSON: string(schemaJSON),
 		schemaTable: descForTable(ctx, t, createStmt, 100, 150, 200, NoFKs).
 			ImmutableCopy().(catalog.TableDescriptor),
-		codec:    codec,
-		gens:     gens,
-		settings: st,
-		evalCtx:  evalCtx,
+		databaseDesc: databaseDesc,
+		codec:        codec,
+		gens:         gens,
+		settings:     st,
+		evalCtx:      evalCtx,
 	}
 }
 
@@ -251,13 +259,13 @@ func (th *testHelper) newRecordStream(
 	}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 
-	avro, err := newAvroInputReader(&semaCtx, nil, th.schemaTable, opts, 0, 1, &th.evalCtx, db)
+	avro, err := newAvroInputReader(&semaCtx, nil, th.schemaTable, th.databaseDesc, opts, 0, 1, &th.evalCtx, db)
 	require.NoError(t, err)
 	producer, consumer, err := newImportAvroPipeline(avro, &fileReader{Reader: records})
 	require.NoError(t, err)
 
 	conv, err := row.NewDatumRowConverter(
-		context.Background(), &semaCtx, th.schemaTable, nil, th.evalCtx.Copy(), nil,
+		context.Background(), &semaCtx, th.schemaTable, th.databaseDesc, nil, th.evalCtx.Copy(), nil,
 		nil /* seqChunkProvider */, nil /* metrics */, nil,
 	)
 	require.NoError(t, err)
@@ -590,6 +598,11 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 
 	tableDesc, err := MakeTestingSimpleTableDescriptor(ctx, &semaCtx, st, create, descpb.ID(100), keys.PublicSchemaID, descpb.ID(100), NoFKs, 1)
 	require.NoError(b, err)
+	createDatabase := &tree.CreateDatabase{}
+	databaseDesc, err := MakeTestingSimpleDatabaseDescriptor(ctx, &semaCtx, st, createDatabase, descpb.ID(100))
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	kvCh := make(chan row.KVBatch)
 	// no-op drain kvs channel.
@@ -603,6 +616,7 @@ func benchmarkAvroImport(b *testing.B, avroOpts roachpb.AvroOptions, testData st
 
 	avro, err := newAvroInputReader(&semaCtx, kvCh,
 		tableDesc.ImmutableCopy().(catalog.TableDescriptor),
+		databaseDesc,
 		avroOpts, 0, 1, &evalCtx, db)
 	require.NoError(b, err)
 

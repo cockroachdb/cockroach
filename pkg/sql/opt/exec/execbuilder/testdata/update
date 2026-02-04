@@ -884,7 +884,7 @@ SET tracing = on,kv,results; UPDATE tu SET c=c+1; SET tracing = off
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation NOT LIKE '%sending batch 1 Get to (n1,s1):1'
 ----
 Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
 fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>
@@ -899,7 +899,7 @@ SET tracing = on,kv,results; UPDATE tu SET b = NULL, c = NULL, d = NULL; SET tra
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+ WHERE operation != 'dist sender send' AND operation NOT LIKE '%sending batch 1 Get to (n1,s1):1'
 ----
 Scan /Table/115/{1-2} lock Exclusive (Block, Unreplicated)
 fetched: /tu/tu_pkey/1:cf=0 -> <undecoded>

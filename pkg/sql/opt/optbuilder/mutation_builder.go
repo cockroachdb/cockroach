@@ -47,9 +47,15 @@ type mutationBuilder struct {
 	// tabID is the metadata ID of the table.
 	tabID opt.TableID
 
+	// databaseID is the metadata ID of the database.
+	databaseID opt.DatabaseID
+
 	// alias is the table alias specified in the mutation statement, or just the
 	// resolved table name if no alias was specified.
 	alias tree.TableName
+
+	// database is the target database.
+	database cat.Database
 
 	// outScope contains the current set of columns that are in scope, as well as
 	// the output expression as it is incrementally built. Once the final mutation
@@ -253,15 +259,16 @@ type mutationBuilder struct {
 	regionColExplicitlyMutated bool
 }
 
-func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName) {
+func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias tree.TableName, database cat.Database) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*mb = mutationBuilder{
-		b:      b,
-		md:     b.factory.Metadata(),
-		opName: opName,
-		tab:    tab,
-		alias:  alias,
+		b:        b,
+		database: database,
+		md:       b.factory.Metadata(),
+		opName:   opName,
+		tab:      tab,
+		alias:    alias,
 	}
 
 	tabCols := tab.ColumnCount()
@@ -292,6 +299,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTable(tab, &mb.alias)
+	mb.databaseID = mb.md.AddDatabase(mb.database)
 }
 
 // setFetchColIDs sets the list of columns that are fetched in order to provide
@@ -1768,6 +1776,7 @@ func (mb *mutationBuilder) makeMutationPrivate(
 
 	private := &memo.MutationPrivate{
 		Table:                          mb.tabID,
+		Database:                       mb.databaseID,
 		InsertCols:                     checkEmptyList(mb.insertColIDs),
 		FetchCols:                      checkEmptyList(mb.fetchColIDs),
 		UpdateCols:                     checkEmptyList(mb.updateColIDs),

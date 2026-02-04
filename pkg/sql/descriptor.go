@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/databasestorageparam"
 	"github.com/cockroachdb/errors"
 )
 
@@ -139,6 +141,18 @@ func (p *planner) createDatabase(
 	}).BuildCreatedMutableSchema()
 
 	if err := p.checkCanAlterToNewOwner(ctx, db, owner); err != nil {
+		return nil, true, err
+	}
+
+	setter := databasestorageparam.NewSetter(db)
+	err = storageparam.Set(
+		ctx,
+		p.SemaCtx(),
+		p.EvalContext(),
+		database.StorageParams,
+		setter,
+	)
+	if err != nil {
 		return nil, true, err
 	}
 

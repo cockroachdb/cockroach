@@ -1377,6 +1377,7 @@ func (e *distSQLSpecExecFactory) ConstructShowTrace(
 func (e *distSQLSpecExecFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
+	database cat.Database,
 	arbiterIndexes cat.IndexOrdinals,
 	arbiterConstraints cat.UniqueOrdinals,
 	insertCols exec.TableColumnOrdinalSet,
@@ -1392,6 +1393,7 @@ func (e *distSQLSpecExecFactory) ConstructInsert(
 func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 	rows [][]tree.TypedExpr,
 	table cat.Table,
+	database cat.Database,
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
@@ -1406,6 +1408,7 @@ func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 func (e *distSQLSpecExecFactory) ConstructUpdate(
 	input exec.Node,
 	table cat.Table,
+	database cat.Database,
 	fetchCols exec.TableColumnOrdinalSet,
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
@@ -1421,6 +1424,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdate(
 func (e *distSQLSpecExecFactory) ConstructUpdateSwap(
 	input exec.Node,
 	table cat.Table,
+	database cat.Database,
 	fetchCols exec.TableColumnOrdinalSet,
 	updateCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
@@ -1436,6 +1440,7 @@ func (e *distSQLSpecExecFactory) ConstructUpdateSwap(
 func (e *distSQLSpecExecFactory) ConstructUpsert(
 	input exec.Node,
 	table cat.Table,
+	database cat.Database,
 	arbiterIndexes cat.IndexOrdinals,
 	arbiterConstraints cat.UniqueOrdinals,
 	canaryCol exec.NodeColumnOrdinal,

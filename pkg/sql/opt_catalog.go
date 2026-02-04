@@ -184,6 +184,17 @@ func (oc *optCatalog) LookupDatabaseName(
 	return tree.Name(name), nil
 }
 
+// ResolveDatabaseByID implements cat.Catalog interface.
+func (oc *optCatalog) ResolveDatabaseByID(
+	ctx context.Context, flags cat.Flags, id cat.StableID,
+) (cat.Database, error) {
+	desc, err := oc.planner.LookupDatabaseByID(ctx, descpb.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return newOptDatabase(desc), nil
+}
+
 func (oc *optCatalog) ResolveSchemaByID(
 	ctx context.Context, flags cat.Flags, schemaID cat.StableID,
 ) (cat.Schema, error) {
@@ -883,6 +894,12 @@ func (os *optSequence) CollectTypes(ord int) (descpb.IDs, error) {
 	return collectTypes(col)
 }
 
+// optDatabase is a wrapper around catalog.DatabaseDescriptor that
+// implements the cat.Object and cat.Database interfaces.
+type optDatabase struct {
+	desc catalog.DatabaseDescriptor
+}
+
 // optTable is a wrapper around catalog.TableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
 type optTable struct {
@@ -943,6 +960,34 @@ type optTable struct {
 	// table. This is a common lookup that needs to be fast.
 	colMap catalog.TableColMap
 }
+
+var _ cat.Database = &optDatabase{}
+
+func newOptDatabase(desc catalog.DatabaseDescriptor) *optDatabase {
+	return &optDatabase{desc: desc}
+}
+
+func (os *optDatabase) ID() cat.StableID {
+	return cat.StableID(os.desc.GetID())
+}
+
+func (os *optDatabase) Version() uint64 {
+	return uint64(os.desc.GetVersion())
+}
+
+func (os *optDatabase) PostgresDescriptorID() catid.DescID {
+	return os.desc.GetID()
+}
+
+func (os *optDatabase) Equals(other cat.Object) bool {
+	otherDb, ok := other.(*optDatabase)
+	if !ok {
+		return false
+	}
+	return os.desc.GetID() == otherDb.desc.GetID() && os.desc.GetVersion() == otherDb.desc.GetVersion()
+}
+
+// TODO (KB) add cat.Database interface implementations
 
 var _ cat.Table = &optTable{}
 

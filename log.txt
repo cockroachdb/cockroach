@@ -1,0 +1,17 @@
+CockroachDB node starting at 2025-09-03 17:20:15.527243262 +0000 UTC m=+1.022958526 (took 0.8s)
+build:               CCL v25.4.0-alpha.1-dev @  (go1.23.12 X:nocoverageredesign)
+malloc_conf:         prof:false,prof_active:true,background_thread:true,thp:never,metadata_thp:disabled,narenas:64,dirty_decay_ms:2000,muzzy_decay_ms:0
+webui:               http://localhost:8080
+sql:                 postgresql://root@localhost:26257/defaultdb?sslmode=disable
+sql (JDBC):          jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable&user=root
+RPC client flags:    ./cockroach-short <client cmd> --host=localhost:26257 --insecure
+logs:                /home/naiv/personal/cockroach/cockroach-data/logs
+temp dir:            /home/naiv/personal/cockroach/cockroach-data/cockroach-temp983914133
+external I/O path:   /home/naiv/personal/cockroach/cockroach-data/extern
+store[0]:            path=/home/naiv/personal/cockroach/cockroach-data
+clusterID:           b6618aed-de5f-467c-b087-76e3188d49f0
+status:              restarted pre-existing node
+nodeID:              1
+Note: a second interrupt will skip graceful shutdown and terminate forcefully
+initiating graceful shutdown of server
+server drained and shutdown completed

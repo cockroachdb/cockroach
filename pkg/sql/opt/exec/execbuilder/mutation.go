@@ -128,12 +128,15 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colO
 
 	// Construct the Insert node.
 	tab := b.mem.Metadata().Table(ins.Table)
+	databaseDesc := b.mem.Metadata().Database(ins.Database)
+
 	insertOrds := ordinalSetFromColList(ins.InsertCols)
 	checkOrds := ordinalSetFromColList(ins.CheckCols)
 	returnOrds := ordinalSetFromColList(ins.ReturnCols)
 	node, err := b.factory.ConstructInsert(
 		input.root,
 		tab,
+		databaseDesc,
 		ins.ArbiterIndexes,
 		ins.ArbiterConstraints,
 		insertOrds,
@@ -207,6 +210,7 @@ func (b *Builder) tryBuildFastPathInsert(
 
 	md := b.mem.Metadata()
 	tab := md.Table(ins.Table)
+	databaseDesc := md.Database(ins.Database)
 
 	uniqChecks := make([]exec.InsertFastPathCheck, len(ins.UniqueChecks))
 	for i := range ins.FastPathUniqueChecks {
@@ -376,6 +380,7 @@ func (b *Builder) tryBuildFastPathInsert(
 	node, err := b.factory.ConstructInsertFastPath(
 		rows,
 		tab,
+		databaseDesc,
 		insertOrds,
 		returnOrds,
 		checkOrds,
@@ -449,6 +454,8 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	// Construct the Update node.
 	md := b.mem.Metadata()
 	tab := md.Table(upd.Table)
+	database := md.Database(upd.Database)
+
 	fetchColOrds := ordinalSetFromColList(upd.FetchCols)
 	updateColOrds := ordinalSetFromColList(upd.UpdateCols)
 	returnColOrds := ordinalSetFromColList(upd.ReturnCols)
@@ -466,6 +473,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 	node, err := b.factory.ConstructUpdate(
 		input.root,
 		tab,
+		database,
 		fetchColOrds,
 		updateColOrds,
 		returnColOrds,
@@ -524,6 +532,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	// Construct the Upsert node.
 	md := b.mem.Metadata()
 	tab := md.Table(ups.Table)
+	database := md.Database(ups.Database)
 	canaryCol := exec.NodeColumnOrdinal(-1)
 	if ups.CanaryCol != 0 {
 		// The canary column comes after the insert, fetch, and update columns.
@@ -543,6 +552,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 	node, err := b.factory.ConstructUpsert(
 		input.root,
 		tab,
+		database,
 		ups.ArbiterIndexes,
 		ups.ArbiterConstraints,
 		canaryCol,

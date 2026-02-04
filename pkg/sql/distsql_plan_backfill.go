@@ -22,8 +22,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+//TODO (KB): write some tests for distbuted backfill and database max row size guardrails
+
 func initColumnBackfillerSpec(
 	tbl catalog.TableDescriptor,
+	db catalog.DatabaseDescriptor,
 	duration time.Duration,
 	chunkSize int64,
 	updateChunkSizeThresholdBytes uint64,
@@ -31,6 +34,7 @@ func initColumnBackfillerSpec(
 ) execinfrapb.BackfillerSpec {
 	return execinfrapb.BackfillerSpec{
 		Table:                         *tbl.TableDesc(),
+		Database:                      *db.DatabaseDesc(),
 		Duration:                      duration,
 		ChunkSize:                     chunkSize,
 		UpdateChunkSizeThresholdBytes: updateChunkSizeThresholdBytes,

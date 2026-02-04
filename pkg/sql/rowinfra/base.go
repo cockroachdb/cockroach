@@ -10,6 +10,7 @@ package rowinfra
 import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/errors"
 )
 
 // RowLimit represents a response limit expressed in terms of number of result
@@ -77,3 +78,13 @@ func SetDefaultBatchBytesLimitForTests(v BytesLimit) {
 // RowExecCancelCheckInterval is the default cancel check interval for the row
 // execution engine.
 const RowExecCancelCheckInterval = uint32(128)
+
+// IntInRange returns a function that checks if the given integer is in the range [min, max].
+func IntInRange(min, max int64) func(int64) error {
+	return func(intVal int64) error {
+		if intVal < min || intVal > max {
+			return errors.Newf("expected value in range [%d, %d], got: %d", min, max, intVal)
+		}
+		return nil
+	}
+}

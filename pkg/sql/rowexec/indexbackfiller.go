@@ -40,9 +40,9 @@ import (
 type indexBackfiller struct {
 	backfill.IndexBackfiller
 
-	desc catalog.TableDescriptor
-
-	spec execinfrapb.BackfillerSpec
+	desc         catalog.TableDescriptor
+	databaseDesc catalog.DatabaseDescriptor
+	spec         execinfrapb.BackfillerSpec
 
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
@@ -96,11 +96,12 @@ func newIndexBackfiller(
 		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("index-backfill-mon"),
 	)
 	ib := &indexBackfiller{
-		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
-		spec:        spec,
-		flowCtx:     flowCtx,
-		processorID: processorID,
-		filter:      backfill.IndexMutationFilter,
+		desc:         flowCtx.TableDescriptor(ctx, &spec.Table),
+		databaseDesc: flowCtx.DatabaseDescriptor(ctx, &spec.Database),
+		spec:         spec,
+		flowCtx:      flowCtx,
+		processorID:  processorID,
+		filter:       backfill.IndexMutationFilter,
 	}
 
 	if err := ib.IndexBackfiller.InitForDistributedUse(

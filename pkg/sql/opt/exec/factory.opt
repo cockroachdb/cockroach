@@ -480,6 +480,7 @@ define ShowTrace {
 define Insert {
     Input exec.Node
     Table cat.Table
+    Database cat.Database
     ArbiterIndexes cat.IndexOrdinals
     ArbiterConstraints cat.UniqueOrdinals
     InsertCols exec.TableColumnOrdinalSet
@@ -517,6 +518,7 @@ define Insert {
 define InsertFastPath {
     Rows [][]tree.TypedExpr
     Table cat.Table
+    Database cat.Database
     InsertCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
     CheckCols exec.CheckOrdinalSet
@@ -553,6 +555,7 @@ define InsertFastPath {
 define Update {
     Input exec.Node
     Table cat.Table
+    Database cat.Database
     FetchCols exec.TableColumnOrdinalSet
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet
@@ -595,6 +598,7 @@ define Update {
 define Upsert {
     Input exec.Node
     Table cat.Table
+    Database cat.Database
     ArbiterIndexes cat.IndexOrdinals
     ArbiterConstraints cat.UniqueOrdinals
     CanaryCol exec.NodeColumnOrdinal
@@ -932,6 +936,7 @@ define VectorMutationSearch {
 define UpdateSwap {
     Input exec.Node
     Table cat.Table
+    Database cat.Database
     FetchCols exec.TableColumnOrdinalSet
     UpdateCols exec.TableColumnOrdinalSet
     ReturnCols exec.TableColumnOrdinalSet

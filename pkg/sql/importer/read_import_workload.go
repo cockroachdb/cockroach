@@ -34,12 +34,13 @@ import (
 )
 
 type workloadReader struct {
-	semaCtx     *tree.SemaContext
-	evalCtx     *eval.Context
-	table       catalog.TableDescriptor
-	kvCh        chan row.KVBatch
-	parallelism int
-	db          *kv.DB
+	semaCtx      *tree.SemaContext
+	evalCtx      *eval.Context
+	table        catalog.TableDescriptor
+	databaseDesc catalog.DatabaseDescriptor
+	kvCh         chan row.KVBatch
+	parallelism  int
+	db           *kv.DB
 }
 
 var _ inputConverter = &workloadReader{}
@@ -48,6 +49,7 @@ func newWorkloadReader(
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	table catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	kvCh chan row.KVBatch,
 	parallelism int,
 	db *kv.DB,
@@ -181,7 +183,7 @@ func (w *workloadReader) readFiles(
 		}
 
 		wc := NewWorkloadKVConverter(
-			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.db)
+			fileID, w.table, w.databaseDesc, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.db)
 		wcs = append(wcs, wc)
 	}
 
@@ -199,6 +201,7 @@ func (w *workloadReader) readFiles(
 // WorkloadKVConverter converts workload.BatchedTuples to []roachpb.KeyValues.
 type WorkloadKVConverter struct {
 	tableDesc      catalog.TableDescriptor
+	databaseDesc   catalog.DatabaseDescriptor
 	rows           workload.BatchedTuples
 	batchIdxAtomic int64
 	batchEnd       int
@@ -216,6 +219,7 @@ type WorkloadKVConverter struct {
 func NewWorkloadKVConverter(
 	fileID int32,
 	tableDesc catalog.TableDescriptor,
+	databaseDesc catalog.DatabaseDescriptor,
 	rows workload.BatchedTuples,
 	batchStart, batchEnd int,
 	kvCh chan row.KVBatch,
@@ -223,6 +227,7 @@ func NewWorkloadKVConverter(
 ) *WorkloadKVConverter {
 	return &WorkloadKVConverter{
 		tableDesc:      tableDesc,
+		databaseDesc:   databaseDesc,
 		rows:           rows,
 		batchIdxAtomic: int64(batchStart) - 1,
 		batchEnd:       batchEnd,
@@ -253,7 +258,7 @@ func (w *WorkloadKVConverter) Worker(
 	defer pacer.Close()
 
 	conv, err := row.NewDatumRowConverter(
-		ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
+		ctx, semaCtx, w.tableDesc, w.databaseDesc, nil, /* targetColNames */
 		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db,
 	)
 	if err != nil {

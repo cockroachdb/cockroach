@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -248,16 +250,20 @@ func makeInputConverter(
 ) (inputConverter, error) {
 	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
 	var singleTable catalog.TableDescriptor
+	var database *descpb.DatabaseDescriptor
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
 			singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
+			database = table.DatabaseDesc
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
 				singleTableTargetCols[i] = tree.Name(colName)
 			}
 		}
 	}
+
+	databaseDesc := dbdesc.NewBuilder(database).BuildImmutableDatabase()
 
 	if singleTable == nil {
 		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
@@ -297,21 +303,21 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh, readerParallelism, db), nil
+			return newWorkloadReader(semaCtx, evalCtx, singleTable, databaseDesc, kvCh, readerParallelism, db), nil
 		}
 		return newCSVInputReader(
 			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, readerParallelism,
-			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider, db), nil
+			singleTable, databaseDesc, singleTableTargetCols, evalCtx, seqChunkProvider, db), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+			readerParallelism, singleTable, databaseDesc, singleTableTargetCols, evalCtx, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+			readerParallelism, singleTable, databaseDesc, singleTableTargetCols, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
-			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
+			semaCtx, kvCh, singleTable, databaseDesc, spec.Format.Avro, spec.WalltimeNanos,
 			readerParallelism, evalCtx, db)
 	default:
 		return nil, errors.Errorf(

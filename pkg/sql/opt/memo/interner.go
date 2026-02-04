@@ -492,6 +492,10 @@ func (h *hasher) HashTableID(val opt.TableID) {
 	h.HashUint64(uint64(val))
 }
 
+func (h *hasher) HashDatabaseID(val opt.DatabaseID) {
+	h.HashUint64(uint64(val))
+}
+
 func (h *hasher) HashSequenceID(val opt.SequenceID) {
 	h.HashUint64(uint64(val))
 }
@@ -983,6 +987,10 @@ func (h *hasher) IsSchemaIDEqual(l, r opt.SchemaID) bool {
 }
 
 func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
+	return l == r
+}
+
+func (h *hasher) IsDatabaseIDEqual(l, r opt.DatabaseID) bool {
 	return l == r
 }
 

@@ -72,6 +72,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(upd.Table, privilege.UPDATE)
+	database := b.resolveDatabaseForMutation(cat.StableID(tab.GetDatabaseID()))
 
 	if tab.IsVirtualTable() {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -91,7 +92,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	b.checkMultipleMutations(tab, generalMutation)
 
 	var mb mutationBuilder
-	mb.init(b, "update", tab, alias)
+	mb.init(b, "update", tab, alias, database)
 
 	// exprColRefs tracks the columns referenced by expressions in the
 	// SET and WHERE clauses.

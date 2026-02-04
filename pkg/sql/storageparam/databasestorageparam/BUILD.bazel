@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "databasestorageparam",
+    srcs = ["database_storage_param.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam/databasestorageparam",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/telemetry",
+        "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/paramparse",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowinfra",
+        "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltelemetry",
+        "//pkg/util/humanizeutil",
+    ],
+)

@@ -44,8 +44,9 @@ import (
 
 const (
 	// testDB is the default current database for testing purposes.
-	testDB       = "t"
-	testSchemaID = 1
+	testDB         = "t"
+	testSchemaID   = 1
+	testDatabaseID = 1
 )
 
 // Catalog implements the cat.Catalog interface for testing purposes.
@@ -101,6 +102,16 @@ func (tc *Catalog) LookupDatabaseName(
 		return "", sqlerrors.NewUndefinedDatabaseError(name)
 	}
 	return tree.Name(name), nil
+}
+
+func (tc *Catalog) ResolveDatabaseByID(
+	_ context.Context, _ cat.Flags, id cat.StableID,
+) (cat.Database, error) {
+	if id != testDatabaseID {
+		return nil, pgerror.Newf(pgcode.InvalidSchemaName,
+			"target database does not exist")
+	}
+	return &tc.testSchema, nil
 }
 
 // ResolveSchema is part of the cat.Catalog interface.

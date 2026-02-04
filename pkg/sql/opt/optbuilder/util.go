@@ -565,6 +565,10 @@ func (b *Builder) checkMultipleMutationsCascade(
 	}
 }
 
+func (b *Builder) resolveDatabaseForMutation(id cat.StableID) cat.Database {
+	return b.resolveDatabase(id)
+}
+
 // resolveTableForMutation is a helper method for building mutations. It returns
 // the table in the catalog that matches the given TableExpr, along with the
 // table's MDDepName and alias, and the IDs of any columns explicitly specified
@@ -636,6 +640,14 @@ func (b *Builder) resolveTable(
 		panic(sqlerrors.NewWrongObjectTypeError(tn, "table"))
 	}
 	return tab, resName
+}
+
+func (b *Builder) resolveDatabase(id cat.StableID) cat.Database {
+	db, err := b.catalog.ResolveDatabaseByID(b.ctx, cat.Flags{}, id)
+	if err != nil {
+		panic(err)
+	}
+	return db
 }
 
 // resolveTableRef returns the table in the catalog that matches the given

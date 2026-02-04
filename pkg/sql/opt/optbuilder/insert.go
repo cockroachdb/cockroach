@@ -178,6 +178,7 @@ func init() {
 func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope) {
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
+	database := b.resolveDatabaseForMutation(cat.StableID(tab.GetDatabaseID()))
 
 	if tab.IsVirtualTable() {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -223,9 +224,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 	var mb mutationBuilder
 	if ins.OnConflict != nil && ins.OnConflict.IsUpsertAlias() {
-		mb.init(b, "upsert", tab, alias)
+		mb.init(b, "upsert", tab, alias, database)
 	} else {
-		mb.init(b, "insert", tab, alias)
+		mb.init(b, "insert", tab, alias, database)
 	}
 
 	// Compute target columns in two cases:

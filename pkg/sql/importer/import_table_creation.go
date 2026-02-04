@@ -20,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/databasestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,6 +46,72 @@ type fkHandler struct {
 var NoFKs = fkHandler{resolver: fkResolver{
 	tableNameToDesc: make(map[string]*tabledesc.Mutable),
 }}
+
+// MakeTestingSimpleDatabaseDescriptor creates a dbdesc.Mutable from a
+// CreateDatabase parse node without the full machinery
+func MakeTestingSimpleDatabaseDescriptor(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	st *cluster.Settings,
+	create *tree.CreateDatabase,
+	databaseID descpb.ID,
+) (*dbdesc.Mutable, error) {
+	// Generate a unique ID for the public schema
+	publicSchemaID := databaseID + 1
+
+	// Get database name from the CREATE DATABASE statement
+	dbName := string(create.Name)
+	if dbName == "" {
+		dbName = "test_db"
+	}
+
+	// Set up the owner - use root if not specified
+	owner := username.RootUserName()
+	if !create.Owner.Undefined() {
+		// For testing purposes, we'll create a simple session data
+		// In real usage, this would need proper session context
+		sessionData := &sessiondata.SessionData{}
+		var err error
+		owner, err = decodeusername.FromRoleSpec(
+			sessionData, username.PurposeValidation, create.Owner,
+		)
+		if err != nil {
+			// Fall back to root user if we can't resolve the owner
+			owner = username.RootUserName()
+		}
+	}
+
+	// Create the database descriptor
+	db := dbdesc.NewInitial(
+		databaseID,
+		dbName,
+		owner,
+		dbdesc.WithPublicSchemaID(publicSchemaID),
+	)
+
+	// Create a simple evaluation context for storage parameter processing
+	evalCtx := eval.Context{
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		Settings:         st,
+	}
+
+	// Set storage parameters if any are provided
+	if len(create.StorageParams) > 0 {
+		setter := databasestorageparam.NewSetter(db)
+		err := storageparam.Set(
+			ctx,
+			semaCtx,
+			&evalCtx,
+			create.StorageParams,
+			setter,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return db, nil
+}
 
 // MakeTestingSimpleTableDescriptor creates a tabledesc.Mutable from a
 // CreateTable parse node without the full machinery. Many parts of the syntax

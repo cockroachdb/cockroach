@@ -29,12 +29,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TODO (KB): write some tests for vector inserter and database max row size guardrails
+
 type vectorInserter struct {
 	colexecop.OneInputHelper
-	desc       catalog.TableDescriptor
-	insertCols []catalog.Column
-	retBatch   coldata.Batch
-	flowCtx    *execinfra.FlowCtx
+	tableDesc    catalog.TableDescriptor
+	databaseDesc catalog.DatabaseDescriptor
+	insertCols   []catalog.Column
+	retBatch     coldata.Batch
+	flowCtx      *execinfra.FlowCtx
 	// checkOrds are the columns containing bool values with check expression
 	// results.
 	checkOrds intsets.Fast
@@ -78,6 +81,11 @@ func NewInsertOp(
 		}
 		insCols[i] = col
 	}
+	databaseID := desc.GetParentID()
+	databaseDesc, err := flowCtx.Descriptors.ByIDWithLeased(flowCtx.Txn).Get().Database(ctx, databaseID)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
 
 	// Empirical testing shows that if ApproximateMutationBytes approaches
 	// 32MB we'll hit the command limit. So set limit to a fraction of
@@ -86,7 +94,8 @@ func NewInsertOp(
 
 	v := vectorInserter{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
-		desc:           desc,
+		tableDesc:      desc,
+		databaseDesc:   databaseDesc,
 		retBatch:       alloc.NewMemBatchWithFixedCapacity(typs, 1),
 		flowCtx:        flowCtx,
 		insertCols:     insCols,
@@ -107,7 +116,7 @@ func (v *vectorInserter) getPartialIndexMap(b coldata.Batch) map[catid.IndexID][
 	// Create a set of partial index IDs to not write to. Indexes should not be
 	// written to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
-	pindexes := v.desc.PartialIndexes()
+	pindexes := v.tableDesc.PartialIndexes()
 	if n := len(pindexes); n > 0 {
 		colOffset := len(v.insertCols) + v.checkOrds.Len()
 		numCols := len(b.ColVecs()) - colOffset
@@ -134,7 +143,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 			// TODO(yuzefovich): when auto-commit enabled, the inserted rows
 			// will be visible sooner than at the end. Is it worth notifying the
 			// stats refresher earlier in that case?
-			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, v.rowsWritten)
+			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.tableDesc, v.rowsWritten)
 			v.statsRefresherNotified = true
 		}
 		return coldata.ZeroBatch
@@ -156,7 +165,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 	// time here is minimal compared to time spent executing batch.
 	p = &row.SortingPutter{Putter: p}
 	enc := colenc.MakeEncoder(
-		v.flowCtx.Codec(), v.desc, v.flowCtx.EvalCtx.SessionData(), &v.flowCtx.Cfg.Settings.SV,
+		v.flowCtx.Codec(), v.tableDesc, v.databaseDesc, v.flowCtx.EvalCtx.SessionData(), &v.flowCtx.Cfg.Settings.SV,
 		b, v.insertCols, v.flowCtx.GetRowMetrics(), partialIndexColMap,
 		func() error {
 			if kvba.Batch.ApproximateMutationBytes() > v.mutationQuota {
@@ -199,7 +208,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 		}
 		if err != nil {
 			colexecerror.ExpectedError(row.ConvertBatchError(
-				ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
+				ctx, v.tableDesc, kvba.Batch, false, /* alwaysConvertCondFailed */
 			))
 		}
 		numRows := end - start
@@ -220,7 +229,7 @@ func (v *vectorInserter) Next() coldata.Batch {
 }
 
 func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch) error {
-	checks := v.desc.EnforcedCheckValidators()
+	checks := v.tableDesc.EnforcedCheckValidators()
 	colIdx := 0
 	for i, ch := range checks {
 		if !v.checkOrds.Contains(i) {
@@ -231,7 +240,7 @@ func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch
 		nulls := vec.Nulls()
 		for r := 0; r < b.Length(); r++ {
 			if ch.IsCheckFailed(bools[r], nulls.NullAt(r)) {
-				return row.CheckFailed(ctx, v.flowCtx.EvalCtx, v.semaCtx, v.flowCtx.EvalCtx.SessionData(), v.desc, ch)
+				return row.CheckFailed(ctx, v.flowCtx.EvalCtx, v.semaCtx, v.flowCtx.EvalCtx.SessionData(), v.tableDesc, ch)
 			}
 		}
 		colIdx++
