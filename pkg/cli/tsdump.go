@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 )
 
@@ -65,6 +66,7 @@ var debugTimeSeriesDumpOpts = struct {
 	metricsListFile        string // file containing explicit list of metrics to dump
 	nonVerbose             bool   // dump only essential and support metrics
 	output                 string // output file path; empty means stdout
+	encoding               string // encoding for raw format: zstd (empty means no encoding)
 }{
 	format:                 tsDumpRaw,
 	from:                   timestampValue{},
@@ -74,6 +76,7 @@ var debugTimeSeriesDumpOpts = struct {
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
 	nonVerbose:             false, // dump all metrics by default
+	encoding:               "",    // default: no encoding
 
 	// default to 10 seconds interval for datadoginit.
 	// This is based on the scrape interval that is currently set accross all managed clusters
@@ -123,6 +126,14 @@ will then convert it to the --format requested in the current invocation.
 			}
 			defer f.Close()
 			output = f
+		}
+
+		// Validate encoding flag is only used with raw format
+		if debugTimeSeriesDumpOpts.encoding != "" && debugTimeSeriesDumpOpts.format != tsDumpRaw {
+			return errors.New("--encoding is only supported with --format=raw")
+		}
+		if debugTimeSeriesDumpOpts.encoding != "" && debugTimeSeriesDumpOpts.encoding != "zstd" {
+			return errors.Errorf("invalid value for --encoding: %s (supported: zstd)", debugTimeSeriesDumpOpts.encoding)
 		}
 
 		var w tsWriter
@@ -296,20 +307,22 @@ will then convert it to the --format requested in the current invocation.
 					return errors.Wrapf(err, "connecting to %s", target)
 				}
 
-				// Buffer the writes since we're going to
-				// be writing potentially a lot of data.
-				w := bufio.NewWriterSize(output, 1024*1024)
+				// Create the output writer with optional encoding
+				rawWriter, err := makeRawOutputWriter(output, debugTimeSeriesDumpOpts.encoding)
+				if err != nil {
+					return err
+				}
 
 				// Write embedded metadata first
-				if err := tsdumpmeta.Write(w, metadata); err != nil {
+				if err := tsdumpmeta.Write(rawWriter, metadata); err != nil {
 					return err
 				}
 
-				if err := tsutil.DumpRawTo(stream, w); err != nil {
+				if err := tsutil.DumpRawTo(stream, rawWriter); err != nil {
 					return err
 				}
 
-				if err := w.Flush(); err != nil {
+				if err := rawWriter.Close(); err != nil {
 					return err
 				}
 
@@ -819,6 +832,40 @@ func readMetricsListFile(filePath string) ([]serverpb.MetricsFilterEntry, error)
 		return nil, errors.Newf("metrics list file %s contains no valid metric names or patterns", filePath)
 	}
 	return entries, nil
+}
+
+// rawOutputWriter wraps a writer with a buffer that needs flushing on close.
+type rawOutputWriter struct {
+	io.Writer               // embedded - Write() delegated automatically
+	buf       *bufio.Writer // buffer to flush
+	encoder   io.Closer     // encoder to close (may be nil)
+}
+
+// Close closes the encoder (if any) and flushes the buffer.
+func (w *rawOutputWriter) Close() error {
+	if w.encoder != nil {
+		if err := w.encoder.Close(); err != nil {
+			return err
+		}
+	}
+	return w.buf.Flush()
+}
+
+// makeRawOutputWriter creates a buffered writer with optional encoding.
+func makeRawOutputWriter(output io.Writer, encoding string) (*rawOutputWriter, error) {
+	buf := bufio.NewWriterSize(output, 1024*1024)
+
+	if encoding == "zstd" {
+		encoder, err := zstd.NewWriter(buf)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating zstd encoder")
+		}
+		// encoder is used as a Writer and a Closer because it implements both io.Writer and io.Closer
+		return &rawOutputWriter{Writer: encoder, buf: buf, encoder: encoder}, nil
+	}
+
+	// buf is both the Writer and the buffer to flush
+	return &rawOutputWriter{Writer: buf, buf: buf}, nil
 }
 
 type tsDumpFormat int
