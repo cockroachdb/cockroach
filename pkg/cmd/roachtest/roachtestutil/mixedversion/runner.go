@@ -575,7 +575,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	availableNodes := tr.getAvailableNodes(service.descriptor)
 	for j, node := range service.descriptor.Nodes {
 		group.GoCtx(func(ctx context.Context) error {
-			cv, err := clusterupgrade.ClusterVersion(ctx, tr.logger, tr.conn(node, service.descriptor.Name))
+			cv, err := clusterupgrade.ClusterVersionFromKV(ctx, tr.logger, tr.conn(node, service.descriptor.Name))
 			if err != nil {
 				if !availableNodes.Contains(node) {
 					return nil
