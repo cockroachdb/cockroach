@@ -544,8 +544,10 @@ func scaleStatsSum(vals []float64) float64 {
 func registerSchemaChangeBulkIngest(r registry.Registry) {
 	// Allow a long running time to account for runs that use a
 	// cockroach build with runtime assertions enabled.
-	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, createIndexOp))
-	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, addColumnOp))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, createIndexOp, false))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, addColumnOp, false))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, createIndexOp, true))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, addColumnOp, true))
 }
 
 func makeSchemaChangeBulkIngestTest(
@@ -553,9 +555,10 @@ func makeSchemaChangeBulkIngestTest(
 	numNodes, numRows int,
 	length time.Duration,
 	operation bulkIngestSchemaChangeOp,
+	enableElasticCPUControl bool,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:      fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d/%s", numNodes, numRows, operation),
+		Name:      makeSchemaChangeBulkIngestTestName(numNodes, numRows, operation, enableElasticCPUControl),
 		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.Disks(4)),
@@ -641,6 +644,11 @@ func makeSchemaChangeBulkIngestTest(
 					t.Fatal(err)
 				}
 
+				// Set elastic control
+				if _, err := db.Exec("SET CLUSTER SETTING kvadmission.elastic_control_bulk_low_priority.enabled = $1", enableElasticCPUControl); err != nil {
+					t.Fatal(err)
+				}
+
 				t.L().Printf("Computing table statistics manually")
 				if _, err := db.Exec("CREATE STATISTICS stats from bulkingest.bulkingest"); err != nil {
 					t.Fatal(err)
@@ -683,6 +691,17 @@ func makeSchemaChangeBulkIngestTest(
 			m.Wait()
 		},
 	}
+}
+
+func makeSchemaChangeBulkIngestTestName(
+	numNodes, numRows int, operation bulkIngestSchemaChangeOp, enableElasticCPUControl bool,
+) string {
+	testName := fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d", numNodes, numRows)
+	if !enableElasticCPUControl {
+		testName = fmt.Sprintf("%s/elastic=false", testName)
+	}
+	testName = fmt.Sprintf("%s/%s", testName, operation)
+	return testName
 }
 
 // registerSchemaChangeBulkIngestScaleTest registers tests for investigating
