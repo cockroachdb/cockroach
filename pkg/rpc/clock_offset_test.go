@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -148,7 +149,7 @@ func TestIsHealthyOffsetInterval(t *testing.T) {
 		{RemoteOffset{Offset: 15, Uncertainty: 4}, false},
 		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, false},
 	} {
-		if isHealthy := tc.offset.isHealthy(context.Background(), maxOffset); tc.expectedHealthy {
+		if isHealthy := tc.offset.isHealthy(context.Background(), maxOffset, log.Every(time.Second)); tc.expectedHealthy {
 			if !isHealthy {
 				t.Errorf("%d: expected remote offset %s for maximum offset %s to be healthy", i, tc.offset, maxOffset)
 			}

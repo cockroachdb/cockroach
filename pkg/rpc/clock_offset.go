@@ -175,7 +175,8 @@ type RemoteClockMonitor struct {
 		connCount    map[roachpb.NodeID]uint
 	}
 
-	metrics RemoteClockMetrics
+	uncertainOffsetLogOnce log.EveryN
+	metrics                RemoteClockMetrics
 }
 
 // TestingResetLatencyInfos will clear all latency info from the clock monitor.
@@ -213,9 +214,10 @@ func newRemoteClockMonitor(
 	histogramWindowInterval time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		clock:           clock,
-		toleratedOffset: toleratedOffset,
-		offsetTTL:       offsetTTL,
+		clock:                  clock,
+		toleratedOffset:        toleratedOffset,
+		offsetTTL:              offsetTTL,
+		uncertainOffsetLogOnce: log.Every(time.Second * 10),
 	}
 	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
 	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
@@ -435,7 +437,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 			off2 := float64(offset.Offset - offset.Uncertainty)
 			sum += off1 + off2
 			offs = append(offs, off1, off2)
-			if offset.isHealthy(ctx, r.toleratedOffset) {
+			if offset.isHealthy(ctx, r.toleratedOffset, r.uncertainOffsetLogOnce) {
 				healthyOffsetCount++
 			}
 		}
@@ -466,7 +468,9 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	return nil
 }
 
-func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Duration) bool {
+func (r RemoteOffset) isHealthy(
+	ctx context.Context, toleratedOffset time.Duration, logEvery log.EveryN,
+) bool {
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
@@ -487,7 +491,9 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 		// The tolerated offset is in the uncertainty window of the measured offset;
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
-		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
+		if logEvery.ShouldLog() {
+			log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
+		}
 		return true
 	}
 }
