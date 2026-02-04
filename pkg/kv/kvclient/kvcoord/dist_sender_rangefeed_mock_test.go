@@ -287,14 +287,14 @@ func TestMuxRangeFeedTransportRace(t *testing.T) {
 		}
 	}
 
-	go func() {
+	require.NoError(t, stopper.RunAsyncTask(ctx, "range-feed", func(ctx context.Context) {
 		_ = ds.RangeFeed(
 			ctx,
 			[]SpanTimePair{{Span: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}}},
 			nil,
 			TestingWithAfterRoutingReset(afterResetFn),
 		)
-	}()
+	}))
 
 	<-resetDone
 	close(proceedAfterReset)
