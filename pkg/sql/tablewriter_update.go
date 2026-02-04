@@ -22,10 +22,8 @@ type tableUpdater struct {
 }
 
 // init initializes the tableUpdater with a Txn.
-func (tu *tableUpdater) init(
-	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, workloadID uint64,
-) error {
-	return tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx, workloadID)
+func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
+	return tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx)
 }
 
 // rowForUpdate performs an update.

@@ -13,20 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/petermattis/goid"
-)
-
-// Well-known workload IDs for internal operations.
-// These are used to attribute background work that doesn't have a user workload.
-const (
-	// IntentResolutionWorkloadID is the workload ID used for intent resolution.
-	IntentResolutionWorkloadID uint64 = 0xFFFFFFFFFFFFFF01
-	// TxnHeartbeatWorkloadID is the workload ID used for transaction heartbeats.
-	TxnHeartbeatWorkloadID uint64 = 0xFFFFFFFFFFFFFF02
-	// RangeLookupWorkloadID is the workload ID used for range lookups.
-	RangeLookupWorkloadID uint64 = 0xFFFFFFFFFFFFFF03
-	// LeaseRequestWorkloadID is the workload ID used for lease acquisition.
-	LeaseRequestWorkloadID uint64 = 0xFFFFFFFFFFFFFF04
 )
 
 // WorkState represents the current work state of a goroutine.
@@ -60,8 +48,18 @@ var workStatePool = sync.Pool{
 // This is a global map that the sampler reads from periodically.
 var activeWorkStates sync.Map // int64 (goroutine ID) -> *WorkState
 
+// retiredWorkStates holds WorkState objects that have been removed from
+// activeWorkStates but cannot yet be returned to the pool. This is because
+// the sampler may still hold a pointer obtained from sync.Map.Range.
+// clearWorkState appends here; the sampler drains after RangeWorkStates.
+var retiredWorkStates struct {
+	syncutil.Mutex
+	states []*WorkState
+}
+
 // appNameMap stores the mapping from app name ID (uint64) to app name string.
 // This map is node-local and is populated when app names are first seen.
+// TODO(alyshan): A sharded map might outperform sync.Map (write heavy).
 var appNameMap sync.Map // uint64 -> string
 
 // SetWorkState registers the current goroutine's work state.
@@ -148,13 +146,24 @@ func GetOrStoreAppNameID(appName string) uint64 {
 		return 0
 	}
 	id := HashAppName(appName)
-	_, loaded := appNameMap.LoadOrStore(id, appName)
-	if !loaded {
-		// New entry was stored, return the ID.
+	// Use Load first to avoid the allocation from boxing appName into
+	// interface{} on every call to LoadOrStore. The common case (app name
+	// already seen) hits Load and returns without allocating.
+	if _, ok := appNameMap.Load(id); ok {
 		return id
 	}
-	// Entry already existed, return the ID.
+	appNameMap.LoadOrStore(id, appName)
 	return id
+}
+
+// StoreAppNameMapping stores a single app name ID to string mapping.
+// This is used when the ID is already known (e.g., received in a
+// SetupFlowRequest) and we only need to populate the local map
+// without re-hashing the app name.
+func StoreAppNameMapping(id uint64, appName string) {
+	if id != 0 && appName != "" {
+		appNameMap.Store(id, appName)
+	}
 }
 
 // GetAppName retrieves the app name string for the given ID from the local map.
@@ -207,7 +216,12 @@ type AppNameMappingsResponse struct {
 // This is used by the sampler to resolve app name IDs when they're not available locally.
 type ResolveAppNameID func(context.Context, *AppNameMappingsRequest) (*AppNameMappingsResponse, error)
 
-// clearWorkState removes the work state for the given goroutine and returns it to the pool.
+// clearWorkState removes the work state for the given goroutine.
+// The removed WorkState is placed on the retired list rather than
+// immediately returned to the pool, because the sampler may still
+// hold a pointer to it from a concurrent sync.Map.Range call.
+// The sampler calls reclaimRetiredWorkStates after each Range to
+// safely return retired states to the pool.
 func clearWorkState(gid int64) {
 	v, ok := activeWorkStates.Load(gid)
 	if !ok {
@@ -219,14 +233,37 @@ func clearWorkState(gid int64) {
 	} else {
 		activeWorkStates.Delete(gid)
 	}
-	// Clear the state before returning to pool.
-	state.WorkloadID = 0
-	state.WorkEventType = 0
-	state.WorkEvent = ""
-	state.AppNameID = 0
-	state.GatewayNodeID = 0
-	state.prev = nil
-	workStatePool.Put(state)
+	// Do NOT zero fields or return to pool here. The sampler may
+	// still be reading this WorkState via a pointer obtained from
+	// sync.Map.Range. Defer reclamation to the sampler.
+	retireWorkState(state)
+}
+
+// retireWorkState adds a WorkState to the retired list for deferred pool return.
+func retireWorkState(state *WorkState) {
+	retiredWorkStates.Lock()
+	defer retiredWorkStates.Unlock()
+	retiredWorkStates.states = append(retiredWorkStates.states, state)
+}
+
+// reclaimRetiredWorkStates returns all retired WorkState objects to the pool.
+// This must be called after RangeWorkStates completes, at which point the
+// sampler no longer holds any pointers from the previous iteration.
+func reclaimRetiredWorkStates() {
+	states := drainRetiredWorkStates()
+	for _, s := range states {
+		*s = WorkState{}
+		workStatePool.Put(s)
+	}
+}
+
+// drainRetiredWorkStates atomically swaps out the retired list and returns it.
+func drainRetiredWorkStates() []*WorkState {
+	retiredWorkStates.Lock()
+	defer retiredWorkStates.Unlock()
+	states := retiredWorkStates.states
+	retiredWorkStates.states = retiredWorkStates.states[:0]
+	return states
 }
 
 func getWorkState(gid int64) (*WorkState, bool) {

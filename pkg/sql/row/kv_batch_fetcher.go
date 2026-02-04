@@ -638,11 +638,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.Header.IsReverse = f.reverse
-	ba.Header.WorkloadId = f.workloadID
-	ba.Header.AppNameID = f.appNameID
-	if f.gatewayNodeID != 0 {
-		ba.Header.SQLGatewayNodeID = f.gatewayNodeID
-	}
+	// Note: WorkloadId, AppNameID, and SQLGatewayNodeID are not set here
+	// because the txn already has them set via SetWorkloadInfo() and will
+	// populate them in Txn.Send() if they are 0 on the batch header.
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")

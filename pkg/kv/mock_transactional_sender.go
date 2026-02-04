@@ -109,6 +109,13 @@ func (m *MockTransactionalSender) SetOmitInRangefeeds() {
 	m.txn.OmitInRangefeeds = true
 }
 
+// SetWorkloadInfo is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetWorkloadInfo(
+	workloadID uint64, appNameID uint64, sqlGatewayNodeID roachpb.NodeID,
+) {
+	// No-op for mock sender.
+}
+
 // SetBufferedWritesEnabled is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {}
 

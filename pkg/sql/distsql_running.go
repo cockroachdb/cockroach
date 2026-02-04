@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -474,10 +473,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if planCtx.planner != nil {
 		workloadID = planCtx.planner.stmt.WorkloadID
 	}
-	var appNameID uint64
-	if evalCtx.SessionData().ApplicationName != "" {
-		appNameID = ash.GetOrStoreAppNameID(evalCtx.SessionData().ApplicationName)
-	}
+	// Read the cached appNameID from the eval context, which was set by
+	// the conn executor when the statement was prepared.
+	appNameID := evalCtx.AppNameID
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execversion.V25_4,

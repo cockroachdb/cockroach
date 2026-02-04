@@ -713,9 +713,12 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.semaCtx.Placeholders.Assign(pinfo, stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	// Set workload info on the transaction so it propagates to all BatchRequests.
+	// Set workload info on the eval context and transaction so it propagates
+	// to DistSQL flows and all BatchRequests respectively.
+	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+	p.extendedEvalCtx.WorkloadID = stmt.WorkloadID
+	p.extendedEvalCtx.AppNameID = appNameID
 	if p.txn != nil {
-		appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 		sqlGatewayNodeID := roachpb.NodeID(p.extendedEvalCtx.Gateway)
 		p.txn.SetWorkloadInfo(stmt.WorkloadID, appNameID, sqlGatewayNodeID)
 	}
@@ -1677,9 +1680,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.semaCtx.Placeholders.Assign(pinfo, vars.stmt.NumPlaceholders)
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 
-	// Set workload info on the transaction so it propagates to all BatchRequests.
+	// Set workload info on the eval context and transaction so it propagates
+	// to DistSQL flows and all BatchRequests respectively.
+	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
+	p.extendedEvalCtx.WorkloadID = vars.stmt.WorkloadID
+	p.extendedEvalCtx.AppNameID = appNameID
 	if p.txn != nil {
-		appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 		sqlGatewayNodeID := roachpb.NodeID(p.extendedEvalCtx.Gateway)
 		p.txn.SetWorkloadInfo(vars.stmt.WorkloadID, appNameID, sqlGatewayNodeID)
 	}

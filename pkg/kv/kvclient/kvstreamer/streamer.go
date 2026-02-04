@@ -925,15 +925,9 @@ type workerCoordinator struct {
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 
-	// workloadID is an identifier that links the request back to the workload
-	// entity that triggered the Batch. This can be a statement fingerprint ID,
-	// transaction fingerprint ID, job ID, etc.
-	workloadID uint64
-	// appNameID is the uint64 identifier for the app_name of the SQL session
-	// that created this request. This is a hash of the app_name string.
-	appNameID uint64
-	// gatewayNodeID is the SQL instance ID of the gateway node that planned the flow
-	// or served the query.
+	// Workload attribution fields for response admission control.
+	workloadID    uint64
+	appNameID     uint64
 	gatewayNodeID roachpb.NodeID
 }
 
@@ -1430,11 +1424,6 @@ func (w *workerCoordinator) performRequestAsync(
 		ba.Header.AllowEmpty = !headOfLine
 		ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
 		ba.Header.IsReverse = w.s.reverse
-		ba.Header.WorkloadId = w.workloadID
-		ba.Header.AppNameID = w.appNameID
-		if w.gatewayNodeID != 0 {
-			ba.Header.SQLGatewayNodeID = w.gatewayNodeID
-		}
 		// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 		// applicable (#67885).
 		ba.AdmissionHeader = w.requestAdmissionHeader

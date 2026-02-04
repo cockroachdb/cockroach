@@ -75,6 +75,42 @@ func TestWorkStateStack(t *testing.T) {
 	clearWorkState(gid)
 	_, ok = getWorkState(gid)
 	require.False(t, ok)
+
+	// Drain the retired list so pool objects are recycled.
+	reclaimRetiredWorkStates()
+}
+
+// TestWorkStateRetiredList verifies that cleared work states are placed on the
+// retired list (not immediately returned to the pool) and that
+// reclaimRetiredWorkStates returns them to the pool.
+func TestWorkStateRetiredList(t *testing.T) {
+	enabled.Store(true)
+	defer enabled.Store(false)
+
+	cleanup := SetWorkState(42, WORK_CPU, "test")
+
+	// Retired list should be empty before cleanup.
+	retiredWorkStates.Lock()
+	require.Empty(t, retiredWorkStates.states)
+	retiredWorkStates.Unlock()
+
+	// Cleanup moves the state to the retired list, NOT the pool.
+	cleanup()
+
+	retiredWorkStates.Lock()
+	require.Len(t, retiredWorkStates.states, 1)
+	// The retired state should still have its original field values
+	// (not zeroed), proving it wasn't returned to the pool yet.
+	require.Equal(t, uint64(42), retiredWorkStates.states[0].WorkloadID)
+	require.Equal(t, "test", retiredWorkStates.states[0].WorkEvent)
+	retiredWorkStates.Unlock()
+
+	// Reclaim returns retired states to the pool and zeroes them.
+	reclaimRetiredWorkStates()
+
+	retiredWorkStates.Lock()
+	require.Empty(t, retiredWorkStates.states)
+	retiredWorkStates.Unlock()
 }
 
 // TestWorkStateDisabled verifies that SetWorkState is a no-op when disabled.

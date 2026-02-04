@@ -550,13 +550,15 @@ func BenchmarkTracing(b *testing.B) {
 						ashEnabled bool
 					}
 					for _, test := range []testSpec{
-						{alwaysTrace: false},
-						{alwaysTrace: false, ashEnabled: true},
-						{sqlTraceRatio: 0.01},
-						{sqlTraceRatio: 0.01, ashEnabled: true},
-						{sqlTraceRatio: 0.03},
-						{sqlTraceRatio: 0.10},
-						{sqlTraceRatio: 1.0},
+						{ashEnabled: false},
+						{ashEnabled: true},
+						// {alwaysTrace: false},
+						// {alwaysTrace: false, ashEnabled: true},
+						// {sqlTraceRatio: 0.01},
+						// {sqlTraceRatio: 0.01, ashEnabled: true},
+						// {sqlTraceRatio: 0.03},
+						// {sqlTraceRatio: 0.10},
+						// {sqlTraceRatio: 1.0},
 						// {alwaysTrace: true},
 						// {netTrace: true},
 					} {

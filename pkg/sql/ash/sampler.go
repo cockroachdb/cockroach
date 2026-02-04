@@ -56,6 +56,10 @@ type Sampler struct {
 	stopper          *stop.Stopper
 	resolveAppNameID ResolveAppNameID
 	ctx              context.Context
+	// workloadIDCache caches the result of EncodeStmtFingerprintIDToString
+	// to avoid repeated allocations for the same workload ID. Only accessed
+	// from the single sampler goroutine, so no synchronization is needed.
+	workloadIDCache map[uint64]string
 }
 
 // NewSampler creates a new ASH sampler.
@@ -80,11 +84,13 @@ func NewSamplerWithAppNameFetcher(
 		buffer:           NewRingBuffer(bufSize),
 		stopper:          stopper,
 		resolveAppNameID: resolveAppNameID,
+		workloadIDCache:  make(map[uint64]string),
 	}
 }
 
 // Start begins the background sampling loop.
 func (s *Sampler) Start(ctx context.Context) error {
+	log.Ops.Info(ctx, "Starting ASH sampler")
 	return s.stopper.RunAsyncTask(ctx, "ash-sampler", func(ctx context.Context) {
 		s.run(ctx)
 	})
@@ -105,18 +111,19 @@ func (s *Sampler) run(ctx context.Context) {
 	var timer timeutil.Timer
 	defer timer.Stop()
 
-	interval := SampleInterval.Get(&s.st.SV)
-	timer.Reset(interval)
+	var interval atomic.Int64
+	interval.Store(int64(SampleInterval.Get(&s.st.SV)))
+	timer.Reset(time.Duration(interval.Load()))
 
 	SampleInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
-		interval = SampleInterval.Get(&s.st.SV)
+		interval.Store(int64(SampleInterval.Get(&s.st.SV)))
 	})
 
 	for {
 		select {
 		case <-timer.C:
 			timer.Read = true
-			timer.Reset(interval)
+			timer.Reset(time.Duration(interval.Load()))
 			if Enabled.Get(&s.st.SV) {
 				s.takeSample()
 			}
@@ -135,22 +142,23 @@ func (s *Sampler) takeSample() {
 	// Iterate over all registered work states and create samples.
 	RangeWorkStates(func(gid int64, state WorkState) bool {
 		// Encode the workloadID to a string for the ASHSample.
+		// First check if it's a known system workload ID, otherwise encode as hex.
 		var workloadIDStr string
 		switch state.WorkloadID {
 		case 0:
 			// No workload ID.
-		case IntentResolutionWorkloadID:
-			workloadIDStr = "intent resolution"
-		case TxnHeartbeatWorkloadID:
-			workloadIDStr = "txn heartbeat"
-		case RangeLookupWorkloadID:
-			workloadIDStr = "range lookup"
-		case LeaseRequestWorkloadID:
-			workloadIDStr = "lease request"
 		default:
-			// TODO(alyshan): Cache these mappings to reduce allocations.
-			// TODO(alyshan): Use StringInterner(?).
-			workloadIDStr = EncodeStmtFingerprintIDToString(state.WorkloadID)
+			// Check if this is a known system workload ID (e.g., TXN_HEARTBEAT).
+			if name, ok := LookupSystemWorkloadName(state.WorkloadID); ok {
+				workloadIDStr = name
+			} else {
+				if cached, ok := s.workloadIDCache[state.WorkloadID]; ok {
+					workloadIDStr = cached
+				} else {
+					workloadIDStr = EncodeStmtFingerprintIDToString(state.WorkloadID)
+					s.workloadIDCache[state.WorkloadID] = workloadIDStr
+				}
+			}
 		}
 
 		// Look up app_name from AppNameID if present.
@@ -158,11 +166,13 @@ func (s *Sampler) takeSample() {
 		if state.AppNameID != 0 {
 			var found bool
 			appName, found = GetAppName(state.AppNameID)
+			// TODO(alyshan): Could probably take this (network call to resolve app name)off the sampler.
+			// But app name mappings would be relatively stable, so this path is mostly no-op.
 			if !found {
 				appName = "unknown"
 				if state.GatewayNodeID != 0 && s.resolveAppNameID != nil {
 					// Fetch all mappings from the gateway node and store them locally.
-					log.Ops.Infof(s.ctx, "ASH sampler: fetching app name mappings from gateway node %d", state.GatewayNodeID)
+					// log.Ops.Infof(s.ctx, "ASH sampler: fetching app name mappings from gateway node %d", state.GatewayNodeID)
 					resp, err := s.resolveAppNameID(s.ctx, &AppNameMappingsRequest{
 						NodeID: state.GatewayNodeID,
 					})
@@ -171,10 +181,10 @@ func (s *Sampler) takeSample() {
 						// Try to get the app name again after storing mappings.
 						appName, found = GetAppName(state.AppNameID)
 						if found {
-							log.Ops.Info(s.ctx, "ASH sampler: successfully resolved app name from gateway node")
+							// log.Ops.Info(s.ctx, "ASH sampler: successfully resolved app name from gateway node")
 						}
 					} else {
-						log.Ops.Infof(s.ctx, "ASH sampler: failed to resolve app name from gateway node: %v", err)
+						// log.Ops.Infof(s.ctx, "ASH sampler: failed to resolve app name from gateway node: %v", err)
 					}
 				}
 			}
@@ -193,6 +203,10 @@ func (s *Sampler) takeSample() {
 		s.buffer.Add(sample)
 		return true // continue iteration
 	})
+
+	// Return retired WorkState objects to the pool now that Range is
+	// complete and the sampler no longer holds any stale pointers.
+	reclaimRetiredWorkStates()
 
 	// TODO(alyshan): Add metrics for sample count, processing time, etc.
 }

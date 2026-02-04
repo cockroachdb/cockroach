@@ -114,6 +114,13 @@ type txnHeartbeater struct {
 		// txn is a reference to the TxnCoordSender's proto.
 		txn *roachpb.Transaction
 
+		// Pointers to workload attribution fields in TxnCoordSender. These are
+		// used to attribute heartbeat and async rollback work to the originating
+		// workload for ASH sampling.
+		workloadID       *uint64
+		appNameID        *uint64
+		sqlGatewayNodeID *roachpb.NodeID
+
 		// loopStarted indicates whether the heartbeat loop has been launched
 		// for the transaction or not. It remains true once the loop terminates.
 		loopStarted bool
@@ -186,6 +193,9 @@ func (h *txnHeartbeater) init(
 	txn *roachpb.Transaction,
 	settings *cluster.Settings,
 	testingKnobs *ClientTestingKnobs,
+	workloadID *uint64,
+	appNameID *uint64,
+	sqlGatewayNodeID *roachpb.NodeID,
 ) {
 	if testingKnobs == nil {
 		testingKnobs = &ClientTestingKnobs{}
@@ -200,6 +210,9 @@ func (h *txnHeartbeater) init(
 	h.gatekeeper = gatekeeper
 	h.mu.Locker = mu
 	h.mu.txn = txn
+	h.mu.workloadID = workloadID
+	h.mu.appNameID = appNameID
+	h.mu.sqlGatewayNodeID = sqlGatewayNodeID
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -472,13 +485,26 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	}
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
-	ba.Header.WorkloadId = ash.TxnHeartbeatWorkloadID
 	ba.Add(&kvpb.HeartbeatTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
 	})
+
+	// Set workload attribution for ASH sampling. Use the transaction's workload
+	// info if available, otherwise use a hardcoded TXN_HEARTBEAT workload ID.
+	if h.mu.workloadID != nil && *h.mu.workloadID != 0 {
+		ba.Header.WorkloadId = *h.mu.workloadID
+	} else {
+		ba.Header.WorkloadId = uint64(ash.SystemWorkloadIDTxnHeartbeat)
+	}
+	if h.mu.appNameID != nil {
+		ba.Header.AppNameID = *h.mu.appNameID
+	}
+	if h.mu.sqlGatewayNodeID != nil {
+		ba.Header.SQLGatewayNodeID = *h.mu.sqlGatewayNodeID
+	}
 
 	// Send the heartbeat request directly through the gatekeeper interceptor.
 	// See comment on h.gatekeeper for a discussion of why.
@@ -555,7 +581,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	// Construct a batch with an EndTxn request.
 	txn := h.mu.txn.Clone()
 	ba := &kvpb.BatchRequest{}
-	ba.Header = kvpb.Header{Txn: txn, WorkloadId: ash.TxnHeartbeatWorkloadID}
+	ba.Header = kvpb.Header{Txn: txn}
 	ba.Add(&kvpb.EndTxnRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
@@ -568,6 +594,20 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		Priority:   txn.AdmissionPriority,
 		CreateTime: h.clock.PhysicalTime().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
+	}
+
+	// Set workload attribution for ASH sampling. Use the transaction's workload
+	// info if available, otherwise use a hardcoded TXN_ROLLBACK workload ID.
+	if h.mu.workloadID != nil && *h.mu.workloadID != 0 {
+		ba.Header.WorkloadId = *h.mu.workloadID
+	} else {
+		ba.Header.WorkloadId = uint64(ash.SystemWorkloadIDTxnRollback)
+	}
+	if h.mu.appNameID != nil {
+		ba.Header.AppNameID = *h.mu.appNameID
+	}
+	if h.mu.sqlGatewayNodeID != nil {
+		ba.Header.SQLGatewayNodeID = *h.mu.sqlGatewayNodeID
 	}
 
 	const taskName = "txnHeartbeater: aborting txn"

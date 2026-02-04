@@ -106,18 +106,18 @@ func newTxnKVFetcher(
 		}
 	}
 
-		fetcherArgs := newTxnKVFetcherArgs{
-			sendFn:                     sendFn,
-			reverse:                    reverse,
-			rawMVCCValues:              rawMVCCValues,
-			lockStrength:               lockStrength,
-			lockWaitPolicy:             lockWaitPolicy,
-			lockDurability:             lockDurability,
-			lockTimeout:                lockTimeout,
-			deadlockTimeout:            deadlockTimeout,
-			acc:                        acc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			gatewayNodeID:              gatewayNodeID,
+	fetcherArgs := newTxnKVFetcherArgs{
+		sendFn:                     sendFn,
+		reverse:                    reverse,
+		rawMVCCValues:              rawMVCCValues,
+		lockStrength:               lockStrength,
+		lockWaitPolicy:             lockWaitPolicy,
+		lockDurability:             lockDurability,
+		lockTimeout:                lockTimeout,
+		deadlockTimeout:            deadlockTimeout,
+		acc:                        acc,
+		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		gatewayNodeID:              gatewayNodeID,
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
