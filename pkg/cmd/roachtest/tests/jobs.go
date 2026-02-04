@@ -52,6 +52,7 @@ func registerJobs(r registry.Registry) {
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Weekly),
 		Timeout:           roachtestTimeout,
+		Benchmark:         true,
 		Run:               runJobsStress,
 	})
 }
@@ -138,7 +139,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	group.Go(poller(time.Minute, checkPersistentUnclaimedJobs))
 
 	group.Go(func(ctx context.Context, _ *logger.Logger) error {
-		createTablesWithChangefeeds(ctx, t, c, rng, jobIDToTableName, &jobIDToTableNameMu)
+		createTablesWithChangefeeds(ctx, t, c, rng, done, jobIDToTableName, &jobIDToTableNameMu)
 		return nil
 	})
 
@@ -155,6 +156,7 @@ func createTablesWithChangefeeds(
 	t test.Test,
 	c cluster.Cluster,
 	rng *rand.Rand,
+	doneChan chan struct{},
 	jobIDToTableName map[jobspb.JobID]string,
 	jobIDToTableNameMu *syncutil.Mutex,
 ) {
@@ -183,6 +185,13 @@ func createTablesWithChangefeeds(
 
 		if i%(tableCount/5) == 0 {
 			t.L().Printf("Created %d tables so far", i)
+		}
+
+		select {
+		case <-doneChan:
+			t.L().Printf("Exiting table creation early")
+			return
+		default:
 		}
 	}
 	t.L().Printf("Finished creating tables with changefeeds")
@@ -286,7 +295,7 @@ func controlChangefeeds(
 					continue
 				}
 				var newJobID jobspb.JobID
-				err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='6m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
+				err := conn.QueryRowContext(ctx, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='10m', protect_data_from_gc_on_pause", tableName)).Scan(&newJobID)
 				if err == nil {
 					jobIDToTableNameMu.Lock()
 					jobIDToTableName[newJobID] = tableName
@@ -370,7 +379,7 @@ func checkPersistentUnclaimedJobs(
 		}
 		jobIDsStr := "(" + strings.Join(jobIDList, ", ") + ")"
 
-		t.L().Printf("Checking for persistent unclaimed jobs %s from %d minutes ago", jobIDsStr, minutesAgo)
+		t.L().Printf("Checking for %d persistent unclaimed jobs from %d minutes ago", len(jobIDsStr), minutesAgo)
 
 		// Query unclaimed jobs at this time in the past using AOST, filtered by current unclaimed job IDs
 		query := fmt.Sprintf(`
