@@ -219,6 +219,12 @@ const (
 	// immediate removal.
 	V26_2_AddTableStatisticsDelayDeleteColumn
 
+	// V26_2_TriggerBackrefRepair repairs trigger backrefs to include the TriggerID
+	// field. Previously, trigger dependencies in DependedOnBy had TriggerID=0,
+	// making them indistinguishable from view dependencies. This upgrade ensures
+	// each trigger backref has the correct TriggerID set.
+	V26_2_TriggerBackrefRepair
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -272,6 +278,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_Start: {Major: 26, Minor: 1, Internal: 2},
 
 	V26_2_AddTableStatisticsDelayDeleteColumn: {Major: 26, Minor: 1, Internal: 4},
+
+	V26_2_TriggerBackrefRepair: {Major: 26, Minor: 1, Internal: 6},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

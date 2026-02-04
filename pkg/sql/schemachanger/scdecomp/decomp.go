@@ -960,11 +960,13 @@ func (w *walkCtx) buildTriggerRelationDependencies(
 			if dep.ID != tbl.GetID() {
 				return nil
 			}
-			// Only include backreferences for this specific trigger.
-			// TODO(rafi): Test mixed-version case for this. Could the backref have
-			//   a zero trigger ID if it was made on an older version?
+			// Only include backreferences for this specific trigger. Legacy backrefs
+			// created before V26_2_TriggerBackrefRepair have TriggerID=0, so we treat
+			// them as matching any trigger until the upgrade repairs them.
 			if dep.TriggerID != t.ID {
-				return nil
+				if w.clusterVersion.IsActive(clusterversion.V26_2_TriggerBackrefRepair) || dep.TriggerID != 0 {
+					return nil
+				}
 			}
 			usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
 				ID:        id,

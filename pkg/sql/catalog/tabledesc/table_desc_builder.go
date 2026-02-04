@@ -239,6 +239,12 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
 	}
 
+	// Repair trigger backrefs for restores from versions before TriggerID was tracked.
+	// TODO(rafi): remove this when we no longer support restoring from v26.1 or older.
+	if repaired := maybeRepairTriggerBackrefs(descLookupFn, tdb.getOrInitModifiedDesc()); repaired {
+		tdb.changes.Add(catalog.RepairedTriggerBackrefs)
+	}
+
 	return err
 }
 
@@ -1329,4 +1335,75 @@ func maybeFixUsesSequencesIDForIdentityColumns(
 		wasRepaired = true
 	}
 	return wasRepaired, nil
+}
+
+// maybeRepairTriggerBackrefs repairs trigger backrefs that have TriggerID=0.
+// Previously, trigger dependencies in DependedOnBy had TriggerID=0, making them
+// indistinguishable from view dependencies. This function ensures each trigger
+// backref has the correct TriggerID set.
+//
+// For each backref with TriggerID=0, we look up the referencing table to find
+// all triggers that reference this table, then replace the single legacy
+// backref with individual backrefs for each trigger.
+func maybeRepairTriggerBackrefs(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, desc *descpb.TableDescriptor,
+) bool {
+	if len(desc.DependedOnBy) == 0 {
+		return false
+	}
+
+	repaired := false
+	var newDependedOnBy []descpb.TableDescriptor_Reference
+
+	for _, backref := range desc.DependedOnBy {
+		// Only process backrefs with TriggerID=0 that might be legacy trigger refs.
+		if backref.TriggerID != 0 {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Look up the referencing table to find triggers.
+		refDesc := descLookupFn(backref.ID)
+		if refDesc == nil {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+		refTbl, ok := refDesc.(catalog.TableDescriptor)
+		if !ok {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Find all triggers on the referencing table that reference this table.
+		triggers := refTbl.GetTriggers()
+		var matchingTriggers []descpb.TriggerDescriptor
+		for _, trigger := range triggers {
+			for _, depID := range trigger.DependsOn {
+				if depID == desc.ID {
+					matchingTriggers = append(matchingTriggers, trigger)
+					break
+				}
+			}
+		}
+
+		if len(matchingTriggers) == 0 {
+			// No triggers reference this table - keep the original backref.
+			// This might be a view dependency.
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Replace the single legacy backref with one backref per trigger.
+		for _, trigger := range matchingTriggers {
+			newBackref := backref
+			newBackref.TriggerID = trigger.ID
+			newDependedOnBy = append(newDependedOnBy, newBackref)
+		}
+		repaired = true
+	}
+
+	if repaired {
+		desc.DependedOnBy = newDependedOnBy
+	}
+	return repaired
 }
