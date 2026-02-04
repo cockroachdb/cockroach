@@ -123,6 +123,7 @@ go_test(
         "//pkg/roachprod",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/errors",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/azure",
