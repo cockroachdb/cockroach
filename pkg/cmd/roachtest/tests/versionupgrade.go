@@ -123,8 +123,13 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Verify that backups can be created in various configurations. This is
 				// important to test because changes in system tables might cause backups to
 				// fail in mixed-version clusters.
-				dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
-				return h.Exec(rng, `BACKUP INTO $1`, dest)
+				availableNodes := h.AvailableNodes()
+				if len(availableNodes) == 0 {
+					return errors.Newf("no available nodes to run and store the backup")
+				}
+				gatewayNode := availableNodes.SeededRandNode(rng)
+				dest := fmt.Sprintf("nodelocal://%d/%d", gatewayNode[0], timeutil.Now().UnixNano())
+				return h.ExecWithGateway(rng, gatewayNode, `BACKUP INTO $1`, dest)
 			} else {
 				// Skip the backup step in separate-process deployments, since nodelocal
 				// is not supported in pods.
