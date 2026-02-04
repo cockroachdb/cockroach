@@ -380,7 +380,7 @@ func (ds *ServerImpl) setupFlow(
 
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, parentMonitor, diskMonitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
@@ -478,23 +478,19 @@ func (ds *ServerImpl) newFlowContext(
 	ctx context.Context,
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
-	monitor, parentMonitor, diskMonitor *mon.BytesMonitor,
+	monitor, diskMonitor *mon.BytesMonitor,
 	makeLeafTxn func(context.Context) (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
 ) execinfra.FlowCtx {
-	if !isGatewayNode {
-		parentMonitor = nil
-	}
 	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
 		Mon:            monitor,
-		ParentMon:      parentMonitor,
 		Txn:            evalCtx.Txn,
 		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,

@@ -1078,7 +1078,7 @@ func (m execNodeTraceMetadata) annotateExplain(
 	makeDeterministic bool,
 	p *planner,
 ) {
-	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic, p.execCfg.DistSQLPlanner.gatewaySQLInstanceID, p.execMon.MaximumBytes())
 
 	// Retrieve which region each node is on.
 	sqlInstanceIDToRegion := make(map[int64]string)

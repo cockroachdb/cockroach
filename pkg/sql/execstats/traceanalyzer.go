@@ -215,8 +215,13 @@ func NewTraceAnalyzer(flowsMetadata *FlowsMetadata) *TraceAnalyzer {
 //
 // If makeDeterministic is set, statistics that can vary from run to run are set
 // to fixed values; see ComponentStats.MakeDeterministic.
-func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
-	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
+func (a *TraceAnalyzer) AddTrace(
+	trace []tracingpb.RecordedSpan,
+	makeDeterministic bool,
+	gateway base.SQLInstanceID,
+	gatewayFlowMaxMemUsage int64,
+) error {
+	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic, gateway, gatewayFlowMaxMemUsage)
 	// Annotate the maps with stats extracted from the trace.
 	for component, componentStats := range m {
 		if !component.FlowID.Equal(a.flowID) {
@@ -423,7 +428,8 @@ func GetQueryLevelStats(
 	var errs error
 	for _, metadata := range flowsMetadata {
 		analyzer := NewTraceAnalyzer(metadata)
-		if err := analyzer.AddTrace(trace, deterministicExplainAnalyze); err != nil {
+		// TODO
+		if err := analyzer.AddTrace(trace, deterministicExplainAnalyze, 0, 0); err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error analyzing trace statistics"))
 			continue
 		}

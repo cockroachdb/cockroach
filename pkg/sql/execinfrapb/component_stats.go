@@ -511,7 +511,10 @@ func (s *ComponentStats) MakeDeterministic() {
 // ExtractStatsFromSpans extracts all ComponentStats from a set of tracing
 // spans.
 func ExtractStatsFromSpans(
-	spans []tracingpb.RecordedSpan, makeDeterministic bool,
+	spans []tracingpb.RecordedSpan,
+	makeDeterministic bool,
+	gateway base.SQLInstanceID,
+	gatewayFlowMaxMemUsage int64,
 ) map[ComponentID]*ComponentStats {
 	statsMap := make(map[ComponentID]*ComponentStats)
 	// componentStats is only used to check whether a structured payload item is
@@ -529,6 +532,9 @@ func ExtractStatsFromSpans(
 			}
 			if stats.Component == (ComponentID{}) {
 				return
+			}
+			if stats.Component.Type == ComponentID_FLOW && stats.Component.SQLInstanceID == gateway {
+				stats.FlowStats.MaxMemUsage.Set(uint64(gatewayFlowMaxMemUsage))
 			}
 			if makeDeterministic {
 				stats.MakeDeterministic()

@@ -693,9 +693,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 			f.sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: f.FlowCtx.FlowComponentID(),
 				FlowStats: execinfrapb.FlowStats{
-					// Here we use ParentMon and not Mon so that the memory
-					// allocated during logical planning is included.
-					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.ParentMon.MaximumBytes())),
+					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(f.FlowCtx.DiskMonitor.MaximumBytes())),
 				},
 			})

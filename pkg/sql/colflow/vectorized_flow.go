@@ -494,8 +494,6 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 			result = append(result, &execinfrapb.ComponentStats{
 				Component: flowCtx.FlowComponentID(),
 				FlowStats: execinfrapb.FlowStats{
-					// Note that here we use Mon and not ParentMon since we're
-					// part of the remote flow.
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
 					ConsumedRU:   optional.MakeUint(uint64(flowCtx.TenantCPUMonitor.EndCollection(ctx))),

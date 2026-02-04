@@ -130,7 +130,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		require.NoError(t, err)
 		trace := finishAndCollect()
 		analyzer := <-analyzerChan
-		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */))
+		require.NoError(t, analyzer.AddTrace(trace, true /* makeDeterministic */, 0 /* gateway */, 0 /* gatewayFlowMaxMemUsage */))
 		analyzer.ProcessStats()
 		switch vectorizeMode {
 		case sessiondatapb.VectorizeOff:

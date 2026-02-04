@@ -941,7 +941,9 @@ func (d *diagramData) UpdateComponentFractionProgressed(
 
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
-	statsMap := ExtractStatsFromSpans(spans, d.Flags.MakeDeterministic)
+	// We don't look at the flow stats, so we can pass zeroes for the last two
+	// arguments.
+	statsMap := ExtractStatsFromSpans(spans, d.Flags.MakeDeterministic, 0 /* gateway */, 0 /* gatewayFlowMaxMemUsage */)
 	for i := range d.Processors {
 		p := &d.Processors[i]
 		sqlInstanceID := d.sqlInstanceIDs[p.NodeIdx]

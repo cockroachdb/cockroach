@@ -96,10 +96,8 @@ func newFlowCtxForExplainPurposes(ctx context.Context, p *planner) *execinfra.Fl
 	return &execinfra.FlowCtx{
 		NodeID:  p.EvalContext().NodeID,
 		EvalCtx: p.EvalContext(),
-		// It's ok to use the same monitor for both.
-		Mon:       monitor,
-		ParentMon: monitor,
-		Txn:       p.txn,
+		Mon:     monitor,
+		Txn:     p.txn,
 		Cfg: &execinfra.ServerConfig{
 			Settings:          p.execCfg.Settings,
 			LogicalClusterID:  p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,

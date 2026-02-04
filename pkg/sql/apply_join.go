@@ -291,6 +291,8 @@ func runPlanInsidePlan(
 	defer recv.Release()
 
 	plannerCopy := *params.p
+	// TODO: think about using params.p.execMon from the outer plan - should we
+	// use a separate exec monitor for the inner plan?
 	plannerCopy.curPlan.planComponents = *plan
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
