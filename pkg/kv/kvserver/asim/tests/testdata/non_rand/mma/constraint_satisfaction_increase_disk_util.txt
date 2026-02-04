@@ -42,6 +42,7 @@ assertion type=conformance under=0 over=0 unavailable=0 violating=0
 
 eval duration=10m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,replicas,disk_fraction_used)
 ----
+sma-count:
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
 disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
 disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
@@ -51,8 +52,9 @@ leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=2
 replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
 replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[sma-count]: 9e69db6ac95253c2
+hash: 9e69db6ac95253c2
 ==========================
+mma-count:
 disk_fraction_used#1: first: [s1=0.73, s2=0.73, s3=0.37, s4=0.37, s5=0.18, s6=0.18, s7=0.18] (stddev=0.23, mean=0.39, sum=3)
 disk_fraction_used#1: last:  [s1=0.92, s2=0.92, s3=0.37, s4=0.37, s5=0.06, s6=0.06, s7=0.06] (stddev=0.35, mean=0.39, sum=3)
 disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
@@ -62,5 +64,5 @@ leases#1: thrash_pct: [s1=20%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=2
 replicas#1: first: [s1=60, s2=60, s3=30, s4=30, s5=15, s6=15, s7=15] (stddev=18.68, mean=32.14, sum=225)
 replicas#1: last:  [s1=75, s2=75, s3=30, s4=30, s5=5, s6=5, s7=5] (stddev=29.01, mean=32.14, sum=225)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-artifacts[mma-count]: 9e69db6ac95253c2
+hash: 9e69db6ac95253c2
 ==========================
