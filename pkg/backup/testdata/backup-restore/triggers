@@ -338,3 +338,331 @@ DROP TYPE sc1.enum1;
 exec-sql
 ALTER TABLE sc2.table2 RENAME TO tbl2;
 ----
+
+# ==============================================================================
+# Test backup/restore with two triggers on the same table, each referencing a
+# different function that depends on a different column of another table. This
+# verifies that DependedOnBy backrefs on the referenced table are correctly
+# maintained when multiple triggers from the same table produce separate
+# backrefs.
+#
+# Additionally, this test simulates the legacy format (TriggerID=0 in backrefs)
+# to verify that maybeRepairTriggerBackrefs correctly handles two legacy backref
+# entries from different triggers pointing to the same table.
+#
+# NOTE: since the test simulates the legacy format, it can be removed once we
+# no longer need support with pre-26.2 backups. At that time, we can also remove
+# the RepairedTriggerBackrefs post-restore logic.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db3;
+----
+
+exec-sql
+USE db3;
+----
+
+exec-sql
+CREATE TABLE tbl2(x INT PRIMARY KEY, y INT);
+----
+
+exec-sql
+CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v INT;
+  BEGIN
+    SELECT x INTO v FROM tbl2 LIMIT 1;
+    RAISE NOTICE 'f1 fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE FUNCTION f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v INT;
+  BEGIN
+    SELECT y INTO v FROM tbl2 LIMIT 1;
+    RAISE NOTICE 'f2 fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TABLE tbl1(a INT PRIMARY KEY, b INT);
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON tbl1 FOR EACH ROW EXECUTE FUNCTION f1();
+----
+
+exec-sql
+CREATE TRIGGER tr2 AFTER UPDATE ON tbl1 FOR EACH ROW EXECUTE FUNCTION f2();
+----
+
+# Inspect backrefs on tbl2 - should show two entries with distinct TriggerIDs
+# and different column references.
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id
+----
+1 [1]
+2 [2]
+
+# Simulate legacy format by zeroing out TriggerIDs using unsafe_upsert_descriptor.
+# In older versions, trigger backrefs had TriggerID=0. This leaves two entries
+# both with TriggerID=0 pointing to the same table, which tests the edge case in
+# maybeRepairTriggerBackrefs.
+query-sql
+WITH desc_data AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS j
+  FROM system.descriptor
+  WHERE id = 'tbl2'::REGCLASS::OID::INT
+),
+modified AS (
+  SELECT id, jsonb_set(
+    j,
+    ARRAY['table', 'dependedOnBy'],
+    (SELECT jsonb_agg(elem - 'triggerId') FROM jsonb_array_elements(j->'table'->'dependedOnBy') AS elem)
+  ) AS j
+  FROM desc_data
+)
+SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', j), true)
+FROM modified
+----
+true
+
+# Verify TriggerIDs are now zero (legacy format) in the on-disk descriptor.
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id, column_ids
+----
+0 [1]
+0 [2]
+
+exec-sql
+BACKUP DATABASE db3 INTO 'nodelocal://1/test_two_triggers/';
+----
+
+# Don't drop db3 (its corrupted descriptors would cause DROP to fail).
+# Instead, restore directly into a new database name.
+exec-sql
+RESTORE DATABASE db3 FROM LATEST IN 'nodelocal://1/test_two_triggers/' WITH new_db_name = db3_new;
+----
+
+exec-sql
+USE db3_new;
+----
+
+# After restore, maybeRepairTriggerBackrefs should produce exactly two backrefs
+# with correct TriggerIDs (not four, which would happen if the repair function
+# didn't deduplicate legacy entries pointing to the same table). Column IDs are
+# empty because the repair can't determine which columns each trigger references;
+# empty is treated as "depends on the whole table" (overly conservative but safe).
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id
+----
+1 NULL
+2 NULL
+
+# Verify both triggers are present.
+query-sql
+WITH descs AS (
+  SELECT relname, tab->'table'->'triggers' AS triggers FROM (
+    SELECT relname, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, false) AS tab
+    FROM system.descriptor d INNER JOIN pg_class c ON d.id = c.oid::INT
+    WHERE relname = 'tbl1'
+  )
+)
+SELECT relname, t.name FROM descs, LATERAL (
+  SELECT value->'name' FROM jsonb_array_elements(descs.triggers)
+) AS t(name)
+ORDER BY relname, t.name
+----
+tbl1 "tr1"
+tbl1 "tr2"
+
+# Verify both triggers fire.
+exec-sql
+INSERT INTO tbl1 VALUES (1, 10);
+----
+NOTICE: f1 fired
+
+exec-sql
+UPDATE tbl1 SET b = 20 WHERE a = 1;
+----
+NOTICE: f2 fired
+
+# Neither function can be dropped while triggers depend on them.
+exec-sql
+DROP FUNCTION f1;
+----
+pq: cannot drop function "f1" because other objects ([db3_new.public.tbl1]) still depend on it
+
+exec-sql
+DROP FUNCTION f2;
+----
+pq: cannot drop function "f2" because other objects ([db3_new.public.tbl1]) still depend on it
+
+# Drop one trigger; its function can now be dropped.
+exec-sql
+DROP TRIGGER tr1 ON tbl1;
+----
+
+exec-sql
+DROP FUNCTION f1;
+----
+
+# The other function still can't be dropped.
+exec-sql
+DROP FUNCTION f2;
+----
+pq: cannot drop function "f2" because other objects ([db3_new.public.tbl1]) still depend on it
+
+# Drop the second trigger; now f2 can be dropped.
+exec-sql
+DROP TRIGGER tr2 ON tbl1;
+----
+
+exec-sql
+DROP FUNCTION f2;
+----
+
+exec-sql
+DROP DATABASE db3_new;
+----
+
+# ==============================================================================
+# Test that when there is only one trigger referencing a table, the legacy
+# backref repair preserves the original column IDs (since with only one trigger
+# we know for sure which columns are referenced).
+#
+# NOTE: since the test simulates the legacy format, it can be removed once we
+# no longer need support with pre-26.2 backups. At that time, we can also remove
+# the RepairedTriggerBackrefs post-restore logic.
+# ==============================================================================
+
+exec-sql
+CREATE DATABASE db4;
+----
+
+exec-sql
+USE db4;
+----
+
+exec-sql
+CREATE TABLE tbl2(x INT PRIMARY KEY, y INT);
+----
+
+exec-sql
+CREATE FUNCTION f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    v INT;
+  BEGIN
+    SELECT y INTO v FROM tbl2 LIMIT 1;
+    RAISE NOTICE 'f1 fired';
+    RETURN NEW;
+  END
+$$;
+----
+
+exec-sql
+CREATE TABLE tbl1(a INT PRIMARY KEY);
+----
+
+exec-sql
+CREATE TRIGGER tr1 AFTER INSERT ON tbl1 FOR EACH ROW EXECUTE FUNCTION f1();
+----
+
+# With only one trigger, the backref should have the correct column IDs.
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id
+----
+1 [2]
+
+# Simulate legacy format by zeroing out TriggerID.
+query-sql
+WITH desc_data AS (
+  SELECT id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) AS j
+  FROM system.descriptor
+  WHERE id = 'tbl2'::REGCLASS::OID::INT
+),
+modified AS (
+  SELECT id, jsonb_set(
+    j,
+    ARRAY['table', 'dependedOnBy'],
+    (SELECT jsonb_agg(elem - 'triggerId') FROM jsonb_array_elements(j->'table'->'dependedOnBy') AS elem)
+  ) AS j
+  FROM desc_data
+)
+SELECT crdb_internal.unsafe_upsert_descriptor(id, crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', j), true)
+FROM modified
+----
+true
+
+# Verify TriggerID is now zero.
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id
+----
+0 [2]
+
+exec-sql
+BACKUP DATABASE db4 INTO 'nodelocal://1/test_single_trigger/';
+----
+
+exec-sql
+RESTORE DATABASE db4 FROM LATEST IN 'nodelocal://1/test_single_trigger/' WITH new_db_name = db4_new;
+----
+
+exec-sql
+USE db4_new;
+----
+
+# After restore, the single trigger's backref should have the correct TriggerID
+# AND the original column IDs preserved (since there's only one trigger, we know
+# the columns belong to it).
+query-sql
+SELECT COALESCE((elem->>'triggerId')::INT, 0) AS trigger_id, COALESCE(elem->>'columnIds', 'NULL') AS column_ids
+FROM system.descriptor,
+  LATERAL jsonb_array_elements(
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy'
+  ) AS elem
+WHERE id = 'tbl2'::REGCLASS::OID::INT
+ORDER BY trigger_id
+----
+1 [2]
+
+exec-sql
+DROP DATABASE db4_new;
+----
