@@ -219,6 +219,11 @@ func (h *Helper) AvailableNodes() option.NodeListOption {
 	return h.DefaultService().AvailableNodes()
 }
 
+func (h *Helper) RandomAvailableNode(rng *rand.Rand) int {
+	nodes := h.AvailableNodes()
+	return nodes.SeededRandNode(rng)[0]
+}
+
 func (h *Helper) Context() *ServiceContext {
 	return h.DefaultService().ServiceContext
 }
