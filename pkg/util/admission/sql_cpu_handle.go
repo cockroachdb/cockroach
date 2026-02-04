@@ -240,3 +240,10 @@ func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
 	// TODO(sumeer): implement.
 	return newSQLCPUAdmissionHandle(workInfo, p)
 }
+
+// NewSQLCPUProvider creates a new SQLCPUProvider.
+//
+// TODO(sumeer): real implementation.
+func NewSQLCPUProvider() SQLCPUProvider {
+	return &sqlCPUProviderImpl{}
+}

@@ -2758,8 +2758,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}()
 
-	// TODO: Plumb the cpuProvider. There is one per node.
 	var cpuProvider admission.SQLCPUProvider
+	if server := ex.server.cfg.DistSQLSrv; server != nil {
+		cpuProvider = server.SQLCPUProvider
+	}
 	if cpuProvider != nil {
 		var cpuHandle *admission.SQLCPUHandle
 		var mainGoroutineCPUHandle *admission.GoroutineCPUHandle

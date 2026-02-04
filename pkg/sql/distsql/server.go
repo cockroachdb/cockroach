@@ -384,15 +384,13 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
 
-		// TODO: Plumb the cpuProvider. There is one per node.
-		var cpuProvider admission.SQLCPUProvider
-		if cpuProvider != nil {
+		if ds.SQLCPUProvider != nil {
 			var cpuHandle *admission.SQLCPUHandle
 			var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
 			var err error
 			// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
 			ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
-				ctx, cpuProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false)
+				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false)
 			if err != nil {
 				return nil, nil, nil, err
 			}

@@ -202,6 +202,8 @@ type ServerConfig struct {
 	// with elastic CPU control.
 	AdmissionPacerFactory admission.PacerFactory
 
+	SQLCPUProvider admission.SQLCPUProvider
+
 	// Allow mutation operations to trigger stats refresh.
 	StatsRefresher *stats.Refresher
 
