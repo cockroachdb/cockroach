@@ -255,24 +255,11 @@ func (c *indexConsistencyCheck) Next(
 		_ = c.Close(ctx)
 		c.state = checkDone
 
-		// Convert internal errors to inspect issues rather than failing the entire job.
-		// This allows us to capture and log data corruption or encoding errors as
-		// structured issues for investigation.
-		details := make(map[redact.RedactableString]interface{})
-		details["error_message"] = err.Error()
-		details["error_type"] = "internal_query_error"
-		details["index_name"] = c.secIndex.GetName()
-		details["query"] = c.lastQuery // Store the query that caused the error
-		details["query_placeholders"] = formatPlaceholders(c.lastQueryPlaceholders)
-
-		return &inspectIssue{
-			ErrorType:  InternalError,
-			AOST:       c.asOf.GoTime(),
-			DatabaseID: c.tableDesc.GetParentID(),
-			SchemaID:   c.tableDesc.GetParentSchemaID(),
-			ObjectID:   c.tableDesc.GetID(),
-			Details:    details,
-		}, nil
+		issue := errorToInternalInspectIssue(err, c.asOf, c.tableDesc, c.secIndex, map[redact.RedactableString]interface{}{
+			"query":              c.lastQuery, // Store the query that caused the error
+			"query_placeholders": formatPlaceholders(c.lastQueryPlaceholders),
+		})
+		return issue, nil
 	}
 	if !ok {
 		c.state = checkDone
