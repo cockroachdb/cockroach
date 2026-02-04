@@ -1296,3 +1296,57 @@ func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
 	}
 	return names
 }
+
+// TestInactiveDescriptorsWithAggregateAll validates that the aggregate all layer
+// include offline, adding, and dropped descriptors when the leasing layer
+// is used.
+func TestInactiveDescriptorsWithAggregateAll(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
+	var descID descpb.ID
+	r := tdb.QueryRow(t, `SELECT 'db.schema.table'::REGCLASS::OID`)
+	r.Scan(&descID)
+
+	// Validate behavior with the leasing layer disabled and enabled.
+	testutils.RunTrueAndFalse(t, "leased-descriptors", func(t *testing.T, leasedDescriptors bool) {
+		tdb.Exec(t, "SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled=$1", leasedDescriptors)
+		// Validate we can look up the descriptor in every possible state.
+		for _, state := range []descpb.DescriptorState{descpb.DescriptorState_OFFLINE, descpb.DescriptorState_DROP, descpb.DescriptorState_ADD} {
+			err := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				desc, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, descID)
+				if err != nil {
+					return err
+				}
+				desc.TableDesc().State = state
+				return txn.Descriptors().WriteDesc(ctx, false, desc, txn.KV())
+			})
+			require.NoError(t, err)
+			err = s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+				dbDesc, err := txn.Descriptors().ByNameWithLeased(txn.KV()).Get().Database(ctx, "db")
+				if err != nil {
+					return err
+				}
+				descs, err := txn.Descriptors().GetAllInDatabase(ctx, txn.KV(), dbDesc, descs.WithAllowLeased(), descs.WithMetaData())
+				if err != nil {
+					return err
+				}
+				desc := descs.LookupDescriptor(descID)
+				if desc.(catalog.TableDescriptor).GetState() != state {
+					return errors.AssertionFailedf("unexpected state")
+				}
+				return err
+			})
+			require.NoError(t, err)
+		}
+	})
+}

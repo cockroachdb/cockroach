@@ -379,7 +379,7 @@ func filterDescriptor(desc catalog.Descriptor, flags getterFlags) error {
 			return nil
 		}
 	}
-	if flags.layerFilters.withAdding {
+	if flags.descFilters.withAdding {
 		return nil
 	}
 	return catalog.FilterAddingDescriptor(desc)
@@ -490,9 +490,11 @@ func (q *byIDLookupContext) lookupLeased(
 	}
 	desc, shouldReadFromStore, err := q.tc.leased.getByID(q.ctx, q.tc.deadlineHolder(q.txn), id, q.flags.descFilters.withoutLockedTimestamp)
 	if err != nil || shouldReadFromStore {
-		// Leasing does not support leasing adding descriptors, and in certain contexts,
-		// we may want them leased. So, we will fallback to the KV based reads if requested.
-		if q.flags.layerFilters.withAdding && catalog.HasAddingDescriptorError(err) {
+		// When used with this option we will send requests for adding,
+		// offline or dropped descriptor to the KV layer.
+		if q.flags.layerFilters.withAddingOrInactive &&
+			(catalog.HasAddingDescriptorError(err) ||
+				catalog.HasInactiveDescriptorError(err)) {
 			return nil, catalog.NoValidation, nil
 		}
 		return nil, catalog.NoValidation, err

@@ -483,8 +483,10 @@ type layerFilters struct {
 	// This is always acquired for descriptors from storage, and may need an extra
 	// round trip.
 	withMetadata bool
-	// withAdding specifies that adding descriptors can be safely included.
-	withAdding bool
+	// withAddingOrInactive specifies that adding / inactive descriptors still
+	// need to be read. The leasing layer will return an error when these are
+	// encountered.
+	withAddingOrInactive bool
 }
 
 type descFilters struct {
@@ -504,6 +506,9 @@ type descFilters struct {
 	// be resolved at the current timestamp. This is to ensure caches
 	// are up to date.
 	withoutLockedTimestamp bool
+	// withAdding, specifies that adding descriptors should
+	// not be filtered.
+	withAdding bool
 }
 
 func defaultUnleasedFlags() (f getterFlags) {
