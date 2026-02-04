@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "benchdoc",
+    srcs = ["benchdoc.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/benchdoc",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "benchdoc_test",
+    srcs = ["benchdoc_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":benchdoc"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "@com_github_stretchr_testify//require",
+    ],
+)
