@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func loadTableDesc(
@@ -169,4 +170,33 @@ func getPredicateAndQueryArgs(
 	}
 
 	return predicate, queryArgs, nil
+}
+
+// errorToInspectIssue converts internal errors to inspect issues so they can be
+// captured and log data corruption or encoding errors as structured issues for
+// investigation rather than percolated and failing the entire job.
+func errorToInternalInspectIssue(
+	err error,
+	asOf hlc.Timestamp,
+	tableDesc catalog.TableDescriptor,
+	index catalog.Index,
+	details map[redact.RedactableString]interface{},
+) *inspectIssue {
+	dets := make(map[redact.RedactableString]interface{})
+	for k, v := range details {
+		dets[k] = v
+	}
+
+	dets["error_message"] = err.Error()
+	dets["error_type"] = "internal_query_error"
+	dets["index_name"] = index.GetName()
+
+	return &inspectIssue{
+		ErrorType:  InternalError,
+		AOST:       asOf.GoTime(),
+		DatabaseID: tableDesc.GetParentID(),
+		SchemaID:   tableDesc.GetParentSchemaID(),
+		ObjectID:   tableDesc.GetID(),
+		Details:    dets,
+	}
 }
