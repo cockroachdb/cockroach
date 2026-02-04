@@ -1384,6 +1384,13 @@ mma_overloaded_store_short_dur_failure: mma.overloaded_store.short_dur.failure
 mma_overloaded_store_short_dur_success: mma.overloaded_store.short_dur.success
 mma_span_config_normalization_error: mma.span_config.normalization.error
 mma_span_config_normalization_soft_error: mma.span_config.normalization.soft_error
+mma_store_cpu_capacity: mma.store.cpu.capacity
+mma_store_cpu_load: mma.store.cpu.load
+mma_store_cpu_utilization: mma.store.cpu.utilization
+mma_store_disk_capacity: mma.store.disk.capacity
+mma_store_disk_logical: mma.store.disk.logical
+mma_store_disk_utilization: mma.store.disk.utilization
+mma_store_write_bandwidth: mma.store.write.bandwidth
 node_id: node_id
 obs_tablemetadata_update_job_duration: obs.tablemetadata.update_job.duration
 obs_tablemetadata_update_job_duration_bucket: obs.tablemetadata.update_job.duration.bucket

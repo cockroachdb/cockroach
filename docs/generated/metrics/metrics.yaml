@@ -13490,6 +13490,62 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: mma.store.cpu.capacity
+      exported_name: mma_store_cpu_capacity
+      description: Logical CPU capacity estimated by MMA by extrapolating from the current load and system CPU utilization after accounting for CPU load that MMA cannot account for that scales with KV work (RPC, DistSender, etc.) and load that doesn't (SQL).
+      y_axis_label: Nanoseconds/Sec
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.cpu.load
+      exported_name: mma_store_cpu_load
+      description: CPU load that is attributed to the replicas on this store. This includes reads (for leaseholder) and raft. Since CPU is shared across stores on a node, we approximate this by measuring the CPU usage on the node and then dividing this equally among all stores on the node.
+      y_axis_label: Nanoseconds/Sec
+      type: GAUGE
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.cpu.utilization
+      exported_name: mma_store_cpu_utilization
+      description: Ratio of logical CPU load to capacity expressed as a percentage
+      y_axis_label: CPU Utilization
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.disk.capacity
+      exported_name: mma_store_disk_capacity
+      description: Logical disk capacity estimated by MMA by extrapolating from the logical bytes consumed by the replicas and the current used and free physical disk bytes.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.disk.logical
+      exported_name: mma_store_disk_logical
+      description: Logical bytes consumed by the replicas on this store as reported by MVCC statistics without accounting for any space amplification or compression.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.disk.utilization
+      exported_name: mma_store_disk_utilization
+      description: Ratio of logical disk usage to capacity expressed as a percentage
+      y_axis_label: Disk Utilization
+      type: GAUGE
+      unit: PERCENT
+      aggregation: AVG
+      derivative: NONE
+    - name: mma.store.write.bandwidth
+      exported_name: mma_store_write_bandwidth
+      description: Disk write bandwidth as observed by MMA corresponding to the store
+      y_axis_label: Bytes/Sec
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
     - name: node-id
       exported_name: node_id
       description: node ID with labels for advertised RPC and HTTP addresses
