@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -49,11 +50,20 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 			); err != nil {
 				return err
 			}
-			return h.System.Exec(
+			// server.time_after_store_suspect_in_store_liveness was added in 26.1.
+			// Ignore the error if the setting doesn't exist on older versions.
+			if err := h.System.Exec(
 				rng,
 				"SET CLUSTER SETTING server.time_after_store_suspect_in_store_liveness = $1",
 				suspectDuration.String(),
-			)
+			); err != nil {
+				if strings.Contains(err.Error(), "unknown cluster setting") {
+					l.Printf("skipping server.time_after_store_suspect_in_store_liveness (not available on this version)")
+					return nil
+				}
+				return err
+			}
+			return nil
 		})
 
 	mvt.OnStartup(
