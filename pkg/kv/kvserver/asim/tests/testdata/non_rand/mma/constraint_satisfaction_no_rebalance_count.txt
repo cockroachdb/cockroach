@@ -35,6 +35,7 @@ setting split_queue_enabled=false
 
 eval duration=5m samples=1 seed=42 cfgs=(sma-count) metrics=(leases,replicas,disk_fraction_used)
 ----
+sma-count:
 disk_fraction_used#1: first: [s1=0.61, s2=0.61] (stddev=0.00, mean=0.61, sum=1)
 disk_fraction_used#1: last:  [s1=0.33, s2=0.89] (stddev=0.28, mean=0.61, sum=1)
 disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
@@ -44,7 +45,7 @@ leases#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
 replicas#1: first: [s1=50, s2=3] (stddev=23.50, mean=26.50, sum=53)
 replicas#1: last:  [s1=27, s2=26] (stddev=0.50, mean=26.50, sum=53)
 replicas#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
-artifacts[sma-count]: 48dbff430f9a21be
+hash: 48dbff430f9a21be
 ==========================
 
 assertion type=balance ticks=5 stat=disk_fraction_used upper_bound=1.1
@@ -60,6 +61,7 @@ assertion type=conformance under=0 over=0 unavailable=0 violating=0
 
 eval duration=5m samples=1 seed=42 cfgs=(mma-count) metrics=(leases,replicas,disk_fraction_used)
 ----
+mma-count:
 disk_fraction_used#1: first: [s1=0.61, s2=0.61] (stddev=0.00, mean=0.61, sum=1)
 disk_fraction_used#1: last:  [s1=0.57, s2=0.65] (stddev=0.04, mean=0.61, sum=1)
 disk_fraction_used#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
@@ -69,5 +71,5 @@ leases#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
 replicas#1: first: [s1=50, s2=3] (stddev=23.50, mean=26.50, sum=53)
 replicas#1: last:  [s1=47, s2=6] (stddev=20.50, mean=26.50, sum=53)
 replicas#1: thrash_pct: [s1=0%, s2=0%]  (sum=0%)
-artifacts[mma-count]: d2a2823701a6f92a
+hash: d2a2823701a6f92a
 ==========================
