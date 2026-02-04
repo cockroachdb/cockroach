@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/crlib/crstrings"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -215,6 +216,100 @@ var (
 	// are other than rebalance. Eventually, the external label value will go
 	// away when everything is migrated to MMA and SMA is removed.
 )
+
+// loadAndCapacityMetrics contains per-store metrics related to the virtual
+// load and capacity calculated at each store that are used by MMA to perform
+// allocation. The allocator on each node calculates the load and capacity of
+// every store, but we only report metrics for the local stores.
+type loadAndCapacityMetrics struct {
+	// The metrics below populate the CPU load and capacity as seen by MMA.
+	CPULoad        *metric.Gauge
+	CPUCapacity    *metric.Gauge
+	CPUUtilization *metric.GaugeFloat64
+
+	// The metric below populates the disk write bandwidth as seen by MMA.
+	WriteBandwidth *metric.Gauge
+
+	// The metrics below populate the disk load and capacity as seen by MMA.
+	DiskLoad        *metric.Gauge
+	DiskCapacity    *metric.Gauge
+	DiskUtilization *metric.GaugeFloat64
+}
+
+var (
+	metaStoreCPULoad = metric.Metadata{
+		Name: "mma.store.cpu.load",
+		Help: crstrings.UnwrapText(`
+			CPU load that is attributed to the replicas on this store. This
+			includes reads (for leaseholder) and raft. Since CPU is shared
+			across stores on a node, we approximate this by measuring the CPU
+			usage on the node and then dividing this equally among all stores
+			on the node.
+		`),
+		Measurement: "Nanoseconds/Sec",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStoreCPUCapacity = metric.Metadata{
+		Name: "mma.store.cpu.capacity",
+		Help: crstrings.UnwrapText(`
+			Logical CPU capacity estimated by MMA by extrapolating from the
+			current load and system CPU utilization after accounting for CPU
+			load that MMA cannot account for that scales with KV work (RPC,
+			DistSender, etc.) and load that doesn't (SQL).
+		`),
+		Measurement: "Nanoseconds/Sec",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaStoreCPUUtilization = metric.Metadata{
+		Name:        "mma.store.cpu.utilization",
+		Help:        "Ratio of logical CPU load to capacity expressed as a percentage",
+		Measurement: "CPU Utilization",
+		Unit:        metric.Unit_PERCENT,
+	}
+	metaStoreWriteBandwidth = metric.Metadata{
+		Name:        "mma.store.write.bandwidth",
+		Help:        "Disk write bandwidth as observed by MMA corresponding to the store",
+		Measurement: "Bytes/Sec",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaStoreDiskLoad = metric.Metadata{
+		Name: "mma.store.disk.logical",
+		Help: crstrings.UnwrapText(`
+			Logical bytes consumed by the replicas on this store as reported by
+			MVCC statistics without accounting for any space amplification or
+			compression.
+		`),
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaStoreDiskCapacity = metric.Metadata{
+		Name: "mma.store.disk.capacity",
+		Help: crstrings.UnwrapText(`
+			Logical disk capacity estimated by MMA by extrapolating from the
+			logical bytes consumed by the replicas and the current used and free
+			physical disk bytes.
+		`), Measurement: "Bytes",
+		Unit: metric.Unit_BYTES,
+	}
+	metaStoreDiskUtilization = metric.Metadata{
+		Name:        "mma.store.disk.utilization",
+		Help:        "Ratio of logical disk usage to capacity expressed as a percentage",
+		Measurement: "Disk Utilization",
+		Unit:        metric.Unit_PERCENT,
+	}
+)
+
+func makeLoadAndCapacityMetrics() *loadAndCapacityMetrics {
+	return &loadAndCapacityMetrics{
+		CPULoad:         metric.NewGauge(metaStoreCPULoad),
+		CPUCapacity:     metric.NewGauge(metaStoreCPUCapacity),
+		CPUUtilization:  metric.NewGaugeFloat64(metaStoreCPUUtilization),
+		WriteBandwidth:  metric.NewGauge(metaStoreWriteBandwidth),
+		DiskLoad:        metric.NewGauge(metaStoreDiskLoad),
+		DiskCapacity:    metric.NewGauge(metaStoreDiskCapacity),
+		DiskUtilization: metric.NewGaugeFloat64(metaStoreDiskUtilization),
+	}
+}
 
 // overloadKind represents the various time-based overload states for a store.
 type overloadKind uint8
