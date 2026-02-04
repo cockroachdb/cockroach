@@ -108,6 +108,13 @@ func TestLogic_mixed_version_timeseries_range_already_exists(
 	runLogicTest(t, "mixed_version_timeseries_range_already_exists")
 }
 
+func TestLogic_mixed_version_trigger_backref(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_trigger_backref")
+}
+
 func TestLogic_mixed_version_upgrade_preserve_ttl(
 	t *testing.T,
 ) {
