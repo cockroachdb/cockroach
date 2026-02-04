@@ -41,7 +41,7 @@ func newCountAggregator(
 	ag.input = input
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		ag.input = newInputStatCollector(input)
+		ag.input = NewInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 
@@ -98,7 +98,7 @@ func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(ag.input)
+	is, ok := GetInputStats(ag.input)
 	if !ok {
 		return nil
 	}

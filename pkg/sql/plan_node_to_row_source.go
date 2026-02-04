@@ -65,13 +65,7 @@ func newPlanNodeToRowSource(
 		params:          params,
 		firstNotWrapped: firstNotWrapped,
 		row:             p.row,
-	}
-	if p.rowsAffected {
-		// The node returns a single integer value with the number of rows affected.
-		// TODO(drewk): consider using a global singleton to avoid allocating.
-		p.outputTypes = []*types.T{types.Int}
-	} else {
-		p.outputTypes = getTypesFromResultColumns(planColumns(source))
+		outputTypes:     planTypes(source),
 	}
 	if p.row != nil && cap(p.row) >= len(p.outputTypes) {
 		// In some cases we might have no output columns, so nil row would have
@@ -146,10 +140,8 @@ func (p *planNodeToRowSource) Init(
 		flowCtx.EvalCtx,
 		processorID,
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{
-			// Input to drain is added in SetInput.
-			TrailingMetaCallback: p.trailingMetaCallback,
-		},
+		// Input to drain is added in SetInput.
+		execinfra.ProcStateOpts{},
 	); err != nil {
 		return err
 	}
@@ -250,23 +242,6 @@ func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 // trailing metadata and expect us to forward it further.
 func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
-}
-
-func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {
-	var meta []execinfrapb.ProducerMetadata
-	if p.InternalClose() {
-		// Check if we're wrapping a mutation and emit the rows written metric
-		// if so.
-		if m, ok := p.node.(mutationPlanNode); ok {
-			metrics := execinfrapb.GetMetricsMeta()
-			metrics.RowsWritten = m.rowsWritten()
-			metrics.IndexRowsWritten = m.indexRowsWritten()
-			metrics.IndexBytesWritten = m.indexBytesWritten()
-			metrics.KVCPUTime = m.kvCPUTime()
-			meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
-		}
-	}
-	return meta
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.

@@ -1465,7 +1465,7 @@ regions: <hidden>
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ execution time: 0µs
-│   │ actual row count: 0
+│   │ actual row count: 1
 │   │ from: p138974
 │   │
 │   └── • buffer

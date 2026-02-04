@@ -50,7 +50,7 @@ func (s *sorterBase) init(
 	opts execinfra.ProcStateOpts,
 ) error {
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		input = newInputStatCollector(input)
+		input = NewInputStatCollector(input)
 		s.ExecStatsForTrace = s.execStatsForTrace
 	}
 
@@ -128,7 +128,7 @@ func (s *sorterBase) close() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(s.input)
+	is, ok := GetInputStats(s.input)
 	if !ok {
 		return nil
 	}
