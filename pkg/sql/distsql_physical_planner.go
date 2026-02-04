@@ -3598,10 +3598,17 @@ func (dsp *DistSQLPlanner) createPhysPlan(
 	// during the flow setup). So to prevent expected nil pointer internal
 	// errors we set a noop forwarder and then unset it once the physical
 	// planning is done.
-	planCtx.planner.routineMetadataForwarder = singletonNoopMetadataForwarder
-	defer func() {
-		planCtx.planner.routineMetadataForwarder = nil
-	}()
+	//
+	// The only exception is if we're running parallel CHECKs, we'll avoid
+	// mutating the planner (since it's shared between goroutines) - similar to
+	// what we do in DistSQLPlanner.Run. (We can't have routines in post-query
+	// CHECKs since only FK and UNIQUE checks are run in parallel.)
+	if planCtx.flowConcurrency&distsql.ConcurrencyParallelChecks == 0 {
+		planCtx.planner.routineMetadataForwarder = singletonNoopMetadataForwarder
+		defer func() {
+			planCtx.planner.routineMetadataForwarder = nil
+		}()
+	}
 	physPlan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan.planNode)
 	return physPlan, planCtx.getCleanupFunc(), err
 }
