@@ -77,6 +77,7 @@ asserting: max_{stores}(cpu)/mean_{stores}(cpu) ≤ 1.15 at each of last 6 ticks
 # takes ~5min.
 eval duration=32m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu,cpu_util,leases,replicas)
 ----
+sma-count:
 cpu#1: last:  [s1=1650518518, s2=1725373840, s3=1625615244] (stddev=42394011.32, mean=1667169200.67, sum=5001507602)
 cpu#1: thrash_pct: [s1=4%, s2=5%, s3=5%]  (sum=14%)
 cpu_util#1: last:  [s1=0.21, s2=0.22, s3=0.20] (stddev=0.01, mean=0.21, sum=1)
@@ -87,8 +88,9 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
 replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
-artifacts[sma-count]: d29c210445a690ce
+hash: d29c210445a690ce
 ==========================
+mma-only:
 cpu#1: last:  [s1=1820976543, s2=1649994712, s3=1524369164] (stddev=121560456.89, mean=1665113473.00, sum=4995340419)
 cpu#1: thrash_pct: [s1=2%, s2=11%, s3=11%]  (sum=25%)
 cpu_util#1: last:  [s1=0.23, s2=0.21, s3=0.19] (stddev=0.02, mean=0.21, sum=1)
@@ -99,8 +101,9 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
 replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
-artifacts[mma-only]: 239cb1f32d4a2e3f
+hash: 239cb1f32d4a2e3f
 ==========================
+mma-count:
 cpu#1: last:  [s1=1776335802, s2=1675272645, s3=1549901392] (stddev=92618845.46, mean=1667169946.33, sum=5001509839)
 cpu#1: thrash_pct: [s1=4%, s2=6%, s3=5%]  (sum=15%)
 cpu_util#1: last:  [s1=0.22, s2=0.21, s3=0.19] (stddev=0.01, mean=0.21, sum=1)
@@ -111,5 +114,5 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
 replicas#1: first: [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: last:  [s1=200, s2=200, s3=200] (stddev=0.00, mean=200.00, sum=600)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%]  (sum=0%)
-artifacts[mma-count]: c3c6de6cbcc1f69f
+hash: c3c6de6cbcc1f69f
 ==========================
