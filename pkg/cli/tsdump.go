@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 )
 
@@ -127,7 +128,7 @@ will then convert it to the --format requested in the current invocation.
 
 		var w tsWriter
 		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
-		case tsDumpRaw:
+		case tsDumpRaw, tsDumpRawZstd:
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
 			}
@@ -263,7 +264,7 @@ will then convert it to the --format requested in the current invocation.
 			}
 
 			tsClient := conn.NewTimeSeriesClient()
-			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
+			if debugTimeSeriesDumpOpts.format == tsDumpRaw || debugTimeSeriesDumpOpts.format == tsDumpRawZstd {
 				// get the node details so that we can get the SQL port
 				statusClient := conn.NewStatusClient()
 				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
@@ -298,7 +299,18 @@ will then convert it to the --format requested in the current invocation.
 
 				// Buffer the writes since we're going to
 				// be writing potentially a lot of data.
-				w := bufio.NewWriterSize(output, 1024*1024)
+				bufWriter := bufio.NewWriterSize(output, 1024*1024)
+
+				// Set up the writer chain - optionally with ZSTD compression
+				var w io.Writer = bufWriter
+				var zstdWriter *zstd.Encoder
+				if debugTimeSeriesDumpOpts.format == tsDumpRawZstd {
+					zstdWriter, err = zstd.NewWriter(bufWriter)
+					if err != nil {
+						return errors.Wrap(err, "creating zstd writer")
+					}
+					w = zstdWriter
+				}
 
 				// Write embedded metadata first
 				if err := tsdumpmeta.Write(w, metadata); err != nil {
@@ -309,7 +321,14 @@ will then convert it to the --format requested in the current invocation.
 					return err
 				}
 
-				if err := w.Flush(); err != nil {
+				// Close ZSTD writer first if used (flushes compressed data)
+				if zstdWriter != nil {
+					if err := zstdWriter.Close(); err != nil {
+						return errors.Wrap(err, "closing zstd writer")
+					}
+				}
+
+				if err := bufWriter.Flush(); err != nil {
 					return err
 				}
 
@@ -828,6 +847,7 @@ const (
 	tsDumpCSV
 	tsDumpTSV
 	tsDumpRaw
+	tsDumpRawZstd // raw format with ZSTD compression
 	tsDumpOpenMetrics
 	tsDumpJSON
 	// tsDumpDatadog format will send metrics to the public Datadog HTTP
@@ -855,6 +875,8 @@ func (m *tsDumpFormat) String() string {
 		return "text"
 	case tsDumpRaw:
 		return "raw"
+	case tsDumpRawZstd:
+		return "raw-zstd"
 	case tsDumpOpenMetrics:
 		return "openmetrics"
 	case tsDumpJSON:
@@ -878,6 +900,8 @@ func (m *tsDumpFormat) Set(s string) error {
 		*m = tsDumpTSV
 	case "raw":
 		*m = tsDumpRaw
+	case "raw-zstd":
+		*m = tsDumpRawZstd
 	case "openmetrics":
 		*m = tsDumpOpenMetrics
 	case "json":
