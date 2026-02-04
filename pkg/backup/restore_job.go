@@ -1421,9 +1421,7 @@ func createRestoreFlows(
 		}
 	}
 
-	// postRestoreTables will have system tables during a cluster or system users
-	// restore, so they will have the id of the temp system db.
-	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables)
+	tempSystemDBID := tempSystemDatabaseID(details, postRestoreTables, r.job.Payload().CreationClusterVersion)
 
 	var rekeys []execinfrapb.TableRekey
 	var systemTables []catalog.TableDescriptor
@@ -1624,7 +1622,7 @@ func createImportingDescriptors(
 		}
 	}
 
-	tempSystemDBID := tempSystemDatabaseID(details, tables)
+	tempSystemDBID := tempSystemDatabaseID(details, tables, r.job.Payload().CreationClusterVersion)
 	tempSystemDBName := restoreTempSystemName(r.job.Payload().CreationClusterVersion, r.job.ID())
 	if tempSystemDBID != descpb.InvalidID {
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, tempSystemDBName,
@@ -2737,8 +2735,14 @@ func (r *restoreResumer) MaybeWaitForSpanConfigConformance(
 // the new parent assigned in the rewrites during planning. Returns InvalidID if
 // no such table appears in the rewrites.
 func tempSystemDatabaseID(
-	details jobspb.RestoreDetails, tables []catalog.TableDescriptor,
+	details jobspb.RestoreDetails,
+	tables []catalog.TableDescriptor,
+	jobCreationClusterVersion roachpb.Version,
 ) descpb.ID {
+	if jobCreationClusterVersion.AtLeast(clusterversion.V26_2.Version()) {
+		return details.TempSystemID
+	}
+
 	if details.DescriptorCoverage != tree.AllDescriptors && !isSystemUserRestore(details) {
 		return descpb.InvalidID
 	}
@@ -3205,7 +3209,7 @@ func (r *restoreResumer) OnFailOrCancel(
 		}
 	}
 
-	if details.DescriptorCoverage == tree.AllDescriptors {
+	if details.DescriptorCoverage == tree.AllDescriptors || isSystemUserRestore(details) {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
