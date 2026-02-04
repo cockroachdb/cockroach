@@ -11,9 +11,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
@@ -48,11 +50,12 @@ var _ BlobClient = &remoteClient{}
 // to Read or Write bulk files from/to other nodes.
 type remoteClient struct {
 	blobClient blobspb.RPCBlobClient
+	settings   *cluster.Settings
 }
 
 // newRemoteClient instantiates a remote blob service client.
-func newRemoteClient(blobClient blobspb.RPCBlobClient) BlobClient {
-	return &remoteClient{blobClient: blobClient}
+func newRemoteClient(blobClient blobspb.RPCBlobClient, settings *cluster.Settings) BlobClient {
+	return &remoteClient{blobClient: blobClient, settings: settings}
 }
 
 func (c *remoteClient) ReadFile(
@@ -63,6 +66,23 @@ func (c *remoteClient) ReadFile(
 	if err != nil {
 		return nil, 0, err
 	}
+
+	// Use flow-controlled streaming if version gate is active and flow control
+	// is not disabled.
+	if c.settings != nil &&
+		c.settings.Version.IsActive(ctx, clusterversion.V26_2_BlobServiceFlowControl) &&
+		FlowControlWindow.Get(&c.settings.SV) > 0 {
+		return c.readFileWithFlowControl(ctx, file, offset, st.Filesize)
+	}
+
+	// Fall back to legacy streaming.
+	return c.readFileLegacy(ctx, file, offset, st.Filesize)
+}
+
+// readFileLegacy uses the original GetStream RPC without flow control.
+func (c *remoteClient) readFileLegacy(
+	ctx context.Context, file string, offset int64, size int64,
+) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	stream, err := c.blobClient.GetStream(ctx, &blobspb.GetRequest{
 		Filename: file,
@@ -72,7 +92,37 @@ func (c *remoteClient) ReadFile(
 		cancel()
 		return nil, 0, errors.Wrap(err, "fetching file")
 	}
-	return newGetStreamReader(stream, cancel), st.Filesize, nil
+	return newGetStreamReader(stream, cancel), size, nil
+}
+
+// readFileWithFlowControl uses the GetStreamFlowControlled RPC with explicit
+// acknowledgments to control the pace of data transfer.
+func (c *remoteClient) readFileWithFlowControl(
+	ctx context.Context, file string, offset int64, size int64,
+) (ioctx.ReadCloserCtx, int64, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	stream, err := c.blobClient.GetStreamFlowControlled(ctx)
+	if err != nil {
+		cancel()
+		return nil, 0, errors.Wrap(err, "opening flow-controlled stream")
+	}
+
+	// Send initial request.
+	req := &blobspb.FlowControlledClientMessage{
+		Msg: &blobspb.FlowControlledClientMessage_Request{
+			Request: &blobspb.FlowControlledGetRequest{
+				Filename:          file,
+				Offset:            offset,
+				FlowControlWindow: int32(FlowControlWindow.Get(&c.settings.SV)),
+			},
+		},
+	}
+	if err := stream.Send(req); err != nil {
+		cancel()
+		return nil, 0, errors.Wrap(err, "sending initial request")
+	}
+
+	return newFlowControlledStreamReader(stream, cancel), size, nil
 }
 
 type streamWriter struct {
@@ -193,6 +243,7 @@ func NewBlobClientFactory(
 	dialer *nodedialer.Dialer,
 	externalIODir string,
 	allowLocalFastpath bool,
+	settings *cluster.Settings,
 ) BlobClientFactory {
 	return func(ctx context.Context, dialTarget roachpb.NodeID) (BlobClient, error) {
 		localNodeID, ok := localNodeIDContainer.OptionalNodeID()
@@ -209,7 +260,7 @@ func NewBlobClientFactory(
 		if err != nil {
 			return nil, errors.Wrapf(err, "connecting to node %d", dialTarget)
 		}
-		return newRemoteClient(client), nil
+		return newRemoteClient(client, settings), nil
 	}
 }
 

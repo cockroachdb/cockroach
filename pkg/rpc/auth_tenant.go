@@ -174,6 +174,7 @@ func (a tenantAuthorizer) authorize(
 		"/cockroach.blobs.Blob/Delete",
 		"/cockroach.blobs.Blob/Stat",
 		"/cockroach.blobs.Blob/GetStream",
+		"/cockroach.blobs.Blob/GetStreamFlowControlled",
 		"/cockroach.blobs.Blob/PutStream":
 		return a.capabilitiesAuthorizer.HasNodelocalStorageCapability(ctx, tenID)
 
