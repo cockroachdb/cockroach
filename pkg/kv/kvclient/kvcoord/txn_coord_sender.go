@@ -148,6 +148,13 @@ type TxnCoordSender struct {
 		// caller of DeferCommitWait has assumed responsibility for performing
 		// the commit-wait.
 		commitWaitDeferred bool
+
+		// Workload attribution fields for ASH sampling. These are set via
+		// SetWorkloadInfo and used by the heartbeater to attribute background
+		// work to the originating workload.
+		workloadID       uint64
+		appNameID        uint64
+		sqlGatewayNodeID roachpb.NodeID
 	}
 
 	// A pointer member to the creating factory provides access to
@@ -269,6 +276,9 @@ func newRootTxnCoordSender(
 		&tcs.mu.txn,
 		tcf.st,
 		&tcs.testingKnobs,
+		&tcs.mu.workloadID,
+		&tcs.mu.appNameID,
+		&tcs.mu.sqlGatewayNodeID,
 	)
 	tcs.interceptorAlloc.txnCommitter = txnCommitter{
 		st:      tcf.st,
@@ -1178,6 +1188,17 @@ func (tc *TxnCoordSender) SetOmitInRangefeeds() {
 		panic("cannot change OmitInRangefeeds of a running transaction")
 	}
 	tc.mu.txn.OmitInRangefeeds = true
+}
+
+// SetWorkloadInfo is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) SetWorkloadInfo(
+	workloadID uint64, appNameID uint64, sqlGatewayNodeID roachpb.NodeID,
+) {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	tc.mu.workloadID = workloadID
+	tc.mu.appNameID = appNameID
+	tc.mu.sqlGatewayNodeID = sqlGatewayNodeID
 }
 
 // SetBufferedWritesEnabled is part of the kv.TxnSender interface.

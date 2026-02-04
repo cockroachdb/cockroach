@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -546,19 +547,13 @@ func BenchmarkTracing(b *testing.B) {
 						// netTrace, if set, enables use of net.Traces. This is similar to
 						// the effects of the trace.debug_http_endpoint.enabled cluster setting.
 						netTrace bool
-						// ashEnabled, if set, enables Active Session History (ASH) sampling.
-						ashEnabled bool
 					}
 					for _, test := range []testSpec{
 						{alwaysTrace: false},
-						{alwaysTrace: false, ashEnabled: true},
 						{sqlTraceRatio: 0.01},
-						{sqlTraceRatio: 0.01, ashEnabled: true},
-						{sqlTraceRatio: 0.03},
-						{sqlTraceRatio: 0.10},
 						{sqlTraceRatio: 1.0},
-						// {alwaysTrace: true},
-						// {netTrace: true},
+						{alwaysTrace: true},
+						{netTrace: true},
 					} {
 						if test.alwaysTrace && test.sqlTraceRatio != 0 {
 							panic("invalid test")
@@ -575,12 +570,6 @@ func BenchmarkTracing(b *testing.B) {
 						} else {
 							percent := int(test.sqlTraceRatio * 100)
 							name.WriteString(fmt.Sprintf("%d%%", percent))
-						}
-						name.WriteString("/ash=")
-						if test.ashEnabled {
-							name.WriteString("on")
-						} else {
-							name.WriteString("off")
 						}
 						b.Run(name.String(), func(b *testing.B) {
 							var opts []tracing.TracerOption
@@ -600,7 +589,107 @@ func BenchmarkTracing(b *testing.B) {
 
 							sqlRunner.Exec(b, `CREATE DATABASE bench`)
 							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.txn_stats.sample_rate = $1`, test.sqlTraceRatio)
+
+							b.ReportAllocs()
+							bench.fn(b, sqlRunner)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+// BenchmarkASH measures the overhead of Active Session History (ASH) sampling.
+// It tests with ASH disabled vs enabled, and when enabled, varies the sampling
+// interval to measure its impact on performance.
+func BenchmarkASH(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	type clusterCreationFn func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper)
+	type clusterSpec struct {
+		name   string
+		create clusterCreationFn
+	}
+	for _, cluster := range []clusterSpec{
+		{
+			name: "1node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+					UseDatabase: "bench",
+					Tracer:      tr,
+				})
+				sqlRunner := sqlutils.MakeSQLRunner(db)
+				return sqlRunner, s.Stopper()
+			},
+		},
+		{
+			name: "3node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				tc := testcluster.StartTestCluster(b, 3,
+					base.TestClusterArgs{
+						ReplicationMode: base.ReplicationAuto,
+						ServerArgs: base.TestServerArgs{
+							UseDatabase: "bench",
+							Tracer:      tr,
+						},
+					})
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				return sqlRunner, tc.Stopper()
+			},
+		},
+	} {
+		b.Run(cluster.name, func(b *testing.B) {
+			ctx := context.Background()
+
+			type benchmark struct {
+				name string
+				fn   func(b *testing.B, db *sqlutils.SQLRunner)
+			}
+			for _, bench := range []benchmark{
+				{
+					name: "scan",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkScan(b, db, 1, 1)
+					},
+				},
+				{
+					name: "insert",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkInsert(b, db, 1)
+					},
+				},
+			} {
+				b.Run(bench.name, func(b *testing.B) {
+					type testSpec struct {
+						ashEnabled     bool
+						sampleInterval time.Duration
+					}
+					for _, test := range []testSpec{
+						{ashEnabled: false},
+						{ashEnabled: true, sampleInterval: 100 * time.Millisecond},
+						{ashEnabled: true, sampleInterval: 500 * time.Millisecond},
+						{ashEnabled: true, sampleInterval: 1 * time.Second},
+					} {
+						var name string
+						if !test.ashEnabled {
+							name = "ash=off"
+						} else {
+							name = fmt.Sprintf("ash=on/interval=%s", test.sampleInterval)
+						}
+						b.Run(name, func(b *testing.B) {
+							tr := tracing.NewTracerWithOpt(ctx,
+								tracing.WithTracingMode(tracing.TracingModeOnDemand))
+							sqlRunner, stop := cluster.create(tr)
+							defer stop.Stop(ctx)
+
+							sqlRunner.Exec(b, `CREATE DATABASE bench`)
 							sqlRunner.Exec(b, `SET CLUSTER SETTING sql.ash.enabled = $1`, test.ashEnabled)
+							if test.ashEnabled {
+								sqlRunner.Exec(b, `SET CLUSTER SETTING sql.ash.sample_interval = $1`,
+									test.sampleInterval.String())
+							}
 
 							b.ReportAllocs()
 							bench.fn(b, sqlRunner)

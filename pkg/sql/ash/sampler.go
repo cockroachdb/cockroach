@@ -48,6 +48,13 @@ var BufferSize = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// pendingSample holds a snapshot of a goroutine's work state collected
+// during RangeWorkStates, for processing after the lock is released.
+type pendingSample struct {
+	gid   int64
+	state WorkState
+}
+
 // Sampler periodically samples the active work states and stores ASH data.
 type Sampler struct {
 	nodeID           roachpb.NodeID
@@ -56,12 +63,18 @@ type Sampler struct {
 	stopper          *stop.Stopper
 	resolveAppNameID ResolveAppNameID
 	ctx              context.Context
+	// workloadIDCache caches the result of EncodeStmtFingerprintIDToString
+	// to avoid repeated allocations for the same workload ID. Only accessed
+	// from the single sampler goroutine, so no synchronization is needed.
+	workloadIDCache map[uint64]string
+	// pendingSamples is a reusable slice for collecting work state snapshots
+	// during RangeWorkStates. Reused across samples to avoid per-sample
+	// slice allocation. Only accessed from the single sampler goroutine.
+	pendingSamples []pendingSample
 }
 
 // NewSampler creates a new ASH sampler.
-func NewSampler(
-	nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopper,
-) *Sampler {
+func NewSampler(nodeID roachpb.NodeID, st *cluster.Settings, stopper *stop.Stopper) *Sampler {
 	return NewSamplerWithAppNameFetcher(nodeID, st, stopper, nil)
 }
 
@@ -80,11 +93,13 @@ func NewSamplerWithAppNameFetcher(
 		buffer:           NewRingBuffer(bufSize),
 		stopper:          stopper,
 		resolveAppNameID: resolveAppNameID,
+		workloadIDCache:  make(map[uint64]string),
 	}
 }
 
 // Start begins the background sampling loop.
 func (s *Sampler) Start(ctx context.Context) error {
+	log.Ops.Info(ctx, "Starting ASH sampler")
 	return s.stopper.RunAsyncTask(ctx, "ash-sampler", func(ctx context.Context) {
 		s.run(ctx)
 	})
@@ -105,18 +120,19 @@ func (s *Sampler) run(ctx context.Context) {
 	var timer timeutil.Timer
 	defer timer.Stop()
 
-	interval := SampleInterval.Get(&s.st.SV)
-	timer.Reset(interval)
+	var interval atomic.Int64
+	interval.Store(int64(SampleInterval.Get(&s.st.SV)))
+	timer.Reset(time.Duration(interval.Load()))
 
 	SampleInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
-		interval = SampleInterval.Get(&s.st.SV)
+		interval.Store(int64(SampleInterval.Get(&s.st.SV)))
 	})
 
 	for {
 		select {
 		case <-timer.C:
 			timer.Read = true
-			timer.Reset(interval)
+			timer.Reset(time.Duration(interval.Load()))
 			if Enabled.Get(&s.st.SV) {
 				s.takeSample()
 			}
@@ -132,49 +148,59 @@ func (s *Sampler) run(ctx context.Context) {
 func (s *Sampler) takeSample() {
 	sampleTime := timeutil.Now()
 
-	// Iterate over all registered work states and create samples.
+	// Collect work state snapshots during RangeWorkStates, then process
+	// them afterwards so that app name resolution RPCs and buffer
+	// writes don't hold iteration open.
+	s.pendingSamples = s.pendingSamples[:0]
 	RangeWorkStates(func(gid int64, state WorkState) bool {
+		s.pendingSamples = append(s.pendingSamples, pendingSample{gid: gid, state: state})
+		return true
+	})
+
+	// Return retired WorkState objects to the pool now that Range is
+	// complete and the sampler no longer holds any stale pointers.
+	reclaimRetiredWorkStates()
+
+	// Process collected snapshots outside the iteration so that app
+	// name resolution RPCs and buffer writes don't block new work.
+	for i := range s.pendingSamples {
+		ps := &s.pendingSamples[i]
+
 		// Encode the workloadID to a string for the ASHSample.
 		var workloadIDStr string
-		switch state.WorkloadID {
+		switch ps.state.WorkloadID {
 		case 0:
 			// No workload ID.
-		case IntentResolutionWorkloadID:
-			workloadIDStr = "intent resolution"
-		case TxnHeartbeatWorkloadID:
-			workloadIDStr = "txn heartbeat"
-		case RangeLookupWorkloadID:
-			workloadIDStr = "range lookup"
-		case LeaseRequestWorkloadID:
-			workloadIDStr = "lease request"
 		default:
-			// TODO(alyshan): Cache these mappings to reduce allocations.
-			// TODO(alyshan): Use StringInterner(?).
-			workloadIDStr = EncodeStmtFingerprintIDToString(state.WorkloadID)
+			if name, ok := LookupSystemWorkloadName(ps.state.WorkloadID); ok {
+				workloadIDStr = name
+			} else {
+				if cached, ok := s.workloadIDCache[ps.state.WorkloadID]; ok {
+					workloadIDStr = cached
+				} else {
+					workloadIDStr = EncodeStmtFingerprintIDToString(ps.state.WorkloadID)
+					s.workloadIDCache[ps.state.WorkloadID] = workloadIDStr
+				}
+			}
 		}
 
 		// Look up app_name from AppNameID if present.
 		var appName string
-		if state.AppNameID != 0 {
+		if ps.state.AppNameID != 0 {
 			var found bool
-			appName, found = GetAppName(state.AppNameID)
+			appName, found = GetAppName(ps.state.AppNameID)
 			if !found {
 				appName = "unknown"
-				if state.GatewayNodeID != 0 && s.resolveAppNameID != nil {
-					// Fetch all mappings from the gateway node and store them locally.
-					log.Ops.Infof(s.ctx, "ASH sampler: fetching app name mappings from gateway node %d", state.GatewayNodeID)
+				if ps.state.GatewayNodeID != 0 && s.resolveAppNameID != nil {
 					resp, err := s.resolveAppNameID(s.ctx, &AppNameMappingsRequest{
-						NodeID: state.GatewayNodeID,
+						NodeID: ps.state.GatewayNodeID,
 					})
 					if err == nil {
 						StoreAppNameMappings(resp.Mappings)
-						// Try to get the app name again after storing mappings.
-						appName, found = GetAppName(state.AppNameID)
+						appName, found = GetAppName(ps.state.AppNameID)
 						if found {
-							log.Ops.Info(s.ctx, "ASH sampler: successfully resolved app name from gateway node")
+							// Successfully resolved.
 						}
-					} else {
-						log.Ops.Infof(s.ctx, "ASH sampler: failed to resolve app name from gateway node: %v", err)
 					}
 				}
 			}
@@ -184,15 +210,14 @@ func (s *Sampler) takeSample() {
 			SampleTime:    sampleTime,
 			NodeID:        s.nodeID,
 			WorkloadID:    workloadIDStr,
-			WorkEventType: state.WorkEventType,
-			WorkEvent:     state.WorkEvent,
-			GoroutineID:   gid,
+			WorkEventType: ps.state.WorkEventType,
+			WorkEvent:     ps.state.WorkEvent,
+			GoroutineID:   ps.gid,
 			AppName:       appName,
-			GatewayNodeID: state.GatewayNodeID,
+			GatewayNodeID: ps.state.GatewayNodeID,
 		}
 		s.buffer.Add(sample)
-		return true // continue iteration
-	})
+	}
 
 	// TODO(alyshan): Add metrics for sample count, processing time, etc.
 }

@@ -282,7 +282,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
 		go func(input colexecargs.OpWithMetaInfo, inputIdx int) {
-			clearWorkState := ash.SetWorkState(s.flowCtx.WorkloadID, ash.WORK_OTHER, "ColExecSync")
+			clearWorkState := ash.SetWorkState(s.flowCtx.EvalCtx.WorkloadID, ash.WORK_OTHER, "ColExecSync")
 			defer clearWorkState()
 			span := s.tracingSpans[inputIdx]
 			defer func() {

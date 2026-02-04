@@ -3049,7 +3049,7 @@ func indexTruncateInTxn(
 			evalCtx.SessionData(), &execCfg.Settings.SV, execCfg.GetRowMetrics(evalCtx.SessionData().Internal),
 		)
 		td := tableDeleter{rd: rd}
-		if err := td.init(ctx, txn.KV(), evalCtx, 0 /* workloadID */); err != nil {
+		if err := td.init(ctx, txn.KV(), evalCtx); err != nil {
 			return err
 		}
 		var err error

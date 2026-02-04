@@ -20,7 +20,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql/ash",
         "//pkg/storage/enginepb",
         "//pkg/util/debugutil",
         "//pkg/util/envutil",

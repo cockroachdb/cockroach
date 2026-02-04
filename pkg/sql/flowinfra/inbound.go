@@ -9,7 +9,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -132,10 +131,6 @@ func processInboundStreamHelper(
 	f.GetWaitGroup().Add(1)
 	go func() {
 		defer f.GetWaitGroup().Done()
-		workloadID := f.GetFlowCtx().WorkloadID
-		appNameID := f.GetFlowCtx().AppNameID
-		clearWorkState := ash.SetWorkStateWithAppName(workloadID, ash.WORK_NETWORK, "RowInboxRecv", appNameID, 0)
-		defer clearWorkState()
 		for {
 			msg, err := stream.Recv()
 			if err != nil {

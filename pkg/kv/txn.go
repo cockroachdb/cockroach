@@ -482,6 +482,10 @@ func (txn *Txn) SetWorkloadInfo(workloadID uint64, appNameID uint64, sqlGatewayN
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
 	txn.sqlGatewayNodeID = sqlGatewayNodeID
+	// Also propagate to the TxnCoordSender so it can be used for heartbeats.
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.SetWorkloadInfo(workloadID, appNameID, sqlGatewayNodeID)
 }
 
 // DebugName returns the debug name associated with the transaction.
@@ -1406,12 +1410,9 @@ func (txn *Txn) Send(
 	if txn.gatewayNodeID != 0 {
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
-	// Set SQLGatewayNodeID if it's not already set. This is used for ASH sampling.
 	if txn.sqlGatewayNodeID != 0 && ba.Header.SQLGatewayNodeID == 0 {
 		ba.Header.SQLGatewayNodeID = txn.sqlGatewayNodeID
 	}
-	// Set WorkloadId and AppNameID if they're not already set. These are used for
-	// profiling, tracing, and ASH sampling.
 	if txn.workloadID != 0 && ba.Header.WorkloadId == 0 {
 		ba.Header.WorkloadId = txn.workloadID
 	}
@@ -1419,32 +1420,32 @@ func (txn *Txn) Send(
 		ba.Header.AppNameID = txn.appNameID
 	}
 
-	if ba.Header.WorkloadId != 0 {
-		if ba.Header.AppNameID == 0 || ba.Header.SQLGatewayNodeID == 0 {
-			// Get transaction info (requires lock)
-			txn.mu.Lock()
-			txnID := txn.mu.ID
-			debugName := txn.mu.debugName
-			txn.mu.Unlock()
+	// if ba.Header.WorkloadId != 0 {
+	// 	if ba.Header.AppNameID == 0 || ba.Header.SQLGatewayNodeID == 0 {
+	// 		// Get transaction info (requires lock)
+	// 		txn.mu.Lock()
+	// 		txnID := txn.mu.ID
+	// 		debugName := txn.mu.debugName
+	// 		txn.mu.Unlock()
 
-			log.Ops.Infof(ctx,
-				"workloadID is non-zero (%d) but appNameID or sqlGatewayNodeID are missing "+
-					"(appNameID=%d, sqlGatewayNodeID=%d). "+
-					"txn: %s (id: %s), typ: %v, gatewayNodeID: %d, "+
-					"admissionSource: %v, admissionSourceLocation: %v, numRequests: %d. "+
-					"This may affect profiling, tracing, and ASH sampling.",
-				ba.Header.WorkloadId,
-				ba.Header.AppNameID,
-				ba.Header.SQLGatewayNodeID,
-				debugName,
-				txnID,
-				txn.typ,
-				txn.gatewayNodeID,
-				ba.AdmissionHeader.Source,
-				ba.AdmissionHeader.SourceLocation,
-				len(ba.Requests))
-		}
-	}
+	// 		log.Ops.Infof(ctx,
+	// 			"workloadID is non-zero (%d) but appNameID or sqlGatewayNodeID are missing "+
+	// 				"(appNameID=%d, sqlGatewayNodeID=%d). "+
+	// 				"txn: %s (id: %s), typ: %v, gatewayNodeID: %d, "+
+	// 				"admissionSource: %v, admissionSourceLocation: %v, numRequests: %d. "+
+	// 				"This may affect profiling, tracing, and ASH sampling.",
+	// 			ba.Header.WorkloadId,
+	// 			ba.Header.AppNameID,
+	// 			ba.Header.SQLGatewayNodeID,
+	// 			debugName,
+	// 			txnID,
+	// 			txn.typ,
+	// 			txn.gatewayNodeID,
+	// 			ba.AdmissionHeader.Source,
+	// 			ba.AdmissionHeader.SourceLocation,
+	// 			len(ba.Requests))
+	// 	}
+	// }
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.
 	if ba.BoundedStaleness != nil {

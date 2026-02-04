@@ -331,9 +331,10 @@ func NewFlowBase(
 	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{
-		TenantID:   roachpb.SystemTenantID,
-		WorkloadID: flowCtx.WorkloadID,
-		AppNameID:  flowCtx.AppNameID,
+		TenantID:      roachpb.SystemTenantID,
+		WorkloadID:    flowCtx.EvalCtx.WorkloadID,
+		AppNameID:     flowCtx.EvalCtx.AppNameID,
+		GatewayNodeID: roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	}
 	if flowCtx.Txn == nil {
 		admissionInfo.Priority = admissionpb.NormalPri

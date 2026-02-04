@@ -74,6 +74,9 @@ func getStreamer(
 		lock.None,
 		lock.Unreplicated,
 		reverse,
+		0, /* workloadID */
+		0, /* appNameID */
+		0, /* gatewayNodeID */
 	)
 }
 
@@ -133,13 +136,13 @@ func TestStreamerLimitations(t *testing.T) {
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
 				nil,           /* kvCpuTime */
-		lock.None,
-		lock.Unreplicated,
-		false, /* reverse */
-		0,     /* workloadID */
-		0,     /* appNameID */
-		0,     /* gatewayNodeID */
-	)
+				lock.None,
+				lock.Unreplicated,
+				false, /* reverse */
+				0,     /* workloadID */
+				0,     /* appNameID */
+				0,     /* gatewayNodeID */
+			)
 		})
 	})
 }

@@ -568,9 +568,9 @@ func (n *createTableNode) startExec(params runParams) error {
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext(), params.p.stmt.WorkloadID); err != nil {
-				return err
-			}
+		if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			return err
+		}
 
 			// Prepare the buffer for row values. At this point, one more column has
 			// been added by ensurePrimaryKey() to the list of columns in input, if

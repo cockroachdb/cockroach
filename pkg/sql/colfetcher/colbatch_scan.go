@@ -381,21 +381,24 @@ func NewColBatchScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
-		flowCtx.WorkloadID,
-		flowCtx.AppNameID,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.AppNameID,
 		roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
-		execinfra.GetWorkMemLimit(flowCtx),
-		estimatedRowCount,
-		flowCtx.TraceKV,
-		true, /* singleUse */
-		shouldCollectStats,
-		false, /* alwaysReallocate */
-		flowCtx.Txn,
-		flowCtx.Codec().TenantID,
+		memoryLimit:      execinfra.GetWorkMemLimit(flowCtx),
+		estimatedRowCount: estimatedRowCount,
+		traceKV:          flowCtx.TraceKV,
+		singleUse:        true,
+		collectStats:     shouldCollectStats,
+		alwaysReallocate: false,
+		txn:              flowCtx.Txn,
+		tenantID:         flowCtx.Codec().TenantID,
+		workloadID:       flowCtx.EvalCtx.WorkloadID,
+		appNameID:        flowCtx.EvalCtx.AppNameID,
+		gatewayNodeID:    roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()

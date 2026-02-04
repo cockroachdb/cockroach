@@ -595,8 +595,8 @@ func newJoinReader(
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
 			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
-			flowCtx.WorkloadID,
-			flowCtx.AppNameID,
+			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.AppNameID,
 			roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 		)
 	} else {
@@ -627,8 +627,8 @@ func newJoinReader(
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			SpansCanOverlap:            jr.spansCanOverlap,
-			WorkloadID:                 flowCtx.WorkloadID,
-			AppNameID:                  flowCtx.AppNameID,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
+			AppNameID:                  flowCtx.EvalCtx.AppNameID,
 			Gateway:                    flowCtx.EvalCtx.Gateway,
 		},
 	); err != nil {

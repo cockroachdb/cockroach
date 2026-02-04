@@ -4940,6 +4940,17 @@ type MVCCScanOptions struct {
 	// roachpb.Value whose RawBytes may contain MVCCValueHeader
 	// data.
 	ReturnRawMVCCValues bool
+
+	// WorkloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	WorkloadID uint64
+	// AppNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this request.
+	AppNameID uint64
+	// SQLGatewayNodeID is the SQL instance ID of the gateway node that planned
+	// the flow or served the query.
+	SQLGatewayNodeID roachpb.NodeID
 }
 
 func (opts *MVCCScanOptions) validate() error {

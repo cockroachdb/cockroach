@@ -91,14 +91,6 @@ type FlowCtx struct {
 	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
-
-	WorkloadID uint64
-
-	// AppNameID is the uint64 identifier for the app_name of the SQL session
-	// that created this flow. This is a hash of the app_name string that can
-	// be mapped back to the app_name using the node-local app name mapping.
-	// Zero means no app_name is associated with this flow.
-	AppNameID uint64
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's eval.Context.

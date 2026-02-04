@@ -239,8 +239,8 @@ func NewColBatchDirectScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
-		flowCtx.WorkloadID,
-		flowCtx.AppNameID,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.AppNameID,
 		roachpb.NodeID(flowCtx.EvalCtx.Gateway),
 	)
 	var hasDatumVec bool

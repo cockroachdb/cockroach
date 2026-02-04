@@ -11,7 +11,6 @@ import (
 
 // RingBuffer is a thread-safe circular buffer for ASH samples.
 // When the buffer is full, the oldest samples are overwritten.
-// TODO(alyshan): Use util/container/ring/buffer.go instead.
 type RingBuffer struct {
 	mu struct {
 		syncutil.Mutex

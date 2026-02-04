@@ -493,7 +493,7 @@ func (b *baseStatusServer) localAppNameMappings(
 ) *serverpb.AppNameMappingsResponse {
 	mappings := ash.GetAllAppNameMappings()
 
-	log.Ops.Infof(ctx, "ASH sampler: returning app name mappings: %v", mappings)
+	// log.Ops.Infof(ctx, "ASH sampler: returning app name mappings: %v", mappings)
 	return &serverpb.AppNameMappingsResponse{
 		Mappings: mappings,
 	}
@@ -4409,11 +4409,11 @@ func (s *statusServer) AppNameMappings(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if local {
-		log.Ops.Info(ctx, "ASH sampler: resolving app name mappings")
+		// log.Ops.Info(ctx, "ASH sampler: resolving app name mappings")
 		return s.localAppNameMappings(ctx, req), nil
 	}
 
-	log.Ops.Infof(ctx, "ASH sampler: resolving app name mappings dialing node %d", requestedNodeID)
+	// log.Ops.Infof(ctx, "ASH sampler: resolving app name mappings dialing node %d", requestedNodeID)
 	statusClient, err := s.dialNode(ctx, requestedNodeID)
 	if err != nil {
 		return nil, err
