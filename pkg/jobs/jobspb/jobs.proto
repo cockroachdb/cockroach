@@ -664,7 +664,12 @@ message RestoreDetails {
 
   bool experimental_copy = 37;
 
-  // NEXT ID: 38.
+  uint32 temp_system_id = 38 [
+    (gogoproto.customname) = "TempSystemID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+
+  // NEXT ID: 39.
 }
 
 
