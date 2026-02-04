@@ -1,16 +1,10 @@
-# Ref: https://github.com/bazel-contrib/bazel-lib/blob/v2.9.4/lib/private/tar_toolchain.bzl
+# Ref: https://github.com/bazel-contrib/bazel-lib/blob/v2.22.5/lib/private/tar_toolchain.bzl
 # We can't use the upstream implementation as it is hard-coded to use the
 # binaries from aspect's Github.
 # NB: s390x is not supported here, but that shouldn't matter for the s390x
 # unit test build in TeamCity, where we go to pains to avoid building any of
 # the UI stuff.
 BSDTAR_PLATFORMS = {
-    "darwin_amd64": struct(
-        compatible_with = [
-            "@platforms//os:osx",
-            "@platforms//cpu:x86_64",
-        ],
-    ),
     "darwin_arm64": struct(
         compatible_with = [
             "@platforms//os:osx",
@@ -39,25 +33,21 @@ BSDTAR_PLATFORMS = {
 }
 
 BSDTAR_PREBUILT = {
-    "darwin_amd64": (
-        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.7.4-4/tar_darwin_amd64",
-        "a412e5a7b02979cee36dd6b05df62b8596e907c2d9b473786a5d9d5204a0b837",
-    ),
     "darwin_arm64": (
-        "https://github.com/aspect-build/bsdtar-prebuilt/releases/download/v3.7.4-4/tar_darwin_arm64",
-        "ad68a5f777d85032853883ee0d56ec8e26c01692e9ec843d82279d446214922b",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_darwin_arm64",
+        "9e78a0b3e21bc05c67e54004e5b29c2b19c3a9f16ccec4de2a227b1e01aea5fd",
     ),
     "linux_amd64": (
-        "https://github.com/aspect-build/bsdtar-prebuilt/releases/download/v3.7.4-4/tar_linux_amd64",
-        "9dba82030199b2660086e458fa6481cf73089ee5c47d216e647bb2a6b0fae792",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_amd64",
+        "a703af6fc8df1a89f1ca864c651a9003b75069dd6b80bd32dcd94a7d255df07d",
     ),
     "linux_arm64": (
-        "https://github.com/aspect-build/bsdtar-prebuilt/releases/download/v3.7.4-4/tar_linux_arm64",
-        "105f91ad792fce13030bd249d8f9a14fd7ceaf908e1caeb99685b0b1fac44be2",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_linux_arm64",
+        "663f498baab2a9b7758e46d0c377b311c5b058758a37958372a0503c5dda4028",
     ),
     "windows_amd64": (
-        "https://github.com/aspect-build/bsdtar-prebuilt/releases/download/v3.7.4-4/tar_windows_x86_64.exe",
-        "8ccb320816f5bd018b6fd073f466800534b885a37ace656b0b4e0aff01c8ce65",
+        "https://storage.googleapis.com/public-bazel-artifacts/tar/v3.8.1/tar_windows_x86_64.exe",
+        "f48c81e1812956adb4906c6f057ca856dd280a455e7867d77800e6d5ef9fc81d",
     ),
 }
 
