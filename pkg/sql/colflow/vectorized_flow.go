@@ -513,6 +513,9 @@ type admissionOptions struct {
 
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
+// TODO(alyshan): Will likely need to plumb workload info through to these interface
+// methods. Why does outbox get the flowCtx but not inbox? Workload info will be present
+// in flowCtx.EvalCtx.
 type remoteComponentCreator interface {
 	newOutbox(
 		flowCtx *execinfra.FlowCtx,
@@ -529,8 +532,6 @@ type remoteComponentCreator interface {
 		streamID execinfrapb.StreamID,
 		flowCtxDone <-chan struct{},
 		admissionOpts admissionOptions,
-		workloadID uint64,
-		appNameID uint64,
 	) (*colrpc.Inbox, error)
 }
 
@@ -554,14 +555,10 @@ func (vectorizedRemoteComponentCreator) newInbox(
 	streamID execinfrapb.StreamID,
 	flowCtxDone <-chan struct{},
 	admissionOpts admissionOptions,
-	workloadID uint64,
-	appNameID uint64,
 ) (*colrpc.Inbox, error) {
 	return colrpc.NewInboxWithAdmissionControl(
 		allocator, typs, streamID, flowCtxDone,
 		admissionOpts.admissionQ, admissionOpts.admissionInfo,
-		workloadID,
-		appNameID,
 	)
 }
 
@@ -935,8 +932,6 @@ func (s *vectorizedFlowCreator) setupInput(
 					admissionQ:    flowCtx.Cfg.SQLSQLResponseAdmissionQ,
 					admissionInfo: s.f.GetAdmissionInfo(),
 				},
-				flowCtx.WorkloadID,
-				flowCtx.AppNameID,
 			)
 
 			if err != nil {

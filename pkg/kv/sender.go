@@ -133,6 +133,11 @@ type TxnSender interface {
 	// Transaction proto.
 	SetOmitInRangefeeds()
 
+	// SetWorkloadInfo sets the workload ID, app name ID, and SQL gateway node ID
+	// on the transaction sender. This information is used to attribute background
+	// work (like heartbeats) to the originating workload.
+	SetWorkloadInfo(workloadID uint64, appNameID uint64, sqlGatewayNodeID roachpb.NodeID)
+
 	// SetBufferedWritesEnabled toggles whether the writes are buffered on the
 	// gateway node until the commit time. Buffered writes cannot be enabled on
 	// a txn that performed any requests. When disabling buffered writes, if

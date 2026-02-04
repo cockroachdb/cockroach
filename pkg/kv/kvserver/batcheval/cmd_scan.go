@@ -64,6 +64,9 @@ func Scan(
 		DontInterleaveIntents:   cArgs.DontInterleaveIntents,
 		ReadCategory:            readCategory,
 		ReturnRawMVCCValues:     args.ReturnRawMVCCValues,
+		WorkloadID:              h.WorkloadId,
+		AppNameID:               h.AppNameID,
+		SQLGatewayNodeID:        h.SQLGatewayNodeID,
 	}
 
 	switch args.ScanFormat {

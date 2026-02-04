@@ -135,22 +135,20 @@ func (s *Sampler) takeSample() {
 	// Iterate over all registered work states and create samples.
 	RangeWorkStates(func(gid int64, state WorkState) bool {
 		// Encode the workloadID to a string for the ASHSample.
+		// First check if it's a known system workload ID, otherwise encode as hex.
 		var workloadIDStr string
 		switch state.WorkloadID {
 		case 0:
 			// No workload ID.
-		case IntentResolutionWorkloadID:
-			workloadIDStr = "intent resolution"
-		case TxnHeartbeatWorkloadID:
-			workloadIDStr = "txn heartbeat"
-		case RangeLookupWorkloadID:
-			workloadIDStr = "range lookup"
-		case LeaseRequestWorkloadID:
-			workloadIDStr = "lease request"
 		default:
-			// TODO(alyshan): Cache these mappings to reduce allocations.
-			// TODO(alyshan): Use StringInterner(?).
-			workloadIDStr = EncodeStmtFingerprintIDToString(state.WorkloadID)
+			// Check if this is a known system workload ID (e.g., TXN_HEARTBEAT).
+			if name, ok := LookupSystemWorkloadName(state.WorkloadID); ok {
+				workloadIDStr = name
+			} else {
+				// TODO(alyshan): Cache these mappings to reduce allocations.
+				// TODO(alyshan): Use StringInterner(?).
+				workloadIDStr = EncodeStmtFingerprintIDToString(state.WorkloadID)
+			}
 		}
 
 		// Look up app_name from AppNameID if present.

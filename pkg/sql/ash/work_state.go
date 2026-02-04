@@ -16,19 +16,6 @@ import (
 	"github.com/petermattis/goid"
 )
 
-// Well-known workload IDs for internal operations.
-// These are used to attribute background work that doesn't have a user workload.
-const (
-	// IntentResolutionWorkloadID is the workload ID used for intent resolution.
-	IntentResolutionWorkloadID uint64 = 0xFFFFFFFFFFFFFF01
-	// TxnHeartbeatWorkloadID is the workload ID used for transaction heartbeats.
-	TxnHeartbeatWorkloadID uint64 = 0xFFFFFFFFFFFFFF02
-	// RangeLookupWorkloadID is the workload ID used for range lookups.
-	RangeLookupWorkloadID uint64 = 0xFFFFFFFFFFFFFF03
-	// LeaseRequestWorkloadID is the workload ID used for lease acquisition.
-	LeaseRequestWorkloadID uint64 = 0xFFFFFFFFFFFFFF04
-)
-
 // WorkState represents the current work state of a goroutine.
 // Goroutines explicitly register their state when performing work
 // that should be captured by ASH sampling.

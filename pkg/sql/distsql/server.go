@@ -287,6 +287,9 @@ func (ds *ServerImpl) setupFlow(
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
 		sqlGatewayNodeID := roachpb.NodeID(req.Flow.Gateway)
+		if req.WorkloadID == 0 || req.AppNameID == 0 {
+			log.Ops.Error(ctx, "ASH debugging: empty workloadID or appNameID when creating a leaf txn")
+		}
 		return kv.NewLeafTxnWithWorkloadInfo(
 			ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader,
 			req.WorkloadID, req.AppNameID, sqlGatewayNodeID,
@@ -306,6 +309,9 @@ func (ds *ServerImpl) setupFlow(
 		if evalCtx.Gateway == 0 {
 			evalCtx.Gateway = req.Flow.Gateway
 		}
+		// Set WorkloadID and AppNameID on the eval context from the request.
+		evalCtx.WorkloadID = req.WorkloadID
+		evalCtx.AppNameID = req.AppNameID
 		if localState.MustUseLeafTxn() {
 			var err error
 			leafTxn, err = makeLeaf(ctx)
@@ -369,6 +375,8 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:                    ds.ServerConfig.NodeID,
 			Gateway:                   req.Flow.Gateway,
 			Codec:                     ds.ServerConfig.Codec,
+			WorkloadID:                req.WorkloadID,
+			AppNameID:                 req.AppNameID,
 			ReCache:                   ds.regexpCache,
 			ToCharFormatCache:         ds.toCharFormatCache,
 			Locality:                  ds.ServerConfig.Locality,
@@ -397,8 +405,7 @@ func (ds *ServerImpl) setupFlow(
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
 		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
-		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(), req.WorkloadID,
-		req.AppNameID,
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -477,7 +484,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		txn = leafTxn
 	}
-	txn.SetWorkloadInfo(flowCtx.WorkloadID, flowCtx.AppNameID, roachpb.NodeID(req.Flow.Gateway))
+	txn.SetWorkloadInfo(flowCtx.EvalCtx.WorkloadID, flowCtx.EvalCtx.AppNameID, roachpb.NodeID(req.Flow.Gateway))
 	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
 	// field has already been captured by various processors and operators that
 	// have already made a copy of the EvalCtx. In case this is not the gateway,
@@ -502,8 +509,6 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
-	workloadID uint64,
-	appNameID uint64,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -520,8 +525,6 @@ func (ds *ServerImpl) newFlowContext(
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
 		DiskMonitor:    diskMonitor,
-		WorkloadID:     workloadID,
-		AppNameID:      appNameID,
 	}
 
 	// Don't reuse the collection when we're running a parallel check off the

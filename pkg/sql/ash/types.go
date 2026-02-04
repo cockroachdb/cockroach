@@ -24,6 +24,31 @@ const (
 	WORK_UNKNOWN
 )
 
+// SystemWorkloadID represents a well-known system workload identifier for ASH sampling.
+// These are used when work cannot be attributed to a specific SQL statement fingerprint.
+type SystemWorkloadID uint64
+
+const (
+	// SystemWorkloadIDTxnHeartbeat identifies transaction heartbeat work.
+	SystemWorkloadIDTxnHeartbeat SystemWorkloadID = iota + 1
+	// SystemWorkloadIDTxnRollback identifies async transaction rollback work.
+	SystemWorkloadIDTxnRollback
+)
+
+// systemWorkloadNames maps system workload IDs to their display names.
+var systemWorkloadNames = map[SystemWorkloadID]string{
+	SystemWorkloadIDTxnHeartbeat: "TXN_HEARTBEAT",
+	SystemWorkloadIDTxnRollback:  "TXN_ROLLBACK",
+}
+
+// LookupSystemWorkloadName returns the name for a known system workload ID.
+// Returns the name and true if found, or empty string and false if the ID
+// is not a known system workload ID (e.g., it's a statement fingerprint ID).
+func LookupSystemWorkloadName(id uint64) (string, bool) {
+	name, ok := systemWorkloadNames[SystemWorkloadID(id)]
+	return name, ok
+}
+
 // String returns the string representation of a WorkEventType.
 func (w WorkEventType) String() string {
 	switch w {

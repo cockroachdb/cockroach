@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/ash"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -287,7 +286,6 @@ func lookupRangeFwdScan(
 
 	ba := &kvpb.BatchRequest{}
 	ba.ReadConsistency = rc
-	ba.Header.WorkloadId = ash.RangeLookupWorkloadID
 	// If the caller is asking for a potentially stale result, we want to route
 	// the request to the nearest replica rather than the leaseholder.
 	if rc == kvpb.INCONSISTENT {
@@ -386,7 +384,6 @@ func lookupRangeRevScan(
 
 	ba := &kvpb.BatchRequest{}
 	ba.ReadConsistency = rc
-	ba.Header.WorkloadId = ash.RangeLookupWorkloadID
 	// If the caller is asking for a potentially stale result, we want to route
 	// the request to the nearest replica rather than the leaseholder.
 	if rc == kvpb.INCONSISTENT {

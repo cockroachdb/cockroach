@@ -224,6 +224,17 @@ type cFetcherArgs struct {
 
 	// tenantID is required in some places for AC/bookkeeping.
 	tenantID roachpb.TenantID
+
+	// workloadID is an identifier that links the request back to the workload
+	// entity that triggered the Batch. This can be a statement fingerprint ID,
+	// transaction fingerprint ID, job ID, etc.
+	workloadID uint64
+	// appNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this request. This is a hash of the app_name string.
+	appNameID uint64
+	// gatewayNodeID is the SQL instance ID of the gateway node that planned the
+	// flow or served the query.
+	gatewayNodeID roachpb.NodeID
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -566,7 +577,12 @@ func (cf *cFetcher) Init(
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
 				50*time.Millisecond, // Request a realistic per-batch amount.
 				admission.WorkInfo{
-					TenantID: cf.tenantID, Priority: pri, CreateTime: timeutil.Now().UnixNano(),
+					TenantID:      cf.tenantID,
+					Priority:      pri,
+					CreateTime:    timeutil.Now().UnixNano(),
+					WorkloadID:    cf.workloadID,
+					AppNameID:     cf.appNameID,
+					GatewayNodeID: cf.gatewayNodeID,
 				},
 			)
 		}

@@ -58,8 +58,6 @@ func (c callbackRemoteComponentCreator) newInbox(
 	streamID execinfrapb.StreamID,
 	_ <-chan struct{},
 	_ admissionOptions,
-	_ uint64,
-	_ uint64,
 ) (*colrpc.Inbox, error) {
 	return c.newInboxFn(allocator, typs, streamID)
 }

@@ -114,7 +114,7 @@ var maxBatchBytes = settings.RegisterByteSizeSetting(
 
 // init initializes the tableWriterBase with a Txn.
 func (tb *tableWriterBase) init(
-	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context, workloadID uint64,
+	txn *kv.Txn, tableDesc catalog.TableDescriptor, evalCtx *eval.Context,
 ) error {
 	if txn.Type() != kv.RootTxn {
 		return errors.AssertionFailedf("unexpectedly non-root txn is used by the table writer")
@@ -125,13 +125,19 @@ func (tb *tableWriterBase) init(
 	tb.deadlockTimeout = 0
 	tb.originID = 0
 	tb.originTimestamp = hlc.Timestamp{}
-	tb.workloadID = workloadID
+	tb.workloadID = 0
+	tb.appNameID = 0
+	tb.gatewayNodeID = 0
 	if evalCtx != nil {
 		tb.lockTimeout = evalCtx.SessionData().LockTimeout
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
-		if evalCtx.SessionData().ApplicationName != "" {
+		// Get workload info from evalCtx. If not set, try to get appNameID from
+		// the session's application name.
+		tb.workloadID = evalCtx.WorkloadID
+		tb.appNameID = evalCtx.AppNameID
+		if tb.appNameID == 0 && evalCtx.SessionData().ApplicationName != "" {
 			tb.appNameID = ash.GetOrStoreAppNameID(evalCtx.SessionData().ApplicationName)
 		}
 		tb.gatewayNodeID = roachpb.NodeID(evalCtx.Gateway)
@@ -224,11 +230,12 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 	if responseAdmissionQ != nil {
 		requestAdmissionHeader := tb.txn.AdmissionHeader()
 		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
-			CreateTime: requestAdmissionHeader.CreateTime,
-			WorkloadID: tb.workloadID,
-			AppNameID:  tb.appNameID,
+			TenantID:      roachpb.SystemTenantID,
+			Priority:      admissionpb.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime:    requestAdmissionHeader.CreateTime,
+			WorkloadID:    tb.workloadID,
+			AppNameID:     tb.appNameID,
+			GatewayNodeID: tb.gatewayNodeID,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
@@ -246,11 +253,9 @@ func (tb *tableWriterBase) initNewBatch() {
 	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
 	tb.b.Header.DeadlockTimeout = tb.deadlockTimeout
-	tb.b.Header.WorkloadId = tb.workloadID
-	tb.b.Header.AppNameID = tb.appNameID
-	if tb.gatewayNodeID != 0 {
-		tb.b.Header.SQLGatewayNodeID = tb.gatewayNodeID
-	}
+	// Note: WorkloadId, AppNameID, and SQLGatewayNodeID are not set here
+	// because the txn already has them set via SetWorkloadInfo() and will
+	// populate them in Txn.Send() if they are 0 on the batch header.
 	if tb.originID != 0 {
 		tb.b.Header.WriteOptions = &kvpb.WriteOptions{
 			OriginID:        tb.originID,

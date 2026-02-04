@@ -106,18 +106,18 @@ func newTxnKVFetcher(
 		}
 	}
 
-		fetcherArgs := newTxnKVFetcherArgs{
-			sendFn:                     sendFn,
-			reverse:                    reverse,
-			rawMVCCValues:              rawMVCCValues,
-			lockStrength:               lockStrength,
-			lockWaitPolicy:             lockWaitPolicy,
-			lockDurability:             lockDurability,
-			lockTimeout:                lockTimeout,
-			deadlockTimeout:            deadlockTimeout,
-			acc:                        acc,
-			forceProductionKVBatchSize: forceProductionKVBatchSize,
-			gatewayNodeID:              gatewayNodeID,
+	fetcherArgs := newTxnKVFetcherArgs{
+		sendFn:                     sendFn,
+		reverse:                    reverse,
+		rawMVCCValues:              rawMVCCValues,
+		lockStrength:               lockStrength,
+		lockWaitPolicy:             lockWaitPolicy,
+		lockDurability:             lockDurability,
+		lockTimeout:                lockTimeout,
+		deadlockTimeout:            deadlockTimeout,
+		acc:                        acc,
+		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		gatewayNodeID:              gatewayNodeID,
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
@@ -220,9 +220,6 @@ func NewStreamingKVFetcher(
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	rawMVCCValues bool,
-	workloadID uint64,
-	appNameID uint64,
-	gatewayNodeID roachpb.NodeID,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -244,9 +241,6 @@ func NewStreamingKVFetcher(
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
-		workloadID,
-		appNameID,
-		gatewayNodeID,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {

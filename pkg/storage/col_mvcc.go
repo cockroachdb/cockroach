@@ -162,6 +162,9 @@ var GetCFetcherWrapper func(
 	nextKVer NextKVer,
 	startKey roachpb.Key,
 	mustSerialize bool,
+	workloadID uint64,
+	appNameID uint64,
+	sqlGatewayNodeID roachpb.NodeID,
 ) (CFetcherWrapper, error)
 
 // onNextKVFn represents the transition that the mvccScanFetchAdapter needs to
@@ -460,6 +463,9 @@ func mvccScanToCols(
 		&adapter,
 		key,
 		mustSerialize,
+		opts.WorkloadID,
+		opts.AppNameID,
+		opts.SQLGatewayNodeID,
 	)
 	if err != nil {
 		return MVCCScanResult{}, err

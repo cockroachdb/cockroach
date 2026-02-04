@@ -91,11 +91,7 @@ type Context struct {
 	// circumstances.
 	// TODO(knz,radu): Split this into separate fields.
 	NodeID *base.SQLIDContainer
-	// Gateway is the SQL instance ID of the gateway node that planned the flow
-	// or served the query. This is always set to the gateway node ID, even when
-	// the flow is executing on a remote node.
-	Gateway base.SQLInstanceID
-	Codec   keys.SQLCodec
+	Codec  keys.SQLCodec
 
 	// Locality contains the location of the current node as a set of user-defined
 	// key/value pairs, ordered from most inclusive to least inclusive. If there
@@ -358,6 +354,22 @@ type Context struct {
 	// thumb is: the cached memo, either in query cache or prepared stmt,
 	// are always for stable stats.
 	UseCanaryStats bool
+
+	// Note(alyshan): The fields below are set for ASH.
+	// TODO(alyshan): Consider grouping into a struct.
+
+	// Gateway is the SQL instance ID of the gateway node that served the query.
+	// TODO(alyshan): We should be able to use NodeID but that gets set as the evalContext
+	// is passed to remote nodes(?).
+	Gateway base.SQLInstanceID
+	// WorkloadID is the identifier for this workload that we can use
+	// for profiling and tracing.
+	WorkloadID uint64
+	// AppNameID is the uint64 identifier for the app_name of the SQL session
+	// that created this flow. This is a hash of the app_name string that can
+	// be mapped back to the app_name using the node-local app name mapping.
+	// Zero means no app_name is associated with this flow.
+	AppNameID uint64
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
