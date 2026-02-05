@@ -110,6 +110,9 @@ var (
 		Help:        "Latency histogram for time %s requests spent waiting for flow tokens to evaluate",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric shows how long requests are waiting for flow tokens before evaluation. Extended wait times may indicate flow control token exhaustion or replication lag.",
 	}
 
 	// RangeController metrics.
@@ -126,6 +129,9 @@ var (
 		Help:        "Byte size of all raft entries queued for sending to followers, waiting on available elastic send tokens",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates the size of queued raft entries waiting for elastic send tokens. Large or growing queue sizes may indicate replication backlog or follower lag.",
 	}
 	sendQueueCount = metric.Metadata{
 		Name:        "kvflowcontrol.send_queue.count",
