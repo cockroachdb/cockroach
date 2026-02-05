@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// convertWithLogicalType implements parquetConversionFunc for Parquet files using
-// LogicalType annotations. This is used for files written by recent tools (Apache Arrow,
-// modern Spark, etc.).
+// convertWithLogicalType converts Parquet values to CockroachDB datums using LogicalType annotations.
+// This is used for files written by recent tools (Apache Arrow, modern Spark, etc.).
+// For legacy files with ConvertedType, the ConvertedType is converted to LogicalType during
+// initialization using Apache Arrow's ToLogicalType() method.
 //
 // Supported LogicalTypes:
 //   - StringLogicalType, JSONLogicalType, EnumLogicalType (BYTE_ARRAY)
@@ -36,16 +37,19 @@ import (
 //
 // Unsupported LogicalTypes (low priority):
 //   - BSONLogicalType - Binary JSON (could convert to JSONB)
-var convertWithLogicalType parquetConversionFunc = func(
+func convertWithLogicalType(
 	value any, targetType *types.T, metadata *parquetColumnMetadata,
 ) (tree.Datum, error) {
-	if metadata.logicalType == nil {
-		return nil, errors.AssertionFailedf("convertWithLogicalType called with nil logicalType")
-	}
+	// metadata.logicalType can be nil for plain primitive types with no annotations.
+	// This is valid Parquet - columns can have just a physical type (INT32, INT64, etc.)
+	// without any semantic LogicalType or ConvertedType annotation.
+	// The fallback conversion logic below handles these cases.
 
 	// NullLogicalType represents a column that only contains null values
-	if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
-		return tree.DNull, nil
+	if metadata.logicalType != nil {
+		if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
+			return tree.DNull, nil
+		}
 	}
 
 	switch v := value.(type) {
@@ -191,24 +195,29 @@ var convertWithLogicalType parquetConversionFunc = func(
 func validateWithLogicalType(
 	physicalType parquet.Type, logicalType schema.LogicalType, targetType *types.T,
 ) error {
-	if logicalType == nil {
-		return errors.AssertionFailedf("validateWithLogicalType called with nil logicalType")
-	}
+	// logicalType can be nil for plain primitive types with no annotations.
+	// This is valid Parquet - columns can have just a physical type (INT32, INT64, etc.)
+	// without any semantic LogicalType or ConvertedType annotation.
+	// The validation logic below handles these cases based on physical type alone.
 
 	// NullLogicalType represents columns that only contain null values - always valid
-	if _, ok := logicalType.(schema.NullLogicalType); ok {
-		return nil
-	}
+	if logicalType != nil {
+		if _, ok := logicalType.(schema.NullLogicalType); ok {
+			return nil
+		}
 
-	// Check for unsupported LogicalTypes that require nested column handling
-	if _, ok := logicalType.(schema.ListLogicalType); ok {
-		return errors.Newf("ListLogicalType is not supported (requires nested column chunk handling)")
-	}
-	if _, ok := logicalType.(schema.MapLogicalType); ok {
-		return errors.Newf("MapLogicalType is not supported (requires nested column chunk handling)")
-	}
-	if _, ok := logicalType.(schema.BSONLogicalType); ok {
-		return errors.Newf("BSONLogicalType is not supported")
+		// Check for unsupported LogicalTypes that require nested column handling
+		if _, ok := logicalType.(schema.ListLogicalType); ok {
+			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+				"ListLogicalType not supported (requires nested column chunk handling)")
+		}
+		if _, ok := logicalType.(schema.MapLogicalType); ok {
+			return errors.UnimplementedErrorf(errors.IssueLink{IssueURL: "https://github.com/cockroachdb/cockroach/issues/162543"},
+				"MapLogicalType not supported (requires nested column chunk handling)")
+		}
+		if _, ok := logicalType.(schema.BSONLogicalType); ok {
+			return errors.Newf("BSONLogicalType is not supported")
+		}
 	}
 
 	// UnknownLogicalType is allowed - we'll use fallback conversions based on physical type
