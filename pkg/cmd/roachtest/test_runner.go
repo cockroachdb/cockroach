@@ -1630,8 +1630,8 @@ func (r *testRunner) runTest(
 		l.PrintfCtx(ctx, "error during artifact inspection: %v", err)
 	}
 
-	//Upload test logs to Datadog if running on TeamCity on a release branch
-	if datadog.ShouldUploadLogs() {
+	// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
+	if datadog.ShouldUploadLogs(t.Failed()) {
 		t.L().Printf("uploading %s to Datadog", "test.log")
 		logPath := filepath.Join(t.artifactsDir, "test.log")
 		m := datadog.NewLogMetadata(

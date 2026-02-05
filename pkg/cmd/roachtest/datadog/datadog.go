@@ -205,17 +205,25 @@ func NewLogMetadata(
 	return m
 }
 
-// ShouldUploadLogs checks if we are on a release branch or master or if
-// roachtestflags.DatadogAlwaysUpload is set
-func ShouldUploadLogs() bool {
-	if roachtestflags.DatadogAlwaysUpload {
-		return true
-	}
+// ShouldUploadLogs checks if logs should be uploaded to Datadog based on branch
+// filtering and test result. Returns true if both the branch check and result
+// check pass:
+//   - Branch check passes if --datadog-ignore-branch-filter is set OR on
+//     master/release branch
+//   - Result check passes if --datadog-ignore-result-filter is set OR test failed
+func ShouldUploadLogs(testFailed bool) bool {
+	// Determine if we're on a branch that should upload
 	branch := os.Getenv(envTCBuildBranch)
-	if branch == "master" || strings.HasPrefix(branch, "release-") {
-		return true
-	}
-	return false
+	isReleaseBranch := branch == "master" || strings.HasPrefix(branch, "release-")
+
+	// Branch check: passes if ignore-branch-filter is set OR on release branch
+	branchCheckPassed := roachtestflags.DatadogIgnoreBranchFilter || isReleaseBranch
+
+	// Result check: passes if ignore-result-filter is set OR test failed
+	resultCheckPassed := roachtestflags.DatadogIgnoreResultFilter || testFailed
+
+	// Upload if both checks pass
+	return branchCheckPassed && resultCheckPassed
 }
 
 // MaybeUploadTestLog reads the log at logPath and transforms each

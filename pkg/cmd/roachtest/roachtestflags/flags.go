@@ -342,11 +342,16 @@ var (
 		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
 	})
 
-	DatadogAlwaysUpload bool = false
-	_                        = registerRunFlag(&DatadogAlwaysUpload, FlagInfo{
-		Name: "datadog-always-upload",
-		Usage: `Always upload roachtest run log data to Datadog. Logs from master and release branches are uploaded by
-				default.`,
+	DatadogIgnoreBranchFilter bool = false
+	_                              = registerRunFlag(&DatadogIgnoreBranchFilter, FlagInfo{
+		Name:  "datadog-ignore-branch-filter",
+		Usage: `Upload roachtest logs to Datadog regardless of branch. By default, only logs from master and release branches are uploaded.`,
+	})
+
+	DatadogIgnoreResultFilter bool = false
+	_                              = registerRunFlag(&DatadogIgnoreResultFilter, FlagInfo{
+		Name:  "datadog-ignore-result-filter",
+		Usage: `Upload roachtest logs to Datadog regardless of test result. By default, only failed test logs are uploaded.`,
 	})
 
 	DatadogSite string = "us5.datadoghq.com"

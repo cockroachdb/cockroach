@@ -316,52 +316,133 @@ func TestNewDatadogContextDatadogSiteSet(t *testing.T) {
 }
 
 func TestShouldUploadLogs(t *testing.T) {
-	// Save and restore env var and flag
+	// Save and restore env var and flags
 	originalBranch := os.Getenv(envTCBuildBranch)
-	originalFlag := roachtestflags.DatadogAlwaysUpload
+	originalIgnoreBranchFilter := roachtestflags.DatadogIgnoreBranchFilter
+	originalIgnoreResultFilter := roachtestflags.DatadogIgnoreResultFilter
 	defer func() {
 		_ = os.Setenv(envTCBuildBranch, originalBranch)
-		roachtestflags.DatadogAlwaysUpload = originalFlag
+		roachtestflags.DatadogIgnoreBranchFilter = originalIgnoreBranchFilter
+		roachtestflags.DatadogIgnoreResultFilter = originalIgnoreResultFilter
 	}()
 
 	tests := []struct {
 		name                 string
 		branch               string
-		datadogAlwaysUpload  bool
+		ignoreBranchFilter   bool
+		ignoreResultFilter   bool
+		testFailed           bool
 		expectedShouldUpload bool
 	}{
+		// Default behavior: upload only failures from master/release branches
 		{
-			name:                 "always upload flag set",
-			branch:               "feature-branch",
-			datadogAlwaysUpload:  true,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "master branch",
+			name:                 "default: master branch, passing test",
 			branch:               "master",
-			datadogAlwaysUpload:  false,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "release branch",
-			branch:               "release-24.1",
-			datadogAlwaysUpload:  false,
-			expectedShouldUpload: true,
-		},
-		{
-			name:                 "feature branch",
-			branch:               "feature-new-stuff",
-			datadogAlwaysUpload:  false,
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   false,
+			testFailed:           false,
 			expectedShouldUpload: false,
+		},
+		{
+			name:                 "default: master branch, failing test",
+			branch:               "master",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   false,
+			testFailed:           true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "default: release branch, passing test",
+			branch:               "release-24.1",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   false,
+			testFailed:           false,
+			expectedShouldUpload: false,
+		},
+		{
+			name:                 "default: feature branch, passing test",
+			branch:               "feature-new-stuff",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   false,
+			testFailed:           false,
+			expectedShouldUpload: false,
+		},
+		// ignore-result-filter only: upload all from master/release
+		{
+			name:                 "ignore-result-filter: master branch, passing test",
+			branch:               "master",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   true,
+			testFailed:           false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "ignore-result-filter: master branch, failing test",
+			branch:               "master",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   true,
+			testFailed:           true,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "ignore-result-filter: feature branch, passing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   true,
+			testFailed:           false,
+			expectedShouldUpload: false,
+		},
+		{
+			name:                 "ignore-result-filter: feature branch, failing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   false,
+			ignoreResultFilter:   true,
+			testFailed:           true,
+			expectedShouldUpload: false,
+		},
+		// ignore-branch-filter only: upload only failures from any branch
+		{
+			name:                 "ignore-branch-filter: feature branch, passing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   true,
+			ignoreResultFilter:   false,
+			testFailed:           false,
+			expectedShouldUpload: false,
+		},
+		{
+			name:                 "ignore-branch-filter: feature branch, failing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   true,
+			ignoreResultFilter:   false,
+			testFailed:           true,
+			expectedShouldUpload: true,
+		},
+		// Both flags: upload all from any branch
+		{
+			name:                 "both flags: feature branch, passing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   true,
+			ignoreResultFilter:   true,
+			testFailed:           false,
+			expectedShouldUpload: true,
+		},
+		{
+			name:                 "both flags: feature branch, failing test",
+			branch:               "feature-branch",
+			ignoreBranchFilter:   true,
+			ignoreResultFilter:   true,
+			testFailed:           true,
+			expectedShouldUpload: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = os.Setenv(envTCBuildBranch, tt.branch)
-			roachtestflags.DatadogAlwaysUpload = tt.datadogAlwaysUpload
+			roachtestflags.DatadogIgnoreBranchFilter = tt.ignoreBranchFilter
+			roachtestflags.DatadogIgnoreResultFilter = tt.ignoreResultFilter
 
-			result := ShouldUploadLogs()
+			result := ShouldUploadLogs(tt.testFailed)
 			require.Equal(t, tt.expectedShouldUpload, result)
 		})
 	}
