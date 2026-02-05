@@ -109,9 +109,9 @@ type waitingState struct {
 	// conflicting request being sequenced through the same lockTable.
 	txn                   *enginepb.TxnMeta // always non-nil
 	key                   roachpb.Key       // the key of the conflict
-	held                  bool              // is the conflict a held lock?
 	queuedLockingRequests int               // how many locking requests are waiting?
 	queuedReaders         int               // how many readers are waiting?
+	held                  bool              // is the conflict a held lock?
 
 	// Represents the lock strength of the action that the request was trying to
 	// perform when it hit the conflict. E.g. was it trying to perform a (possibly

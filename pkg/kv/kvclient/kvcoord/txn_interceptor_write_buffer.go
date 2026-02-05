@@ -1366,6 +1366,12 @@ func (twb *txnWriteBuffer) mergeResponseWithRequestRecords(
 // applied by the txnWriteBuffer on a batch request that needs to be accounted
 // for when returning the response.
 type requestRecord struct {
+	// origRequest is the original request that was transformed.
+	origRequest kvpb.Request
+	// index of the request in the original batch to which the requestRecord
+	// applies.
+	index int
+
 	// stripped, if true, indicates that the request was stripped from the batch
 	// and never sent to the KV layer.
 	stripped bool
@@ -1374,11 +1380,6 @@ type requestRecord struct {
 	// transformed is always false; i.e. if the request was completely dropped,
 	// then it's not considered transformed.
 	transformed bool
-	// index of the request in the original batch to which the requestRecord
-	// applies.
-	index int
-	// origRequest is the original request that was transformed.
-	origRequest kvpb.Request
 }
 
 // toResp returns the response that should be added to the batch response as
