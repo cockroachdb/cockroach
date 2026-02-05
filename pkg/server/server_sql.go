@@ -413,6 +413,10 @@ type sqlServerArgs struct {
 	// CPU intensive operations, such as CDC event encoding/decoding.
 	admissionPacerFactory admission.PacerFactory
 
+	// sqlCPUProvider is used to reporting CPU usage and foreground (non-elastic)
+	// SQL CPU admission control.
+	sqlCPUProvider admission.SQLCPUProvider
+
 	// rangeDescIteratorFactory is used to construct iterators over range
 	// descriptors.
 	rangeDescIteratorFactory rangedesc.IteratorFactory
@@ -859,6 +863,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantCostController:     cfg.costController,
 		RangeStatsFetcher:        rangeStatsFetcher,
 		AdmissionPacerFactory:    cfg.admissionPacerFactory,
+		SQLCPUProvider:           cfg.sqlCPUProvider,
 		ExecutorConfig:           execCfg,
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 		VecIndexManager:          vecIndexManager,
