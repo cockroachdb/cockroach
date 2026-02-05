@@ -768,6 +768,8 @@ func unsortedMatricesDiffWithFloatComp(
 					cmpFn = floatcmp.FloatArraysMatchApprox
 				case runtime.GOARCH == "s390x" && !isFloatOrDecimalArray:
 					cmpFn = floatcmp.FloatsMatchApprox
+				case isDecimalArray(colType):
+					cmpFn = floatcmp.FloatArraysMatch
 				case isFloatArray(colType):
 					cmpFn = floatcmp.FloatArraysMatchApprox
 				case isFloat(colType):
