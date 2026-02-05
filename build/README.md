@@ -199,4 +199,4 @@ To achieve this, proceed as follows:
 
 ### Removing a dependency
 
-When a dependency has been removed, run `go mod tidy` and `dev generate bazel`.
+When a dependency has been removed, run `go mod tidy` and `dev generate bazel`. 
