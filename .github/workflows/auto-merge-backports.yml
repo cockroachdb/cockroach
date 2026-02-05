@@ -29,7 +29,6 @@ jobs:
                     ... on PullRequest {
                       number
                       createdAt
-                      baseRefName
                       labels(first: 10) {
                         nodes {
                           name
@@ -79,34 +78,18 @@ jobs:
               }
 
               const labels = pr.labels.nodes.map(l => l.name).join(', ');
-              const baseRef = pr.baseRefName;
-              console.log(`Processing PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Target: ${baseRef}, Labels: ${labels}`);
+              console.log(`Merging PR #${pr.number}, Created at: ${pr.createdAt}, Approved: ${approved}, Labels: ${labels}`);
 
-              if (baseRef === 'release-25.4') {
-                // Use comment to trigger trunk merge for release-25.4
-                console.log(`Adding /trunk merge comment for PR #${pr.number} (target: ${baseRef})`);
-                try {
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    body: '/trunk merge'
-                  });
-                } catch (err) {
-                  console.warn(`Failed to comment on PR #${pr.number}: ${err.message}`);
-                }
-              } else {
-                // Direct merge for all other branches
-                console.log(`Directly merging PR #${pr.number} (target: ${baseRef})`);
-                try {
-                  await github.rest.pulls.merge({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: pr.number,
-                    merge_method: "merge",
-                  });
-                } catch (err) {
-                  console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
-                }
+              // Merge the PR
+              try {
+                console.log(`Merging PR #${pr.number}`);
+                await github.rest.pulls.merge({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  merge_method: "merge",
+                });
+              } catch (err) {
+                console.warn(`Failed to merge PR #${pr.number}: ${err.message}`);
               }
             }
