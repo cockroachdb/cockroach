@@ -250,7 +250,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 }
 
 func newMetrics(locality roachpb.Locality) *Metrics {
-	childLabels := []string{"remote_node_id", "remote_addr", "class"}
+	childLabels := []string{"remote_node_id", "remote_addr", "class", "protocol"}
 	localityLabels := []string{}
 	for _, tier := range locality.Tiers {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
@@ -390,10 +390,12 @@ type localityMetrics struct {
 	ConnectionBytesRecv *aggmetric.Counter
 }
 
-func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityMetrics) {
+func (m *Metrics) acquire(
+	k peerKey, l roachpb.Locality, protocol string,
+) (peerMetrics, localityMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String(), protocol}
 	labelKey := strings.Join(labelVals, ",")
 	pm, ok := m.mu.peerMetrics[labelKey]
 	if !ok {
@@ -435,6 +437,8 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 const (
 	RpcMethodLabel     = "methodName"
 	RpcStatusCodeLabel = "statusCode"
+	grpcProtocolLabel  = "grpc"
+	drpcProtocolLabel  = "drpc"
 )
 
 // RequestMetrics contains metrics for RPC requests.
