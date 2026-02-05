@@ -106,6 +106,7 @@ var buildTargetMapping = map[string]string{
 	"smithtest":             "//pkg/cmd/smithtest:smithtest",
 	"sql-bootstrap-data":    "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
 	"staticcheck":           "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
+	"tef":                   "//pkg/cmd/tef:tef",
 	"tests":                 "//pkg:all_tests",
 	"vecbench":              "//pkg/cmd/vecbench:vecbench",
 	"whoownsit":             "//pkg/cmd/whoownsit:whoownsit",
