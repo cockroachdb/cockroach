@@ -8,6 +8,7 @@ package rowexec
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -71,17 +72,18 @@ var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 	512<<20,
 )
 
-// indexBackfillIngestConcurrency is the number of goroutines to use for
-// the ingestion step of the index backfiller; these are the goroutines
-// that write the index entries in bulk. Since that is mostly I/O bound,
-// adding concurrency allows some of the computational work to occur in
-// parallel.
+// indexBackfillIngestConcurrency controls the number of goroutines for the
+// ingestion step of the index backfiller. When set to 0 (auto), uses
+// GOMAXPROCS/2 for distributed merge, or 2 for the legacy path.
+// When set to a positive value, uses that explicit value.
 var indexBackfillIngestConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"bulkio.index_backfill.ingest_concurrency",
-	"the number of goroutines to use for bulk adding index entries",
-	2,
-	settings.PositiveInt, /* validateFn */
+	"the number of goroutines to use for bulk adding index entries: "+
+		"0 assigns a reasonable default based on CPU count for distributed merge "+
+		"or 2 for the legacy path, >0 assigns the setting value",
+	0, // auto mode by default
+	settings.NonNegativeInt,
 )
 
 var indexBackfillElasticCPUControlEnabled = settings.RegisterBoolSetting(
@@ -533,6 +535,15 @@ func (ib *indexBackfiller) runBackfill(
 ) error {
 	const indexEntriesChBufferSize = 10
 	ingestConcurrency := indexBackfillIngestConcurrency.Get(&ib.flowCtx.Cfg.Settings.SV)
+	if ingestConcurrency == 0 {
+		if ib.spec.UseDistributedMergeSink {
+			// Auto mode for distributed merge: scale with CPU count.
+			ingestConcurrency = max(1, int64(runtime.GOMAXPROCS(0)/2))
+		} else {
+			// Auto mode for legacy path: use historic default.
+			ingestConcurrency = 2
+		}
+	}
 
 	// Used to send index entries to the KV layer.
 	indexEntriesCh := make(chan indexEntryBatch, indexEntriesChBufferSize)
