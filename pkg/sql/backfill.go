@@ -162,7 +162,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 	return runner
 }
 
-// makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
+// makeFixedTimestampInternalExecRunner creates a HistoricalInternalExecTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) descs.HistoricalInternalExecTxnRunner {
@@ -198,6 +198,8 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 		txn descs.Txn,
 	) error,
 ) error {
+	// This type of transaction is only used for validation or backfill. Use
+	// bulkNormalPri to run.
 	return sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
@@ -205,7 +207,7 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 			return err
 		}
 		return retryable(ctx, txn)
-	})
+	}, validationTxn)
 }
 
 // runBackfill runs the backfill for the schema changer.
@@ -541,7 +543,7 @@ func (sc *SchemaChanger) dropConstraints(
 			return err
 		}
 		return txn.KV().Run(ctx, b)
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return nil, err
 	}
 
@@ -565,7 +567,7 @@ func (sc *SchemaChanger) dropConstraints(
 			}
 		}
 		return nil
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return nil, err
 	}
 	return tableDescs, nil
@@ -718,7 +720,7 @@ func (sc *SchemaChanger) addConstraints(
 			return err
 		}
 		return txn.KV().Run(ctx, b)
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	log.Dev.Info(ctx, "finished adding constraints")
@@ -958,7 +960,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			sc.mutationID, filter,
 		)
 		return err
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 
@@ -1009,7 +1011,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			details := sc.job.Details().(jobspb.SchemaChangeDetails)
 			details.WriteTimestamp = writeAsOf
 			return sc.job.WithTxn(txn).SetDetails(ctx, details)
-		}); err != nil {
+		}, metadataOnlyTxn); err != nil {
 			return err
 		}
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
@@ -1024,6 +1026,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
+	// Creating the plan is relatively fast, but use bulkNormalPri
+	// for running it to be safe.
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
@@ -1056,7 +1060,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
-	}); err != nil {
+	}, backfillTxn); err != nil {
 		return err
 	}
 
@@ -1355,6 +1359,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 		// Make sure not to update todoSpans inside the transaction closure as it
 		// may not commit. Instead write the updated value for todoSpans to this
 		// variable and assign to todoSpans after committing.
+		// Creating the plan is relatively fast, but use bulkNormalPri to be safe.
 		var updatedTodoSpans []roachpb.Span
 		if err := sc.txn(ctx, func(
 			ctx context.Context, txn descs.Txn,
@@ -1405,7 +1410,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				nil, /* finishedSetupFn */
 			)
 			return cbw.Err()
-		}); err != nil {
+		}, backfillTxn); err != nil {
 			return err
 		}
 		todoSpans = updatedTodoSpans
@@ -2408,7 +2413,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 		var err error
 		tbl, err = txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		return err
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	clusterVersion := tbl.ClusterVersion()
@@ -2468,7 +2473,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			}
 		}
 		return nil
-	})
+	}, metadataOnlyTxn)
 }
 
 // truncateAndBackfillColumns performs the backfill operation on the given leased
