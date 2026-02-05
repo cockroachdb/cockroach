@@ -125,6 +125,7 @@ go_library(
         "mixed_version_c2c.go",
         "mixed_version_cdc.go",
         "mixed_version_change_replicas.go",
+        "mixed_version_contention.go",
         "mixed_version_decl_schemachange_compat.go",
         "mixed_version_decommission.go",
         "mixed_version_import.go",
