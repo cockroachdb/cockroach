@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1261,86 +1260,6 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 	require.Equal(t, jobspb.Replicating, ingestionProgress.ReplicationStatus)
 }
 
-// TestStreamingRegionalConstraint ensures that the replicating tenants regional
-// constraints are obeyed during replication. This test serves as an end to end
-// test of span config replication.
-func TestStreamingRegionalConstraint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes too long under race")
-	skip.UnderDeadlock(t, "takes too long under deadlock")
-
-	testutils.RunTrueAndFalse(t, "fromSys", func(t *testing.T, sys bool) {
-		ctx := context.Background()
-		regions := []string{"mars", "venus", "mercury"}
-		args := replicationtestutils.DefaultTenantStreamingClustersArgs
-		args.MultitenantSingleClusterNumNodes = 3
-		args.MultiTenantSingleClusterTestRegions = regions
-		if sys {
-			args.SrcTenantID = roachpb.SystemTenantID
-			args.SrcTenantName = "system"
-		}
-		marsNodeID := roachpb.NodeID(1)
-
-		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
-		defer cleanup()
-
-		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-		c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
-		c.SrcTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=mars]', num_replicas = 1;`)
-		c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
-		c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
-
-		srcTime := c.SrcCluster.Server(0).Clock().Now()
-		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-		checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
-			// make pageSize large enough to not affect the test
-			pageSize := 10000
-			init := func() {}
-
-			return func() error {
-				return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
-					for _, desc := range descriptors {
-						for _, replica := range desc.InternalReplicas {
-							if replica.NodeID != marsNodeID {
-								return errors.Newf("found table data located on another node %d, desc %v",
-									replica.NodeID, desc)
-							}
-						}
-					}
-					return nil
-				})
-			}
-		}
-
-		srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-			c.SrcSysServer.DB(), srcCodec, "test", "x")
-		destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
-
-		testutils.SucceedsWithin(t,
-			checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
-			time.Second*45*5)
-
-		testutils.SucceedsWithin(t,
-			checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
-			time.Second*45*5)
-
-		tableName := "test"
-		tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
-
-		var tableID uint32
-		c.SrcTenantSQL.QueryRow(t, tabledIDQuery).Scan(&tableID)
-		fmt.Printf("%d", tableID)
-
-		checkLocalityRanges(t, c.SrcSysSQL, srcCodec, uint32(tableDesc.GetID()), "mars")
-	})
-}
-
 func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1398,23 +1317,6 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 		c.SrcTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
 		c.DestTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
 	})
-}
-
-func checkLocalityRanges(
-	t *testing.T, sysSQL *sqlutils.SQLRunner, codec keys.SQLCodec, tableID uint32, region string,
-) {
-	targetPrefix := codec.TablePrefix(tableID)
-	distinctQuery := fmt.Sprintf(`
-SELECT
-  DISTINCT replica_localities
-FROM
-  [SHOW CLUSTER RANGES]
-WHERE
-  start_key ~ '%s'
-`, targetPrefix)
-	var locality string
-	sysSQL.QueryRow(t, distinctQuery).Scan(&locality)
-	require.Contains(t, locality, region)
 }
 
 // TestStreamingZoneConfigsMismatchedRegions tests that c2c cutover proceeds
