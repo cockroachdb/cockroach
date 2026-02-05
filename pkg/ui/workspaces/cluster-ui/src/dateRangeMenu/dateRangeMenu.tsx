@@ -20,7 +20,6 @@ import { TimezoneContext } from "../contexts";
 import styles from "./dateRangeMenu.module.scss";
 
 import type { PickerProps } from "antd/es/date-picker/generatePicker/interface";
-import type { SharedTimeProps } from "rc-picker/lib/panels/TimePanel";
 
 const cx = classNames.bind(styles);
 
@@ -28,19 +27,22 @@ const cx = classNames.bind(styles);
 // More details: https://ant.design/docs/react/use-custom-date-library#timepickertsx
 const DatePicker = AntDatePicker.generatePicker<Moment>(momentGenerateConfig);
 
-// TimePickerProps extends PickerProps with time-specific props from rc-picker
-export type TimePickerProps = Omit<PickerProps<Moment>, "picker"> &
-  Pick<SharedTimeProps<Moment>, "showNow">;
+// TimePickerProps extends PickerProps with time-specific props.
+// We define showNow inline to avoid depending on rc-picker's internal type paths,
+// which changed between major versions.
+export type TimePickerProps = Omit<PickerProps<Moment>, "picker"> & {
+  showNow?: boolean;
+};
 
-// TimePicker wraps DatePicker with picker="time"
-const TimePicker = React.forwardRef<unknown, TimePickerProps>((props, ref) => (
+// TimePicker wraps DatePicker with picker="time".
+// We don't forward refs since they're not used by callers.
+const TimePicker: React.FC<TimePickerProps> = props => (
   <DatePicker
     {...(props as React.ComponentProps<typeof DatePicker>)}
     picker="time"
     mode={undefined}
-    ref={ref}
   />
-));
+);
 
 TimePicker.displayName = "TimePicker";
 
@@ -94,16 +96,20 @@ export function DateRangeMenu({
     endInit ? endInit.tz(timezone) : moment.tz(timezone),
   );
 
-  const onChangeStart = (m: Moment | null) => {
+  // onChange also accepts arrays for range pickers.
+  // Since we use single-value pickers, we extract the first element.
+  const onChangeStart = (m: Moment | Moment[] | null) => {
     // Use keepLocalTime=true to preserve the wall clock time the user entered
     // while interpreting it in the configured timezone, instead of the user's
     // timezone.
-    m && setStartMoment(m.tz(timezone, true));
+    const value = Array.isArray(m) ? m[0] : m;
+    value && setStartMoment(value.tz(timezone, true));
   };
 
-  const onChangeEnd = (m: Moment | null) => {
+  const onChangeEnd = (m: Moment | Moment[] | null) => {
     // Same as onChangeStart.
-    m && setEndMoment(m.tz(timezone, true));
+    const value = Array.isArray(m) ? m[0] : m;
+    value && setEndMoment(value.tz(timezone, true));
   };
 
   const isDisabled = allowedInterval
