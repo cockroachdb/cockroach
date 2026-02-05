@@ -188,7 +188,7 @@ func (h *GoroutineCPUHandle) reset() {
 // will be pooled when SQLCPUHandle.Close is called, so MeasureAndAdmit must
 // never be called after Close.
 func (h *GoroutineCPUHandle) Close(ctx context.Context) {
-	_ = h.measureAndAdmit(ctx, true)
+	_ = h.measureAndAdmit(ctx, true /* noWait */)
 	h.closed.Store(true)
 }
 
@@ -199,7 +199,7 @@ func (h *GoroutineCPUHandle) Close(ctx context.Context) {
 //
 // TODO(sumeer): implement the measurement and admission logic.
 func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
-	return h.measureAndAdmit(ctx, false)
+	return h.measureAndAdmit(ctx, false /* noWait */)
 }
 
 // measureAndAdmit is the internal implementation of MeasureAndAdmit. The
@@ -226,8 +226,8 @@ func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) e
 
 // PauseMeasuring is used to pause the CPU accounting for this goroutine. It
 // must be paired with UnpauseMeasuring. Used when the goroutine is being used
-// for KV work. If pause is called multiple times, an equal number of unpause
-// calls are needed to resume measuring.
+// for KV work. If PauseMeasuring is called multiple times, an equal number of
+// UnpauseMeasuring calls are needed to resume measuring.
 func (h *GoroutineCPUHandle) PauseMeasuring() {
 	h.paused++
 	if h.paused == 1 {

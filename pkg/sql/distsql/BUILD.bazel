@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqltelemetry",
+        "//pkg/util/admission",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/pprofutil",
