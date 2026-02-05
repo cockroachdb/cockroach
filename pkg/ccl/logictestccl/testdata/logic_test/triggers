@@ -5782,6 +5782,80 @@ DROP TABLE xy_158154
 
 subtest end
 
+# Regression test for dropping a trigger when a policy on the same table
+# references the same sequence. Previously, the trigger's backref would
+# incorrectly remain because the policy's reference was considered sufficient.
+subtest regression_trigger_policy_shared_sequence_backref
+
+statement ok
+CREATE SEQUENCE seq_tr_policy;
+
+statement ok
+CREATE TABLE t_tr_policy (id INT PRIMARY KEY, data INT);
+
+statement ok
+CREATE FUNCTION trigger_fn_policy() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT nextval('seq_tr_policy');
+  RETURN NEW;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER my_trigger AFTER INSERT ON t_tr_policy
+FOR EACH ROW EXECUTE FUNCTION trigger_fn_policy();
+
+statement ok
+ALTER TABLE t_tr_policy ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY my_policy ON t_tr_policy USING (nextval('seq_tr_policy') < 1000);
+
+# Before dropping the trigger, the sequence should have two backrefs:
+# one from the trigger (with trigger_id != 0) and one from the policy (trigger_id = 0).
+query TI colnames
+SELECT
+  n.name,
+  (d->>'triggerId')::INT as trigger_id
+FROM (
+  SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy') as d
+  FROM system.descriptor
+  WHERE id = 'seq_tr_policy'::REGCLASS::INT
+)
+JOIN system.namespace n ON (d->>'id')::INT = n.id
+ORDER BY 1, 2;
+----
+name         trigger_id
+t_tr_policy  NULL
+t_tr_policy  1
+
+statement ok
+DROP TRIGGER my_trigger ON t_tr_policy;
+
+# After dropping the trigger, only the policy's backref should remain.
+query TI colnames
+SELECT
+  n.name,
+  (d->>'triggerId')::INT as trigger_id
+FROM (
+  SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy') as d
+  FROM system.descriptor
+  WHERE id = 'seq_tr_policy'::REGCLASS::INT
+)
+JOIN system.namespace n ON (d->>'id')::INT = n.id
+ORDER BY 1, 2;
+----
+name         trigger_id
+t_tr_policy  NULL
+
+statement ok
+DROP POLICY my_policy ON t_tr_policy;
+DROP TABLE t_tr_policy;
+DROP FUNCTION trigger_fn_policy;
+DROP SEQUENCE seq_tr_policy;
+
+subtest end
+
 # ==============================================================================
 # End of regression tests. Add new features above the regression test section.
 # ==============================================================================

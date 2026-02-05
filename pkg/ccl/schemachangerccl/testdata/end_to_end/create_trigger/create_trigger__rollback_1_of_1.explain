@@ -29,7 +29,7 @@ Schema change plan for rolling back CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerTimi...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerEven...","TriggerID":1}
       │         ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.TriggerFunc...","TriggerID":1}
-      │         ├── UpdateTableBackReferencesInRelations {"TableID":104,"TriggerID":1}
+      │         ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
       │         ├── RemoveTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}

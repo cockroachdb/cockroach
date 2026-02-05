@@ -22,7 +22,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       Trigger:
         TableID: 104
         TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 104
         columnids: []
@@ -50,7 +50,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       Trigger:
         TableID: 104
         TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
+    *scop.UpdateTriggerBackReferencesInRelations
       RelationReferences:
       - id: 104
         columnids: []
