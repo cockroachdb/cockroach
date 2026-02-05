@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/ingeststopped"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -238,7 +237,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		//
 		// The count is low-cost for empty tables and otherwise the expensive
 		// full scan is only run the one time.
-		if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, p, txn, details)
 			if err != nil {
 				return err
@@ -439,42 +438,42 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // detailsWithInitialRowCount checks if the table being imported into is empty
 // and return an updated details with the initial row count.
 func (r *importResumer) detailsWithInitialRowCount(
-	ctx context.Context, p sql.JobExecContext, txn isql.Txn, details jobspb.ImportDetails,
+	ctx context.Context, p sql.JobExecContext, txn descs.Txn, details jobspb.ImportDetails,
 ) (jobspb.ImportDetails, error) {
 	rowCountDetails := details
 
-	tblDesc := tabledesc.NewBuilder(details.Table.Desc).BuildImmutableTable()
-	primaryIdxSpan := tblDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
-
-	// Paginate the scan to keep the coordinator from running out of memory.
-	const batchSize = 10000
-	var rowCount uint64
-
-	resumeKey := primaryIdxSpan.Key
-	for {
-		rows, err := txn.KV().Scan(ctx, resumeKey, primaryIdxSpan.EndKey, batchSize)
-		if err != nil {
-			return jobspb.ImportDetails{}, errors.Wrap(err, "counting rows via paginated scan")
-		}
-
-		// Only count family 0 KV pairs, which always exist for every row.
-		// Other families may be missing if all their columns are NULL.
-		for _, row := range rows {
-			familyID, err := keys.DecodeFamilyKey(row.Key)
-			if err != nil {
-				return jobspb.ImportDetails{}, errors.Wrap(err, "decoding family ID from key")
-			}
-			if familyID == 0 {
-				rowCount++
-			}
-		}
-
-		if len(rows) < batchSize {
-			break
-		}
-
-		resumeKey = rows[len(rows)-1].Key.Next()
+	mut, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, details.Table.Desc.ID)
+	if err != nil {
+		return jobspb.ImportDetails{}, err
 	}
+	mut.SetPublic()
+
+	txn.Descriptors().AddSyntheticDescriptor(mut.ImmutableCopy())
+
+	query := fmt.Sprintf(`
+SELECT
+  count(*) AS row_count
+FROM [%d AS t]@{FORCE_INDEX=[%d]}`,
+		mut.GetID(),
+		mut.GetPrimaryIndex().GetID(),
+	)
+
+	row, err := p.ExecCfg().InternalDB.Executor().QueryRowEx(
+		ctx,
+		"import-initial-row-count",
+		txn.KV(),
+		sessiondata.InternalExecutorOverride{
+			User: username.NodeUserName(),
+		},
+		query,
+	)
+	if err != nil {
+		return jobspb.ImportDetails{}, errors.Wrap(err, "counting rows via synthetic descriptor")
+	}
+	if len(row) != 1 {
+		return jobspb.ImportDetails{}, errors.AssertionFailedf("row count query returned unexpected column count: %d", len(row))
+	}
+	rowCount := uint64(tree.MustBeDInt(row[0]))
 
 	rowCountDetails.Table.WasEmpty = rowCount == 0
 	rowCountDetails.Tables[0].WasEmpty = rowCount == 0
