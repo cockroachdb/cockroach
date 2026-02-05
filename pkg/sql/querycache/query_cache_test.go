@@ -202,7 +202,7 @@ func TestSynchronization(t *testing.T) {
 					c.Purge(sql)
 				case r <= 35:
 					// 25% of the time, add an entry.
-					c.Add(&s, data(sql, &memo.Memo{}, int64(288+rng.Intn(10*avgCachedSize))))
+					c.Add(&s, data(sql, &memo.Memo{}, int64(299+rng.Intn(10*avgCachedSize))))
 				default:
 					// The rest of the time, find an entry.
 					_, _ = c.Find(&s, sql)

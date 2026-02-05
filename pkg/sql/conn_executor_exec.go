@@ -342,6 +342,59 @@ func (ex *connExecutor) execPortal(
 	}
 }
 
+func (ex *connExecutor) checkUDTStaleness(
+	ctx context.Context, prep *prep.Statement,
+) (stale bool, staleEnumNames []string, err error) {
+	if len(prep.UDTs) == 0 {
+		return false, nil, nil
+	}
+	staleEnumNames = make([]string, 0)
+	for i, typ := range prep.UDTs {
+		toCheck, err := ex.planner.ResolveTypeByOID(ctx, typ.Oid())
+		if err != nil {
+			return stale, nil, err
+		}
+		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			stale = true
+			prep.UDTs[i] = toCheck
+			staleEnumNames = append(staleEnumNames, typ.Name())
+		}
+	}
+	return stale, staleEnumNames, nil
+}
+
+// maybeReparsePrepStmt is to reparse the prepared statement so that the
+// stored udt datum is up-to-date. The reparse is needed because AST can
+// be modified at type chekcing, with tree.StrVal component replaced
+// with a versioned tree.DEnum. If the UDT's version changed, this
+// tree.DEnum would be outdated.
+func (ex *connExecutor) maybeReparsePrepStmt(
+	ctx context.Context, prep *prep.Statement, name string,
+) error {
+	stale, staleEnumNames, err := ex.checkUDTStaleness(ctx, prep)
+	if err != nil {
+		return err
+	}
+	if !stale {
+		return nil
+	}
+	log.Eventf(ctx, "reparsing prepared statament %q for the user defined types are stale: %s", name, staleEnumNames)
+	newStmt, err := parser.ParseOne(prep.SQL)
+	if err != nil {
+		return err
+	}
+	prep.Statement = newStmt
+	prep.AST = newStmt.AST
+	// Since the udt is outdated, the stored memo will be stale and we will need to
+	// regenerate the memo anyways, so we just reset all the memo related fields as well.
+	prep.BaseMemo = nil
+	prep.GenericMemo = nil
+	prep.IdealGenericPlan = false
+	prep.Costs.Reset()
+	prep.HintsGeneration = 0
+	return nil
+}
+
 // execStmtInOpenState executes one statement in the context of the session's
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
@@ -553,6 +606,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error
@@ -1465,6 +1522,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(name)
 		if !ok {
 			return makeErrEvent(newPreparedStmtDNEError(ex.sessionData(), name))
+		}
+
+		if err := ex.maybeReparsePrepStmt(ctx, ps, name); err != nil {
+			return makeErrEvent(err)
 		}
 
 		var err error
