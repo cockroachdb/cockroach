@@ -16,9 +16,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// convertWithLogicalType implements parquetConversionFunc for Parquet files using
-// LogicalType annotations. This is used for files written by recent tools (Apache Arrow,
-// modern Spark, etc.).
+// convertWithLogicalType converts Parquet values to CockroachDB datums using LogicalType annotations.
+// This is used for files written by recent tools (Apache Arrow, modern Spark, etc.).
+// For legacy files with ConvertedType, the ConvertedType is converted to LogicalType during
+// initialization using Apache Arrow's ToLogicalType() method.
 //
 // Supported LogicalTypes:
 //   - StringLogicalType, JSONLogicalType, EnumLogicalType (BYTE_ARRAY)
@@ -36,16 +37,19 @@ import (
 //
 // Unsupported LogicalTypes (low priority):
 //   - BSONLogicalType - Binary JSON (could convert to JSONB)
-var convertWithLogicalType parquetConversionFunc = func(
+func convertWithLogicalType(
 	value any, targetType *types.T, metadata *parquetColumnMetadata,
 ) (tree.Datum, error) {
-	if metadata.logicalType == nil {
-		return nil, errors.AssertionFailedf("convertWithLogicalType called with nil logicalType")
-	}
+	// metadata.logicalType can be nil for plain primitive types with no annotations.
+	// This is valid Parquet - columns can have just a physical type (INT32, INT64, etc.)
+	// without any semantic LogicalType or ConvertedType annotation.
+	// The fallback conversion logic below handles these cases.
 
 	// NullLogicalType represents a column that only contains null values
-	if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
-		return tree.DNull, nil
+	if metadata.logicalType != nil {
+		if _, ok := metadata.logicalType.(schema.NullLogicalType); ok {
+			return tree.DNull, nil
+		}
 	}
 
 	switch v := value.(type) {

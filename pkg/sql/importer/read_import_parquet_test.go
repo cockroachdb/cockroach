@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/compress"
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/pqarrow"
+	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1457,4 +1458,90 @@ func TestParquetRowView(t *testing.T) {
 	require.Equal(t, int32(2), view1.batches[0].int32Values[view1.rowIndex])
 
 	require.True(t, view1.batches[1].isNull[view1.rowIndex])
+}
+
+// TestParquetPlainPrimitiveTypes verifies that Parquet files with plain primitive
+// types (no LogicalType or ConvertedType annotations) are handled correctly.
+func TestParquetPlainPrimitiveTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Open alltypes_plain.parquet which should have plain primitive types
+	testFile := "testdata/parquet/alltypes_plain.parquet"
+	f, err := os.Open(testFile)
+	require.NoError(t, err)
+	defer f.Close()
+
+	stat, err := f.Stat()
+	require.NoError(t, err)
+
+	fr := &fileReader{
+		Reader:   f,
+		ReaderAt: f,
+		Seeker:   f,
+		total:    stat.Size(),
+	}
+
+	// Create producer (this will call newParquetRowProducer)
+	producer, err := newParquetRowProducer(fr, nil)
+	require.NoError(t, err)
+	require.NotNil(t, producer)
+
+	// Check the metadata to verify we're testing plain types
+	parquetReader, err := file.NewParquetReader(fr)
+	require.NoError(t, err)
+	defer func() { _ = parquetReader.Close() }()
+
+	parquetSchema := parquetReader.MetaData().Schema
+	foundPlainType := false
+
+	t.Log("Column annotations:")
+	for i := 0; i < parquetSchema.NumColumns(); i++ {
+		col := parquetSchema.Column(i)
+		logicalType := col.LogicalType()
+		convertedType := col.ConvertedType()
+
+		t.Logf("  %s: LogicalType=%v (nil=%v), ConvertedType=%v",
+			col.Name(), logicalType, logicalType == nil, convertedType)
+
+		// Check if this is a plain type (either no logical type, or UnknownLogicalType)
+		// Plain types have no semantic annotations, just physical type
+		isPlainType := false
+		if logicalType == nil {
+			isPlainType = true
+		} else {
+			// Check for UnknownLogicalType which represents plain types
+			// Also check string representation for "None"
+			switch logicalType.(type) {
+			case schema.UnknownLogicalType:
+				isPlainType = true
+			default:
+				// Check if string representation is "None"
+				if logicalType.String() == "None" {
+					isPlainType = true
+				}
+			}
+		}
+
+		if isPlainType && convertedType == schema.ConvertedTypes.None {
+			foundPlainType = true
+		}
+	}
+
+	require.True(t, foundPlainType,
+		"alltypes_plain.parquet should have at least one column with no type annotations")
+
+	// Verify we can read rows (this tests that conversion works with nil logicalType)
+	rowCount := 0
+	for producer.Scan() && rowCount < 5 {
+		row, err := producer.Row()
+		require.NoError(t, err)
+		require.NotNil(t, row)
+		rowCount++
+	}
+
+	require.NoError(t, producer.Err())
+	require.Greater(t, rowCount, 0, "should read at least some rows")
+
+	t.Logf("Successfully read %d rows with plain primitive types", rowCount)
 }
