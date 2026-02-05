@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -126,10 +127,6 @@ type readImportDataProcessor struct {
 	importErr error
 	summary   *kvpb.BulkOpSummary
 	files     *bulksst.SSTFiles
-
-	// reportedSSTURIs tracks which SST files have been reported via progress
-	// metadata to prevent duplicate emissions. Used during distributed merge.
-	reportedSSTURIs map[string]struct{}
 }
 
 var (
@@ -189,34 +186,11 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
 
-		// Initialize the map to track which SST files have been reported incrementally.
-		// This is used both during processing and for the final emission to prevent duplicates.
-		idp.reportedSSTURIs = make(map[string]struct{})
-
 		idp.summary, idp.files, idp.importErr = runImport(ctx, idp.FlowCtx, &idp.spec, idp.progCh,
-			idp.seqChunkProvider, idp.reportedSSTURIs)
+			idp.seqChunkProvider)
 
-		// When using distributed merge, emit any final SST metadata not yet reported.
-		// Most SST metadata is sent incrementally via pushProgress() (synchronized
-		// with ResumePos updates), but there may be final SSTs created during the
-		// last flush that haven't been reported yet.
-		if idp.files != nil && idp.importErr == nil && idp.spec.UseDistributedMerge {
-			var newFiles []*bulksst.SSTFileInfo
-			for _, f := range idp.files.SST {
-				if _, reported := idp.reportedSSTURIs[f.URI]; !reported {
-					newFiles = append(newFiles, f)
-				}
-			}
-			if len(newFiles) > 0 {
-				var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-				prog.SSTMetadata = bulksst.SSTFilesToManifests(&bulksst.SSTFiles{SST: newFiles}, nil /* writeTS */)
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case idp.progCh <- prog:
-				}
-			}
-		}
+		// All SST manifests are now sent via the OnFlush callback synchronized
+		// with flush events, eliminating the need for final manifest emission.
 		return nil
 	})
 }
@@ -376,7 +350,6 @@ func ingestKvs(
 	tableName string,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
-	reportedSSTURIs map[string]struct{},
 ) (*kvpb.BulkOpSummary, *bulksst.SSTFiles, error) {
 	ctx, span := tracing.ChildSpan(ctx, "import-ingest-kvs")
 	defer span.Finish()
@@ -411,61 +384,79 @@ func ingestKvs(
 		offset++
 	}
 
-	// Track which SST files have been reported by their URI to ensure SST metadata
-	// and ResumePos are synchronized. This prevents orphaned SSTs if the processor
-	// fails before completion. We track by URI rather than count to avoid issues
-	// with file list ordering changes. The map is passed in by the caller to
-	// preserve state across the full processor lifecycle.
+	// Protected state for progress tracking, following index backfiller pattern.
+	// OnFlush callback collects this state synchronously; pushProgress consumes it.
+	var mu struct {
+		syncutil.Mutex
+		resumePos         map[int32]int64
+		completedFraction map[int32]float32
+		summary           kvpb.BulkOpSummary
+		manifests         []jobspb.BulkSSTManifest
+	}
+	mu.resumePos = make(map[int32]int64)
+	mu.completedFraction = make(map[int32]float32)
+
+	// flushProgress collects state synchronously during flush.
+	flushProgress := func(summary kvpb.BulkOpSummary) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Update resume positions and fractions from current state.
+		for file, offset := range offsets {
+			mu.resumePos[file] = writtenRow[offset]
+			mu.completedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+		}
+
+		// Accumulate bulk summary.
+		mu.summary.Add(summary)
+
+		// Collect SST manifests for distributed merge.
+		if spec.UseDistributedMerge {
+			mu.manifests = append(mu.manifests, importAdder.ConsumeFlushManifests()...)
+		}
+	}
+
+	// Install the flush callback.
+	importAdder.SetOnFlush(flushProgress)
+
+	// Initialize resume positions from spec if resuming. This ensures the first
+	// progress update doesn't reset positions to zero on resume.
+	if spec.ResumePos != nil {
+		for file := range offsets {
+			if resumePos, ok := spec.ResumePos[file]; ok {
+				mu.resumePos[file] = resumePos
+			}
+		}
+	}
 
 	pushProgress := func(ctx context.Context) {
+		mu.Lock()
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
-		for file, offset := range offsets {
-			prog.ResumePos[file] = importAdder.GetResumePos(offset)
-			prog.CompletedFraction[file] = math.Float32frombits(atomic.LoadUint32(&writtenFraction[offset]))
+		for file := range offsets {
+			prog.ResumePos[file] = mu.resumePos[file]
+			prog.CompletedFraction[file] = mu.completedFraction[file]
 		}
-		// Write down the summary of how much we've ingested since the last update.
-		prog.BulkSummary = importAdder.GetProgress()
+		prog.BulkSummary = mu.summary
+		mu.summary.Reset()
 
-		// For distributed merge, include node ID so coordinator can track storage
-		// prefixes. The coordinator's addStoragePrefix handles deduplication, so we
-		// send this on every progress update to ensure it's recorded even if the
-		// job is paused and resumed.
+		var manifests []jobspb.BulkSSTManifest
 		if spec.UseDistributedMerge {
 			prog.NodeID = flowCtx.Cfg.NodeID.SQLInstanceID()
+			manifests = append([]jobspb.BulkSSTManifest(nil), mu.manifests...)
+			mu.manifests = nil
+		}
+		mu.Unlock()
 
-			// Emit SST metadata incrementally, synchronized with ResumePos updates.
-			// This ensures that on retry, the coordinator has metadata for all SSTs
-			// created before the failure, preventing orphaned files in external storage.
-			// We track reported files by URI to avoid relying on file list ordering.
-			currentFiles := importAdder.GetFileList()
-			if currentFiles != nil {
-				var newFiles []*bulksst.SSTFileInfo
-				for _, f := range currentFiles.SST {
-					if _, reported := reportedSSTURIs[f.URI]; !reported {
-						newFiles = append(newFiles, f)
-						reportedSSTURIs[f.URI] = struct{}{}
-					}
-				}
-				if len(newFiles) > 0 {
-					prog.SSTMetadata = bulksst.SSTFilesToManifests(&bulksst.SSTFiles{SST: newFiles}, nil /* writeTS */)
-				}
-			}
+		if len(manifests) > 0 {
+			prog.SSTMetadata = manifests
 		}
 
 		select {
 		case progCh <- prog:
 		case <-ctx.Done():
 		}
-
-	}
-
-	// For distributed merge, send an initial progress update to ensure the
-	// coordinator knows this node is participating, even if the job completes
-	// before the first ticker fires.
-	if spec.UseDistributedMerge {
-		pushProgress(ctx)
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -548,8 +539,13 @@ func ingestKvs(
 		return nil, nil, err
 	}
 
+	// Send final progress update to ensure all flush state is reported.
+	pushProgress(ctx)
+
 	addedSummary := importAdder.GetSummary()
-	return &addedSummary, importAdder.GetFileList(), nil
+	// SST file list is only relevant for legacy mode (returns via BulkAdder.GetSummary()).
+	// For distributed merge, manifests are sent via progress updates.
+	return &addedSummary, nil, nil
 }
 
 // ingestHelper abstracts the BulkAdder interfaces used by the importer so
@@ -561,14 +557,15 @@ type ingestHelper interface {
 	// Set the index to target with further operations.
 	SetIndexID(indexID catid.IndexID)
 
-	// Get the output SST file list, or nil if none.
-	GetFileList() *bulksst.SSTFiles
+	// SetOnFlush installs a callback that is invoked after the helper flushes a
+	// batch. The callback receives the bulk operation summary and should be used
+	// to collect progress state synchronously. This mirrors the indexBackfillSink
+	// pattern to avoid race conditions with async progress reporting.
+	SetOnFlush(func(summary kvpb.BulkOpSummary))
 
-	// Given a position in the progress tracking slice, get the resume position.
-	GetResumePos(offset int) int64
-
-	// Read the incremental progress of the import.
-	GetProgress() kvpb.BulkOpSummary
+	// ConsumeFlushManifests returns any SST manifests produced since the last
+	// call. This is only relevant for distributed merge mode.
+	ConsumeFlushManifests() []jobspb.BulkSSTManifest
 
 	// In the event of an error in Add() or Flush(), this is the target that
 	// errored.
@@ -613,12 +610,45 @@ func makeIngestHelper(
 		batcher := bulksst.NewUnsortedSSTBatcher(flowCtx.Cfg.Settings, fileAllocator)
 		batcher.SetWriteTS(writeTS)
 
-		helper = &mergeImportBulkAdder{
+		adder := &mergeImportBulkAdder{
 			Writer:                *batcher,
 			rowStorage:            rowStorage,
 			fileAllocator:         fileAllocator,
 			baseBulkAdderProgress: baseProgress,
 		}
+
+		// On resume, discover any SST files created in previous runs. These files
+		// exist in external storage but their metadata may not have been persisted
+		// to CompletedMapWork before the pause. We need to include them in manifests
+		// to ensure they get merged.
+		//
+		// CRITICAL: We populate these into pendingManifests but do NOT set emittedFileCount.
+		// The fileAllocator will discover existing files and number new files starting
+		// after them. Setting emittedFileCount would prevent collectNewManifests from
+		// reporting new files created during this run.
+		if spec.ResumePos != nil {
+			var existingFiles []*bulksst.SSTFileInfo
+			err := rowStorage.List(ctx, "", cloud.ListOptions{}, func(f string) error {
+				if strings.HasSuffix(f, ".sst") {
+					// Create a basic file info - the merge phase only needs the URI
+					existingFiles = append(existingFiles, &bulksst.SSTFileInfo{
+						URI: uri + f,
+					})
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			if len(existingFiles) > 0 {
+				ssts := &bulksst.SSTFiles{SST: existingFiles}
+				adder.pendingManifests = bulksst.SSTFilesToManifests(ssts, nil /* writeTS */)
+				// DO NOT set emittedFileCount here - let collectNewManifests track new files
+			}
+		}
+
+		helper = adder
 		indexAdder = helper
 	} else {
 		// We create two bulk adders so as to combat the excessive flushing of small
@@ -702,21 +732,12 @@ func makeIngestHelper(
 	return helper, nil
 }
 
-// baseBulkAdderProgress provides a common implementation of GetProgress().
+// baseBulkAdderProgress provides common state for tracking import progress.
 type baseBulkAdderProgress struct {
 	indexFlushedRow []int64 // Accessed via atomics only.
 
 	mu      syncutil.Mutex     // Protects summary.
 	summary kvpb.BulkOpSummary // Incremental summary.
-}
-
-// GetProgress() implements the importHelper interface.
-func (bbap *baseBulkAdderProgress) GetProgress() kvpb.BulkOpSummary {
-	bbap.mu.Lock()
-	summary := bbap.summary
-	bbap.summary.Reset()
-	bbap.mu.Unlock()
-	return summary
 }
 
 // legacyImportBulkAdder implements the importHelper interface for the
@@ -744,25 +765,19 @@ func (liba *legacyImportBulkAdder) SetIndexID(indexID catid.IndexID) {
 	liba.targetID = indexID
 }
 
-// GetFileList() implements the importHelper interface.
-func (liba *legacyImportBulkAdder) GetFileList() *bulksst.SSTFiles {
+// SetOnFlush() implements the ingestHelper interface.
+func (liba *legacyImportBulkAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
+	// The callback is installed on the underlying BulkAdders during construction
+	// in makeIngestHelper, so this is a no-op for legacy mode.
+}
+
+// ConsumeFlushManifests() implements the ingestHelper interface.
+func (liba *legacyImportBulkAdder) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
+	// Legacy BulkAdder does not produce SST manifests.
 	return nil
 }
 
-// GetResumePos() implements the importHelper interface.
-func (liba *legacyImportBulkAdder) GetResumePos(offset int) int64 {
-	pk := atomic.LoadInt64(&liba.pkFlushedRow[offset])
-	idx := atomic.LoadInt64(&liba.indexFlushedRow[offset])
-	// On resume we'll be able to skip up the last row for which both the
-	// PK and index adders have flushed KVs.
-	if idx > pk {
-		return pk
-	} else {
-		return idx
-	}
-}
-
-// ErrTarget() implements the importHelper interface.
+// ErrTarget() implements the ingestHelper interface.
 func (liba *legacyImportBulkAdder) ErrTarget() string {
 	return liba.errTarget
 }
@@ -821,11 +836,6 @@ func (liba *legacyImportBulkAdder) Close(ctx context.Context) {
 	liba.indexAdder.Close(ctx)
 }
 
-// SetOnFlush() implements the BulkAdder interface.
-func (liba *legacyImportBulkAdder) SetOnFlush(func(summary kvpb.BulkOpSummary)) {
-	panic("unimplemented")
-}
-
 type mergeImportBulkAdder struct {
 	bulksst.Writer
 
@@ -833,24 +843,67 @@ type mergeImportBulkAdder struct {
 	fileAllocator bulksst.FileAllocator
 
 	*baseBulkAdderProgress
+
+	// Manifest buffering (matches index backfiller pattern).
+	manifestsMu      syncutil.Mutex
+	pendingManifests []jobspb.BulkSSTManifest
+	emittedFileCount int
 }
 
 var _ ingestHelper = &mergeImportBulkAdder{}
 
-// SetIndexID() implements the importHelper interface.
+// SetIndexID() implements the ingestHelper interface.
 func (miba *mergeImportBulkAdder) SetIndexID(_ catid.IndexID) {}
 
-// GetFileList() implements the importHelper interface.
-func (miba *mergeImportBulkAdder) GetFileList() *bulksst.SSTFiles {
-	return miba.fileAllocator.GetFileList()
+// SetOnFlush() implements the ingestHelper interface.
+func (miba *mergeImportBulkAdder) SetOnFlush(fn func(summary kvpb.BulkOpSummary)) {
+	miba.Writer.SetOnFlush(func(summary kvpb.BulkOpSummary) {
+		// Collect manifests synchronously during flush, matching index backfiller pattern.
+		miba.manifestsMu.Lock()
+		newManifests := miba.collectNewManifests()
+		if len(newManifests) > 0 {
+			miba.pendingManifests = append(miba.pendingManifests, newManifests...)
+		}
+		miba.manifestsMu.Unlock()
+
+		// Call the user-provided callback.
+		if fn != nil {
+			fn(summary)
+		}
+	})
 }
 
-// GetResumePos() implements the importHelper interface.
-func (miba *mergeImportBulkAdder) GetResumePos(offset int) int64 {
-	return atomic.LoadInt64(&miba.indexFlushedRow[offset])
+// ConsumeFlushManifests() implements the ingestHelper interface.
+func (miba *mergeImportBulkAdder) ConsumeFlushManifests() []jobspb.BulkSSTManifest {
+	miba.manifestsMu.Lock()
+	defer miba.manifestsMu.Unlock()
+
+	if len(miba.pendingManifests) == 0 {
+		return nil
+	}
+	out := miba.pendingManifests
+	miba.pendingManifests = nil
+	return out
 }
 
-// ErrTarget() implements the importHelper interface.
+// collectNewManifests() returns SST manifests produced since the last call.
+// Must be called with manifestsMu held.
+func (miba *mergeImportBulkAdder) collectNewManifests() []jobspb.BulkSSTManifest {
+	files := miba.fileAllocator.GetFileList()
+	if len(files.SST) <= miba.emittedFileCount {
+		return nil
+	}
+	// Extract only the new files since last collection.
+	newFiles := &bulksst.SSTFiles{
+		SST: files.SST[miba.emittedFileCount:],
+	}
+	miba.emittedFileCount = len(files.SST)
+
+	// Convert to manifests (no writeTS for distributed merge).
+	return bulksst.SSTFilesToManifests(newFiles, nil /* writeTS */)
+}
+
+// ErrTarget() implements the ingestHelper interface.
 func (miba *mergeImportBulkAdder) ErrTarget() string {
 	return "index"
 }

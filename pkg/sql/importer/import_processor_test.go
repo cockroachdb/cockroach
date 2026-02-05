@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"reflect"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -446,7 +447,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 					}
 				}()
 
-				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
+				_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -523,7 +524,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 				}
 			}()
 
-			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */, make(map[string]struct{}))
+			_, _, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
 			require.True(t, errors.HasType(err, &kvserverbase.DuplicateKeyError{}))
 		})
 	}
@@ -692,7 +693,7 @@ func testCSVImportCanBeResumed(t *testing.T, useDistributedMerge bool) {
 	defer setImportReaderParallelism(1)()
 	const batchSize = 5
 	defer TestingSetParallelImporterReaderBatchSize(batchSize)()
-	defer row.TestingSetDatumRowConverterBatchSize(2 * batchSize)()
+	defer row.TestingSetDatumRowConverterBatchSize(batchSize)()
 
 	// Create a temp directory for nodelocal storage used by distributed merge.
 	tempDir := t.TempDir()
@@ -794,6 +795,27 @@ func testCSVImportCanBeResumed(t *testing.T, useDistributedMerge bool) {
 
 	// Verify that the import proceeded from the resumeRow position.
 	require.Equal(t, int64(csv1.numRows)-resumePos, importSummary.Rows)
+
+	// DEBUG: Show what rows are actually in the table
+	actual := sqlDB.QueryStr(t, `SELECT id FROM t ORDER BY id`)
+	expected := sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Logf("DEBUG: Row count mismatch! Expected %d rows, got %d rows", len(expected), len(actual))
+		if len(actual) < len(expected) {
+			// Find missing rows
+			actualSet := make(map[string]bool)
+			for _, row := range actual {
+				actualSet[row[0]] = true
+			}
+			var missing []string
+			for _, row := range expected {
+				if !actualSet[row[0]] {
+					missing = append(missing, row[0])
+				}
+			}
+			t.Logf("DEBUG: Missing rows: %v", missing)
+		}
+	}
 
 	sqlDB.CheckQueryResults(t, `SELECT id FROM t ORDER BY id`,
 		sqlDB.QueryStr(t, `SELECT generate_series(0, $1)`, csv1.numRows-1),
