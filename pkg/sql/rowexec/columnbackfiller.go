@@ -73,6 +73,7 @@ func newColumnBackfiller(
 	if err := cb.ColumnBackfiller.InitForDistributedUse(
 		ctx, flowCtx, cb.desc, columnBackfillerMon,
 	); err != nil {
+		columnBackfillerMon.Stop(ctx)
 		return nil, err
 	}
 	return cb, nil

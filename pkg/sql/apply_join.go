@@ -315,7 +315,7 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
+		subqueryResultMemAcc := params.p.ExecMon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		// Note that planAndRunSubquery updates recv.stats with top-level
 		// subquery stats.
@@ -360,6 +360,11 @@ func runPlanInsidePlan(
 			for _, flowInfo := range plannerCopy.curPlan.distSQLFlowInfos {
 				flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
 			}
+			// TODO(yuzefovich): we might want to update
+			// queryLevelStats.MaxMemUsage with the exec mon's MaxMemUsage, but
+			// that would require having a separate exec monitor for the inner
+			// plan (currently plannerCopy.execMon is the same as used by the
+			// outer plan).
 			queryLevelStats, err := execstats.GetQueryLevelStats(recording, false /* deterministicExplainAnalyze */, flowsMetadata)
 			if err == nil {
 				sqlStatsBuilder.ExecStats(&queryLevelStats)

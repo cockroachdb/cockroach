@@ -44,7 +44,7 @@ func (p *planner) newContainerValuesNode(columns colinfo.ResultColumns, capacity
 		columns: columns,
 		valuesRun: valuesRun{
 			rows: rowcontainer.NewRowContainerWithCapacity(
-				p.Mon().MakeBoundAccount(),
+				p.ExecMon().MakeBoundAccount(),
 				colinfo.ColTypeInfoFromResCols(columns),
 				capacity,
 			),
@@ -74,7 +74,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
 	n.rows = rowcontainer.NewRowContainerWithCapacity(
-		params.p.Mon().MakeBoundAccount(),
+		params.p.ExecMon().MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(n.columns),
 		len(n.tuples),
 	)

@@ -2591,7 +2591,7 @@ type spanKeyIterator struct {
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
 	return &spanKeyIterator{
-		acc:  evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:  evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		span: span,
 	}
 }
@@ -2697,7 +2697,7 @@ func makeRangeKeyIterator(
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: planner.Mon().MakeBoundAccount(),
+			acc: planner.ExecMon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
 		planner: planner,
@@ -3012,7 +3012,7 @@ func makeShowCreateAllSchemasGenerator(
 	return &showCreateAllSchemasGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3168,7 +3168,7 @@ func makeShowCreateAllTablesGenerator(
 	return &showCreateAllTablesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		sessionData: evalCtx.SessionData(),
 	}, nil
 }
@@ -3246,7 +3246,7 @@ func makeShowCreateAllTriggersGenerator(
 	return &showCreateAllTriggersGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3326,7 +3326,7 @@ func makeShowCreateAllTypesGenerator(
 	return &showCreateAllTypesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3418,7 +3418,7 @@ func makeShowCreateAllRoutinesGenerator(
 	return &showCreateAllRoutinesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3554,7 +3554,7 @@ func makeIdentGenerator(
 	rand := rand.New(rand.NewSource(seed))
 	return &identGenerator{
 		gen:   randident.NewNameGenerator(&cfg, rand, pattern),
-		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:   evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		count: count,
 	}, nil
 }

@@ -198,6 +198,12 @@ type Context struct {
 	// where each aggregate function struct grows its own memory account by
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
+	//
+	// Additionally, this memory account is touched by some aggregate builtins
+	// that store multiple datums in order to access the memory monitor this
+	// account is bound to.
+	//
+	// It **must** be bound to an unlimited memory monitor.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
@@ -537,8 +543,13 @@ type fakePlannerWithMonitor struct {
 	monitor *mon.BytesMonitor
 }
 
-// Mon is part of the Planner interface.
-func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+// TxnMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) TxnMon() *mon.BytesMonitor {
+	return p.monitor
+}
+
+// ExecMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 	return p.monitor
 }
 

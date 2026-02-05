@@ -205,6 +205,8 @@ func (ex *connExecutor) prepare(
 			// the planner here would break the assumptions of the instrumentation.
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
+			ex.execMon.StartNoReserved(ctx, ex.state.txnMon)
+			defer ex.execMon.Stop(ctx)
 		}
 
 		if err := ex.maybeAdjustTxnForDDL(ctx, stmt); err != nil {
@@ -450,6 +452,8 @@ func (ex *connExecutor) execBind(
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			p := &ex.planner
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+			ex.execMon.StartNoReserved(ctx, ex.state.txnMon)
+			defer ex.execMon.Stop(ctx)
 			if err := ex.handleAOST(ctx, ps.AST); err != nil {
 				return err
 			}
