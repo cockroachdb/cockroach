@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -364,9 +363,9 @@ func maybeDropAdditionallyForShardedIndex(
 	dropColumn(b, &tn, tbl, stmt, stmt, shardCol, shardColElms, dropBehavior)
 }
 
-// maybeDropTriggers attempts to drop all triggers that depend on the index
-// being dropped, but only if the drop behavior is CASCADE. It panics if any
-// dependent trigger exists and the drop behavior is not CASCADE.
+// maybeDropTriggers drops all triggers that depend on the index being dropped
+// if the drop behavior is CASCADE. It panics if any dependent trigger exists
+// and the drop behavior is not CASCADE.
 func maybeDropTriggers(
 	b BuildCtx,
 	tableID catid.DescID,
@@ -379,19 +378,22 @@ func maybeDropTriggers(
 		case *scpb.TriggerDeps:
 			for _, ref := range elt.UsesRelations {
 				if ref.ID == tableID && ref.IndexID == indexID {
-					if behavior == tree.DropCascade {
-						panic(unimplemented.NewWithIssuef(
-							146667, "DROP INDEX cascade is not supported with triggers"))
-					}
 					tableElts := b.QueryByID(elt.TableID)
 					tableName := tableElts.FilterNamespace().MustGetOneElement()
 					triggerName := tableElts.FilterTriggerName().Filter(
 						func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TriggerName) bool {
 							return e.TriggerID == elt.TriggerID
 						}).MustGetOneElement()
-					panic(sqlerrors.NewDependentObjectErrorf(
-						"cannot drop index %q because trigger %q on table %q depends on it",
-						indexName, triggerName.Name, tableName.Name))
+					if behavior != tree.DropCascade {
+						panic(sqlerrors.NewDependentObjectErrorf(
+							"cannot drop index %q because trigger %q on table %q depends on it",
+							indexName, triggerName.Name, tableName.Name))
+					}
+					b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+						"drop cascades to trigger %s on table %s",
+						triggerName.Name, tableName.Name,
+					))
+					dropTrigger(b, elt.TableID, elt.TriggerID)
 				}
 			}
 		}
